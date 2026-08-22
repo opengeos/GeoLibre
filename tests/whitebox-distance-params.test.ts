@@ -227,6 +227,13 @@ describe("wgs84VectorLayerIds", () => {
     );
   });
 
+  it("flattens a multi-dataset layer selection", () => {
+    assert.deepEqual(
+      wgs84VectorLayerIds([{ required: true, value: ["layer:a", "layer:b"] }], PREFIX),
+      ["a", "b"],
+    );
+  });
+
   it("rejects any input left on a file path, required or not", () => {
     // The file is read from disk in whatever CRS it carries, so the tool's units
     // are unknowable even when the path is on an optional input.

@@ -1,4 +1,5 @@
 import {
+  batchDecodePolylines,
   hasPathTraversal,
   isAbsoluteFilesystemPath,
   parseProject,
@@ -639,6 +640,91 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
       name: `${baseName} ${layer.label}`,
       path,
     }));
+}
+
+/**
+ * Checks whether a decoded polyline FeatureCollection contains valid, non-empty WGS84 coordinates.
+ *
+ * Rejects collections with no features or 0 total coordinates, non-finite values,
+ * or coordinate values falling outside the valid WGS84 domain ([-180, 180] lon, [-90, 90] lat).
+ */
+function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
+  if (!fc.features || fc.features.length === 0) return false;
+  let totalPoints = 0;
+  for (const feature of fc.features) {
+    const geometry = feature.geometry;
+    if (!geometry) continue;
+    if (geometry.type === "LineString") {
+      for (const coord of geometry.coordinates) {
+        const [lon, lat] = coord;
+        if (
+          !Number.isFinite(lon) ||
+          !Number.isFinite(lat) ||
+          lon < -180 ||
+          lon > 180 ||
+          lat < -90 ||
+          lat > 90
+        ) {
+          return false;
+        }
+        totalPoints++;
+      }
+    } else if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        for (const coord of line) {
+          const [lon, lat] = coord;
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            return false;
+          }
+          totalPoints++;
+        }
+      }
+    }
+  }
+  return totalPoints > 0;
+}
+
+/**
+ * Parses raw polyline text from a dropped/opened file into a vector layer.
+ *
+ * Encoded polyline format does not self-describe its precision factor. Auto-detection
+ * first attempts standard precision 5 (Google Maps / OSRM standard, factor 1e5).
+ * If precision 5 yields coordinates outside valid WGS84 bounds (which occurs when
+ * precision 6 data with latitude > 9° or longitude > 18° is scaled up by 10x),
+ * it falls back to precision 6 (Valhalla / Mapbox standard, factor 1e6).
+ *
+ * That bounds check only settles the cases it can: the two decodes of the same
+ * bytes differ by exactly a factor of 10, so whenever precision 5 lands in
+ * bounds precision 6 necessarily does too, and nothing in the data says which
+ * one the author meant. Precision-6 data close to the prime meridian and the
+ * equator (|lon| <= 18°, |lat| <= 9°) therefore imports at precision 5, ten
+ * times too large, with no error. Drag-and-drop has nowhere to ask, so it takes
+ * the more common of the two; Add Data → Encoded Polyline is the path with an
+ * explicit precision picker and a preview to check the result against.
+ */
+function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
+  let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
+  if (!hasValidPolylineCoordinates(fc)) {
+    fc = batchDecodePolylines(text, { precision: 6, unescape: true });
+  }
+  if (!hasValidPolylineCoordinates(fc)) {
+    throw new Error("No valid polyline coordinates could be decoded from this file.");
+  }
+  const baseName = pathWithoutExtension(browserSafeFileName(path)) || "Polyline";
+  return [
+    {
+      data: fc,
+      name: baseName,
+      path,
+    },
+  ];
 }
 
 /** Delimited text formats the drag-and-drop / open path loads as points. */
@@ -1991,6 +2077,15 @@ async function loadBrowserVectorFile(
     };
   }
 
+  if (extension === "polyline") {
+    const text = await file.text();
+    const [layer] = parsePolylineFileLayers(text, file.name);
+    return {
+      data: layer.data,
+      path: file.name,
+    };
+  }
+
   // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
   // longitude/latitude column detection (that lives only in the GeoParquet
   // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
@@ -2191,6 +2286,7 @@ async function tryLoadPickedNativeVectorPath(
     extension === "kml" ||
     extension === "kmz" ||
     extension === "gpx" ||
+    extension === "polyline" ||
     extension === "zip"
   ) {
     return undefined;
@@ -2283,6 +2379,20 @@ async function loadTauriVectorFile(
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this GPX file. ${detail}`);
+    }
+  }
+
+  if (extension === "polyline") {
+    try {
+      const text = await readLocalFileText(path);
+      const [layer] = parsePolylineFileLayers(text, path);
+      return {
+        data: layer.data,
+        path,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Could not read this Polyline file. ${detail}`);
     }
   }
 
@@ -2612,6 +2722,43 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   });
 }
 
+/** Open a multi-file picker and read every selected file as bytes. */
+export async function openLocalDataFilesWithFallback(
+  options: LocalDataFileOptions,
+): Promise<Array<{ data: ArrayBuffer; path: string }>> {
+  if (isTauri()) {
+    const selected = await open({
+      multiple: true,
+      filters: nativeFileDialogFilters(options.filters, options.androidFilters),
+    });
+    const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
+    return Promise.all(
+      paths.map(async (path) => ({ data: toArrayBuffer(await readFile(path)), path })),
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = options.accept;
+    input.onchange = async () => {
+      try {
+        const files = Array.from(input.files ?? []);
+        resolve(
+          await Promise.all(
+            files.map(async (file) => ({ data: await file.arrayBuffer(), path: file.name })),
+          ),
+        );
+      } catch (error) {
+        reject(error);
+      }
+    };
+    input.addEventListener("cancel", () => resolve([]));
+    input.click();
+  });
+}
+
 export async function pickLocalPathWithFallback(
   options: PickLocalPathOptions = {},
 ): Promise<string | null> {
@@ -2628,6 +2775,19 @@ export async function pickLocalPathWithFallback(
   // require a real path. Return null so callers surface the desktop-only
   // message rather than passing a non-resolvable bare file name.
   return null;
+}
+
+/** Pick several native filesystem paths (desktop only). */
+export async function pickLocalPathsWithFallback(
+  options: PickLocalPathOptions = {},
+): Promise<string[]> {
+  if (!isTauri()) return [];
+  const selected = await open({
+    directory: options.directory ?? false,
+    filters: options.filters,
+    multiple: true,
+  });
+  return Array.isArray(selected) ? selected : selected ? [selected] : [];
 }
 
 /**
@@ -3109,6 +3269,11 @@ export async function loadDroppedVectorFiles(
         continue;
       }
 
+      if (extension === "polyline") {
+        layers.push(...parsePolylineFileLayers(await file.text(), file.name));
+        continue;
+      }
+
       if (extension === "kmz") {
         try {
           layers.push(...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)));
@@ -3388,6 +3553,15 @@ export async function loadDroppedVectorPaths(
           // "Unknown error" when the fs-plugin fallback fails.
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(`Could not read this GPX file. ${detail}`);
+        }
+        continue;
+      }
+      if (extension === "polyline") {
+        try {
+          layers.push(...parsePolylineFileLayers(await readLocalFileText(path), path));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Could not read this Polyline file. ${detail}`);
         }
         continue;
       }

@@ -1,4 +1,7 @@
-import type { WhiteboxToolParameter } from "@geolibre/processing";
+import {
+  isMultipleWhiteboxDatasetParameter,
+  type WhiteboxToolParameter,
+} from "@geolibre/processing";
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
   if (["raster", "vector", "lidar", "file"].includes(dataKind)) {
@@ -41,4 +44,9 @@ export function parameterKind(param: WhiteboxToolParameter): string {
     return scalar.includes("int") ? "int" : "double";
   }
   return "string";
+}
+
+/** Whether a dataset input accepts a stack/list rather than one dataset. */
+export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param).endsWith("_in") && isMultipleWhiteboxDatasetParameter(param);
 }

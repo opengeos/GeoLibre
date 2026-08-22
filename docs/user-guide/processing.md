@@ -104,6 +104,8 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | **Regular grid** | Generate a rectangular grid (fishnet) over the map view, a layer's extent, or a manual bounding box. |
 | **Voronoi / Delaunay** | Build a Voronoi diagram (one polygon per point, clipped to the points' extent) or a Delaunay triangulation from a point layer. |
 | **Cell-site coverage** | Build antenna sector polygons from point sites using azimuth, radius, and beamwidth read from fields or fixed values. |
+| **Decode polyline** | Decode encoded polyline strings (precision 5 or 6) from an attribute field into a LineString vector layer. |
+| **Encode line to polyline** | Encode LineString and MultiLineString geometries into an encoded polyline string stored in a new attribute field. |
 
 **Overlay**
 

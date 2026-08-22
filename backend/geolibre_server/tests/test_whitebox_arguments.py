@@ -8,6 +8,30 @@ from geolibre_server.app.whitebox import (
     _prepare_arguments,
 )
 
+
+def test_prepare_arguments_materializes_multiple_embedded_layers(tmp_path: Path) -> None:
+    """Verify embedded multi-vector inputs become a comma-delimited path list."""
+    feature_collection = {"type": "FeatureCollection", "features": []}
+    request = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        tool={"params": [{"name": "inputs", "kind": "vector_in"}]},
+        layer_inputs={
+            "inputs": [
+                {"name": "a", "kind": "vector_in", "geojson": feature_collection},
+                {"name": "b", "kind": "vector_in", "geojson": feature_collection},
+            ]
+        },
+    )
+
+    temp_paths: list[Path] = []
+    args, _ = _prepare_arguments(request, temp_paths)
+
+    paths = args["inputs"].split(",")
+    assert len(paths) == 2
+    assert all(Path(path).exists() for path in paths)
+    assert len(temp_paths) == 2
+
+
 _BATCH_DESCRIPTION = (
     "Input LiDAR path or typed LiDAR object. If omitted, runs "
     "in batch mode over LiDAR files in current directory."

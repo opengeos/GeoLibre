@@ -93,7 +93,12 @@ import {
   registerTemporalLayer,
   unregisterTemporalLayer,
 } from "./temporal-layers";
-import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
+import {
+  pickTimeDimension,
+  readCoordinateTimeAttributes,
+  resolveZarrTimeAxis,
+  type ZarrTimeAttributes,
+} from "./zarr-time-axis";
 import {
   ZarrDirectoryStore,
   createDirectoryZarrMetadataReader,
@@ -2746,22 +2751,7 @@ function localZarrTimeAttributesReader(url: string): ZarrTimeAttributesReader | 
   const reader = zarrLocalStoreReaders.get(url);
   if (!reader) return null;
   const read = createDirectoryZarrMetadataReader(reader);
-  return async (dimension: string) => {
-    for (const prefix of ["", "0/"]) {
-      for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
-        const document = await read(key);
-        const attributes = key.endsWith("zarr.json")
-          ? (document as { attributes?: unknown } | undefined)?.attributes
-          : document;
-        if (!attributes || typeof attributes !== "object") continue;
-        const record = attributes as Record<string, unknown>;
-        const units = typeof record.units === "string" ? record.units : undefined;
-        const calendar = typeof record.calendar === "string" ? record.calendar : undefined;
-        if (units !== undefined || calendar !== undefined) return { units, calendar };
-      }
-    }
-    return null;
-  };
+  return (dimension: string) => readCoordinateTimeAttributes(read, dimension);
 }
 
 /** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */

@@ -336,37 +336,47 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       if (!tool) throw new Error(`Unknown Whitebox tool "${id}"`);
       const supplied = (params.params as Record<string, unknown>) ?? {};
       const parameters: Record<string, unknown> = { ...supplied };
-      const layerInputs: Record<string, WhiteboxLayerInput> = {};
+      const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
       const layers = useAppStore.getState().layers;
 
       for (const param of tool.params ?? []) {
         const kind = parameterKind(param);
         if (!kind.endsWith("_in")) continue;
         const value = supplied[param.name];
-        if (typeof value !== "string") continue;
-        const layer = layers.find((item) => item.id === value);
-        if (!layer) continue;
-        // Same eligibility rule the Processing dialog filters its layer picker
-        // by, so a wrong-type layer reports that rather than failing later with
-        // a vaguer "not fetchable".
-        if (!canUseLayerForParameter(layer, param)) {
-          throw new Error(
-            `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`,
-          );
+        const values = Array.isArray(value) ? value : [value];
+        const resolvedLayers = values.map((item) =>
+          typeof item === "string" ? layers.find((layer) => layer.id === item) : undefined,
+        );
+        if (resolvedLayers.every((layer) => !layer)) continue;
+        if (resolvedLayers.some((layer) => !layer)) {
+          throw new Error(`Not every layer supplied for "${param.name}" could be resolved`);
+        }
+        const resolved = resolvedLayers.filter((layer) => layer !== undefined);
+        const inputs: WhiteboxLayerInput[] = [];
+        for (const layer of resolved) {
+          // Same eligibility rule the Processing dialog filters its layer picker
+          // by, so a wrong-type layer reports that rather than failing later with
+          // a vaguer "not fetchable".
+          if (!canUseLayerForParameter(layer, param)) {
+            throw new Error(
+              `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`,
+            );
+          }
+          if (kind === "vector_in") {
+            if (!layer.geojson) {
+              throw new Error(`Layer "${layer.name}" has no in-memory GeoJSON for "${param.name}"`);
+            }
+            inputs.push({ name: layer.name, kind, geojson: layer.geojson });
+          } else {
+            const bytes = await fetchLayerBytes(layer);
+            if (!bytes) {
+              throw new Error(`Layer "${layer.name}" is not fetchable for "${param.name}"`);
+            }
+            inputs.push({ name: layer.name, kind, bytes });
+          }
         }
         delete parameters[param.name];
-        if (kind === "vector_in") {
-          if (!layer.geojson) {
-            throw new Error(`Layer "${layer.name}" has no in-memory GeoJSON for "${param.name}"`);
-          }
-          layerInputs[param.name] = { name: layer.name, kind, geojson: layer.geojson };
-        } else {
-          const bytes = await fetchLayerBytes(layer);
-          if (!bytes) {
-            throw new Error(`Layer "${layer.name}" is not fetchable for "${param.name}"`);
-          }
-          layerInputs[param.name] = { name: layer.name, kind, bytes };
-        }
+        layerInputs[param.name] = inputs.length === 1 ? inputs[0] : inputs;
       }
 
       const tracker = beginProcessingRun({

@@ -11,6 +11,8 @@
 // `FileSystemDirectoryHandle`. Both are expressed as a
 // {@link ZarrDirectoryReader}, so everything below is platform-free.
 
+import { createZarrMetadataReader, type ZarrMetadataReader } from "./zarr-metadata-reader";
+
 /** Read access to one local folder holding a Zarr store. */
 export interface ZarrDirectoryReader {
   /** Display name of the folder, used to name the layer. */
@@ -25,13 +27,9 @@ export interface ZarrDirectoryReader {
   readFile(path: string): Promise<Uint8Array | undefined>;
 }
 
-/**
- * Reads one of a store's metadata documents.
- *
- * @param key - Store-relative key, e.g. `.zmetadata` or `time/.zattrs`.
- * @returns The parsed JSON document, or undefined when the key is absent.
- */
-export type ZarrMetadataReader = (key: string) => Promise<unknown | undefined>;
+// Re-exported so the existing importers of this module — and the plugin API surface — keep the
+// name they had when a folder was the only store read this way.
+export type { ZarrMetadataReader };
 
 /**
  * Strip the leading slash zarrita may put on a key and reject anything that
@@ -98,23 +96,12 @@ export class ZarrDirectoryStore {
  * @returns A reader resolving each metadata key to its parsed JSON document.
  */
 export function createDirectoryZarrMetadataReader(reader: ZarrDirectoryReader): ZarrMetadataReader {
-  return async (key: string) => {
+  // Only the key handling is this store's own: a folder cannot be asked for the leading slash
+  // zarrita adds, nor for a path that climbs out of it. The decode is shared.
+  return createZarrMetadataReader(async (key: string) => {
     const path = normalizeZarrKey(key);
-    if (!path) return undefined;
-    let bytes: Uint8Array | undefined;
-    try {
-      bytes = await reader.readFile(path);
-    } catch {
-      return undefined;
-    }
-    if (!bytes) return undefined;
-    try {
-      return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-    } catch {
-      // A key that exists but is not JSON is not a metadata document.
-      return undefined;
-    }
-  };
+    return path ? reader.readFile(path) : undefined;
+  });
 }
 
 // Distinguishes one picked folder from the next; see localZarrStoreUrl.

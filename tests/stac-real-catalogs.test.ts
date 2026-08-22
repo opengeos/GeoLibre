@@ -6,9 +6,12 @@ import {
   assetFormat,
   assetTargets,
   canAddAsset,
+  icechunkBranch,
+  isIcechunkAsset,
   searchStacApi,
   type StacItem,
   zarrLayerRequest,
+  zarrReaderTargetCheck,
   zarrStorePath,
   zarrTargetCheck,
 } from "../packages/plugins/src/plugins/stac-api";
@@ -97,4 +100,34 @@ test("EOPF's Sentinel-2 assets address an array inside the store", async () => {
   }) as unknown as typeof fetch);
   assert.equal(verdict, "array");
   assert.deepEqual(probed, [`${url}/measurements/reflectance/r10m/b02/zarr.json`]);
+});
+
+test("UGS's Icechunk asset names a repository, and takes its variables from the item", async () => {
+  const item = await itemFrom("ubm-icechunk", "https://ubm-assets.geology.utah.gov/stac/");
+  const asset = item.assets.data;
+
+  // The media type is the plain Zarr one: only `icechunk:branch` says how the store is read.
+  assert.equal(asset.type, "application/vnd.zarr");
+  assert.equal(assetFormat(asset), "zarr");
+  assert.equal(isIcechunkAsset(asset, item), true);
+  assert.equal(icechunkBranch(asset, item), "main");
+
+  // The href names the repository, not a `.zarr` directory, so nothing is embedded to split off
+  // and every variable the item declares is on offer.
+  assert.equal(zarrStorePath(asset.href).path, undefined);
+  assert.equal(canAddAsset(item, "data", asset), true);
+  const targets = assetTargets(item, "data", asset).map((target) => target.id);
+  assert.equal(targets.length, 12);
+  assert.ok(targets.includes("AET"), "the item's own variables are what the picker offers");
+
+  // A repository is read through its manifest, so the preflight asks it rather than the URL.
+  const asked: string[] = [];
+  const verdict = await zarrReaderTargetCheck(async (key) => {
+    asked.push(key);
+    return key === "/AET/zarr.json"
+      ? new TextEncoder().encode(JSON.stringify({ node_type: "array" }))
+      : undefined;
+  }, "AET");
+  assert.equal(verdict, "array");
+  assert.deepEqual(asked, ["/AET/zarr.json"]);
 });

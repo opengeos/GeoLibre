@@ -275,3 +275,90 @@ def test_validation_and_errors_use_contract_shape(client):
     )
     assert bad.status_code == 422 and set(bad.json()) == {"error"}
     assert client.get("/api/projects?limit=101").status_code == 422
+
+
+def test_activity_log_aggregates_anonymous_opens_and_is_owner_only(client):
+    token = account(client)
+    project, _ = create_project(client, token)
+    project_id = project["id"]
+
+    # Anonymous opens/fetches are aggregated into one row per action and day,
+    # never stored per visitor.
+    for _ in range(3):
+        assert client.get("/ada/wetlands", follow_redirects=False).status_code == 302
+    assert client.get("/ada/wetlands.geolibre.json").status_code == 200
+    assert client.get("/ada/wetlands.geolibre.json").status_code == 200
+
+    # Authenticated actions are attributed.
+    response = client.patch(
+        f"/api/projects/{project_id}", headers=auth(token), json={"visibility": "private"}
+    )
+    assert response.status_code == 200
+
+    response = client.get(f"/api/projects/{project_id}/activity", headers=auth(token))
+    assert response.status_code == 200
+    entries = response.json()["activity"]
+    by_action = {entry["action"]: entry for entry in entries}
+    assert set(by_action) == {"open", "fetch", "visibility_change"}
+    assert len(entries) == 3
+    assert by_action["open"]["actorId"] is None
+    assert by_action["open"]["details"]["count"] == 3
+    assert by_action["fetch"]["details"]["count"] == 2
+    assert by_action["visibility_change"]["details"] == {"before": "public", "after": "private"}
+    assert by_action["visibility_change"]["actorId"]
+    assert all(entry["createdAt"].endswith("Z") for entry in entries)
+
+    # Only the owner may read or delete the log.
+    other = account(client, "bob")
+    assert (
+        client.get(f"/api/projects/{project_id}/activity", headers=auth(other)).status_code == 403
+    )
+    assert client.get(f"/api/projects/{project_id}/activity").status_code == 401
+    assert (
+        client.delete(f"/api/projects/{project_id}/activity", headers=auth(other)).status_code
+        == 403
+    )
+    assert (
+        client.delete(f"/api/projects/{project_id}/activity", headers=auth(token)).status_code
+        == 204
+    )
+    assert client.get(f"/api/projects/{project_id}/activity", headers=auth(token)).json() == {
+        "activity": []
+    }
+
+
+def test_anonymous_bucket_insert_race_falls_back_to_increment(client):
+    from geolibre_server_api.main import ProjectActivity, log_project_activity
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    token = account(client)
+    project, _ = create_project(client, token)
+
+    class MissedUpdate:
+        rowcount = 0
+
+    class RacingSession(Session):
+        """Pretends the first UPDATE found no bucket, as if another request
+        inserted it between our UPDATE and our INSERT."""
+
+        missed = False
+
+        def execute(self, statement, *args, **kwargs):
+            if not self.missed and "UPDATE" in str(statement):
+                self.missed = True
+                return MissedUpdate()
+            return super().execute(statement, *args, **kwargs)
+
+    with Session(client.app.state.engine) as session:
+        log_project_activity(session, project["id"], None, "open")
+        session.commit()
+    with RacingSession(client.app.state.engine) as session:
+        log_project_activity(session, project["id"], None, "open")
+        session.commit()
+        assert session.missed
+        rows = session.scalars(
+            select(ProjectActivity).where(ProjectActivity.project_id == project["id"])
+        ).all()
+    assert len(rows) == 1
+    assert rows[0].count == 2

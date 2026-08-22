@@ -4,7 +4,6 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
-  getVectorTool,
   runAlgorithmCapture,
   type AlgorithmParameter,
   type GeometryFamily,
@@ -39,13 +38,23 @@ interface BatchToolsDialogProps {
 
 /** The conventional id of a tool's primary input layer parameter. */
 const PRIMARY_INPUT_PARAM = "layer";
+/**
+ * Batch mode runs a tool once per selected layer, swapping that layer into the
+ * primary input each time, so a tool without that parameter cannot be batched.
+ * A tool that consumes several layers at once (a `"layers"` parameter) would
+ * otherwise ignore the per-item input and emit one identical copy of the same
+ * result per selected row.
+ */
+const BATCH_TOOLS = VECTOR_TOOLS.filter((tool) =>
+  tool.parameters.some((p) => p.id === PRIMARY_INPUT_PARAM && p.type === "layer"),
+);
 /** Sample size when scanning a layer's attribute field names. */
 const FIELD_SCAN_SAMPLE = 1000;
 
 /** Vector tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
   const groups: { group: string; tools: ProcessingAlgorithm[] }[] = [];
-  for (const tool of VECTOR_TOOLS) {
+  for (const tool of BATCH_TOOLS) {
     const label = tool.group ?? "Tools";
     let entry = groups.find((g) => g.group === label);
     if (!entry) {
@@ -196,8 +205,11 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const duckdb = useMemo(() => createDuckDbCapability(), []);
 
-  const [toolId, setToolId] = useState<string>(VECTOR_TOOLS[0].id);
-  const tool = useMemo(() => getVectorTool(toolId) ?? VECTOR_TOOLS[0], [toolId]);
+  const [toolId, setToolId] = useState<string>(BATCH_TOOLS[0].id);
+  const tool = useMemo(
+    () => BATCH_TOOLS.find((candidate) => candidate.id === toolId) ?? BATCH_TOOLS[0],
+    [toolId],
+  );
   const [params, setParams] = useState<Record<string, unknown>>(() => defaultParams(tool));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [log, setLog] = useState<string[]>([]);
@@ -285,6 +297,7 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
         value === undefined ||
         value === "" ||
         value === null ||
+        (Array.isArray(value) && value.length === 0) ||
         (param.type === "number" && Number.isNaN(value))
       ) {
         appendLog(`Error: "${param.label}" is required`);

@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { addCogRasterLayer } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins";
 import {
   RASTER_TOOLS,
   getRasterTool,
@@ -10,6 +10,8 @@ import {
   runRasterTool,
   readRasterData,
   runRasterToolClient,
+  convertGeoTiffToCog,
+  exceedsBrowserCogConversionLimit,
   buildSpectralIndexExpression,
   type AlgorithmParameter,
   type ConversionJob,
@@ -567,16 +569,26 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // Persist the result before the map add so the Download button survives a
       // render failure (the compute already succeeded — don't discard it).
       setClientResult({ name: outName, bytes });
+      const resultSampleCount = result.width * result.height * result.bands.length;
+      if (exceedsBrowserCogConversionLimit(resultSampleCount)) {
+        const message = t("raster.cogConvertTooLarge", { name: outName });
+        setError(message);
+        setClientLog((prev) => [...prev, message]);
+        tracker.finish("error", message);
+        return;
+      }
       const app = createAppAPI(mapControllerRef);
       try {
-        await addCogRasterLayer(app, {
-          url: outName,
-          data: bytes,
-          name: outName.replace(/\.tiff?$/i, ""),
-          // The renderer reads NoData from options (not the file's tag), so pass
-          // it explicitly for correct transparency of masked/edge cells.
-          ...(result.nodata != null ? { nodata: result.nodata } : {}),
-        });
+        const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
+        await addRasterToMap(
+          app,
+          // TypeScript widens wasm byte buffers to ArrayBufferLike, which is
+          // not directly assignable to BlobPart's ArrayBufferView.
+          new File([cogBytes as Uint8Array<ArrayBuffer>], outName, { type: "image/tiff" }),
+          {
+            name: outName.replace(/\.tiff?$/i, ""),
+          },
+        );
         setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
         tracker.addOutputLayer(outName);
       } catch (mapError) {

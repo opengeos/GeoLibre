@@ -293,3 +293,12 @@ export type ServerMessage =
   | LayerLocksMessage
   | KickedMessage
   | ErrorMessage;
+
+// Session Log ----------------------------------------------------------------
+
+export type SessionLogEntry =
+  | { type: "join"; ts: number; clientId: string; identity?: ParticipantIdentity | null }
+  | { type: "leave"; ts: number; clientId: string }
+  | { type: "set-mode"; ts: number; mode: CollaborationMode }
+  | { type: "set-participant-mode"; ts: number; clientId: string; canEdit: boolean }
+  | { type: "snapshot"; ts: number; rev: number; origin: string };

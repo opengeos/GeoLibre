@@ -199,6 +199,7 @@ interface TopToolbarProps {
 /** Translation keys for the reasons a Zarr variable cannot be added. */
 const ZARR_PROBLEM_KEYS = {
   group: "stacPlugin.zarrProblemGroup",
+  missing: "stacPlugin.zarrProblemMissing",
   unauthorized: "stacPlugin.zarrProblemUnauthorized",
   "unsupported-url": "stacPlugin.zarrProblemUnsupportedUrl",
   unavailable: "stacPlugin.zarrProblemUnavailable",
@@ -965,7 +966,7 @@ export function TopToolbar({
       formatZarr: t("stacPlugin.formatZarr"),
       formatUnknown: t("stacPlugin.formatUnknown"),
       addNoTarget: t("stacPlugin.addNoTarget"),
-      addIcechunk: t("stacPlugin.addIcechunk"),
+      addIcechunkFailed: t("stacPlugin.addIcechunkFailed"),
       zarrProblem: (problem) => t(ZARR_PROBLEM_KEYS[problem]),
       chooseTarget: t("stacPlugin.chooseTarget"),
       notAddable: t("stacPlugin.notAddable"),

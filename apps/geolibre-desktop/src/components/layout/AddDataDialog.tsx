@@ -18,6 +18,7 @@ import { MbtilesSource } from "./add-data/sources/MbtilesSource";
 import { OgcFeaturesSource } from "./add-data/sources/OgcFeaturesSource";
 import { OgcVectorTilesSource } from "./add-data/sources/OgcVectorTilesSource";
 import { PhotosSource } from "./add-data/sources/PhotosSource";
+import { PolylineSource } from "./add-data/sources/PolylineSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
 import { WfsSource } from "./add-data/sources/WfsSource";
@@ -103,6 +104,8 @@ function renderSource(
       return <PhotosSource />;
     case "mbtiles":
       return <MbtilesSource />;
+    case "polyline":
+      return <PolylineSource />;
     case "arcgis":
       return <ArcGISSource initialUrl={initialUrl} />;
     case "postgres":

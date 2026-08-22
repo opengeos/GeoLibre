@@ -1,7 +1,10 @@
 import {
   addArcGISLayer,
+  ARCGIS_IMAGE_SERVICE_URL_ERROR,
   ARCGIS_MAP_SERVICE_URL_ERROR,
+  fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
+  type ArcGISImageServiceRasterFunction,
   parseArcGISLayerType,
   type ArcGISLayerType,
   type ArcGISMapServiceSublayer,
@@ -39,6 +42,28 @@ const URL_PLACEHOLDER_KEYS = {
   "image-service": "addData.arcgis.imageServiceUrlPlaceholder",
 } as const satisfies Record<ArcGISLayerType, string>;
 
+const CUSTOM_RENDERING_RULE_OPTION = "custom-rendering-rule";
+const RASTER_FUNCTION_OPTION_PREFIX = "raster-function:";
+
+/** The raster function name carried by a rule with no custom arguments. */
+function simpleRenderingRuleFunctionName(renderingRule: string): string | null {
+  try {
+    const parsed = JSON.parse(renderingRule) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      Object.keys(parsed).length !== 1
+    ) {
+      return null;
+    }
+    const rasterFunction = (parsed as { rasterFunction?: unknown }).rasterFunction;
+    return typeof rasterFunction === "string" ? rasterFunction : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.arcgis.defaultName"));
@@ -57,9 +82,22 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const retrieveAbortRef = useRef<AbortController | null>(null);
   const retrievedSublayerUrlRef = useRef<string | null>(null);
   const [arcgisRenderingRule, setArcgisRenderingRule] = useState("");
+  const [rasterFunctionOptions, setRasterFunctionOptions] = useState<
+    ArcGISImageServiceRasterFunction[]
+  >([]);
+  const [isRetrievingRasterFunctions, setIsRetrievingRasterFunctions] = useState(false);
+  const [rasterFunctionError, setRasterFunctionError] = useState<string | null>(null);
+  const rasterFunctionAbortRef = useRef<AbortController | null>(null);
+  const retrievedRasterFunctionUrlRef = useRef<string | null>(null);
   const [progress, setProgress] = useState<{ loaded: number; total: number | null } | null>(null);
 
-  useEffect(() => () => retrieveAbortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      retrieveAbortRef.current?.abort();
+      rasterFunctionAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const resetSublayerCatalog = (clearSelection = false) => {
     retrieveAbortRef.current?.abort();
@@ -69,6 +107,16 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     setSublayerError(null);
     setIsRetrievingSublayers(false);
     if (clearSelection) setArcgisSublayers("");
+  };
+
+  const resetRasterFunctionCatalog = (clearSelection = false) => {
+    rasterFunctionAbortRef.current?.abort();
+    rasterFunctionAbortRef.current = null;
+    retrievedRasterFunctionUrlRef.current = null;
+    setRasterFunctionOptions([]);
+    setRasterFunctionError(null);
+    setIsRetrievingRasterFunctions(false);
+    if (clearSelection) setArcgisRenderingRule("");
   };
 
   const handleRetrieveSublayers = async () => {
@@ -102,6 +150,39 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     }
   };
 
+  const handleRetrieveRasterFunctions = async () => {
+    resetRasterFunctionCatalog();
+    const controller = new AbortController();
+    rasterFunctionAbortRef.current = controller;
+    setIsRetrievingRasterFunctions(true);
+    setRasterFunctionError(null);
+    try {
+      const rasterFunctions = await fetchArcGISImageServiceRasterFunctions({
+        url: arcgisUrl,
+        token: arcgisAccessToken || undefined,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setRasterFunctionOptions(rasterFunctions);
+      retrievedRasterFunctionUrlRef.current = arcgisUrl.trim();
+      if (rasterFunctions.length === 0) {
+        setRasterFunctionError(t("addData.arcgis.noRasterFunctionsFound"));
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setRasterFunctionOptions([]);
+      setRasterFunctionError(
+        error instanceof Error && error.message === ARCGIS_IMAGE_SERVICE_URL_ERROR
+          ? t("addData.arcgis.errorImageServiceUrl")
+          : error instanceof Error
+            ? error.message
+            : t("addData.arcgis.retrieveRasterFunctionsError"),
+      );
+    } finally {
+      if (!controller.signal.aborted) setIsRetrievingRasterFunctions(false);
+    }
+  };
+
   const selectedSublayerIds = new Set(
     arcgisSublayers.split(/[\s,]+/).filter((id) => /^\d+$/.test(id)),
   );
@@ -111,6 +192,15 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     else next.delete(String(id));
     setArcgisSublayers([...next].sort((a, b) => Number(a) - Number(b)).join(","));
   };
+  const renderingRuleFunction = simpleRenderingRuleFunctionName(arcgisRenderingRule);
+  const selectedRasterFunction = rasterFunctionOptions.find(
+    (rasterFunction) => rasterFunction.name === renderingRuleFunction,
+  );
+  const rasterFunctionSelectValue = arcgisRenderingRule.trim()
+    ? selectedRasterFunction
+      ? `${RASTER_FUNCTION_OPTION_PREFIX}${selectedRasterFunction.name}`
+      : CUSTOM_RENDERING_RULE_OPTION
+    : "";
 
   // The access token is intentionally excluded from saved fields — credentials
   // must not be persisted to the shared, exportable service library.
@@ -128,6 +218,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
 
   const applyFields = (fields: ServiceFields) => {
     resetSublayerCatalog(true);
+    resetRasterFunctionCatalog(true);
     setArcgisLayerType(parseArcGISLayerType(serviceFieldString(fields, "layerType")));
     setArcgisSourceType(
       serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
@@ -146,6 +237,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
     resetSublayerCatalog();
+    resetRasterFunctionCatalog();
     const currentUrl = arcgisUrl.trim();
     setArcgisLayerType(nextLayerType);
     // Keep a loaded sample URL in sync with the layer type, but leave an
@@ -225,6 +317,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
               value={arcgisSourceType}
               onChange={(event) => {
                 resetSublayerCatalog();
+                resetRasterFunctionCatalog();
                 setArcgisSourceType(event.target.value as ArcGISSourceType);
               }}
             >
@@ -242,10 +335,14 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
               value={arcgisUrl}
               onChange={(event) => {
                 const nextUrl = event.target.value;
-                const clearSelection =
+                const clearSublayerSelection =
                   retrievedSublayerUrlRef.current !== null &&
                   nextUrl.trim() !== retrievedSublayerUrlRef.current;
-                resetSublayerCatalog(clearSelection);
+                const clearRasterFunctionSelection =
+                  retrievedRasterFunctionUrlRef.current !== null &&
+                  nextUrl.trim() !== retrievedRasterFunctionUrlRef.current;
+                resetSublayerCatalog(clearSublayerSelection);
+                resetRasterFunctionCatalog(clearRasterFunctionSelection);
                 setArcgisUrl(nextUrl);
               }}
             />
@@ -279,6 +376,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
             value={arcgisAccessToken}
             onChange={(event) => {
               resetSublayerCatalog();
+              resetRasterFunctionCatalog();
               setArcgisAccessToken(event.target.value);
             }}
           />
@@ -369,14 +467,76 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
           </div>
         ) : null}
         {arcgisLayerType === "image-service" ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="arcgis-rendering-rule">{t("addData.arcgis.renderingRule")}</Label>
-            <Input
-              id="arcgis-rendering-rule"
-              placeholder={t("addData.arcgis.renderingRulePlaceholder")}
-              value={arcgisRenderingRule}
-              onChange={(event) => setArcgisRenderingRule(event.target.value)}
-            />
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="arcgis-raster-function">{t("addData.arcgis.rasterFunction")}</Label>
+              <div className="flex gap-2">
+                <Select
+                  id="arcgis-raster-function"
+                  value={rasterFunctionSelectValue}
+                  onChange={(event) => {
+                    const optionValue = event.target.value;
+                    if (optionValue === CUSTOM_RENDERING_RULE_OPTION) return;
+                    const rasterFunction = optionValue.startsWith(RASTER_FUNCTION_OPTION_PREFIX)
+                      ? optionValue.slice(RASTER_FUNCTION_OPTION_PREFIX.length)
+                      : "";
+                    setArcgisRenderingRule(
+                      rasterFunction ? JSON.stringify({ rasterFunction }) : "",
+                    );
+                  }}
+                >
+                  <option value="">{t("addData.arcgis.serviceDefaultRasterFunction")}</option>
+                  {rasterFunctionOptions.map((rasterFunction) => (
+                    <option
+                      key={rasterFunction.name}
+                      value={`${RASTER_FUNCTION_OPTION_PREFIX}${rasterFunction.name}`}
+                    >
+                      {rasterFunction.name}
+                    </option>
+                  ))}
+                  {arcgisRenderingRule.trim() && !selectedRasterFunction ? (
+                    <option value={CUSTOM_RENDERING_RULE_OPTION}>
+                      {t("addData.arcgis.customRenderingRule")}
+                    </option>
+                  ) : null}
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={
+                    isRetrievingRasterFunctions || arcgisSourceType !== "url" || !arcgisUrl.trim()
+                  }
+                  onClick={handleRetrieveRasterFunctions}
+                >
+                  {isRetrievingRasterFunctions ? (
+                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ListTree className="me-2 h-3.5 w-3.5" />
+                  )}
+                  {isRetrievingRasterFunctions
+                    ? t("addData.arcgis.retrievingRasterFunctions")
+                    : t("addData.arcgis.retrieveRasterFunctions")}
+                </Button>
+              </div>
+              {rasterFunctionError ? (
+                <p className="text-xs text-destructive">{rasterFunctionError}</p>
+              ) : null}
+              {selectedRasterFunction?.description ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedRasterFunction.description}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="arcgis-rendering-rule">{t("addData.arcgis.renderingRule")}</Label>
+              <Input
+                id="arcgis-rendering-rule"
+                placeholder={t("addData.arcgis.renderingRulePlaceholder")}
+                value={arcgisRenderingRule}
+                onChange={(event) => setArcgisRenderingRule(event.target.value)}
+              />
+            </div>
             <p className="text-xs text-muted-foreground">{t("addData.arcgis.renderingRuleHint")}</p>
           </div>
         ) : null}

@@ -111,7 +111,7 @@ class WhiteboxRunRequest(BaseModel):
     tool_id: str
     parameters: dict[str, Any] = {}
     tool: dict[str, Any] | None = None
-    layer_inputs: dict[str, dict[str, Any]] = {}
+    layer_inputs: dict[str, dict[str, Any] | list[dict[str, Any]]] = {}
     include_pro: bool = False
     tier: str = "open"
 
@@ -864,13 +864,37 @@ def _prepare_arguments(
     args: dict[str, Any] = {}
     working_directory: str | None = None
     absolute_paths: list[str] = []
-    for name, value in request.parameters.items():
+    # Preserve parameter order, then append embedded-only inputs. Browser and
+    # in-memory layers intentionally have no matching filesystem parameter.
+    names = dict.fromkeys((*request.parameters, *request.layer_inputs))
+    for name in names:
+        value = request.parameters.get(name)
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
         if name in request.layer_inputs:
             # Embedded layers are materialized to a server-owned temp file, so
             # the caller never controls this path.
-            value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
+            embedded = request.layer_inputs[name]
+            if isinstance(embedded, list):
+                value = ",".join(
+                    _write_layer_input(f"{name}_{index + 1}", layer, temp_paths)
+                    for index, layer in enumerate(embedded)
+                )
+            else:
+                value = _write_layer_input(name, embedded, temp_paths)
+        elif isinstance(value, str) and "," in value:
+            # The tool metadata is untrusted. Validate each escape-shaped
+            # comma-delimited member independently rather than trusting `kind`
+            # or treating the list as one opaque path. Plain relative members
+            # are deferred to the defense-in-depth pass below, which resolves
+            # them against the pinned working directory (checking them here
+            # would resolve against the sidecar's own cwd and wrongly reject).
+            for path_value in (item.strip() for item in value.split(",")):
+                if not _looks_like_fs_path(path_value):
+                    continue
+                _ensure_within_roots(path_value)
+                if Path(path_value).expanduser().is_absolute():
+                    absolute_paths.append(path_value)
         elif isinstance(value, str) and _looks_like_fs_path(value):
             # A path-shaped value must stay inside the allowlisted roots,
             # regardless of the client-declared `kind`. `request.tool` is
@@ -920,12 +944,17 @@ def _prepare_arguments(
     if working_directory is not None and conversion._CONVERSION_ROOTS:
         base = Path(working_directory)
         for value in args.values():
+            if not isinstance(value, str):
+                continue
             # Every non-absolute string arg — including a bare filename like
             # "pwned.tif", which could itself be a symlink planted at the root —
             # is resolved against the pinned cwd and checked. Absolute / `..`
-            # values were already validated in the loop above.
-            if isinstance(value, str) and not Path(value).is_absolute():
-                _ensure_within_roots(str(base / value))
+            # values were already validated in the loop above. Whitebox splits a
+            # multi-dataset arg on commas, so check each member rather than the
+            # joined string (`safe.tif,escape/evil.tif` is not one path).
+            for member in (item.strip() for item in value.split(",")):
+                if member and not Path(member).is_absolute():
+                    _ensure_within_roots(str(base / member))
     return args, working_directory
 
 
@@ -1167,16 +1196,20 @@ def whitebox_run(request: WhiteboxRunRequest):
     # Reject oversized embedded layers before enqueueing work, matching the
     # 413 vector/PostGIS/Sedona feature cap (defense-in-depth also lives in
     # ``_write_layer_input``).
-    for name, layer in request.layer_inputs.items():
-        geojson = layer.get("geojson") if isinstance(layer, dict) else None
-        if not isinstance(geojson, dict):
-            continue
-        features = geojson.get("features") or []
-        if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
-            raise HTTPException(
-                status_code=413,
-                detail=(f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"),
-            )
+    for name, value in request.layer_inputs.items():
+        layers = value if isinstance(value, list) else [value]
+        for layer in layers:
+            geojson = layer.get("geojson") if isinstance(layer, dict) else None
+            if not isinstance(geojson, dict):
+                continue
+            features = geojson.get("features") or []
+            if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
+                    ),
+                )
     job_id = str(uuid.uuid4())
     now = _utc_now()
     with _JOBS_LOCK:

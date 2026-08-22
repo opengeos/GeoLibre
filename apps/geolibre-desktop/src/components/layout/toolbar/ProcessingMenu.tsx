@@ -270,6 +270,12 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
                       {t("toolbar.vectorTool.simplify")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("decode-polyline")}>
+                      {t("toolbar.vectorTool.decodePolyline")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("encode-polyline")}>
+                      {t("toolbar.vectorTool.encodePolyline")}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
                       {t("toolbar.vectorTool.reproject")}
                     </DropdownMenuItem>
@@ -281,6 +287,12 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
                       {t("toolbar.vectorTool.smooth")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("extract-vertices")}>
+                      {t("toolbar.vectorTool.extractVertices")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("points-along-geometry")}>
+                      {t("toolbar.vectorTool.pointsAlongGeometry")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
                       {t("toolbar.vectorTool.grid")}
@@ -342,6 +354,13 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("space-time-proximity")}>
                       {t("toolbar.vectorTool.spaceTimeProximity")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupDataManagement")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("merge-layers")}>
+                      {t("toolbar.vectorTool.mergeLayers")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">

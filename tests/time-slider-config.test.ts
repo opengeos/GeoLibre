@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  __resetBoundFilterScheduleForTests,
   __reconcileBoundLayersForTests,
+  __scheduleBoundFiltersForTests,
+  buildDefaultOptions,
   configToOptions,
   getLayerTimeBinding,
   createStoreLayer,
@@ -37,7 +40,69 @@ function baseConfig(overrides: Record<string, unknown> = {}): Record<string, unk
 // Clear the plugin's persisted config between tests (no control is active, so a
 // null state simply resets savedConfig to null).
 afterEach(() => {
+  __resetBoundFilterScheduleForTests();
   apply(null);
+});
+
+describe("Time Slider playback defaults", () => {
+  it("stops at the end unless the user explicitly enables looping", () => {
+    assert.equal(buildDefaultOptions().loop, false);
+  });
+});
+
+describe("Time Slider bound-filter backpressure", () => {
+  it("applies the first date immediately and collapses rapid ticks to the latest date", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const previousLayers = useAppStore.getState().layers;
+    const layer = {
+      id: "buildings",
+      name: "Buildings",
+      type: "vector-tiles",
+      source: { type: "vector" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {
+        timeBinding: {
+          property: "construction_year",
+          valueKind: "year",
+          min: Date.UTC(1719, 0, 1),
+          max: Date.UTC(2026, 0, 1),
+          granularity: "year",
+          cumulative: true,
+          window: { unit: "year", before: 0, after: 1 },
+        },
+      },
+    } satisfies GeoLibreLayer;
+    let currentDate = "1900-01-01T00:00:00.000Z";
+    const control = {
+      getConfig: () => ({ currentDate }),
+    } as unknown as TimeSliderControl;
+    const upperYear = (): number | undefined => {
+      const filter = useAppStore.getState().layers[0]?.timeFilter;
+      return Array.isArray(filter) ? ((filter.at(-1) as unknown[])?.at(-1) as number) : undefined;
+    };
+
+    try {
+      useAppStore.setState({ layers: [layer] });
+      __scheduleBoundFiltersForTests(control);
+      assert.equal(upperYear(), 1901, "the leading date should render immediately");
+
+      currentDate = "1901-01-01T00:00:00.000Z";
+      __scheduleBoundFiltersForTests(control);
+      currentDate = "1902-01-01T00:00:00.000Z";
+      __scheduleBoundFiltersForTests(control);
+      assert.equal(upperYear(), 1901, "intermediate worker-invalidating filters are held back");
+
+      t.mock.timers.tick(249);
+      assert.equal(upperYear(), 1901);
+      t.mock.timers.tick(1);
+      assert.equal(upperYear(), 1903, "the trailing apply should use only the newest date");
+    } finally {
+      __resetBoundFilterScheduleForTests();
+      useAppStore.setState({ layers: previousLayers });
+    }
+  });
 });
 
 describe("Time Slider open-ended end date persistence", () => {

@@ -37,6 +37,18 @@ const CLIP: ModelToolDescriptor = {
   ],
 };
 
+/** A tool whose input is the multi-layer `"layers"` parameter, not a `"layer"` port. */
+const MERGE: ModelToolDescriptor = {
+  key: "vector:merge-layers",
+  provider: "vector",
+  toolId: "merge-layers",
+  name: "Merge layers",
+  group: "Data management",
+  inputs: [],
+  outputs: [{ id: "out", label: "Output", kind: "vector" }],
+  parameters: [{ id: "layers", label: "Input layers", type: "layers", required: true }],
+};
+
 /** A same-id tool from the other registry, the collision `modelToolKey` guards. */
 const WHITEBOX_BUFFER: ModelToolDescriptor = {
   key: "whitebox:buffer",
@@ -350,6 +362,114 @@ describe("AI-created Model Builder models", () => {
           ids(),
         ),
       /"distance" of "buffer" is required/,
+    );
+  });
+
+  it("accepts a layer-id array for a multi-layer parameter", () => {
+    const base = {
+      name: "Merged",
+      inputs: [],
+      steps: [
+        {
+          key: "result",
+          algorithm: "merge-layers",
+          inputs: {},
+          parameters: { layers: ["roads-id", "counties-id"] } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // A "layers" value arrives as an array, so the text check the other
+    // non-numeric types use would reject every valid value.
+    assert.doesNotThrow(() => buildAssistantModel(base, layers, [MERGE], ids()));
+
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: "roads-id" } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: [1, 2] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: [] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /"layers" of "merge-layers" is required/,
+    );
+    // An empty entry is falsy, so the resolution loop leaves it alone; without
+    // the type check it would reach the saved model and be dropped at Run time,
+    // merging fewer layers than the model names.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["roads-id", ""] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    // A whitespace-only entry is truthy, so resolution rejects it first -- also
+    // at build time, just with the layer-reference message.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["roads-id", "  "] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /No layer matching "  " for "layers" of "merge-layers"/,
+    );
+  });
+
+  it("resolves layer names inside a multi-layer parameter to ids", () => {
+    const base = {
+      name: "Merged",
+      inputs: [],
+      steps: [
+        {
+          key: "result",
+          algorithm: "merge-layers",
+          inputs: {},
+          parameters: { layers: ["Roads", "counties-id"] } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // The assistant may write a layer name where the canvas would store an id,
+    // so the saved graph must hold ids only -- as it does for a "layer" slot.
+    const model = buildAssistantModel(base, layers, [MERGE], ids());
+    const step = model.graph?.nodes.find((node) => node.kind === "tool");
+    assert.deepEqual(step?.parameters.layers, ["roads-id", "counties-id"]);
+
+    // An unknown name fails at build time rather than silently at Run time.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["Roads", "Nowhere"] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /No layer matching "Nowhere" for "layers" of "merge-layers"/,
     );
   });
 

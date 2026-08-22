@@ -948,13 +948,18 @@ export function withItemBounds(
 const ZARR_NODE_KEYS = ["zarr.json", ".zarray", ".zgroup"];
 
 /**
- * What the store said about a variable. The three failures need different words: a group is a real
- * path that simply cannot be drawn, a refusal means credentials this build cannot supply, and the
- * rest is a store nothing can read.
+ * What the store said about a variable. The failures need different words: a group is a real path
+ * that simply cannot be drawn, a refusal means credentials this build cannot supply, `missing` is a
+ * store that answered and does not hold the variable, and the rest is a store nothing can read.
+ *
+ * Only {@link zarrReaderTargetCheck} reports `missing`. Over HTTP the two are not separable — a
+ * gateway that omits CORS headers on its 404s throws for a key that is merely absent, so an absent
+ * variable and an unreachable store arrive identically.
  */
 export type ZarrTargetCheck =
   | "array"
   | "group"
+  | "missing"
   | "unauthorized"
   | "unsupported-url"
   | "unavailable";
@@ -966,6 +971,64 @@ interface Node {
 
 /** Statuses an object store answers with when a token is missing rather than the object. */
 const UNAUTHORIZED_STATUSES = new Set([401, 403, 409]);
+
+/**
+ * What one metadata document says a node is. v2 splits the answer across two files; v3 says which
+ * it is, and says so explicitly. A body that is not metadata says nothing at all.
+ */
+function nodeVerdict(key: string, body: unknown): ZarrTargetCheck | null {
+  // An array parses and is `typeof "object"`, but no Zarr node is one, so it says nothing either.
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  if (key === ".zarray") return "array";
+  if (key === ".zgroup") return "group";
+  // A v3 node says which it is. One that says neither is not a node either, whatever else it holds.
+  const nodeType = (body as Node).node_type;
+  return nodeType === "array" || nodeType === "group" ? nodeType : null;
+}
+
+/**
+ * The same verdict, for a store that is read through its own reader rather than over HTTP — an
+ * Icechunk repository resolves a Zarr key through its manifest, so there is no URL to probe.
+ */
+export async function zarrReaderTargetCheck(
+  read: (key: `/${string}`, options?: { signal?: AbortSignal }) => Promise<Uint8Array | undefined>,
+  variable: string,
+  signal?: AbortSignal,
+): Promise<ZarrTargetCheck> {
+  // "No such key" is about the variable; a throw is about the store. The difference is the two
+  // verdicts below, so which happened is remembered rather than collapsed. `IcechunkStore.get`
+  // catches its own `NotFoundError` and resolves undefined, so an absent variable reports
+  // `missing`; a reader that threw would report `unavailable`, which is honest for one whose
+  // absences cannot be told from its failures.
+  let failed = false;
+  // Both Zarr versions are asked for, as over HTTP. An Icechunk repository answers only the v3
+  // name, and answers the other two from the snapshot it holds rather than by asking.
+  for (const key of ZARR_NODE_KEYS) {
+    signal?.throwIfAborted();
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = await read(`/${variable}/${key}`, { signal });
+    } catch (error) {
+      // One key failing is not the whole store, the same way it is not over HTTP: a manifest can
+      // refuse a key it does not carry. Keep asking, and report only once every key has been.
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      failed = true;
+      continue;
+    }
+    if (!bytes) continue;
+    // Bytes that are not usable metadata — unparseable, or parsed into something that is not a
+    // node — are the store failing to answer rather than the variable being absent, however well
+    // formed they are.
+    try {
+      const verdict = nodeVerdict(key, JSON.parse(new TextDecoder().decode(bytes)) as unknown);
+      if (verdict) return verdict;
+      failed = true;
+    } catch {
+      failed = true;
+    }
+  }
+  return failed ? "unavailable" : "missing";
+}
 
 /**
  * Whether a variable really is a drawable array in the store. Asking for the array's own metadata
@@ -997,11 +1060,8 @@ export async function zarrTargetCheck(
         .json()
         .then((body: unknown) => (body && typeof body === "object" ? (body as Node) : null))
         .catch(() => null);
-      if (!metadata) continue;
-      // v2 splits the answer across two files; v3 says which it is, and says so explicitly.
-      if (key === ".zarray") return "array";
-      if (key === ".zgroup") return "group";
-      return metadata.node_type === "array" ? "array" : "group";
+      const verdict = nodeVerdict(key, metadata);
+      if (verdict) return verdict;
     } catch (error) {
       // Not every failure is the whole host: a gateway that omits CORS headers on its 404s throws
       // for a key that is merely absent, so keep asking rather than condemning a store that would
@@ -1027,8 +1087,9 @@ function storeKeyUrl(store: string, key: string): string {
 /** What the panel would add from an asset, for the formats that hold more than one thing. */
 export function assetTargets(item: StacItem, key: string, asset: StacAsset): AssetTarget[] {
   if (assetFormat(asset) !== "zarr") return [];
-  // An href reaching into the store already names its array; there is nothing left to choose.
-  const { path } = zarrStorePath(asset.href);
+  // An href reaching into the store already names its array; there is nothing left to choose. An
+  // Icechunk repository is no different: the reader gets the root, the path becomes the variable.
+  const path = zarrStorePath(asset.href).path;
   if (path) return [{ id: path, label: asset.title || path.split("/").pop() || path }];
   return zarrTargets(item, key);
 }
@@ -1039,10 +1100,24 @@ export function assetTargets(item: StacItem, key: string, asset: StacAsset): Ass
  * say it once for every asset it publishes.
  */
 export function isIcechunkAsset(asset: StacAsset, item?: StacItem): boolean {
-  return (
-    typeof asset["icechunk:branch"] === "string" ||
-    typeof item?.properties?.["icechunk:branch"] === "string"
-  );
+  // Presence, not usability: naming the field at all declares the format, and an empty or
+  // malformed value means no branch was named rather than that this is a plain store. Falling back
+  // to the URL reader would give 404s and "unavailable"; the default branch gives the layer.
+  return "icechunk:branch" in asset || "icechunk:branch" in (item?.properties ?? {});
+}
+
+/**
+ * The branch an Icechunk asset names, or undefined when it names none — the default is
+ * {@link openIcechunkStore}'s. Declared a string but arriving as catalog JSON, so it is checked
+ * here rather than trusted, and this is the only reading of it.
+ */
+export function icechunkBranch(asset: StacAsset, item?: StacItem): string | undefined {
+  for (const value of [asset["icechunk:branch"], item?.properties?.["icechunk:branch"]]) {
+    // Trimmed on the way out too: the name is interpolated into a request path, so accepting one
+    // form and sending another would ask for a branch the catalog did not name.
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
 }
 
 /** Whether a format is one whose assets are read one target at a time. */
@@ -1052,10 +1127,11 @@ export function requiresTarget(asset: StacAsset): boolean {
 
 /** Whether Add can proceed: a format the panel draws, holding something it can draw. */
 export function canAddAsset(item: StacItem, key: string, asset: StacAsset): boolean {
-  if (!isVisualizableAsset(asset) || isIcechunkAsset(asset, item)) return false;
+  if (!isVisualizableAsset(asset)) return false;
   if (!requiresTarget(asset)) return true;
-  // Whether a store can take keys is answerable without asking the host, so answer it here rather
-  // than enabling Add and refusing the click.
+  // Answerable without asking the host, so answer it here rather than enabling Add and refusing
+  // the click. It holds for an Icechunk repository too: the manifest reader still asks for
+  // `<store>/<key>` (`HttpStorage.getUrl` concatenates), so a token in the URL lands mid-request.
   if (!zarrStoreTakesKeys(zarrStorePath(asset.href).url)) return false;
   return assetTargets(item, key, asset).length > 0;
 }

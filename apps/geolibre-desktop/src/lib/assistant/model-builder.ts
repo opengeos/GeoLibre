@@ -66,6 +66,14 @@ function parameterTypeMatches(param: AlgorithmParameter, value: unknown): boolea
         typeof value === "string" &&
         (!param.options?.length || param.options.some((option) => option.value === value))
       );
+    case "layers":
+      // A multi-layer picker arrives as an array of layer ids, not as text. A
+      // blank entry would survive resolution below and then be dropped at Run
+      // time, quietly merging fewer layers than the model names.
+      return (
+        Array.isArray(value) &&
+        value.every((entry) => typeof entry === "string" && entry.trim().length > 0)
+      );
     default:
       // layer / string / field / path all arrive as text.
       return typeof value === "string";
@@ -111,7 +119,12 @@ function checkStepParameters(
     if (!param.required || wired.has(param.id) || param.default !== undefined) continue;
     if (!isParameterVisible(param, values, declared)) continue;
     const value = values[param.id];
-    if (value === undefined || value === null || value === "") {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    ) {
       throw new Error(`Parameter "${param.id}" of "${step.algorithm}" is required.`);
     }
   }
@@ -258,8 +271,10 @@ export function buildAssistantModel(
     // `layerToModelValue` looks the value up by exact id. Resolve it here the
     // way `definition.inputs` is resolved, so the saved graph holds ids only.
     const layerSlots = new Set(descriptor.inputs.map((port) => port.id));
+    const multiLayerSlots = new Set<string>();
     for (const param of descriptor.parameters) {
       if (param.type === "layer") layerSlots.add(param.id);
+      else if (param.type === "layers") multiLayerSlots.add(param.id);
     }
     for (const slot of layerSlots) {
       if (wired.has(slot)) continue;
@@ -270,6 +285,21 @@ export function buildAssistantModel(
         throw new Error(`No layer matching "${raw}" for "${slot}" of "${step.algorithm}".`);
       }
       parameters[slot] = layer.id;
+    }
+    // A multi-layer slot holds an array of the same references, so resolve each
+    // entry the same way rather than leaving names to fail at Run time.
+    for (const slot of multiLayerSlots) {
+      if (wired.has(slot)) continue;
+      const raw = parameters[slot];
+      if (!Array.isArray(raw)) continue;
+      parameters[slot] = raw.map((entry) => {
+        if (typeof entry !== "string" || !entry) return entry;
+        const layer = resolveLayer(entry);
+        if (!layer) {
+          throw new Error(`No layer matching "${entry}" for "${slot}" of "${step.algorithm}".`);
+        }
+        return layer.id;
+      });
     }
     checkStepParameters(step, descriptor, parameters, wired);
     nodes.push({

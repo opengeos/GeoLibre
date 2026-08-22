@@ -183,6 +183,27 @@ def test_whitebox_path_check_ignores_mislabeled_kind(
     assert args["input"] == "EPSG:4326"
 
 
+def test_whitebox_multi_path_check_ignores_mislabeled_kind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Every path-list member stays confined even when its kind is mislabeled."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import WhiteboxRunRequest, _prepare_arguments
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+    request = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": "a.geojson,/etc/passwd"},
+        tool={"params": [{"name": "inputs", "kind": "string"}]},
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(request, [])
+    assert excinfo.value.status_code == 403
+
+
 def test_whitebox_relative_path_confined_by_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """A relative path arg is confined by pinning the subprocess cwd to a root.
 
@@ -285,6 +306,54 @@ def test_whitebox_relative_path_through_symlink_is_rejected(
     )
     args, _ = _prepare_arguments(ok, [])
     assert args["output"] == "subdir/out.tif"
+
+
+def test_whitebox_relative_path_list_member_through_symlink_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Each member of an all-relative path list is checked against the pinned cwd.
+
+    Whitebox splits a multi-dataset arg on commas, so a safe first member must
+    not shield a later member that traverses a symlink out of the root.
+    """
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import WhiteboxRunRequest, _prepare_arguments
+
+    root = tmp_path / "data"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside)
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {"id": "merge_vectors", "params": [{"name": "inputs", "kind": "vector_in"}]}
+    request = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": "safe.geojson,escape/secret.geojson"},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(request, [])
+    assert excinfo.value.status_code == 403
+
+    ok = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": "safe.geojson,subdir/other.geojson"},
+        tool=tool,
+    )
+    args, _ = _prepare_arguments(ok, [])
+    assert args["inputs"] == "safe.geojson,subdir/other.geojson"
+
+    # A relative member alongside an absolute in-root member is resolved
+    # against the pinned root, not the sidecar's own cwd.
+    mixed = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": f"safe.geojson,{root / 'other.geojson'}"},
+        tool=tool,
+    )
+    args, cwd = _prepare_arguments(mixed, [])
+    assert cwd == str(root.resolve())
+    assert args["inputs"] == f"safe.geojson,{root / 'other.geojson'}"
 
 
 def test_whitebox_null_byte_path_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

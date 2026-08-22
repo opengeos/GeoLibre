@@ -11,8 +11,9 @@ from .authoring import (
 )
 from .geolibre import Feature, Layer, Map
 from .legends import builtin_legend_names
+from .polyline import decode_polyline, encode_polyline, polyline_to_geojson, unescape_polyline
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 __all__ = [
     "Feature",
     "Layer",
@@ -21,9 +22,13 @@ __all__ = [
     "basemap_catalog",
     "builtin_legend_names",
     "color_ramp_names",
+    "decode_polyline",
     "describe_project",
+    "encode_polyline",
     "load_project",
+    "polyline_to_geojson",
     "save_project",
+    "unescape_polyline",
 ]
 
 

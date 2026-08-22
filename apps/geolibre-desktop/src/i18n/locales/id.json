@@ -325,6 +325,10 @@
         "label": "Tambahkan Layer PostgreSQL",
         "description": "Jalankan Martin secara lokal, temukan sumber PostGIS, dan tambahkan sumber sebagai ubin vektor."
       },
+      "iceberg": {
+        "label": "Tambahkan Layer Apache Iceberg",
+        "description": "Baca tabel Iceberg (v3 atau lebih baru) dan tambahkan sebagian fiturnya."
+      },
       "deckglViz": {
         "label": "Tambahkan Layer Deck.gl",
         "description": "Pilih jenis layer deck.gl, lalu muat data contoh atau unggah file/URL CSV/JSON/GeoJSON."
@@ -332,6 +336,10 @@
       "video": {
         "label": "Tambahkan Layer Video",
         "description": "Tambahkan overlay video bergeoreferensi dengan memasukkan URL MP4 dan empat koordinat sudut."
+      },
+      "polyline": {
+        "label": "Tambahkan Layer Polyline Terenkode",
+        "description": "Impor string polyline terenkode (Google, OSRM, Valhalla) dari teks atau file sebagai garis vektor."
       }
     },
     "shared": {
@@ -500,6 +508,14 @@
       "noSublayersFound": "Layanan peta ini tidak mencantumkan layer apa pun.",
       "retrieveError": "Tidak dapat mengambil layer dari layanan peta.",
       "errorMapServiceUrl": "Masukkan URL ArcGIS MapServer.",
+      "rasterFunction": "Fungsi raster",
+      "serviceDefaultRasterFunction": "Default layanan",
+      "retrieveRasterFunctions": "Telusuri fungsi",
+      "retrievingRasterFunctions": "Mengambil...",
+      "noRasterFunctionsFound": "Layanan citra ini tidak mencantumkan fungsi raster apa pun.",
+      "retrieveRasterFunctionsError": "Tidak dapat mengambil fungsi raster dari layanan citra.",
+      "errorImageServiceUrl": "Masukkan URL ArcGIS ImageServer.",
+      "customRenderingRule": "Aturan rendering kustom",
       "renderingRule": "Aturan render",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
@@ -691,6 +707,40 @@
       "errorSelectTable": "Pilih tabel untuk dimuat.",
       "errorRuntimeMissing": "Server pemrosesan tidak memiliki runtime PostGIS (psycopg) terpasang. Pasang ekstra 'postgis' pada geolibre-server untuk memuat layer yang dapat diedit."
     },
+    "iceberg": {
+      "defaultName": "Layer Iceberg",
+      "notice": "Tabel Iceberg dibaca sekali, sesuai permintaan. Layer ini adalah snapshot yang dibatasi oleh batas baris di bawah dan tidak pernah dipindai ulang secara otomatis — gunakan Segarkan di menu layer untuk membacanya lagi.",
+      "mode": "Sumber Iceberg",
+      "modeTable": "Lokasi tabel",
+      "modeCatalog": "Katalog REST",
+      "location": "Lokasi metadata tabel",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Endpoint katalog",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Hubungkan",
+      "table": "Tabel Iceberg",
+      "sql": "SQL (opsional)",
+      "sqlHint": "Edit untuk memfilter atau mengubah bentuk data yang dirender. Pernyataan harus mengembalikan kolom GEOMETRY; biarkan seperti yang dihasilkan untuk membaca seluruh tabel.",
+      "selectTable": "Pilih tabel",
+      "geometryColumn": "Kolom geometri",
+      "rowLimit": "Batas baris",
+      "rowLimitHint": "Layer menyimpan baris-baris pertama tabel, hingga batas ini. Batas tidak boleh melebihi {{max}} baris.",
+      "rowLimitTruncates": "Tabel berisi {{total}} baris; layer akan berisi {{limit}} baris pertama.",
+      "statusConnecting": "Membaca metadata Iceberg...",
+      "statusInspecting": "Memeriksa tabel...",
+      "statusInspected": "{{rows}} baris. Geometri: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} baris, tetapi tidak ditemukan kolom GEOMETRY. Geometri Iceberg harus menggunakan tipe geometri v3.",
+      "statusTablesFound_other": "Ditemukan {{count}} tabel. Pilih salah satu untuk melanjutkan.",
+      "statusNoTables": "Katalog tidak menampilkan tabel apa pun.",
+      "errorLocation": "Masukkan lokasi metadata tabel Iceberg.",
+      "errorWarehouse": "Masukkan warehouse Iceberg yang akan dilampirkan.",
+      "errorEndpoint": "Masukkan endpoint katalog REST Iceberg.",
+      "errorConnect": "Tidak dapat membaca sumber Iceberg.",
+      "errorInspect": "Tidak dapat memeriksa tabel Iceberg.",
+      "errorConnectFirst": "Hubungkan dan pilih tabel Iceberg terlebih dahulu."
+    },
     "video": {
       "defaultName": "Layer Video",
       "sampleLabel": "Ombak pesisir dekat San Francisco",
@@ -713,6 +763,47 @@
       "bottomRight": "Kanan-bawah (bujur, lintang)",
       "bottomLeft": "Kiri-bawah (bujur, lintang)",
       "cornersNote": "Keempat sudut menggeoreferensikan video pada peta. Video harus disajikan melalui HTTPS dan host harus mengizinkan permintaan lintas asal (CORS) agar bingkai dapat dirender."
+    },
+    "polyline": {
+      "defaultName": "Polyline",
+      "modePaste": "Tempel teks",
+      "modeFile": "Pilih file",
+      "precisionLabel": "Presisi",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Hapus escape backslash (\\\\ menjadi \\)",
+      "delimiterLabel": "Pembatas polyline",
+      "delimNewline": "Baris baru (default)",
+      "delimSemicolon": "Titik koma (;)",
+      "delimComma": "Koma (,)",
+      "delimTab": "Tab",
+      "delimCustom": "Pembatas kustom",
+      "customDelimPlaceholder": "Pembatas kustom (mis. | atau ---)",
+      "outputGeometryLabel": "Geometri keluaran",
+      "separateLines": "LineString terpisah",
+      "multiLineString": "MultiLineString tunggal",
+      "textLabel": "String polyline terenkode",
+      "placeholder": "Tempel string polyline terenkode (mis. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Berhasil mendekode {{lines}} garis dengan total {{points}} titik koordinat.",
+      "previewTitle": "Pratinjau Geometri Terdekode",
+      "previewExtent": "Cakupan",
+      "previewLength": "Panjang",
+      "previewCoordinates": "Periksa koordinat",
+      "previewLine": "Garis",
+      "previewPoints": "titik",
+      "previewStart": "Awal",
+      "previewEnd": "Akhir",
+      "errorFileMissing": "File yang dipilih kosong atau tidak dapat dibaca.",
+      "readError": "Tidak dapat membaca file polyline.",
+      "errorChooseFile": "Pilih file polyline untuk dimuat.",
+      "errorEmptyInput": "Masukkan satu atau beberapa string polyline terenkode.",
+      "errorNoValidLines": "Tidak ada koordinat polyline valid yang dapat didekode.",
+      "sampleGoogle": "Google / OSRM (presisi 5)",
+      "sampleValhalla": "Valhalla / Mapbox (presisi 6)",
+      "sampleEscaped": "Backslash ter-escape (format string JSON)",
+      "sampleMultiLine": "Batch rute multi-baris (3 segmen)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Suhu udara",
@@ -2225,6 +2316,7 @@
       "delimitedText": "Layer Teks Berpembatas",
       "photos": "Foto Bertag Geo",
       "gpx": "Layer GPX",
+      "polyline": "Polyline Terenkode",
       "mbtiles": "Layer MBTiles",
       "xyz": "Layer XYZ",
       "wms": "Layer WMS",
@@ -2237,7 +2329,8 @@
       "video": "Layer Video",
       "deckglViz": "Layer Deck.gl",
       "gltfModel": "Model 3D (glTF)",
-      "postgres": "Layer PostgreSQL"
+      "postgres": "Layer PostgreSQL",
+      "iceberg": "Layer Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Vektor ke Vektor",
@@ -2324,6 +2417,8 @@
       "dissolve": "Dissolve",
       "boundingBox": "Kotak pembatas",
       "simplify": "Sederhanakan",
+      "decodePolyline": "Dekode polyline",
+      "encodePolyline": "Enkode garis menjadi polyline",
       "clip": "Potong",
       "intersection": "Irisan",
       "difference": "Selisih",
@@ -2337,6 +2432,8 @@
       "explode": "Pisahkan (explode)",
       "aggregate": "Agregasi berdasarkan atribut",
       "smooth": "Haluskan",
+      "extractVertices": "Ekstrak verteks",
+      "pointsAlongGeometry": "Titik di sepanjang geometri",
       "grid": "Grid teratur",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cakupan sel BTS",
@@ -2346,6 +2443,7 @@
       "trajectorySpeed": "Kecepatan lintasan",
       "detectStops": "Deteksi pemberhentian",
       "spaceTimeProximity": "Kedekatan ruang-waktu",
+      "mergeLayers": "Gabungkan layer",
       "checkValidity": "Periksa validitas",
       "fixGeometries": "Perbaiki geometri",
       "checkTopologyRules": "Periksa aturan topologi",
@@ -2530,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Pergerakan & waktu",
+      "subGroupDataManagement": "Manajemen data",
       "subGroupDataQuality": "Kualitas data",
       "subGroupTerrain": "Medan",
       "subGroupReproject": "Proyeksikan ulang",
@@ -3385,11 +3484,20 @@
     "addUnsupported": "Hanya aset GeoTIFF/COG, GeoJSON, GeoParquet, dan PMTiles yang dapat ditambahkan ke peta",
     "addFailed": "Tidak dapat menambahkan aset",
     "addNoSourceLayers": "Arsip ini tidak mencantumkan lapisan untuk digambar",
+    "addNoTarget": "Aset ini tidak mencantumkan apa pun untuk digambar",
+    "addIcechunkFailed": "Repositori Icechunk ini tidak dapat dibuka",
+    "zarrProblemGroup": "Aset ini menunjuk ke sebuah grup array, bukan satu array yang dapat digambar",
+    "zarrProblemMissing": "Penyimpanan ini tidak memuat variabel tersebut",
+    "zarrProblemUnauthorized": "Penyimpanan Zarr ini memerlukan kredensial yang belum dapat disediakan GeoLibre",
+    "zarrProblemUnsupportedUrl": "Alamat penyimpanan Zarr ini tidak dapat dibaca satu kunci per satu",
+    "zarrProblemUnavailable": "Penyimpanan Zarr ini tidak dapat dibuka",
+    "chooseTarget": "Pilih yang akan ditambahkan",
     "cogUnsupported": "Host GeoLibre ini tidak dapat memvisualisasikan aset GeoTIFF jarak jauh",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Format tidak dikenal",
     "notAddable": "tidak dapat ditambahkan"
   },
@@ -3614,6 +3722,10 @@
   },
   "basemaps": {
     "confirmStyleReplace_other": "Beralih ke \"{{name}}\" mengganti seluruh gaya peta dan akan menghapus {{count}} peta dasar bertumpuk yang Anda tambahkan. Lanjutkan?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Properti fitur",
+    "massingHeight": "Tinggi (m)"
   },
   "annotations": {
     "toolbar": "Alat anotasi",
@@ -4073,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "Pilih layer...",
       "selectField": "Pilih bidang...",
-      "selectLayerFirst": "Pilih layer terlebih dahulu"
+      "selectLayerFirst": "Pilih layer terlebih dahulu",
+      "layersSelected_other": "{{count}} layer dipilih"
     },
     "whitebox": {
       "run": "Jalankan",
@@ -4179,6 +4292,1527 @@
       "run": "Jalankan",
       "outputPlaceholder": "Keluaran akan muncul di sini.",
       "resolutionRange": "Resolusi (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Membuat poligon buffer di sekitar setiap fitur dengan jarak tetap",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "distance": {
+              "label": "Jarak"
+            },
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Sentroid",
+          "description": "Menghitung titik sentroid setiap fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Convex hull",
+          "description": "Menghitung convex hull yang melingkupi semua fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Dissolve",
+          "description": "Menggabungkan fitur poligon menjadi satu geometri, dengan opsi pengelompokan berdasarkan bidang",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang dissolve (opsional)",
+              "description": "Nama properti untuk mengelompokkan fitur sebelum di-dissolve"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Kotak pembatas",
+          "description": "Menghitung selubung persegi panjang dari semua fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Sederhanakan",
+          "description": "Mengurangi jumlah verteks menggunakan Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "tolerance": {
+              "label": "Toleransi (derajat)"
+            },
+            "highQuality": {
+              "label": "Kualitas tinggi"
+            }
+          }
+        },
+        "clip": {
+          "name": "Potong",
+          "description": "Memotong layer masukan ke area yang dicakup layer overlay (mempertahankan atribut masukan)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay (pemotong)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Irisan",
+          "description": "Hanya mempertahankan area tempat kedua layer poligon saling tumpang tindih",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "difference": {
+          "name": "Selisih",
+          "description": "Menghapus area layer overlay dari layer masukan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "union": {
+          "name": "Gabungan",
+          "description": "Menggabungkan dua layer poligon menjadi satu geometri gabungan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Gabungan spasial",
+          "description": "Melampirkan atribut dari layer join ke setiap fitur masukan berdasarkan hubungan spasial",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer join"
+            },
+            "predicate": {
+              "label": "Hubungan spasial",
+              "options": {
+                "intersects": "Berpotongan",
+                "within": "Di dalam",
+                "contains": "Memuat"
+              }
+            },
+            "how": {
+              "label": "Tipe join",
+              "options": {
+                "inner": "Inner (hanya fitur yang cocok)",
+                "left": "Left (semua fitur masukan)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Join atribut",
+          "description": "Melampirkan atribut dari layer join (sebuah tabel) ke setiap fitur masukan jika bidang kunci cocok, tanpa menggunakan geometri. Satu-ke-satu: baris join pertama yang cocok yang dipakai.",
+          "params": {
+            "layer": {
+              "label": "Layer target"
+            },
+            "overlay": {
+              "label": "Layer join (tabel)",
+              "description": "Layer yang atributnya akan dibawa. Geometrinya diabaikan."
+            },
+            "target_field": {
+              "label": "Bidang kunci target"
+            },
+            "join_field": {
+              "label": "Bidang kunci join"
+            },
+            "how": {
+              "label": "Tipe join",
+              "options": {
+                "left": "Left (semua fitur target)",
+                "inner": "Inner (hanya fitur yang cocok)"
+              }
+            },
+            "fields": {
+              "label": "Bidang yang dibawa (opsional)",
+              "description": "Bidang join yang disalin, dipisahkan koma. Biarkan kosong untuk membawa semua bidang join kecuali kunci."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Pilih berdasarkan nilai",
+          "description": "Mengekstrak fitur yang nilai atributnya memenuhi suatu kondisi ke layer baru",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (sama dengan)",
+                "neq": "≠ (tidak sama dengan)",
+                "gt": "> (lebih besar dari)",
+                "gte": "≥ (lebih besar atau sama dengan)",
+                "lt": "< (lebih kecil dari)",
+                "lte": "≤ (lebih kecil atau sama dengan)",
+                "contains": "mengandung (teks)",
+                "starts-with": "diawali dengan (teks)",
+                "is-null": "kosong",
+                "is-not-null": "tidak kosong"
+              }
+            },
+            "value": {
+              "label": "Nilai",
+              "description": "Dibandingkan sebagai angka jika kedua sisi numerik."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Pilih berdasarkan lokasi",
+          "description": "Mengekstrak fitur berdasarkan hubungan spasialnya dengan layer kedua ke layer baru",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer filter"
+            },
+            "predicate": {
+              "label": "Hubungan spasial",
+              "options": {
+                "intersects": "Berpotongan",
+                "within": "Di dalam",
+                "contains": "Memuat",
+                "disjoint": "Terpisah (tidak berpotongan)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Ekstrak acak",
+          "description": "Mengekstrak subset fitur secara acak ke layer baru, dengan ukuran berupa jumlah fitur atau persentase dari masukan.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "method": {
+              "label": "Metode",
+              "options": {
+                "count": "Jumlah fitur",
+                "percentage": "Persentase fitur"
+              }
+            },
+            "count": {
+              "label": "Jumlah fitur",
+              "description": "Dibatasi ke jumlah fitur masukan jika lebih besar."
+            },
+            "percentage": {
+              "label": "Persentase fitur"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Proyeksikan ulang",
+          "description": "Menafsirkan ulang koordinat layer sebagai CRS sumber dan mentransformasikannya ke WGS84 agar tampil di lokasi yang benar. Memerlukan engine Sidecar atau Python.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "source_crs": {
+              "label": "CRS sumber",
+              "description": "CRS yang sebenarnya digunakan koordinat layer (mis. EPSG:3857). Hasilnya ditransformasikan ke WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Pecah multibagian",
+          "description": "Memecah geometri multibagian menjadi fitur bagian tunggal (satu fitur per bagian), dengan mempertahankan atribut induknya",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Agregasi berdasarkan atribut",
+          "description": "Men-dissolve fitur yang memiliki nilai atribut sama menjadi satu geometri per kelompok, dengan statistik ringkasan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "group_field": {
+              "label": "Bidang pengelompokan"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "count": "Jumlah",
+                "sum": "Total",
+                "mean": "Rata-rata",
+                "min": "Min",
+                "max": "Maks",
+                "median": "Median"
+              }
+            },
+            "stat_field": {
+              "label": "Bidang statistik",
+              "description": "Bidang numerik yang diringkas dengan statistik di atas."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Haluskan",
+          "description": "Membulatkan sudut fitur garis dan poligon dengan algoritma Chaikin (menambah verteks), berbeda dari pengurangan verteks pada Sederhanakan. Z/elevasi dipertahankan; titik diteruskan tanpa perubahan.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "iterations": {
+              "label": "Iterasi",
+              "description": "Lebih banyak iterasi memberi hasil yang lebih halus (1-10)."
+            }
+          }
+        },
+        "extract-vertices": {
+          "name": "Ekstrak verteks",
+          "description": "Ubah setiap verteks fitur masukan menjadi titik, dengan mempertahankan atribut asli ditambah kolom vertex_index dan part_index (atribut sumber dengan nama yang sama akan ditimpa)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Titik di sepanjang geometri",
+          "description": "Buat titik pada interval jarak tetap di sepanjang garis dan batas poligon; verteks pertama dan terakhir selalu disertakan. Setiap titik mendapat kolom distance (atribut sumber dengan nama yang sama akan ditimpa)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Jarak antar titik yang dibuat"
+            },
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "grid": {
+          "name": "Grid teratur",
+          "description": "Membuat grid persegi panjang teratur (fishnet) dari sel-sel di atas suatu cakupan. Sumber: tampilan peta saat ini, cakupan layer, atau kotak pembatas manual.",
+          "params": {
+            "source": {
+              "label": "Sumber cakupan",
+              "options": {
+                "viewport": "Tampilan peta",
+                "layer": "Cakupan layer",
+                "bbox": "Kotak pembatas manual"
+              }
+            },
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "west": {
+              "label": "Barat (bujur min)"
+            },
+            "south": {
+              "label": "Selatan (lintang min)"
+            },
+            "east": {
+              "label": "Timur (bujur maks)"
+            },
+            "north": {
+              "label": "Utara (lintang maks)"
+            },
+            "cell_width": {
+              "label": "Lebar sel (derajat)"
+            },
+            "cell_height": {
+              "label": "Tinggi sel (derajat)",
+              "description": "Biarkan kosong agar sama dengan lebar sel."
+            },
+            "cell_type": {
+              "label": "Tipe sel",
+              "options": {
+                "polygon": "Persegi panjang",
+                "point": "Titik (pusat sel)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Membangun diagram Voronoi (satu poligon per titik, dipotong ke cakupan titik) atau triangulasi Delaunay dari layer titik.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "type": {
+              "label": "Diagram",
+              "options": {
+                "voronoi": "Poligon Voronoi",
+                "delaunay": "Segitiga Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Cakupan menara seluler",
+          "description": "Membangun poligon sektor/juring antena dari titik lokasi menggunakan azimut, radius, dan lebar berkas (dibaca dari bidang atribut atau nilai tetap). Lebar berkas dibatasi hingga 360° (lingkaran penuh); lebar berkas yang tercatat mencerminkan nilai yang dibatasi. Berguna untuk cakupan menara seluler, seperti QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "azimuthField": {
+              "label": "Bidang azimut (°)",
+              "description": "Arah hadap sektor, dalam derajat searah jarum jam dari utara. Memakai azimut tetap jika kosong atau bukan angka."
+            },
+            "azimuth": {
+              "label": "Azimut (tetap, °)"
+            },
+            "radiusField": {
+              "label": "Bidang radius",
+              "description": "Radius cakupan. Memakai radius tetap jika kosong atau bukan angka."
+            },
+            "radius": {
+              "label": "Radius (tetap)"
+            },
+            "beamwidthField": {
+              "label": "Bidang lebar berkas (°)",
+              "description": "Lebar sudut sektor, dibatasi hingga 360° (lingkaran penuh). Memakai lebar berkas tetap jika kosong atau bukan angka."
+            },
+            "beamwidth": {
+              "label": "Lebar berkas (tetap, °)"
+            },
+            "units": {
+              "label": "Satuan radius",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Dekode polyline",
+          "description": "Dekode string polyline terenkode dari bidang atribut menjadi layer vektor LineString",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang polyline",
+              "description": "Bidang atribut yang berisi string polyline terenkode"
+            },
+            "precision": {
+              "label": "Presisi",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Enkode garis menjadi polyline",
+          "description": "Enkode geometri LineString dan MultiLineString menjadi string atribut polyline terenkode",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "precision": {
+              "label": "Presisi",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Nama bidang keluaran",
+              "description": "Nama kolom atribut untuk menyimpan polyline terenkode (default: polyline)"
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Generator DGGS",
+          "description": "Mengisi suatu area dengan sel DGGS (H3, S2, A5, DGGRID, DGGAL). Sumber: geometri layer, cakupan layer, tampilan peta saat ini, atau kotak pembatas manual.",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipe DGGRID",
+              "description": "Konfigurasi grid yang diteruskan ke duck_dggs sebagai dggs_params (ISEA/FULLER × apertur × topologi).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Sumber area",
+              "options": {
+                "polyfill": "Geometri layer (polyfill)",
+                "extent": "Cakupan layer (bbox)",
+                "viewport": "Tampilan peta",
+                "bbox": "Kotak pembatas manual"
+              }
+            },
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "west": {
+              "label": "Barat (bujur min)"
+            },
+            "south": {
+              "label": "Selatan (lintang min)"
+            },
+            "east": {
+              "label": "Timur (bujur maks)"
+            },
+            "north": {
+              "label": "Utara (lintang maks)"
+            },
+            "resolution": {
+              "label": "Resolusi",
+              "description": "Rentang bergantung pada tipe DGGS. Biarkan kosong untuk dipilih otomatis dari area."
+            },
+            "compactCells": {
+              "label": "Padatkan sel",
+              "description": "Menggabungkan himpunan lengkap sel sesaudara menjadi induk yang lebih kasar (lebih sedikit fitur, resolusi campuran)."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Binning DGGS",
+          "description": "Mengagregasi layer titik ke dalam sel DGGS (jumlah, atau total/rata-rata/min/maks dari bidang numerik).",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipe DGGRID",
+              "description": "Konfigurasi grid yang diteruskan ke duck_dggs sebagai dggs_params (ISEA/FULLER × apertur × topologi).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "aggOp": {
+              "label": "Agregasi",
+              "options": {
+                "count": "Jumlah",
+                "sum": "Total",
+                "mean": "Rata-rata",
+                "min": "Min",
+                "max": "Maks"
+              }
+            },
+            "field": {
+              "label": "Bidang",
+              "description": "Bidang numerik yang diagregasi."
+            },
+            "resolution": {
+              "label": "Resolusi",
+              "description": "Rentang bergantung pada tipe DGGS. Biarkan kosong untuk dipilih otomatis dari area."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Pemadatan DGGS",
+          "description": "Memadatkan sel poligon DGGS, atau memperluasnya ke resolusi seragam (H3, S2, A5, DGGAL). Masukan harus berupa layer sel dengan properti ID.",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Mode",
+              "options": {
+                "compact": "Padatkan",
+                "expand": "Perluas"
+              }
+            },
+            "layer": {
+              "label": "Layer DGGS masukan",
+              "description": "Layer sel poligon dari Generator DGGS / Binning (atau yang setara)."
+            },
+            "cellField": {
+              "label": "Bidang ID sel",
+              "description": "Default ke h3, a5, s2, atau dggal sesuai tipe yang dipilih jika dibiarkan kosong."
+            },
+            "resolution": {
+              "label": "Resolusi target",
+              "description": "Resolusi tujuan perluasan. Harus setidaknya sehalus sel masukan."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Kecepatan lintasan",
+          "description": "Mengurutkan titik menurut waktu (per target) dan menghubungkan titik berurutan menjadi segmen yang membawa jarak, durasi, dan kecepatan. Seperti QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Memisahkan titik menjadi lintasan-lintasan terpisah. Biarkan kosong untuk memperlakukan semua titik sebagai satu target."
+            },
+            "speedUnits": {
+              "label": "Satuan kecepatan",
+              "options": {
+                "km/h": "km/jam",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Deteksi perhentian",
+          "description": "Menemukan tempat target berdiam: rangkaian titik berurutan yang tetap berada dalam suatu jarak (menyerap sebaran GPS) selama setidaknya durasi minimum. Menghasilkan satu titik per perhentian. Seperti QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Mendeteksi perhentian per target. Biarkan kosong untuk memperlakukan semua titik sebagai satu target."
+            },
+            "maxDistance": {
+              "label": "Jarak maks",
+              "description": "Setiap titik dalam sebuah perhentian harus berada dalam jarak ini dari titik pertama perhentian (sehingga perhentian dapat membentang hingga dua kali nilai ini). Atur sesuai radius sebaran GPS Anda."
+            },
+            "distanceUnits": {
+              "label": "Satuan jarak",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mil"
+              }
+            },
+            "minDuration": {
+              "label": "Durasi min (s)",
+              "description": "Berdiam yang lebih singkat dari ini tidak dilaporkan sebagai perhentian."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Kedekatan ruang-waktu",
+          "description": "Menemukan pasangan titik yang berdekatan dalam ruang dan waktu — mis. dua target yang bertemu. Menghasilkan garis yang menghubungkan setiap pasangan yang memenuhi syarat, dengan jarak dan selisih waktunya.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Jika diisi, hanya titik dengan nilai id BERBEDA yang dipasangkan (pertemuan antar target yang berbeda). Biarkan kosong untuk mempertimbangkan setiap pasangan."
+            },
+            "maxDistance": {
+              "label": "Jarak maks"
+            },
+            "distanceUnits": {
+              "label": "Satuan jarak",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mil"
+              }
+            },
+            "maxTime": {
+              "label": "Selisih waktu maks"
+            },
+            "timeUnits": {
+              "label": "Satuan waktu",
+              "options": {
+                "seconds": "Detik",
+                "minutes": "Menit",
+                "hours": "Jam"
+              }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Gabungkan layer",
+          "description": "Gabungkan beberapa layer vektor menjadi satu, dengan menyatukan skema atributnya (atribut yang tidak ada menjadi null)",
+          "params": {
+            "layers": {
+              "label": "Layer masukan",
+              "description": "Pilih dua layer atau lebih; layer digabungkan sesuai urutan yang ditampilkan"
+            },
+            "addSourceField": {
+              "label": "Tambahkan bidang layer sumber",
+              "description": "Catat nama layer asal untuk setiap fitur keluaran"
+            },
+            "sourceFieldName": {
+              "label": "Nama bidang sumber",
+              "description": "Nama bidang yang menyimpan nama layer asal"
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Periksa validitas",
+          "description": "Menemukan fitur dengan geometri tidak valid (aturan GEOS: cincin berpotongan sendiri, lubang di luar cangkang, ...) dan menandainya di peta",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Perbaiki geometri",
+          "description": "Memperbaiki geometri tidak valid dengan ST_MakeValid (GEOS); fitur yang valid diteruskan tanpa perubahan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Periksa aturan topologi",
+          "description": "Memvalidasi layer terhadap aturan topologi (tumpang tindih, celah, perpotongan sendiri, ujung menggantung) dan menandai setiap pelanggaran di peta",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "ruleSelfIntersect": {
+              "label": "Garis tidak boleh berpotongan sendiri"
+            },
+            "ruleOverlap": {
+              "label": "Poligon tidak boleh tumpang tindih"
+            },
+            "ruleGaps": {
+              "label": "Poligon tidak boleh memiliki celah"
+            },
+            "ruleDangles": {
+              "label": "Garis tidak boleh memiliki ujung menggantung"
+            },
+            "rulePointCovered": {
+              "label": "Titik harus tercakup oleh garis"
+            },
+            "ruleEndpointSnap": {
+              "label": "Titik ujung garis harus terhubung dalam toleransi"
+            },
+            "snapTolerance": {
+              "label": "Toleransi snap",
+              "description": "Untuk aturan titik ujung: seberapa jauh (dalam satuan koordinat layer — derajat untuk WGS84) dua ujung garis boleh terpisah dan masih dianggap terhubung."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Perbaiki topologi",
+          "description": "Memperbaiki pelanggaran topologi secara otomatis: snap titik ujung garis yang hampir terhubung, perbaiki ujung menggantung, dan proyeksikan titik ke garis. Ujung bebas tanpa apa pun di dekatnya dibiarkan tidak berubah.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "ruleEndpointSnap": {
+              "label": "Snap titik ujung garis yang hampir terhubung"
+            },
+            "ruleDangles": {
+              "label": "Perbaiki ujung menggantung (snap atau proyeksikan ke geometri terdekat)"
+            },
+            "rulePointCovered": {
+              "label": "Proyeksikan titik ke garis terdekat"
+            },
+            "snapTolerance": {
+              "label": "Toleransi snap",
+              "description": "Seberapa jauh (dalam satuan koordinat layer — derajat untuk WGS84) geometri boleh bergeser untuk terhubung."
+            },
+            "dryRun": {
+              "label": "Pratinjau saja (uji coba)",
+              "description": "Melaporkan perbaikan yang akan diterapkan tanpa membuat layer hasil perbaikan."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isokron / area layanan",
+          "description": "Poligon jangkauan waktu tempuh atau jarak tempuh dari setiap titik dalam sebuah layer",
+          "params": {
+            "layer": {
+              "label": "Titik asal"
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "metric": {
+              "label": "Metrik",
+              "options": {
+                "time": "Waktu tempuh (menit)",
+                "distance": "Jarak (km)"
+              }
+            },
+            "contours": {
+              "label": "Kontur",
+              "description": "Nilai yang dipisahkan koma (menit untuk waktu, km untuk jarak)"
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Matriks biaya OD",
+          "description": "Waktu dan jarak tempuh antara setiap titik asal dan tujuan, sebagai garis penghubung",
+          "params": {
+            "origins": {
+              "label": "Titik asal"
+            },
+            "destinations": {
+              "label": "Titik tujuan"
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Rute berurutan (petunjuk arah)",
+          "description": "Menghubungkan titik secara berurutan di sepanjang jaringan jalan menjadi sebuah rute. Setiap titik di-snap ke jalan terdekat, sehingga koordinat di luar jalan (menara seluler, sensor) tetap dapat dirutekan. Urutan mengikuti bidang yang dipilih (mis. stempel waktu) atau urutan fitur layer.",
+          "params": {
+            "layer": {
+              "label": "Titik masukan"
+            },
+            "order_field": {
+              "label": "Urutkan berdasarkan bidang (opsional)",
+              "description": "Mengurutkan titik berdasarkan bidang ini (angka atau stempel waktu) sebelum perutean. Biarkan kosong untuk memakai urutan fitur layer."
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Moran's I Global",
+          "description": "Mengukur autokorelasi spasial keseluruhan dari atribut numerik di seluruh layer.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            },
+            "permutations": {
+              "label": "Permutasi",
+              "description": "Permutasi acak untuk nilai p semu."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Moran's I Lokal (LISA)",
+          "description": "Klaster dan pencilan per fitur (Tinggi-Tinggi, Rendah-Rendah, Tinggi-Rendah, Rendah-Tinggi) dengan signifikansi semu.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            },
+            "permutations": {
+              "label": "Permutasi",
+              "description": "Permutasi acak untuk nilai p semu."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Hotspot Getis-Ord Gi*",
+          "description": "Mengidentifikasi hot spot dan cold spot yang signifikan secara statistik dari atribut numerik.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Rata-rata tetangga terdekat",
+          "description": "Menguji apakah titik mengelompok, tersebar, atau terdistribusi acak (rasio ANN + skor z).",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kepadatan kernel (heatmap)",
+          "description": "Memperkirakan permukaan kepadatan dari titik sebagai grid sel, menggunakan kernel kuartik.",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            },
+            "weightField": {
+              "label": "Bidang bobot (opsional)",
+              "description": "Bidang numerik yang membobot setiap titik; kosong = bobot sama."
+            },
+            "bandwidth": {
+              "label": "Radius pencarian / bandwidth (km)"
+            },
+            "cellSize": {
+              "label": "Ukuran sel (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Emerging Hot Spot (kubus ruang-waktu)",
+          "description": "Membangun kubus ruang-waktu dari titik berstempel waktu (grid fishnet × langkah waktu yang sama) dan mengklasifikasikan setiap sel sebagai hot/cold spot baru, menguat, persisten, melemah, sporadis, berosilasi, atau historis. Menjalankan Getis-Ord Gi* per irisan waktu, lalu uji tren Mann-Kendall pada deret Gi* setiap sel. Berjalan di sisi klien, seperti Emerging Hot Spot Analysis di ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "cellSize": {
+              "label": "Ukuran sel (km)",
+              "description": "Panjang sisi setiap bin spasial persegi, dalam kilometer."
+            },
+            "timeStep": {
+              "label": "Interval langkah waktu"
+            },
+            "timeStepUnit": {
+              "label": "Satuan langkah waktu",
+              "options": {
+                "hours": "Jam",
+                "days": "Hari",
+                "weeks": "Minggu"
+              }
+            },
+            "weightField": {
+              "label": "Bidang bobot (opsional)",
+              "description": "Bidang numerik yang dijumlahkan per bin ruang-waktu alih-alih menghitung titik; kosong = hitung titik."
+            },
+            "confidence": {
+              "label": "Tingkat kepercayaan",
+              "description": "Ambang signifikansi agar sebuah bin dihitung sebagai hot/cold spot dan untuk tren.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Hillshade",
+          "description": "Menghitung raster relief berbayang (hillshade) dari model elevasi.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (derajat)"
+            },
+            "altitude": {
+              "label": "Ketinggian sudut (derajat)"
+            },
+            "z_factor": {
+              "label": "Faktor Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Kemiringan",
+          "description": "Menghitung kemiringan (kecuraman) dari model elevasi.",
+          "params": {
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "degrees": "Derajat",
+                "percent": "Persen"
+              }
+            },
+            "z_factor": {
+              "label": "Faktor Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Arah lereng",
+          "description": "Menghitung arah lereng (arah kompas dari kemiringan tercuram) dari model elevasi."
+        },
+        "reproject": {
+          "name": "Proyeksikan ulang",
+          "description": "Mentransformasikan raster ke sistem referensi koordinat lain.",
+          "params": {
+            "dst_crs": {
+              "label": "CRS target",
+              "description": "Kode otoritas seperti EPSG:3857 atau EPSG:4326."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Tetangga terdekat",
+                "bilinear": "Bilinear",
+                "cubic": "Kubik"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Sampel ulang",
+          "description": "Me-resample raster ke ukuran piksel (resolusi) yang berbeda.",
+          "params": {
+            "resolution": {
+              "label": "Ukuran piksel target",
+              "description": "Ukuran piksel keluaran dalam satuan CRS raster."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Tetangga terdekat",
+                "bilinear": "Bilinear",
+                "cubic": "Kubik"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Potong berdasarkan cakupan",
+          "description": "Memotong raster ke sebuah kotak pembatas (dalam CRS raster).",
+          "params": {
+            "minx": {
+              "label": "X min"
+            },
+            "miny": {
+              "label": "Y min"
+            },
+            "maxx": {
+              "label": "X maks"
+            },
+            "maxy": {
+              "label": "Y maks"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Potong berdasarkan layer mask",
+          "description": "Memotong raster ke geometri dari file mask vektor.",
+          "params": {
+            "mask_path": {
+              "label": "Layer mask",
+              "description": "File GeoJSON yang geometrinya menentukan wilayah pemotongan. Diproyeksikan ulang ke CRS raster secara otomatis (GeoJSON tanpa CRS dianggap WGS84)."
+            },
+            "crop": {
+              "label": "Potong ke cakupan mask"
+            },
+            "all_touched": {
+              "label": "Sertakan semua piksel yang tersentuh"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Poligonisasi",
+          "description": "Mengonversi band raster menjadi poligon vektor yang dikelompokkan menurut nilai piksel.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Konektivitas",
+              "options": {
+                "4": "4-terhubung",
+                "8": "8-terhubung"
+              }
+            },
+            "field": {
+              "label": "Nama bidang nilai"
+            }
+          }
+        },
+        "contour": {
+          "name": "Kontur",
+          "description": "Membuat garis kontur dari model elevasi.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Selisih elevasi antara garis kontur yang berurutan."
+            },
+            "base": {
+              "label": "Dasar"
+            },
+            "attribute": {
+              "label": "Nama bidang elevasi"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolasi (IDW / Kriging)",
+          "description": "Menginterpolasi atribut numerik layer titik menjadi permukaan raster kontinu menggunakan pembobotan jarak terbalik atau ordinary kriging.",
+          "params": {
+            "field": {
+              "label": "Bidang nilai",
+              "description": "Nama atribut titik numerik yang diinterpolasi (mis. elevasi, suhu)."
+            },
+            "method": {
+              "label": "Metode",
+              "options": {
+                "idw": "Pembobotan jarak terbalik (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "Ukuran piksel keluaran",
+              "description": "Ukuran sel dalam satuan CRS layer (derajat untuk WGS84). Grid mencakup cakupan titik-titik."
+            },
+            "power": {
+              "label": "Pangkat IDW",
+              "description": "Nilai lebih tinggi memberi pengaruh lebih besar pada titik terdekat."
+            },
+            "variogram_model": {
+              "label": "Model variogram",
+              "description": "Model teoretis yang dicocokkan ke semivariogram empiris. Kriging dibatasi hingga 1500 titik.",
+              "options": {
+                "spherical": "Sferis",
+                "exponential": "Eksponensial",
+                "gaussian": "Gaussian",
+                "linear": "Linear"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Statistik zonal",
+          "description": "Meringkas nilai raster di dalam setiap poligon dari layer vektor (jumlah, min, maks, rata-rata, total, simpangan baku, median).",
+          "params": {
+            "zones_path": {
+              "label": "Layer zona",
+              "description": "Layer poligon GeoJSON yang menentukan zona. Diproyeksikan ulang ke CRS raster secara otomatis (GeoJSON tanpa CRS dianggap WGS84)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Awalan bidang",
+              "description": "Ditambahkan di depan setiap nama bidang statistik (mis. 'dem_' → 'dem_mean'). Biarkan kosong untuk nama polos 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Kalkulator raster",
+          "description": "Mengevaluasi ekspresi matematika band NumPy. Rujuk band 1 setiap masukan sebagai A, B, C dan band tertentu sebagai A1, A2, …; mis. NDVI adalah (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Ekspresi",
+              "description": "Ekspresi NumPy atas A, B, C (dan A1, A2, …). Fungsi: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (opsional)",
+              "description": "Raster kedua, dirujuk sebagai B / B1, B2, …. Dimensinya harus sama dengan A."
+            },
+            "c_path": {
+              "label": "Raster C (opsional)",
+              "description": "Raster ketiga, dirujuk sebagai C / C1, C2, …. Dimensinya harus sama dengan A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Indeks spektral",
+          "description": "Menghitung indeks spektral bernama (NDVI, NDWI, EVI, …) dari raster multiband. Pilih preset sensor untuk tata letak band, atau atur nomor band secara manual dengan sensor Kustom.",
+          "params": {
+            "index": {
+              "label": "Indeks",
+              "options": {
+                "ndvi": "NDVI (vegetasi)",
+                "gndvi": "GNDVI (vegetasi hijau)",
+                "ndwi": "NDWI (air, McFeeters)",
+                "ndmi": "NDMI (kelembapan)",
+                "ndbi": "NDBI (lahan terbangun)",
+                "nbr": "NBR (rasio terbakar)",
+                "evi": "EVI (vegetasi ditingkatkan)",
+                "savi": "SAVI (vegetasi terkoreksi tanah)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / tata letak band",
+              "description": "Nomor band preset untuk sensor umum. Pilih Kustom untuk memetakan band secara manual pada GeoTIFF dengan susunan berbeda.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Kustom (atur nomor band di bawah)"
+              }
+            },
+            "red": {
+              "label": "Nomor band merah"
+            },
+            "green": {
+              "label": "Nomor band hijau"
+            },
+            "blue": {
+              "label": "Nomor band biru"
+            },
+            "nir": {
+              "label": "Nomor band NIR"
+            },
+            "swir1": {
+              "label": "Nomor band SWIR1"
+            },
+            "swir2": {
+              "label": "Nomor band SWIR2"
+            },
+            "L": {
+              "label": "Faktor tanah (L)",
+              "description": "Koreksi kecerahan tanah SAVI (0 tutupan rapat → 1 tanah terbuka)."
+            },
+            "scale": {
+              "label": "Skala reflektansi",
+              "description": "Pengali yang mengonversi nilai piksel ke reflektansi (0–1). Biarkan 1 untuk indeks selisih ternormalisasi; atur untuk EVI/SAVI pada citra DN bilangan bulat (mis. 0.0001 untuk Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reklasifikasi",
+          "description": "Memetakan ulang rentang nilai ke nilai kelas baru menggunakan tabel aturan.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Aturan",
+              "description": "Aturan 'min:maks:nilaibaru' yang dipisahkan koma atau baris baru, mis. '0:10:1, 10:20:2, 20:max:3'. Rentang bersifat setengah terbuka [min, maks); kosong/min/max berarti ±∞."
+            },
+            "unmatched": {
+              "label": "Nilai yang tidak cocok",
+              "options": {
+                "nodata": "Atur ke NoData",
+                "original": "Pertahankan nilai asli"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaik / gabung",
+          "description": "Menggabungkan hingga lima raster (dengan CRS yang sama) menjadi satu raster yang mencakup gabungannya.",
+          "params": {
+            "raster_2": {
+              "label": "Raster kedua"
+            },
+            "raster_3": {
+              "label": "Raster ketiga (opsional)"
+            },
+            "raster_4": {
+              "label": "Raster keempat (opsional)"
+            },
+            "raster_5": {
+              "label": "Raster kelima (opsional)"
+            },
+            "method": {
+              "label": "Metode tumpang tindih",
+              "description": "Nilai mana yang dipakai di tempat masukan saling tumpang tindih.",
+              "options": {
+                "first": "Pertama",
+                "last": "Terakhir",
+                "min": "Minimum",
+                "max": "Maksimum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Statistik fokal",
+          "description": "Menerapkan statistik jendela bergerak (ketetanggaan) pada band raster.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "mean": "Rata-rata",
+                "median": "Median",
+                "min": "Minimum",
+                "max": "Maksimum",
+                "sum": "Total",
+                "std": "Simpangan baku",
+                "range": "Rentang (maks − min)"
+              }
+            },
+            "size": {
+              "label": "Ukuran jendela",
+              "description": "Ukuran ketetanggaan ganjil dalam piksel (3 = 3×3). Dibatasi hingga 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analisis",
+      "clip": "Potong",
+      "dataManagement": "Manajemen data",
+      "dataQuality": "Kualitas data",
+      "dggs": "DGGS",
+      "geometry": "Geometri",
+      "join": "Gabungan",
+      "movementTime": "Pergerakan & waktu",
+      "network": "Jaringan",
+      "overlay": "Overlay",
+      "rasterToVector": "Raster ke Vektor",
+      "reproject": "Proyeksikan ulang",
+      "select": "Seleksi",
+      "spatialStatistics": "Statistik Spasial",
+      "terrain": "Medan",
+      "vectorToRaster": "Vektor ke Raster"
     }
   },
   "segmentation": {
@@ -5170,11 +6804,13 @@
     "refreshVectorControlError": "Tidak dapat menyegarkan layer ini. Coba buka kembali panel Tambahkan Layer Vektor.",
     "refreshed": "Disegarkan.",
     "refreshedCount": "Menyegarkan {{count}} fitur.",
+    "refreshedTruncated": "Disegarkan {{shown}} dari {{total}} fitur.",
     "refreshError": "Tidak dapat menyegarkan layer ini.",
     "exportNeedsFeatures": "Ekspor memerlukan layer vektor dengan fitur.",
     "exportedWithWarnings": "Layer berhasil diekspor. {{warnings}}",
     "exported": "Layer berhasil diekspor.",
     "exportLayerError": "Tidak dapat mengekspor layer ini.",
+    "exportPolyline": "Polyline Terenkode (presisi {{precision}})",
     "refreshIntervals": {
       "off": "Mati",
       "s15": "15 detik",

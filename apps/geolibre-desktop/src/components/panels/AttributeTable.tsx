@@ -129,6 +129,7 @@ import {
   formatAttributeValue,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -997,7 +998,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     };
   };
 
-  const exportLayer = async (format: VectorExportFormat) => {
+  const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
 
     try {
@@ -1010,7 +1011,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
+      const polylinePrecision =
+        precision ??
+        (typeof layer.metadata?.polylinePrecision === "number"
+          ? layer.metadata.polylinePrecision
+          : 5);
+      const savedPath = await exportVectorLayer(
+        exportGeojson,
+        format,
+        baseName,
+        layer.name,
+        polylinePrecision,
+      );
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -1773,6 +1785,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
               CSV (attributes only)
             </DropdownMenuItem>
+            {layer && layerSupportsPolylineExport(layer) && (
+              <>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
+                  {t("layers.exportPolyline", { precision: 5 })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
+                  {t("layers.exportPolyline", { precision: 6 })}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {isEditing ? (

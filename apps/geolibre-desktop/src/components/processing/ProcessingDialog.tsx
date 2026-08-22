@@ -49,7 +49,9 @@ import type { TFunction } from "i18next";
 import {
   isTauri,
   openLocalDataFileWithFallback,
+  openLocalDataFilesWithFallback,
   pickLocalPathWithFallback,
+  pickLocalPathsWithFallback,
   pickSavePathWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
@@ -71,7 +73,7 @@ import {
   wgs84VectorLayerIds,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
-import { parameterKind } from "../../lib/whitebox-param-kind";
+import { isMultipleDatasetParameter, parameterKind } from "../../lib/whitebox-param-kind";
 import { isTiff } from "../../lib/scripting/binary-output";
 import {
   canUseLayerForParameter,
@@ -257,7 +259,10 @@ function wgs84ToolLayerIds(tool: WhiteboxTool | null, values: ParameterValues): 
   const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
   if (!vectorInputs.length) return null;
   return wgs84VectorLayerIds(
-    vectorInputs.map((param) => ({ required: param.required, value: values[param.name] })),
+    vectorInputs.map((param) => ({
+      required: param.required,
+      value: values[param.name],
+    })),
     LAYER_TOKEN_PREFIX,
   );
 }
@@ -664,7 +669,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // the in-browser WASM runner. GeoJSON files are parsed up front so vector
   // tools receive a FeatureCollection, matching the layer-input path.
   const browsedInputsRef = useRef<
-    Map<string, { name: string; bytes: Uint8Array; geojson?: FeatureCollection }>
+    Map<string, Array<{ name: string; bytes: Uint8Array; geojson?: FeatureCollection }>>
   >(new Map());
   // Parameters passed to each run, keyed by the resulting job id, so output
   // naming can honor the output path the user actually typed (which the finished
@@ -1389,8 +1394,28 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           // not valid JSON; fall back to raw bytes
         }
       }
-      browsedInputsRef.current.set(paramName, { name: fileName, bytes, geojson });
+      browsedInputsRef.current.set(paramName, [{ name: fileName, bytes, geojson }]);
       setValues((prev) => ({ ...prev, [paramName]: fileName }));
+    },
+    [],
+  );
+
+  const handlePickInputFiles = useCallback(
+    (paramName: string, files: Array<{ fileName: string; bytes: Uint8Array }>) => {
+      const inputs = files.map(({ fileName, bytes }) => {
+        let geojson: FeatureCollection | undefined;
+        if (/\.(geojson|json)$/i.test(fileName)) {
+          try {
+            const parsed = JSON.parse(new TextDecoder().decode(bytes));
+            if (isFeatureCollection(parsed)) geojson = parsed;
+          } catch {
+            // Leave non-GeoJSON vector formats as raw bytes.
+          }
+        }
+        return { name: fileName, bytes, geojson };
+      });
+      browsedInputsRef.current.set(paramName, inputs);
+      setValues((prev) => ({ ...prev, [paramName]: inputs.map((input) => input.name).join(", ") }));
     },
     [],
   );
@@ -1490,18 +1515,22 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     // blocks the main thread).
     setRunningLocal(true);
     const parameters: Record<string, unknown> = {};
-    const layerInputs: Record<string, WhiteboxLayerInput> = {};
+    const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
 
     for (const param of selectedTool.params ?? []) {
+      const parameterLabelText = whiteboxParameterLabel(t, selectedTool.id, param);
       const value = values[param.name];
       if (
         param.required &&
         !isOutputParameter(param) &&
-        (value === undefined || value === null || value === "")
+        (value === undefined ||
+          value === null ||
+          value === "" ||
+          (Array.isArray(value) && value.length === 0))
       ) {
         setError(
           t("processing.whitebox.missingRequiredParameter", {
-            label: whiteboxParameterLabel(t, selectedTool.id, param),
+            label: parameterLabelText,
           }),
         );
         setRunningLocal(false);
@@ -1511,15 +1540,85 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // A file browsed from disk in the web build: feed its bytes (or parsed
       // GeoJSON) straight to the WASM runner instead of an unresolvable path.
       const browsed = browsedInputsRef.current.get(param.name);
-      if (browsed && isDataInputParameter(param)) {
+      if (browsed?.length && isDataInputParameter(param)) {
         const kind = parameterKind(param);
-        layerInputs[param.name] = browsed.geojson
-          ? { name: browsed.name, kind, geojson: browsed.geojson }
-          : { name: browsed.name, kind, bytes: browsed.bytes };
+        if (!runLocal && browsed.some((input) => !input.geojson)) {
+          setError(
+            `The sidecar cannot read browser-selected files for ${parameterLabelText}. Run locally (WASM), or enter filesystem paths available to the sidecar.`,
+          );
+          setRunningLocal(false);
+          return;
+        }
+        const inputs = browsed.map((input) =>
+          input.geojson
+            ? { name: input.name, kind, geojson: input.geojson }
+            : { name: input.name, kind, bytes: input.bytes },
+        );
+        layerInputs[param.name] = inputs.length === 1 ? inputs[0] : inputs;
         continue;
       }
 
-      if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
+      if (isMultipleDatasetParameter(param) && Array.isArray(value)) {
+        const selectedLayers = value
+          .filter(
+            (item): item is string =>
+              typeof item === "string" && item.startsWith(LAYER_TOKEN_PREFIX),
+          )
+          .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
+          .filter((layer): layer is GeoLibreLayer => Boolean(layer));
+        if (selectedLayers.length !== value.length) {
+          setError(`One or more selected layers for ${parameterLabelText} no longer exist.`);
+          setRunningLocal(false);
+          return;
+        }
+        const kind = parameterKind(param);
+        if (runLocal && kind === "vector_in") {
+          const missing = selectedLayers.find((layer) => !layer.geojson);
+          if (missing) {
+            setError(
+              `Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabelText}.`,
+            );
+            setRunningLocal(false);
+            return;
+          }
+          layerInputs[param.name] = selectedLayers.map((layer) => ({
+            name: layer.name,
+            kind,
+            geojson: layer.geojson,
+          }));
+        } else if (runLocal) {
+          const inputs: WhiteboxLayerInput[] = [];
+          for (const layer of selectedLayers) {
+            const bytes = await fetchLayerBytes(layer);
+            if (!bytes) {
+              setError(`Layer "${layer.name}" is not fetchable for ${parameterLabelText}.`);
+              setRunningLocal(false);
+              return;
+            }
+            inputs.push({ name: layer.name, kind, bytes });
+          }
+          layerInputs[param.name] = inputs;
+        } else if (kind === "vector_in" && selectedLayers.every((layer) => layer.geojson)) {
+          layerInputs[param.name] = selectedLayers.map((layer) => ({
+            name: layer.name,
+            kind,
+            geojson: layer.geojson,
+          }));
+        } else {
+          // Whitebox list arguments use comma-delimited paths. The browser
+          // runner builds the same form after staging each selected dataset.
+          const paths = selectedLayers.map(layerPath);
+          const missingIndex = paths.findIndex((path) => !path);
+          if (missingIndex >= 0) {
+            setError(
+              `Layer "${selectedLayers[missingIndex].name}" has no filesystem path for ${parameterLabelText}.`,
+            );
+            setRunningLocal(false);
+            return;
+          }
+          parameters[param.name] = paths.join(",");
+        }
+      } else if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
         const layerId = value.slice(LAYER_TOKEN_PREFIX.length);
         const layer = layers.find((item) => item.id === layerId);
         if (!layer) continue;
@@ -2062,6 +2161,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                       onPickFile={(fileName, bytes) =>
                         handlePickInputFile(param.name, fileName, bytes)
                       }
+                      onPickFiles={(files) => handlePickInputFiles(param.name, files)}
                       onUseMapExtent={
                         isBboxExtentParameter(selectedTool, param) ? handleUseMapExtent : undefined
                       }
@@ -2307,6 +2407,7 @@ interface ParameterFieldProps {
   degreeLatitude?: number;
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
+  onPickFiles?: (files: Array<{ fileName: string; bytes: Uint8Array }>) => void;
   /** When set, renders a "Use map extent" button that fills this bbox field
    * (and its companion CRS) from the current map view. */
   onUseMapExtent?: () => void;
@@ -2330,6 +2431,7 @@ function ParameterField({
   degreeLatitude,
   onChange,
   onPickFile,
+  onPickFiles,
   onUseMapExtent,
   onDrawMapExtent,
   drawingMapExtent,
@@ -2459,6 +2561,16 @@ function ParameterField({
             onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
           />
         </div>
+      ) : isDataInputParameter(param) && isMultipleDatasetParameter(param) ? (
+        <MultiLayerOrPathInput
+          id={`whitebox-${param.name}`}
+          label={label}
+          layers={availableLayers}
+          param={param}
+          value={value}
+          onChange={onChange}
+          onPickFiles={onPickFiles}
+        />
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
           id={`whitebox-${param.name}`}
@@ -2737,7 +2849,10 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
       ? t("processing.distance.convertedEmpty", { latitude: latitudeLabel })
       : draftValue === null
         ? t("processing.distance.notANumber")
-        : t("processing.distance.converted", { degrees: value, latitude: latitudeLabel });
+        : t("processing.distance.converted", {
+            degrees: value,
+            latitude: latitudeLabel,
+          });
 
   return (
     <div className="grid gap-1.5">
@@ -2784,6 +2899,83 @@ interface LayerOrPathInputProps {
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
   param: WhiteboxToolParameter;
   value: string;
+}
+
+interface MultiLayerOrPathInputProps {
+  id: string;
+  label: string;
+  layers: GeoLibreLayer[];
+  onChange: (value: unknown) => void;
+  onPickFiles?: (files: Array<{ fileName: string; bytes: Uint8Array }>) => void;
+  param: WhiteboxToolParameter;
+  value: unknown;
+}
+
+/** Dataset-list picker used by merge, overlay, statistics, and stack tools. */
+function MultiLayerOrPathInput({
+  id,
+  label,
+  layers,
+  onChange,
+  onPickFiles,
+  param,
+  value,
+}: MultiLayerOrPathInputProps) {
+  const { t } = useTranslation();
+  const selected = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+  const usingLayers = Array.isArray(value);
+  return (
+    <div className="grid gap-2">
+      {layers.length > 0 ? (
+        <div
+          role="group"
+          aria-label={label}
+          className="grid max-h-40 gap-1 overflow-y-auto rounded-md border p-2"
+        >
+          {layers.map((layer) => {
+            const token = `${LAYER_TOKEN_PREFIX}${layer.id}`;
+            return (
+              <label key={layer.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(token)}
+                  onChange={(event) =>
+                    onChange(
+                      event.target.checked
+                        ? [...selected, token]
+                        : selected.filter((item) => item !== token),
+                    )
+                  }
+                />
+                <span className="truncate">{layer.name}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+        <Input
+          id={id}
+          value={usingLayers ? "" : String(value ?? "")}
+          placeholder={
+            usingLayers ? t("processing.whitebox.selectedLayer") : t("processing.whitebox.filePath")
+          }
+          disabled={usingLayers && selected.length > 0}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <PathBrowseButton
+          disabled={usingLayers && selected.length > 0}
+          mode="open"
+          multiple
+          param={param}
+          onPick={(paths) => onChange(paths)}
+          onPickFiles={onPickFiles}
+        />
+      </div>
+    </div>
+  );
 }
 
 function LayerOrPathInput({
@@ -2873,8 +3065,10 @@ function PathPickerInput({ id, onChange, onPickFile, param, toolId, value }: Pat
 interface PathBrowseButtonProps {
   disabled?: boolean;
   mode: "open" | "save";
+  multiple?: boolean;
   onPick: (path: string) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
+  onPickFiles?: (files: Array<{ fileName: string; bytes: Uint8Array }>) => void;
   param: WhiteboxToolParameter;
   toolId?: string;
 }
@@ -2882,8 +3076,10 @@ interface PathBrowseButtonProps {
 function PathBrowseButton({
   disabled = false,
   mode,
+  multiple = false,
   onPick,
   onPickFile,
+  onPickFiles,
   param,
   toolId = "whitebox",
 }: PathBrowseButtonProps) {
@@ -2896,6 +3092,30 @@ function PathBrowseButton({
         filters,
       });
       if (path) onPick(path);
+      return;
+    }
+
+    if (multiple) {
+      const paths = await pickLocalPathsWithFallback({
+        accept: acceptForParameter(param),
+        filters,
+      });
+      if (paths.length > 0) {
+        onPick(paths.join(","));
+        return;
+      }
+      if (!isTauri() && onPickFiles) {
+        const picked = await openLocalDataFilesWithFallback({
+          accept: acceptForParameter(param),
+          filters,
+          readBinary: true,
+        });
+        if (picked.length > 0) {
+          onPickFiles(
+            picked.map((file) => ({ fileName: file.path, bytes: new Uint8Array(file.data) })),
+          );
+        }
+      }
       return;
     }
 

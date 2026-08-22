@@ -187,13 +187,18 @@ export function wgs84VectorLayerIds(
 ): string[] | null {
   const ids: string[] = [];
   for (const input of inputs) {
-    const value = input.value;
-    if (typeof value !== "string" || value.trim() === "") {
+    const values = Array.isArray(input.value) ? input.value : [input.value];
+    const selected = values.filter(
+      (value): value is string => typeof value === "string" && value.trim() !== "",
+    );
+    if (!selected.length) {
       if (input.required) return null;
       continue;
     }
-    if (!value.startsWith(layerTokenPrefix)) return null;
-    ids.push(value.slice(layerTokenPrefix.length));
+    for (const value of selected) {
+      if (!value.startsWith(layerTokenPrefix)) return null;
+      ids.push(value.slice(layerTokenPrefix.length));
+    }
   }
   return ids.length ? ids : null;
 }

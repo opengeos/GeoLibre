@@ -1,9 +1,19 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 
-export type ParameterType = "layer" | "number" | "string" | "boolean" | "select" | "field" | "path";
+export type ParameterType =
+  | "layer"
+  | "layers"
+  | "number"
+  | "string"
+  | "boolean"
+  | "select"
+  | "field"
+  | "path";
 
-/** A single geometry family used to filter layer pickers. */
+/**
+ * A single geometry family used to filter layer pickers.
+ */
 export type GeometryFamily = "point" | "line" | "polygon";
 
 export interface ParameterOption {
@@ -25,7 +35,10 @@ export interface AlgorithmParameter {
   min?: number;
   max?: number;
   step?: number;
-  /** Restrict a `type: "layer"` picker to layers with these geometry families. */
+  /**
+   * Restrict a `type: "layer"` or `type: "layers"` picker to layers with these
+   * geometry families.
+   */
   geometryFilter?: GeometryFamily[];
   /**
    * For `type: "field"`: the id of the `type: "layer"` parameter whose selected

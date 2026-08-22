@@ -9,6 +9,7 @@ import {
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   addArcGISLayer,
+  fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
 } from "../packages/plugins/src/plugins/arcgis-layer";
 
@@ -546,6 +547,63 @@ describe("fetchArcGISMapServiceSublayers", () => {
     await assert.rejects(
       fetchArcGISMapServiceSublayers({ url: IMAGE_SERVICE_URL }),
       /Enter an ArcGIS MapServer URL/,
+    );
+  });
+});
+
+describe("fetchArcGISImageServiceRasterFunctions", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("retrieves named ImageServer raster functions and carries credentials", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = input.toString();
+      return jsonResponse({
+        rasterFunctionInfos: [
+          null,
+          { description: "Missing name" },
+          { name: 42, description: "Non-string name" },
+          { name: "", description: "Blank name" },
+          { name: "Missing description" },
+          {
+            name: "Multidirectional Hillshade",
+            description: "Creates a shaded-relief representation of the surface.",
+            help: "",
+          },
+          { name: "Multidirectional Hillshade", description: "Duplicate" },
+        ],
+      });
+    }) as typeof fetch;
+
+    const rasterFunctions = await fetchArcGISImageServiceRasterFunctions({
+      url: `${IMAGE_SERVICE_URL}/?f=html`,
+      token: "private token",
+    });
+
+    assert.deepEqual(rasterFunctions, [
+      { name: "Missing description", description: "" },
+      {
+        name: "Multidirectional Hillshade",
+        description: "Creates a shaded-relief representation of the surface.",
+      },
+    ]);
+    assert.match(requestedUrl, /\/ImageServer\?f=json&token=private\+token$/);
+  });
+
+  it("returns an empty catalog when the service advertises no raster functions", async () => {
+    globalThis.fetch = (async () => jsonResponse({ name: "Elevation" })) as typeof fetch;
+
+    assert.deepEqual(await fetchArcGISImageServiceRasterFunctions({ url: IMAGE_SERVICE_URL }), []);
+  });
+
+  it("rejects URLs that are not ImageServer endpoints", async () => {
+    await assert.rejects(
+      fetchArcGISImageServiceRasterFunctions({ url: MAP_SERVICE_URL }),
+      /Enter an ArcGIS ImageServer URL/,
     );
   });
 });

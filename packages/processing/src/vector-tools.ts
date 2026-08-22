@@ -13,6 +13,8 @@ import tin from "@turf/tin";
 import sector from "@turf/sector";
 import circle from "@turf/circle";
 import distance from "@turf/distance";
+import bearing from "@turf/bearing";
+import destination from "@turf/destination";
 import bbox from "@turf/bbox";
 import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
@@ -28,11 +30,15 @@ import type {
   Point,
   Polygon,
   Position,
+  MultiLineString,
   MultiPolygon,
 } from "geojson";
 import {
   bodyLengthToEarth,
+  decodePolyline,
+  decodePolylineDetailed,
   earthLengthToBody,
+  encodePolyline,
   getActiveBodyRadiusRatio,
   layerJoinKey,
   type GeoLibreLayer,
@@ -1687,6 +1693,301 @@ export const smoothTool: ProcessingAlgorithm = {
   },
 };
 
+/**
+ * Split any geometry into its linear "parts": each ring of a polygon, each
+ * line of a (multi)linestring, or the single coordinate of a point. Used by
+ * Extract vertices and Points along geometry to walk coordinates uniformly.
+ */
+function geometryParts(geometry: Geometry): Position[][] {
+  switch (geometry.type) {
+    case "Point":
+      return [[geometry.coordinates]];
+    case "MultiPoint":
+      return geometry.coordinates.map((pos) => [pos]);
+    case "LineString":
+      return [geometry.coordinates];
+    case "MultiLineString":
+      return geometry.coordinates;
+    case "Polygon":
+      return geometry.coordinates;
+    case "MultiPolygon":
+      return geometry.coordinates.flat();
+    case "GeometryCollection":
+      return geometry.geometries.flatMap(geometryParts);
+    default:
+      return [];
+  }
+}
+
+/** Line/polygon coordinate rings of a geometry, unwrapping GeometryCollections. */
+function linearParts(geometry: Geometry): Position[][] {
+  if (geometry.type === "GeometryCollection") return geometry.geometries.flatMap(linearParts);
+  return isFamily(geometry, "line") || isFamily(geometry, "polygon") ? geometryParts(geometry) : [];
+}
+
+export const extractVerticesTool: ProcessingAlgorithm = {
+  id: "extract-vertices",
+  name: "Extract vertices",
+  description:
+    "Convert every vertex of the input features into a point, keeping the original attributes plus vertex_index and part_index columns (same-named source attributes are overwritten)",
+  group: "Geometry",
+  parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const points: Feature<Point>[] = [];
+    let skipped = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      if (!geometry) {
+        skipped += 1;
+        continue;
+      }
+      const parts = geometryParts(geometry);
+      if (!parts.length) {
+        skipped += 1;
+        continue;
+      }
+      for (const [partIndex, part] of parts.entries()) {
+        for (const [vertexIndex, position] of part.entries()) {
+          points.push({
+            type: "Feature",
+            properties: {
+              ...(feature.properties ?? {}),
+              vertex_index: vertexIndex,
+              part_index: partIndex,
+            },
+            geometry: { type: "Point", coordinates: [...position] as Position },
+          });
+        }
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no vertices found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable geometry`);
+    ctx.log(`Extracted ${points.length} vertex point(s)`);
+    ctx.addResultLayer?.("Vertices", featureCollection(points));
+  },
+};
+
+/** Units accepted by Points along geometry; @turf/distance speaks all three. */
+type AlongUnits = "kilometers" | "meters" | "miles";
+
+/**
+ * Hard ceiling on generated points so a tiny interval on a long geometry
+ * cannot freeze the tab (the same guard {@link GRID_HARD_CAP} gives the grid).
+ */
+const POINTS_ALONG_HARD_CAP = 1_000_000;
+
+/**
+ * Forward-only cursor that yields a point every {@link interval} (in Turf's
+ * Earth-scaled units; see {@link bodyLengthToEarth}) along an open coordinate
+ * ring, together with the interval multiple it sits on. Segment lengths are haversine and the position inside a
+ * segment is found geodesically (bearing + destination), so the measured
+ * `distance` attribute and the emitted coordinate agree even on long
+ * high-latitude segments where linear lon/lat interpolation drifts. Each
+ * segment is visited once, so a walk is O(points + vertices) rather than
+ * re-scanning the ring from its first vertex for every point.
+ */
+function* walkAlong(
+  positions: Position[],
+  interval: number,
+  units: AlongUnits,
+  segmentLengths: number[],
+): Generator<{ position: Position; step: number }> {
+  let travelled = 0;
+  let atDistance = 0;
+  let step = 0;
+  for (let i = 1; i < positions.length; i += 1) {
+    const start = positions[i - 1];
+    const end = positions[i];
+    const segment = segmentLengths[i - 1];
+    if (segment <= 0) continue;
+    let heading: number | null = null;
+    // A step landing within float noise of a vertex snaps to the vertex itself
+    // (exact coordinates), so the caller's endpoint dedup never sees a point a
+    // few ulps short of the end vertex. The noise in `atDistance - travelled`
+    // scales with the *accumulated* distance, not with this segment, so the
+    // tolerance follows the running totals: a segment-proportional epsilon is
+    // far below the noise for a short segment late in a long ring, and far
+    // above it (centimetres) for a single segment thousands of km long. The
+    // 1e-12 factor is ~4500 ulp at any magnitude, enough slack to absorb the
+    // per-vertex error of summing a dense ring.
+    const epsilon = (travelled + segment) * 1e-12;
+    while (atDistance <= travelled + segment + epsilon) {
+      const offset = atDistance - travelled;
+      let position: Position;
+      // Exact vertices keep their full position; interior points are placed
+      // geodesically in 2-D by Turf, so any Z is interpolated back in here to
+      // keep a 3-D input from coming out with elevation only at its vertices.
+      if (offset <= epsilon) position = [...start] as Position;
+      else if (offset >= segment - epsilon) position = [...end] as Position;
+      else {
+        heading ??= bearing(start, end);
+        position = destination(start, offset, heading, { units }).geometry.coordinates;
+        if (typeof start[2] === "number" && typeof end[2] === "number") {
+          position = [
+            position[0],
+            position[1],
+            start[2] + (end[2] - start[2]) * (offset / segment),
+          ];
+        }
+      }
+      yield { position, step };
+      step += 1;
+      atDistance = step * interval;
+    }
+    travelled += segment;
+  }
+}
+
+/** Haversine lengths of an open coordinate ring's segments. */
+function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
+  const lengths: number[] = [];
+  for (let i = 1; i < positions.length; i += 1) {
+    lengths.push(distance(positions[i - 1], positions[i], { units }));
+  }
+  return lengths;
+}
+
+export const pointsAlongGeometryTool: ProcessingAlgorithm = {
+  id: "points-along-geometry",
+  name: "Points along geometry",
+  description:
+    "Generate points at a fixed distance interval along lines and polygon boundaries; the first and last vertices are always included. Each point gets a distance column (a same-named source attribute is overwritten)",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line", "polygon"],
+    },
+    {
+      id: "interval",
+      label: "Interval",
+      type: "number",
+      required: true,
+      default: 1,
+      min: 0.000001,
+      step: 0.1,
+      description: "Distance between generated points",
+    },
+    {
+      id: "units",
+      label: "Units",
+      type: "select",
+      default: "kilometers",
+      options: [
+        { value: "kilometers", label: "Kilometers" },
+        { value: "meters", label: "Meters" },
+        { value: "miles", label: "Miles" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const interval = numberParam(ctx, "interval", 1);
+    if (!(interval > 0)) {
+      ctx.log("Error: interval must be greater than 0");
+      return;
+    }
+    const units = (ctx.parameters.units as string) || "kilometers";
+    if (!LINEAR_UNITS.has(units)) {
+      ctx.log(`Error: unknown units '${units}'`);
+      return;
+    }
+    const alongUnits = units as AlongUnits;
+    // Turf is Earth-locked: pre-scale the user's ground interval into Turf's
+    // frame for the walk, and post-scale every length Turf measures back into
+    // the active body's frame before it reaches the distance column.
+    const turfInterval = bodyLengthToEarth(interval);
+    const parts: {
+      feature: Feature;
+      part: Position[];
+      length: number;
+      segmentLengths: number[];
+    }[] = [];
+    let skipped = 0;
+    let estimated = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      const linear = geometry ? linearParts(geometry) : [];
+      let usable = 0;
+      for (const part of linear) {
+        if (part.length < 2) continue;
+        // Interval multiples plus the closing end vertex.
+        const segmentLengths = ringSegmentLengths(part, alongUnits);
+        const length = segmentLengths.reduce((total, segment) => total + segment, 0);
+        estimated += Math.floor(length / turfInterval) + 2;
+        parts.push({ feature, part, length, segmentLengths });
+        usable += 1;
+      }
+      // A feature with no line or polygon geometry at all and one whose every
+      // part is a lone coordinate both contribute nothing, so both are counted
+      // here: the summary would otherwise under-report the second kind.
+      if (!usable) skipped += 1;
+    }
+    // Bail before allocating anything, the way gridTool does for its cells.
+    if (estimated > POINTS_ALONG_HARD_CAP) {
+      ctx.log(
+        `Error: this interval would generate about ${estimated.toLocaleString()} points (cap ${POINTS_ALONG_HARD_CAP.toLocaleString()}); use a larger interval.`,
+      );
+      return;
+    }
+    // One rounding rule for the whole distance column, so `3 * 0.1` and the
+    // measured endpoint length both read cleanly.
+    const roundDistance = (value: number) => Number(value.toFixed(6));
+    const points: Feature<Point>[] = [];
+    for (const { feature, part, length, segmentLengths } of parts) {
+      // Walk every interval multiple, then always close with the part's
+      // final vertex so endpoints survive rounding of the total length.
+      let lastPushed: Feature<Point> | undefined;
+      for (const { position, step } of walkAlong(part, turfInterval, alongUnits, segmentLengths)) {
+        lastPushed = {
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}), distance: roundDistance(step * interval) },
+          geometry: { type: "Point", coordinates: position },
+        };
+        points.push(lastPushed);
+      }
+      const last = part[part.length - 1];
+      const endDistance = roundDistance(earthLengthToBody(length));
+      const previous = lastPushed?.geometry.coordinates;
+      // When the length is an (near) exact multiple of the interval, the last
+      // stepped point already sits on the end vertex; keep one point but snap
+      // it to the exact end vertex so endpoints are never off by float noise.
+      // `lastPushed` is scoped to this part, so a degenerate part (all
+      // segments zero-length) can never snap a point from another part.
+      const duplicatesEnd =
+        previous &&
+        Math.abs(previous[0] - last[0]) < 1e-9 &&
+        Math.abs(previous[1] - last[1]) < 1e-9;
+      if (duplicatesEnd && lastPushed) {
+        lastPushed.geometry.coordinates = [...last] as Position;
+        lastPushed.properties!.distance = endDistance;
+      } else if (!duplicatesEnd) {
+        points.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}), distance: endDistance },
+          geometry: { type: "Point", coordinates: [...last] as Position },
+        });
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no line or polygon features found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable line or polygon geometry`);
+    ctx.log(`Generated ${points.length} point(s) every ${interval} ${units}`);
+    ctx.addResultLayer?.("Points along geometry", featureCollection(points));
+  },
+};
+
 /** Hard ceiling on grid cells so a tiny cell size cannot freeze the tab. */
 const GRID_HARD_CAP = 1_000_000;
 
@@ -2739,6 +3040,349 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
   },
 };
 
+export const mergeLayersTool: ProcessingAlgorithm = {
+  id: "merge-layers",
+  name: "Merge layers",
+  description:
+    "Combine several vector layers into one, uniting their attribute schemas (missing attributes become null)",
+  group: "Data management",
+  parameters: [
+    {
+      id: "layers",
+      label: "Input layers",
+      type: "layers",
+      required: true,
+      description: "Select two or more layers; they are concatenated in the order shown",
+    },
+    {
+      id: "addSourceField",
+      label: "Add source layer field",
+      type: "boolean",
+      default: true,
+      description: "Record each output feature's originating layer name",
+    },
+    {
+      id: "sourceFieldName",
+      label: "Source field name",
+      type: "string",
+      default: "source",
+      description: "Name of the field that stores the originating layer name",
+    },
+  ],
+  run: (ctx) => {
+    // De-duplicate: the multi-select cannot repeat an option, but a replayed
+    // History entry could, and merging a layer into itself twice is never meant.
+    const ids = Array.isArray(ctx.parameters.layers)
+      ? [...new Set(ctx.parameters.layers as string[])]
+      : [];
+    if (ids.length < 2) {
+      ctx.log('Error: parameter "layers" requires at least two selected layers');
+      return;
+    }
+    const addSource = ctx.parameters.addSourceField !== false;
+    const rawFieldName = (ctx.parameters.sourceFieldName as string)?.trim();
+    const sourceField = rawFieldName || "source";
+
+    // Resolve first so a layer deleted since it was selected (or a stale
+    // History re-run) is reported as missing rather than as merely empty.
+    const resolved = ids.map((id) => ctx.layers.find((l) => l.id === id));
+    const missing = resolved.filter((l) => !l).length;
+    if (missing) ctx.log(`Skipped ${missing} selected layer(s) that no longer exist`);
+    // Require a feature that will actually be emitted: a layer whose features
+    // all have null geometry contributes nothing to the output below, so it is
+    // a skip, not a merged layer.
+    const selected = resolved.filter((l): l is GeoLibreLayer =>
+      Boolean(l?.geojson?.features?.some((feature) => feature.geometry)),
+    );
+    const unusable = ids.length - missing - selected.length;
+    if (unusable) ctx.log(`Skipped ${unusable} selected layer(s) with no usable geometry`);
+    if (!selected.length) {
+      ctx.log("Error: none of the selected layers has usable geometry");
+      return;
+    }
+    // The source field is written last and would otherwise overwrite an input
+    // attribute of the same name, so refuse rather than silently drop data.
+    if (
+      addSource &&
+      selected.some((layer) =>
+        layer.geojson!.features.some(
+          (feature) =>
+            feature.geometry &&
+            Object.prototype.hasOwnProperty.call(feature.properties ?? {}, sourceField),
+        ),
+      )
+    ) {
+      ctx.log(
+        `Error: source field '${sourceField}' already exists in an input layer; choose a different source field name`,
+      );
+      return;
+    }
+
+    // Union of property keys in first-seen order, so the merged attribute
+    // schema is stable regardless of feature iteration.
+    const schema: string[] = [];
+    const seen = new Set<string>();
+    if (addSource) {
+      schema.push(sourceField);
+      seen.add(sourceField);
+    }
+    for (const layer of selected) {
+      for (const feature of layer.geojson!.features) {
+        // Skip features the output builder drops, so a property carried only
+        // by a null-geometry feature does not become an always-null column.
+        if (!feature.geometry) continue;
+        for (const key of Object.keys(feature.properties ?? {})) {
+          if (!seen.has(key)) {
+            seen.add(key);
+            schema.push(key);
+          }
+        }
+      }
+    }
+
+    // Build fresh features (no `id`): two input layers routinely number their
+    // features from the same base, so carrying ids across a merge would emit
+    // duplicates, which would corrupt MapLibre feature state. Same reasoning as
+    // the one-to-many spatial join above.
+    const out = featureCollection(
+      selected.flatMap((layer) =>
+        layer
+          .geojson!.features.filter((feature) => feature.geometry)
+          .map((feature) => ({
+            type: "Feature" as const,
+            properties: Object.fromEntries(
+              schema.map((key) => {
+                if (key === sourceField && addSource) return [key, layer.name];
+                const props = feature.properties ?? {};
+                // Own-property lookup: a bare `props[key]` resolves "__proto__"
+                // to Object.prototype for a feature that lacks it, and `?? null`
+                // does not catch that because it is not nullish. JSON.parse does
+                // create an own "__proto__" key, so this is reachable from a file.
+                return [
+                  key,
+                  Object.prototype.hasOwnProperty.call(props, key) ? (props[key] ?? null) : null,
+                ];
+              }),
+            ),
+            geometry: feature.geometry!,
+          })),
+      ),
+    );
+
+    ctx.log(
+      `Merged ${selected.length} layer(s): ${out.features.length} feature(s), ${schema.length} attribute(s)`,
+    );
+    ctx.addResultLayer?.("Merged layers", out);
+  },
+};
+
+export const decodePolylineTool: ProcessingAlgorithm = {
+  id: "decode-polyline",
+  name: "Decode polyline",
+  description:
+    "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+    },
+    {
+      id: "field",
+      label: "Polyline field",
+      type: "field",
+      description: "Attribute field containing the encoded polyline string",
+      required: true,
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const field = (ctx.parameters.field as string)?.trim();
+    if (!field) {
+      ctx.log("Error: please specify a polyline field");
+      return;
+    }
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+
+    const outFeatures: Feature<LineString | MultiLineString>[] = [];
+    let skipped = 0;
+
+    for (const feature of fc.features) {
+      const rawVal = feature.properties?.[field];
+      if (typeof rawVal !== "string" || !rawVal.trim()) {
+        skipped++;
+        continue;
+      }
+      const val = rawVal.trim();
+      const parts = val
+        .split(";")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      let valid = true;
+      const multiCoords: [number, number][][] = [];
+
+      for (const part of parts) {
+        for (let i = 0; i < part.length; i++) {
+          const code = part.charCodeAt(i);
+          if (code < 63 || code > 126) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        const decodeResult = decodePolylineDetailed(part, precision);
+        if (!decodeResult.complete) {
+          valid = false;
+          break;
+        }
+
+        const coords = decodeResult.coordinates;
+        if (coords.length < 2) {
+          valid = false;
+          break;
+        }
+
+        for (const [lon, lat] of coords) {
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        multiCoords.push(coords);
+      }
+
+      if (!valid || multiCoords.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      if (multiCoords.length === 1) {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "LineString",
+            coordinates: multiCoords[0],
+          },
+        });
+      } else {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: multiCoords,
+          },
+        });
+      }
+    }
+
+    if (skipped > 0) {
+      ctx.log(`Skipped ${skipped} feature(s) with missing or invalid polyline string`);
+    }
+    ctx.log(`Decoded ${outFeatures.length} line feature(s) from "${field}"`);
+    ctx.addResultLayer?.("Decoded polylines", featureCollection(outFeatures));
+  },
+};
+
+export const encodePolylineTool: ProcessingAlgorithm = {
+  id: "encode-polyline",
+  name: "Encode line to polyline",
+  description:
+    "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line"],
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+    {
+      id: "targetField",
+      label: "Output field name",
+      type: "string",
+      description: "Name of the attribute column to store encoded polylines (default: polyline)",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+    const targetField = ((ctx.parameters.targetField as string) || "").trim() || "polyline";
+
+    const outFeatures: Feature[] = [];
+    let encodedCount = 0;
+
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      let polylineStr = "";
+      if (geometry?.type === "LineString") {
+        polylineStr = encodePolyline(geometry.coordinates as [number, number][], precision);
+      } else if (geometry?.type === "MultiLineString") {
+        polylineStr = geometry.coordinates
+          .map((lineCoords) => encodePolyline(lineCoords as [number, number][], precision))
+          .filter(Boolean)
+          .join(";");
+      }
+      if (polylineStr) encodedCount++;
+      outFeatures.push({
+        ...feature,
+        properties: {
+          ...(feature.properties ?? {}),
+          [targetField]: polylineStr,
+        },
+      });
+    }
+
+    ctx.log(
+      `Encoded ${encodedCount} line feature(s) into field "${targetField}" (precision ${precision})`,
+    );
+    ctx.addResultLayer?.("Encoded polylines", featureCollection(outFeatures));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -2759,9 +3403,13 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   explodeTool,
   aggregateTool,
   smoothTool,
+  extractVerticesTool,
+  pointsAlongGeometryTool,
   gridTool,
   voronoiTool,
   cellSectorsTool,
+  decodePolylineTool,
+  encodePolylineTool,
   createDggsGridTool,
   dggsBinPointsTool,
   dggsCompactTool,
@@ -2770,6 +3418,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   trajectorySpeedTool,
   detectStopsTool,
   spaceTimeProximityTool,
+  mergeLayersTool,
   // Data-quality tools (validity + topology rules) last, matching the menu.
   ...TOPOLOGY_TOOLS,
 ];

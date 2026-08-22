@@ -16,7 +16,8 @@ import time
 import urllib.parse
 import uuid
 import warnings
-from typing import Any, Callable
+from collections.abc import Callable, Sequence
+from typing import Any
 from urllib.error import URLError
 
 import anywidget
@@ -26,6 +27,7 @@ from . import authoring as _authoring
 from . import project as _project
 from ._server import app_port, register_local_file, serve_app
 from .basemaps import resolve_basemap
+from .polyline import polyline_to_geojson
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -1196,6 +1198,31 @@ class Map(anywidget.AnyWidget):
             source_layer=layer,
             **style,
         )
+
+    def add_polyline(
+        self,
+        polyline: str | Sequence[str],
+        name: str = "Polyline",
+        *,
+        precision: int = 5,
+        unescape: bool = False,
+        **style: Any,
+    ) -> str:
+        """Add an Encoded Polyline layer.
+
+        Args:
+            polyline: A single polyline string (e.g. Google or Valhalla encoded)
+                or a list of polyline strings.
+            name: Layer display name.
+            precision: Decimal digits of precision (5 for Google/OSRM, 6 for Valhalla/Mapbox).
+            unescape: Whether to unescape double-escaped backslashes before decoding.
+            **style: Style overrides (e.g. ``lineColor="#ff0000"``, ``lineWidth=3``).
+
+        Returns:
+            The id of the added layer.
+        """
+        fc = polyline_to_geojson(polyline, precision=precision, unescape=unescape)
+        return self.add_geojson(fc, name=name, **style)
 
     # -- markers ---------------------------------------------------------
 

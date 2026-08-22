@@ -219,6 +219,7 @@ import {
   exportVectorLayer,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -1578,7 +1579,7 @@ export function LayerPanel({
   );
 
   const handleExportLayer = useCallback(
-    async (layer: GeoLibreLayer, format: VectorExportFormat) => {
+    async (layer: GeoLibreLayer, format: VectorExportFormat, precision?: number) => {
       clearRefreshStatusTimer(layer.id);
       try {
         const geojson = await resolveLayerGeojson(
@@ -1603,11 +1604,17 @@ export function LayerPanel({
         const egressGeojson = layer.fieldVisibility
           ? excludeHiddenFieldsFromGeojson(geojson, layer.fieldVisibility)
           : geojson;
+        const polylinePrecision =
+          precision ??
+          (typeof layer.metadata?.polylinePrecision === "number"
+            ? layer.metadata.polylinePrecision
+            : 5);
         const savedPath = await exportVectorLayer(
           egressGeojson,
           format,
           sanitizeExportFileName(layer.name),
           layer.name,
+          polylinePrecision,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
@@ -3134,6 +3141,7 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
             // Importing a style (Mapbox GL or SLD) only writes the layer's
             // vector symbology, so it applies to any vector-styled layer (local
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
@@ -3951,6 +3959,24 @@ export function LayerPanel({
                                 >
                                   CSV (attributes only)
                                 </DropdownMenuItem>
+                                {canExportPolyline && (
+                                  <>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 5);
+                                      }}
+                                    >
+                                      {t("layers.exportPolyline", { precision: 5 })}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 6);
+                                      }}
+                                    >
+                                      {t("layers.exportPolyline", { precision: 6 })}
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
                           )}

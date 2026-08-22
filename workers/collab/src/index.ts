@@ -5,6 +5,8 @@
 //
 //   POST /sessions          -> create a session, return its code + host token
 //   GET  /sessions/:id/ws   -> WebSocket upgrade into that session's actor
+//   GET  /sessions/:id/log  -> host-only session log (Authorization: Bearer)
+//   DELETE /sessions/:id/log -> host-only: clear the session log
 //
 // The session code namespaces the Durable Object (idFromName), so every
 // participant of a session lands on the same actor and gets fanned out to.
@@ -20,8 +22,8 @@ const CODE_LENGTH = 8;
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -192,6 +194,17 @@ export default {
       // Rewrite to the actor's internal /ws path, preserving the upgrade
       // headers and method by copying them from the incoming request.
       return stub.fetch(new Request("https://collab/ws", request));
+    }
+
+    // Host-only session log: GET downloads it, DELETE clears it. The host
+    // token travels as `Authorization: Bearer <hostToken>`; the actor checks it.
+    const logMatch = url.pathname.match(/^\/sessions\/([^/]+)\/log$/);
+    if (logMatch && (request.method === "GET" || request.method === "DELETE")) {
+      const stub = env.COLLAB_SESSION.get(env.COLLAB_SESSION.idFromName(logMatch[1]));
+      const res = await stub.fetch(new Request("https://collab/log", request));
+      const headers = new Headers(res.headers);
+      for (const [key, value] of Object.entries(CORS_HEADERS)) headers.set(key, value);
+      return new Response(res.body, { status: res.status, headers });
     }
 
     if (url.pathname === "/" || url.pathname === "/health") {

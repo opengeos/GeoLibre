@@ -21,6 +21,9 @@ export const EMPTY_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 export const MAX_CHAT_TEXT_LENGTH = 2000;
 export const CHAT_HISTORY_LIMIT = 50;
 export const MAX_CHAT_STORAGE_BYTES = 100_000;
+/** Host-visible session log: bounded by entry count and serialized bytes. */
+export const SESSION_LOG_LIMIT = 5000;
+export const MAX_SESSION_LOG_STORAGE_BYTES = 100_000;
 export const MIN_CHAT_INTERVAL_MS = 250;
 
 /**

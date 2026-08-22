@@ -16,6 +16,7 @@ import {
   canAddAsset,
   connectStac,
   horizontalBbox,
+  icechunkBranch,
   isAzureBlobHref,
   isIcechunkAsset,
   isVisualizableAsset,
@@ -36,6 +37,7 @@ import {
   withItemBounds,
   zarrCrs,
   zarrLayerRequest,
+  zarrReaderTargetCheck,
   zarrTargetCheck,
   zarrStorePath,
   zarrStoreTakesKeys,
@@ -44,6 +46,13 @@ import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import { addZarrRasterLayer } from "./maplibre-components";
+import {
+  icechunkLayerUrl,
+  icechunkTimeAttributesReader,
+  openIcechunkStore,
+  repositoryOpenError,
+  type ZarrKeyReader,
+} from "./stac-icechunk";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
@@ -205,7 +214,7 @@ export interface StacLabels {
   formatZarr: string;
   formatUnknown: string;
   addNoTarget: string;
-  addIcechunk: string;
+  addIcechunkFailed: string;
   zarrProblem: (problem: Exclude<ZarrTargetCheck, "array">) => string;
   chooseTarget: string;
   notAddable: string;
@@ -220,6 +229,7 @@ export interface StacLabels {
 /** Why a Zarr variable could not be added, in the panel's own words. */
 const ZARR_PROBLEMS: Record<Exclude<ZarrTargetCheck, "array">, string> = {
   group: "This asset names a group of arrays, not one that can be drawn",
+  missing: "This store does not hold that variable",
   unauthorized: "This Zarr store needs credentials GeoLibre cannot supply yet",
   "unsupported-url": "This Zarr store's address cannot be read one key at a time",
   unavailable: "This Zarr store could not be opened",
@@ -307,7 +317,7 @@ let labels: StacLabels = {
   formatZarr: "Zarr",
   formatUnknown: "Unknown format",
   addNoTarget: "This asset lists nothing to draw",
-  addIcechunk: "Icechunk stores cannot be read yet",
+  addIcechunkFailed: "This Icechunk repository could not be opened",
   zarrProblem: (problem) => ZARR_PROBLEMS[problem],
   chooseTarget: "Choose what to add",
   notAddable: "not addable",
@@ -630,7 +640,6 @@ function assetFormatLabel(asset: StacAsset): string {
 function addReason(item: StacItem, key: string, asset: StacAsset): string {
   if (canAddAsset(item, key, asset)) return asset.href;
   if (!isVisualizableAsset(asset)) return labels.addUnsupported;
-  if (isIcechunkAsset(asset, item)) return labels.addIcechunk;
   if (requiresTarget(asset) && !zarrStoreTakesKeys(zarrStorePath(asset.href).url)) {
     return labels.zarrProblem("unsupported-url");
   }
@@ -683,6 +692,25 @@ async function readableHref(item: StacItem, href: string): Promise<string> {
   }
 }
 
+/**
+ * Open the repository an Icechunk asset names, on the branch its item or asset named. A spec
+ * version the reader cannot read fails here rather than inside the renderer, where it would arrive
+ * as a blank layer.
+ */
+async function openIcechunkAsset(
+  asset: StacAsset,
+  branch: string | undefined,
+  signal?: AbortSignal,
+): Promise<ZarrKeyReader> {
+  try {
+    return await openIcechunkStore(zarrStorePath(asset.href).url, branch, signal);
+  } catch (error) {
+    // An add the user abandoned is not a repository that refused, so it is not reported as one.
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw repositoryOpenError(error, labels.addIcechunkFailed);
+  }
+}
+
 async function visualizeAsset(
   item: StacItem,
   key: string,
@@ -721,13 +749,24 @@ async function visualizeAsset(
     }
     case "zarr": {
       if (!appRef) throw new Error(labels.addFailed);
-      if (isIcechunkAsset(asset, item)) throw new Error(labels.addIcechunk);
       const variable = target ?? assetTargets(item, key, asset)[0]?.id;
       if (!variable) throw new Error(labels.addNoTarget);
-      // Deliberately unsigned: a store is read key by key, and a token in the URL cannot survive
-      // being followed by one. A private container therefore fails the check below and says so.
+      // A repository is opened by its own reader and handed over as a store; a plain store is read
+      // from its URL. Unsigned either way — a token cannot survive being followed by a key, so a
+      // private container fails the check below and says so.
+      // Worked out once: the branch decides which snapshot is opened and, with it, which layer the
+      // control keys — two branches of one repository are two layers.
+      const isIcechunk = isIcechunkAsset(asset, item);
+      const branch = isIcechunk ? icechunkBranch(asset, item) : undefined;
+      const icechunk = isIcechunk ? await openIcechunkAsset(asset, branch, signal) : null;
       const { url } = zarrStorePath(asset.href);
-      const checked = await zarrTargetCheck(url, variable, fetch, signal);
+      const checked = icechunk
+        ? await zarrReaderTargetCheck(
+            (key, options) => icechunk.get(key, options),
+            variable,
+            signal,
+          )
+        : await zarrTargetCheck(url, variable, fetch, signal);
       if (checked !== "array") throw new Error(labels.zarrProblem(checked));
 
       const crs = zarrCrs(item, asset);
@@ -738,6 +777,17 @@ async function visualizeAsset(
       const layerId = await addZarrRasterLayer(appRef, {
         ...request,
         name: `${name} — ${variable}`,
+        // The renderer's `store` takes `get(key: string)` where the reader wants a rooted key;
+        // method bivariance lets it through, and it holds because zarrita addresses keys absolutely.
+        // The url is only an identifier once a store is supplied, so it carries the branch: two
+        // branches of one repository are two layers, not one patching the other.
+        ...(icechunk
+          ? {
+              url: icechunkLayerUrl(request.url, branch),
+              store: icechunk,
+              readTimeAttributes: icechunkTimeAttributesReader(icechunk),
+            }
+          : {}),
       });
       // The renderer places the data from the store's own coordinates and records no extent, so
       // Zoom to layer has nothing to fly to. The item's bbox is WGS84, which is what it wants.

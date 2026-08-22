@@ -68,7 +68,14 @@ import {
   TriangleAlert,
   Puzzle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type RefObject,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
@@ -181,6 +188,19 @@ interface SettingsDialogProps {
   /** Flip the light/dark mode; the Appearance cards drive the same toggle. */
   onToggleThemeMode: () => void;
 }
+
+type TransComponents = ComponentProps<typeof Trans>["components"];
+
+const cesiumTokenComponents: TransComponents = {
+  tokenLink: (
+    <a
+      className="underline"
+      href="https://ion.cesium.com/tokens"
+      target="_blank"
+      rel="noreferrer noopener"
+    />
+  ),
+};
 
 const SECTION_ITEMS: Array<{
   id: SettingsSection;
@@ -396,6 +416,16 @@ export function SettingsDialog({
   const shareBaseUrl = shareHostState.baseUrl;
   const shareHost = shareHostLabel();
   const shareSettingsUrl = shareBaseUrl ? `${shareBaseUrl}/settings` : null;
+  const shareTokenComponents: TransComponents = {
+    tokenLink: (
+      <a
+        className="underline"
+        href={shareSettingsUrl ?? undefined}
+        target="_blank"
+        rel="noreferrer noopener"
+      />
+    ),
+  };
   // No usable host (sharing turned off, or a configured address that was
   // rejected) means the token field is dead: it would authenticate against a
   // server this deployment never talks to. Say so instead of rendering guidance
@@ -2371,18 +2401,9 @@ export function SettingsDialog({
                           <Trans
                             i18nKey="settings.env.tokenDescription"
                             values={{ shareHost }}
-                            components={{
-                              // Non-null here: this branch requires shareBaseUrl,
-                              // which is what shareSettingsUrl is derived from.
-                              tokenLink: (
-                                <a
-                                  className="underline"
-                                  href={shareSettingsUrl ?? undefined}
-                                  target="_blank"
-                                  rel="noreferrer noopener"
-                                />
-                              ),
-                            }}
+                            // Non-null here: this branch requires shareBaseUrl,
+                            // which is what shareSettingsUrl is derived from.
+                            components={shareTokenComponents}
                           />
                         </p>
                         <Input
@@ -2409,16 +2430,7 @@ export function SettingsDialog({
                     <p className="text-xs text-muted-foreground">
                       <Trans
                         i18nKey="settings.env.cesiumTokenDescription"
-                        components={{
-                          tokenLink: (
-                            <a
-                              className="underline"
-                              href="https://ion.cesium.com/tokens"
-                              target="_blank"
-                              rel="noreferrer noopener"
-                            />
-                          ),
-                        }}
+                        components={cesiumTokenComponents}
                       />
                     </p>
                     <Input

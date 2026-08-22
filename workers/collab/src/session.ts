@@ -9,6 +9,7 @@ import type {
   PresenceEntry,
   ServerMessage,
   ParticipantIdentity,
+  SessionLogEntry,
 } from "./protocol";
 import {
   isBoundedId,
@@ -30,6 +31,7 @@ import {
   isIdentityConfigured,
   MAX_CHAT_STORAGE_BYTES,
   MAX_CHAT_TEXT_LENGTH,
+  MAX_SESSION_LOG_STORAGE_BYTES,
   MAX_SNAPSHOT_BYTES,
   parseStoredChat,
   MIN_CHAT_INTERVAL_MS,
@@ -37,6 +39,7 @@ import {
   participantCanEdit,
   sanitizeColor,
   sanitizeCursor,
+  SESSION_LOG_LIMIT,
   sanitizeDisplayName,
   sanitizeView,
   setParticipantOverride,
@@ -78,6 +81,19 @@ export interface Env {
 // Stateless and reused across frames (snapshots can arrive several times a
 // second), so we don't allocate a new encoder per message.
 const ENCODER = new TextEncoder();
+
+function parseStoredSessionLog(raw: unknown): SessionLogEntry[] {
+  // Accept either the JSON string this code writes or a bare array, so a
+  // value persisted in another shape is kept rather than silently discarded.
+  if (Array.isArray(raw)) return raw as SessionLogEntry[];
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SessionLogEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 // Characters per stored snapshot chunk. A Durable Object caps a SQLite string
 // at 2 MB of UTF-8, and a JS string character can encode to 4 bytes, so this
@@ -334,6 +350,32 @@ export class CollabSession extends DurableObject<Env> {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // Host-only session log. The host token is a bearer credential, so it
+    // travels in the Authorization header rather than the query string (which
+    // lands in server logs, browser history and referrers). Both the stored and
+    // the presented token must be non-empty: /init persists "" for a session
+    // created without a token, and "" === "" must not grant access.
+    if (url.pathname === "/log" && (request.method === "GET" || request.method === "DELETE")) {
+      const hostToken = await this.ctx.storage.get<string>("hostToken");
+      const authorization = request.headers.get("Authorization") ?? "";
+      const clientToken = authorization.startsWith("Bearer ")
+        ? authorization.slice("Bearer ".length).trim()
+        : "";
+      if (!hostToken || !clientToken || hostToken !== clientToken) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      if (request.method === "DELETE") {
+        // Owner-initiated deletion of the log alone; the session itself and
+        // its snapshot are untouched.
+        await this.ctx.storage.delete("sessionLog");
+        return new Response(null, { status: 204 });
+      }
+      const log = parseStoredSessionLog(await this.ctx.storage.get<unknown>("sessionLog"));
+      return new Response(JSON.stringify(log), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+
     return new Response("Not found", { status: 404 });
   }
 
@@ -389,7 +431,7 @@ export class CollabSession extends DurableObject<Env> {
         await this.handleSetMode(ws, attachment, message.mode);
         break;
       case "set-participant-mode":
-        this.handleSetParticipantMode(ws, attachment, message);
+        await this.handleSetParticipantMode(ws, attachment, message);
         break;
       case "chat":
         await this.handleChat(ws, attachment, message);
@@ -420,7 +462,14 @@ export class CollabSession extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-    if (attachment) this.presence.delete(attachment.clientId);
+    if (attachment) {
+      this.presence.delete(attachment.clientId);
+      await this.appendLog({
+        type: "leave",
+        ts: Date.now(),
+        clientId: attachment.clientId,
+      });
+    }
     try {
       ws.close();
     } catch {
@@ -563,6 +612,13 @@ export class CollabSession extends DurableObject<Env> {
     };
     ws.serializeAttachment(attachment);
 
+    await this.appendLog({
+      type: "join",
+      ts: Date.now(),
+      clientId: socketClientId,
+      identity,
+    });
+
     const welcomeInvites = role === "host" ? this.readInvites() : undefined;
 
     this.send(ws, {
@@ -633,6 +689,12 @@ export class CollabSession extends DurableObject<Env> {
     const rev = ((await this.ctx.storage.get<number>("rev")) ?? 0) + 1;
     await this.writeSnapshot(JSON.stringify(project));
     await this.ctx.storage.put("rev", rev);
+    await this.appendLog({
+      type: "snapshot",
+      ts: Date.now(),
+      rev,
+      origin: attachment.clientId,
+    });
 
     this.broadcast(
       {
@@ -679,6 +741,11 @@ export class CollabSession extends DurableObject<Env> {
     }
     const next = normalizeMode(mode);
     await this.ctx.storage.put("mode", next);
+    await this.appendLog({
+      type: "set-mode",
+      ts: Date.now(),
+      mode: next,
+    });
     // A session-wide mode change is authoritative: clear any per-participant
     // overrides so the new mode applies to everyone. Without this, a guest the
     // host previously pinned to can-edit would keep editing through a later
@@ -704,11 +771,11 @@ export class CollabSession extends DurableObject<Env> {
     this.broadcast({ type: "mode", mode: next });
   }
 
-  private handleSetParticipantMode(
+  private async handleSetParticipantMode(
     ws: WebSocket,
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "set-participant-mode" }>,
-  ): void {
+  ): Promise<void> {
     const forbidden = authorizeHostAction(attachment, "participant permissions");
     if (forbidden) {
       this.send(ws, {
@@ -737,6 +804,14 @@ export class CollabSession extends DurableObject<Env> {
     const targetKey = getParticipantKey(target.attachment);
     this.writeDurableOverride(targetKey, target.attachment.editOverride);
     target.socket.serializeAttachment(target.attachment);
+    await this.appendLog({
+      type: "set-participant-mode",
+      ts: Date.now(),
+      clientId: message.clientId,
+      // Record the normalized value that was actually applied, not the raw
+      // client-supplied one.
+      canEdit: target.attachment.editOverride === true,
+    });
     // Everyone re-derives effective permission from the participants list (the
     // affected guest learns its own change here too), so a single broadcast
     // suffices.
@@ -804,6 +879,32 @@ export class CollabSession extends DurableObject<Env> {
   }
 
   // -- helpers ----------------------------------------------------------------
+
+  private async appendLog(entry: SessionLogEntry): Promise<void> {
+    // Never let log persistence abort the caller: several handlers await this
+    // inline and still have to close the socket, broadcast, or arm the
+    // empty-session alarm afterwards.
+    try {
+      const log = parseStoredSessionLog(await this.ctx.storage.get<unknown>("sessionLog"));
+      log.push(entry);
+      // Bound by count AND serialized bytes, the same way the chat history is:
+      // `join` entries carry an identity of unbounded size, so the count cap
+      // alone cannot keep the value under the ~128 KiB per-value storage cap.
+      let trimmed = log.slice(-SESSION_LOG_LIMIT);
+      let byteLen = ENCODER.encode(JSON.stringify(trimmed)).length;
+      while (trimmed.length > 1 && byteLen > MAX_SESSION_LOG_STORAGE_BYTES) {
+        byteLen -= ENCODER.encode(JSON.stringify(trimmed[0])).length + 1;
+        trimmed = trimmed.slice(1);
+      }
+      // Stored as the same JSON string the budget was measured against (the
+      // chat history does the same), so the cap bounds what is persisted.
+      await this.ctx.storage.put("sessionLog", JSON.stringify(trimmed));
+    } catch {
+      // Persisting failed (e.g. a single entry still exceeds the value cap).
+      // The log is best-effort; the session state change it describes has
+      // already been applied.
+    }
+  }
 
   /**
    * Live sockets paired with their deserialized attachment. Callers mutate the

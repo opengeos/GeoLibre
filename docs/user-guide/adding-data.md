@@ -13,6 +13,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
+| **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 
@@ -77,9 +78,11 @@ Two optional fields shape what the service draws:
 - **Sublayers** (map service) takes the sublayer ids to draw, such as `0,2,5`.
   Leave it blank for the service's own default set. Pasting a URL that ends in a
   sublayer id (`.../MapServer/3`) selects that sublayer for you.
-- **Rendering rule** (image service) takes an Esri raster function as JSON, such
-  as `{"rasterFunction":"Hillshade"}`, applied by the server before the image is
-  sent.
+- **Raster function** (image service) can be selected from the functions the
+  service advertises with **Browse functions**. The selected function is applied
+  by the server before the image is sent. The **Rendering rule** field
+  remains available for advanced Esri raster function JSON. For example,
+  `{"rasterFunction":"Hillshade"}` selects the Hillshade function.
 
 Either choice draws the service dynamically, because a cached service's tiles
 were rendered before the choice existed and cannot honor it.

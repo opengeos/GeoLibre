@@ -44,6 +44,7 @@ export function parseArcGISLayerType(
 export const ARCGIS_MAP_SERVICE_SOURCE_KIND = "arcgis-map-service";
 export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
 export const ARCGIS_MAP_SERVICE_URL_ERROR = "Enter an ArcGIS MapServer URL.";
+export const ARCGIS_IMAGE_SERVICE_URL_ERROR = "Enter an ArcGIS ImageServer URL.";
 
 /** Tile size requested from `/export` and `/exportImage`, in pixels. */
 const ARCGIS_EXPORT_TILE_SIZE = 256;
@@ -202,6 +203,12 @@ export interface ArcGISMapServiceSublayer {
   name: string;
 }
 
+/** One raster function advertised by an ArcGIS ImageServer. */
+export interface ArcGISImageServiceRasterFunction {
+  description: string;
+  name: string;
+}
+
 interface ArcGISTileInfo {
   cols?: number;
   lods?: Array<{ level?: number; resolution?: number }>;
@@ -346,6 +353,42 @@ export async function fetchArcGISMapServiceSublayers(params: {
           typeof (layer as Partial<ArcGISMapServiceSublayer>).name === "string",
       )
     : [];
+}
+
+/**
+ * Retrieve the named raster functions advertised by an ArcGIS ImageServer.
+ *
+ * @param params - ImageServer URL and optional request credentials/cancellation.
+ * @returns The service's valid named raster functions in advertised order.
+ */
+export async function fetchArcGISImageServiceRasterFunctions(params: {
+  url: string;
+  token?: string;
+  signal?: AbortSignal;
+}): Promise<ArcGISImageServiceRasterFunction[]> {
+  const { serviceUrl } = resolveArcGISImageServiceUrl(params.url, "image-service");
+  const json = await fetchArcGISJson<{ rasterFunctionInfos?: unknown[] }>(
+    serviceUrl,
+    { layerType: "image-service", sourceType: "url", token: params.token },
+    undefined,
+    params.signal,
+  );
+  if (!Array.isArray(json.rasterFunctionInfos)) return [];
+
+  const rasterFunctions: ArcGISImageServiceRasterFunction[] = [];
+  const names = new Set<string>();
+  for (const rasterFunction of json.rasterFunctionInfos) {
+    if (typeof rasterFunction !== "object" || rasterFunction === null) continue;
+    const candidate = rasterFunction as Partial<ArcGISImageServiceRasterFunction>;
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : undefined;
+    if (!name || names.has(name)) continue;
+    names.add(name);
+    rasterFunctions.push({
+      name,
+      description: typeof candidate.description === "string" ? candidate.description.trim() : "",
+    });
+  }
+  return rasterFunctions;
 }
 
 function ensureArcGISStoreCleanup(): void {
@@ -1088,7 +1131,7 @@ function resolveArcGISImageServiceUrl(
   const url = trimTrailingSlash(stripArcGISUrlQuery(input));
   if (layerType === "image-service") {
     if (!/\/ImageServer$/i.test(url)) {
-      throw new Error("Enter an ArcGIS ImageServer URL.");
+      throw new Error(ARCGIS_IMAGE_SERVICE_URL_ERROR);
     }
     return { serviceUrl: url };
   }

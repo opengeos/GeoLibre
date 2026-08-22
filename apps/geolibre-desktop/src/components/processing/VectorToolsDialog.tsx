@@ -356,6 +356,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
         value === undefined ||
         value === "" ||
         value === null ||
+        (Array.isArray(value) && value.length === 0) ||
         (param.type === "number" && Number.isNaN(value))
       ) {
         appendLog(`Error: "${param.label}" is required`);
