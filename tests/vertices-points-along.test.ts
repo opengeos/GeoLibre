@@ -437,6 +437,39 @@ describe("points along geometry tool", () => {
     assert.equal(vertices.results[0].features.length, 3);
   });
 
+  it("counts a feature whose every part is a lone coordinate as skipped", () => {
+    const degenerate = makeLayer("degenerate", "Degenerate", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          // A line-family geometry, so it survives `linearParts`, but with too
+          // few coordinates to walk.
+          geometry: { type: "LineString", coordinates: [[0, 0]] },
+        },
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Point", coordinates: [5, 5] },
+        },
+        ...line.geojson.features,
+      ],
+    });
+    const { messages, results } = runTool("points-along-geometry", [degenerate], {
+      layer: "degenerate",
+      interval: 100,
+      units: "kilometers",
+    });
+    // Only the real line produces points; both the lone-coordinate line and
+    // the point feature are reported.
+    assert.equal(results[0].features.length, 5);
+    assert.ok(
+      messages.some((m) => m === "Skipped 2 feature(s) with no usable line or polygon geometry"),
+      messages.join(" | "),
+    );
+  });
+
   it("keeps a sample just past a very long segment's end on the next segment", () => {
     // A ~10,000 km first segment: a boundary tolerance proportional to the
     // segment is a centimetre wide there, so a sample landing millimetres

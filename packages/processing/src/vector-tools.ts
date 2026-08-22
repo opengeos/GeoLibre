@@ -1917,10 +1917,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
     for (const feature of fc.features) {
       const geometry = feature.geometry;
       const linear = geometry ? linearParts(geometry) : [];
-      if (!linear.length) {
-        skipped += 1;
-        continue;
-      }
+      let usable = 0;
       for (const part of linear) {
         if (part.length < 2) continue;
         // Interval multiples plus the closing end vertex.
@@ -1928,7 +1925,12 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
         const length = segmentLengths.reduce((total, segment) => total + segment, 0);
         estimated += Math.floor(length / turfInterval) + 2;
         parts.push({ feature, part, length, segmentLengths });
+        usable += 1;
       }
+      // A feature with no line or polygon geometry at all and one whose every
+      // part is a lone coordinate both contribute nothing, so both are counted
+      // here: the summary would otherwise under-report the second kind.
+      if (!usable) skipped += 1;
     }
     // Bail before allocating anything, the way gridTool does for its cells.
     if (estimated > POINTS_ALONG_HARD_CAP) {
@@ -1980,7 +1982,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       ctx.log("Error: no line or polygon features found in the input layer");
       return;
     }
-    if (skipped) ctx.log(`Skipped ${skipped} feature(s) that are not lines or polygons`);
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable line or polygon geometry`);
     ctx.log(`Generated ${points.length} point(s) every ${interval} ${units}`);
     ctx.addResultLayer?.("Points along geometry", featureCollection(points));
   },
