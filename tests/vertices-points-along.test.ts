@@ -436,4 +436,74 @@ describe("points along geometry tool", () => {
     const vertices = runTool("extract-vertices", [collection], { layer: "gc" });
     assert.equal(vertices.results[0].features.length, 3);
   });
+
+  it("keeps a sample just past a very long segment's end on the next segment", () => {
+    // A ~10,000 km first segment: a boundary tolerance proportional to the
+    // segment is a centimetre wide there, so a sample landing millimetres
+    // past the shared vertex was snapped back onto it. The interval here puts
+    // the second sample 5 mm along the second segment.
+    const a: Position = [0, 0];
+    const b: Position = [90, 0];
+    const c: Position = [90, 10];
+    const first = distance(a, b, { units: "kilometers" });
+    const interval = first + 0.000005;
+    const long = makeLayer("long", "Long", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [a, b, c] },
+        },
+      ],
+    });
+    const { results } = runTool("points-along-geometry", [long], {
+      layer: "long",
+      interval,
+      units: "kilometers",
+    });
+    const points = results[0].features;
+    // 0 km, one sample 5 mm up the second segment, then the end vertex.
+    assert.equal(points.length, 3);
+    const sample = points[1].geometry.coordinates;
+    assert.equal(points[1].properties?.distance, Number(interval.toFixed(6)));
+    // It sits on the second segment (north of the equator), not snapped back
+    // to the shared vertex.
+    assert.ok(sample[1] > 0, `latitude ${sample[1]}`);
+    const past = distance(b, sample, { units: "kilometers" });
+    assert.ok(Math.abs(past - 0.000005) < 1e-6, `${past} km past the vertex`);
+  });
+
+  it("interpolates Z on generated points instead of flattening to 2-D", () => {
+    const elevated = makeLayer("z", "Z", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0, 100],
+              [2, 0, 300],
+            ],
+          },
+        },
+      ],
+    });
+    const total = distance([0, 0], [2, 0], { units: "kilometers" });
+    const { results } = runTool("points-along-geometry", [elevated], {
+      layer: "z",
+      interval: total / 2,
+      units: "kilometers",
+    });
+    const points = results[0].features;
+    assert.equal(points.length, 3);
+    // Endpoints keep their exact Z; the interior point is interpolated, not
+    // dropped to 2-D.
+    assert.equal(points[0].geometry.coordinates[2], 100);
+    assert.equal(points[2].geometry.coordinates[2], 300);
+    const midZ = points[1].geometry.coordinates[2];
+    assert.ok(typeof midZ === "number" && Math.abs(midZ - 200) < 1e-6, `mid Z ${midZ}`);
+  });
 });

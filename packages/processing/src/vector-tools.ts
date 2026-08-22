@@ -1808,18 +1808,32 @@ function* walkAlong(
     let heading: number | null = null;
     // A step landing within float noise of a vertex snaps to the vertex itself
     // (exact coordinates), so the caller's endpoint dedup never sees a point a
-    // few ulps short of the end vertex.
-    const epsilon = segment * 1e-9;
+    // few ulps short of the end vertex. The noise in `atDistance - travelled`
+    // scales with the *accumulated* distance, not with this segment, so the
+    // tolerance follows the running totals: a segment-proportional epsilon is
+    // far below the noise for a short segment late in a long ring, and far
+    // above it (centimetres) for a single segment thousands of km long. The
+    // 1e-12 factor is ~4500 ulp at any magnitude, enough slack to absorb the
+    // per-vertex error of summing a dense ring.
+    const epsilon = (travelled + segment) * 1e-12;
     while (atDistance <= travelled + segment + epsilon) {
       const offset = atDistance - travelled;
       let position: Position;
-      // Exact vertices keep their full position (Z included); only the
-      // geodesically interpolated interior points are necessarily 2-D.
+      // Exact vertices keep their full position; interior points are placed
+      // geodesically in 2-D by Turf, so any Z is interpolated back in here to
+      // keep a 3-D input from coming out with elevation only at its vertices.
       if (offset <= epsilon) position = [...start] as Position;
       else if (offset >= segment - epsilon) position = [...end] as Position;
       else {
         heading ??= bearing(start, end);
         position = destination(start, offset, heading, { units }).geometry.coordinates;
+        if (typeof start[2] === "number" && typeof end[2] === "number") {
+          position = [
+            position[0],
+            position[1],
+            start[2] + (end[2] - start[2]) * (offset / segment),
+          ];
+        }
       }
       yield { position, step };
       step += 1;
