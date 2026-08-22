@@ -4217,6 +4217,8 @@
       "removeConnection": "कनेक्शन हटाएँ",
       "removeNode": "नोड हटाएँ",
       "resizePanel": "पैनल का आकार बदलें",
+      "maximizePanel": "पैनल को अधिकतम करें",
+      "restorePanelSize": "पिछला आकार पुनर्स्थापित करें",
       "minimizePanel": "पैनल छोटा करें",
       "restorePanel": "पैनल पुनर्स्थापित करें",
       "resizePalette": "उपकरण पैलेट का आकार बदलें",

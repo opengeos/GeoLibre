@@ -4149,6 +4149,8 @@
       "removeConnection": "ลบการเชื่อมต่อ",
       "removeNode": "ลบโหนด",
       "resizePanel": "ปรับขนาดแผง",
+      "maximizePanel": "ขยายแผงเต็มพื้นที่",
+      "restorePanelSize": "คืนค่าขนาดก่อนหน้า",
       "minimizePanel": "ย่อแผง",
       "restorePanel": "คืนขนาดแผง",
       "resizePalette": "ปรับขนาดแผงเครื่องมือ",

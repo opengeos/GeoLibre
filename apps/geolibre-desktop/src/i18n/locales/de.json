@@ -4217,6 +4217,8 @@
       "removeConnection": "Verbindung entfernen",
       "removeNode": "Knoten entfernen",
       "resizePanel": "Bereichsgröße ändern",
+      "maximizePanel": "Bereich maximieren",
+      "restorePanelSize": "Vorherige Größe wiederherstellen",
       "minimizePanel": "Bereich minimieren",
       "restorePanel": "Bereich wiederherstellen",
       "resizePalette": "Werkzeugpalette in der Größe ändern",

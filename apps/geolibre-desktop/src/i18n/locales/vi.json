@@ -4149,6 +4149,8 @@
       "removeConnection": "Xóa kết nối",
       "removeNode": "Xóa nút",
       "resizePanel": "Đổi kích thước bảng",
+      "maximizePanel": "Phóng to bảng",
+      "restorePanelSize": "Khôi phục kích thước trước đó",
       "minimizePanel": "Thu nhỏ bảng",
       "restorePanel": "Khôi phục bảng",
       "resizePalette": "Đổi kích thước bảng công cụ",

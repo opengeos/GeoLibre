@@ -4217,6 +4217,8 @@
       "removeConnection": "Bağlantıyı kaldır",
       "removeNode": "Düğümü kaldır",
       "resizePanel": "Paneli yeniden boyutlandır",
+      "maximizePanel": "Paneli büyüt",
+      "restorePanelSize": "Önceki boyutu geri yükle",
       "minimizePanel": "Paneli küçült",
       "restorePanel": "Paneli geri yükle",
       "resizePalette": "Araç paletini yeniden boyutlandır",

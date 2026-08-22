@@ -4488,6 +4488,8 @@
       "removeConnection": "إزالة الاتصال",
       "removeNode": "إزالة العقدة",
       "resizePanel": "تغيير حجم اللوحة",
+      "maximizePanel": "تكبير اللوحة",
+      "restorePanelSize": "استعادة الحجم السابق",
       "minimizePanel": "تصغير اللوحة",
       "restorePanel": "استعادة اللوحة",
       "resizePalette": "تغيير حجم لوحة الأدوات",

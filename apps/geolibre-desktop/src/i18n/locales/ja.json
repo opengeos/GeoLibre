@@ -4149,6 +4149,8 @@
       "removeConnection": "接続を削除",
       "removeNode": "ノードを削除",
       "resizePanel": "パネルのサイズを変更",
+      "maximizePanel": "パネルを最大化",
+      "restorePanelSize": "以前のサイズに戻す",
       "minimizePanel": "パネルを最小化",
       "restorePanel": "パネルを元に戻す",
       "resizePalette": "ツールパレットのサイズを変更",

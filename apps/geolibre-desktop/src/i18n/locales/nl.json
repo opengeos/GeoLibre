@@ -4217,6 +4217,8 @@
       "removeConnection": "Verbinding verwijderen",
       "removeNode": "Knooppunt verwijderen",
       "resizePanel": "Paneelgrootte wijzigen",
+      "maximizePanel": "Paneel maximaliseren",
+      "restorePanelSize": "Vorige grootte herstellen",
       "minimizePanel": "Paneel minimaliseren",
       "restorePanel": "Paneel herstellen",
       "resizePalette": "Grootte van het gereedschapspalet wijzigen",

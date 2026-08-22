@@ -4149,6 +4149,8 @@
       "removeConnection": "연결 제거",
       "removeNode": "노드 제거",
       "resizePanel": "패널 크기 조정",
+      "maximizePanel": "패널 최대화",
+      "restorePanelSize": "이전 크기로 복원",
       "minimizePanel": "패널 최소화",
       "restorePanel": "패널 복원",
       "resizePalette": "도구 팔레트 크기 조정",

@@ -4149,6 +4149,8 @@
       "removeConnection": "删除连接",
       "removeNode": "删除节点",
       "resizePanel": "调整面板大小",
+      "maximizePanel": "最大化面板",
+      "restorePanelSize": "恢复之前的大小",
       "minimizePanel": "最小化面板",
       "restorePanel": "还原面板",
       "resizePalette": "调整工具面板大小",
