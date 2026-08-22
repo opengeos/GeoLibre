@@ -53,13 +53,19 @@ export { STORE_LAYER_SOURCE_KIND as TIME_SLIDER_SOURCE_KIND };
  * range out of the box rather than against an unrelated span (which would
  * request tiles for years the data does not cover).
  */
-function buildDefaultOptions(): TimeSliderOptions {
+export function buildDefaultOptions(): TimeSliderOptions {
   return {
     startDate: "1984-01-01",
     endDate: "2013-01-01",
     granularity: "year",
     granularities: ["year", "month", "day"],
     speed: 800,
+    // Reaching the end should leave the map on the final frame. Apart from
+    // being the less surprising default, this prevents a slow vector-tile
+    // filter from finishing an old end-of-range render after the marker has
+    // already wrapped to the beginning. A user can still enable looping, and
+    // an explicitly saved `loop` value continues to round-trip unchanged.
+    loop: false,
     collapsible: true,
     collapsed: false,
     // Match the in-app light/dark toggle rather than the system
@@ -477,6 +483,17 @@ let applyingBoundFilters = false;
 // re-write the store. Cleared when a layer is unbound or the dock detaches.
 const appliedFilterKeys = new Map<string, string>();
 
+// Changing a MapLibre filter invalidates the loaded vector-tile buckets and
+// sends them back through the workers. At fast playback speeds a large bound
+// layer can take longer to rebuild than one timeline step; sending every
+// intermediate year then creates a worker backlog, so the map continues
+// painting old cumulative frames after the marker has moved elsewhere. Keep a
+// short leading/trailing throttle and retain only the newest requested date.
+// The ordinary 800 ms default cadence remains completely unaffected.
+const BOUND_FILTER_APPLY_INTERVAL_MS = 250;
+let boundFilterApplyTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingBoundFilterControl: TimeSliderControl | null = null;
+
 // Guards the store writes made by overlay-frame visibility toggling (mirrors
 // `applyingBoundFilters`) so they do not re-trigger the store subscription.
 let applyingOverlayVisibility = false;
@@ -609,6 +626,50 @@ function applyBoundFilters(control: TimeSliderControl, bound: BoundLayer[]): voi
   } finally {
     applyingBoundFilters = false;
   }
+}
+
+/**
+ * Apply bound vector filters at a rate MapLibre's tile workers can sustain.
+ * The first change after an idle period is immediate; changes during the
+ * cooldown collapse into one trailing apply that reads the control's latest
+ * date when it runs.
+ */
+function scheduleBoundFilters(control: TimeSliderControl): void {
+  const bound = getBoundLayers();
+  if (bound.length === 0) {
+    pendingBoundFilterControl = null;
+    return;
+  }
+  pendingBoundFilterControl = control;
+  if (boundFilterApplyTimer !== null) return;
+
+  pendingBoundFilterControl = null;
+  applyBoundFilters(control, bound);
+  boundFilterApplyTimer = setTimeout(flushPendingBoundFilters, BOUND_FILTER_APPLY_INTERVAL_MS);
+}
+
+function flushPendingBoundFilters(): void {
+  boundFilterApplyTimer = null;
+  const control = pendingBoundFilterControl;
+  pendingBoundFilterControl = null;
+  if (control) scheduleBoundFilters(control);
+}
+
+function clearBoundFilterSchedule(): void {
+  if (boundFilterApplyTimer !== null) clearTimeout(boundFilterApplyTimer);
+  boundFilterApplyTimer = null;
+  pendingBoundFilterControl = null;
+}
+
+/** Test seam for the latest-date throttle used by bound vector layers. */
+export function __scheduleBoundFiltersForTests(control: TimeSliderControl): void {
+  scheduleBoundFilters(control);
+}
+
+/** Reset the module-level throttle between tests. */
+export function __resetBoundFilterScheduleForTests(): void {
+  clearBoundFilterSchedule();
+  appliedFilterKeys.clear();
 }
 
 // Last time index *requested* per selector-bound layer, so a tick that lands on
@@ -809,7 +870,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     if (!selectorIds.has(id)) appliedTimeIndices.delete(id);
   }
   scheduleSelectorTimes(control);
-  applyBoundFilters(control, bound);
+  scheduleBoundFilters(control);
   applyTimeOverlayVisibility(control, frames);
 }
 
@@ -827,6 +888,7 @@ export function __reconcileBoundLayersForTests(control: TimeSliderControl): void
  * @returns A teardown function.
  */
 function attachBindingSync(control: TimeSliderControl): () => void {
+  clearBoundFilterSchedule();
   lastBoundRangeKey = null;
   preBindingRange = null;
   appliedTimeIndices.clear();
@@ -837,7 +899,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
   // and overlay frames must update.
   const onStateChange = () => {
     scheduleSelectorTimes(control);
-    applyBoundFilters(control, getBoundLayers());
+    scheduleBoundFilters(control);
     applyTimeOverlayVisibility(control, getTimeOverlayFrames());
   };
   control.on("statechange", onStateChange);
@@ -874,6 +936,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
       clearTimeout(selectorApplyTimer);
       selectorApplyTimer = null;
     }
+    clearBoundFilterSchedule();
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
     // A cube stays on the slice it was last stepped to: unlike a filter, that is
