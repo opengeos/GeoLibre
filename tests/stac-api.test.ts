@@ -1074,6 +1074,79 @@ test("searchStaticStac traverses child and item links and applies filters", asyn
   );
 });
 
+test("searchStaticStac exposes assets attached directly to a Collection", async () => {
+  const url = "https://example.com/data/collection.json";
+  const root = {
+    type: "Collection",
+    id: "collection-assets",
+    title: "Collection assets",
+    extent: {
+      spatial: {
+        bbox: [
+          [4.8, 52, 5.2, 52.2],
+          [10, 60, 11, 61],
+        ],
+      },
+      temporal: {
+        interval: [
+          ["2020-01-01T00:00:00Z", "2020-12-31T23:59:59Z"],
+          ["2022-01-01T00:00:00Z", "2022-12-31T23:59:59Z"],
+        ],
+      },
+    },
+    assets: {
+      geoparquet: { href: "data.parquet", type: "application/vnd.apache.parquet" },
+      pmtiles: { href: "tiles.pmtiles", type: "application/vnd.pmtiles" },
+    },
+    links: [],
+  };
+
+  const result = await searchStaticStac(
+    { url, title: "Static collection", isApi: false, collections: [], root },
+    { bbox: [10.5, 60.5, 10.6, 60.6], datetime: "2020-06-01", limit: 20 },
+  );
+
+  assert.equal(result.matched, 1);
+  assert.equal(result.items[0].id, "collection-assets::collection-assets");
+  assert.equal(result.items[0].properties.title, "Collection assets");
+  assert.deepEqual(result.items[0].bbox, [4.8, 52, 5.2, 52.2]);
+  assert.equal(result.items[0].assets.geoparquet.href, "https://example.com/data/data.parquet");
+  assert.equal(result.items[0].assets.pmtiles.href, "https://example.com/data/tiles.pmtiles");
+
+  const outsideTime = await searchStaticStac(
+    { url, title: "Static collection", isApi: false, collections: [], root },
+    { datetime: "2021-01-01", limit: 20 },
+  );
+  assert.equal(outsideTime.matched, 0);
+
+  const laterInterval = await searchStaticStac(
+    { url, title: "Static collection", isApi: false, collections: [], root },
+    { datetime: "2022-06-01", limit: 20 },
+  );
+  assert.equal(laterInterval.matched, 1);
+
+  const openEnded = {
+    ...root,
+    extent: { ...root.extent, temporal: { interval: [[null, "2020-12-31T23:59:59Z"]] } },
+  };
+  const beforeOpenEnd = await searchStaticStac(
+    { url, title: "Static collection", isApi: false, collections: [], root: openEnded },
+    { datetime: "1900-01-01", limit: 20 },
+  );
+  assert.equal(beforeOpenEnd.matched, 1);
+
+  const unknownExtents = {
+    ...root,
+    extent: { spatial: { bbox: {} as unknown as number[][] } },
+  };
+  const unknownTime = await searchStaticStac(
+    { url, title: "Static collection", isApi: false, collections: [], root: unknownExtents },
+    { datetime: "2024-01-01", limit: 20 },
+  );
+  assert.equal(unknownTime.matched, 1);
+  assert.equal(unknownTime.items[0].bbox, undefined);
+});
+
 test("searchStaticStac pages through a catalog holding more items than one page fits", async () => {
   const total = 25;
   const docs: Record<string, unknown> = {

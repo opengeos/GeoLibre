@@ -21,7 +21,6 @@ import {
   openPMTilesLayerPanel,
   openRasterLayerPanel,
   openSplattingLayerPanel,
-  openStacSearchLayerPanel,
   openZarrLayerPanel,
   openThreeDTilesLayerPanel,
   openVectorLayerPanel,
@@ -46,6 +45,7 @@ import {
   setSourceCoopLabels,
   setReverseGeocodeLabels,
   setStacLabels,
+  STAC_PLUGIN_ID,
   setTimelapseLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -1175,7 +1175,10 @@ export function TopToolbar({
   const addLayer: AddLayerHandlers = {
     vector: () => openVectorLayerPanel(appApi),
     raster: () => openRasterLayerPanel(appApi),
-    stac: () => openStacSearchLayerPanel(appApi),
+    stac: () => {
+      if (isActive(STAC_PLUGIN_ID)) openRightPanel(STAC_PLUGIN_ID);
+      else toggle(STAC_PLUGIN_ID, appApi);
+    },
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
     pmtiles: () => openPMTilesLayerPanel(appApi),
     zarr: () => openZarrLayerPanel(appApi),

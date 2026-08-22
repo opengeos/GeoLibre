@@ -4149,6 +4149,8 @@
       "removeConnection": "Hapus koneksi",
       "removeNode": "Hapus simpul",
       "resizePanel": "Ubah ukuran panel",
+      "maximizePanel": "Maksimalkan panel",
+      "restorePanelSize": "Pulihkan ukuran sebelumnya",
       "minimizePanel": "Perkecil panel",
       "restorePanel": "Pulihkan panel",
       "resizePalette": "Ubah ukuran palet alat",

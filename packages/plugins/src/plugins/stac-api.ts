@@ -60,6 +60,7 @@ export interface StacItem extends Feature<Geometry | null> {
   properties: Record<string, unknown> & {
     datetime?: string;
     start_datetime?: string;
+    end_datetime?: string;
     "table:storage_options"?: StorageOptions;
     "xarray:open_kwargs"?: XarrayOpenKwargs;
     "icechunk:branch"?: string;
@@ -360,6 +361,45 @@ function collectionBbox(
   return horizontalBbox(Array.isArray(boxes) ? boxes[0] : undefined);
 }
 
+/** Presents a Collection's own assets as one item so the existing asset browser can render it. */
+function collectionAssetItem(document: Record<string, unknown>, url: string): StacItem | undefined {
+  if (document.type !== "Collection" || typeof document.id !== "string") return undefined;
+  if (typeof document.assets !== "object" || document.assets === null) return undefined;
+  const assets = document.assets as Record<string, StacAsset>;
+  if (!Object.keys(assets).length) return undefined;
+  const extent = document.extent as StacCollection["extent"] | undefined;
+  const spatialBoxes = extent?.spatial?.bbox;
+  const spatialBboxes = (Array.isArray(spatialBoxes) ? spatialBoxes : []).flatMap((bbox) => {
+    const horizontal = horizontalBbox(bbox);
+    return horizontal ? [horizontal] : [];
+  });
+  const temporalIntervals = extent?.temporal?.interval ?? [];
+  const interval = temporalIntervals[0];
+  const start = interval?.[0] ?? undefined;
+  const end = interval?.[1] ?? undefined;
+  return normalizeItem(
+    {
+      type: "Feature",
+      id: `${document.id}::collection-assets`,
+      collection: document.id,
+      geometry: null,
+      bbox: collectionBbox(document),
+      properties: {
+        ...(typeof document.title === "string" ? { title: document.title } : {}),
+        ...(typeof document.description === "string" ? { description: document.description } : {}),
+        "geolibre:spatial_bboxes": spatialBboxes,
+        "geolibre:temporal_intervals": temporalIntervals,
+        ...(start && start === end ? { datetime: start } : {}),
+        ...(start && start !== end ? { start_datetime: start } : {}),
+        ...(end && start !== end ? { end_datetime: end } : {}),
+      },
+      assets,
+      links: document.links as StacLink[] | undefined,
+    },
+    url,
+  );
+}
+
 export async function openCatalogNode(
   href: string,
   fetcher: FetchLike = fetch,
@@ -512,16 +552,28 @@ function intersects(a: number[], b: [number, number, number, number]): boolean {
 function inTime(item: StacItem, interval?: string): boolean {
   if (!interval) return true;
   const [rawStart, rawEnd = rawStart] = interval.split("/");
-  const start = rawStart === ".." ? undefined : rawStart;
-  const end = rawEnd === ".." ? undefined : rawEnd;
-  const value = item.properties.datetime ?? item.properties.start_datetime;
-  if (!value) return true;
-  const time = Date.parse(String(value));
-  return (
-    Number.isFinite(time) &&
-    (!start || time >= Date.parse(start)) &&
-    (!end || time <= Date.parse(end))
-  );
+  const queryStart = rawStart === ".." ? undefined : Date.parse(rawStart);
+  const queryEnd = rawEnd === ".." ? undefined : Date.parse(rawEnd);
+  const advertised = item.properties["geolibre:temporal_intervals"];
+  const intervals =
+    Array.isArray(advertised) && advertised.length
+      ? advertised
+      : [
+          [
+            item.properties.datetime ?? item.properties.start_datetime ?? null,
+            item.properties.datetime ?? item.properties.end_datetime ?? null,
+          ],
+        ];
+  return intervals.some((candidate) => {
+    if (!Array.isArray(candidate)) return false;
+    const itemStart = candidate[0] === null ? undefined : Date.parse(String(candidate[0] ?? ""));
+    const itemEnd = candidate[1] === null ? undefined : Date.parse(String(candidate[1] ?? ""));
+    if (!Number.isFinite(itemStart) && !Number.isFinite(itemEnd)) return true;
+    return (
+      (queryEnd === undefined || itemStart === undefined || itemStart <= queryEnd) &&
+      (queryStart === undefined || itemEnd === undefined || itemEnd >= queryStart)
+    );
+  });
 }
 
 /** Searches a static catalog by following child/item links, with a hard safety cap. */
@@ -563,7 +615,11 @@ export async function searchStaticStac(
     if (filters.collections?.length && !filters.collections.includes(item.collection ?? "")) {
       return false;
     }
-    if (filters.bbox && !(bbox && intersects(bbox, filters.bbox))) return false;
+    const collectionBboxes = item.properties["geolibre:spatial_bboxes"];
+    const bboxes = Array.isArray(collectionBboxes) ? collectionBboxes : bbox ? [bbox] : [];
+    if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
+      return false;
+    }
     return inTime(item, filters.datetime);
   };
 
@@ -609,6 +665,8 @@ export async function searchStaticStac(
 
   const collect = (document: Record<string, unknown>, url: string): void => {
     if (document.type !== "Feature") {
+      const collectionItem = collectionAssetItem(document, url);
+      if (collectionItem && accepts(collectionItem)) found.push(collectionItem);
       for (const link of linksOf(document.links, url)) {
         if (link.rel === "item") walk.items.push({ url: link.href });
         else if (link.rel === "child") walk.folders.push({ url: link.href });

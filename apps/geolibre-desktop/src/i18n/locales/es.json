@@ -4217,6 +4217,8 @@
       "removeConnection": "Quitar conexión",
       "removeNode": "Quitar nodo",
       "resizePanel": "Cambiar el tamaño del panel",
+      "maximizePanel": "Maximizar el panel",
+      "restorePanelSize": "Restaurar el tamaño anterior",
       "minimizePanel": "Minimizar el panel",
       "restorePanel": "Restaurar el panel",
       "resizePalette": "Cambiar el tamaño de la paleta de herramientas",

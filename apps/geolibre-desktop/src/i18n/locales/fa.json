@@ -4217,6 +4217,8 @@
       "removeConnection": "حذف اتصال",
       "removeNode": "حذف گره",
       "resizePanel": "تغییر اندازهٔ پنل",
+      "maximizePanel": "بیشینه کردن پنل",
+      "restorePanelSize": "بازگرداندن اندازهٔ قبلی",
       "minimizePanel": "کوچک‌کردن پنل",
       "restorePanel": "بازگرداندن پنل",
       "resizePalette": "تغییر اندازهٔ پالت ابزارها",

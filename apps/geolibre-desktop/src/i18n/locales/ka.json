@@ -4217,6 +4217,8 @@
       "removeConnection": "კავშირის წაშლა",
       "removeNode": "კვანძის წაშლა",
       "resizePanel": "პანელის ზომის შეცვლა",
+      "maximizePanel": "პანელის სრულად გაშლა",
+      "restorePanelSize": "წინა ზომის აღდგენა",
       "minimizePanel": "პანელის ჩაკეცვა",
       "restorePanel": "პანელის აღდგენა",
       "resizePalette": "ხელსაწყოთა პალიტრის ზომის შეცვლა",

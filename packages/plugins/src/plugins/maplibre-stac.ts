@@ -719,7 +719,7 @@ async function visualizeAsset(
   signal?: AbortSignal,
   target?: string,
 ): Promise<void> {
-  const name = `${item.id} — ${assetLabel(key, asset)}`;
+  const name = `${itemTitle(item)} — ${assetLabel(key, asset)}`;
   const format = assetFormat(asset);
   switch (format) {
     case "pmtiles": {
@@ -815,6 +815,12 @@ async function visualizeAsset(
       throw new Error(`Unhandled asset format: ${String(unhandled)}`);
     }
   }
+}
+
+/** An item's descriptive title when available, otherwise its stable identifier. */
+function itemTitle(item: StacItem): string {
+  const title = item.properties.title;
+  return typeof title === "string" && title.trim() ? title : item.id;
 }
 
 function buildPanel(container: HTMLElement): () => void {
@@ -1174,7 +1180,7 @@ function buildPanel(container: HTMLElement): () => void {
         if (target.closest("button, select")) return;
         selectItem(item.id, false);
       });
-      const title = el("div", item.id);
+      const title = el("div", itemTitle(item));
       title.style.cssText = "font-weight:600;word-break:break-word;";
       const date = String(item.properties.datetime ?? item.properties.start_datetime ?? "");
       const subtitle = el("div", [item.collection, date.slice(0, 10)].filter(Boolean).join(" · "));
