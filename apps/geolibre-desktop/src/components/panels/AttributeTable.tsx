@@ -1525,7 +1525,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     <section
       ref={tableSectionRef}
       aria-label={t("attributeTable.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      data-collapsed={collapsed || undefined}
+      className="geolibre-attribute-table-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: collapsed ? undefined : tableHeight }}
     >
       {!collapsed ? (

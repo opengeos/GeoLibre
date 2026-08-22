@@ -2137,6 +2137,18 @@ body,
   scrollbar-width: thin;
 }
 
+/* The attribute-table toolbar wraps into several rows on portrait phones. Its
+   desktop default is only 192px tall, which can leave the flexing row viewport
+   with no usable height after the toolbar and status bar are laid out. Give the
+   open panel a viewport-relative height on narrow portrait screens so the rows
+   remain scrollable. The desktop inline height and resize handle still govern
+   every other layout. */
+@media (max-width: 639px) and (orientation: portrait) {
+  .geolibre-attribute-table-panel:not([data-collapsed]) {
+    height: clamp(22rem, 60dvh, 32rem) !important;
+  }
+}
+
 .geolibre-kml-description table {
   width: 100%;
   border-collapse: collapse;
