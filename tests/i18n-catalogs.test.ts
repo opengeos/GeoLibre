@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import { whiteboxMenuSubcategorySlug } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog";
 
 const localesDir = fileURLToPath(
@@ -105,11 +106,6 @@ describe("i18n catalogs", () => {
   });
 
   it("covers every Whitebox Processing menu key in English and Chinese", () => {
-    const subcategoryKey = (label: string) =>
-      label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/_+$/, "");
     const expectedTools = new Map(
       WHITEBOX_MENU_CATALOG.flatMap((category) =>
         category.subcategories.flatMap((subcategory) =>
@@ -120,7 +116,8 @@ describe("i18n catalogs", () => {
     const expectedSubcategories = new Map(
       WHITEBOX_MENU_CATALOG.flatMap((category) =>
         category.subcategories.map(
-          (subcategory) => [subcategoryKey(subcategory.label), subcategory.label] as const,
+          (subcategory) =>
+            [whiteboxMenuSubcategorySlug(subcategory.label), subcategory.label] as const,
         ),
       ),
     );

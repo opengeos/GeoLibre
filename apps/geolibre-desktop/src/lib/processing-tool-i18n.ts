@@ -108,6 +108,14 @@ export function whiteboxCategoryKey(category: string): string {
   return `processing.whitebox.categories.${toolGroupKey(category)}`;
 }
 
+/** Key fragment for a translated Whitebox Processing menu subcategory. */
+export function whiteboxMenuSubcategorySlug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+$/, "");
+}
+
 function localizedText(
   t: TFunction,
   key: string,

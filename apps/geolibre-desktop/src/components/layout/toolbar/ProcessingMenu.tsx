@@ -21,15 +21,13 @@ import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { whiteboxMenuSubcategorySlug } from "../../../lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
 
-/** Convert a Whitebox subcategory label to an i18n key. */
+/** Convert a Whitebox subcategory label to its full i18n key. */
 function subcatKey(label: string): string {
-  return `processing.whitebox.menuSubcategory.${label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/_+$/, "")}`;
+  return `processing.whitebox.menuSubcategory.${whiteboxMenuSubcategorySlug(label)}`;
 }
 
 // Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple

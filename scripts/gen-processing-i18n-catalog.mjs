@@ -5,9 +5,9 @@
 // Usage: node --import tsx scripts/gen-processing-i18n-catalog.mjs
 //        node --import tsx scripts/gen-processing-i18n-catalog.mjs --check
 //
-// Tool names, descriptions, group labels, Whitebox categories, parameter
-// labels/help text and select option labels live in registries that have no
-// i18n access. The Processing
+// Tool names, descriptions, group labels, Whitebox categories and menu labels,
+// parameter labels/help text and select option labels live in registries and
+// generated catalogs that have no i18n access. The Processing
 // dialogs render them through `lib/processing-tool-i18n.ts`, which resolves
 // `processing.toolMeta.<catalog>.<toolId>.…` and falls back to the registry's
 // own string. This script writes those registry strings into `en.json` so
@@ -23,9 +23,9 @@
 // `--check` exits non-zero (without writing) when the catalog is out of date,
 // for use in CI.
 //
-// Existing translations are never touched: only the `processing.toolMeta` and
-// `processing.toolGroup` subtrees of en.json are rewritten, and the other
-// locales are left alone.
+// Existing translations are never touched: only the `processing.toolMeta`,
+// `processing.toolGroup`, and translated Whitebox subtrees of en.json are
+// rewritten, and the other locales are left alone.
 //
 // The Whitebox baseline is not the public snapshot alone. In local WASM mode
 // Processing uses the binary's manifests for parameter names and appends
@@ -44,7 +44,9 @@ import {
 import {
   humanizeParameterName,
   toolGroupKey,
+  whiteboxMenuSubcategorySlug,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n.ts";
+import { WHITEBOX_MENU_CATALOG } from "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const enPath = join(repoRoot, "apps/geolibre-desktop/src/i18n/locales/en.json");
@@ -192,6 +194,40 @@ export function buildWhiteboxCategories(tools) {
   return Object.fromEntries([...categories.entries()].sort(([, a], [, b]) => a.localeCompare(b)));
 }
 
+/** Build the English baseline for labels rendered from the generated menu catalog. */
+export function buildWhiteboxMenuTranslations(menuCatalog) {
+  const menuTools = Object.create(null);
+  const menuSubcategories = Object.create(null);
+  for (const category of menuCatalog) {
+    for (const subcategory of category.subcategories) {
+      const key = whiteboxMenuSubcategorySlug(subcategory.label);
+      if (
+        menuSubcategories[key] !== undefined &&
+        menuSubcategories[key] !== subcategory.label
+      ) {
+        throw new Error(
+          `Whitebox menu subcategory labels "${menuSubcategories[key]}" and ` +
+            `"${subcategory.label}" both map to the key "${key}".`,
+        );
+      }
+      menuSubcategories[key] = subcategory.label;
+      for (const tool of subcategory.tools) {
+        if (menuTools[tool.id] !== undefined && menuTools[tool.id] !== tool.name) {
+          throw new Error(
+            `Whitebox menu tool id "${tool.id}" has conflicting names ` +
+              `"${menuTools[tool.id]}" and "${tool.name}".`,
+          );
+        }
+        menuTools[tool.id] = tool.name;
+      }
+    }
+  }
+  return {
+    menuTool: Object.fromEntries(Object.entries(menuTools)),
+    menuSubcategory: Object.fromEntries(Object.entries(menuSubcategories)),
+  };
+}
+
 async function main() {
   const catalogTools = whiteboxSnapshot.tools.filter((tool) => !tool.locked);
   const wasmTools = await loadWasmWhiteboxTools();
@@ -210,6 +246,7 @@ async function main() {
 
   const catalog = JSON.parse(readFileSync(enPath, "utf8"));
   const before = JSON.stringify(catalog);
+  const whiteboxMenu = buildWhiteboxMenuTranslations(WHITEBOX_MENU_CATALOG);
   catalog.processing = {
     ...catalog.processing,
     toolMeta: buildToolMeta(CATALOGS),
@@ -217,6 +254,8 @@ async function main() {
     whitebox: {
       ...catalog.processing.whitebox,
       categories: buildWhiteboxCategories(CATALOGS.whitebox),
+      menuTool: whiteboxMenu.menuTool,
+      menuSubcategory: whiteboxMenu.menuSubcategory,
     },
   };
   // Two-space indent + trailing newline: what the other catalogs use, and what
@@ -227,7 +266,7 @@ async function main() {
     const current = readFileSync(enPath, "utf8");
     if (current !== next) {
       console.error(
-        "en.json's processing.toolMeta/toolGroup are out of date.\n" +
+        "en.json's processing tool metadata is out of date.\n" +
           "Run: node --import tsx scripts/gen-processing-i18n-catalog.mjs",
       );
       process.exit(1);

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
-import { buildWhiteboxCategories } from "../scripts/gen-processing-i18n-catalog.mjs";
+import {
+  buildWhiteboxCategories,
+  buildWhiteboxMenuTranslations,
+} from "../scripts/gen-processing-i18n-catalog.mjs";
 import {
   modelProviderCatalog,
   translateModelToolGroup,
@@ -11,6 +14,7 @@ import {
   translateToolGroup,
   translateToolName,
   translateWhiteboxParameterDescription,
+  whiteboxMenuSubcategorySlug,
   whiteboxParameterLabel,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
@@ -70,6 +74,34 @@ describe("toolGroupKey", () => {
         { id: "two", category: "Terrain Analysis" },
       ]),
       { terrainAnalysis: "Terrain Analysis" },
+    );
+  });
+
+  it("builds the Whitebox menu translation baseline from catalog labels", () => {
+    assert.equal(whiteboxMenuSubcategorySlug("Vector & Table I/O"), "vector_table_i_o");
+    assert.deepEqual(
+      buildWhiteboxMenuTranslations([
+        {
+          key: "vector",
+          labelKey: "toolbar.item.vector",
+          subcategories: [
+            {
+              label: "Vector & Table I/O",
+              tools: [
+                { id: "read_geoparquet", name: "Read GeoParquet" },
+                { id: "write_geoparquet", name: "Write GeoParquet" },
+              ],
+            },
+          ],
+        },
+      ]),
+      {
+        menuTool: {
+          read_geoparquet: "Read GeoParquet",
+          write_geoparquet: "Write GeoParquet",
+        },
+        menuSubcategory: { vector_table_i_o: "Vector & Table I/O" },
+      },
     );
   });
 });
