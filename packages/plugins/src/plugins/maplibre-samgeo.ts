@@ -101,8 +101,7 @@ export interface SamGeoLabels {
 
 const DEFAULT_LABELS: SamGeoLabels = {
   panelTitle: "SamGeo Segmentation",
-  intro:
-    "Segment imagery with SAM3 using text, points, a box, or automatic masks.",
+  intro: "Segment imagery with SAM3 using text, points, a box, or automatic masks.",
   apiUrl: "SamGeo API URL",
   checkConnection: "Check connection",
   notChecked: "Not checked",
@@ -137,8 +136,7 @@ const DEFAULT_LABELS: SamGeoLabels = {
   boxAdded: "Box added.",
   boxSummary: (box) => `Box: ${box}`,
   noBox: "No box drawn.",
-  pointSummary: (foreground, background) =>
-    `${foreground} foreground, ${background} background`,
+  pointSummary: (foreground, background) => `${foreground} foreground, ${background} background`,
   pointsPerSide: "Points per side",
   predIou: "Predicted IoU threshold",
   stability: "Stability threshold",
@@ -184,12 +182,7 @@ const state: SamGeoState = { ...DEFAULT_STATE };
 const MODES: readonly Mode[] = ["text", "points", "box", "automatic"];
 const NUMERIC_RANGES: Readonly<
   Record<
-    | "confidence"
-    | "minSize"
-    | "maxSize"
-    | "pointsPerSide"
-    | "predIou"
-    | "stability",
+    "confidence" | "minSize" | "maxSize" | "pointsPerSide" | "predIou" | "stability",
     [number, number]
   >
 > = {
@@ -215,22 +208,20 @@ export function sanitizeSamGeoState(value: unknown): Partial<SamGeoState> {
     if (typeof raw[key] === "string") next[key] = raw[key] as string;
   }
   if (MODES.includes(raw.mode as Mode)) next.mode = raw.mode as Mode;
-  if (raw.backend === "meta" || raw.backend === "transformers")
-    next.backend = raw.backend;
+  if (raw.backend === "meta" || raw.backend === "transformers") next.backend = raw.backend;
   for (const [key, [min, max]] of Object.entries(NUMERIC_RANGES) as [
     keyof typeof NUMERIC_RANGES,
-    [number, number]
+    [number, number],
   ][]) {
     const n = raw[key];
-    if (typeof n === "number" && Number.isFinite(n))
-      next[key] = Math.min(max, Math.max(min, n));
+    if (typeof n === "number" && Number.isFinite(n)) next[key] = Math.min(max, Math.max(min, n));
   }
   return next;
 }
 
 function stateIsDefault(): boolean {
   return (Object.keys(DEFAULT_STATE) as (keyof SamGeoState)[]).every(
-    (key) => state[key] === DEFAULT_STATE[key]
+    (key) => state[key] === DEFAULT_STATE[key],
   );
 }
 
@@ -274,8 +265,7 @@ function beginRequest(slot: RequestSlot): AbortController {
 }
 
 function endRequest(slot: RequestSlot, controller: AbortController): void {
-  if (slot === "segmentation" && pendingSegmentation === controller)
-    pendingSegmentation = null;
+  if (slot === "segmentation" && pendingSegmentation === controller) pendingSegmentation = null;
   if (slot === "health" && pendingHealth === controller) pendingHealth = null;
 }
 
@@ -312,8 +302,7 @@ const css = {
   primary:
     "min-height:36px;border:0;border-radius:6px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));padding:7px 12px;font-weight:600;cursor:pointer;",
   muted: "color:hsl(var(--muted-foreground));font-size:12px;line-height:1.4;",
-  status:
-    "min-height:18px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;",
+  status: "min-height:18px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;",
 };
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) {
@@ -358,14 +347,12 @@ function apiBase(): string {
 }
 
 function promptFeatures(): FeatureCollection {
-  const features: FeatureCollection["features"] = promptPoints.map(
-    (point, index) => ({
-      type: "Feature",
-      id: `point-${index}`,
-      geometry: { type: "Point", coordinates: point.coordinates },
-      properties: { label: point.label },
-    })
-  );
+  const features: FeatureCollection["features"] = promptPoints.map((point, index) => ({
+    type: "Feature",
+    id: `point-${index}`,
+    geometry: { type: "Point", coordinates: point.coordinates },
+    properties: { label: point.label },
+  }));
   if (promptBox) {
     const [west, south, east, north] = promptBox;
     features.push({
@@ -437,12 +424,7 @@ function updatePromptOverlay(map: MapLibreMap): void {
     filter: ["==", ["geometry-type"], "Point"],
     paint: {
       "circle-radius": 7,
-      "circle-color": [
-        "case",
-        ["==", ["get", "label"], 1],
-        "#22c55e",
-        "#ef4444",
-      ],
+      "circle-color": ["case", ["==", ["get", "label"], 1], "#22c55e", "#ef4444"],
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 2,
     },
@@ -480,10 +462,7 @@ function beginBoxDraw(done: () => void): (() => void) | null {
   map.dragPan.disable();
   const coordinatesAt = (event: MouseEvent): [number, number] => {
     const rect = canvas.getBoundingClientRect();
-    const p = map.unproject([
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-    ]);
+    const p = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
     return [p.lng, p.lat];
   };
   const onDown = (event: MouseEvent) => {
@@ -508,10 +487,7 @@ function beginBoxDraw(done: () => void): (() => void) | null {
     setBox(coordinatesAt(event));
     // A plain click (no drag) yields a zero-area box; drop it so the user is
     // asked to draw again rather than posting a degenerate prompt.
-    if (
-      promptBox &&
-      (promptBox[0] === promptBox[2] || promptBox[1] === promptBox[3])
-    ) {
+    if (promptBox && (promptBox[0] === promptBox[2] || promptBox[1] === promptBox[3])) {
       promptBox = null;
       updatePromptOverlay(map);
     }
@@ -534,24 +510,15 @@ async function rasterProjection(bytes: ArrayBuffer): Promise<string | null> {
     const image = await (await fromArrayBuffer(bytes)).getImage();
     const keys = image.getGeoKeys() as Record<string, unknown>;
     const mod = await import("geotiff-geokeys-to-proj4");
-    return (
-      mod.toProj4(keys as never)?.proj4?.replace(/\+axis=\w+\s*/g, "") ?? null
-    );
+    return mod.toProj4(keys as never)?.proj4?.replace(/\+axis=\w+\s*/g, "") ?? null;
   } catch {
     return null;
   }
 }
 
-function mapPositions(
-  value: unknown,
-  convert: (position: Position) => Position
-): unknown {
+function mapPositions(value: unknown, convert: (position: Position) => Position): unknown {
   if (!Array.isArray(value)) return value;
-  if (
-    value.length >= 2 &&
-    typeof value[0] === "number" &&
-    typeof value[1] === "number"
-  ) {
+  if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") {
     return convert(value as Position);
   }
   return value.map((part) => mapPositions(part, convert));
@@ -560,11 +527,10 @@ function mapPositions(
 /** Convert SamGeo polygons from the source raster CRS to MapLibre's WGS84. */
 export function reprojectSamGeoResult(
   fc: FeatureCollection,
-  sourceProjection: string | null
+  sourceProjection: string | null,
 ): FeatureCollection {
-  const namedCrs = (
-    fc as FeatureCollection & { crs?: { properties?: { name?: unknown } } }
-  ).crs?.properties?.name;
+  const namedCrs = (fc as FeatureCollection & { crs?: { properties?: { name?: unknown } } }).crs
+    ?.properties?.name;
   const crsText = typeof namedCrs === "string" ? namedCrs : "";
   const alreadyWgs84 = /EPSG:{1,2}4326|CRS84/i.test(crsText);
   if (!alreadyWgs84 && !sourceProjection && fc.features.length > 0) {
@@ -581,12 +547,9 @@ export function reprojectSamGeoResult(
         coordinates: mapPositions(
           (geometry as { coordinates?: unknown }).coordinates,
           (position) => {
-            const [lng, lat] = proj4(projection, "EPSG:4326", [
-              position[0],
-              position[1],
-            ]);
+            const [lng, lat] = proj4(projection, "EPSG:4326", [position[0], position[1]]);
             return [lng, lat, ...position.slice(2)];
-          }
+          },
         ),
       } as Geometry,
     };
@@ -605,7 +568,7 @@ async function postSegmentation(
   endpoint: string,
   form: FormData,
   apiUrl: string,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<FeatureCollection> {
   const response = await fetch(`${normalizeApiUrl(apiUrl)}${endpoint}`, {
     method: "POST",
@@ -614,9 +577,7 @@ async function postSegmentation(
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(
-      `SamGeo API ${response.status}: ${detail || response.statusText}`
-    );
+    throw new Error(`SamGeo API ${response.status}: ${detail || response.statusText}`);
   }
   const result = (await response.json()) as FeatureCollection;
   if (result.type !== "FeatureCollection" || !Array.isArray(result.features)) {
@@ -629,7 +590,7 @@ async function requestSegmentation(
   file: File,
   bytes: ArrayBuffer,
   req: SegmentationSnapshot,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<FeatureCollection> {
   const form = new FormData();
   form.append("file", file, file.name);
@@ -653,19 +614,11 @@ async function requestSegmentation(
     // Match the QGIS plugin: multiple prompts and any background prompt are
     // already unambiguous; a lone foreground click benefits from alternatives.
     const multimask =
-      req.mode === "points" &&
-      req.points.length === 1 &&
-      req.points[0]?.label === 1;
+      req.mode === "points" && req.points.length === 1 && req.points[0]?.label === 1;
     form.append("multimask_output", String(multimask));
     if (req.mode === "points") {
-      form.append(
-        "point_coords",
-        JSON.stringify(req.points.map((point) => point.coordinates))
-      );
-      form.append(
-        "point_labels",
-        JSON.stringify(req.points.map((point) => point.label))
-      );
+      form.append("point_coords", JSON.stringify(req.points.map((point) => point.coordinates)));
+      form.append("point_labels", JSON.stringify(req.points.map((point) => point.label)));
     } else if (req.box) {
       form.append("boxes", JSON.stringify([req.box]));
     }
@@ -691,7 +644,7 @@ function rasterLayerChoices(): {
       const url =
         candidates.find(
           (value): value is string =>
-            typeof value === "string" && /^(https?|blob|data):/i.test(value)
+            typeof value === "string" && /^(https?|blob|data):/i.test(value),
         ) ?? null;
       return { id: layer.id, name: layer.name, url };
     });
@@ -699,14 +652,12 @@ function rasterLayerChoices(): {
 
 async function fileFromLayer(
   choice: { name: string; url: string },
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<File> {
   const response = await fetch(choice.url, { signal });
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${choice.url}`);
   const blob = await response.blob();
-  const name = /\.tiff?$/i.test(choice.name)
-    ? choice.name
-    : `${choice.name}.tif`;
+  const name = /\.tiff?$/i.test(choice.name) ? choice.name : `${choice.name}.tif`;
   return new File([blob], name, { type: blob.type || "image/tiff" });
 }
 
@@ -767,9 +718,7 @@ function buildPanel(container: HTMLElement): () => void {
       option.value = choice.id;
       imageSource.append(option);
     }
-    imageSource.value = choices.some((c) => c.id === current)
-      ? current
-      : UPLOAD;
+    imageSource.value = choices.some((c) => c.id === current) ? current : UPLOAD;
     fileInput.style.display = imageSource.value === UPLOAD ? "" : "none";
   };
   imageSource.addEventListener("change", () => {
@@ -811,7 +760,7 @@ function buildPanel(container: HTMLElement): () => void {
     min: number,
     max: number,
     step: number,
-    update: (n: number) => void
+    update: (n: number) => void,
   ) => {
     const node = input("number");
     let committed = value;
@@ -858,7 +807,7 @@ function buildPanel(container: HTMLElement): () => void {
       dynamic.append(
         numberField(labels.confidence, state.confidence, 0, 1, 0.05, (n) => {
           state.confidence = n;
-        })
+        }),
       );
       dynamic.append(...sizeFields());
       const backend = element("select");
@@ -880,9 +829,7 @@ function buildPanel(container: HTMLElement): () => void {
       const negative = button(labels.backgroundPoint);
       const arm = (label: 0 | 1) => {
         cancelDrawing?.();
-        status.textContent = label
-          ? labels.clickForeground
-          : labels.clickBackground;
+        status.textContent = label ? labels.clickForeground : labels.clickBackground;
         cancelDrawing = beginPointDraw(label, () => {
           cancelDrawing = null;
           status.textContent = labels.pointAdded;
@@ -901,9 +848,7 @@ function buildPanel(container: HTMLElement): () => void {
         status.textContent = labels.dragBox;
         cancelDrawing = beginBoxDraw(() => {
           cancelDrawing = null;
-          status.textContent = promptBox
-            ? labels.boxAdded
-            : labels.drawBoxFirst;
+          status.textContent = promptBox ? labels.boxAdded : labels.drawBoxFirst;
           refreshSummary();
         });
       });
@@ -911,26 +856,19 @@ function buildPanel(container: HTMLElement): () => void {
       dynamic.append(...sizeFields());
     } else {
       dynamic.append(
-        numberField(
-          labels.pointsPerSide,
-          state.pointsPerSide,
-          1,
-          128,
-          1,
-          (n) => {
-            state.pointsPerSide = n;
-          }
-        )
+        numberField(labels.pointsPerSide, state.pointsPerSide, 1, 128, 1, (n) => {
+          state.pointsPerSide = n;
+        }),
       );
       dynamic.append(
         numberField(labels.predIou, state.predIou, 0, 1, 0.05, (n) => {
           state.predIou = n;
-        })
+        }),
       );
       dynamic.append(
         numberField(labels.stability, state.stability, 0, 1, 0.05, (n) => {
           state.stability = n;
-        })
+        }),
       );
       dynamic.append(...sizeFields());
     }
@@ -941,11 +879,11 @@ function buildPanel(container: HTMLElement): () => void {
       state.mode === "points"
         ? labels.pointSummary(
             promptPoints.filter((p) => p.label === 1).length,
-            promptPoints.filter((p) => p.label === 0).length
+            promptPoints.filter((p) => p.label === 0).length,
           )
         : promptBox
-        ? labels.boxSummary(promptBox.map((n) => n.toFixed(5)).join(", "))
-        : labels.noBox;
+          ? labels.boxSummary(promptBox.map((n) => n.toFixed(5)).join(", "))
+          : labels.noBox;
   };
 
   const model = input();
@@ -965,7 +903,7 @@ function buildPanel(container: HTMLElement): () => void {
     const layerChoice =
       imageSource.value === UPLOAD
         ? null
-        : rasterLayerChoices().find((c) => c.id === imageSource.value) ?? null;
+        : (rasterLayerChoices().find((c) => c.id === imageSource.value) ?? null);
     const file = layerChoice ? null : fileInput.files?.[0];
     if (!layerChoice && !file) {
       status.textContent = labels.chooseImage;
@@ -999,18 +937,10 @@ function buildPanel(container: HTMLElement): () => void {
     try {
       const image =
         layerChoice && layerChoice.url
-          ? await fileFromLayer(
-              { name: layerChoice.name, url: layerChoice.url },
-              controller.signal
-            )
+          ? await fileFromLayer({ name: layerChoice.name, url: layerChoice.url }, controller.signal)
           : (file as File);
       const bytes = await image.arrayBuffer();
-      const result = await requestSegmentation(
-        image,
-        bytes,
-        req,
-        controller.signal
-      );
+      const result = await requestSegmentation(image, bytes, req, controller.signal);
       // The panel was closed (or a newer request started) while this one was
       // in flight: drop the result rather than adding a layer the user has
       // moved on from.
@@ -1019,18 +949,14 @@ function buildPanel(container: HTMLElement): () => void {
         status.textContent = labels.noObjects;
         return;
       }
-      const suffix =
-        req.mode === "text" ? `: ${req.prompt.trim()}` : ` (${req.mode})`;
+      const suffix = req.mode === "text" ? `: ${req.prompt.trim()}` : ` (${req.mode})`;
       const layerId = appRef?.addGeoJsonLayer(`SamGeo${suffix}`, result);
       const bounds = result.features.flatMap((feature) => {
         const coords: Position[] = [];
-        mapPositions(
-          (feature.geometry as { coordinates?: unknown } | null)?.coordinates,
-          (p) => {
-            coords.push(p);
-            return p;
-          }
-        );
+        mapPositions((feature.geometry as { coordinates?: unknown } | null)?.coordinates, (p) => {
+          coords.push(p);
+          return p;
+        });
         return coords;
       });
       if (bounds.length) {
@@ -1043,14 +969,11 @@ function buildPanel(container: HTMLElement): () => void {
             Math.max(acc[2], x),
             Math.max(acc[3], y),
           ],
-          [Infinity, Infinity, -Infinity, -Infinity]
+          [Infinity, Infinity, -Infinity, -Infinity],
         );
         appRef?.fitBounds?.(extent);
       }
-      status.textContent = labels.added(
-        result.features.length,
-        layerId ? ` as ${layerId}` : ""
-      );
+      status.textContent = labels.added(result.features.length, layerId ? ` as ${layerId}` : "");
     } catch (error) {
       if (!controller.signal.aborted) status.textContent = errorMessage(error);
     } finally {
@@ -1070,9 +993,7 @@ function buildPanel(container: HTMLElement): () => void {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { version?: string };
-      healthText.textContent = `${labels.connected}${
-        data.version ? ` · v${data.version}` : ""
-      }`;
+      healthText.textContent = `${labels.connected}${data.version ? ` · v${data.version}` : ""}`;
     } catch (error) {
       healthText.textContent = labels.unavailable(errorMessage(error));
     } finally {
@@ -1103,7 +1024,7 @@ function buildPanel(container: HTMLElement): () => void {
     field(labels.modelId, model),
     dynamic,
     actions,
-    status
+    status,
   );
   container.append(root);
   refreshDynamic();
