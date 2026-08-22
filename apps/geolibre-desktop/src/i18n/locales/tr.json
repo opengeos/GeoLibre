@@ -522,7 +522,7 @@
       "noRasterFunctionsFound": "Bu görüntü servisi hiçbir raster fonksiyonu bildirmedi.",
       "retrieveRasterFunctionsError": "Görüntü servisinin raster fonksiyonları alınamadı.",
       "errorImageServiceUrl": "Bir ArcGIS ImageServer URL'si girin.",
-      "customRenderingRule": "Özel işleme kuralı",
+      "customRenderingRule": "Özel görselleştirme kuralı",
       "renderingRule": "Görselleştirme kuralı",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Servisin uyguladığı isteğe bağlı raster işlevi JSON'u. Görselleştirme kuralı, servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",

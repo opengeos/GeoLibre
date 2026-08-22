@@ -522,7 +522,7 @@
       "noRasterFunctionsFound": "Este servicio de imágenes no publicó ninguna función ráster.",
       "retrieveRasterFunctionsError": "No se pudieron recuperar las funciones ráster del servicio de imágenes.",
       "errorImageServiceUrl": "Introduzca una URL de ArcGIS ImageServer.",
-      "customRenderingRule": "Regla de renderizado personalizada",
+      "customRenderingRule": "Regla de representación personalizada",
       "renderingRule": "Regla de representación",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON opcional de una función ráster que aplica el servicio. Una regla de representación dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
@@ -2464,7 +2464,7 @@
       "boundingBox": "Cuadro delimitador",
       "simplify": "Simplificar",
       "decodePolyline": "Decodificar polilínea",
-      "encodePolyline": "Codificar línea a polilínea",
+      "encodePolyline": "Codificar líneas como polilíneas",
       "clip": "Recortar",
       "intersection": "Intersección",
       "difference": "Diferencia",
@@ -4830,7 +4830,7 @@
           }
         },
         "encode-polyline": {
-          "name": "Codificar línea a polilínea",
+          "name": "Codificar líneas como polilíneas",
           "description": "Codificar geometrías LineString y MultiLineString en una cadena de atributo de polilínea codificada",
           "params": {
             "layer": {

@@ -765,7 +765,7 @@
       "cornersNote": "这四个角点用于在地图上对视频进行地理配准。视频必须通过 HTTPS 提供，且主机必须允许跨域请求（CORS），画面才能正常渲染。"
     },
     "polyline": {
-      "defaultName": "折线",
+      "defaultName": "编码折线",
       "modePaste": "粘贴文本",
       "modeFile": "选择文件",
       "precisionLabel": "精度",
@@ -2418,7 +2418,7 @@
       "boundingBox": "边界框",
       "simplify": "简化",
       "decodePolyline": "解码折线",
-      "encodePolyline": "将线编码为折线",
+      "encodePolyline": "将线编码为折线字符串",
       "clip": "裁剪",
       "intersection": "相交",
       "difference": "差集",
@@ -4760,7 +4760,7 @@
           }
         },
         "encode-polyline": {
-          "name": "将线编码为折线",
+          "name": "将线编码为折线字符串",
           "description": "将 LineString 和 MultiLineString 几何编码为编码折线属性字符串",
           "params": {
             "layer": {

@@ -341,7 +341,7 @@
       },
       "polyline": {
         "label": "Ajouter une couche de polyligne encodée",
-        "description": "Importer des chaînes de polyligne encodée (Google, OSRM, Valhalla) depuis du texte ou des fichiers sous forme de lignes vectorielles."
+        "description": "Importer des chaînes de polylignes encodées (Google, OSRM, Valhalla) depuis du texte ou des fichiers sous forme de lignes vectorielles."
       }
     },
     "shared": {
@@ -813,7 +813,7 @@
       "errorFileMissing": "Le fichier sélectionné est vide ou n'a pas pu être lu.",
       "readError": "Impossible de lire le fichier de polylignes.",
       "errorChooseFile": "Veuillez choisir un fichier de polylignes à charger.",
-      "errorEmptyInput": "Entrez une ou plusieurs chaînes de polyligne encodée.",
+      "errorEmptyInput": "Entrez une ou plusieurs chaînes de polylignes encodées.",
       "errorNoValidLines": "Aucune coordonnée de polyligne valide n'a pu être décodée.",
       "sampleGoogle": "Google / OSRM (précision 5)",
       "sampleValhalla": "Valhalla / Mapbox (précision 6)",
@@ -4811,7 +4811,7 @@
         },
         "decode-polyline": {
           "name": "Décoder la polyligne",
-          "description": "Décoder les chaînes de polyligne encodée d'un champ attributaire en une couche vectorielle LineString",
+          "description": "Décoder les chaînes de polylignes encodées d'un champ attributaire en une couche vectorielle LineString",
           "params": {
             "layer": {
               "label": "Couche d'entrée"

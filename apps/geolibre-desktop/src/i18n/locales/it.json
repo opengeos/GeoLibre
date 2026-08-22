@@ -801,7 +801,7 @@
       "multiLineString": "Singolo MultiLineString",
       "textLabel": "Stringa/e di polilinea codificata",
       "placeholder": "Incolla la stringa di polilinea codificata (es. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
-      "previewInfo": "Decodificate {{lines}} linea/e con {{points}} punti di coordinate in totale.",
+      "previewInfo": "Numero di linee decodificate: {{lines}}, numero totale di punti: {{points}}.",
       "previewTitle": "Anteprima della geometria decodificata",
       "previewExtent": "Estensione",
       "previewLength": "Lunghezza",

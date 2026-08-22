@@ -869,7 +869,7 @@
       "multiLineString": "MultiLineString واحد",
       "textLabel": "سلسلة (سلاسل) الخط المتعدد المشفرة",
       "placeholder": "الصق سلسلة الخط المتعدد المشفرة (مثال: _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
-      "previewInfo": "تم فك تشفير {{lines}} خط (خطوط) بإجمالي {{points}} نقطة إحداثيات.",
+      "previewInfo": "تم فك تشفير {{lines}} من الخطوط بإجمالي عدد نقاط الإحداثيات: {{points}}.",
       "previewTitle": "معاينة الهندسة المفكوكة",
       "previewExtent": "النطاق",
       "previewLength": "الطول",
@@ -4527,7 +4527,7 @@
       "selectLayerFirst": "حدد طبقة أولًا",
       "layersSelected_one": "تم تحديد {{count}} طبقة",
       "layersSelected_zero": "تم تحديد {{count}} طبقة",
-      "layersSelected_two": "تم تحديد {{count}} طبقتين",
+      "layersSelected_two": "تم تحديد طبقتين ({{count}})",
       "layersSelected_few": "تم تحديد {{count}} طبقات",
       "layersSelected_many": "تم تحديد {{count}} طبقة",
       "layersSelected_other": "تم تحديد {{count}} طبقة"

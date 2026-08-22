@@ -2479,7 +2479,7 @@
       "aggregate": "Nach Attribut aggregieren",
       "smooth": "Glätten",
       "extractVertices": "Stützpunkte extrahieren",
-      "pointsAlongGeometry": "Punkte entlang Geometrie",
+      "pointsAlongGeometry": "Punkte entlang der Geometrie",
       "grid": "Regelmäßiges Raster",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Mobilfunkzellen-Abdeckung",
@@ -4692,7 +4692,7 @@
           }
         },
         "points-along-geometry": {
-          "name": "Punkte entlang Geometrie",
+          "name": "Punkte entlang der Geometrie",
           "description": "Punkte in einem festen Abstandsintervall entlang von Linien und Polygongrenzen erzeugen; der erste und der letzte Stützpunkt werden immer einbezogen. Jeder Punkt erhält eine Spalte distance (ein gleichnamiges Quellattribut wird überschrieben)",
           "params": {
             "layer": {
@@ -5193,7 +5193,7 @@
         },
         "merge-layers": {
           "name": "Ebenen zusammenführen",
-          "description": "Mehrere Vektorebenen zu einer zusammenführen und ihre Attributschemata vereinigen (fehlende Attribute werden null)",
+          "description": "Mehrere Vektorebenen zu einer zusammenführen und ihre Attributschemata vereinigen (fehlende Attribute erhalten den Wert null)",
           "params": {
             "layers": {
               "label": "Eingabeebenen",
