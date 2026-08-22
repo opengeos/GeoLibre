@@ -8,6 +8,10 @@ name: Cut over web.geolibre.app DNS
 on:
   workflow_dispatch:
 
+concurrency:
+  group: web-dns-cutover
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -51,7 +55,10 @@ jobs:
             fi
           }
 
-          zone_response=$(cf_request GET "zones?name=geolibre.app")
+          if ! zone_response=$(cf_request GET "zones?name=geolibre.app"); then
+            echo "::error::The Cloudflare token cannot read the geolibre.app zone."
+            exit 1
+          fi
           zone_id=$(jq -r '.result[0].id // empty' <<< "$zone_response")
           if [ -z "$zone_id" ]; then
             echo "::error::The Cloudflare token cannot resolve the geolibre.app zone."
@@ -66,7 +73,10 @@ jobs:
             --arg name "$check_name" \
             --arg content "github-actions-$GITHUB_RUN_ID" \
             '{type:"TXT", name:$name, content:$content, ttl:60}')
-          check_response=$(cf_request POST "zones/$zone_id/dns_records" "$check_body")
+          if ! check_response=$(cf_request POST "zones/$zone_id/dns_records" "$check_body"); then
+            echo "::error::The Cloudflare token cannot create DNS records; the Worker domain was not changed."
+            exit 1
+          fi
           check_id=$(jq -r '.result.id // empty' <<< "$check_response")
           if [ -z "$check_id" ]; then
             echo "::error::The Cloudflare token cannot create DNS records; the Worker domain was not changed."
@@ -75,7 +85,7 @@ jobs:
           cf_request DELETE "zones/$zone_id/dns_records/$check_id" >/dev/null
           echo "DNS write access verified."
 
-          domains=$(cf_request GET "accounts/$CF_ACCOUNT_ID/workers/domains")
+          domains=$(cf_request GET "accounts/$CF_ACCOUNT_ID/workers/domains?hostname=$HOSTNAME")
           domain_id=$(jq -r --arg hostname "$HOSTNAME" \
             '.result[] | select(.hostname == $hostname) | .id' <<< "$domains")
           if [ -n "$domain_id" ]; then
@@ -88,7 +98,7 @@ jobs:
           # Worker custom domains own a managed DNS record. Wait for Cloudflare
           # to remove it before creating the replacement CNAME.
           records='[]'
-          for attempt in {1..30}; do
+          for _ in {1..30}; do
             records_response=$(cf_request GET "zones/$zone_id/dns_records?name=$HOSTNAME")
             records=$(jq '.result' <<< "$records_response")
             if [ "$(jq length <<< "$records")" -eq 0 ]; then
