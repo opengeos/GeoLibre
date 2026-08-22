@@ -1,4 +1,4 @@
-// Shared helpers for the web.geolibre.app / viewer.geolibre.app proxy.
+// Shared helpers for the legacy viewer.geolibre.app proxy.
 // Kept free of the Worker `export default` so unit tests can import them
 // without Cloudflare runtime types.
 

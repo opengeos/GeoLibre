@@ -1,0 +1,128 @@
+name: Deploy web.geolibre.app
+
+# Publishes the browser app to the dedicated opengeos/geolibre-web GitHub
+# Pages repository after every update to GeoLibre's main branch. The hosting
+# repository contains only the generated site; this workflow remains beside
+# the source code and build configuration it deploys.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to build and publish (branch, tag, or SHA)
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and publish
+    if: github.repository == 'opengeos/GeoLibre'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Record the commit that was built
+        id: built
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Python for the JupyterLite build
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/geolibre-desktop/jupyterlite/requirements.txt
+
+      - name: Install JupyterLite build dependencies
+        run: python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build the web app
+        # geolibre-desktop's prebuild hook builds the embed package and runs
+        # build-jupyterlite.mjs before Vite, so the published app includes the
+        # notebook site without running that expensive build twice.
+        run: npm run build -w geolibre-desktop
+        env:
+          # No GEOLIBRE_APP_BASE: this site is served from the root of its own
+          # domain, unlike the /demo/ copy published by pages.yml.
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
+          VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
+
+      - name: Prepare the site for GitHub Pages
+        working-directory: apps/geolibre-desktop/dist
+        run: |
+          set -euo pipefail
+          test -f index.html
+          test -f jupyterlite/lab/index.html
+          touch .nojekyll
+          echo "web.geolibre.app" > CNAME
+          # Published Pages sites may be no larger than 1 GB. Keep headroom for
+          # Git metadata and fail here with a useful message if the app grows.
+          size=$(du -sm . | cut -f1)
+          echo "Built site: ${size} MB"
+          if [ "$size" -gt 900 ]; then
+            echo "::error::Site is ${size} MB, at the 1 GB GitHub Pages limit."
+            exit 1
+          fi
+          oversized=$(find . -type f -size +104857600c -print)
+          if [ -n "$oversized" ]; then
+            echo "::error::A file exceeds GitHub Pages' 100 MB per-file limit: $oversized"
+            exit 1
+          fi
+
+      - name: Configure the hosting repository deploy key
+        env:
+          WEB_DEPLOY_KEY: ${{ secrets.WEB_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEB_DEPLOY_KEY:-}" ]; then
+            echo "::error::WEB_DEPLOY_KEY is not configured."
+            exit 1
+          fi
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$WEB_DEPLOY_KEY" > "$HOME/.ssh/geolibre-web"
+          chmod 600 "$HOME/.ssh/geolibre-web"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Publish an orphan snapshot
+        working-directory: apps/geolibre-desktop/dist
+        env:
+          BUILT_SHA: ${{ steps.built.outputs.sha }}
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/geolibre-web -o IdentitiesOnly=yes
+        run: |
+          set -euo pipefail
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${BUILT_SHA} from ${GITHUB_REPOSITORY}"
+          # Parentless snapshots keep the hosting repository near the size of
+          # one build instead of accumulating a ~200 MB commit on every merge.
+          git push -q --force git@github.com:opengeos/geolibre-web.git gh-pages
+          echo "Published ${BUILT_SHA} to https://web.geolibre.app"

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Direct downloads for the latest GeoLibre release."
+    />
+    <meta name="theme-color" content="#0d5c4d" />
+    <title>GeoLibre downloads</title>
+    <link rel="icon" href="/geolibre-icon.png" type="image/png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#downloads">Skip to downloads</a>
+
+    <header class="masthead">
+      <a
+        class="wordmark"
+        href="https://geolibre.app"
+        aria-label="GeoLibre home"
+      >
+        <img class="mark" src="/geolibre-icon.png" alt="" />
+        <span>GeoLibre</span>
+      </a>
+      <span class="site-label">Download mirror</span>
+    </header>
+
+    <main>
+      <section class="release-intro" aria-labelledby="page-title">
+        <div class="release-heading">
+          <p class="eyebrow">Latest stable release</p>
+          <h1 id="page-title">
+            Get GeoLibre<br /><span id="release-version">…</span>
+          </h1>
+        </div>
+        <div class="release-note">
+          <p>
+            Choose the package for your system. Files up to 100 MB are served
+            directly by this mirror; larger files keep their original GitHub
+            link.
+          </p>
+          <dl class="release-facts" aria-live="polite">
+            <div>
+              <dt>Published</dt>
+              <dd id="published-at">—</dd>
+            </div>
+            <div>
+              <dt>Files</dt>
+              <dd id="file-count">—</dd>
+            </div>
+            <div>
+              <dt>Mirrored</dt>
+              <dd id="mirror-size">—</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section
+        class="directory"
+        id="downloads"
+        aria-labelledby="directory-title"
+      >
+        <div class="directory-bar">
+          <div>
+            <p class="eyebrow">Release directory</p>
+            <h2 id="directory-title">All artifacts</h2>
+          </div>
+          <label class="search">
+            <span class="visually-hidden">Filter artifacts</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input
+              id="artifact-filter"
+              type="search"
+              placeholder="Filter by name or platform"
+              autocomplete="off"
+            />
+          </label>
+        </div>
+
+        <div class="legend" aria-label="Download source legend">
+          <span><i class="source-dot mirror"></i>This mirror</span>
+          <span><i class="source-dot github"></i>GitHub, over 100 MB</span>
+          <a href="/SHA256SUMS.txt">SHA-256 checksums</a>
+          <a href="/manifest.json">JSON manifest</a>
+        </div>
+
+        <nav
+          class="platform-nav"
+          id="platform-nav"
+          aria-label="Jump to a platform"
+        ></nav>
+
+        <div class="artifact-list" id="artifact-list" aria-live="polite">
+          <p class="loading">Reading the release manifest…</p>
+        </div>
+        <p class="empty" id="empty-state" hidden>
+          No artifacts match that filter.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>Free and open-source geospatial software.</p>
+      <nav aria-label="Project links">
+        <a href="https://geolibre.app">Website</a>
+        <a href="https://docs.geolibre.app">Documentation</a>
+        <a href="https://github.com/opengeos/GeoLibre">Source</a>
+      </nav>
+    </footer>
+  </body>
+</html>

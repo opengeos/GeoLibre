@@ -86,5 +86,5 @@ apps/geolibre-desktop/src-tauri/mas/embedded.provisionprofile
 # (the obvious place) drops the file here.
 /geolibre-server-api.db
 
-# gradle
+# Local Android Gradle cache for the vendored Tauri geolocation plugin.
 apps/geolibre-desktop/src-tauri/vendor/tauri-plugin-geolocation/android/.gradle/
