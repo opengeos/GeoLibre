@@ -472,6 +472,12 @@ function beginBoxDraw(done: () => void): (() => void) | null {
   const onMove = (event: MouseEvent) => setBox(coordinatesAt(event));
   const onUp = (event: MouseEvent) => {
     setBox(coordinatesAt(event));
+    // A plain click (no drag) yields a zero-area box; drop it so the user is
+    // asked to draw again rather than posting a degenerate prompt.
+    if (promptBox && (promptBox[0] === promptBox[2] || promptBox[1] === promptBox[3])) {
+      promptBox = null;
+      updatePromptOverlay(map);
+    }
     cleanup();
     done();
   };
@@ -655,6 +661,7 @@ function buildPanel(container: HTMLElement): () => void {
     update: (n: number) => void,
   ) => {
     const node = input("number");
+    let committed = value;
     node.value = String(value);
     node.min = String(min);
     node.max = String(max);
@@ -662,11 +669,12 @@ function buildPanel(container: HTMLElement): () => void {
     node.addEventListener("change", () => {
       const parsed = Number(node.value);
       if (!Number.isFinite(parsed)) {
-        node.value = String(value);
+        node.value = String(committed);
         return;
       }
       const clamped = Math.min(max, Math.max(min, parsed));
       node.value = String(clamped);
+      committed = clamped;
       update(clamped);
     });
     return field(label, node);
@@ -738,7 +746,7 @@ function buildPanel(container: HTMLElement): () => void {
         status.textContent = labels.dragBox;
         cancelDrawing = beginBoxDraw(() => {
           cancelDrawing = null;
-          status.textContent = labels.boxAdded;
+          status.textContent = promptBox ? labels.boxAdded : labels.drawBoxFirst;
           refreshSummary();
         });
       });
