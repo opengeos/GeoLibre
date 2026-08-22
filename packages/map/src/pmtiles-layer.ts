@@ -19,6 +19,28 @@ export function normalizePMTilesUrl(url: string): string {
   return url.startsWith(`${PMTILES_PROTOCOL}://`) ? url : `${PMTILES_PROTOCOL}://${url}`;
 }
 
+/** The MapLibre layers one source layer is drawn with. */
+const pmtilesLayerKinds = ["fill", "line", "circle"] as const;
+
+/**
+ * The ids one source layer of an archive draws under.
+ *
+ * Matched on the whole segment, not a substring: `water` must not claim `waterway`'s ids, which the
+ * fallback loop in `syncExternalNativeLayer` would then style and reorder as if they were this
+ * layer's. Matching nothing means the control named its layers some other way, and the ids
+ * `ensurePMTilesExternalLayer` goes on to create stand instead — they are scoped to the archive,
+ * not to the split-out layer, so letting the layer derive its own would name ids that never exist.
+ */
+function ownNativeLayerIds(
+  ids: readonly string[] | undefined,
+  sourceId: string,
+  sourceLayer: string,
+): string[] {
+  const scoped = pmtilesLayerKinds.map((kind) => pmtilesVectorLayerId(sourceId, sourceLayer, kind));
+  const own = ids?.filter((id) => scoped.includes(id));
+  return own && own.length > 0 ? own : scoped;
+}
+
 export function pmtilesVectorLayerId(sourceId: string, sourceLayer: string, kind: string): string {
   return `${sourceId}-${encodeVectorTileLayerPart(sourceLayer)}-${kind}`;
 }
@@ -114,6 +136,36 @@ export function createPMTilesStoreLayer(options: PMTilesStoreLayerOptions): GeoL
       tileType,
     },
   };
+}
+
+/**
+ * One layer per source layer in a vector archive, so the Layers panel can show, reorder, style and
+ * hide them with the machinery it already has. The caller groups them under the archive's name.
+ *
+ * They share `metadata.sourceId` — one MapLibre source under all of them — so removing one must not
+ * remove that source. `removeLayerFromMap` refcounts it against the layers that survive.
+ *
+ * A raster archive, or one holding a single source layer, comes back as the one layer it is.
+ */
+export function createPMTilesArchiveLayers(options: PMTilesStoreLayerOptions): GeoLibreLayer[] {
+  const sourceLayers = [...options.sourceLayers];
+  if (options.tileType === "raster" || sourceLayers.length < 2) {
+    return [createPMTilesStoreLayer(options)];
+  }
+  return sourceLayers.map((sourceLayer) => {
+    const assigned = options.sourceLayerColors?.[sourceLayer];
+    const layer = createPMTilesStoreLayer({
+      ...options,
+      id: `${options.id}-${encodeVectorTileLayerPart(sourceLayer)}`,
+      name: sourceLayer,
+      sourceLayers: [sourceLayer],
+      nativeLayerIds: ownNativeLayerIds(options.nativeLayerIds, options.id, sourceLayer),
+      ...(assigned
+        ? { style: { ...options.style, fillColor: assigned, strokeColor: assigned } }
+        : {}),
+    });
+    return { ...layer, metadata: { ...layer.metadata, sourceId: options.id } };
+  });
 }
 
 /** Facts about a PMTiles archive needed to build a GeoLibre layer for it. */

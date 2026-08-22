@@ -1,17 +1,18 @@
 import {
   controlRendersLayer,
   DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  type ExternalNativePaintBridge,
   generatorCircleRadiusValue,
   geojsonHasZCoordinates,
   getExternalNativePaintBridge,
-  type LayerStyle,
   pluginOwnsPaint,
   proportionalRadiusExpression,
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
+  styleForSourceLayer,
   styleValue,
+  type ExternalNativePaintBridge,
+  type GeoLibreLayer,
+  type LayerStyle,
   validateMapExpression,
 } from "@geolibre/core";
 import { normalizePMTilesUrl, PMTILES_PROTOCOL, pmtilesVectorLayerId } from "./pmtiles-layer";
@@ -640,7 +641,13 @@ function syncExternalNativeLayer(
     }
 
     if (!controlOwnsPaint(layer)) {
-      setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+      setExternalNativeLayerPaint(
+        map,
+        nativeLayerId,
+        nativeLayer.type,
+        layer,
+        typeof nativeLayer.sourceLayer === "string" ? nativeLayer.sourceLayer : undefined,
+      );
     }
     // External layers carry their own zoom range from the control or tile
     // service that registered them, so we leave a pristine layer's native range
@@ -912,6 +919,9 @@ function ensurePMTilesExternalLayer(
   }
 
   for (const sourceLayer of sourceLayers) {
+    // Created with the source layer's own colour; `setExternalNativeLayerPaint` below resolves the
+    // same one on later syncs. Both read `styleForSourceLayer`, so neither can drift.
+    const partStyle = styleForSourceLayer(layer, sourceLayer);
     const fillId = getPMTilesNativeLayerId(
       nativeLayerIds,
       pmtilesVectorLayerId(sourceId, sourceLayer, "fill"),
@@ -935,7 +945,7 @@ function ensurePMTilesExternalLayer(
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
         filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Polygon"]),
-        paint: fillPaint(layer.style, layer.opacity),
+        paint: fillPaint(partStyle, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
@@ -955,7 +965,7 @@ function ensurePMTilesExternalLayer(
           ["==", ["geometry-type"], "LineString"],
           ["==", ["geometry-type"], "Polygon"],
         ]),
-        paint: linePaint(layer.style, layer.opacity),
+        paint: linePaint(partStyle, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
@@ -971,7 +981,7 @@ function ensurePMTilesExternalLayer(
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
         filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Point"]),
-        paint: circlePaint(layer.style, layer.opacity),
+        paint: circlePaint(partStyle, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
@@ -1732,16 +1742,19 @@ function setExternalNativeLayerPaint(
   nativeLayerId: string,
   nativeLayerType: string,
   layer: GeoLibreLayer,
+  sourceLayer?: string,
 ): void {
+  // MapLibre knows which source layer this native layer draws, so no id decoding is needed.
+  const style = styleForSourceLayer(layer, sourceLayer);
   const paint =
     nativeLayerType === "fill"
-      ? fillPaint(layer.style, layer.opacity)
+      ? fillPaint(style, layer.opacity)
       : nativeLayerType === "line"
-        ? linePaint(layer.style, layer.opacity)
+        ? linePaint(style, layer.opacity)
         : nativeLayerType === "circle"
-          ? circlePaint(layer.style, layer.opacity)
+          ? circlePaint(style, layer.opacity)
           : nativeLayerType === "raster"
-            ? rasterPaint(layer.style, layer.opacity)
+            ? rasterPaint(style, layer.opacity)
             : null;
 
   if (!paint) return;
@@ -1911,6 +1924,9 @@ function applyVectorDataRenderLayers(
     ? { source: src, "source-layer": sourceLayer }
     : { source: src };
 
+  // `sourceLayer` names one layer of an archive, which may have its own colour; undefined for an
+  // ordinary source.
+  const partStyle = styleForSourceLayer(layer, sourceLayer);
   const visibility = layer.visible ? "visible" : "none";
   const opacity = layer.opacity;
   const hasTextMarkers = hasTextMarkerFeatures(layer.geojson!);
@@ -1956,7 +1972,7 @@ function applyVectorDataRenderLayers(
               false,
             ]),
             paint: {
-              ...fillPaint(layer.style, opacity),
+              ...fillPaint(partStyle, opacity),
               "fill-pattern": (fillPatternId ?? null) as unknown as string,
             },
             layout: { visibility },
@@ -1986,7 +2002,7 @@ function applyVectorDataRenderLayers(
             true,
             false,
           ]),
-          paint: fillExtrusionPaint(layer.style, opacity),
+          paint: fillExtrusionPaint(partStyle, opacity),
           layout: { visibility },
         },
         beforeId,
@@ -1994,7 +2010,7 @@ function applyVectorDataRenderLayers(
     } else {
       removeIfExists(map, fillExtrusionLayerId(layer.id));
       const fillPaintSpec = {
-        ...fillPaint(layer.style, opacity),
+        ...fillPaint(partStyle, opacity),
         // A set fill-pattern replaces fill-color with the recolorable
         // sprite tile; null resets it on the setPaintProperty update path in
         // ensureLayer (MapLibre documents null, not undefined, as the value
@@ -2100,7 +2116,7 @@ function applyVectorDataRenderLayers(
           true,
           false,
         ]),
-        paint: linePaint(layer.style, opacity),
+        paint: linePaint(partStyle, opacity),
         layout: { visibility },
       },
       beforeId,
@@ -2176,7 +2192,7 @@ function applyVectorDataRenderLayers(
           layer,
           hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         ),
-        paint: heatmapPaint(layer.style, opacity),
+        paint: heatmapPaint(partStyle, opacity),
         layout: { visibility },
       },
       beforeId,
@@ -2196,7 +2212,7 @@ function applyVectorDataRenderLayers(
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: ["has", "point_count"],
-        paint: clusterCirclePaint(layer.style, opacity),
+        paint: clusterCirclePaint(partStyle, opacity),
         layout: { visibility },
       },
       beforeId,
@@ -2236,7 +2252,7 @@ function applyVectorDataRenderLayers(
         // Unclustered points, excluding text markers (which the symbol layer
         // renders) so they don't also appear as plain circles.
         filter: withFeatureFilters(layer, unclusteredPointFilter(hasTextMarkers)),
-        paint: circlePaint(layer.style, opacity),
+        paint: circlePaint(partStyle, opacity),
         layout: { visibility },
       },
       beforeId,
@@ -2292,7 +2308,7 @@ function applyVectorDataRenderLayers(
               hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
               ["!", ["has", KML_ICON_URL_PROPERTY]],
             ] as maplibregl.FilterSpecification),
-            paint: circlePaint(layer.style, opacity),
+            paint: circlePaint(partStyle, opacity),
             layout: { visibility },
           },
           beforeId,
@@ -2309,7 +2325,7 @@ function applyVectorDataRenderLayers(
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
           filter: pointFilter,
-          paint: circlePaint(layer.style, opacity),
+          paint: circlePaint(partStyle, opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3064,6 +3080,10 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
   const currentLayerIds = new Set(vectorTileStyleLayerIds(layer));
 
   for (const sourceLayer of sourceLayers) {
+    // Each source layer draws in the colour the archive gave it, where it named one. Passed to the
+    // extrusion branch too, though it paints from `extrusionColor` and so is unaffected today —
+    // otherwise that branch is the one left behind when the part style covers another property.
+    const partStyle = styleForSourceLayer(layer, sourceLayer);
     const layerPart = vectorTileScopedSourceLayer(layer, sourceLayer);
     if (layer.style.extrusionEnabled) {
       removeIfExists(map, vectorTileLayerId(layer.id, false, layerPart));
@@ -3085,7 +3105,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             true,
             false,
           ]),
-          paint: fillExtrusionPaint(layer.style, layer.opacity),
+          paint: fillExtrusionPaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3108,7 +3128,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             true,
             false,
           ]),
-          paint: fillPaint(layer.style, layer.opacity),
+          paint: fillPaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3129,7 +3149,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             true,
             false,
           ]),
-          paint: linePaint(layer.style, layer.opacity),
+          paint: linePaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3150,7 +3170,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             true,
             false,
           ]),
-          paint: circlePaint(layer.style, layer.opacity),
+          paint: circlePaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3194,6 +3214,8 @@ function syncMbtilesVectorLayer(
   const currentLayerIds = new Set(mbtilesStyleLayerIds(layer));
 
   for (const sourceLayer of sourceLayers) {
+    // Each source layer draws in the colour the archive gave it, where it named one.
+    const partStyle = styleForSourceLayer(layer, sourceLayer);
     const fillId = mbtilesFillLayerId(layer.id, sourceLayer);
     const extrusionId = mbtilesExtrusionLayerId(layer.id, sourceLayer);
 
@@ -3215,7 +3237,7 @@ function syncMbtilesVectorLayer(
             true,
             false,
           ]),
-          paint: fillExtrusionPaint(layer.style, layer.opacity),
+          paint: fillExtrusionPaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3238,7 +3260,7 @@ function syncMbtilesVectorLayer(
             true,
             false,
           ]),
-          paint: fillPaint(layer.style, layer.opacity),
+          paint: fillPaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3264,7 +3286,7 @@ function syncMbtilesVectorLayer(
             true,
             false,
           ]),
-          paint: linePaint(layer.style, layer.opacity),
+          paint: linePaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3285,7 +3307,7 @@ function syncMbtilesVectorLayer(
             true,
             false,
           ]),
-          paint: circlePaint(layer.style, layer.opacity),
+          paint: circlePaint(partStyle, layer.opacity),
           layout: { visibility },
         },
         beforeId,
@@ -3633,6 +3655,7 @@ export function removeLayerFromMap(
   map: maplibregl.Map,
   layerId: string,
   layer?: GeoLibreLayer,
+  survivingLayers?: readonly GeoLibreLayer[],
 ): void {
   // Drop cached paint-bridge state so a later layer reusing this id never
   // skips a fresh opacity/visibility apply against a new bridge.
@@ -3667,6 +3690,13 @@ export function removeLayerFromMap(
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
+  // An archive's source layers are separate layers over one source, so it goes only once nothing
+  // draws from it. Without the survivors to check, the old behaviour stands.
+  const stillInUse = new Set(
+    (survivingLayers ?? [])
+      .filter((candidate) => candidate.id !== layerId)
+      .flatMap((candidate) => getExternalSourceIds(candidate)),
+  );
   for (const src of [
     ...getExternalSourceIds(layer),
     sourceId(layerId),
@@ -3674,7 +3704,7 @@ export function removeLayerFromMap(
     invertedSourceId(layerId),
     generatorSourceId(layerId),
   ]) {
-    if (src && map.getSource(src)) map.removeSource(src);
+    if (src && !stillInUse.has(src) && map.getSource(src)) map.removeSource(src);
   }
   // Drop radius-override tracking for the removed layer's native ids so a
   // later layer reusing an id never inherits a stale restore.
