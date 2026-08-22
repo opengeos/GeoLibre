@@ -941,12 +941,17 @@ def _prepare_arguments(
     if working_directory is not None and conversion._CONVERSION_ROOTS:
         base = Path(working_directory)
         for value in args.values():
+            if not isinstance(value, str):
+                continue
             # Every non-absolute string arg — including a bare filename like
             # "pwned.tif", which could itself be a symlink planted at the root —
             # is resolved against the pinned cwd and checked. Absolute / `..`
-            # values were already validated in the loop above.
-            if isinstance(value, str) and not Path(value).is_absolute():
-                _ensure_within_roots(str(base / value))
+            # values were already validated in the loop above. Whitebox splits a
+            # multi-dataset arg on commas, so check each member rather than the
+            # joined string (`safe.tif,escape/evil.tif` is not one path).
+            for member in (item.strip() for item in value.split(",")):
+                if member and not Path(member).is_absolute():
+                    _ensure_within_roots(str(base / member))
     return args, working_directory
 
 

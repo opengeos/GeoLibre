@@ -714,6 +714,9 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
         );
       }
       if (!layerInputs.length || layerInputs.some((item) => !item.geojson && !item.bytes)) {
+        // An optional vector input the user left blank (no layer and no path)
+        // is omitted, mirroring the raster/lidar/file branch below.
+        if (!param.required && !layerInputs.length) continue;
         throw new Error(`Missing vector input for "${name}"`);
       }
       // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
