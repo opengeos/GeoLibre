@@ -9,6 +9,8 @@ import type { GeoLibreAppAPI } from "../types";
 export type ArcGISLayerType = "feature" | "vector-tile" | "map-service" | "image-service";
 export type ArcGISSourceType = "url" | "portal-item";
 
+const MAX_ARCGIS_RING_REPAIR_PARTS = 64;
+
 /**
  * Every {@link ArcGISLayerType}, as a runtime list so a stored value (a saved
  * service-library entry, a hand-edited project) can be validated against it
@@ -1854,15 +1856,16 @@ async function fetchArcGISGeoJson(
  * ArcGIS determines shell/hole membership from its own winding convention. If
  * a service contains rings wound the other way around, `f=geojson` can emit a
  * MultiPolygon whose nested rings are all independent polygons. MapLibre then
- * fills the intended holes. Only that unmistakable shape is repaired here:
- * ordinary polygons and multipolygons that already contain hole rings pass
- * through unchanged.
+ * fills the intended holes. This guarded containment heuristic is limited to
+ * small all-one-ring exports; ordinary polygons, structured multipolygons,
+ * and large multipart features pass through unchanged.
  */
 function repairArcGISNestedPolygonRings(feature: Feature): Feature {
   const geometry = feature.geometry;
   if (
     geometry?.type !== "MultiPolygon" ||
     geometry.coordinates.length < 2 ||
+    geometry.coordinates.length > MAX_ARCGIS_RING_REPAIR_PARTS ||
     geometry.coordinates.some((polygon) => polygon.length !== 1)
   ) {
     return feature;
