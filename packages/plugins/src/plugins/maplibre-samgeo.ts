@@ -38,7 +38,118 @@ interface SamGeoState {
   stability: number;
 }
 
-const state: SamGeoState = {
+/**
+ * Host-translated strings. The plugins package has no i18n access, so the
+ * desktop shell pushes translations through {@link setSamGeoLabels} (the same
+ * pattern as `maplibre-stac` and `maplibre-graticule`).
+ */
+export interface SamGeoLabels {
+  panelTitle: string;
+  intro: string;
+  apiUrl: string;
+  checkConnection: string;
+  notChecked: string;
+  checking: string;
+  connected: string;
+  unavailable: (error: string) => string;
+  image: string;
+  mode: string;
+  modeText: string;
+  modePoints: string;
+  modeBox: string;
+  modeAutomatic: string;
+  modelId: string;
+  textPrompt: string;
+  confidence: string;
+  minSize: string;
+  maxSize: string;
+  backend: string;
+  foregroundPoint: string;
+  backgroundPoint: string;
+  clickForeground: string;
+  clickBackground: string;
+  pointAdded: string;
+  drawBox: string;
+  dragBox: string;
+  boxAdded: string;
+  boxSummary: (box: string) => string;
+  noBox: string;
+  pointSummary: (foreground: number, background: number) => string;
+  pointsPerSide: string;
+  predIou: string;
+  stability: string;
+  clearPrompts: string;
+  promptsCleared: string;
+  segment: string;
+  chooseImage: string;
+  enterPrompt: string;
+  addPoint: string;
+  drawBoxFirst: string;
+  segmenting: string;
+  noObjects: string;
+  added: (count: number, layer: string) => string;
+  badResponse: string;
+  unknownProjection: string;
+}
+
+const DEFAULT_LABELS: SamGeoLabels = {
+  panelTitle: "SamGeo Segmentation",
+  intro: "Segment imagery with SAM3 using text, points, a box, or automatic masks.",
+  apiUrl: "SamGeo API URL",
+  checkConnection: "Check connection",
+  notChecked: "Not checked",
+  checking: "Checking…",
+  connected: "Connected",
+  unavailable: (error) => `Unavailable: ${error}`,
+  image: "Image",
+  mode: "Mode",
+  modeText: "Text prompt",
+  modePoints: "Point prompts",
+  modeBox: "Bounding box (find similar)",
+  modeAutomatic: "Automatic (everything)",
+  modelId: "Model ID",
+  textPrompt: "Text prompt",
+  confidence: "Confidence threshold",
+  minSize: "Minimum mask size (pixels)",
+  maxSize: "Maximum mask size (0 = no limit)",
+  backend: "Backend",
+  foregroundPoint: "+ Foreground point",
+  backgroundPoint: "− Background point",
+  clickForeground: "Click the map to add a foreground point.",
+  clickBackground: "Click the map to add a background point.",
+  pointAdded: "Point added.",
+  drawBox: "Draw box on map",
+  dragBox: "Drag a rectangle on the map.",
+  boxAdded: "Box added.",
+  boxSummary: (box) => `Box: ${box}`,
+  noBox: "No box drawn.",
+  pointSummary: (foreground, background) => `${foreground} foreground, ${background} background`,
+  pointsPerSide: "Points per side",
+  predIou: "Predicted IoU threshold",
+  stability: "Stability threshold",
+  clearPrompts: "Clear prompts",
+  promptsCleared: "Prompts cleared.",
+  segment: "Segment",
+  chooseImage: "Choose an image first.",
+  enterPrompt: "Enter a text prompt.",
+  addPoint: "Add at least one point prompt.",
+  drawBoxFirst: "Draw a box first.",
+  segmenting: "Segmenting…",
+  noObjects: "No objects found.",
+  added: (count, layer) => `Added ${count} feature(s)${layer}.`,
+  badResponse: "SamGeo API did not return a GeoJSON FeatureCollection.",
+  unknownProjection:
+    "The result is not in WGS84 and the image carries no readable projection, so it cannot be placed on the map. Use a georeferenced GeoTIFF.",
+};
+
+let labels: SamGeoLabels = { ...DEFAULT_LABELS };
+
+/** Replace the panel's user-facing strings; call again on language change. */
+export function setSamGeoLabels(next: Partial<SamGeoLabels>): void {
+  labels = { ...DEFAULT_LABELS, ...next };
+}
+
+const DEFAULT_STATE: SamGeoState = {
   apiUrl: DEFAULT_API_URL,
   mode: "text",
   modelId: "facebook/sam3.1",
@@ -51,6 +162,54 @@ const state: SamGeoState = {
   predIou: 0.8,
   stability: 0.95,
 };
+
+const state: SamGeoState = { ...DEFAULT_STATE };
+
+const MODES: readonly Mode[] = ["text", "points", "box", "automatic"];
+const NUMERIC_RANGES: Readonly<
+  Record<
+    "confidence" | "minSize" | "maxSize" | "pointsPerSide" | "predIou" | "stability",
+    [number, number]
+  >
+> = {
+  confidence: [0, 1],
+  minSize: [0, 1_000_000],
+  maxSize: [0, 10_000_000],
+  pointsPerSide: [1, 128],
+  predIou: [0, 1],
+  stability: [0, 1],
+};
+
+/**
+ * Validate a restored project-state blob field by field. Unknown keys and
+ * values of the wrong type or outside the panel's range are ignored, so a
+ * crafted `.geolibre.json` cannot widen `mode`/`backend` past their unions or
+ * hand `apiBase()` a non-string.
+ */
+export function sanitizeSamGeoState(value: unknown): Partial<SamGeoState> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const raw = value as Record<string, unknown>;
+  const next: Partial<SamGeoState> = {};
+  for (const key of ["apiUrl", "modelId", "prompt"] as const) {
+    if (typeof raw[key] === "string") next[key] = raw[key] as string;
+  }
+  if (MODES.includes(raw.mode as Mode)) next.mode = raw.mode as Mode;
+  if (raw.backend === "meta" || raw.backend === "transformers") next.backend = raw.backend;
+  for (const [key, [min, max]] of Object.entries(NUMERIC_RANGES) as [
+    keyof typeof NUMERIC_RANGES,
+    [number, number],
+  ][]) {
+    const n = raw[key];
+    if (typeof n === "number" && Number.isFinite(n)) next[key] = Math.min(max, Math.max(min, n));
+  }
+  return next;
+}
+
+function stateIsDefault(): boolean {
+  return (Object.keys(DEFAULT_STATE) as (keyof SamGeoState)[]).every(
+    (key) => state[key] === DEFAULT_STATE[key],
+  );
+}
 
 let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
@@ -103,6 +262,10 @@ function button(text: string, primary = false): HTMLButtonElement {
   return node;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function apiBase(): string {
   return state.apiUrl.trim().replace(/\/+$/, "");
 }
@@ -137,6 +300,12 @@ function promptFeatures(): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+function clearPrompts(map?: MapLibreMap | null): void {
+  promptPoints = [];
+  promptBox = null;
+  if (map) removePromptOverlay(map);
+}
+
 function removePromptOverlay(map: MapLibreMap): void {
   for (const id of [PROMPT_POINTS, PROMPT_LINE, PROMPT_FILL]) {
     if (map.getLayer(id)) map.removeLayer(id);
@@ -166,7 +335,11 @@ function updatePromptOverlay(map: MapLibreMap): void {
     type: "line",
     source: PROMPT_SOURCE,
     filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "line-color": "#8b5cf6", "line-width": 2, "line-dasharray": [2, 1] },
+    paint: {
+      "line-color": "#8b5cf6",
+      "line-width": 2,
+      "line-dasharray": [2, 1],
+    },
   });
   map.addLayer({
     id: PROMPT_POINTS,
@@ -188,7 +361,10 @@ function beginPointDraw(label: 0 | 1, done: () => void): (() => void) | null {
   const canvas = map.getCanvas();
   canvas.style.cursor = "crosshair";
   const onClick = (event: { lngLat: { lng: number; lat: number } }) => {
-    promptPoints.push({ coordinates: [event.lngLat.lng, event.lngLat.lat], label });
+    promptPoints.push({
+      coordinates: [event.lngLat.lng, event.lngLat.lat],
+      label,
+    });
     updatePromptOverlay(map);
     cleanup();
     done();
@@ -275,6 +451,9 @@ export function reprojectSamGeoResult(
     ?.properties?.name;
   const crsText = typeof namedCrs === "string" ? namedCrs : "";
   const alreadyWgs84 = /(?:EPSG(?::|::)4326|CRS84)/i.test(crsText);
+  if (!alreadyWgs84 && !sourceProjection && fc.features.length > 0) {
+    throw new Error(labels.unknownProjection);
+  }
   const projection = alreadyWgs84 ? null : sourceProjection;
   const features = fc.features.map((feature) => {
     if (!projection || !feature.geometry) return feature;
@@ -335,14 +514,17 @@ async function requestSegmentation(file: File, bytes: ArrayBuffer): Promise<Feat
       form.append("boxes", JSON.stringify([promptBox]));
     }
   }
-  const response = await fetch(`${apiBase()}${endpoint}`, { method: "POST", body: form });
+  const response = await fetch(`${apiBase()}${endpoint}`, {
+    method: "POST",
+    body: form,
+  });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`SamGeo API ${response.status}: ${detail || response.statusText}`);
   }
   const result = (await response.json()) as FeatureCollection;
   if (result.type !== "FeatureCollection" || !Array.isArray(result.features)) {
-    throw new Error("SamGeo API did not return a GeoJSON FeatureCollection.");
+    throw new Error(labels.badResponse);
   }
   return reprojectSamGeoResult(result, await rasterProjection(bytes));
 }
@@ -353,10 +535,7 @@ function buildPanel(container: HTMLElement): () => void {
   root.style.cssText = css.root;
   root.dataset.testid = "samgeo-panel";
 
-  const intro = element(
-    "p",
-    "Segment imagery with SAM3 using text, points, a box, or automatic masks.",
-  );
+  const intro = element("p", labels.intro);
   intro.style.cssText = `${css.muted}margin:0 0 13px;`;
 
   const api = input();
@@ -365,8 +544,8 @@ function buildPanel(container: HTMLElement): () => void {
   api.addEventListener("change", () => {
     state.apiUrl = api.value;
   });
-  const health = button("Check connection");
-  const healthText = element("span", "Not checked");
+  const health = button(labels.checkConnection);
+  const healthText = element("span", labels.notChecked);
   healthText.style.cssText = css.muted;
   const healthRow = element("div");
   healthRow.style.cssText = css.row;
@@ -380,10 +559,10 @@ function buildPanel(container: HTMLElement): () => void {
   mode.style.cssText = css.input;
   mode.dataset.testid = "samgeo-mode";
   for (const [value, label] of [
-    ["text", "Text prompt"],
-    ["points", "Point prompts"],
-    ["box", "Bounding box (find similar)"],
-    ["automatic", "Automatic (everything)"],
+    ["text", labels.modeText],
+    ["points", labels.modePoints],
+    ["box", labels.modeBox],
+    ["automatic", labels.modeAutomatic],
   ] as const) {
     const option = element("option", label);
     option.value = value;
@@ -413,7 +592,13 @@ function buildPanel(container: HTMLElement): () => void {
     node.step = String(step);
     node.addEventListener("change", () => {
       const parsed = Number(node.value);
-      if (Number.isFinite(parsed)) update(Math.min(max, Math.max(min, parsed)));
+      if (!Number.isFinite(parsed)) {
+        node.value = String(value);
+        return;
+      }
+      const clamped = Math.min(max, Math.max(min, parsed));
+      node.value = String(clamped);
+      update(clamped);
     });
     return field(label, node);
   };
@@ -429,19 +614,19 @@ function buildPanel(container: HTMLElement): () => void {
       prompt.addEventListener("input", () => {
         state.prompt = prompt.value;
       });
-      dynamic.append(field("Text prompt", prompt));
+      dynamic.append(field(labels.textPrompt, prompt));
       dynamic.append(
-        numberField("Confidence threshold", state.confidence, 0, 1, 0.05, (n) => {
+        numberField(labels.confidence, state.confidence, 0, 1, 0.05, (n) => {
           state.confidence = n;
         }),
       );
       dynamic.append(
-        numberField("Minimum mask size (pixels)", state.minSize, 0, 1_000_000, 1, (n) => {
+        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
           state.minSize = n;
         }),
       );
       dynamic.append(
-        numberField("Maximum mask size (0 = no limit)", state.maxSize, 0, 10_000_000, 1, (n) => {
+        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
           state.maxSize = n;
         }),
       );
@@ -456,18 +641,18 @@ function buildPanel(container: HTMLElement): () => void {
       backend.addEventListener("change", () => {
         state.backend = backend.value as SamGeoState["backend"];
       });
-      dynamic.append(field("Backend", backend));
+      dynamic.append(field(labels.backend, backend));
     } else if (state.mode === "points") {
       const row = element("div");
       row.style.cssText = `${css.row}margin-bottom:7px;flex-wrap:wrap;`;
-      const positive = button("+ Foreground point");
-      const negative = button("− Background point");
+      const positive = button(labels.foregroundPoint);
+      const negative = button(labels.backgroundPoint);
       const arm = (label: 0 | 1) => {
         cancelDrawing?.();
-        status.textContent = `Click the map to add a ${label ? "foreground" : "background"} point.`;
+        status.textContent = label ? labels.clickForeground : labels.clickBackground;
         cancelDrawing = beginPointDraw(label, () => {
           cancelDrawing = null;
-          status.textContent = "Point added.";
+          status.textContent = labels.pointAdded;
           refreshSummary();
         });
       };
@@ -476,60 +661,60 @@ function buildPanel(container: HTMLElement): () => void {
       row.append(positive, negative);
       dynamic.append(row, drawSummary);
       dynamic.append(
-        numberField("Minimum mask size (pixels)", state.minSize, 0, 1_000_000, 1, (n) => {
+        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
           state.minSize = n;
         }),
       );
       dynamic.append(
-        numberField("Maximum mask size (0 = no limit)", state.maxSize, 0, 10_000_000, 1, (n) => {
+        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
           state.maxSize = n;
         }),
       );
     } else if (state.mode === "box") {
-      const draw = button("Draw box on map");
+      const draw = button(labels.drawBox);
       draw.addEventListener("click", () => {
         cancelDrawing?.();
-        status.textContent = "Drag a rectangle on the map.";
+        status.textContent = labels.dragBox;
         cancelDrawing = beginBoxDraw(() => {
           cancelDrawing = null;
-          status.textContent = "Box added.";
+          status.textContent = labels.boxAdded;
           refreshSummary();
         });
       });
       dynamic.append(draw, drawSummary);
       dynamic.append(
-        numberField("Minimum mask size (pixels)", state.minSize, 0, 1_000_000, 1, (n) => {
+        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
           state.minSize = n;
         }),
       );
       dynamic.append(
-        numberField("Maximum mask size (0 = no limit)", state.maxSize, 0, 10_000_000, 1, (n) => {
+        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
           state.maxSize = n;
         }),
       );
     } else {
       dynamic.append(
-        numberField("Points per side", state.pointsPerSide, 1, 128, 1, (n) => {
+        numberField(labels.pointsPerSide, state.pointsPerSide, 1, 128, 1, (n) => {
           state.pointsPerSide = n;
         }),
       );
       dynamic.append(
-        numberField("Predicted IoU threshold", state.predIou, 0, 1, 0.05, (n) => {
+        numberField(labels.predIou, state.predIou, 0, 1, 0.05, (n) => {
           state.predIou = n;
         }),
       );
       dynamic.append(
-        numberField("Stability threshold", state.stability, 0, 1, 0.05, (n) => {
+        numberField(labels.stability, state.stability, 0, 1, 0.05, (n) => {
           state.stability = n;
         }),
       );
       dynamic.append(
-        numberField("Minimum mask size (pixels)", state.minSize, 0, 1_000_000, 1, (n) => {
+        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
           state.minSize = n;
         }),
       );
       dynamic.append(
-        numberField("Maximum mask size (0 = no limit)", state.maxSize, 0, 10_000_000, 1, (n) => {
+        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
           state.maxSize = n;
         }),
       );
@@ -539,10 +724,13 @@ function buildPanel(container: HTMLElement): () => void {
   const refreshSummary = () => {
     drawSummary.textContent =
       state.mode === "points"
-        ? `${promptPoints.filter((p) => p.label === 1).length} foreground, ${promptPoints.filter((p) => p.label === 0).length} background`
+        ? labels.pointSummary(
+            promptPoints.filter((p) => p.label === 1).length,
+            promptPoints.filter((p) => p.label === 0).length,
+          )
         : promptBox
-          ? `Box: ${promptBox.map((n) => n.toFixed(5)).join(", ")}`
-          : "No box drawn.";
+          ? labels.boxSummary(promptBox.map((n) => n.toFixed(5)).join(", "))
+          : labels.noBox;
   };
 
   const model = input();
@@ -550,42 +738,39 @@ function buildPanel(container: HTMLElement): () => void {
   model.addEventListener("change", () => {
     state.modelId = model.value;
   });
-  const clear = button("Clear prompts");
+  const clear = button(labels.clearPrompts);
   clear.addEventListener("click", () => {
-    promptPoints = [];
-    promptBox = null;
-    const map = appRef?.getMap?.();
-    if (map) updatePromptOverlay(map);
+    clearPrompts(appRef?.getMap?.());
     refreshSummary();
-    status.textContent = "Prompts cleared.";
+    status.textContent = labels.promptsCleared;
   });
-  const run = button("Segment", true);
+  const run = button(labels.segment, true);
   run.dataset.testid = "samgeo-run";
   run.addEventListener("click", async () => {
     const file = fileInput.files?.[0];
     if (!file) {
-      status.textContent = "Choose an image first.";
+      status.textContent = labels.chooseImage;
       return;
     }
     if (state.mode === "text" && !state.prompt.trim()) {
-      status.textContent = "Enter a text prompt.";
+      status.textContent = labels.enterPrompt;
       return;
     }
     if (state.mode === "points" && promptPoints.length === 0) {
-      status.textContent = "Add at least one point prompt.";
+      status.textContent = labels.addPoint;
       return;
     }
     if (state.mode === "box" && !promptBox) {
-      status.textContent = "Draw a box first.";
+      status.textContent = labels.drawBoxFirst;
       return;
     }
     run.disabled = true;
-    status.textContent = "Segmenting…";
+    status.textContent = labels.segmenting;
     try {
       const bytes = await file.arrayBuffer();
       const result = await requestSegmentation(file, bytes);
       if (!result.features.length) {
-        status.textContent = "No objects found.";
+        status.textContent = labels.noObjects;
         return;
       }
       const suffix = state.mode === "text" ? `: ${state.prompt.trim()}` : ` (${state.mode})`;
@@ -606,9 +791,9 @@ function buildPanel(container: HTMLElement): () => void {
           Math.max(...bounds.map((p) => p[1])),
         ]);
       }
-      status.textContent = `Added ${result.features.length} feature(s)${layerId ? ` as ${layerId}` : ""}.`;
+      status.textContent = labels.added(result.features.length, layerId ? ` as ${layerId}` : "");
     } catch (error) {
-      status.textContent = error instanceof Error ? error.message : String(error);
+      status.textContent = errorMessage(error);
     } finally {
       run.disabled = false;
     }
@@ -616,20 +801,25 @@ function buildPanel(container: HTMLElement): () => void {
 
   health.addEventListener("click", async () => {
     health.disabled = true;
-    healthText.textContent = "Checking…";
+    healthText.textContent = labels.checking;
     try {
       const response = await fetch(`${apiBase()}/health`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { version?: string };
-      healthText.textContent = `Connected${data.version ? ` · v${data.version}` : ""}`;
+      healthText.textContent = `${labels.connected}${data.version ? ` · v${data.version}` : ""}`;
     } catch (error) {
-      healthText.textContent = `Unavailable: ${error instanceof Error ? error.message : error}`;
+      healthText.textContent = labels.unavailable(errorMessage(error));
     } finally {
       health.disabled = false;
     }
   });
   mode.addEventListener("change", () => {
     state.mode = mode.value as Mode;
+    // Only the active mode's prompts are sent, so drop the other mode's
+    // geometry rather than leaving it painted on the map.
+    clearPrompts();
+    const map = appRef?.getMap?.();
+    if (map) updatePromptOverlay(map);
     refreshDynamic();
   });
 
@@ -638,11 +828,11 @@ function buildPanel(container: HTMLElement): () => void {
   actions.append(run, clear);
   root.append(
     intro,
-    field("SamGeo API URL", api),
+    field(labels.apiUrl, api),
     healthRow,
-    field("Image", fileInput),
-    field("Mode", mode),
-    field("Model ID", model),
+    field(labels.image, fileInput),
+    field(labels.mode, mode),
+    field(labels.modelId, model),
     dynamic,
     actions,
     status,
@@ -652,6 +842,9 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     cancelDrawing?.();
     cancelDrawing = null;
+    // The overlay is not a store layer, so closing the panel (header "X")
+    // must tear it down here too, not only in deactivate.
+    clearPrompts(appRef?.getMap?.());
     container.replaceChildren();
   };
 }
@@ -665,7 +858,7 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: "SamGeo Segmentation",
+        title: labels.panelTitle,
         dock: "replace-style",
         defaultWidth: 390,
         render(container) {
@@ -684,17 +877,21 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
     cancelDrawing = null;
     disposePanel?.();
     disposePanel = null;
-    const map = app.getMap?.();
-    if (map) removePromptOverlay(map);
+    clearPrompts(app.getMap?.());
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;
     appRef = null;
   },
-  getProjectState: () => ({ ...state }),
+  // Default settings are not worth persisting: the manager polls every
+  // registered plugin on save, and any non-default blob makes the project look
+  // like it carries plugin state (which the credential-redaction pass then
+  // offers to strip on every Save).
+  getProjectState: () => (stateIsDefault() ? undefined : { ...state }),
   applyProjectState(_app, value) {
-    if (!value || typeof value !== "object") return false;
-    Object.assign(state, value);
+    const next = sanitizeSamGeoState(value);
+    if (Object.keys(next).length === 0) return false;
+    Object.assign(state, next);
     return true;
   },
 };
