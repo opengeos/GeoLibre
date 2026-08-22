@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useState, type ComponentType, type ReactElement } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   Button,
@@ -21,6 +21,14 @@ export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true, shift:
 const postingAsComponents: Record<string, ReactElement> = {
   strong: <strong className="text-foreground" />,
 };
+
+type PostingAsTransProps = {
+  i18nKey: "comments.postingAs";
+  values: { name: string | null };
+  components: Record<string, ReactElement>;
+};
+
+const PostingAsTrans = Trans as ComponentType<PostingAsTransProps>;
 
 interface AddCommentDialogProps {
   pendingComment: PendingCommentState;
@@ -145,7 +153,7 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           ) : (
             <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
               <span>
-                <Trans
+                <PostingAsTrans
                   i18nKey="comments.postingAs"
                   values={{ name: savedName }}
                   components={postingAsComponents}

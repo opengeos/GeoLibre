@@ -30,6 +30,8 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type ComponentType,
+  type ReactElement,
   type RefObject,
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
@@ -77,6 +79,13 @@ const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
 // snapshot identity and doesn't re-subscribe on every render.
 const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
 const getPluginManagerVersion = () => getPluginManager().getVersion();
+
+type ManagePluginsTransProps = {
+  i18nKey: "managePlugins.description";
+  components: Record<string, ReactElement>;
+};
+
+const ManagePluginsTrans = Trans as ComponentType<ManagePluginsTransProps>;
 
 interface ManagePluginsDialogProps {
   open: boolean;
@@ -440,7 +449,7 @@ export function ManagePluginsDialog({
         <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>{t("managePlugins.title")}</DialogTitle>
           <DialogDescription>
-            <Trans
+            <ManagePluginsTrans
               i18nKey="managePlugins.description"
               components={{
                 registryLink: (
