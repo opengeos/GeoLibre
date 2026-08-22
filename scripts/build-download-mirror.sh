@@ -10,7 +10,8 @@ readonly OMITTED_ASSET_PATTERNS_JSON='[
   "^geolibre-android\\.aab$",
   "^GeoLibre\\.Desktop_[^/]+_universal_mas\\.pkg$",
   "^GeoLibre_[^/]+_ios_app-store\\.ipa$",
-  "\\.msix$"
+  "\\.msix$",
+  "\\.AppImage\\.zsync$"
 ]'
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
