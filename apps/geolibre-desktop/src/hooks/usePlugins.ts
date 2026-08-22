@@ -60,6 +60,7 @@ import {
   maplibreMapillaryPlugin,
   maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
+  maplibreSamGeoPlugin,
   maplibreSunPlugin,
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
@@ -227,6 +228,9 @@ manager.registerAll([
   maplibreSunPlugin,
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
+  // Last visible entry of the Plugins menu; the ids below are skipped by
+  // PluginsMenu and surface elsewhere.
+  maplibreSamGeoPlugin,
   maplibreDirectionsPlugin,
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
