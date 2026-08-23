@@ -596,6 +596,7 @@ Where to find the output:
 | `GEOLIBRE_STORE_BUILD` | unset | Set `1` for Microsoft Store MSIX builds (removes in-app updater). |
 | `GEOLIBRE_MAS_BUILD` | unset | Set `1` for Mac App Store builds (removes sidecar/server features). |
 | `GEOLIBRE_EMBED` | unset | Set `1` for the Jupyter embed wheel build. |
+| `VITE_GEOLIBRE_GA_MEASUREMENT_ID` | unset | Set a GA4 measurement ID (`G-…`) to load Google Analytics in the **web** build. Unset ships no analytics code at all, which is the default for every build; the desktop and Jupyter embed builds ignore it entirely. Used only by the hosted geolibre.app and web.geolibre.app deploys; see [Privacy Policy](privacy.md#website-analytics). |
 
 Example — build with no external CDN dependencies:
 

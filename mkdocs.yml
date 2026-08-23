@@ -125,6 +125,18 @@ extra_css:
   - stylesheets/extra.css
 
 extra:
+  # Google Analytics for geolibre.app, configured entirely from the environment
+  # so the tracker only loads where a measurement ID is set: the production
+  # Pages deploy. A local `zensical build`, a fork, and a PR preview leave these
+  # unset and ship no tracker, which is also why the ID is not hard-coded here.
+  #
+  # `provider` is a second variable because the theme keys the whole integration
+  # off it: with a provider and a blank property it would still load gtag.js,
+  # pointed at nothing. .github/workflows/pages.yml derives it from
+  # GEOLIBRE_GA_MEASUREMENT_ID, so an operator only ever sets that one value.
+  analytics:
+    provider: !ENV [GEOLIBRE_ANALYTICS_PROVIDER, ""]
+    property: !ENV [GEOLIBRE_GA_MEASUREMENT_ID, ""]
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/opengeos/GeoLibre

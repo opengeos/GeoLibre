@@ -4,7 +4,7 @@ GeoLibre's browser build can be embedded in any web page and configured through 
 
 ## The live viewer
 
-The browser build is hosted at `https://web.geolibre.app/`. It is a static site deployed on GitHub Pages that runs entirely in your browser: it has no analytics and no server account, and the data you load is processed client-side. Data leaves your browser only when you add a remote URL or explicitly share a project.
+The browser build is hosted at `https://web.geolibre.app/`. It is a static site deployed on GitHub Pages that runs entirely in your browser: there is no server account, and the data you load is processed client-side. The hosted site counts page visits with Google Analytics, which never sees the data you load (see the [Privacy Policy](../privacy.md#website-analytics)); a copy you host yourself has no analytics at all. Data leaves your browser only when you add a remote URL or explicitly share a project.
 
 Open a public project by passing its `.geolibre.json` URL with the `url` parameter:
 

@@ -62,6 +62,7 @@ import "./lib/auth-return-url-boot";
 // lazily imported, so `i18nReady` resolves once the initial locale's catalog has
 // loaded and init has run — the render below awaits it.
 import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
+import { startAnalytics } from "./lib/analytics";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
@@ -119,6 +120,10 @@ installStaleChunkReload();
 // `isEmbedded()` — that returns true for a plain `?embed=1` query parameter, so
 // any visitor could disable a configured sign-in wall by typing a URL.
 const isHostedWebApp = !isTauri() && !__GEOLIBRE_EMBED_BUILD__;
+// Google Analytics, if this deployment was built with a measurement ID (only
+// the geolibre.app and web.geolibre.app Pages deploys are, see analytics.ts).
+// A no-op in every other build, so nothing is loaded and nothing is sent.
+startAnalytics(isHostedWebApp);
 // Clerk or Auth0, whichever this deployment configured (neither, normally).
 const authGate = resolveAuthGate(isHostedWebApp);
 if (authGate) {

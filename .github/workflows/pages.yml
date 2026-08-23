@@ -75,9 +75,27 @@ jobs:
           # up live collaboration; requires the workers/collab relay to be
           # deployed (see docs/collaboration.md).
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
+          # Google Analytics measurement ID for the demo app served under
+          # geolibre.app/demo/, so it reports to the same stream as the
+          # documentation pages around it. Only on the deploying push: a
+          # pull_request run builds the same site for a check, and analytics
+          # from an unpublished build would be noise. Unset (the default,
+          # including on every fork) ships no tracker. See analytics.ts.
+          VITE_GEOLIBRE_GA_MEASUREMENT_ID: >-
+            ${{ github.event_name != 'pull_request' && vars.GEOLIBRE_GA_MEASUREMENT_ID || '' }}
 
       - name: Build documentation
         run: zensical build --strict
+        env:
+          # Same measurement ID for the documentation itself. `provider` is a
+          # separate variable the theme keys its analytics partial off; it is
+          # derived here rather than configured, so setting the one repository
+          # variable GEOLIBRE_GA_MEASUREMENT_ID turns the whole site on. See the
+          # extra.analytics block in mkdocs.yml.
+          GEOLIBRE_ANALYTICS_PROVIDER: >-
+            ${{ github.event_name != 'pull_request' && vars.GEOLIBRE_GA_MEASUREMENT_ID != '' && 'google' || '' }}
+          GEOLIBRE_GA_MEASUREMENT_ID: >-
+            ${{ github.event_name != 'pull_request' && vars.GEOLIBRE_GA_MEASUREMENT_ID || '' }}
 
       - name: Add web demo to site
         run: |

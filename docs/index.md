@@ -133,7 +133,7 @@ New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feat
 GeoLibre Web is the full browser version of the GeoLibre app, ready to use with nothing to install. It is great for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
 
 !!! note "Hosted on GitHub Pages, private by design"
-    GeoLibre Web is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
+    GeoLibre Web is a static site deployed on GitHub Pages and runs entirely in your browser. There is no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project. The hosted site measures page visits with Google Analytics, which never sees the data you load (see the [Privacy Policy](privacy.md#website-analytics)). A build you host yourself has no analytics at all.
 
     If your data cannot be public at all, run the same web build on your own server next to your data. See [Self-Hosting & Private Data](self-hosting.md).
 

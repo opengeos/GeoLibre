@@ -71,6 +71,14 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
+          # Google Analytics measurement ID, baked into the client bundle. Unset
+          # is the normal case and ships no tracker at all (desktop, Docker, the
+          # Jupyter wheel, and every fork build). See analytics.ts. This site is
+          # its own domain, so GEOLIBRE_WEB_GA_MEASUREMENT_ID can point it at a
+          # separate GA4 data stream; without it web.geolibre.app reports to the
+          # same stream as geolibre.app.
+          VITE_GEOLIBRE_GA_MEASUREMENT_ID: >-
+            ${{ vars.GEOLIBRE_WEB_GA_MEASUREMENT_ID || vars.GEOLIBRE_GA_MEASUREMENT_ID }}
 
       - name: Prepare the site for GitHub Pages
         working-directory: apps/geolibre-desktop/dist
