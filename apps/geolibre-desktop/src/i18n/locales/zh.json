@@ -3757,6 +3757,10 @@
   "basemaps": {
     "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "要素属性",
+    "massingHeight": "高度 (m)"
+  },
   "annotations": {
     "toolbar": "标注工具",
     "layerName": "标注",
@@ -7284,8 +7288,59 @@
     "reply": "回复",
     "replyPlaceholder": "写下回复..."
   },
-  "geoEditorPlugin": {
-    "attributePanelTitle": "要素属性",
-    "massingHeight": "高度 (m)"
+  "samgeoPlugin": {
+    "panelTitle": "SamGeo 分割",
+    "intro": "使用 SAM3 通过文本、点、边界框或自动掩膜对影像进行分割。",
+    "apiUrl": "SamGeo API 地址",
+    "checkConnection": "检查连接",
+    "notChecked": "未检查",
+    "checking": "正在检查…",
+    "connected": "已连接",
+    "unavailable": "不可用：{{error}}",
+    "image": "图像",
+    "imageSource": "图像来源",
+    "imageUpload": "上传文件",
+    "noRasterLayers": "未加载任何栅格图层",
+    "layerUnreadable": "该图层没有可读取的 GeoTIFF 源；请先导出该图层，或改为上传文件。",
+    "docsLink": "如何搭建 SamGeo API",
+    "mode": "模式",
+    "modeText": "文本提示",
+    "modePoints": "点提示",
+    "modeBox": "边界框（查找相似对象）",
+    "modeAutomatic": "自动（全部分割）",
+    "modelId": "模型 ID",
+    "sam2ModelId": "SAM2 模型",
+    "automaticHint": "自动模式使用 SAM2 的掩膜生成器，可分割每一个对象；SAM3 仅响应提示。",
+    "textPrompt": "文本提示",
+    "confidence": "置信度阈值",
+    "minSize": "最小掩膜尺寸（像素）",
+    "maxSize": "最大掩膜尺寸（0 = 不限制）",
+    "backend": "后端",
+    "foregroundPoint": "+ 前景点",
+    "backgroundPoint": "− 背景点",
+    "clickForeground": "在地图上点击以添加前景点。",
+    "clickBackground": "在地图上点击以添加背景点。",
+    "pointAdded": "已添加点。",
+    "drawBox": "在地图上绘制边界框",
+    "dragBox": "在地图上拖拽出一个矩形。",
+    "boxAdded": "已添加边界框。",
+    "boxSummary": "边界框：{{box}}",
+    "noBox": "尚未绘制边界框。",
+    "pointSummary": "前景 {{foreground}} 个，背景 {{background}} 个",
+    "pointsPerSide": "每边点数",
+    "predIou": "预测 IoU 阈值",
+    "stability": "稳定性阈值",
+    "clearPrompts": "清除提示",
+    "promptsCleared": "已清除提示。",
+    "segment": "分割",
+    "chooseImage": "请先选择一幅图像。",
+    "enterPrompt": "请输入文本提示。",
+    "addPoint": "请至少添加一个前景点。",
+    "drawBoxFirst": "请先绘制一个边界框。",
+    "segmenting": "正在分割…",
+    "noObjects": "未找到任何对象。",
+    "added": "已添加 {{count}} 个要素{{layer}}。",
+    "badResponse": "SamGeo API 未返回 GeoJSON FeatureCollection。",
+    "unknownProjection": "结果不是 WGS84 坐标，且图像未携带可读取的投影信息，因此无法放置到地图上。请使用带地理参考的 GeoTIFF。"
   }
 }
