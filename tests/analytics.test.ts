@@ -17,6 +17,10 @@ const SENSITIVE_URL = {
   search: "?url=https://example.com/secret-project.geolibre.json&session=abc123",
 };
 
+/** The page that linked here, itself carrying a project in its query. */
+const SENSITIVE_REFERRER =
+  "https://geolibre.app/demo/?url=https://example.com/private.geolibre.json";
+
 /** A document with the globals gtag.js seeds, as a browser page would have. */
 function makeDocument() {
   const { document } = parseHTML("<!doctype html><html><head></head><body></body></html>");
@@ -24,6 +28,10 @@ function makeDocument() {
   // from it to build the page it reports.
   Object.defineProperty(document.defaultView, "location", {
     value: SENSITIVE_URL,
+    configurable: true,
+  });
+  Object.defineProperty(document, "referrer", {
+    value: SENSITIVE_REFERRER,
     configurable: true,
   });
   return document as unknown as Document;
@@ -93,16 +101,12 @@ describe("analytics installation", () => {
       calls.map((call) => call[0]),
       ["set", "js", "config", "event"],
     );
-    assert.deepEqual(calls[2], [
-      "config",
-      ID,
-      { page_location: "https://web.geolibre.app/", send_page_view: false },
-    ]);
-    assert.deepEqual(calls[3], [
-      "event",
-      "page_view",
-      { page_location: "https://web.geolibre.app/" },
-    ]);
+    const page = {
+      page_location: "https://web.geolibre.app/",
+      page_referrer: "https://geolibre.app/demo/",
+    };
+    assert.deepEqual(calls[2], ["config", ID, { ...page, send_page_view: false }]);
+    assert.deepEqual(calls[3], ["event", "page_view", page]);
 
     // A second call (StrictMode's double-invoke, or dev HMR) must not stack a
     // second tag or re-queue the configuration.
@@ -111,16 +115,18 @@ describe("analytics installation", () => {
     assert.equal(queue(doc).length, 4);
   });
 
-  it("never reports the query string", () => {
+  it("never reports the query string, of this page or the referring one", () => {
     // A GeoLibre link carries the visitor's work in its parameters (a project
     // URL, an inline dataset, a collaboration session), so nothing queued for
     // Google may contain the query, including the automatic page view that
-    // `send_page_view: false` suppresses.
+    // `send_page_view: false` suppresses and the referrer gtag would otherwise
+    // read from the document itself.
     const doc = makeDocument();
     installAnalytics(ID, doc);
     const queued = JSON.stringify(queue(doc));
     assert.ok(!queued.includes("secret-project"), queued);
     assert.ok(!queued.includes("session=abc123"), queued);
+    assert.ok(!queued.includes("private.geolibre.json"), queued);
     assert.ok(!queued.includes("?"), queued);
     for (const call of queue(doc)) {
       if (call[0] === "config")

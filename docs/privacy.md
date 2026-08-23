@@ -73,11 +73,12 @@ You can opt out by blocking `www.googletagmanager.com` with a content blocker or
 your browser's tracking protection; GeoLibre Web works normally with analytics
 blocked.
 
-Analytics run only on the sites we host. The desktop app, the Jupyter widget, the
-Docker image, and any build you host yourself never load or run them: the
-measurement ID is supplied at build time and is absent from those builds, so
-nothing is requested from Google and nothing is reported (see
-[Self-Hosting](self-hosting.md)).
+Analytics run only on the sites we host. The desktop app, the Jupyter widget, and
+the Docker image never load or run them: the measurement ID is supplied at build
+time and is absent from those builds, so nothing is requested from Google and
+nothing is reported. A copy you build and host yourself is the same unless you
+deliberately supply a measurement ID of your own at build time, in which case the
+analytics are yours, not ours (see [Self-Hosting](self-hosting.md)).
 
 ## Personal information
 

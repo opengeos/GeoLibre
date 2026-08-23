@@ -69,10 +69,16 @@ jobs:
         # at all (as do the desktop, Docker, and Jupyter wheel builds).
         env:
           RAW_MEASUREMENT_ID: ${{ vars.GEOLIBRE_WEB_GA_MEASUREMENT_ID || vars.GEOLIBRE_GA_MEASUREMENT_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          id=$(printf '%s' "${RAW_MEASUREMENT_ID:-}" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
-          if [ -n "$id" ] && ! printf '%s' "$id" | grep -Eq '^G-[A-Z0-9]{4,24}$'; then
+          # Trim the ends only, the way the app's own resolveAnalyticsId does.
+          # Deleting *all* whitespace would quietly repair "G-AB CD1234" into a
+          # value that passes, which is the paste error this step exists to
+          # catch. The bash regex matches the whole string, so an embedded
+          # newline fails it rather than matching one line of several.
+          id=$(printf '%s' "${RAW_MEASUREMENT_ID:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:lower:]' '[:upper:]')
+          if [ -n "$id" ] && [[ ! $id =~ ^G-[A-Z0-9]{4,24}$ ]]; then
             echo "::error::The GA measurement ID variable is not a GA4 measurement ID (G-...)."
             exit 1
           fi

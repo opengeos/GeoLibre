@@ -40,6 +40,20 @@ interface AnalyticsWindow {
 }
 
 /**
+ * Strip the query and fragment from an absolute URL.
+ *
+ * @returns `origin` + `pathname`, or undefined when the value does not parse.
+ */
+function pageOf(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolve the Google Analytics measurement ID for a hosted web deployment.
  *
  * A missing or malformed ID leaves analytics completely disabled.
@@ -107,9 +121,19 @@ export function installAnalytics(id: string, doc: Document = document): void {
   // GA4's enhanced measurement fires on a history change: the app rewrites its
   // own URL (a collaboration session, a sign-in return), and this is a
   // single-page app whose path never changes, so pinning the value is right.
+  //
+  // The referrer needs the same treatment. Left alone, gtag.js reads
+  // `document.referrer`, and a link followed inside the site (the docs page or
+  // the demo that sent the visitor here) carries that page's own query. Setting
+  // it explicitly overrides what gtag would have derived; omitted when there is
+  // no referrer, which is what gtag would report anyway.
   const location = view.location;
   const pageLocation = location ? `${location.origin}${location.pathname}` : undefined;
-  const pageView = pageLocation ? { page_location: pageLocation } : {};
+  const referrer = doc.referrer ? pageOf(doc.referrer) : undefined;
+  const pageView = {
+    ...(pageLocation ? { page_location: pageLocation } : {}),
+    ...(referrer ? { page_referrer: referrer } : {}),
+  };
   gtag("set", pageView);
   gtag("js", new Date());
   // send_page_view: false suppresses the automatic view, which would carry the
