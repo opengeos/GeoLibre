@@ -54,6 +54,7 @@ import {
   LayoutPanelTop,
   MessageSquare,
   Moon,
+  PackageCheck,
   Palette,
   PanelLeft,
   PanelRight,
@@ -66,7 +67,9 @@ import {
   Type,
   Trash2,
   TriangleAlert,
+  Upload,
   Puzzle,
+  LoaderCircle,
 } from "lucide-react";
 import {
   useEffect,
@@ -74,6 +77,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type ChangeEvent,
   type ReactElement,
   type RefObject,
 } from "react";
@@ -103,6 +107,17 @@ import { COORDINATE_FORMATS, normalizeCoordinateFormat } from "../../lib/coordin
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { pluginDisplayName } from "../../lib/plugin-display-name";
+import {
+  LanguagePackError,
+  officialLanguagePackDownloadsEnabled,
+  type InstalledLanguagePack,
+} from "../../lib/language-pack";
+import {
+  downloadLanguagePack,
+  getInstalledLanguagePack,
+  installLanguagePackFile,
+  removeLanguagePack,
+} from "../../i18n";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import { ensureStartupProjectSnapshot, openProjectFile } from "../../lib/tauri-io";
@@ -136,6 +151,7 @@ import {
 import { AiSectionContent } from "./AiSectionContent";
 
 export type SettingsSection =
+  | "language"
   | "map"
   | "layout"
   | "appearance"
@@ -218,6 +234,7 @@ const SECTION_ITEMS: Array<{
   labelKey: `settings.section.${SettingsSection}`;
   icon: typeof MapPinned;
 }> = [
+  { id: "language", labelKey: "settings.section.language", icon: Languages },
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
   {
@@ -459,6 +476,17 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  const [installedLanguagePack, setInstalledLanguagePack] = useState<InstalledLanguagePack | null>(
+    null,
+  );
+  const [languagePackBusy, setLanguagePackBusy] = useState<"download" | "import" | "remove" | null>(
+    null,
+  );
+  const [languagePackNotice, setLanguagePackNotice] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
+  const languagePackDownloadsEnabled = officialLanguagePackDownloadsEnabled();
   // Browser and Comments are dockable right panels: the registry owns whether
   // they are on screen and `registerPersistedRightPanel` mirrors that into
   // `layout.browserPanelVisible` / `layout.commentsPanelVisible`, so the toggle
@@ -474,6 +502,7 @@ export function SettingsDialog({
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(null);
   const shareTokenInputRef = useRef<HTMLInputElement>(null);
+  const languagePackFileRef = useRef<HTMLInputElement>(null);
   // The native color input in the Appearance pane. The accent-color dropdown's
   // "Custom" entry deep-links here so picking a custom color is reachable
   // without a third-level menu (#718).
@@ -667,6 +696,24 @@ export function SettingsDialog({
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
   }, [open, mapControllerRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getInstalledLanguagePack(language)
+      .then((installed) => {
+        if (!cancelled) setInstalledLanguagePack(installed);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) {
+          console.error("[GeoLibre] Failed to read the installed language pack", loadError);
+          setInstalledLanguagePack(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, language]);
 
   // Let other panels deep-link into a specific Settings section (e.g. the AI
   // Assistant onboarding card opens the AI Providers section to add credentials).
@@ -1246,6 +1293,80 @@ export function SettingsDialog({
     setOpen(false);
   };
 
+  const languagePackErrorMessage = (packError: unknown): string => {
+    if (!(packError instanceof LanguagePackError)) {
+      return t("settings.languagePack.errorGeneric");
+    }
+    switch (packError.code) {
+      case "invalid-json":
+        return t("settings.languagePack.errorInvalidJson");
+      case "invalid-format":
+      case "invalid-translations":
+      case "empty-pack":
+        return t("settings.languagePack.errorInvalidFormat");
+      case "unsupported-version":
+        return t("settings.languagePack.errorUnsupportedVersion");
+      case "invalid-locale":
+        return t("settings.languagePack.errorInvalidLocale");
+      case "unsupported-locale":
+        return t("settings.languagePack.errorUnsupportedLocale");
+      case "too-large":
+        return t("settings.languagePack.errorTooLarge");
+      case "not-found":
+        return t("settings.languagePack.errorNotFound");
+      case "download-failed":
+        return t("settings.languagePack.errorDownload");
+    }
+  };
+
+  const handleLanguagePackDownload = async () => {
+    setLanguagePackBusy("download");
+    setLanguagePackNotice(null);
+    try {
+      const installed = await downloadLanguagePack(language);
+      setInstalledLanguagePack(installed);
+      setLanguagePackNotice({ kind: "success", text: t("settings.languagePack.downloaded") });
+    } catch (packError) {
+      setLanguagePackNotice({ kind: "error", text: languagePackErrorMessage(packError) });
+    } finally {
+      setLanguagePackBusy(null);
+    }
+  };
+
+  const handleLanguagePackFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setLanguagePackBusy("import");
+    setLanguagePackNotice(null);
+    try {
+      const installed = await installLanguagePackFile(await file.text());
+      if (installed.locale === language) setInstalledLanguagePack(installed);
+      setLanguagePackNotice({
+        kind: "success",
+        text: t("settings.languagePack.imported", { locale: installed.locale }),
+      });
+    } catch (packError) {
+      setLanguagePackNotice({ kind: "error", text: languagePackErrorMessage(packError) });
+    } finally {
+      setLanguagePackBusy(null);
+    }
+  };
+
+  const handleLanguagePackRemove = async () => {
+    setLanguagePackBusy("remove");
+    setLanguagePackNotice(null);
+    try {
+      await removeLanguagePack(language);
+      setInstalledLanguagePack(null);
+      setLanguagePackNotice({ kind: "success", text: t("settings.languagePack.removed") });
+    } catch (packError) {
+      setLanguagePackNotice({ kind: "error", text: languagePackErrorMessage(packError) });
+    } finally {
+      setLanguagePackBusy(null);
+    }
+  };
+
   const renderSectionButton = (item: (typeof SECTION_ITEMS)[number]) => {
     const Icon = item.icon;
     return (
@@ -1299,6 +1420,16 @@ export function SettingsDialog({
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("language");
+                  setOpen(true);
+                }}
+              >
+                <PackageCheck className="me-2 h-3.5 w-3.5" />
+                {t("settings.languagePack.manage")}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
@@ -1588,6 +1719,150 @@ export function SettingsDialog({
               {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(renderSectionButton)}
             </nav>
             <div className="min-h-0 min-w-0 overflow-y-auto p-6">
+              {effectiveSection === "language" ? (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold">{t("settings.languagePack.title")}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("settings.languagePack.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-language-pack-locale">
+                      {t("settings.languagePack.interfaceLanguage")}
+                    </Label>
+                    <Select
+                      id="settings-language-pack-locale"
+                      value={language}
+                      onChange={(event) => {
+                        setLanguagePackNotice(null);
+                        setLanguage(event.target.value);
+                      }}
+                    >
+                      {languageOptions.map((option) => (
+                        <option key={option.code} value={option.code}>
+                          {option.nativeName === option.englishName
+                            ? option.nativeName
+                            : `${option.nativeName} (${option.englishName})`}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          "mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full",
+                          installedLanguagePack
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        <PackageCheck className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">
+                          {installedLanguagePack
+                            ? t("settings.languagePack.installed")
+                            : t("settings.languagePack.notInstalled")}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {installedLanguagePack
+                            ? t("settings.languagePack.installedDetail", {
+                                source:
+                                  installedLanguagePack.source === "download"
+                                    ? t("settings.languagePack.sourceOfficial")
+                                    : t("settings.languagePack.sourceFile"),
+                                date: new Intl.DateTimeFormat(language, {
+                                  dateStyle: "medium",
+                                }).format(new Date(installedLanguagePack.installedAt)),
+                              })
+                            : language === "en"
+                              ? t("settings.languagePack.englishFallback")
+                              : languagePackDownloadsEnabled
+                                ? t("settings.languagePack.notInstalledDetail")
+                                : t("settings.languagePack.downloadsDisabled")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {language !== "en" && languagePackDownloadsEnabled ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleLanguagePackDownload}
+                          disabled={languagePackBusy !== null}
+                        >
+                          {languagePackBusy === "download" ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <DownloadCloud className="h-3.5 w-3.5" />
+                          )}
+                          {t("settings.languagePack.download")}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={languagePackBusy !== null}
+                        onClick={() => languagePackFileRef.current?.click()}
+                      >
+                        {languagePackBusy === "import" ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5" />
+                        )}
+                        {t("settings.languagePack.importFile")}
+                      </Button>
+                      {installedLanguagePack ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={languagePackBusy !== null}
+                          onClick={handleLanguagePackRemove}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("settings.languagePack.remove")}
+                        </Button>
+                      ) : null}
+                      <input
+                        ref={languagePackFileRef}
+                        className="hidden"
+                        type="file"
+                        accept=".json,application/json"
+                        onChange={handleLanguagePackFile}
+                      />
+                    </div>
+                  </div>
+                  {languagePackNotice ? (
+                    <p
+                      className={cn(
+                        "text-sm",
+                        languagePackNotice.kind === "error"
+                          ? "text-destructive"
+                          : "text-emerald-700 dark:text-emerald-300",
+                      )}
+                      role={languagePackNotice.kind === "error" ? "alert" : "status"}
+                    >
+                      {languagePackNotice.text}
+                    </p>
+                  ) : null}
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {t("settings.languagePack.privacy")}{" "}
+                    <a
+                      className="inline-flex items-center gap-1 underline underline-offset-2"
+                      href="https://languages.geolibre.app"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {t("settings.languagePack.browse")}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </p>
+                </div>
+              ) : null}
               {effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
@@ -2712,7 +2987,13 @@ export function SettingsDialog({
           {error ? (
             <div className="border-t px-6 py-2 text-sm text-destructive">{error}</div>
           ) : null}
-          {effectiveSection === "ai" && (editingProfileId || isCreatingProfile) ? (
+          {effectiveSection === "language" ? (
+            <div className="flex justify-end border-t px-6 py-4">
+              <Button type="button" onClick={() => setOpen(false)}>
+                {t("common.close")}
+              </Button>
+            </div>
+          ) : effectiveSection === "ai" && (editingProfileId || isCreatingProfile) ? (
             <div className="border-t px-6 py-4 text-center text-xs text-muted-foreground">
               {t("settings.ai.profileEditSaveHint")}
             </div>

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { whiteboxMenuSubcategorySlug } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
-import { WHITEBOX_MENU_CATALOG } from "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog";
 
 const localesDir = fileURLToPath(
   new URL("../apps/geolibre-desktop/src/i18n/locales/", import.meta.url),
@@ -74,154 +72,21 @@ describe("i18n catalogs", () => {
 
   const enStrings = flatStrings(loadCatalog("en"));
 
-  it("covers the WASM-only Whitebox tools used by local Processing mode", () => {
-    const en = loadCatalog("en").processing as {
-      toolMeta: {
-        whitebox: Record<
-          string,
-          {
-            name?: string;
-            description?: string;
-            params?: Record<string, { label?: string }>;
-          }
-        >;
+  it("keeps optional Whitebox metadata out of bundled locale catalogs", () => {
+    for (const code of localeCodes) {
+      const processing = loadCatalog(code).processing as {
+        toolMeta?: Record<string, unknown>;
+        whitebox?: Record<string, unknown>;
       };
-      whitebox: { categories: Record<string, string> };
-    };
-    const zh = loadCatalog("zh").processing as typeof en;
-    const tool = en.toolMeta.whitebox.write_geoparquet;
-    assert.equal(tool.name, "Write GeoParquet");
-    assert.equal(tool.params?.input?.label, "Input");
-    assert.equal(zh.toolMeta.whitebox.write_geoparquet.name, "写入 GeoParquet");
-    assert.equal(zh.toolMeta.whitebox.write_geoparquet.params?.input?.label, "输入");
-    assert.match(zh.toolMeta.whitebox.write_geoparquet.description ?? "", /[\p{Script=Han}]/u);
-
-    assert.deepEqual(
-      Object.keys(zh.whitebox.categories).sort(),
-      Object.keys(en.whitebox.categories).sort(),
-    );
-    for (const value of Object.values(zh.whitebox.categories)) {
-      assert.match(value, /[\p{Script=Han}]/u);
-    }
-  });
-
-  it("covers every Whitebox Processing menu key in English and Chinese", () => {
-    const expectedTools = new Map(
-      WHITEBOX_MENU_CATALOG.flatMap((category) =>
-        category.subcategories.flatMap((subcategory) =>
-          subcategory.tools.map((tool) => [tool.id, tool.name] as const),
-        ),
-      ),
-    );
-    const expectedSubcategories = new Map(
-      WHITEBOX_MENU_CATALOG.flatMap((category) =>
-        category.subcategories.map(
-          (subcategory) =>
-            [whiteboxMenuSubcategorySlug(subcategory.label), subcategory.label] as const,
-        ),
-      ),
-    );
-    assert.equal(expectedTools.size, 1066);
-    assert.equal(expectedSubcategories.size, 45);
-
-    const untranslatedMenuTools = new Set(["landtrendr", "ripleys_k"]);
-    const untranslatedMenuSubcategories = new Set(["geolibre_wasm"]);
-
-    for (const code of ["en", "zh"]) {
-      const whitebox = loadCatalog(code).processing as {
-        whitebox: {
-          menuTool: Record<string, unknown>;
-          menuSubcategory: Record<string, unknown>;
-        };
-      };
-      assert.deepEqual(
-        Object.keys(whitebox.whitebox.menuTool).sort(),
-        [...expectedTools.keys()].sort(),
-        `${code}.json Whitebox menuTool keys do not match the menu catalog`,
-      );
-      assert.deepEqual(
-        Object.keys(whitebox.whitebox.menuSubcategory).sort(),
-        [...expectedSubcategories.keys()].sort(),
-        `${code}.json Whitebox menuSubcategory keys do not match the menu catalog`,
+      assert.equal(processing.toolMeta?.whitebox, undefined, `${code}.json bundles Whitebox tools`);
+      assert.equal(processing.whitebox?.categories, undefined, `${code}.json bundles categories`);
+      assert.equal(processing.whitebox?.menuTool, undefined, `${code}.json bundles menu tools`);
+      assert.equal(
+        processing.whitebox?.menuSubcategory,
+        undefined,
+        `${code}.json bundles menu subcategories`,
       );
     }
-
-    type WhiteboxMenuCatalog = {
-      whitebox: {
-        menuTool: Record<string, string>;
-        menuSubcategory: Record<string, string>;
-      };
-    };
-    const enWhitebox = loadCatalog("en").processing as WhiteboxMenuCatalog;
-    const zhWhitebox = loadCatalog("zh").processing as WhiteboxMenuCatalog;
-    for (const [key, value] of expectedTools) {
-      assert.equal(enWhitebox.whitebox.menuTool[key], value);
-      if (!untranslatedMenuTools.has(key)) {
-        assert.notEqual(zhWhitebox.whitebox.menuTool[key], enWhitebox.whitebox.menuTool[key]);
-      } else {
-        assert.equal(zhWhitebox.whitebox.menuTool[key], value);
-      }
-    }
-    for (const [key, value] of expectedSubcategories) {
-      assert.equal(enWhitebox.whitebox.menuSubcategory[key], value);
-      if (!untranslatedMenuSubcategories.has(key)) {
-        assert.notEqual(
-          zhWhitebox.whitebox.menuSubcategory[key],
-          enWhitebox.whitebox.menuSubcategory[key],
-        );
-      } else {
-        assert.equal(zhWhitebox.whitebox.menuSubcategory[key], value);
-      }
-    }
-  });
-
-  it("zh covers every Whitebox tool name, parameter label, and description in the baseline", () => {
-    type WhiteboxMeta = Record<
-      string,
-      {
-        name: string;
-        description?: string;
-        params?: Record<string, { label: string; description?: string }>;
-      }
-    >;
-    const enTools = (
-      loadCatalog("en").processing as {
-        toolMeta: { whitebox: WhiteboxMeta };
-      }
-    ).toolMeta.whitebox;
-    const zhTools = (
-      loadCatalog("zh").processing as {
-        toolMeta: { whitebox: WhiteboxMeta };
-      }
-    ).toolMeta.whitebox;
-    const untranslatedToolNames = new Set(["LandTrendr", "Ripley's K"]);
-    const symbolLabels = /^(?:[A-Z](?:\d+)?|Alpha|Beta|Gamma|Sigma\d?|Epsilon|Kappa|Lambda|D[xy])$/;
-    const missing: string[] = [];
-
-    for (const [toolId, tool] of Object.entries(enTools)) {
-      const zhTool = zhTools[toolId];
-      if (!zhTool?.name || (zhTool.name === tool.name && !untranslatedToolNames.has(tool.name))) {
-        missing.push(`${toolId}.name`);
-      }
-      for (const [paramId, param] of Object.entries(tool.params ?? {})) {
-        const zhLabel = zhTool?.params?.[paramId]?.label;
-        if (!zhLabel || (zhLabel === param.label && !symbolLabels.test(param.label))) {
-          missing.push(`${toolId}.params.${paramId}.label`);
-        }
-        const zhDescription = zhTool?.params?.[paramId]?.description;
-        if (param.description && (!zhDescription || zhDescription === param.description)) {
-          missing.push(`${toolId}.params.${paramId}.description`);
-        }
-      }
-      if (tool.description && (!zhTool?.description || zhTool.description === tool.description)) {
-        missing.push(`${toolId}.description`);
-      }
-    }
-    assert.deepEqual(
-      missing,
-      [],
-      `zh.json has untranslated Whitebox labels or descriptions: ${missing.length}`,
-    );
   });
 
   it("covers the Processing vector toolbar keys in English and Chinese", () => {

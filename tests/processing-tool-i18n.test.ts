@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
 import {
-  buildWhiteboxCategories,
-  buildWhiteboxMenuTranslations,
-} from "../scripts/gen-processing-i18n-catalog.mjs";
-import {
   modelProviderCatalog,
   translateModelToolGroup,
   toolGroupKey,
@@ -14,7 +10,6 @@ import {
   translateToolGroup,
   translateToolName,
   translateWhiteboxParameterDescription,
-  whiteboxMenuSubcategorySlug,
   whiteboxParameterLabel,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
@@ -54,55 +49,6 @@ describe("toolGroupKey", () => {
     // guard would fire on a group that has no collision at all.
     assert.equal(toolGroupKey("Constructor"), "constructor");
     assert.equal(toolGroupKey("To String"), "toString");
-  });
-
-  it("rejects distinct Whitebox category labels that slug to one key", () => {
-    assert.throws(
-      () =>
-        buildWhiteboxCategories([
-          { id: "one", category: "Terrain Analysis" },
-          { id: "two", category: "Terrain-Analysis" },
-        ]),
-      /Whitebox category labels "Terrain Analysis" and "Terrain-Analysis" both map/,
-    );
-  });
-
-  it("merges a repeated Whitebox category into one key", () => {
-    assert.deepEqual(
-      buildWhiteboxCategories([
-        { id: "one", category: "Terrain Analysis" },
-        { id: "two", category: "Terrain Analysis" },
-      ]),
-      { terrainAnalysis: "Terrain Analysis" },
-    );
-  });
-
-  it("builds the Whitebox menu translation baseline from catalog labels", () => {
-    assert.equal(whiteboxMenuSubcategorySlug("Vector & Table I/O"), "vector_table_i_o");
-    assert.deepEqual(
-      buildWhiteboxMenuTranslations([
-        {
-          key: "vector",
-          labelKey: "toolbar.item.vector",
-          subcategories: [
-            {
-              label: "Vector & Table I/O",
-              tools: [
-                { id: "read_geoparquet", name: "Read GeoParquet" },
-                { id: "write_geoparquet", name: "Write GeoParquet" },
-              ],
-            },
-          ],
-        },
-      ]),
-      {
-        menuTool: {
-          read_geoparquet: "Read GeoParquet",
-          write_geoparquet: "Write GeoParquet",
-        },
-        menuSubcategory: { vector_table_i_o: "Vector & Table I/O" },
-      },
-    );
   });
 });
 
