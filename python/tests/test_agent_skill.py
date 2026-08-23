@@ -94,20 +94,44 @@ def parameters(node: ast.FunctionDef) -> list[tuple[str, str | None]]:
     not Python types, so it writes ``zoom=None`` where the server writes
     ``zoom: float | None = None``.
 
+    Every parameter kind is represented, including the ``/`` and ``*``
+    separators and ``*args``/``**kwargs``. No tool uses anything but plain
+    positional-or-keyword parameters today, and reading only ``args`` would work
+    — right up until the first tool takes a keyword-only argument, which this
+    comparison would then silently ignore while claiming to check the signature.
+
     Args:
         node: The parsed function definition.
 
     Returns:
-        One pair per positional-or-keyword parameter, in order, with ``None``
-        as the default for a parameter that has none.
+        One pair per parameter, in signature order, with ``None`` as the default
+        for a parameter that has none. Separators appear as their own entries.
     """
     args = node.args
-    defaults: list[ast.expr | None] = [None] * (len(args.args) - len(args.defaults))
+    collected: list[tuple[str, str | None]] = []
+
+    def pair(arg: ast.arg, default: ast.expr | None) -> tuple[str, str | None]:
+        return (arg.arg, ast.unparse(default) if default is not None else None)
+
+    # `defaults` covers the tail of posonlyargs + args together.
+    positional = args.posonlyargs + args.args
+    defaults: list[ast.expr | None] = [None] * (len(positional) - len(args.defaults))
     defaults += list(args.defaults)
-    return [
-        (arg.arg, ast.unparse(default) if default is not None else None)
-        for arg, default in zip(args.args, defaults)
-    ]
+    for index, (arg, default) in enumerate(zip(positional, defaults)):
+        collected.append(pair(arg, default))
+        if args.posonlyargs and index == len(args.posonlyargs) - 1:
+            collected.append(("/", None))
+
+    if args.vararg:
+        collected.append((f"*{args.vararg.arg}", None))
+    elif args.kwonlyargs:
+        collected.append(("*", None))
+    for arg, kw_default in zip(args.kwonlyargs, args.kw_defaults):
+        collected.append(pair(arg, kw_default))
+
+    if args.kwarg:
+        collected.append((f"**{args.kwarg.arg}", None))
+    return collected
 
 
 def mcp_tool_signatures() -> dict[str, list[tuple[str, str | None]]]:
