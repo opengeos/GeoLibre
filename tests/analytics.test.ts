@@ -10,10 +10,29 @@ import {
 
 const ID = "G-ABC1234567";
 
+/** A hosted URL carrying the kind of query GeoLibre puts in its own links. */
+const SENSITIVE_URL = {
+  origin: "https://web.geolibre.app",
+  pathname: "/",
+  search: "?url=https://example.com/secret-project.geolibre.json&session=abc123",
+};
+
 /** A document with the globals gtag.js seeds, as a browser page would have. */
 function makeDocument() {
   const { document } = parseHTML("<!doctype html><html><head></head><body></body></html>");
+  // linkedom leaves `location` undefined; analytics reads origin and pathname
+  // from it to build the page it reports.
+  Object.defineProperty(document.defaultView, "location", {
+    value: SENSITIVE_URL,
+    configurable: true,
+  });
   return document as unknown as Document;
+}
+
+/** The queued gtag calls, each as a plain array. */
+function queue(doc: Document): unknown[][] {
+  const { dataLayer } = doc.defaultView as unknown as { dataLayer: IArguments[] };
+  return dataLayer.map((entry) => Array.from(entry));
 }
 
 /** The GA script tag installed into `doc`, if any. */
@@ -67,19 +86,46 @@ describe("analytics installation", () => {
     assert.equal(script.src, `https://www.googletagmanager.com/gtag/js?id=${ID}`);
     assert.equal(script.async, true);
 
-    const { dataLayer } = doc.defaultView as unknown as { dataLayer: IArguments[] };
-    // The queue gtag.js drains on load: the `js` timestamp, then `config`.
+    // The queue gtag.js drains on load: the page default, the `js` timestamp,
+    // the configuration, then the one page view we send ourselves.
+    const calls = queue(doc);
     assert.deepEqual(
-      dataLayer.map((entry) => Array.from(entry)[0]),
-      ["js", "config"],
+      calls.map((call) => call[0]),
+      ["set", "js", "config", "event"],
     );
-    assert.deepEqual(Array.from(dataLayer[1]), ["config", ID]);
+    assert.deepEqual(calls[2], [
+      "config",
+      ID,
+      { page_location: "https://web.geolibre.app/", send_page_view: false },
+    ]);
+    assert.deepEqual(calls[3], [
+      "event",
+      "page_view",
+      { page_location: "https://web.geolibre.app/" },
+    ]);
 
     // A second call (StrictMode's double-invoke, or dev HMR) must not stack a
     // second tag or re-queue the configuration.
     installAnalytics(ID, doc);
     assert.equal(doc.querySelectorAll("script[src*='googletagmanager']").length, 1);
-    assert.equal(dataLayer.length, 2);
+    assert.equal(queue(doc).length, 4);
+  });
+
+  it("never reports the query string", () => {
+    // A GeoLibre link carries the visitor's work in its parameters (a project
+    // URL, an inline dataset, a collaboration session), so nothing queued for
+    // Google may contain the query, including the automatic page view that
+    // `send_page_view: false` suppresses.
+    const doc = makeDocument();
+    installAnalytics(ID, doc);
+    const queued = JSON.stringify(queue(doc));
+    assert.ok(!queued.includes("secret-project"), queued);
+    assert.ok(!queued.includes("session=abc123"), queued);
+    assert.ok(!queued.includes("?"), queued);
+    for (const call of queue(doc)) {
+      if (call[0] === "config")
+        assert.equal((call[2] as Record<string, unknown>).send_page_view, false);
+    }
   });
 });
 

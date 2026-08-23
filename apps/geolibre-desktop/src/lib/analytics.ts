@@ -1,11 +1,18 @@
 // Optional Google Analytics (GA4) for the *hosted web builds* only.
 //
-// The tracker is off unless a measurement ID is configured at build time, so
-// the desktop app, the Jupyter embed wheel, the Docker image, and every local
-// or fork build ship without it. See resolveAnalyticsId for why that gate is
-// a build fact rather than a runtime one. Only opengeos' own Pages deploys
-// (geolibre.app/demo/ and web.geolibre.app) pass the variable, and the privacy
-// policy documents that (docs/privacy.md).
+// The tracker is off unless a measurement ID is configured at build time, and
+// only opengeos' own Pages deploys (geolibre.app/demo/ and web.geolibre.app)
+// pass one, so the desktop app, the Jupyter embed wheel, the Docker image, and
+// every local or fork build have no ID compiled in and load nothing. Note the
+// desktop installers bundle the very same Vite output as the web app, so this
+// module is *present* in them (a few hundred bytes of inert code); what keeps
+// it dark there is the missing ID plus the webApp gate below, not tree shaking.
+// See resolveAnalyticsId for why that gate is a build fact rather than a
+// runtime one, and docs/privacy.md for what the hosted sites report.
+//
+// The two deploy workflows validate the measurement ID against the same shape
+// this module enforces, so a mistyped repository variable fails the deploy
+// instead of publishing a tag that reports nowhere.
 //
 // Deliberately not wired into `docker/entrypoint.sh`: the container serves a
 // CSP whose script-src does not allow googletagmanager.com, so a runtime value
@@ -29,6 +36,7 @@ const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{4,24}$/;
 /** The globals gtag.js expects to find already present. */
 interface AnalyticsWindow {
   dataLayer?: unknown[];
+  location?: { origin: string; pathname: string };
 }
 
 /**
@@ -88,8 +96,26 @@ export function installAnalytics(id: string, doc: Document = document): void {
     // eslint-disable-next-line prefer-rest-params
     dataLayer.push(arguments);
   }
+  // What gets reported as the page: origin + path, never the query string. A
+  // GeoLibre URL carries the visitor's work in its parameters (`?url=` a project,
+  // `?data=` an inline dataset, a collaboration session id, a shared-settings
+  // URL), and gtag would otherwise send the whole address as `page_location`.
+  // The privacy policy promises analytics never see the data you load, so the
+  // query is dropped here rather than trusted to a property-side setting.
+  //
+  // `set` applies to every later event as well, which covers the page_view that
+  // GA4's enhanced measurement fires on a history change: the app rewrites its
+  // own URL (a collaboration session, a sign-in return), and this is a
+  // single-page app whose path never changes, so pinning the value is right.
+  const location = view.location;
+  const pageLocation = location ? `${location.origin}${location.pathname}` : undefined;
+  const pageView = pageLocation ? { page_location: pageLocation } : {};
+  gtag("set", pageView);
   gtag("js", new Date());
-  gtag("config", id);
+  // send_page_view: false suppresses the automatic view, which would carry the
+  // raw URL; the explicit event below replaces it with the trimmed one.
+  gtag("config", id, { ...pageView, send_page_view: false });
+  gtag("event", "page_view", pageView);
 
   const script = doc.createElement("script");
   script.id = GA_SCRIPT_ID;

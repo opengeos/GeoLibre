@@ -64,15 +64,19 @@ your browser. It is governed by [Google's privacy policy](https://policies.googl
 
 What analytics never sees is the geospatial data you work with: layers, files,
 project contents, queries, and coordinates are processed in your browser and are
-not sent to Google.
+not sent to Google. The page address we report is trimmed to the site and path
+(for example `https://web.geolibre.app/`), with the query string removed, because
+a GeoLibre link can carry a project URL, an inline dataset, or a collaboration
+session identifier in its parameters.
 
 You can opt out by blocking `www.googletagmanager.com` with a content blocker or
 your browser's tracking protection; GeoLibre Web works normally with analytics
 blocked.
 
 Analytics run only on the sites we host. The desktop app, the Jupyter widget, the
-Docker image, and any build you host yourself contain no analytics code: the
-measurement ID is supplied at build time and is absent from those builds (see
+Docker image, and any build you host yourself never load or run them: the
+measurement ID is supplied at build time and is absent from those builds, so
+nothing is requested from Google and nothing is reported (see
 [Self-Hosting](self-hosting.md)).
 
 ## Personal information
