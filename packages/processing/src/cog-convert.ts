@@ -219,6 +219,11 @@ export async function convertRasterDataToCog(raster: RasterData): Promise<Uint8A
     const epsg = Number(
       raster.geoKeys.ProjectedCSTypeGeoKey ?? raster.geoKeys.GeographicTypeGeoKey,
     );
+    if (Number.isFinite(epsg) && epsg >= 32767 && epsg <= 65535) {
+      throw new Error(
+        `Client raster output cannot preserve user-defined or private CRS code ${epsg}. Use the sidecar engine instead.`,
+      );
+    }
     if (Number.isFinite(epsg) && epsg > 0) builder.set_epsg(epsg);
     builder.set_geo_transform(
       Float64Array.from([

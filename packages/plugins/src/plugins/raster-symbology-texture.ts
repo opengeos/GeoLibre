@@ -86,6 +86,15 @@ function readRasterReversed(layer: GeoLibreLayer): boolean {
   );
 }
 
+/** Reads the persisted raster render mode, defaulting like the control. */
+function readRasterMode(layer: GeoLibreLayer): string {
+  const raw = layer.metadata.rasterState;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "rgb";
+  return typeof (raw as Record<string, unknown>).mode === "string"
+    ? String((raw as Record<string, unknown>).mode)
+    : "rgb";
+}
+
 // Per-layer classification state and built GPU textures. Module-global to
 // match the single mounted raster control (see maplibre-raster.ts).
 const entries = new Map<string, ClassificationEntry>();
@@ -266,6 +275,7 @@ function reconcile(control: unknown): void {
     // map still draws a continuous ramp. Move to the renderer that can honor
     // the requested symbology; the control's engine picker updates with it.
     if (
+      readRasterMode(layer) === "single" &&
       rasterControl.getEngine?.() !== "maplibre-gl-raster" &&
       typeof rasterControl.setEngine === "function"
     ) {

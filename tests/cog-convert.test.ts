@@ -94,6 +94,23 @@ describe("convertGeoTiffToCog", () => {
     }
   });
 
+  it("rejects a user-defined CRS code that cannot be preserved by the COG writer", async () => {
+    await assert.rejects(
+      convertRasterDataToCog({
+        bands: [Float32Array.from([1])],
+        width: 1,
+        height: 1,
+        originX: 0,
+        originY: 1,
+        resX: 1,
+        resY: 1,
+        nodata: null,
+        geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32767 },
+      }),
+      /cannot preserve user-defined or private CRS code 32767/,
+    );
+  });
+
   // Raster to COG lets the user pick a codec on the web, so every advertised
   // choice has to survive an Int16 source — webp/jpeg/jpegxl do not (they reject
   // anything but 8-bit samples) and zstd/raw are not implemented at all, which

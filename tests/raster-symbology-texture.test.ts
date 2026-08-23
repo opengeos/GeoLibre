@@ -74,7 +74,11 @@ function renderColormapProps(
 
 function rasterLayer(
   id: string,
-  opts: { rasterSymbology?: Record<string, unknown>; reversed?: boolean } = {},
+  opts: {
+    rasterSymbology?: Record<string, unknown>;
+    reversed?: boolean;
+    mode?: "single" | "rgb";
+  } = {},
 ): GeoLibreLayer {
   return {
     id,
@@ -91,7 +95,7 @@ function rasterLayer(
       // Reverse lives on rasterState now (the control renders it for built-in
       // colormaps; the injected texture reads it for classified / custom).
       rasterState: {
-        mode: "single",
+        mode: opts.mode ?? "single",
         colormap: "viridis",
         reversed: opts.reversed ?? false,
       },
@@ -184,5 +188,26 @@ describe("raster symbology render injection", () => {
     activateRasterClassification(control);
 
     assert.equal(control.getEngine(), "maplibre-gl-raster");
+  });
+
+  it("does not switch renderers for stale classification metadata in RGB mode", () => {
+    useAppStore.getState().addLayer(
+      rasterLayer("r1", {
+        mode: "rgb",
+        rasterSymbology: {
+          classified: true,
+          ramp: "autumn",
+          method: "manual",
+          classCount: 2,
+          breaks: [0, 200, 300],
+        },
+      }),
+    );
+    const control = fakeControl();
+    control.setEngine("cog-tiler-wasm");
+
+    activateRasterClassification(control);
+
+    assert.equal(control.getEngine(), "cog-tiler-wasm");
   });
 });
