@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 import geolibre.mcp as mcp_package
+from geolibre import Map
 from geolibre.authoring import color_ramp_names
 from geolibre.basemaps import BASEMAPS
 from geolibre.legends import builtin_legend_names
@@ -131,7 +132,7 @@ def test_skill_names_no_tool_that_does_not_exist() -> None:
         name
         for name in called
         # Python-API calls are checked by test_python_api_reference_is_real.
-        if name not in tools and not hasattr(__import__("geolibre").Map, name)
+        if name not in tools and not hasattr(Map, name)
     )
     assert not unknown, f"the skill names MCP tools that do not exist: {unknown}"
 
@@ -160,8 +161,6 @@ def test_legend_preset_catalog_matches() -> None:
 
 def test_python_api_reference_is_real() -> None:
     """Every ``Map`` method the Python reference shows exists on ``Map``."""
-    from geolibre import Map
-
     text = read("references/python-api.md")
     # Every `m.<name>` the reference shows, whether it is called (`m.fly_to(...)`),
     # a property (`m.layers`), or trailed by a comment. An earlier version
