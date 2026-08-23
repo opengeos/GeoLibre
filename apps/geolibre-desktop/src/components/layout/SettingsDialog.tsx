@@ -109,6 +109,7 @@ import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/th
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { pluginDisplayName } from "../../lib/plugin-display-name";
 import {
+  LANGUAGE_PACK_MAX_BYTES,
   LanguagePackError,
   languagePackBaseUrl,
   type InstalledLanguagePack,
@@ -1384,6 +1385,14 @@ export function SettingsDialog({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    // `parseLanguagePack` enforces the same limit, but only after `file.text()`
+    // has already buffered the whole file. Checking the declared size first
+    // turns a mistakenly picked multi-gigabyte file into a clean error rather
+    // than a tab that reads it into memory before rejecting it.
+    if (file.size > LANGUAGE_PACK_MAX_BYTES) {
+      setLanguagePackNotice({ kind: "error", text: t("settings.languagePack.errorTooLarge") });
+      return;
+    }
     setLanguagePackBusy("import");
     setLanguagePackNotice(null);
     try {
