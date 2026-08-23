@@ -1357,8 +1357,12 @@ export function DesktopShell({
       // splits into one layer per placemark, so the final fit needs every id
       // from that file to frame the whole import rather than one placemark.
       const layerIdsBySource = new Map<string, string[]>();
+      // Tracked across every record kind (not just the GeoJSON ones) so a file
+      // whose placemarks are followed by an overlay or model is still
+      // recognized as the last source imported.
       let lastSourcePath: string | null = null;
       for (const layer of importedLayers) {
+        if (layer.path) lastSourcePath = layer.path;
         if (isLoadedKmlSuperOverlay(layer)) {
           lastLayerId = addTileLayer(layer.name || layerNameFromPath(layer.path), {
             tiles: [layer.url],
@@ -1424,7 +1428,6 @@ export function DesktopShell({
         }
         lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
         if (layer.path) {
-          lastSourcePath = layer.path;
           const sourceIds = layerIdsBySource.get(layer.path) ?? [];
           sourceIds.push(lastLayerId);
           layerIdsBySource.set(layer.path, sourceIds);
@@ -1476,9 +1479,9 @@ export function DesktopShell({
 
       // A folder-aware KML becomes one layer per placemark, so framing the last
       // layer alone would open on a single point. Combine the extents of every
-      // layer that file contributed and fit that instead.
+      // layer the last source contributed and fit that instead.
       const sourceLayerIds = lastSourcePath ? (layerIdsBySource.get(lastSourcePath) ?? []) : [];
-      if (sourceLayerIds.length > 1 && sourceLayerIds.at(-1) === lastLayerId) {
+      if (sourceLayerIds.length > 1) {
         const sourceLayerIdSet = new Set(sourceLayerIds);
         const bounds = useAppStore
           .getState()
