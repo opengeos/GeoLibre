@@ -117,7 +117,7 @@ def parameters(node: ast.FunctionDef) -> list[tuple[str, str | None]]:
     positional = args.posonlyargs + args.args
     defaults: list[ast.expr | None] = [None] * (len(positional) - len(args.defaults))
     defaults += list(args.defaults)
-    for index, (arg, default) in enumerate(zip(positional, defaults)):
+    for index, (arg, default) in enumerate(zip(positional, defaults, strict=True)):
         collected.append(pair(arg, default))
         if args.posonlyargs and index == len(args.posonlyargs) - 1:
             collected.append(("/", None))
@@ -126,7 +126,7 @@ def parameters(node: ast.FunctionDef) -> list[tuple[str, str | None]]:
         collected.append((f"*{args.vararg.arg}", None))
     elif args.kwonlyargs:
         collected.append(("*", None))
-    for arg, kw_default in zip(args.kwonlyargs, args.kw_defaults):
+    for arg, kw_default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
         collected.append(pair(arg, kw_default))
 
     if args.kwarg:
