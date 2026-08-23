@@ -56,6 +56,8 @@ The skill mirrors things that live elsewhere in this repo: the MCP tool surface
 (`python/src/geolibre/mcp/server.py`), the basemap and color-ramp catalogs
 (`python/src/geolibre/basemaps.py`, `color_ramp.py`, `legends.py`), the project
 schema (`docs/project-format.md`), and the embed parameters
-(`docs/user-guide/embedding.md`). When one of those changes in a way a user of
-the skill would notice — a renamed tool, a new basemap, a changed limit — update
-`skills/geolibre/` in the same PR.
+(`docs/user-guide/embedding.md`). `python/tests/test_agent_skill.py` fails on
+drift in the mechanical parts — tool names, `Map` methods, and the basemap,
+color-ramp, legend-preset and layer-type lists. Prose it cannot check, so a
+changed limit or caveat still has to be carried over by hand, in the same PR as
+the change.

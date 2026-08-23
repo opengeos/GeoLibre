@@ -68,7 +68,7 @@ explicitly asked for a project, or will keep editing it.
 
 ### A choropleth, start to finish
 
-```
+```text
 create_project(path="counties.geolibre.json", name="Population by county",
                center=[-98.5, 39.8], zoom=4, basemap="positron")
 add_geojson_layer(path=..., name="Counties",
@@ -100,9 +100,13 @@ export_html(path=..., out_path="counties.html", title="Population by county")
   (reads a remote FlatGeobuf / GeoParquet / GeoJSON in place) or a tiled source.
   A layer whose data you inline travels inside the project and is self-contained;
   a layer that points at a URL is small but depends on that URL staying up.
-- **Local file paths do not travel.** A layer reading `/home/you/data.geojson`
-  is invisible to anyone you send the export to, and to the hosted web app. Use
-  hosted URLs for anything shareable, and say so if you had to use a local path.
+- **A local path is only portable when the data is inlined.**
+  `add_geojson_layer` reads a workspace file and copies its features into the
+  project, so that data does travel. A layer that keeps a *reference* to a local
+  file instead — a desktop `sourcePath` layer, a raster served for one notebook
+  session — resolves on the authoring machine only, and is invisible both to
+  anyone you send the export to and to the hosted web app. Use hosted URLs for
+  those, and say so if you had to use a local one.
 - **`set_view(bbox=...)` is approximate** — a project stores a center and zoom,
   not a bbox, so the server resolves the box itself and lands within about half
   a zoom level. Pass `center` and `zoom` when the framing must be exact.

@@ -1,8 +1,9 @@
 # `geolibre-mcp` tool reference
 
-Every tool takes `path`, the `.geolibre.json` file it reads or writes, resolved
-against the workspace roots. Relative paths resolve against the first root, so
-`city.geolibre.json` works without knowing the host layout.
+Every tool that reads or writes a project takes `path`, the `.geolibre.json`
+file, resolved against the workspace roots. Relative paths resolve against the
+first root, so `city.geolibre.json` works without knowing the host layout.
+(`list_catalog` is the one exception — it takes no arguments at all.)
 
 The server's own docstrings are the authority — this page is the map of the
 surface, so you can pick the right tool before calling anything.
@@ -29,7 +30,7 @@ position); omitted, the layer goes on top.
 
 ### Project lifecycle
 
-```
+```text
 create_project(path, name="Untitled Project", center=None, zoom=None,
                basemap=None, overwrite=False)
 describe_project(path)
@@ -47,7 +48,7 @@ active workspace roots. Call it before guessing any of those names.
 
 ### Adding layers
 
-```
+```text
 add_geojson_layer(path, name, data, style=None, index=None)
 add_vector_layer(path, name, url, render_mode="geojson", data_format=None,
                  source_layer=None, style=None, index=None)
@@ -77,7 +78,7 @@ add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
 
 ### Editing
 
-```
+```text
 update_layer(path, layer, name=None, visible=None, opacity=None, index=None)
 remove_layer(path, layer)
 style_layer(path, layer, style)
@@ -101,7 +102,7 @@ name and a sense of the values.
 
 ### Framing and decoration
 
-```
+```text
 set_view(path, center=None, zoom=None, bearing=None, pitch=None, bbox=None)
 set_basemap(path, basemap)
 add_legend(path, title=None, legend_dict=None, labels=None, colors=None,
@@ -129,7 +130,7 @@ Positions are `top-left`, `top-right`, `bottom-left`, `bottom-right`.
 
 ### Export
 
-```
+```text
 export_html(path, out_path, title="GeoLibre Map", width="100%", height="800px",
             app_url=None, overwrite=False)
 ```

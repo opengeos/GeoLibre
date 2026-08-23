@@ -38,7 +38,7 @@ case-sensitive and does not include `blues`, `greens`, `oranges`, `reds`,
 viridis. When the colorbar has to match a layer styled with one of them, pass
 explicit stops instead of a name:
 
-```
+```text
 add_colorbar(path=..., colors=["#eff6ff", "#93c5fd", "#2563eb", "#1e3a8a"],
              vmin=0, vmax=10000000, label="Population")
 ```

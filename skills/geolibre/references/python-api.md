@@ -39,7 +39,11 @@ m.add_geojson(data, name="GeoJSON", **style)          # URL, path, or a dict
 m.add_gdf(gdf, name="GeoDataFrame", column=None)      # GeoPandas
 m.add_data(data, column=None, name="Data")            # dispatches on the format
 m.add_vector(data, name="Vector", render_mode="geojson", data_format=None)
-m.add_shp / add_gpkg / add_kml / add_geoparquet / add_flatgeobuf
+m.add_shp(data, name="Shapefile")
+m.add_gpkg(data, name="GeoPackage", layer=None)
+m.add_kml(data, name="KML")
+m.add_geoparquet(data, name="GeoParquet")
+m.add_flatgeobuf(data, name="FlatGeobuf")
 m.add_csv(data, x="longitude", y="latitude", name="CSV")
 m.add_cog(url, name="COG", bands=None, colormap=None, rescale=None)
 m.add_raster(...)                                     # same, incl. a local GeoTIFF
@@ -47,7 +51,8 @@ m.add_tile_layer(url, name, tile_size=256, attribution=None)
 m.add_pmtiles(url, name, tile_type="vector", source_layers=None)
 m.add_vector_tiles(url, name, source_layers=None)
 m.add_wms(endpoint, layers, name, version="1.1.1")
-m.add_wmts(...) / m.add_wfs(endpoint, type_name, max_features=1000)
+m.add_wmts(endpoint, name)
+m.add_wfs(endpoint, type_name, max_features=1000)
 m.add_3d_tiles(url, name, altitude_offset=0)
 m.add_video(...)
 ```
@@ -62,7 +67,8 @@ strokeWidth=3)`).
 m.add_choropleth(data, column="pop", class_count=5, colormap="blues",
                  scheme="quantile")
 m.add_marker(-122.4, 37.8, properties={"name": "San Francisco"})
-m.add_markers([...]) / m.add_circle_markers([...])
+m.add_markers(points)
+m.add_circle_markers(points)
 m.add_marker_cluster(points, cluster_radius=50, cluster_max_zoom=14)
 m.add_heatmap(points, radius=35, intensity=1)
 m.add_polyline(...)
@@ -88,11 +94,11 @@ m.add_basemap("dark")            # same, kept for leafmap familiarity
 
 m.layers                          # Layer objects, in draw order
 m.layer_names
-m.get_layer(id_or_name) / m.find_layer(name)
-m.set_layer_visibility(layer, False) / m.set_layer_opacity(layer, 0.5)
-m.rename_layer(layer, "New name") / m.move_layer(layer, index)
-m.duplicate_layer(layer) / m.remove_layer(layer) / m.clear_layers()
-m.layer_properties(layer) / m.column_values(layer, "column")
+m.get_layer(id_or_name); m.find_layer(name)
+m.set_layer_visibility(layer, False); m.set_layer_opacity(layer, 0.5)
+m.rename_layer(layer, "New name"); m.move_layer(layer, index)
+m.duplicate_layer(layer); m.remove_layer(layer); m.clear_layers()
+m.layer_properties(layer); m.column_values(layer, "column")
 m.describe()
 ```
 
@@ -116,14 +122,16 @@ These need a running widget, so they are unavailable headless:
 
 ```python
 m.fly_to(lng, lat, zoom=12)
-m.fit_bounds(bounds) / m.zoom_to_layer(layer)
-m.get_view() / m.get_center() / m.get_bounds()
-m.identify(lng, lat) / m.get_features(layer)
-m.get_selected_features() / m.get_drawn_features() / m.user_rois
-m.on_click(fn) / m.on_selection_change(fn) / m.on_layer_change(fn)
+m.fit_bounds(bounds)
+m.zoom_to_layer(layer)
+m.get_view(); m.get_center(); m.get_bounds()
+m.identify(lng, lat)
+m.get_features(layer)
+m.get_selected_features(); m.get_drawn_features(); m.user_rois
+m.on_click(fn); m.on_selection_change(fn); m.on_layer_change(fn)
 m.to_image()                                    # a PNG of the rendered map
-m.list_algorithms() / m.run_algorithm(...)      # client-side processing
-m.list_whitebox_tools() / m.run_whitebox_tool(...)
+m.list_algorithms(); m.run_algorithm(...)       # client-side processing
+m.list_whitebox_tools(); m.run_whitebox_tool(...)
 m.run_model_builder(...)
 ```
 

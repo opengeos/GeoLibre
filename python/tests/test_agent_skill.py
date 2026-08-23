@@ -101,7 +101,9 @@ def test_skill_frontmatter_is_well_formed() -> None:
     """SKILL.md carries the ``name``/``description`` frontmatter loaders require."""
     text = read("SKILL.md")
     assert text.startswith("---\n")
-    frontmatter = text.split("---\n", 2)[1]
+    parts = text.split("---\n", 2)
+    assert len(parts) == 3, "the frontmatter block must be closed with ---"
+    frontmatter = parts[1]
     assert re.search(r"^name: geolibre\s*$", frontmatter, re.M), "name must match the directory"
     assert re.search(r"^description:", frontmatter, re.M)
     # The description is the only thing a loader sees when deciding to load the
@@ -161,12 +163,13 @@ def test_python_api_reference_is_real() -> None:
     from geolibre import Map
 
     text = read("references/python-api.md")
-    named = {
-        match.group(1)
-        for match in re.finditer(r"\bm\.([a-z_][a-z0-9_]*)\s*\(", text)
-        # `m.layers` and friends are properties, matched separately below.
-    }
-    named.update(match.group(1) for match in re.finditer(r"^m\.([a-z_][a-z0-9_]*)$", text, re.M))
+    # Every `m.<name>` the reference shows, whether it is called (`m.fly_to(...)`),
+    # a property (`m.layers`), or trailed by a comment. An earlier version
+    # required either a `(` or the end of the line, which silently skipped
+    # `m.layers  # ...` and `m.user_rois` mid-line — exactly the names a rename
+    # would break. Reference examples always spell the receiver `m.`, so
+    # requiring that prefix is what keeps this from matching prose.
+    named = {match.group(1) for match in re.finditer(r"\bm\.([a-z_][a-z0-9_]*)\b", text)}
     missing = sorted(name for name in named if not hasattr(Map, name))
     assert not missing, f"the skill documents Map methods that do not exist: {missing}"
 
@@ -189,4 +192,9 @@ def test_references_are_all_linked_and_present() -> None:
     files = sorted(p.name for p in (SKILL_DIR / "references").glob("*.md"))
     assert files, "the skill has no reference files"
     for name in files:
-        assert f"references/{name}" in skill, f"references/{name} is never linked from SKILL.md"
+        # As inline code, the convention SKILL.md uses, rather than any raw
+        # occurrence: a bare substring check would still pass if an edit left
+        # the path behind in prose after dropping the pointer itself.
+        assert f"`references/{name}`" in skill, (
+            f"references/{name} is never pointed at from SKILL.md"
+        )
