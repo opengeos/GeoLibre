@@ -378,7 +378,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
       hiddenMenuItems: [...settings.uiProfile.hiddenMenuItems],
     },
     updates: { ...settings.updates },
-    startup: { ...settings.startup },
+    startup: { ...settings.startup, center: [...settings.startup.center] },
   };
 }
 
@@ -1113,6 +1113,23 @@ export function SettingsDialog({
       startup: { ...current.startup, ...patch },
     }));
     setError(null);
+  };
+
+  // Ignore a cleared field (valueAsNumber is NaN) so it does not silently fall
+  // back to the hardcoded default on save; the last valid value is kept.
+  const updateStartupCenterValue = (index: 0 | 1, value: number) => {
+    if (!Number.isFinite(value)) return;
+    setDraftDesktopSettings((current) => {
+      const center: StartupSettings["center"] = [...current.startup.center];
+      center[index] = value;
+      return { ...current, startup: { ...current.startup, center } };
+    });
+    setError(null);
+  };
+
+  const updateStartupZoom = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    updateDraftStartupSettings({ zoom: value });
   };
 
   const chooseStartupProject = async () => {
@@ -3015,12 +3032,7 @@ export function SettingsDialog({
                           step="0.000001"
                           value={draftDesktopSettings.startup.center[0]}
                           onChange={(event) =>
-                            updateDraftStartupSettings({
-                              center: [
-                                event.target.valueAsNumber,
-                                draftDesktopSettings.startup.center[1],
-                              ],
-                            })
+                            updateStartupCenterValue(0, event.target.valueAsNumber)
                           }
                         />
                       </div>
@@ -3036,12 +3048,7 @@ export function SettingsDialog({
                           step="0.000001"
                           value={draftDesktopSettings.startup.center[1]}
                           onChange={(event) =>
-                            updateDraftStartupSettings({
-                              center: [
-                                draftDesktopSettings.startup.center[0],
-                                event.target.valueAsNumber,
-                              ],
-                            })
+                            updateStartupCenterValue(1, event.target.valueAsNumber)
                           }
                         />
                       </div>
@@ -3054,9 +3061,7 @@ export function SettingsDialog({
                           max={24}
                           step={0.25}
                           value={draftDesktopSettings.startup.zoom}
-                          onChange={(event) =>
-                            updateDraftStartupSettings({ zoom: event.target.valueAsNumber })
-                          }
+                          onChange={(event) => updateStartupZoom(event.target.valueAsNumber)}
                         />
                       </div>
                     </div>
