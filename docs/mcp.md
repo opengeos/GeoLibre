@@ -168,6 +168,13 @@ will not load for anyone else, so use hosted URLs for a shareable export.
   backs the [Python widget](python.md) and the
   [embed API](user-guide/embedding.md).
 
+## Driving the server from an agent
+
+GeoLibre ships an [agent skill](agent-skill.md) that teaches an external AI
+agent how to use these tools well: which `add_*_layer` tool fits which data,
+what order to call things in, and the limits above. Install it from
+`skills/geolibre/` in the repository.
+
 ## Under the hood
 
 The tools are thin wrappers over `geolibre.authoring`, a widget-free module of

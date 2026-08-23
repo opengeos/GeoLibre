@@ -94,6 +94,7 @@ nav:
       - Python Package: python.md
       - R Package: r.md
       - MCP Server: mcp.md
+      - Agent Skill: agent-skill.md
       - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md

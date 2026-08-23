@@ -265,3 +265,10 @@ load a CSV from a URL with pandas and summarize its columns
   policy (browser-side calls).
 - The unofficial Google Maps tile endpoints are intentionally **not** included;
   use the listed officially-supported basemaps or supply your own XYZ URL.
+
+## Not the same as the agent skill
+
+The assistant runs **inside** GeoLibre and edits the map you are looking at. To
+have an AI agent *outside* GeoLibre — in a terminal, an editor, or a notebook —
+build a project file for you, see the [agent skill](../agent-skill.md) and the
+[MCP server](../mcp.md).
