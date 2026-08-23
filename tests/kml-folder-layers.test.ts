@@ -7,19 +7,14 @@ import { KML_FOLDER_PATH_PROPERTY } from "../apps/geolibre-desktop/src/lib/kml";
 // global at module-eval time; shim it before the dynamic import.
 (globalThis as { self?: unknown }).self ??= globalThis;
 
-type LoadedVectorLayer = {
-  data: FeatureCollection;
-  path: string;
-  name?: string;
-  groupPath?: string[];
-};
-type SplitKmlFolderLayers = (collection: FeatureCollection, path: string) => LoadedVectorLayer[];
+type SplitKmlFolderLayers =
+  typeof import("../apps/geolibre-desktop/src/lib/tauri-io").splitKmlFolderLayers;
 
 let splitKmlFolderLayers: SplitKmlFolderLayers;
 
 before(async () => {
   const mod = await import("../apps/geolibre-desktop/src/lib/tauri-io");
-  splitKmlFolderLayers = mod.splitKmlFolderLayers as unknown as SplitKmlFolderLayers;
+  splitKmlFolderLayers = mod.splitKmlFolderLayers;
 });
 
 /** A point placemark, optionally inside the given KML Folder ancestry. */
