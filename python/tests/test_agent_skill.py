@@ -87,22 +87,80 @@ def table_keys(body: str) -> set[str]:
     }
 
 
-def mcp_tool_names() -> set[str]:
-    """Return the names of every tool the MCP server registers.
+def parameters(node: ast.FunctionDef) -> list[tuple[str, str | None]]:
+    """Return a function's parameters as ``(name, default source)`` pairs.
+
+    Annotations are dropped: the reference documents call shapes for an agent,
+    not Python types, so it writes ``zoom=None`` where the server writes
+    ``zoom: float | None = None``.
+
+    Args:
+        node: The parsed function definition.
+
+    Returns:
+        One pair per positional-or-keyword parameter, in order, with ``None``
+        as the default for a parameter that has none.
+    """
+    args = node.args
+    defaults: list[ast.expr | None] = [None] * (len(args.args) - len(args.defaults))
+    defaults += list(args.defaults)
+    return [
+        (arg.arg, ast.unparse(default) if default is not None else None)
+        for arg, default in zip(args.args, defaults)
+    ]
+
+
+def mcp_tool_signatures() -> dict[str, list[tuple[str, str | None]]]:
+    """Return every tool the MCP server registers, with its parameters.
 
     Parsed from the source rather than imported, so the check runs without the
     optional ``mcp`` SDK installed.
 
     Returns:
-        The set of ``@server.tool()`` function names.
+        A mapping of ``@server.tool()`` function name to its parameters.
     """
     source = (Path(mcp_package.__file__).parent / "server.py").read_text(encoding="utf-8")
     return {
-        node.name
+        node.name: parameters(node)
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.FunctionDef)
         and any("server.tool" in ast.unparse(d) for d in node.decorator_list)
     }
+
+
+def mcp_tool_names() -> set[str]:
+    """Return the names of every tool the MCP server registers.
+
+    Returns:
+        The set of ``@server.tool()`` function names.
+    """
+    return set(mcp_tool_signatures())
+
+
+def documented_signatures() -> dict[str, list[tuple[str, str | None]]]:
+    """Parse the tool reference's signature blocks.
+
+    A signature wraps across lines in the Markdown, so a line starting at column
+    zero opens a new one and an indented line continues the previous.
+
+    Returns:
+        A mapping of documented tool name to its parameters.
+    """
+    blocks = re.findall(r"^```text\n(.*?)^```", read("references/mcp-tools.md"), re.M | re.S)
+    signatures: list[str] = []
+    for line in "\n".join(blocks).splitlines():
+        if SIGNATURE.match(line):
+            signatures.append(line)
+        elif signatures and line.strip():
+            signatures[-1] += " " + line.strip()
+    parsed = {}
+    for signature in signatures:
+        # Wrapping the signature in a `def` is what lets ast do the parsing,
+        # so a malformed one fails here rather than being quietly skipped.
+        node = ast.parse(f"def {signature}: pass").body[0]
+        assert isinstance(node, ast.FunctionDef)
+        parsed[node.name] = parameters(node)
+    return parsed
 
 
 def test_skill_frontmatter_is_well_formed() -> None:
@@ -120,15 +178,24 @@ def test_skill_frontmatter_is_well_formed() -> None:
 
 
 def test_documented_signatures_match_the_server_exactly() -> None:
-    """The tool reference's signature blocks are the server's tool set, both ways.
+    """The reference's signature blocks match the server's tools, parameters included.
 
-    Checked in both directions on purpose: a missing name means a new tool an
-    agent will never learn about, and an extra one means the reference documents
-    a call the server can no longer answer.
+    The tool *set* is checked in both directions on purpose: a missing name is a
+    new tool an agent will never learn about, an extra one is a call the server
+    can no longer answer. Each tool's parameter names, order, and defaults are
+    then diffed too, so renaming or reordering an argument in `server.py`
+    without updating the reference fails here rather than reaching an agent as a
+    call the server rejects.
     """
-    blocks = re.findall(r"^```text\n(.*?)^```", read("references/mcp-tools.md"), re.M | re.S)
-    documented = set(SIGNATURE.findall("\n".join(blocks)))
-    assert documented == mcp_tool_names()
+    documented = documented_signatures()
+    server = mcp_tool_signatures()
+    assert set(documented) == set(server)
+    mismatched = {
+        name: {"documented": documented[name], "server": server[name]}
+        for name in sorted(documented)
+        if documented[name] != server[name]
+    }
+    assert not mismatched, f"documented signatures have drifted: {mismatched}"
 
 
 def test_skill_names_no_tool_that_does_not_exist() -> None:
@@ -157,6 +224,7 @@ def test_skill_names_no_tool_that_does_not_exist() -> None:
                 on_map.add(base[2:])
     # Both scans were silently empty once (see FENCE); fail loudly if that recurs.
     assert bare, "no tool calls found in the skill's prose — the scan is broken"
+    assert on_map, "no Map calls found in the skill's prose — the scan is broken"
     assert not sorted(bare - tools), f"the skill names MCP tools that do not exist: {bare - tools}"
     missing = sorted(name for name in on_map if not hasattr(Map, name))
     assert not missing, f"the skill names Map methods that do not exist: {missing}"
