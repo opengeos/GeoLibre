@@ -235,11 +235,12 @@ export async function fetchLanguagePack(
   locale: string,
   fetchImpl: typeof fetch = globalThis.fetch,
   baseUrl?: string,
+  timeoutMs: number = LANGUAGE_PACK_TIMEOUT_MS,
 ): Promise<{ pack: GeoLibreLanguagePack; sourceUrl: string }> {
   const sourceUrl = languagePackUrl(locale, baseUrl);
   let response: Response;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LANGUAGE_PACK_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetchImpl(sourceUrl, {
       headers: { Accept: "application/json" },

@@ -299,6 +299,19 @@ interface DraftDesktopSettings {
 }
 
 /**
+ * The bare host to name in the privacy notice. A configured base URL may carry a
+ * scheme and a path (a self-hosted mirror often does); the notice only needs to
+ * say which host the locale code is sent to.
+ */
+function languagePackHostname(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+/**
  * The "installed from X on Y" line for an installed language pack.
  *
  * `installedAt` comes back from IndexedDB, which the i18n layer already treats
@@ -1876,7 +1889,11 @@ export function SettingsDialog({
                     </p>
                   ) : null}
                   <p className="text-xs leading-5 text-muted-foreground">
-                    {t("settings.languagePack.privacy")}
+                    {languagePackHost
+                      ? t("settings.languagePack.privacy", {
+                          host: languagePackHostname(languagePackHost),
+                        })
+                      : t("settings.languagePack.privacyLocalOnly")}
                     {languagePackHost ? (
                       <>
                         {" "}

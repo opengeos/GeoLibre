@@ -135,16 +135,20 @@ describe("GeoLibre language packs", () => {
     assert.ok(signal instanceof AbortSignal);
   });
 
-  it("reports an aborted download as a reachability failure, not a parse error", async () => {
+  it("aborts a host that accepts the connection and never answers", async () => {
+    // Nothing resolves this request; only the timeout's own abort ends it, so
+    // the assertion below proves the timeout fired rather than some other
+    // rejection reaching the same error code.
     const fetchImpl: typeof fetch = (_input, init) =>
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
-        // Nothing resolves it: only the timeout's abort ends this request.
-        (init?.signal as AbortSignal).dispatchEvent(new Event("abort"));
       });
     await assert.rejects(
-      () => fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app"),
-      (error: unknown) => error instanceof LanguagePackError && error.code === "download-failed",
+      () => fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app", 5),
+      (error: unknown) =>
+        error instanceof LanguagePackError &&
+        error.code === "download-failed" &&
+        error.message === "The language-pack download timed out.",
     );
   });
 
