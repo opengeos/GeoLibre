@@ -1353,6 +1353,11 @@ export function DesktopShell({
       // the source path so identically named folders from separate files do not
       // get combined when several files are imported in one batch.
       const kmlGroups = new Map<string, string>();
+      // GeoJSON layer ids contributed by each source file. A folder-aware KML
+      // splits into one layer per placemark, so the final fit needs every id
+      // from that file to frame the whole import rather than one placemark.
+      const layerIdsBySource = new Map<string, string[]>();
+      let lastSourcePath: string | null = null;
       for (const layer of importedLayers) {
         if (isLoadedKmlSuperOverlay(layer)) {
           lastLayerId = addTileLayer(layer.name || layerNameFromPath(layer.path), {
@@ -1418,6 +1423,12 @@ export function DesktopShell({
           );
         }
         lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
+        if (layer.path) {
+          lastSourcePath = layer.path;
+          const sourceIds = layerIdsBySource.get(layer.path) ?? [];
+          sourceIds.push(lastLayerId);
+          layerIdsBySource.set(layer.path, sourceIds);
+        }
         if (layer.groupPath?.length) {
           let parentId: string | null = null;
           const pathParts: string[] = [];
@@ -1461,6 +1472,27 @@ export function DesktopShell({
       // stepped through immediately, without the user hunting for the plugin.
       if (hasTimeAnimation && !isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
         togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+      }
+
+      // A folder-aware KML becomes one layer per placemark, so framing the last
+      // layer alone would open on a single point. Combine the extents of every
+      // layer that file contributed and fit that instead.
+      const sourceLayerIds = lastSourcePath ? (layerIdsBySource.get(lastSourcePath) ?? []) : [];
+      if (sourceLayerIds.length > 1 && sourceLayerIds.at(-1) === lastLayerId) {
+        const bounds = useAppStore
+          .getState()
+          .layers.filter((layer) => sourceLayerIds.includes(layer.id))
+          .map(getLayerBounds)
+          .filter((value): value is [number, number, number, number] => value !== null);
+        if (bounds.length) {
+          mapControllerRef.current?.fitBounds([
+            Math.min(...bounds.map((value) => value[0])),
+            Math.min(...bounds.map((value) => value[1])),
+            Math.max(...bounds.map((value) => value[2])),
+            Math.max(...bounds.map((value) => value[3])),
+          ]);
+          return;
+        }
       }
 
       const importedLayer = useAppStore.getState().layers.find((layer) => layer.id === lastLayerId);
