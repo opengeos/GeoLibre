@@ -1,10 +1,10 @@
-import { useAppStore, type MapProjection } from "@geolibre/core";
+import { useAppStore, type MapProjection, type MapViewState } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
-import { planStartup, startupDefaultProjection, type StartupPlan } from "../lib/startup-project";
+import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
@@ -63,12 +63,19 @@ function currentStartupPlan(): StartupPlan {
   });
 }
 
-/** Seed the empty workspace's projection, without marking the project dirty. */
-function applyDefaultProjection(projection: MapProjection): void {
+/** Seed the empty workspace's camera and projection without marking the project dirty. */
+function applyDefaultWorkspace(
+  workspace: Pick<MapViewState, "center" | "zoom"> & { projection: MapProjection },
+): void {
   useAppStore.setState((state) => ({
+    mapView: {
+      ...state.mapView,
+      center: [...workspace.center],
+      zoom: workspace.zoom,
+    },
     preferences: {
       ...state.preferences,
-      map: { ...state.preferences.map, projection },
+      map: { ...state.preferences.map, projection: workspace.projection },
     },
   }));
 }
@@ -97,7 +104,7 @@ export function useStartupProject(): {
   // rendered, and re-running the initializer would set the same value.
   const [restoring, setRestoring] = useState(() => {
     const plan = currentStartupPlan();
-    if (plan.kind === "default") applyDefaultProjection(plan.projection);
+    if (plan.kind === "default") applyDefaultWorkspace(plan);
     return plan.kind === "restore";
   });
 
@@ -108,7 +115,7 @@ export function useStartupProject(): {
     const path = plan.path;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
     const openDefaultWorkspace = () => {
-      applyDefaultProjection(startupDefaultProjection(settings));
+      applyDefaultWorkspace(startupDefaultWorkspace(settings));
       setRestoring(false);
     };
 

@@ -30,6 +30,8 @@ function settings(patch: Partial<StartupSettings> = {}): StartupSettings {
     projectPath: null,
     projectName: null,
     globeByDefault: true,
+    center: [-100, 40],
+    zoom: 2,
     ...patch,
   };
 }

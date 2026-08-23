@@ -1987,6 +1987,13 @@
       "noProjectSelected": "No project selected",
       "globeByDefault": "Enable 3D globe by default",
       "globeByDefaultHint": "Used for the untitled workspace when no startup project or project link is provided.",
+      "defaultView": "Default map view",
+      "defaultViewHint": "Set the center and zoom for the untitled workspace.",
+      "longitude": "Center longitude",
+      "latitude": "Center latitude",
+      "zoom": "Zoom level",
+      "useCurrentView": "Use Current View",
+      "viewUnavailable": "The current map view is unavailable.",
       "selectError": "The selected project could not be read.",
       "restoring": "Opening your startup project…",
       "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."

@@ -1,4 +1,4 @@
-import type { MapProjection } from "@geolibre/core";
+import type { MapProjection, MapViewState } from "@geolibre/core";
 import type { StartupSettings } from "../hooks/useDesktopSettings";
 
 /**
@@ -45,6 +45,17 @@ export function startupDefaultProjection(settings: StartupSettings): MapProjecti
   return settings.globeByDefault ? "globe" : "mercator";
 }
 
+/** Camera and projection for the empty workspace shown when no project is provided. */
+export function startupDefaultWorkspace(
+  settings: StartupSettings,
+): Pick<MapViewState, "center" | "zoom"> & { projection: MapProjection } {
+  return {
+    projection: startupDefaultProjection(settings),
+    center: [...settings.center],
+    zoom: settings.zoom,
+  };
+}
+
 /**
  * What a launch has to settle before the shell may mount.
  *
@@ -59,7 +70,7 @@ export function startupDefaultProjection(settings: StartupSettings): MapProjecti
 export type StartupPlan =
   | { kind: "payload" }
   | { kind: "restore"; path: string }
-  | { kind: "default"; projection: MapProjection };
+  | ({ kind: "default" } & ReturnType<typeof startupDefaultWorkspace>);
 
 /**
  * Decide a launch's startup plan.
@@ -85,7 +96,7 @@ export function planStartup(options: {
     ? startupProjectPath(options.settings, options.recentProjects)
     : null;
   if (path) return { kind: "restore", path };
-  return { kind: "default", projection: startupDefaultProjection(options.settings) };
+  return { kind: "default", ...startupDefaultWorkspace(options.settings) };
 }
 
 /**

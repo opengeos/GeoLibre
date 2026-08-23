@@ -1,4 +1,8 @@
-import { isAllowedPluginManifestUrl } from "@geolibre/core";
+import {
+  createDefaultMapView,
+  isAllowedPluginManifestUrl,
+  normalizeMapViewState,
+} from "@geolibre/core";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
@@ -95,6 +99,10 @@ export interface StartupSettings {
   projectName: string | null;
   /** Projection used when startup does not restore or receive a project. */
   globeByDefault: boolean;
+  /** Center used for the untitled workspace when no project is provided. */
+  center: [number, number];
+  /** Zoom used for the untitled workspace when no project is provided. */
+  zoom: number;
 }
 
 export interface ThemeSettings {
@@ -205,6 +213,8 @@ export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
   projectPath: null,
   projectName: null,
   globeByDefault: true,
+  center: [...createDefaultMapView().center],
+  zoom: createDefaultMapView().zoom,
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -270,6 +280,12 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
 function normalizeStartupSettings(startup: unknown): StartupSettings {
   if (!startup || typeof startup !== "object") return DEFAULT_STARTUP_SETTINGS;
   const candidate = startup as Partial<StartupSettings>;
+  const view = normalizeMapViewState({
+    center: candidate.center,
+    zoom: candidate.zoom,
+    bearing: 0,
+    pitch: 0,
+  });
   const mode: StartupProjectMode =
     candidate.mode === "last" || candidate.mode === "specific" ? candidate.mode : "default";
   const projectPath =
@@ -285,6 +301,8 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     projectPath,
     projectName,
     globeByDefault: typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
+    center: view.center,
+    zoom: view.zoom,
   };
 }
 
