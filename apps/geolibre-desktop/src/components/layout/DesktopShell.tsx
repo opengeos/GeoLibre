@@ -716,6 +716,8 @@ export function DesktopShell({
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
   const addTileLayer = useAppStore((s) => s.addTileLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
+  const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
+  const moveLayerToGroup = useAppStore((s) => s.moveLayerToGroup);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
@@ -1347,6 +1349,10 @@ export function DesktopShell({
       // Frame ids for each time-animated overlay sequence (keyed by the loader's
       // group marker), so they can be gathered into one layer group afterward.
       const frameGroups = new Map<string, string[]>();
+      // KML Folder ancestry becomes nested GeoLibre groups. Prefix keys with
+      // the source path so identically named folders from separate files do not
+      // get combined when several files are imported in one batch.
+      const kmlGroups = new Map<string, string>();
       for (const layer of importedLayers) {
         if (isLoadedKmlSuperOverlay(layer)) {
           lastLayerId = addTileLayer(layer.name || layerNameFromPath(layer.path), {
@@ -1404,17 +1410,37 @@ export function DesktopShell({
           nonGeographic.push(layerName);
           console.warn(
             `[GeoLibre] "${layerName}" declares geographic coordinates but its values are out of range ` +
-              `(max |x| ${Math.round(offRange.maxAbsX).toLocaleString()}, max |y| ${Math.round(offRange.maxAbsY).toLocaleString()} ` +
+              `(max |x| ${Math.round(offRange.maxAbsX).toLocaleString()}, max |y| ${Math.round(
+                offRange.maxAbsY,
+              ).toLocaleString()} ` +
               `over ${offRange.sampled.toLocaleString()} sampled coordinates). The file's CRS is almost certainly ` +
               `mislabelled — reproject it, or correct its .prj/crs, and load it again.`,
           );
         }
         lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
+        if (layer.groupPath?.length) {
+          let parentId: string | null = null;
+          const pathParts: string[] = [];
+          for (const folderName of layer.groupPath) {
+            pathParts.push(folderName);
+            const key = `${layer.path}\0${pathParts.join("\0")}`;
+            let groupId = kmlGroups.get(key);
+            if (!groupId) {
+              groupId = addLayerGroup(folderName);
+              if (parentId) moveLayerGroupToGroup(groupId, parentId);
+              kmlGroups.set(key, groupId);
+            }
+            parentId = groupId;
+          }
+          if (parentId) moveLayerToGroup(lastLayerId, parentId);
+        }
       }
 
       setCrsWarning(
         nonGeographic.length > 0
-          ? t("addData.nonGeographicCoordinates", { names: nonGeographic.join(", ") })
+          ? t("addData.nonGeographicCoordinates", {
+              names: nonGeographic.join(", "),
+            })
           : null,
       );
 
@@ -1464,6 +1490,8 @@ export function DesktopShell({
       addTileLayer,
       addLayer,
       addLayerGroup,
+      moveLayerGroupToGroup,
+      moveLayerToGroup,
       isPluginActive,
       togglePlugin,
       t,
@@ -1486,7 +1514,9 @@ export function DesktopShell({
         // pyramid, which a path-less browser File cannot support.
         const layers =
           paths.length === imports.length
-            ? await loadDroppedVectorPaths(paths, { onLargeDataset: confirmLargeVectorDataset })
+            ? await loadDroppedVectorPaths(paths, {
+                onLargeDataset: confirmLargeVectorDataset,
+              })
             : await loadDroppedVectorFiles(
                 imports.map(({ file }) => file),
                 {
@@ -1720,7 +1750,9 @@ export function DesktopShell({
                   setDropError(
                     err instanceof OsmPbfTooLargeError
                       ? t("toolbar.error.osmPbfTooLarge")
-                      : `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
+                      : `Could not parse ${name}: ${
+                          err instanceof Error ? err.message : String(err)
+                        }`,
                   );
                 }
               }
@@ -1865,7 +1897,9 @@ export function DesktopShell({
             setDropError(
               err instanceof OsmPbfTooLargeError
                 ? t("toolbar.error.osmPbfTooLarge")
-                : `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+                : `Could not parse ${file.name}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`,
             );
             continue;
           }
@@ -2482,7 +2516,9 @@ export function DesktopShell({
                   const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
                     type: "image/tiff",
                   });
-                  await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+                  await addRasterToMap(createAppAPI(mapControllerRef), file, {
+                    name,
+                  });
                 }}
               />
             </Suspense>

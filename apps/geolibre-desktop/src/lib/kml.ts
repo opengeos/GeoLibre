@@ -31,6 +31,9 @@ interface KmlStyle {
   __geolibre_kml_icon_href?: string;
 }
 
+/** Internal import metadata used to reconstruct KML Folder groups. */
+export const KML_FOLDER_PATH_PROPERTY = "__geolibre_kml_folder_path";
+
 /**
  * Parse a KML document into a styled GeoJSON FeatureCollection.
  *
@@ -58,10 +61,14 @@ export function parseKmlText(text: string): FeatureCollection {
   for (const placemark of descendants(root, "Placemark")) {
     const geometry = geometryFromPlacemark(placemark);
     if (!geometry) continue;
+    const folders = folderPath(placemark);
     features.push({
       type: "Feature",
       geometry,
-      properties: placemarkProperties(placemark, styles, styleMaps),
+      properties: {
+        ...placemarkProperties(placemark, styles, styleMaps),
+        ...(folders.length > 0 ? { [KML_FOLDER_PATH_PROPERTY]: folders } : {}),
+      },
     });
   }
 
@@ -70,6 +77,17 @@ export function parseKmlText(text: string): FeatureCollection {
   }
 
   return { type: "FeatureCollection", features };
+}
+
+/** Names of the enclosing KML Folder elements, from outermost to innermost. */
+function folderPath(element: Element): string[] {
+  const path: string[] = [];
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (parent.localName.toLowerCase() !== "folder") continue;
+    const name = childText(parent, "name");
+    if (name) path.unshift(name);
+  }
+  return path;
 }
 
 /**
@@ -662,9 +680,15 @@ function extendedData(placemark: Element): Record<string, string> {
 
 function descendants(parent: Element, localName: string): Element[] {
   const target = localName.toLowerCase();
-  return Array.from(parent.getElementsByTagName("*")).filter(
-    (element) => element.localName.toLowerCase() === target,
-  );
+  const matches: Element[] = [];
+  const visit = (element: Element): void => {
+    for (const child of Array.from(element.children)) {
+      if (child.localName.toLowerCase() === target) matches.push(child);
+      visit(child);
+    }
+  };
+  visit(parent);
+  return matches;
 }
 
 function directChildren(parent: Element, localName: string): Element[] {
