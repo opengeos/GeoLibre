@@ -29,6 +29,7 @@ type PipelineModule = { module?: { name?: string }; props?: Record<string, unkno
  * (`reversed: false`, a named-colormap texture/index).
  */
 function fakeControl() {
+  let engine = "maplibre-gl-raster";
   const manager: Record<string, unknown> = {
     _device: {},
     _deps: {},
@@ -45,7 +46,17 @@ function fakeControl() {
         ],
       }),
   };
-  return { _layerManager: manager } as { _layerManager: Record<string, unknown> };
+  return {
+    _layerManager: manager,
+    getEngine: () => engine,
+    setEngine: (next: string) => {
+      engine = next;
+    },
+  } as {
+    _layerManager: Record<string, unknown>;
+    getEngine: () => string;
+    setEngine: (next: string) => void;
+  };
 }
 
 /** Renders a single-band tile through the patched manager and returns the
@@ -153,5 +164,25 @@ describe("raster symbology render injection", () => {
     assert.ok(props?.colormapTexture, "expected an injected colormap texture");
     assert.equal(created.length >= 1, true);
     assert.equal(created[0]?.opts.width, 256);
+  });
+
+  it("switches from the WASM renderer when discrete classes need the GPU pipeline", () => {
+    useAppStore.getState().addLayer(
+      rasterLayer("r1", {
+        rasterSymbology: {
+          classified: true,
+          ramp: "autumn",
+          method: "manual",
+          classCount: 2,
+          breaks: [144.86, 200, 322.84],
+        },
+      }),
+    );
+    const control = fakeControl();
+    control.setEngine("cog-tiler-wasm");
+
+    activateRasterClassification(control);
+
+    assert.equal(control.getEngine(), "maplibre-gl-raster");
   });
 });

@@ -10,7 +10,7 @@ import {
   runRasterTool,
   readRasterData,
   runRasterToolClient,
-  convertGeoTiffToCog,
+  convertRasterDataToCog,
   exceedsBrowserCogConversionLimit,
   buildSpectralIndexExpression,
   type AlgorithmParameter,
@@ -579,7 +579,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       const app = createAppAPI(mapControllerRef);
       try {
-        const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
+        // Encode the computed Float32 samples directly. Passing the temporary
+        // geotiff.js file through the WASM reader can reinterpret its byte
+        // order and corrupt otherwise-correct calculated values.
+        const cogBytes = await convertRasterDataToCog(result);
         await addRasterToMap(
           app,
           // TypeScript widens wasm byte buffers to ArrayBufferLike, which is

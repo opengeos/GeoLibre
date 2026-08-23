@@ -275,6 +275,7 @@ export {
   readGeoTiffInfo,
   isTiledGeoTiff,
   convertGeoTiffToCog,
+  convertRasterDataToCog,
   COG_WASM_COMPRESSIONS,
   exceedsBrowserCogConversionLimit,
   geoTiffSampleCount,

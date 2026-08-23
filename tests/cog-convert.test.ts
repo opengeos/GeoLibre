@@ -6,6 +6,7 @@ import { GeoTiffReader } from "geolibre-wasm";
 import {
   COG_WASM_COMPRESSIONS,
   convertGeoTiffToCog,
+  convertRasterDataToCog,
   initCogWasm,
   isTiledGeoTiff,
   readGeoTiffInfo,
@@ -65,6 +66,29 @@ describe("convertGeoTiffToCog", () => {
       assert.equal(band.length, 32 * 32);
       assert.equal(band[0], -11);
       assert.equal(band[20], 9);
+    } finally {
+      reader.free();
+    }
+  });
+
+  it("encodes in-memory Float32 processing results without corrupting sample bytes", async () => {
+    const expected = Float32Array.from([0, 250.25, 282.2, 322.89]);
+    const cog = await convertRasterDataToCog({
+      bands: [expected],
+      width: 4,
+      height: 1,
+      originX: 2.8,
+      originY: 47.35,
+      resX: 0.001,
+      resY: 0.001,
+      nodata: -99999,
+      geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+    });
+    const reader = new GeoTiffReader(cog);
+    try {
+      assert.deepEqual(Array.from(reader.read_band_f32(0)), Array.from(expected));
+      assert.equal(reader.epsg, 4326);
+      assert.deepEqual(Array.from(reader.geo_transform()), [2.8, 0.001, 0, 47.35, 0, -0.001]);
     } finally {
       reader.free();
     }

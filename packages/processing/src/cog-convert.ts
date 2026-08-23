@@ -10,6 +10,7 @@
 // result instead. It runs entirely client-side, so it works in the browser
 // build with no Python sidecar. See opengeos/GeoLibre#789.
 import init, { CogBuilder, GeoTiffReader, geotiff_info } from "geolibre-wasm";
+import type { RasterData } from "./raster-client";
 
 /** Header-only metadata for a GeoTIFF, parsed from {@link geotiff_info}. Cheap:
  * reads only the TIFF header, never the pixel data, so it is safe on large
@@ -196,5 +197,55 @@ export async function convertGeoTiffToCog(
     }
   } finally {
     reader.free();
+  }
+}
+
+/** Encode an in-memory client-processing result directly as a Float32 COG. */
+export async function convertRasterDataToCog(raster: RasterData): Promise<Uint8Array> {
+  await initCogWasm();
+  const samples = geoTiffSampleCount({
+    width: raster.width,
+    height: raster.height,
+    bands: raster.bands.length,
+  });
+  if (exceedsBrowserCogConversionLimit(samples)) {
+    throw new Error(
+      `Raster has ${samples.toLocaleString()} decoded samples, exceeding the safe browser conversion limit.`,
+    );
+  }
+
+  const builder = new CogBuilder(raster.width, raster.height, raster.bands.length);
+  try {
+    const epsg = Number(
+      raster.geoKeys.ProjectedCSTypeGeoKey ?? raster.geoKeys.GeographicTypeGeoKey,
+    );
+    if (Number.isFinite(epsg) && epsg > 0) builder.set_epsg(epsg);
+    builder.set_geo_transform(
+      Float64Array.from([
+        raster.originX,
+        raster.flipX ? -raster.resX : raster.resX,
+        0,
+        raster.originY,
+        0,
+        raster.flipY ? raster.resY : -raster.resY,
+      ]),
+    );
+    if (raster.nodata != null && Number.isFinite(raster.nodata)) {
+      builder.set_nodata(raster.nodata);
+    }
+    builder.set_tile_size(COG_TILE_SIZE);
+    builder.set_compression("deflate");
+    builder.set_overview_levels(overviewLevels(raster.width, raster.height));
+
+    const pixels = raster.width * raster.height;
+    const values = new Float32Array(samples);
+    for (let pixel = 0; pixel < pixels; pixel += 1) {
+      for (let band = 0; band < raster.bands.length; band += 1) {
+        values[pixel * raster.bands.length + band] = raster.bands[band][pixel];
+      }
+    }
+    return builder.write_f32(values);
+  } finally {
+    builder.free();
   }
 }
