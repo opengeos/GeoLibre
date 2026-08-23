@@ -1479,9 +1479,10 @@ export function DesktopShell({
       // layer that file contributed and fit that instead.
       const sourceLayerIds = lastSourcePath ? (layerIdsBySource.get(lastSourcePath) ?? []) : [];
       if (sourceLayerIds.length > 1 && sourceLayerIds.at(-1) === lastLayerId) {
+        const sourceLayerIdSet = new Set(sourceLayerIds);
         const bounds = useAppStore
           .getState()
-          .layers.filter((layer) => sourceLayerIds.includes(layer.id))
+          .layers.filter((layer) => sourceLayerIdSet.has(layer.id))
           .map(getLayerBounds)
           .filter((value): value is [number, number, number, number] => value !== null);
         if (bounds.length) {

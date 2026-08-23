@@ -20,7 +20,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 import type { StartupSettings } from "../hooks/useDesktopSettings";
 import { unzip } from "fflate";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import i18next from "i18next";
 import { combine, parseDbf, parseShp } from "shpjs";
 import {
@@ -479,7 +479,15 @@ function mergeFeatureCollections(collections: FeatureCollection[]): FeatureColle
   };
 }
 
-/** Split folder-aware KML placemarks into layers that can occupy distinct groups. */
+/**
+ * Split folder-aware KML placemarks into layers that can occupy distinct groups.
+ *
+ * Only placemarks that actually sit inside a `<Folder>` become their own layer;
+ * everything else stays merged into a single layer, as it was before folder
+ * support. A real-world export is often a handful of foldered placemarks among
+ * hundreds of flat ones, and splitting those too would turn one cheap layer add
+ * into hundreds of store mutations and layer-panel rows.
+ */
 export function splitKmlFolderLayers(
   collection: FeatureCollection,
   path: string,
@@ -489,31 +497,41 @@ export function splitKmlFolderLayers(
   );
   if (!hasFolderMetadata) return [{ data: collection, path }];
 
+  const layers: LoadedVectorLayer[] = [];
+  // Placemarks outside any Folder, gathered into the one merged layer below.
+  const ungrouped: Feature[] = [];
+  collection.features.forEach((feature, index) => {
+    const properties = { ...(feature.properties ?? {}) };
+    const rawPath = properties[KML_FOLDER_PATH_PROPERTY];
+    delete properties[KML_FOLDER_PATH_PROPERTY];
+    const groupPath = Array.isArray(rawPath)
+      ? rawPath.filter((part): part is string => typeof part === "string" && part.trim() !== "")
+      : [];
+    const stripped: Feature = { ...feature, properties };
+    if (groupPath.length === 0) {
+      ungrouped.push(stripped);
+      return;
+    }
+    const name =
+      typeof properties.name === "string" && properties.name.trim() !== ""
+        ? properties.name
+        : `Placemark ${index + 1}`;
+    layers.push({
+      data: { type: "FeatureCollection", features: [stripped] },
+      name,
+      path,
+      groupPath,
+    });
+  });
+
   // Store insertion is top-first, so feed placemarks in reverse document order
-  // to keep their visible layer/group order aligned with Google Earth.
-  return collection.features
-    .map<LoadedVectorLayer>((feature, index) => {
-      const properties = { ...(feature.properties ?? {}) };
-      const rawPath = properties[KML_FOLDER_PATH_PROPERTY];
-      delete properties[KML_FOLDER_PATH_PROPERTY];
-      const groupPath = Array.isArray(rawPath)
-        ? rawPath.filter((part): part is string => typeof part === "string" && part.trim() !== "")
-        : [];
-      const name =
-        typeof properties.name === "string" && properties.name.trim() !== ""
-          ? properties.name
-          : `Placemark ${index + 1}`;
-      return {
-        data: {
-          type: "FeatureCollection",
-          features: [{ ...feature, properties }],
-        },
-        name,
-        path,
-        ...(groupPath.length > 0 ? { groupPath } : {}),
-      };
-    })
-    .reverse();
+  // to keep their visible layer/group order aligned with Google Earth. The
+  // merged ungrouped layer is added first so it settles below the folders.
+  layers.reverse();
+  if (ungrouped.length > 0) {
+    layers.unshift({ data: { type: "FeatureCollection", features: ungrouped }, path });
+  }
+  return layers;
 }
 
 function normalizeShapefileResult(value: unknown): FeatureCollection {
