@@ -1719,7 +1719,9 @@ async function loadKmzLayers(
             entries,
             options,
           );
-          if (features.features.length > 0) layers.push({ data: features, path });
+          if (features.features.length > 0) {
+            layers.push(...splitKmlFolderLayers(features, path));
+          }
         } catch (error) {
           // Declining the oversized-vector prompt must not throw away the
           // pyramid, which is already registered and loads on its own.
@@ -3648,7 +3650,9 @@ export async function loadDroppedVectorPaths(
           // Only add a vector layer when it actually has features (an overlay-only
           // KML's DuckDB fallback can return an empty collection).
           const vector = await loadTauriVectorFile(path, options);
-          if (vector.data.features.length > 0) layers.push(vector);
+          if (vector.data.features.length > 0) {
+            layers.push(...splitKmlFolderLayers(vector.data, vector.path));
+          }
         } catch (error) {
           // Declining the oversized-vector prompt, or a genuine parse failure,
           // still leaves any ground overlays/models already added above (a real
