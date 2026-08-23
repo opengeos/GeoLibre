@@ -64,7 +64,20 @@ function applyLanguagePack(pack: GeoLibreLanguagePack): void {
 }
 
 async function applyPersistedLanguagePack(code: string): Promise<InstalledLanguagePack | null> {
-  const installed = await loadInstalledLanguagePack(code);
+  let installed: InstalledLanguagePack | null;
+  try {
+    installed = await loadInstalledLanguagePack(code);
+  } catch (error) {
+    // A pack is optional, so a storage failure must degrade to the base catalog
+    // rather than reject. `storageAvailable()` only checks that `indexedDB`
+    // exists; `indexedDB.open()` itself still rejects in storage-restricted
+    // contexts (Safari private browsing, a sandboxed embed iframe without
+    // storage access). Boot awaits this via `i18nReady`, so an uncaught
+    // rejection here would stop `main.tsx` before it renders — a blank app
+    // merely because a language pack could not be read.
+    console.error("[GeoLibre] Could not read the installed language pack", error);
+    return null;
+  }
   if (!installed) return null;
   try {
     // IndexedDB is local but not trusted: browser extensions, DevTools, or a

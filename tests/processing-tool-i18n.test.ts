@@ -179,7 +179,12 @@ describe("Whitebox metadata translation", () => {
         "输入 DEM 栅格路径或类型化的栅格对象。",
     });
     assert.equal(
-      translateWhiteboxParameterDescription(t, "feature_preserving_smoothing_multiscale", param),
+      translateWhiteboxParameterDescription(
+        t,
+        "zh",
+        "feature_preserving_smoothing_multiscale",
+        param,
+      ),
       "输入 DEM 栅格路径或类型化的栅格对象。",
     );
     assert.equal(param.description, "Input DEM raster path or typed raster object.");
@@ -188,9 +193,16 @@ describe("Whitebox metadata translation", () => {
   it("falls back to the manifest description for untranslated Whitebox parameters", () => {
     const param = { name: "input", description: "Input DEM raster path." };
     assert.equal(
-      translateWhiteboxParameterDescription(fakeT(), "a_tool", param),
+      translateWhiteboxParameterDescription(fakeT(), "en", "a_tool", param),
       "Input DEM raster path.",
     );
+  });
+
+  it("suppresses an untranslated Whitebox description outside English", () => {
+    // The inline label already drops an untranslated description; the tooltip
+    // must not put the raw English string back on hover.
+    const param = { name: "input", description: "Input DEM raster path." };
+    assert.equal(translateWhiteboxParameterDescription(fakeT(), "zh", "a_tool", param), undefined);
   });
 
   it("does not splice an untranslated description into a translated label", () => {

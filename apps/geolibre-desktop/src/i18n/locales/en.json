@@ -1933,6 +1933,7 @@
       "installed": "Whitebox language pack installed",
       "notInstalled": "No Whitebox language pack installed",
       "installedDetail": "{{source}} · installed {{date}}",
+      "installedDetailNoDate": "{{source}} · installed",
       "notInstalledDetail": "Whitebox processing metadata remains in English until you download or import a pack.",
       "downloadsDisabled": "Official downloads are disabled in this build. Import a language-pack file instead.",
       "englishFallback": "Whitebox provides its English metadata directly, so an additional pack is not required.",

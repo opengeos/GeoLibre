@@ -1889,6 +1889,7 @@
       "installed": "已安装 Whitebox 语言包",
       "notInstalled": "未安装 Whitebox 语言包",
       "installedDetail": "{{source}} · 安装于 {{date}}",
+      "installedDetailNoDate": "{{source}} · 已安装",
       "notInstalledDetail": "下载或导入语言包之前，Whitebox 处理元数据将继续显示为英文。",
       "downloadsDisabled": "此版本已禁用官方下载。请改为导入语言包文件。",
       "englishFallback": "Whitebox 会直接提供英文元数据，因此无需额外安装语言包。",

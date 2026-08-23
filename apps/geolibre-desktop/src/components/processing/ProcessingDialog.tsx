@@ -102,6 +102,8 @@ import {
   translateToolDescription,
   translateToolName,
   translateWhiteboxParameterLabel,
+  humanizeIdentifier,
+  humanizeParameterName,
   translateWhiteboxParameterDescription,
   translateWhiteboxCategory,
 } from "../../lib/processing-tool-i18n";
@@ -135,13 +137,7 @@ function toolLabel(t: TFunction, tool: WhiteboxTool): string {
 }
 
 function humanize(value: string): string {
-  return (
-    value
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Tool"
-  );
+  return humanizeIdentifier(value, "Tool");
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
@@ -2332,7 +2328,7 @@ function ExtentParameterGroup({
   onDrawMapExtent,
   drawingMapExtent,
 }: ExtentParameterGroupProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (params.length === 0) return null;
   // One badge stands for all four fields, so it names every kind present rather
   // than the first field's: a tool that mixed an int boundary with double ones
@@ -2385,7 +2381,12 @@ function ExtentParameterGroup({
           // of an empty one.
           const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
           const value = values[param.name];
-          const description = translateWhiteboxParameterDescription(t, toolId, param);
+          const description = translateWhiteboxParameterDescription(
+            t,
+            i18n.language,
+            toolId,
+            param,
+          );
           return (
             <div key={param.name} className="grid gap-1">
               <Label
@@ -2393,7 +2394,7 @@ function ExtentParameterGroup({
                 className="text-xs text-muted-foreground"
                 title={description || undefined}
               >
-                {labelKey ? t(labelKey) : humanize(param.name)}
+                {labelKey ? t(labelKey) : humanizeParameterName(param.name)}
               </Label>
               <NumberStepperInput
                 id={`whitebox-${param.name}`}

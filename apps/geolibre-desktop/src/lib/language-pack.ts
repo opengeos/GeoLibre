@@ -201,9 +201,14 @@ function configuredLanguagePackBaseUrl(): string {
   return noExternalCdn ? "" : DEFAULT_LANGUAGE_PACK_BASE_URL;
 }
 
-/** Whether Settings should offer the official network download action. */
-export function officialLanguagePackDownloadsEnabled(): boolean {
-  return configuredLanguagePackBaseUrl().length > 0;
+/**
+ * The configured language-pack host, or `""` when this build has no host to
+ * download from. Settings renders its "browse the catalog" link from this so
+ * the link can never point at the public host a `__NO_EXTERNAL_CDN__` build
+ * opted out of, nor at a different host than `languagePackUrl` downloads from.
+ */
+export function languagePackBaseUrl(): string {
+  return configuredLanguagePackBaseUrl();
 }
 
 /** Stable download URL for an official pack for `locale`. */
@@ -217,6 +222,14 @@ export function languagePackUrl(locale: string, baseUrl = configuredLanguagePack
   return `${baseUrl.replace(/\/+$/, "")}/v1/whitebox/${encodeURIComponent(locale)}.json`;
 }
 
+/**
+ * How long a pack download may take before it is aborted. Settings disables the
+ * Download/Import/Remove buttons for the duration of a download and re-enables
+ * them in a `finally`, so a host that accepts the connection and then never
+ * responds would otherwise leave those controls dead for the whole session.
+ */
+export const LANGUAGE_PACK_TIMEOUT_MS = 30_000;
+
 /** Download and validate an official language pack. */
 export async function fetchLanguagePack(
   locale: string,
@@ -225,13 +238,24 @@ export async function fetchLanguagePack(
 ): Promise<{ pack: GeoLibreLanguagePack; sourceUrl: string }> {
   const sourceUrl = languagePackUrl(locale, baseUrl);
   let response: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LANGUAGE_PACK_TIMEOUT_MS);
   try {
-    response = await fetchImpl(sourceUrl, { headers: { Accept: "application/json" } });
+    response = await fetchImpl(sourceUrl, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
   } catch (error) {
     throw new LanguagePackError(
       "download-failed",
-      error instanceof Error ? error.message : "The language-pack service could not be reached.",
+      controller.signal.aborted
+        ? "The language-pack download timed out."
+        : error instanceof Error
+          ? error.message
+          : "The language-pack service could not be reached.",
     );
+  } finally {
+    clearTimeout(timer);
   }
   if (response.status === 404) {
     throw new LanguagePackError("not-found", `No language pack is available for ${locale}.`);
@@ -242,8 +266,12 @@ export async function fetchLanguagePack(
       `The language-pack service returned HTTP ${response.status}.`,
     );
   }
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > LANGUAGE_PACK_MAX_BYTES) {
+  // A chunked response has no `content-length`, and `Number(null)` is 0, which
+  // would pass a `Number.isFinite` check as if the body were empty. Only trust a
+  // declared length; `parseLanguagePack` still enforces the limit on the decoded
+  // text, so this stays an early exit rather than the only guard.
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && Number(declaredLength) > LANGUAGE_PACK_MAX_BYTES) {
     throw new LanguagePackError("too-large", "The language pack exceeds the 5 MB limit.");
   }
   const pack = parseLanguagePack(await response.text());

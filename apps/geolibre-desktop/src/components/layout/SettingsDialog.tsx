@@ -82,6 +82,7 @@ import {
   type RefObject,
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   DEFAULT_UI_PROFILE_SETTINGS,
@@ -109,7 +110,7 @@ import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { pluginDisplayName } from "../../lib/plugin-display-name";
 import {
   LanguagePackError,
-  officialLanguagePackDownloadsEnabled,
+  languagePackBaseUrl,
   type InstalledLanguagePack,
 } from "../../lib/language-pack";
 import {
@@ -295,6 +296,34 @@ interface DraftDesktopSettings {
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
   startup: StartupSettings;
+}
+
+/**
+ * The "installed from X on Y" line for an installed language pack.
+ *
+ * `installedAt` comes back from IndexedDB, which the i18n layer already treats
+ * as untrusted for the pack payload; the record's own timestamp gets the same
+ * treatment here. `Intl.DateTimeFormat.prototype.format` throws a `RangeError`
+ * on an invalid `Date`, and this renders inside the dialog, so an unparseable
+ * timestamp would take the whole Settings pane down. Drop the date instead.
+ */
+function installedPackDetail(
+  t: TFunction,
+  language: string,
+  installed: InstalledLanguagePack,
+): string {
+  const source =
+    installed.source === "download"
+      ? t("settings.languagePack.sourceOfficial")
+      : t("settings.languagePack.sourceFile");
+  const installedAt = new Date(installed.installedAt);
+  if (Number.isNaN(installedAt.getTime())) {
+    return t("settings.languagePack.installedDetailNoDate", { source });
+  }
+  return t("settings.languagePack.installedDetail", {
+    source,
+    date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(installedAt),
+  });
 }
 
 function createDraftId(): string {
@@ -486,7 +515,12 @@ export function SettingsDialog({
     kind: "success" | "error";
     text: string;
   } | null>(null);
-  const languagePackDownloadsEnabled = officialLanguagePackDownloadsEnabled();
+  // One source for both the Download button and the catalog link below, so a
+  // build that points `VITE_LANGUAGE_PACK_BASE_URL` at a self-hosted mirror (or
+  // opts out of external CDNs entirely) can never offer a link to a host it does
+  // not download from.
+  const languagePackHost = languagePackBaseUrl();
+  const languagePackDownloadsEnabled = languagePackHost.length > 0;
   // Browser and Comments are dockable right panels: the registry owns whether
   // they are on screen and `registerPersistedRightPanel` mirrors that into
   // `layout.browserPanelVisible` / `layout.commentsPanelVisible`, so the toggle
@@ -1768,15 +1802,7 @@ export function SettingsDialog({
                         </p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           {installedLanguagePack
-                            ? t("settings.languagePack.installedDetail", {
-                                source:
-                                  installedLanguagePack.source === "download"
-                                    ? t("settings.languagePack.sourceOfficial")
-                                    : t("settings.languagePack.sourceFile"),
-                                date: new Intl.DateTimeFormat(language, {
-                                  dateStyle: "medium",
-                                }).format(new Date(installedLanguagePack.installedAt)),
-                              })
+                            ? installedPackDetail(t, language, installedLanguagePack)
                             : language === "en"
                               ? t("settings.languagePack.englishFallback")
                               : languagePackDownloadsEnabled
@@ -1850,16 +1876,21 @@ export function SettingsDialog({
                     </p>
                   ) : null}
                   <p className="text-xs leading-5 text-muted-foreground">
-                    {t("settings.languagePack.privacy")}{" "}
-                    <a
-                      className="inline-flex items-center gap-1 underline underline-offset-2"
-                      href="https://languages.geolibre.app"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      {t("settings.languagePack.browse")}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    {t("settings.languagePack.privacy")}
+                    {languagePackHost ? (
+                      <>
+                        {" "}
+                        <a
+                          className="inline-flex items-center gap-1 underline underline-offset-2"
+                          href={languagePackHost}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          {t("settings.languagePack.browse")}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </>
+                    ) : null}
                   </p>
                 </div>
               ) : null}

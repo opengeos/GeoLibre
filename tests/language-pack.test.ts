@@ -124,4 +124,60 @@ describe("GeoLibre language packs", () => {
     assert.equal(downloaded.pack.locale, "zh");
     assert.equal(downloaded.sourceUrl, "https://languages.geolibre.app/v1/whitebox/zh.json");
   });
+
+  it("passes an abort signal so a hung host cannot wedge the Settings buttons", async () => {
+    let signal: AbortSignal | null | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify(pack()), { status: 200 });
+    };
+    await fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app");
+    assert.ok(signal instanceof AbortSignal);
+  });
+
+  it("reports an aborted download as a reachability failure, not a parse error", async () => {
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        // Nothing resolves it: only the timeout's abort ends this request.
+        (init?.signal as AbortSignal).dispatchEvent(new Event("abort"));
+      });
+    await assert.rejects(
+      () => fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app"),
+      (error: unknown) => error instanceof LanguagePackError && error.code === "download-failed",
+    );
+  });
+
+  it("does not read a missing content-length as a zero-byte body", async () => {
+    // `Number(null)` is 0, which passes a `Number.isFinite` check as if the
+    // chunked body were empty; only a declared length may short-circuit.
+    const fetchImpl: typeof fetch = async () => {
+      const response = new Response(JSON.stringify(pack()), { status: 200 });
+      response.headers.delete("content-length");
+      return response;
+    };
+    const downloaded = await fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app");
+    assert.equal(downloaded.pack.locale, "zh");
+  });
+
+  it("rejects a pack whose declared length exceeds the limit before reading it", async () => {
+    let bodyRead = false;
+    // A hand-rolled response, not a real one: the point is to observe that the
+    // body is never read once the declared length is over the limit.
+    const fetchImpl: typeof fetch = async () =>
+      ({
+        status: 200,
+        ok: true,
+        headers: new Headers({ "content-length": String(LANGUAGE_PACK_MAX_BYTES + 1) }),
+        text: async () => {
+          bodyRead = true;
+          return "";
+        },
+      }) as unknown as Response;
+    await assert.rejects(
+      () => fetchLanguagePack("zh", fetchImpl, "https://languages.geolibre.app"),
+      (error: unknown) => error instanceof LanguagePackError && error.code === "too-large",
+    );
+    assert.equal(bodyRead, false);
+  });
 });

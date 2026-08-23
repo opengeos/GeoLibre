@@ -240,15 +240,23 @@ export function translateParameter<T extends AlgorithmParameter>(
   return translated;
 }
 
-/** Humanize a snake_case identifier into a Title Case display string. */
-export function humanizeParameterName(value: string): string {
+/**
+ * Humanize a snake_case identifier into a Title Case display string, falling
+ * back to `fallback` when the identifier is empty or punctuation-only.
+ */
+export function humanizeIdentifier(value: string, fallback: string): string {
   return (
     value
       .replace(/[_-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || fallback
   );
+}
+
+/** Humanize a parameter name into a Title Case display string. */
+export function humanizeParameterName(value: string): string {
+  return humanizeIdentifier(value, "Parameter");
 }
 
 /**
@@ -295,12 +303,25 @@ export function whiteboxParameterLabel(
  * English description. Translating the whole object would make those choices
  * depend on the active locale, so callers should use this text for display and
  * keep passing the original parameter to behavior-bearing code.
+ *
+ * Untranslated help is suppressed outside English for the same reason
+ * {@link whiteboxParameterLabel} suppresses it: the two render the same
+ * underlying text (inline label vs. hover tooltip), so falling back to the raw
+ * English manifest string here would show on hover exactly what the inline
+ * label deliberately leaves out.
  */
 export function translateWhiteboxParameterDescription(
   t: TFunction,
+  language: string | null | undefined,
   toolId: string,
   param: WhiteboxToolParameter,
 ): string | undefined {
   if (!param.description) return param.description;
-  return text(t, parameterDescriptionKey("whitebox", toolId, param.name), param.description);
+  const desc = localizedText(
+    t,
+    parameterDescriptionKey("whitebox", toolId, param.name),
+    param.description,
+  );
+  if (!desc.resolved && !isEnglishLocale(language)) return undefined;
+  return desc.value;
 }
