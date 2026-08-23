@@ -30,7 +30,14 @@ pytestmark = pytest.mark.skipif(
     not SKILL_DIR.is_dir(), reason="the agent skill ships in the repo, not in the package"
 )
 
-BACKTICKED = re.compile(r"`([^`]+)`")
+# Inline code, one span at a time. `[^`\n]` rather than `[^`]` so an unbalanced
+# backtick cannot swallow the rest of the document, and fenced blocks are
+# stripped by FENCE first — three-backtick fences otherwise shift the pairing of
+# every inline span after them, which silently emptied this scan.
+BACKTICKED = re.compile(r"`([^`\n]+)`")
+FENCE = re.compile(r"^```.*?^```", re.M | re.S)
+# A tool name opening a line inside a signature block.
+SIGNATURE = re.compile(r"^([a-z_][a-z0-9_]*)\(", re.M)
 
 
 def read(name: str) -> str:
@@ -112,29 +119,47 @@ def test_skill_frontmatter_is_well_formed() -> None:
     assert len(frontmatter.split("description:", 1)[1].strip()) > 200
 
 
-def test_every_mcp_tool_is_documented() -> None:
-    """A new or renamed MCP tool has to reach the skill's tool reference."""
-    documented = read("references/mcp-tools.md")
-    missing = sorted(name for name in mcp_tool_names() if f"{name}(" not in documented)
-    assert not missing, f"MCP tools missing from the skill's reference: {missing}"
+def test_documented_signatures_match_the_server_exactly() -> None:
+    """The tool reference's signature blocks are the server's tool set, both ways.
+
+    Checked in both directions on purpose: a missing name means a new tool an
+    agent will never learn about, and an extra one means the reference documents
+    a call the server can no longer answer.
+    """
+    blocks = re.findall(r"^```text\n(.*?)^```", read("references/mcp-tools.md"), re.M | re.S)
+    documented = set(SIGNATURE.findall("\n".join(blocks)))
+    assert documented == mcp_tool_names()
 
 
 def test_skill_names_no_tool_that_does_not_exist() -> None:
-    """Every ``tool(...)`` the skill names is a tool the server actually has."""
+    """Every call the skill's prose names exists, as an MCP tool or on ``Map``.
+
+    The two are kept apart rather than accepting either: a bare ``tool(...)``
+    must be an MCP tool even if ``Map`` happens to carry a method by that name,
+    since the prose around it is telling an agent to call the server.
+    """
     tools = mcp_tool_names()
-    called = set()
+    bare: set[str] = set()
+    on_map: set[str] = set()
     for name in ("SKILL.md", "references/mcp-tools.md"):
-        for identifier in BACKTICKED.findall(read(name)):
-            base = identifier.split("(", 1)[0]
-            if identifier.endswith(")") and re.fullmatch(r"[a-z_][a-z0-9_]*", base):
-                called.add(base)
-    unknown = sorted(
-        name
-        for name in called
-        # Python-API calls are checked by test_python_api_reference_is_real.
-        if name not in tools and not hasattr(Map, name)
-    )
-    assert not unknown, f"the skill names MCP tools that do not exist: {unknown}"
+        for identifier in BACKTICKED.findall(FENCE.sub("", read(name))):
+            if not identifier.endswith(")"):
+                continue
+            base, _, args = identifier[:-1].partition("(")
+            # Real call sites are `list_catalog()` or `set_view(bbox=...)`;
+            # requiring empty-or-keyword arguments keeps prose shorthand such as
+            # `http(s)` from reading as a call.
+            if args and "=" not in args:
+                continue
+            if re.fullmatch(r"[a-z_][a-z0-9_]*", base):
+                bare.add(base)
+            elif re.fullmatch(r"m\.[a-z_][a-z0-9_]*", base):
+                on_map.add(base[2:])
+    # Both scans were silently empty once (see FENCE); fail loudly if that recurs.
+    assert bare, "no tool calls found in the skill's prose — the scan is broken"
+    assert not sorted(bare - tools), f"the skill names MCP tools that do not exist: {bare - tools}"
+    missing = sorted(name for name in on_map if not hasattr(Map, name))
+    assert not missing, f"the skill names Map methods that do not exist: {missing}"
 
 
 def test_basemap_catalog_matches() -> None:
