@@ -141,8 +141,8 @@ boundary — see the SKILL.
 
 ## Workspace rules
 
-- Writes are limited to `.json` (projects) and `.html` (exports). A bare `.json`
-  with no name is refused.
+- Writes are limited to `.json` (projects) and `.html`/`.htm` (exports). A bare
+  `.json` with no name is refused.
 - Existing files are never replaced without `overwrite=True`.
 - A tool that edits an existing project first checks the file really is one.
 - Reads are capped at 256 MB per project file.
