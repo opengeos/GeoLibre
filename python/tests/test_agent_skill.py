@@ -38,6 +38,14 @@ BACKTICKED = re.compile(r"`([^`\n]+)`")
 FENCE = re.compile(r"^```.*?^```", re.M | re.S)
 # A tool name opening a line inside a signature block.
 SIGNATURE = re.compile(r"^([a-z_][a-z0-9_]*)\(", re.M)
+# A snake_case name that reads like an operation, so an agent could take it for
+# a tool call: `add_geojson_layer`, `set_view`, `classify_layer`.
+OPERATION = re.compile(
+    r"^(add|set|list|run|classify|remove|update|style|export|create|describe)_[a-z0-9_]+$"
+)
+# The docs an agent reads while driving the MCP server. python-api.md is
+# deliberately absent: it documents the Python API, where these names are real.
+MCP_FACING = ("SKILL.md", "references/mcp-tools.md", "references/catalog.md")
 
 
 def read(name: str) -> str:
@@ -251,6 +259,36 @@ def test_skill_names_no_tool_that_does_not_exist() -> None:
     assert on_map, "no Map calls found in the skill's prose — the scan is broken"
     assert not sorted(bare - tools), f"the skill names MCP tools that do not exist: {bare - tools}"
     missing = sorted(name for name in on_map if not hasattr(Map, name))
+    assert not missing, f"the skill names Map methods that do not exist: {missing}"
+
+
+def test_mcp_facing_docs_do_not_name_python_only_methods() -> None:
+    """An operation named in the MCP docs is a tool, or is qualified as ``Map.``.
+
+    `Map` carries methods with no MCP tool behind them — `add_choropleth`,
+    `add_csv`, `run_algorithm`. Unqualified next to real tool names, they read
+    as tools an agent can call, and the server rejects them as unknown. The
+    convention is to write those as `Map.add_choropleth`, and this enforces it.
+    """
+    tools = mcp_tool_names()
+    for name in MCP_FACING:
+        prose = FENCE.sub("", read(name))
+        named = {identifier.split("(", 1)[0] for identifier in BACKTICKED.findall(prose)}
+        unqualified = sorted(n for n in named if OPERATION.fullmatch(n) and n not in tools)
+        assert not unqualified, (
+            f"{name} names {unqualified} as if it were an MCP tool; "
+            "write it as `Map.<name>` if it is Python-only"
+        )
+
+
+def test_qualified_map_references_exist() -> None:
+    """Every ``Map.<name>`` the skill writes is a real method on ``Map``."""
+    named: set[str] = set()
+    for path in sorted((SKILL_DIR / "references").glob("*.md")) + [SKILL_DIR / "SKILL.md"]:
+        text = path.read_text(encoding="utf-8")
+        named.update(match.group(1) for match in re.finditer(r"\bMap\.([a-z_][a-z0-9_]*)", text))
+    assert named, "no `Map.<name>` references found — the scan is broken"
+    missing = sorted(name for name in named if not hasattr(Map, name))
     assert not missing, f"the skill names Map methods that do not exist: {missing}"
 
 

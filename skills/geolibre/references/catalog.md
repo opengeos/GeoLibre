@@ -23,7 +23,7 @@ imagery, and any `{z}/{x}/{y}` service are *layers*: add them with
 
 ## Color ramps
 
-Accepted by `classify_layer`, `add_colorbar`, `add_choropleth`, and
+Accepted by `classify_layer`, `add_colorbar`, `Map.add_choropleth`, and
 `add_raster_layer(colormap=...)`:
 
 `viridis` · `plasma` · `inferno` · `magma` · `cividis` · `turbo` · `spectral` ·
@@ -31,7 +31,7 @@ Accepted by `classify_layer`, `add_colorbar`, `add_choropleth`, and
 `rdylbu` · `rdbu` · `coolwarm` · `jet` · `greys` · `gray`
 
 **The colorbar control renders a narrower set.** Layer symbology
-(`classify_layer`, `add_choropleth`) honors every name above, but the on-map
+(`classify_layer`, `Map.add_choropleth`) honors every name above, but the on-map
 colorbar is drawn by `maplibre-gl-components`, whose named-ramp table is
 case-sensitive and does not include `blues`, `greens`, `oranges`, `reds`,
 `purples`, `greys`, `rdylgn`, `rdylbu`, or `rdbu` — those silently draw as
@@ -126,4 +126,5 @@ typed iframe client published to npm. See
 - **AI Assistant** — the app's own in-panel chat, which acts through the app's
   store so its edits are undoable. A different thing from this skill.
 - **Processing** — ~800 Whitebox WASM tools plus a client-side Turf.js registry,
-  reachable from Python via `run_algorithm` / `run_whitebox_tool` in a notebook.
+  reachable from Python via `Map.run_algorithm` / `Map.run_whitebox_tool` in a
+  notebook.
