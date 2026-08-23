@@ -62,7 +62,14 @@ jobs:
         # variable fails here instead: see MEASUREMENT_ID_PATTERN in
         # apps/geolibre-desktop/src/lib/analytics.ts.
         env:
-          RAW_MEASUREMENT_ID: ${{ vars.GEOLIBRE_GA_MEASUREMENT_ID }}
+          # Accepted as either a repository variable or a secret, the way
+          # VITE_MAPILLARY_ACCESS_TOKEN is below: a GA4 measurement ID is public
+          # by construction (it ships in the page source), so a variable is the
+          # natural home, but it is a reasonable thing to have typed into the
+          # secrets page and there is no reason to reject it there. Supplied as
+          # a secret it is masked in this job's log, so the step reports "***"
+          # rather than the ID.
+          RAW_MEASUREMENT_ID: ${{ secrets.GEOLIBRE_GA_MEASUREMENT_ID || vars.GEOLIBRE_GA_MEASUREMENT_ID }}
           EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |

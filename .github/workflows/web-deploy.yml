@@ -68,7 +68,12 @@ jobs:
         # stream as geolibre.app. Empty is the normal case and ships no tracker
         # at all (as do the desktop, Docker, and Jupyter wheel builds).
         env:
-          RAW_MEASUREMENT_ID: ${{ vars.GEOLIBRE_WEB_GA_MEASUREMENT_ID || vars.GEOLIBRE_GA_MEASUREMENT_ID }}
+          # Either name works as a repository variable or a secret (see the
+          # matching step in pages.yml). Supplied as a secret it is masked in
+          # this job's log, so the step reports "***" rather than the ID.
+          RAW_MEASUREMENT_ID: >-
+            ${{ secrets.GEOLIBRE_WEB_GA_MEASUREMENT_ID || vars.GEOLIBRE_WEB_GA_MEASUREMENT_ID
+            || secrets.GEOLIBRE_GA_MEASUREMENT_ID || vars.GEOLIBRE_GA_MEASUREMENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
