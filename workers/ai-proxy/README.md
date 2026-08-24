@@ -65,6 +65,13 @@ output-token cap, and per-client rate limit.
    `/search` is always GPT-native web search; `/tavily` is always Tavily. Both
    return `503 Search is not configured` when their settings are missing.
 
+   Upgrading a deployment that set `SEARCH_BACKEND=messages` is a breaking
+   change: that variable is gone, so `/tavily` calls Tavily again and answers
+   `503 Search is not configured` until `TAVILY_API_KEY` is set. The NASA OPERA
+   plugin is loaded from outside this repo and ships on its own schedule, so
+   move it to `/search` before rolling this Worker out -- otherwise its disaster
+   search 503s for the window between the two deploys.
+
    Two differences from Tavily are worth knowing. Anthropic returns each
    hit's page text as opaque `encrypted_content`, so the model writes the
    per-source snippets that ground quantified figures; they are extracts it

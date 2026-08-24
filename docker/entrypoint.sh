@@ -303,19 +303,20 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
 
 
 # The externally loaded NASA OPERA plugin can share the authenticated /ai route
-# when the managed Worker exposes /tavily. Operators using a separate news
-# Worker can override this with its public HTTPS URL. Only the endpoint reaches
-# the browser; the Tavily key remains a Worker secret.
+# when the managed Worker exposes a search route. Operators using a separate
+# news Worker can override this with its public HTTPS URL. Only the endpoint
+# reaches the browser; the search keys remain Worker secrets.
 #
 # Either way the published value is the proxy *base* the plugin appends its own
-# /tavily path to, which is why the same-origin fallback is "/ai" and not
-# "/ai/tavily". That fallback needs no service_url() check: the shell block above
+# search path to -- /search for the GPT-native route, /tavily for the
+# Tavily-only one -- which is why the same-origin fallback is "/ai" and not
+# "/ai/search". That fallback needs no service_url() check: the shell block above
 # already pins GEOLIBRE_AI_URL to exactly "/ai" and exits otherwise, and
 # service_url() would in fact reject a bare path, having no scheme or netloc.
 news_url = os.environ.get("GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT", "").strip()
 if news_url:
     # rstrip the trailing slash the way GEOLIBRE_AI_PROXY_URL is handled above. A
-    # base ending in "/" would become ".../tavily" with a doubled slash under a
+    # base ending in "/" would become ".../search" with a doubled slash under a
     # plain string join, and the plugin doing that join is out of this repo, so
     # this is the only place that can rule it out. Stripping before service_url()
     # keeps a slashes-only value an error rather than silently unsetting it.
