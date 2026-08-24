@@ -6,6 +6,7 @@ import {
   BASEMAP_PANEL_SELECTOR,
   BASEMAP_ROW_ID_ATTR,
   BASEMAP_ROW_SELECTOR,
+  installBasemapThumbnails,
   rasterPreviewUrl,
   styleUrlOf,
 } from "../packages/plugins/src/plugins/basemap-thumbnails";
@@ -111,6 +112,7 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
     const previous = {
       document: globalThis.document,
       window: globalThis.window,
+      MutationObserver: globalThis.MutationObserver,
       requestAnimationFrame: globalThis.requestAnimationFrame,
     };
     // The control assigns `select.value`, which linkedom exposes as a getter
@@ -129,6 +131,7 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
     Object.assign(globalThis, {
       document,
       window,
+      MutationObserver: window.MutationObserver,
       // linkedom ships no rAF; the control only uses it to position the panel.
       requestAnimationFrame: () => 0,
     });
@@ -137,15 +140,16 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
 
   afterEach(() => restoreGlobals());
 
+  /** A map stub with the surface `BasemapControl.onAdd`/`onRemove` touch. */
+  function fakeMap(container: HTMLElement) {
+    return { getContainer: () => container, on: () => {}, off: () => {} } as never;
+  }
+
   it("matches the panel, the rows and the row id attribute", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const control = new BasemapControl({ collapsed: false });
-    control.onAdd({
-      getContainer: () => container,
-      on: () => {},
-      off: () => {},
-    } as never);
+    control.onAdd(fakeMap(container));
 
     const panel = container.querySelector(BASEMAP_PANEL_SELECTOR);
     assert.ok(panel, `no ${BASEMAP_PANEL_SELECTOR} — the control renamed its panel`);
@@ -163,5 +167,35 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
       ids.every((id) => id !== null && catalog.has(id)),
       `rows no longer join the catalog through ${BASEMAP_ROW_ID_ATTR}`,
     );
+  });
+
+  it("re-finds the panel the control rebuilds when it is repositioned", async () => {
+    // `setMapControlPosition` moves the control with a removeMapControl /
+    // addMapControl pair, and `onAdd` builds a *fresh* panel each time. The
+    // watch is anchored to the panel's parent — the map container, which the
+    // control reuses — so both the removal and the insertion land on the node
+    // it observes. Narrow that watch to the panel itself and thumbnails would
+    // silently stop appearing after a reposition, with nothing else to catch it.
+    const container = document.createElement("div");
+    document.body.append(container);
+    const control = new BasemapControl({
+      collapsed: false,
+      includeDefaultBasemaps: false,
+      basemaps: [raster(["https://tiles.example/{z}/{x}/{y}.png"])],
+    } as never);
+    control.onAdd(fakeMap(container));
+    const thumbnails = installBasemapThumbnails(control);
+    const thumbnailCount = () => container.querySelectorAll(".geolibre-basemap-thumbnail").length;
+
+    assert.equal(thumbnailCount(), 1, "the first panel was not enhanced");
+
+    control.onRemove();
+    control.onAdd(fakeMap(container));
+    assert.equal(thumbnailCount(), 0, "expected a fresh, unenhanced panel");
+
+    // MutationObserver callbacks are queued, not synchronous.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(thumbnailCount(), 1, "the rebuilt panel was never enhanced");
+    thumbnails.dispose();
   });
 });

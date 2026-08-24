@@ -168,7 +168,18 @@ function createStyleCamera(): {
       const job = async (): Promise<string | null> => {
         await gate;
         if (disposed) return null;
-        return new Promise<string | null>((resolve) => {
+        // `ensure()` constructs a MapLibre map, which throws when a WebGL
+        // context cannot be created. Every other failure here resolves to null;
+        // letting this one reject would surface as an unhandled rejection
+        // instead of the row falling back to name-only.
+        try {
+          return await capture();
+        } catch {
+          return null;
+        }
+      };
+      const capture = () =>
+        new Promise<string | null>((resolve) => {
           const { map } = ensure();
           let settled = false;
           let loaded = false;
@@ -210,7 +221,6 @@ function createStyleCamera(): {
           cancelInFlight = cancel;
           map.setStyle(url, { diff: false });
         });
-      };
       const next = tail.then(job, job);
       tail = next.then(
         () => undefined,
