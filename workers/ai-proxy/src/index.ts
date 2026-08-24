@@ -13,8 +13,9 @@ const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
 const SEARCH_HEADER_TIMEOUT_MS = 60_000;
 // Declared here rather than in wrangler.jsonc: all four are optional and
 // deployment-specific. wrangler.jsonc's `secrets` block only supports
-// `required`, so listing SEARCH_MESSAGES_API_KEY there would warn on every
-// Tavily deployment that legitimately does not set it.
+// `required`, so listing either search secret there would warn on every
+// deployment that legitimately configures only the other route -- or neither,
+// which leaves chat working and both search routes answering 503.
 declare global {
   interface Env {
     /** Base URL of an Anthropic-messages-compatible endpoint, e.g. a cli-proxy-api. */
@@ -22,6 +23,8 @@ declare global {
     SEARCH_MESSAGES_API_KEY?: string;
     /** Defaults to gpt-5.6-luna. */
     SEARCH_MESSAGES_MODEL?: string;
+    /** Enables the `/tavily` route. */
+    TAVILY_API_KEY?: string;
   }
 }
 
