@@ -42,11 +42,14 @@ jobs:
       - name: Rewrite the manifests for publishing
         run: node scripts/prepare-npm-package.mjs packages/core packages/map
 
+      # Each package is checked against its own version: the two move in
+      # lockstep today, but reading core's version for map would silently skip
+      # a map release (or attempt one npm has already seen) the moment they
+      # diverge.
       - id: version
         run: |
-          version=$(node -p "require('./packages/core/package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
           for pkg in core map; do
+            version=$(node -p "require('./packages/$pkg/package.json').version")
             if npm view "@geolibre/$pkg@$version" version >/dev/null 2>&1; then
               echo "$pkg=false" >> "$GITHUB_OUTPUT"
             else
