@@ -13,10 +13,10 @@ import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { isDesktopRuntime } from "../../lib/is-mobile";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   isLoadableFilePath,
-  isTauri,
   listDirectory,
   openLocalDataFileWithFallback,
   pickLocalDirectory,
@@ -156,11 +156,14 @@ export function BrowserPanel({
     (connectionString: string) => {
       if (connFetchedRef.current.has(connectionString)) return;
       connFetchedRef.current.add(connectionString);
-      // PostGIS browsing needs the desktop sidecar/Martin; off-Tauri, show the
-      // same localized "requires GeoLibre Desktop" message the Add Data dialog
-      // gives rather than letting startGeoLibreSidecar/fetch fail with a raw
-      // network error. Dropped from the fetched set so it can retry on desktop.
-      if (!isTauri()) {
+      // PostGIS browsing needs the desktop sidecar/Martin, so outside the
+      // desktop shell show the same localized "requires GeoLibre Desktop"
+      // message the Add Data dialog gives rather than letting
+      // startGeoLibreSidecar/fetch fail with a raw network error. The gate is
+      // isDesktopRuntime(), not isTauri(): the packaged mobile apps are Tauri
+      // too and have no sidecar to reach (GeoLibre#2091). Dropped from the
+      // fetched set so it can retry on desktop.
+      if (!isDesktopRuntime()) {
         connFetchedRef.current.delete(connectionString);
         setConnLoads((prev) => ({
           ...prev,
