@@ -4043,14 +4043,15 @@ fn cpu_supports_avx() -> bool {
 }
 
 /// Whether an explicit value for one of `WASM_OSR_ENTRY_JSC_OPTIONS` leaves it
-/// off. JavaScriptCore reads `false` and `0` case-insensitively and keeps the
-/// option enabled for anything else, including values it cannot parse, so
-/// answer the way it does rather than treating "set" as "off".
+/// off. JavaScriptCore reads `false`, `no` (either in any case) and `0` as off
+/// and `true`, `yes` and `1` as on, and keeps the option's default, which for
+/// both of these is on, for anything it cannot parse. Answer the way it does
+/// rather than treating "set" as "off".
 #[cfg(target_os = "linux")]
 fn jsc_option_is_off(value: &std::ffi::OsStr) -> bool {
-    value
-        .to_str()
-        .is_some_and(|value| value.eq_ignore_ascii_case("false") || value == "0")
+    value.to_str().is_some_and(|value| {
+        value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("no") || value == "0"
+    })
 }
 
 /// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
@@ -4320,16 +4321,17 @@ mod tests {
 
     // An option someone already turned off is not an opt-out, so the other half
     // of the pair still gets applied. Which values count as off is
-    // JavaScriptCore's rule, measured on WebKitGTK 2.52.6: `false` and `0` in
-    // any case disable an option, and everything else, including a value it
-    // cannot parse, leaves it enabled.
+    // JavaScriptCore's rule, verified against WebKitGTK 2.52.6: `false` and
+    // `no` in any case, and `0`, disable an option; `true`, `yes` and `1` turn
+    // it on; and a value it cannot parse leaves the default, which for both of
+    // these options is on.
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
     #[test]
     fn reads_wasm_osr_values_the_way_javascriptcore_does() {
-        for off in ["false", "FALSE", "0"] {
+        for off in ["false", "FALSE", "False", "no", "NO", "No", "0"] {
             assert!(jsc_option_is_off(OsStr::new(off)), "{off}");
         }
-        for on in ["true", "TRUE", "1", "yes", "garbage", ""] {
+        for on in ["true", "TRUE", "1", "yes", "YES", "garbage", ""] {
             assert!(!jsc_option_is_off(OsStr::new(on)), "{on}");
         }
     }
