@@ -801,13 +801,21 @@ that trampoline. WebAssembly still runs and is still baseline compiled, so the
 cost is bounded: on WebKitGTK 2.52.6 a DuckDB-WASM query took about 2x longer,
 against 34x with the WebAssembly JIT disabled outright.
 
-A value you set yourself always wins over the automatic one, so you can turn
-the workaround off with `JSC_useWasmOSR=true`, or, if a renderer crash
-persists, fall back to disabling the WebAssembly JIT entirely:
+The two options only work as a pair, so GeoLibre treats them as one decision:
+setting either one yourself takes the whole workaround out of its hands, and
+whatever you set is what runs. To turn the workaround off:
+
+```bash
+JSC_useWasmOSR=true JSC_useBBQTierUpChecks=true geolibre
+```
+
+Or, if a renderer crash persists, fall back to disabling the WebAssembly JIT
+entirely:
 
 ```bash
 JSC_useBBQJIT=false geolibre
 ```
 
-None of this applies to CPUs with AVX (every x86-64 part since roughly 2011) or
-to arm64 machines, which never reach that code.
+The check is a runtime CPU feature test, not a model or release-date list, so
+machines that do have AVX are untouched, as are arm64 machines, which never
+reach that code.

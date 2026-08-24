@@ -4042,17 +4042,16 @@ fn cpu_supports_avx() -> bool {
     true
 }
 
-/// Whether one of `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given
-/// whether the CPU supports AVX and what the option is already set to. An
-/// explicit user/distributor value always wins, so an option that is already
-/// set is left alone (that is also the escape hatch for turning the workaround
-/// off, or for pinning `JSC_useBBQJIT=false` instead).
+/// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
+/// CPU supports AVX and whether either option already carries an explicit
+/// value. The two options are one decision, not two: leaving half the pair
+/// applied costs WebAssembly performance without keeping the renderer alive, so
+/// an explicit value on either one takes the whole workaround out of GeoLibre's
+/// hands. That is also the escape hatch, for turning the workaround off or for
+/// pinning `JSC_useBBQJIT=false` instead.
 #[cfg(target_os = "linux")]
-fn linux_needs_wasm_osr_workaround(
-    cpu_supports_avx: bool,
-    existing: Option<&std::ffi::OsStr>,
-) -> bool {
-    !cpu_supports_avx && existing.is_none()
+fn linux_needs_wasm_osr_workaround(cpu_supports_avx: bool, already_configured: bool) -> bool {
+    !cpu_supports_avx && !already_configured
 }
 
 #[cfg(target_os = "linux")]
@@ -4103,20 +4102,28 @@ fn configure_linux_webkit() {
     // breakpointing the trampoline in the web process: with both options off it
     // is never entered, with either one on it still is.
     let cpu_supports_avx = cpu_supports_avx();
-    let mut disabled_for_avx = Vec::new();
-    for option in WASM_OSR_ENTRY_JSC_OPTIONS {
-        if linux_needs_wasm_osr_workaround(cpu_supports_avx, std::env::var_os(option).as_deref()) {
+    let preset = WASM_OSR_ENTRY_JSC_OPTIONS
+        .into_iter()
+        .find(|option| std::env::var_os(option).is_some());
+    if linux_needs_wasm_osr_workaround(cpu_supports_avx, preset.is_some()) {
+        for option in WASM_OSR_ENTRY_JSC_OPTIONS {
             std::env::set_var(option, "false");
-            disabled_for_avx.push(option);
         }
-    }
-    if !disabled_for_avx.is_empty() {
         eprintln!(
             "GeoLibre: this CPU has no AVX, so WebAssembly tier-up would crash the WebKit \
-             renderer (see GeoLibre issue 2087). Disabled {} to keep the app running; \
+             renderer (see GeoLibre issue 2087). Pinned {} off to keep the app running; \
              WebAssembly-heavy work will be slower.",
-            disabled_for_avx.join(" and ")
+            WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
         );
+    } else if !cpu_supports_avx {
+        if let Some(option) = preset {
+            eprintln!(
+                "GeoLibre: this CPU has no AVX, but {option} is already set, so the WebAssembly \
+                 tier-up workaround for GeoLibre issue 2087 was left alone. The renderer can \
+                 still die with SIGILL unless {} are both off.",
+                WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
+            );
+        }
     }
 
     // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
@@ -4283,23 +4290,18 @@ mod tests {
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
     #[test]
     fn disables_wasm_osr_entry_only_without_avx() {
-        assert!(linux_needs_wasm_osr_workaround(false, None));
-        assert!(!linux_needs_wasm_osr_workaround(true, None));
+        assert!(linux_needs_wasm_osr_workaround(false, false));
+        assert!(!linux_needs_wasm_osr_workaround(true, false));
     }
 
-    // An explicit value is the user's escape hatch, in both directions, so it
-    // is never overwritten.
+    // An explicit value on either option is the user's escape hatch, in both
+    // directions, and it takes the whole pair out of GeoLibre's hands: half the
+    // workaround costs WebAssembly performance without saving the renderer.
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
     #[test]
     fn keeps_an_explicit_wasm_osr_setting() {
-        assert!(!linux_needs_wasm_osr_workaround(
-            false,
-            Some(OsStr::new("true"))
-        ));
-        assert!(!linux_needs_wasm_osr_workaround(
-            false,
-            Some(OsStr::new("false"))
-        ));
+        assert!(!linux_needs_wasm_osr_workaround(false, true));
+        assert!(!linux_needs_wasm_osr_workaround(true, true));
     }
 
     // Both options are needed: with either one left on, the web process still
@@ -4321,15 +4323,18 @@ mod tests {
     #[test]
     fn reports_avx_support_for_this_cpu() {
         let supported = cpu_supports_avx();
-        if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-            let flags = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
-            let advertised = flags
-                .lines()
-                .filter(|line| line.starts_with("flags"))
-                .any(|line| line.split_whitespace().any(|flag| flag == "avx"));
-            assert_eq!(supported, advertised);
-        } else {
+        if !cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
             assert!(supported);
+            return;
+        }
+        // Cross-check against the kernel where it reports the flags. A
+        // hypervisor can mask them, and a restricted /proc need not carry a
+        // `flags` line at all, so a missing line means "nothing to compare",
+        // not a failure.
+        let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+        let mut flag_lines = cpuinfo.lines().filter(|line| line.starts_with("flags"));
+        if let Some(flags) = flag_lines.next() {
+            assert_eq!(supported, flags.split_whitespace().any(|flag| flag == "avx"));
         }
     }
 
