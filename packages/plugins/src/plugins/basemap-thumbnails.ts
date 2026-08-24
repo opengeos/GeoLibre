@@ -124,6 +124,13 @@ function createStyleCamera(): {
   let gate: Promise<void> = Promise.resolve();
   let openGate: (() => void) | null = null;
   let resumeTimer = 0;
+  /**
+   * Snapshots already queued, keyed by url. `snapCache` only fills in once a
+   * job has resolved, so without this a second request for the same style
+   * before the first settles would queue a redundant full style load — the same
+   * reuse `styleSwatch` gets from caching its in-flight promise.
+   */
+  const inFlight = new Map<string, Promise<string | null>>();
   /** Settles the job that is already waiting on the hidden map, if any. */
   let cancelInFlight: (() => void) | null = null;
 
@@ -172,6 +179,8 @@ function createStyleCamera(): {
     snapshot(url) {
       const cached = snapCache.get(url);
       if (cached) return Promise.resolve(cached);
+      const queued = inFlight.get(url);
+      if (queued) return queued;
       const job = async (): Promise<string | null> => {
         await gate;
         if (disposed) return null;
@@ -233,6 +242,10 @@ function createStyleCamera(): {
         () => undefined,
         () => undefined,
       );
+      inFlight.set(url, next);
+      void next.then(() => {
+        if (inFlight.get(url) === next) inFlight.delete(url);
+      });
       return next;
     },
     pause() {

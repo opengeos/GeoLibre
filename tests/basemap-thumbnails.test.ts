@@ -90,6 +90,33 @@ describe("basemap preview urls", () => {
     assert.equal(styleUrlOf(style("https://{s}.example.com/style.json")), null);
   });
 
+  it("never previews a url carrying a configured credential", () => {
+    // Previews fire on scroll, not on an explicit pick, so they must never
+    // reach a keyed endpoint and spend the user's quota. The control keeps the
+    // catalog's raw `{api-key}`/`{aws-region}` templates and only substitutes
+    // when a basemap is actually applied, so `hasUnresolvedPlaceholder` rejects
+    // every keyed entry. This fails if that ever stops being true.
+    const secrets = {
+      mapboxAccessToken: "SECRET-MAPBOX",
+      maptilerApiKey: "SECRET-MAPTILER",
+      googleMapsApiKey: "SECRET-GOOGLE",
+      tomtomApiKey: "SECRET-TOMTOM",
+      hereApiKey: "SECRET-HERE",
+      stadiaApiKey: "SECRET-STADIA",
+      tiandituApiKey: "SECRET-TIANDITU",
+      amazonApiKey: "SECRET-AMAZON",
+      protomapsApiKey: "SECRET-PROTOMAPS",
+    };
+    const control = new BasemapControl({ ...secrets, amazonRegion: "us-east-1" } as never);
+    for (const basemap of control.getBasemaps()) {
+      const url = rasterPreviewUrl(basemap) ?? styleUrlOf(basemap);
+      if (!url) continue;
+      for (const secret of Object.values(secrets)) {
+        assert.ok(!url.includes(secret), `${basemap.id} would preview with a credential: ${url}`);
+      }
+    }
+  });
+
   it("ignores the other source kind", () => {
     assert.equal(rasterPreviewUrl(style("https://tiles.openfreemap.org/styles/positron")), null);
     assert.equal(styleUrlOf(raster(["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"])), null);
