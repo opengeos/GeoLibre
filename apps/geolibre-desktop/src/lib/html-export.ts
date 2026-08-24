@@ -2,7 +2,10 @@
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
 import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
-import { encodeInlineProjectFragment, INLINE_PROJECT_FRAGMENT_KEY } from "./inline-project-fragment";
+import {
+  encodeInlineProjectFragment,
+  INLINE_PROJECT_FRAGMENT_KEY,
+} from "./inline-project-fragment";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
