@@ -5,6 +5,7 @@ import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
 import {
   encodeInlineProjectFragment,
   INLINE_PROJECT_FRAGMENT_KEY,
+  INLINE_VIEWER_FRAGMENT_KEY,
 } from "./inline-project-fragment";
 
 // Hosted viewer used as the default embed target (matches Python's default).
@@ -106,6 +107,10 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
   const inlineProject = encodeInlineProjectFragment(redactCredentials(project));
+  const viewerFragment = new URL(iframeSrc).hash;
+  const inlineViewerFragment = viewerFragment
+    ? `&${INLINE_VIEWER_FRAGMENT_KEY}=${encodeURIComponent(viewerFragment)}`
+    : "";
 
   // The iframe sandbox below withholds top-navigation and popups, but each of
   // the tokens it does grant is load-bearing - don't trim them:
@@ -163,7 +168,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   // viewer during startup. This avoids opaque file-origin messaging in WebKit.
   // HTTP(S) exports keep the existing scoped postMessage bridge.
   frame.src = directFile
-    ? viewerSrc.split("#")[0] + "#${INLINE_PROJECT_FRAGMENT_KEY}=${inlineProject}"
+    ? viewerSrc.split("#")[0] + "#${INLINE_PROJECT_FRAGMENT_KEY}=${inlineProject}${inlineViewerFragment}"
     : viewerSrc;
 })();
 </script>

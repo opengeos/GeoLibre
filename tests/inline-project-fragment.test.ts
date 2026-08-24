@@ -5,6 +5,7 @@ import {
   consumeInlineProjectFragment,
   encodeInlineProjectFragment,
   INLINE_PROJECT_FRAGMENT_KEY,
+  INLINE_VIEWER_FRAGMENT_KEY,
   parseInlineProjectFragment,
 } from "../apps/geolibre-desktop/src/lib/inline-project-fragment";
 
@@ -32,6 +33,21 @@ describe("inline project URL fragment", () => {
     );
     assert.equal(parsed?.name, "One shot");
     assert.deepEqual(calls, [[null, "", "/?embed=1"]]);
+  });
+
+  it("restores a viewer hash route after consuming the payload", () => {
+    const encoded = encodeInlineProjectFragment(createEmptyProject("Hash route"));
+    const calls: unknown[][] = [];
+    const parsed = consumeInlineProjectFragment(
+      {
+        hash: `#${INLINE_PROJECT_FRAGMENT_KEY}=${encoded}&${INLINE_VIEWER_FRAGMENT_KEY}=${encodeURIComponent("#/view")}`,
+        pathname: "/app",
+        search: "?embed=1",
+      },
+      { replaceState: (...args: unknown[]) => calls.push(args) },
+    );
+    assert.equal(parsed?.name, "Hash route");
+    assert.deepEqual(calls, [[null, "", "/app?embed=1#/view"]]);
   });
 
   it("also erases malformed encoded input", () => {

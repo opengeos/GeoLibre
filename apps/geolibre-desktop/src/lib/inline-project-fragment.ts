@@ -2,6 +2,7 @@ import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { gzipSync, gunzipSync, strFromU8, strToU8 } from "fflate";
 
 export const INLINE_PROJECT_FRAGMENT_KEY = "geolibreProject";
+export const INLINE_VIEWER_FRAGMENT_KEY = "geolibreViewerFragment";
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -33,7 +34,7 @@ export function parseInlineProjectFragment(hash: string): GeoLibreProject | null
   return parseProject(strFromU8(gunzipSync(base64UrlToBytes(encoded))));
 }
 
-/** Consume and erase an inline payload from the current viewer URL. */
+/** Consume an inline payload and restore any viewer hash route it displaced. */
 export function consumeInlineProjectFragment(
   locationLike: Pick<Location, "hash" | "pathname" | "search"> = window.location,
   historyLike: Pick<History, "replaceState"> = window.history,
@@ -42,8 +43,14 @@ export function consumeInlineProjectFragment(
     return null;
   }
   const hash = locationLike.hash;
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const viewerFragment = params.get(INLINE_VIEWER_FRAGMENT_KEY) ?? "";
   // Remove the potentially large payload before parsing; malformed input must
   // not remain in history or be copied from the address bar.
-  historyLike.replaceState(null, "", `${locationLike.pathname}${locationLike.search}`);
+  historyLike.replaceState(
+    null,
+    "",
+    `${locationLike.pathname}${locationLike.search}${viewerFragment}`,
+  );
   return parseInlineProjectFragment(hash);
 }

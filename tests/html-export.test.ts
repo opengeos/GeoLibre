@@ -147,6 +147,7 @@ describe("buildProjectHtml", () => {
       appUrl: "https://example.com/app#/view",
     });
     assert.match(html, /data-src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
+    assert.match(html, /geolibreViewerFragment=%23%2Fview/);
   });
 
   it("accepts calc() dimensions with division", () => {
