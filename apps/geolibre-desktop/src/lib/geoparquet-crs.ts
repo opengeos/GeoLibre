@@ -65,9 +65,16 @@ export function geoParquetMetadataSql(fileName: string): string {
  *
  * @param metadataJson The `geo` metadata document as text, or null/blank when
  *   the file has none.
+ * @param geometryColumn The column actually being read, when known. A
+ *   GeoParquet may carry several geometry columns in different CRSs, and the
+ *   loader reads whichever one it detected rather than necessarily the primary
+ *   one, so that column's CRS is the one to transform from.
  * @returns A CRS string `ST_Transform` accepts, or null to skip reprojection.
  */
-export function geoParquetSourceCrs(metadataJson: string | null | undefined): string | null {
+export function geoParquetSourceCrs(
+  metadataJson: string | null | undefined,
+  geometryColumn?: string,
+): string | null {
   if (!metadataJson) return null;
 
   let metadata: unknown;
@@ -79,7 +86,7 @@ export function geoParquetSourceCrs(metadataJson: string | null | undefined): st
     return null;
   }
 
-  const column = primaryGeometryColumn(metadata);
+  const column = geometryColumnMetadata(metadata, geometryColumn);
   if (!column || !("crs" in column)) return null;
 
   const crs = (column as { crs?: unknown }).crs;
@@ -92,12 +99,16 @@ export function geoParquetSourceCrs(metadataJson: string | null | undefined): st
 }
 
 /**
- * The metadata entry for the file's primary geometry column, falling back to the
- * first column listed when `primary_column` names one that is absent (or is
- * missing itself), so a hand-written document with a single geometry column
- * still resolves.
+ * The metadata entry for the geometry column being read: the named column when
+ * the document describes it, else the one `primary_column` names, else the first
+ * column listed (so a hand-written document with a single geometry column still
+ * resolves).
+ *
+ * The named column comes first because a GeoParquet may hold several geometry
+ * columns in different CRSs; transforming the column the loader read with the
+ * primary column's CRS would place the layer somewhere else entirely.
  */
-function primaryGeometryColumn(metadata: unknown): object | null {
+function geometryColumnMetadata(metadata: unknown, geometryColumn?: string): object | null {
   const columns = (metadata as { columns?: unknown })?.columns;
   if (!columns || typeof columns !== "object") return null;
   const entries = Object.entries(columns as Record<string, unknown>).filter(
@@ -106,8 +117,9 @@ function primaryGeometryColumn(metadata: unknown): object | null {
   if (entries.length === 0) return null;
 
   const primary = (metadata as { primary_column?: unknown }).primary_column;
-  if (typeof primary === "string") {
-    const named = entries.find(([name]) => name === primary);
+  for (const wanted of [geometryColumn, primary]) {
+    if (typeof wanted !== "string") continue;
+    const named = entries.find(([name]) => name === wanted);
     if (named) return named[1];
   }
   return entries[0][1];

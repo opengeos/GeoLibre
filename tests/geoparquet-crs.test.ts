@@ -85,6 +85,32 @@ describe("geoParquetSourceCrs", () => {
     assert.equal(geoParquetSourceCrs(geoMetadata("EPSG:4326")), null);
   });
 
+  it("reads the column being loaded, not the primary one, when they differ", () => {
+    // A GeoParquet may carry several geometry columns in different CRSs, and the
+    // loader reads whichever column it detected. Resolving `primary_column`'s
+    // CRS instead would transform the loaded geometry with another column's
+    // projection and land the layer somewhere else entirely. The physical order
+    // here also differs from `primary_column`, so a first-entry fallback would
+    // be wrong too.
+    const metadata = JSON.stringify({
+      primary_column: "geom_4326",
+      columns: {
+        geom_2100: { crs: GREEK_GRID_PROJJSON },
+        geom_4326: { crs: { id: { authority: "EPSG", code: 4326 } } },
+      },
+    });
+    assert.equal(geoParquetSourceCrs(metadata, "geom_2100"), "EPSG:2100");
+    assert.equal(geoParquetSourceCrs(metadata, "geom_4326"), null);
+  });
+
+  it("falls back to primary_column when the loaded column is not described", () => {
+    const metadata = JSON.stringify({
+      primary_column: "geometry",
+      columns: { geometry: { crs: GREEK_GRID_PROJJSON } },
+    });
+    assert.equal(geoParquetSourceCrs(metadata, "wkb_blob"), "EPSG:2100");
+  });
+
   it("reads the column named by primary_column, not the first one listed", () => {
     const metadata = JSON.stringify({
       primary_column: "geom_2100",
