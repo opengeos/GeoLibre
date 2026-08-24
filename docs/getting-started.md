@@ -801,13 +801,16 @@ that trampoline. WebAssembly still runs and is still baseline compiled, so the
 cost is bounded: on WebKitGTK 2.52.6 a DuckDB-WASM query took about 2x longer,
 against 34x with the WebAssembly JIT disabled outright.
 
-The two options only work as a pair, so GeoLibre treats them as one decision:
-setting either one yourself takes the whole workaround out of its hands, and
-whatever you set is what runs. To turn the workaround off:
+The two options only work as a pair, so GeoLibre treats them as one decision.
+Turning either one back on is the opt-out and leaves both alone:
 
 ```bash
-JSC_useWasmOSR=true JSC_useBBQTierUpChecks=true geolibre
+JSC_useWasmOSR=true geolibre
 ```
+
+Setting one of them to `false` yourself is not an opt-out: GeoLibre keeps your
+value and still applies the other half, since half the workaround costs
+WebAssembly performance without keeping the renderer alive.
 
 Or, if a renderer crash persists, fall back to disabling the WebAssembly JIT
 entirely:

@@ -4042,16 +4042,28 @@ fn cpu_supports_avx() -> bool {
     true
 }
 
-/// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
-/// CPU supports AVX and whether either option already carries an explicit
-/// value. The two options are one decision, not two: leaving half the pair
-/// applied costs WebAssembly performance without keeping the renderer alive, so
-/// an explicit value on either one takes the whole workaround out of GeoLibre's
-/// hands. That is also the escape hatch, for turning the workaround off or for
-/// pinning `JSC_useBBQJIT=false` instead.
+/// Whether an explicit value for one of `WASM_OSR_ENTRY_JSC_OPTIONS` leaves it
+/// off. JavaScriptCore reads `false` and `0` case-insensitively and keeps the
+/// option enabled for anything else, including values it cannot parse, so
+/// answer the way it does rather than treating "set" as "off".
 #[cfg(target_os = "linux")]
-fn linux_needs_wasm_osr_workaround(cpu_supports_avx: bool, already_configured: bool) -> bool {
-    !cpu_supports_avx && !already_configured
+fn jsc_option_is_off(value: &std::ffi::OsStr) -> bool {
+    value
+        .to_str()
+        .is_some_and(|value| value.eq_ignore_ascii_case("false") || value == "0")
+}
+
+/// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
+/// CPU supports AVX and whether either option is explicitly *on*. The two are
+/// one decision, not two: leaving half the pair applied costs WebAssembly
+/// performance without keeping the renderer alive. So an option somebody has
+/// already turned off is fine to build on (the other half still gets applied),
+/// while an option somebody has turned on is the escape hatch and takes the
+/// whole workaround out of GeoLibre's hands, as does pinning `JSC_useBBQJIT`
+/// instead.
+#[cfg(target_os = "linux")]
+fn linux_needs_wasm_osr_workaround(cpu_supports_avx: bool, opted_out: bool) -> bool {
+    !cpu_supports_avx && !opted_out
 }
 
 #[cfg(target_os = "linux")]
@@ -4102,24 +4114,26 @@ fn configure_linux_webkit() {
     // breakpointing the trampoline in the web process: with both options off it
     // is never entered, with either one on it still is.
     let cpu_supports_avx = cpu_supports_avx();
-    let preset = WASM_OSR_ENTRY_JSC_OPTIONS
+    let kept_on = WASM_OSR_ENTRY_JSC_OPTIONS
         .into_iter()
-        .find(|option| std::env::var_os(option).is_some());
-    if linux_needs_wasm_osr_workaround(cpu_supports_avx, preset.is_some()) {
+        .find(|option| std::env::var_os(option).is_some_and(|value| !jsc_option_is_off(&value)));
+    if linux_needs_wasm_osr_workaround(cpu_supports_avx, kept_on.is_some()) {
         for option in WASM_OSR_ENTRY_JSC_OPTIONS {
-            std::env::set_var(option, "false");
+            if std::env::var_os(option).is_none() {
+                std::env::set_var(option, "false");
+            }
         }
         eprintln!(
             "GeoLibre: this CPU has no AVX, so WebAssembly tier-up would crash the WebKit \
-             renderer (see GeoLibre issue 2087). Pinned {} off to keep the app running; \
+             renderer (see GeoLibre issue 2087). {} are off to keep the app running; \
              WebAssembly-heavy work will be slower.",
             WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
         );
     } else if !cpu_supports_avx {
-        if let Some(option) = preset {
+        if let Some(option) = kept_on {
             eprintln!(
-                "GeoLibre: this CPU has no AVX, but {option} is already set, so the WebAssembly \
-                 tier-up workaround for GeoLibre issue 2087 was left alone. The renderer can \
+                "GeoLibre: this CPU has no AVX, but {option} is set to keep WebAssembly tier-up \
+                 on, so the workaround for GeoLibre issue 2087 was left alone. The renderer can \
                  still die with SIGILL unless {} are both off.",
                 WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
             );
@@ -4146,8 +4160,8 @@ mod tests {
     };
     #[cfg(target_os = "linux")]
     use super::{
-        cpu_supports_avx, linux_needs_wasm_osr_workaround, linux_uses_nvidia_renderer,
-        nvidia_is_primary_gpu, WASM_OSR_ENTRY_JSC_OPTIONS,
+        cpu_supports_avx, jsc_option_is_off, linux_needs_wasm_osr_workaround,
+        linux_uses_nvidia_renderer, nvidia_is_primary_gpu, WASM_OSR_ENTRY_JSC_OPTIONS,
     };
     // Everything these imports feed is compiled out of the `mas` build, so the
     // tests that exercise it (and their scaffolding) are gated with it.
@@ -4294,14 +4308,30 @@ mod tests {
         assert!(!linux_needs_wasm_osr_workaround(true, false));
     }
 
-    // An explicit value on either option is the user's escape hatch, in both
-    // directions, and it takes the whole pair out of GeoLibre's hands: half the
-    // workaround costs WebAssembly performance without saving the renderer.
+    // Turning either option back on is the escape hatch, and it takes the whole
+    // pair out of GeoLibre's hands: half the workaround costs WebAssembly
+    // performance without saving the renderer.
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
     #[test]
     fn keeps_an_explicit_wasm_osr_setting() {
         assert!(!linux_needs_wasm_osr_workaround(false, true));
         assert!(!linux_needs_wasm_osr_workaround(true, true));
+    }
+
+    // An option someone already turned off is not an opt-out, so the other half
+    // of the pair still gets applied. Which values count as off is
+    // JavaScriptCore's rule, measured on WebKitGTK 2.52.6: `false` and `0` in
+    // any case disable an option, and everything else, including a value it
+    // cannot parse, leaves it enabled.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn reads_wasm_osr_values_the_way_javascriptcore_does() {
+        for off in ["false", "FALSE", "0"] {
+            assert!(jsc_option_is_off(OsStr::new(off)), "{off}");
+        }
+        for on in ["true", "TRUE", "1", "yes", "garbage", ""] {
+            assert!(!jsc_option_is_off(OsStr::new(on)), "{on}");
+        }
     }
 
     // Both options are needed: with either one left on, the web process still
