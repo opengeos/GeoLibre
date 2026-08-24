@@ -113,6 +113,7 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
       document: globalThis.document,
       window: globalThis.window,
       MutationObserver: globalThis.MutationObserver,
+      IntersectionObserver: globalThis.IntersectionObserver,
       requestAnimationFrame: globalThis.requestAnimationFrame,
     };
     // The control assigns `select.value`, which linkedom exposes as a getter
@@ -196,6 +197,43 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
     // MutationObserver callbacks are queued, not synchronous.
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(thumbnailCount(), 1, "the rebuilt panel was never enhanced");
+    thumbnails.dispose();
+  });
+
+  it("defers every preview request until the row is on screen", () => {
+    // Opening the panel must not contact every provider in the catalog at once:
+    // the raster tile and the style JSON are deferred the same way the full
+    // snapshot always was.
+    const observed: HTMLElement[] = [];
+    let fire: (entries: IntersectionObserverEntry[]) => void = () => {};
+    class FakeIntersectionObserver {
+      constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+        fire = callback;
+      }
+      observe(target: HTMLElement) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.assign(globalThis, { IntersectionObserver: FakeIntersectionObserver });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const control = new BasemapControl({
+      collapsed: false,
+      includeDefaultBasemaps: false,
+      basemaps: [raster(["https://tiles.example/{z}/{x}/{y}.png"])],
+    } as never);
+    control.onAdd(fakeMap(container));
+    const thumbnails = installBasemapThumbnails(control);
+    const thumbnailCount = () => container.querySelectorAll(".geolibre-basemap-thumbnail").length;
+
+    assert.equal(observed.length, 1, "the row was never observed");
+    assert.equal(thumbnailCount(), 0, "the tile was requested before the row was visible");
+
+    fire([{ isIntersecting: true, target: observed[0] } as unknown as IntersectionObserverEntry]);
+    assert.equal(thumbnailCount(), 1, "the row was not previewed once visible");
     thumbnails.dispose();
   });
 });

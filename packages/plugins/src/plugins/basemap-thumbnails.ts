@@ -24,6 +24,13 @@ const ATTR = "data-geolibre-basemap-preview";
  * rather than stranding every row that is waiting for a snapshot.
  */
 const PAUSE_MS = 1500;
+/**
+ * Caps both preview paths. A host that accepts the connection but never
+ * completes the response would otherwise leave the swatch promise unsettled and
+ * the row on its placeholder for good — the snapshot path has always had this,
+ * and the fetch needs it for the same reason.
+ */
+const PREVIEW_TIMEOUT_MS = 6000;
 /** A row only ever moves forward — see `paint`. */
 const STATE_RANK: Record<string, number> = { skip: 0, pending: 1, ready: 2, loaded: 3 };
 const swatchCache = new Map<string, Promise<string | null>>();
@@ -77,7 +84,7 @@ export function styleUrlOf(basemap: BasemapDefinition): string | null {
 function styleSwatch(url: string): Promise<string | null> {
   const hit = swatchCache.get(url);
   if (hit) return hit;
-  const next = fetch(url)
+  const next = fetch(url, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) })
     .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
     .then((style: { layers?: Array<{ type?: string; paint?: Record<string, unknown> }> }) => {
       const canvas = document.createElement("canvas");
@@ -195,7 +202,7 @@ function createStyleCamera(): {
             resolve(src);
           };
           const cancel = () => finish(null);
-          const timer = window.setTimeout(cancel, 6000);
+          const timer = window.setTimeout(cancel, PREVIEW_TIMEOUT_MS);
           // An unreachable or invalid style URL emits `error` and never fires
           // `style.load`. Without this the job would hold the serialized queue
           // for the full timeout, delaying every later preview by 6s. Errors
@@ -274,16 +281,19 @@ function rowSelector(id: string): string {
   return `${BASEMAP_ROW_SELECTOR}[${BASEMAP_ROW_ID_ATTR}="${CSS.escape(id)}"]`;
 }
 
+function apply(row: HTMLElement, src: string, state: string): void {
+  // The flat-colour swatch and the real render race independently, and
+  // `snapCache` outlives dispose(), so a reopened panel can paint "loaded"
+  // before a slow swatch fetch settles. Never let a row move backwards.
+  const current = row.getAttribute(ATTR);
+  if (current && STATE_RANK[current] >= STATE_RANK[state]) return;
+  row.setAttribute(ATTR, state);
+  stamp(row, src);
+}
+
+/** Repaint by id, for a preview that resolved long after the row was scanned. */
 function paint(id: string, src: string, state: string): void {
-  document.querySelectorAll<HTMLElement>(rowSelector(id)).forEach((row) => {
-    // The flat-colour swatch and the real render race independently, and
-    // `snapCache` outlives dispose(), so a reopened panel can paint "loaded"
-    // before a slow swatch fetch settles. Never let a row move backwards.
-    const current = row.getAttribute(ATTR);
-    if (current && STATE_RANK[current] >= STATE_RANK[state]) return;
-    row.setAttribute(ATTR, state);
-    stamp(row, src);
-  });
+  document.querySelectorAll<HTMLElement>(rowSelector(id)).forEach((row) => apply(row, src, state));
 }
 
 /**
@@ -315,19 +325,43 @@ export function installBasemapThumbnails(control: BasemapControl): {
   let panel: HTMLElement | null = null;
   let visible: IntersectionObserver | null = null;
 
+  /**
+   * Run the preview a row was prepared for. Every request a preview makes —
+   * the raster tile, the style JSON and the full snapshot alike — is deferred
+   * to here, so opening the panel contacts only the providers whose rows are
+   * actually on screen rather than every host in the catalog at once.
+   */
+  function preview(row: HTMLElement): void {
+    const url = row.dataset.previewUrl;
+    const id = row.getAttribute(BASEMAP_ROW_ID_ATTR);
+    if (!url || !id) return;
+    if (row.dataset.previewKind === "raster") {
+      // The tile URL is ready to show, and the row is in hand — no need to go
+      // back through the document for it.
+      apply(row, url, "ready");
+      return;
+    }
+    // The swatch is a flat background colour from one small JSON fetch; the
+    // snapshot is a real render. Both start here, and the rank in `paint`
+    // settles which one the row ends up showing.
+    void styleSwatch(url).then((src) => {
+      if (!active) return;
+      if (src) paint(id, src, "ready");
+      else markSkipped(id);
+    });
+    void camera.snapshot(url).then((src) => {
+      if (!active) return;
+      if (src) paint(id, src, "loaded");
+      else markSkipped(id);
+    });
+  }
+
   function onVisible(entries: IntersectionObserverEntry[]): void {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
       const row = entry.target as HTMLElement;
       visible?.unobserve(row);
-      const url = row.dataset.previewUrl;
-      const id = row.getAttribute(BASEMAP_ROW_ID_ATTR);
-      if (!url || !id) continue;
-      void camera.snapshot(url).then((src) => {
-        if (!active) return;
-        if (src) paint(id, src, "loaded");
-        else markSkipped(id);
-      });
+      preview(row);
     }
   }
 
@@ -339,23 +373,18 @@ export function installBasemapThumbnails(control: BasemapControl): {
       const basemap = id ? catalog.find((item) => item.id === id) : undefined;
       const raster = basemap ? rasterPreviewUrl(basemap) : null;
       const jsonUrl = !raster && basemap ? styleUrlOf(basemap) : null;
-      if (raster) {
-        row.setAttribute(ATTR, "ready");
-        stamp(row, raster);
+      const url = raster ?? jsonUrl;
+      if (!url) {
+        row.setAttribute(ATTR, "skip");
         return;
       }
-      if (jsonUrl && id) {
-        row.dataset.previewUrl = jsonUrl;
-        row.setAttribute(ATTR, "pending");
-        void styleSwatch(jsonUrl).then((src) => {
-          if (!active) return;
-          if (src) paint(id, src, "ready");
-          else markSkipped(id);
-        });
-        visible?.observe(row);
-        return;
-      }
-      row.setAttribute(ATTR, "skip");
+      row.dataset.previewUrl = url;
+      row.dataset.previewKind = raster ? "raster" : "style";
+      row.setAttribute(ATTR, "pending");
+      // Without an IntersectionObserver there is nothing to defer to, so fall
+      // back to previewing every row as it is found.
+      if (visible) visible.observe(row);
+      else preview(row);
     });
   }
 
