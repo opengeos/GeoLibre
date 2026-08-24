@@ -48,6 +48,8 @@ m.add_csv(data, x="longitude", y="latitude", name="CSV")
 m.add_cog(url, name="COG", bands=None, colormap=None, rescale=None)
 m.add_raster(...)                                     # same, incl. a local GeoTIFF
 m.add_tile_layer(url, name, tile_size=256, attribution=None)
+m.add_ee_layer(ee_object, vis_params=None, name="Earth Engine", shown=True,
+               opacity=1.0)
 m.add_pmtiles(url, name, tile_type="vector", source_layers=None)
 m.add_vector_tiles(url, name, source_layers=None)
 m.add_wms(endpoint, layers, name, version="1.1.1")
@@ -60,6 +62,17 @@ m.add_video(...)
 Every `add_*` returns the new layer's **id** and accepts style keyword
 arguments inline (`m.add_geojson(url, name="Roads", strokeColor="#ef4444",
 strokeWidth=3)`).
+
+`add_ee_layer` accepts an authenticated Earth Engine Image, ImageCollection,
+FeatureCollection, Feature, or Geometry. Initialize the Earth Engine Python API
+before calling it; ImageCollections are mosaicked and vector objects are styled
+into raster tiles — for a FeatureCollection/Feature/Geometry, `vis_params` takes
+`ee.FeatureCollection.style()` keys (`color`, `fillColor`, `width`, `pointSize`,
+`pointShape`, `lineType`, `styleProperty`, `neighborhood`), not image keys like
+`min`/`max`/`palette`. The stored tile URL is tied to an Earth Engine map id
+that expires, so a project loaded later may need the Earth Engine layer
+regenerated. The result is a plain raster tile layer, not one of the live
+layers the app's own Earth Engine panel manages.
 
 ### Symbology without precomputing
 

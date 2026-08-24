@@ -48,6 +48,17 @@ m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
+Google Earth Engine layers are optional and need `pip install earthengine-api`
+plus credentials (`ee.Authenticate()` once, then a Google Cloud project):
+
+```python
+import ee
+
+ee.Authenticate()  # once per machine
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
+```
+
 Round-trip the project:
 
 ```python
@@ -74,6 +85,7 @@ m.to_project()["mapView"]["center"]
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add vector tiles from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
+| `add_ee_layer(ee_object, vis_params=, name=, shown=, opacity=)` | Add an authenticated Google Earth Engine object as raster tiles. |
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS (GetMap) tiled raster layer. |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GeoJSON, fetched and inlined). |
@@ -183,6 +195,11 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
   (works in the running server with no restart where it is installed). On other
   remote servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)` to
   use that same remote path; `Map(server_proxy=False)` forces the direct path.
+- `add_ee_layer` needs the Earth Engine Python API, which is **not** a
+  dependency of this package: `pip install earthengine-api`. Authenticate once
+  with `ee.Authenticate()` and initialize with `ee.Initialize(project=...)`
+  before adding a layer. The generated tile URL is tied to an Earth Engine map
+  id that expires, so a saved project may need the layer regenerated later.
 - Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),

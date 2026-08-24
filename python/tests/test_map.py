@@ -70,6 +70,245 @@ def test_add_wmts(m):
     assert _last_layer(m)["type"] == "wmts"
 
 
+def test_add_ee_layer_from_map_id(m):
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/test/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            assert vis_params == {"min": 0, "max": 3000, "palette": ["blue", "green"]}
+            return {"mapid": "test-map", "tile_fetcher": TileFetcher()}
+
+    layer_id = m.add_ee_layer(
+        Image(),
+        {"min": 0, "max": 3000, "palette": ["blue", "green"]},
+        name="Elevation",
+        shown=False,
+        opacity=0.4,
+    )
+    layer = _last_layer(m)
+    assert layer["id"] == layer_id
+    assert layer["name"] == "Elevation"
+    assert layer["type"] == "xyz"
+    assert layer["visible"] is False
+    assert layer["opacity"] == 0.4
+    assert layer["source"]["tiles"] == [TileFetcher.url_format]
+    assert layer["source"]["attribution"] == "Google Earth Engine"
+    assert layer["metadata"]["sourceKind"] == "xyz-url"
+    assert layer["metadata"]["provider"] == "earth-engine"
+    assert layer["metadata"]["earthEngineMapId"] == "test-map"
+
+
+@pytest.mark.parametrize("opacity", [-0.1, 1.1, float("nan"), "bad"])
+def test_add_ee_layer_rejects_invalid_opacity(m, opacity):
+    with pytest.raises(ValueError, match="opacity must"):
+        m.add_ee_layer(object(), opacity=opacity)
+
+
+def test_add_ee_layer_requires_tile_url(m):
+    class Image:
+        def getMapId(self, _vis_params):
+            return {"mapid": "missing-fetcher"}
+
+    with pytest.raises(ValueError, match="without a tile URL"):
+        m.add_ee_layer(Image())
+
+
+def test_add_ee_layer_wraps_earth_engine_errors(m):
+    class Image:
+        def getMapId(self, _vis_params):
+            raise RuntimeError("not initialized")
+
+    with pytest.raises(RuntimeError, match="Authenticate and initialize"):
+        m.add_ee_layer(Image())
+
+
+def test_add_ee_layer_mosaics_image_collection(monkeypatch, m):
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/collection/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            assert vis_params == {"bands": ["B4", "B3", "B2"]}
+            return {"tile_fetcher": TileFetcher()}
+
+    class ImageCollection:
+        # The real ee.ImageCollection exposes getMapId, so dispatch must not
+        # take a duck-typed shortcut past mosaic().
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("ImageCollection.getMapId must not be called")
+
+        def mosaic(self):
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=ImageCollection,
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    m.add_ee_layer(ImageCollection(), {"bands": ["B4", "B3", "B2"]})
+    assert _last_layer(m)["source"]["tiles"] == [TileFetcher.url_format]
+
+
+def test_add_ee_layer_rejects_unsupported_object(monkeypatch, m):
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(TypeError, match="ee_object must be"):
+        m.add_ee_layer(object())
+
+
+def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
+    captured = {}
+
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/features/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            captured["map_params"] = vis_params
+            return {"tile_fetcher": TileFetcher()}
+
+    class FeatureCollection:
+        # The real ee.FeatureCollection exposes getMapId, but it honours only
+        # `color`; styling must run so width/fillColor/pointSize survive.
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("FeatureCollection.getMapId must not be called")
+
+        def style(self, **style):
+            captured["style"] = style
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    m.add_ee_layer(FeatureCollection(), {"color": "ff0000", "width": 4})
+    assert captured["style"]["color"] == "ff0000"
+    assert captured["style"]["width"] == 4
+    assert captured["style"]["fillColor"] == "00000000"
+    assert captured["map_params"] == {}
+
+
+@pytest.mark.parametrize("vis_params", [["min", "max"], "min", 3])
+def test_add_ee_layer_rejects_non_mapping_vis_params(m, vis_params):
+    with pytest.raises(TypeError, match="vis_params must be a mapping"):
+        m.add_ee_layer(object(), vis_params)
+
+
+def _fake_vector_ee(captured):
+    """Fake `ee` module whose vector types record the conversion chain."""
+
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/vector/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            captured["map_params"] = vis_params
+            return {"tile_fetcher": TileFetcher()}
+
+    class Geometry:
+        pass
+
+    class Feature:
+        def __init__(self, geometry=None):
+            captured["feature_from"] = geometry
+
+    class FeatureCollection:
+        def __init__(self, features=None):
+            captured["collection_from"] = features
+
+        def style(self, **style):
+            captured["style"] = style
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=Feature,
+        Geometry=Geometry,
+    )
+    return fake_ee, TileFetcher.url_format
+
+
+def test_add_ee_layer_wraps_feature_in_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    feature = fake_ee.Feature()
+    m.add_ee_layer(feature, {"color": "00ff00"})
+
+    assert captured["collection_from"] == [feature]
+    assert captured["style"]["color"] == "00ff00"
+    assert captured["style"]["pointSize"] == 3
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
+def test_add_ee_layer_wraps_geometry_in_feature_and_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    geometry = fake_ee.Geometry()
+    m.add_ee_layer(geometry, {"width": 5})
+
+    assert captured["feature_from"] is geometry
+    assert isinstance(captured["collection_from"][0], fake_ee.Feature)
+    assert captured["style"]["width"] == 5
+    assert captured["style"]["fillColor"] == "00000000"
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
+def test_add_ee_layer_rejects_image_vis_params_on_vector(monkeypatch, m):
+    class FeatureCollection:
+        def style(self, **_style):  # pragma: no cover - must not be reached
+            raise AssertionError("style() must not be called with bad vis_params")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(ValueError, match="may only contain"):
+        m.add_ee_layer(FeatureCollection(), {"min": 0, "max": 3000})
+
+
+def test_add_ee_layer_wraps_preparation_errors(monkeypatch, m):
+    class ImageCollection:
+        def mosaic(self):
+            raise RuntimeError("collection is empty")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=ImageCollection,
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(RuntimeError, match="could not prepare this object"):
+        m.add_ee_layer(ImageCollection())
+
+
 def test_add_raster_is_cog(m):
     m.add_raster("https://e/dem.tif", bands=[1, 2, 3])
     layer = _last_layer(m)
