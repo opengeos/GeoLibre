@@ -202,6 +202,11 @@ def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
     assert captured["map_params"] == {}
 
 
+def test_add_ee_layer_rejects_non_mapping_vis_params(m):
+    with pytest.raises(TypeError, match="vis_params must be a mapping"):
+        m.add_ee_layer(object(), ["min", "max"])
+
+
 def _fake_vector_ee(captured):
     """Fake `ee` module whose vector types record the conversion chain."""
 

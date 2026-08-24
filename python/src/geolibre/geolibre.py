@@ -16,7 +16,7 @@ import time
 import urllib.parse
 import uuid
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.error import URLError
 
@@ -1686,7 +1686,8 @@ class Map(anywidget.AnyWidget):
         Raises:
             ImportError: If conversion requires the optional Earth Engine
                 Python package and it is not installed.
-            TypeError: If ``ee_object`` is not a supported Earth Engine object.
+            TypeError: If ``ee_object`` is not a supported Earth Engine object,
+                or ``vis_params`` is not a mapping.
             ValueError: If Earth Engine returns no usable tile URL, opacity is
                 outside the range 0--1, or ``vis_params`` carries a key
                 ``ee.FeatureCollection.style()`` does not accept.
@@ -1698,6 +1699,11 @@ class Map(anywidget.AnyWidget):
             The generated tile URL is tied to the Earth Engine map ID. A saved
             project may need the layer to be regenerated after that map ID
             expires.
+
+            The layer is a plain raster tile layer, not one of the live layers
+            the app's own Earth Engine panel manages, so it is listed and
+            styled like any other tile layer rather than appearing in that
+            panel.
         """
         try:
             opacity_value = float(opacity)
@@ -1706,6 +1712,8 @@ class Map(anywidget.AnyWidget):
         if not math.isfinite(opacity_value) or not 0 <= opacity_value <= 1:
             raise ValueError("opacity must be a finite number between 0 and 1")
 
+        if vis_params is not None and not isinstance(vis_params, Mapping):
+            raise TypeError("vis_params must be a mapping of Earth Engine visualization keys")
         params = dict(vis_params or {})
         map_object = ee_object
         map_params = params

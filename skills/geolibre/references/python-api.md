@@ -71,7 +71,8 @@ into raster tiles — for a FeatureCollection/Feature/Geometry, `vis_params` tak
 `pointShape`, `lineType`, `styleProperty`, `neighborhood`), not image keys like
 `min`/`max`/`palette`. The stored tile URL is tied to an Earth Engine map id
 that expires, so a project loaded later may need the Earth Engine layer
-regenerated.
+regenerated. The result is a plain raster tile layer, not one of the live
+layers the app's own Earth Engine panel manages.
 
 ### Symbology without precomputing
 
