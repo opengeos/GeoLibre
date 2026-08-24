@@ -7,11 +7,13 @@ not pull the SDK) stays green rather than silently losing coverage it never had.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import builtins
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -184,6 +186,31 @@ def test_every_tool_is_registered_with_a_description(server):
     assert {"create_project", "add_geojson_layer", "classify_layer", "export_html"} <= names
     # An undescribed tool is invisible to a model choosing between them.
     assert all(tool.description for tool in tools)
+
+
+def test_every_tool_reports_its_own_validation_errors(server):
+    """No tool may be registered with a bare ``@server.tool()``.
+
+    The SDK reserves ``ToolError`` for an anticipated failure and treats every
+    other exception as a crash whose message is withheld, so from mcp 2.1 a tool
+    registered straight on the server answers a rejected call with only "Error
+    executing tool <name>" -- the caller cannot see which argument was wrong.
+    ``build_server``'s ``@tool()`` wrapper restates the ``ValueError`` that every
+    validation rule in this package raises, and this is what keeps a later tool
+    from being added without it.
+    """
+    source = (Path(mcp_package.__file__).parent / "server.py").read_text(encoding="utf-8")
+    bare = [
+        node.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and any("server.tool" in ast.unparse(d) for d in node.decorator_list)
+    ]
+    assert not bare, f"tools registered without the error-reporting wrapper: {bare}"
+
+    # And the wrapper is really in force: a rejected call carries its reason.
+    message = call_error(server, "create_project", path="map.txt")
+    assert "map.txt" in message or "suffix" in message.lower()
 
 
 def test_create_project_writes_a_file(server, tmp_path):

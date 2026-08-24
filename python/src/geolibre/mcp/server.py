@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import inspect
 import os
 import sys
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .. import __version__, authoring
 from .. import project as _project
@@ -154,6 +156,42 @@ def _build_layer(
         ) from exc
 
 
+def _reports_its_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap a tool so a rejected call tells the caller why it was rejected.
+
+    Every validation failure in this package is a ``ValueError`` (``WorkspaceError``
+    subclasses it), raised where the rule lives -- in :mod:`geolibre.authoring`,
+    :mod:`geolibre.project`, :mod:`geolibre.mcp.workspace`, or a tool body here --
+    so none of those modules has to import the MCP SDK. But the SDK reserves
+    ``ToolError`` for a failure the tool *anticipated* and treats anything else as
+    a crash, withholding its message: from mcp 2.1 the caller of, say,
+    ``add_ogc_layer`` without ``layers`` sees only "Error executing tool
+    add_ogc_layer" instead of the sentence naming the missing argument. An agent
+    that cannot read why a call was rejected cannot correct it, so it retries the
+    same call or gives up.
+
+    Restating each failure as a ``ToolError`` at the tool boundary keeps the rules
+    SDK-free and the messages intact. A crash still surfaces as a crash: only
+    ``ValueError`` is translated, and the original stays attached as ``__cause__``
+    for the server log.
+
+    Args:
+        fn: The tool function to wrap.
+
+    Returns:
+        The same function, with anticipated failures restated as ``ToolError``.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
+
+    return wrapper
+
+
 def _summarize(path: Path, project: dict[str, Any], **extra: Any) -> dict[str, Any]:
     """Build a tool result: what changed, plus where the project now stands."""
     return {
@@ -179,6 +217,22 @@ def build_server(workspace: Workspace) -> MCPServer:
         instructions=INSTRUCTIONS,
         version=__version__,
     )
+
+    def tool(**kwargs: Any) -> Callable[[Callable[..., Any]], Any]:
+        """Register a tool, restating its anticipated failures for the caller.
+
+        Stands in for ``@server.tool()`` on every tool below, so none of them can
+        be registered without :func:`_reports_its_errors`; a bare
+        ``@server.tool()`` would silently mask that tool's validation messages.
+
+        Args:
+            **kwargs: Forwarded to :meth:`MCPServer.tool` unchanged.
+
+        Returns:
+            The decorator to apply to the tool function.
+        """
+        register = server.tool(**kwargs)
+        return lambda fn: register(_reports_its_errors(fn))
 
     @contextlib.contextmanager
     def edit(path: str) -> Iterator[tuple[Path, dict[str, Any]]]:
@@ -222,7 +276,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     # -- project lifecycle ----------------------------------------------------
 
-    @server.tool()
+    @tool()
     def create_project(
         path: str,
         name: str = "Untitled Project",
@@ -281,7 +335,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         authoring.save_project(file, project)
         return _summarize(file, project, mapView=project["mapView"])
 
-    @server.tool()
+    @tool()
     def describe_project(path: str) -> dict[str, Any]:
         """Summarize a project: its camera, basemap, layers, and map controls.
 
@@ -298,7 +352,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         project = authoring.load_project(file)
         return {"path": str(file), **authoring.describe_project(project)}
 
-    @server.tool()
+    @tool()
     def list_catalog() -> dict[str, Any]:
         """List the named basemaps, color ramps, and legend presets available.
 
@@ -318,7 +372,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     # -- adding layers --------------------------------------------------------
 
-    @server.tool()
+    @tool()
     def add_geojson_layer(
         path: str,
         name: str,
@@ -362,7 +416,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             layer_id = authoring.add_layer(project, layer, index=index)
         return _summarize(file, project, layerId=layer_id, layerName=layer.get("name"))
 
-    @server.tool()
+    @tool()
     def add_vector_layer(
         path: str,
         name: str,
@@ -404,7 +458,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         )
         return add(path, layer, index)
 
-    @server.tool()
+    @tool()
     def add_raster_layer(
         path: str,
         name: str,
@@ -445,7 +499,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         )
         return add(path, layer, index)
 
-    @server.tool()
+    @tool()
     def add_tile_layer(
         path: str,
         name: str,
@@ -474,7 +528,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         layer = _project.tile_layer(name, url, tile_size=tile_size, attribution=attribution)
         return add(path, layer, index)
 
-    @server.tool()
+    @tool()
     def add_ogc_layer(
         path: str,
         name: str,
@@ -526,7 +580,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             raise ValueError(f"service must be 'wms' or 'wmts', got {service!r}")
         return add(path, layer, index)
 
-    @server.tool()
+    @tool()
     def add_tiles_layer(
         path: str,
         name: str,
@@ -575,7 +629,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             raise ValueError(f"kind must be 'pmtiles' or 'vector-tiles', got {kind!r}")
         return add(path, layer, index)
 
-    @server.tool()
+    @tool()
     def add_3d_tiles_layer(
         path: str,
         name: str,
@@ -601,7 +655,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     # -- editing layers -------------------------------------------------------
 
-    @server.tool()
+    @tool()
     def update_layer(
         path: str,
         layer: str,
@@ -631,7 +685,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, layer=summary)
 
-    @server.tool()
+    @tool()
     def remove_layer(path: str, layer: str) -> dict[str, Any]:
         """Remove a layer from the project.
 
@@ -646,7 +700,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             layer_id = authoring.remove_layer(project, layer)
         return _summarize(file, project, removedLayerId=layer_id)
 
-    @server.tool()
+    @tool()
     def style_layer(path: str, layer: str, style: dict[str, Any]) -> dict[str, Any]:
         """Set style properties on a layer, merging with what is already there.
 
@@ -667,7 +721,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             merged = authoring.apply_style(project, layer, style)
         return _summarize(file, project, style=merged)
 
-    @server.tool()
+    @tool()
     def classify_layer(
         path: str,
         layer: str,
@@ -710,7 +764,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, symbology=fragment)
 
-    @server.tool()
+    @tool()
     def list_layer_properties(path: str, layer: str) -> dict[str, Any]:
         """List the feature properties of a layer, with sample values.
 
@@ -736,7 +790,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     # -- camera, basemap, and controls ---------------------------------------
 
-    @server.tool()
+    @tool()
     def set_view(
         path: str,
         center: list[float] | None = None,
@@ -773,7 +827,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, mapView=view)
 
-    @server.tool()
+    @tool()
     def set_basemap(path: str, basemap: str) -> dict[str, Any]:
         """Set the project's background basemap.
 
@@ -789,7 +843,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             url = authoring.set_basemap(project, basemap)
         return _summarize(file, project, basemapStyleUrl=url)
 
-    @server.tool()
+    @tool()
     def add_legend(
         path: str,
         title: str | None = None,
@@ -835,7 +889,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, legend=entry)
 
-    @server.tool()
+    @tool()
     def add_colorbar(
         path: str,
         colormap: str = "viridis",
@@ -879,7 +933,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, colorbar=entry)
 
-    @server.tool()
+    @tool()
     def add_swipe(
         path: str,
         left_layers: list[str],
@@ -915,7 +969,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     # -- export ---------------------------------------------------------------
 
-    @server.tool()
+    @tool()
     def export_html(
         path: str,
         out_path: str,
