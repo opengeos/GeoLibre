@@ -133,6 +133,11 @@ def test_add_ee_layer_mosaics_image_collection(monkeypatch, m):
             return {"tile_fetcher": TileFetcher()}
 
     class ImageCollection:
+        # The real ee.ImageCollection exposes getMapId, so dispatch must not
+        # take a duck-typed shortcut past mosaic().
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("ImageCollection.getMapId must not be called")
+
         def mosaic(self):
             return Image()
 
@@ -148,6 +153,19 @@ def test_add_ee_layer_mosaics_image_collection(monkeypatch, m):
     assert _last_layer(m)["source"]["tiles"] == [TileFetcher.url_format]
 
 
+def test_add_ee_layer_rejects_unsupported_object(monkeypatch, m):
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(TypeError, match="ee_object must be"):
+        m.add_ee_layer(object())
+
+
 def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
     captured = {}
 
@@ -160,6 +178,11 @@ def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
             return {"tile_fetcher": TileFetcher()}
 
     class FeatureCollection:
+        # The real ee.FeatureCollection exposes getMapId, but it honours only
+        # `color`; styling must run so width/fillColor/pointSize survive.
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("FeatureCollection.getMapId must not be called")
+
         def style(self, **style):
             captured["style"] = style
             return Image()

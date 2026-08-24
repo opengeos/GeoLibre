@@ -57,9 +57,23 @@ m.add_tile_layer(
     attribution="(c) OpenStreetMap contributors",
 )
 m.add_cog("https://example.com/dem.tif", name="DEM", colormap="terrain")
+
+# Earth Engine layers need `pip install earthengine-api` and credentials
+# (run `ee.Authenticate()` once, if you have not already).
+import ee
+ee.Authenticate()
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
+
 m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
+
+`add_ee_layer` evaluates the Earth Engine object in the kernel and adds the
+resulting tile URL as a raster layer (ImageCollections are mosaicked, vector
+objects are styled into raster tiles with `vis_params`). That URL is tied to an
+Earth Engine map id that expires, so a saved project may need the Earth Engine
+layer regenerated when it is reopened.
 
 `add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host:
 the file is served by the bundled localhost server so the app can read it. This
@@ -240,6 +254,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
+| `add_ee_layer(ee_object, vis_params=, name=, shown=, opacity=)` | Add an authenticated Google Earth Engine object as raster tiles (needs `earthengine-api`). |
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |

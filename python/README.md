@@ -45,7 +45,10 @@ m.add_tile_layer(
 )
 m.add_cog("https://example.com/dem.tif", name="DEM", colormap="terrain")
 
+# Earth Engine layers need `pip install earthengine-api` and credentials
+# (run `ee.Authenticate()` once, if you have not already).
 import ee
+ee.Authenticate()
 ee.Initialize(project="your-google-cloud-project")
 m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
 m.add_basemap("dark")
@@ -188,6 +191,11 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
   (works in the running server with no restart where it is installed). On other
   remote servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)` to
   use that same remote path; `Map(server_proxy=False)` forces the direct path.
+- `add_ee_layer` needs the Earth Engine Python API, which is **not** a
+  dependency of this package: `pip install earthengine-api`. Authenticate once
+  with `ee.Authenticate()` and initialize with `ee.Initialize(project=...)`
+  before adding a layer. The generated tile URL is tied to an Earth Engine map
+  id that expires, so a saved project may need the layer regenerated later.
 - Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),

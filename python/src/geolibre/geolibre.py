@@ -1667,6 +1667,9 @@ class Map(anywidget.AnyWidget):
             TypeError: If ``ee_object`` is not a supported Earth Engine object.
             ValueError: If Earth Engine returns no usable tile URL or opacity
                 is outside the range 0--1.
+            RuntimeError: If Earth Engine fails to create map tiles (for
+                example when it is not initialized, or the request is
+                rejected).
 
         Note:
             The generated tile URL is tied to the Earth Engine map ID. A saved
@@ -1684,15 +1687,22 @@ class Map(anywidget.AnyWidget):
         map_object = ee_object
         map_params = params
 
-        if not callable(getattr(map_object, "getMapId", None)):
-            try:
-                import ee
-            except ImportError as exc:
-                raise ImportError(
-                    "Adding this Earth Engine object requires the `earthengine-api` "
-                    "package. Install it with `pip install earthengine-api`."
-                ) from exc
+        try:
+            import ee
+        except ImportError:
+            ee = None
 
+        # Earth Engine types are classified *before* the duck-typed
+        # ``getMapId`` fallback: ``ee.ImageCollection``, ``ee.FeatureCollection``
+        # and ``ee.Feature`` all expose ``getMapId`` themselves, so a
+        # ``getMapId``-first check would silently skip the mosaic/style step and
+        # drop every vector option except ``color``.
+        ee_types = (
+            (ee.Image, ee.ImageCollection, ee.FeatureCollection, ee.Feature, ee.Geometry)
+            if ee is not None
+            else ()
+        )
+        if ee is not None and isinstance(map_object, ee_types):
             if isinstance(map_object, ee.ImageCollection):
                 map_object = map_object.mosaic()
             elif isinstance(map_object, (ee.FeatureCollection, ee.Feature, ee.Geometry)):
@@ -1710,18 +1720,24 @@ class Map(anywidget.AnyWidget):
                 }
                 map_object = map_object.style(**vector_style)
                 map_params = {}
-            elif not isinstance(map_object, ee.Image):
-                raise TypeError(
-                    "ee_object must be an Earth Engine Image, ImageCollection, "
-                    "FeatureCollection, Feature, or Geometry"
+        elif not callable(getattr(map_object, "getMapId", None)):
+            if ee is None:
+                raise ImportError(
+                    "Adding this Earth Engine object requires the `earthengine-api` "
+                    "package. Install it with `pip install earthengine-api`."
                 )
+            raise TypeError(
+                "ee_object must be an Earth Engine Image, ImageCollection, "
+                "FeatureCollection, Feature, or Geometry"
+            )
 
         try:
             map_id = map_object.getMapId(map_params)
         except Exception as exc:
             raise RuntimeError(
-                "Earth Engine could not create map tiles. Authenticate and initialize "
-                "Earth Engine before calling add_ee_layer()."
+                f"Earth Engine could not create map tiles: {exc}. Authenticate and "
+                "initialize Earth Engine before calling add_ee_layer(), and check "
+                "that vis_params are valid for this object."
             ) from exc
 
         tile_fetcher = map_id.get("tile_fetcher") if isinstance(map_id, dict) else None
