@@ -2023,6 +2023,21 @@ body,
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  .maplibregl-ctrl-attrib {
+    max-width: 32px !important;
+    min-height: 32px;
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+
+  .maplibregl-ctrl-attrib-inner {
+    display: none !important;
+  }
+
+  .maplibregl-ctrl-attrib-button {
+    display: block !important;
+  }
 }
 
 /* Compass control (issue #508). Sits directly below the Fullscreen button. The
