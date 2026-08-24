@@ -1,14 +1,28 @@
 {
   "name": "@geolibre/map",
   "version": "2.7.0",
-  "private": true,
   "type": "module",
+  "license": "MIT",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./derived-geometry": "./src/derived-geometry.ts",
     "./pmtiles-layer": "./src/pmtiles-layer.ts"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsdown src/headless.ts --format esm --dts"
+  },
+  "publishConfig": {
+    "main": "./dist/headless.mjs",
+    "types": "./dist/headless.d.mts",
+    "exports": {
+      ".": {
+        "types": "./dist/headless.d.mts",
+        "import": "./dist/headless.mjs"
+      }
+    }
   },
   "dependencies": {
     "@geolibre/core": "*",
@@ -29,13 +43,14 @@
     "maplibre-gl": "^6.3.0",
     "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.5.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
