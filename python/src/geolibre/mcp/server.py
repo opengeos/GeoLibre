@@ -192,7 +192,8 @@ def _reports_its_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
     if inspect.iscoroutinefunction(fn):
         raise TypeError(
             f"{fn.__name__} is async, which this wrapper cannot report errors for; "
-            "give it an async wrapper before registering it as a tool."
+            "give _reports_its_errors a coroutine branch that awaits fn inside the "
+            "same try, and register the tool through that."
         )
 
     @functools.wraps(fn)
