@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { BasemapDefinition } from "maplibre-gl-basemap-control";
-import {
-  rasterPreviewUrl,
-  styleUrlOf,
-} from "../packages/plugins/src/plugins/basemap-thumbnails";
+import { rasterPreviewUrl, styleUrlOf } from "../packages/plugins/src/plugins/basemap-thumbnails";
 
 function raster(tiles: string[]): BasemapDefinition {
   return {
@@ -46,14 +43,14 @@ describe("basemap preview urls", () => {
       styleUrlOf(style("https://tiles.openfreemap.org/styles/positron")),
       "https://tiles.openfreemap.org/styles/positron",
     );
-    assert.equal(styleUrlOf(style("https://api.maptiler.com/maps/basic/style.json?key={key}")), null);
+    assert.equal(
+      styleUrlOf(style("https://api.maptiler.com/maps/basic/style.json?key={key}")),
+      null,
+    );
   });
 
   it("ignores the other source kind", () => {
     assert.equal(rasterPreviewUrl(style("https://tiles.openfreemap.org/styles/positron")), null);
-    assert.equal(
-      styleUrlOf(raster(["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"])),
-      null,
-    );
+    assert.equal(styleUrlOf(raster(["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"])), null);
   });
 });
