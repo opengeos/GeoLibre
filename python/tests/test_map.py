@@ -202,9 +202,10 @@ def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
     assert captured["map_params"] == {}
 
 
-def test_add_ee_layer_rejects_non_mapping_vis_params(m):
+@pytest.mark.parametrize("vis_params", [["min", "max"], "min", 3])
+def test_add_ee_layer_rejects_non_mapping_vis_params(m, vis_params):
     with pytest.raises(TypeError, match="vis_params must be a mapping"):
-        m.add_ee_layer(object(), ["min", "max"])
+        m.add_ee_layer(object(), vis_params)
 
 
 def _fake_vector_ee(captured):
