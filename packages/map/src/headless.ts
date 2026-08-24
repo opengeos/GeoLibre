@@ -10,6 +10,12 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
 import { removeLayerFromMap, syncLayer } from "./layer-sync";
+import { installMapTransformCompat as _installMapTransformCompat } from "./map-transform-compat";
+export { installMapTransformCompat } from "./map-transform-compat";
+
+// Before any `Map` is constructed: re-expose `map.transform` for third-party
+// code (notably @deck.gl/mapbox) that still reads it.
+_installMapTransformCompat();
 
 export interface LayerSync {
   /** Diff-sync the full layer list (bottom-to-top stacking order). */
