@@ -78,7 +78,11 @@ output-token cap, and per-client rate limit.
    `503 Search is not configured` until `TAVILY_API_KEY` is set. The NASA OPERA
    plugin is loaded from outside this repo and ships on its own schedule, so
    move it to `/search` before rolling this Worker out -- otherwise its disaster
-   search 503s for the window between the two deploys.
+   search 503s for the window between the two deploys. A leftover
+   `TAVILY_API_KEY` makes that window quiet rather than loud: `/tavily` answers
+   with real Tavily results instead of GPT-native search and nothing errors, so
+   delete the secret (`npx wrangler secret delete TAVILY_API_KEY`) unless you
+   mean to keep offering that route.
 
    Two differences from Tavily are worth knowing. Anthropic returns each
    hit's page text as opaque `encrypted_content`, so the model writes the
