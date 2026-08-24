@@ -3,9 +3,11 @@
   "compilerOptions": {
     "composite": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@geolibre/map": ["../../packages/map/src/index.ts"],
+      "@geolibre/map/*": ["../../packages/map/src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "../../packages/map/src"],
   "references": []
 }

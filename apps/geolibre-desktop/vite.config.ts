@@ -1059,6 +1059,8 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "maplibre-gl", "@anthropic-ai/sdk", "openai", "@google/genai"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Monorepo development uses map source; npm consumers use dist.
+      "@geolibre/map": path.resolve(__dirname, "../../packages/map/src"),
       // The published package resolves to dist, but the monorepo app should
       // hot-reload SDK source during development.
       "@geolibre/embed": path.resolve(__dirname, "../../packages/embed/src/index.ts"),

@@ -8,6 +8,7 @@
  * full app.
  */
 import type { GeoLibreLayer } from "@geolibre/core";
+import type * as maplibregl from "maplibre-gl";
 import { removeLayerFromMap, syncLayer } from "./layer-sync";
 
 export interface LayerSync {
@@ -18,10 +19,9 @@ export interface LayerSync {
 }
 
 /**
- * ponytail: bottom-up re-add ordering gives correct stacking on insert and
- * append, but moving an existing layer mid-stack does not restack until it is
- * removed and re-added. Full anchor logic lives in MapController.
- * getBeforeStyleLayerId; port it here if in-place reordering matters.
+ * Reapplies the input order among synchronized layers. Unlike MapController,
+ * this headless sync does not compute style-layer anchors, so it cannot preserve
+ * their placement relative to unmanaged or asynchronously inserted layers.
  */
 export function createLayerSync(map: maplibregl.Map): LayerSync {
   let synced: GeoLibreLayer[] = [];

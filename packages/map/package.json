@@ -3,26 +3,29 @@
   "version": "2.7.0",
   "type": "module",
   "license": "MIT",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/headless.mjs",
+  "types": "./dist/headless.d.mts",
   "exports": {
-    ".": "./src/index.ts",
-    "./derived-geometry": "./src/derived-geometry.ts",
-    "./pmtiles-layer": "./src/pmtiles-layer.ts"
+    ".": {
+      "types": "./dist/headless.d.mts",
+      "import": "./dist/headless.mjs"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.mts",
+      "import": "./dist/headless.mjs"
+    },
+    "./derived-geometry": {
+      "types": "./dist/derived-geometry.d.mts",
+      "import": "./dist/derived-geometry.mjs"
+    },
+    "./pmtiles-layer": {
+      "types": "./dist/pmtiles-layer.d.mts",
+      "import": "./dist/pmtiles-layer.mjs"
+    }
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsdown src/headless.ts --format esm --dts"
-  },
-  "publishConfig": {
-    "main": "./dist/headless.mjs",
-    "types": "./dist/headless.d.mts",
-    "exports": {
-      ".": {
-        "types": "./dist/headless.d.mts",
-        "import": "./dist/headless.mjs"
-      }
-    }
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts --format esm --dts"
   },
   "dependencies": {
     "@geolibre/core": "*",
@@ -43,8 +46,8 @@
     "maplibre-gl": "^6.3.0",
     "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.5.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
@@ -54,7 +57,7 @@
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
