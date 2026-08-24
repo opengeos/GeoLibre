@@ -13,6 +13,7 @@ import {
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { installBasemapThumbnails } from "./basemap-thumbnails";
 
 const basemapEnv = (
   import.meta as ImportMeta & {
@@ -134,76 +135,8 @@ export function setBasemapControlLabels(next: Partial<BasemapControlLabels>): vo
   labels = { ...labels, ...next };
 }
 
-// Raster rows get a z=2 XYZ tile so OSM vs OpenTopoMap is visible before click.
-// Style basemaps have no single-tile endpoint; skip them. Failed loads remove
-// the img rather than showing a broken icon.
-const THUMBNAIL_ZOOM = 2;
-const THUMBNAIL_X = 1;
-const THUMBNAIL_Y = 1;
-const PREVIEW_ATTR = "data-geolibre-basemap-preview";
-
-let cachedBasemaps: BasemapDefinition[] = [];
-
-function buildRasterPreviewUrl(basemap: BasemapDefinition): string | null {
-  if (basemap.source.type !== "raster") return null;
-  const tiles = basemap.source.tiles;
-  if (!tiles || tiles.length === 0) return null;
-  const template = tiles[0];
-  if (/\{(api-key|access_token|key)\}/.test(template)) return null;
-  return template
-    .replace(/\{z\}/g, String(THUMBNAIL_ZOOM))
-    .replace(/\{x\}/g, String(THUMBNAIL_X))
-    .replace(/\{y\}/g, String(THUMBNAIL_Y))
-    .replace(/\{s\}/g, "a");
-}
-
-function refreshCachedBasemaps(control: BasemapControl | null): void {
-  if (!control) return;
-  const next = control.getBasemaps();
-  if (Array.isArray(next)) cachedBasemaps = next;
-}
-
-function installThumbnailEnhancer(): () => void {
-  if (typeof window === "undefined" || !document.body) return () => {};
-
-  const enhance = () => {
-    document
-      .querySelectorAll<HTMLElement>(`.basemap-control-result:not([${PREVIEW_ATTR}])`)
-      .forEach((row) => {
-        const id = row.getAttribute("data-basemap-id");
-        const basemap = id ? cachedBasemaps.find((item) => item.id === id) : undefined;
-        const url = basemap ? buildRasterPreviewUrl(basemap) : null;
-        row.setAttribute(PREVIEW_ATTR, url ? "ready" : "skip");
-        if (!url) return;
-        const img = document.createElement("img");
-        img.className = "geolibre-basemap-thumbnail";
-        img.alt = "";
-        img.loading = "lazy";
-        img.decoding = "async";
-        img.src = url;
-        img.addEventListener(
-          "error",
-          () => {
-            img.remove();
-            row.setAttribute(PREVIEW_ATTR, "failed");
-          },
-          { once: true },
-        );
-        img.addEventListener("load", () => row.setAttribute(PREVIEW_ATTR, "loaded"), {
-          once: true,
-        });
-        row.prepend(img);
-      });
-  };
-
-  const observer = new MutationObserver(enhance);
-  observer.observe(document.body, { childList: true, subtree: true });
-  enhance();
-  return () => observer.disconnect();
-}
-
 let basemapControl: BasemapControl | null = null;
-let thumbnailEnhancerCleanup: (() => void) | null = null;
+let thumbnails: ReturnType<typeof installBasemapThumbnails> | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
 const registeredRasterLayers = new Map<string, string>();
@@ -234,10 +167,8 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) {
       basemapControl = new BasemapControl(getBasemapControlOptions(app));
-      refreshCachedBasemaps(basemapControl);
       basemapControl.on("basemapchange", (event) => {
         handleBasemapChange(app, event);
-        refreshCachedBasemaps(basemapControl);
       });
       basemapControl.on("basemapremove", (event) => {
         handleBasemapRemove(app, event);
@@ -261,8 +192,8 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     // style basemap or a removal can unregister them (the module state does not
     // survive a new session).
     relinkRestoredRasterBasemaps();
-    thumbnailEnhancerCleanup?.();
-    thumbnailEnhancerCleanup = installThumbnailEnhancer();
+    thumbnails?.dispose();
+    thumbnails = installBasemapThumbnails(basemapControl);
     // Seed the fresh control instance with every basemap already on the map —
     // the active style basemap plus any stacked rasters we just relinked — so
     // the reopened panel highlights them as active and a re-click on a stacked
@@ -292,8 +223,8 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     // reactivation relinks them from the store via relinkRestoredRasterBasemaps
     // (the same path a reopened project takes). See #1113 follow-up.
     registeredRasterLayers.clear();
-    thumbnailEnhancerCleanup?.();
-    thumbnailEnhancerCleanup = null;
+    thumbnails?.dispose();
+    thumbnails = null;
     app.removeMapControl(basemapControl);
     basemapControl = null;
     // Drop any pending style-failure fallback so a later reactivation cannot
@@ -404,6 +335,7 @@ function handleBasemapChange(app: GeoLibreAppAPI, event: BasemapControlEventPayl
   // before touching the layer manager, so an unrecognized future source type
   // does not evict the raster overlays without replacing the style.
   if (source.type !== "style" && source.type !== "vector-style") return;
+  thumbnails?.pause();
   // Provider style basemaps (Amazon Location, MapTiler, Mapbox, ...) carry a
   // templated source.url with `{api-key}`/`{aws-region}` placeholders that the
   // control substitutes from the user's credentials. Apply the resolved URL the
