@@ -6,6 +6,7 @@ import {
   BASEMAP_PANEL_SELECTOR,
   BASEMAP_ROW_ID_ATTR,
   BASEMAP_ROW_SELECTOR,
+  advances,
   installBasemapThumbnails,
   rasterPreviewUrl,
   styleUrlOf,
@@ -23,6 +24,16 @@ function raster(tiles: string[]): BasemapDefinition {
 
 function tmsRaster(tiles: string[]): BasemapDefinition {
   return { ...raster(tiles), source: { type: "raster", tiles, scheme: "tms" } };
+}
+
+function styleBasemap(url: string): BasemapDefinition {
+  return {
+    id: "positron",
+    name: "Positron",
+    provider: "openfreemap",
+    type: "style",
+    source: { type: "style", url },
+  };
 }
 
 function style(url: string): BasemapDefinition {
@@ -131,6 +142,26 @@ describe("basemap preview urls", () => {
  * restate the strings, this builds a real `BasemapControl` and asks it for its
  * rendered panel.
  */
+describe("the preview state rank", () => {
+  it("only ever moves a row forward", () => {
+    // The swatch and the snapshot resolve independently, so a slow flat-colour
+    // swatch must not overwrite a row already showing the real render.
+    assert.equal(advances("ready", "loaded"), true);
+    assert.equal(advances("loaded", "ready"), false);
+    assert.equal(advances("pending", "ready"), true);
+    assert.equal(advances("ready", "pending"), false);
+    assert.equal(advances("loaded", "loaded"), false, "a repaint at the same state is a no-op");
+  });
+
+  it("paints a row that has no state yet, and can revive a skipped one", () => {
+    assert.equal(advances(null, "pending"), true);
+    // markSkipped drops a row that produced nothing; a snapshot arriving later
+    // still gets to fill it in.
+    assert.equal(advances("skip", "loaded"), true);
+    assert.equal(advances("skip", "ready"), true);
+  });
+});
+
 describe("the maplibre-gl-basemap-control DOM mirror", () => {
   let restoreGlobals: () => void;
 
@@ -142,6 +173,7 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
       MutationObserver: globalThis.MutationObserver,
       IntersectionObserver: globalThis.IntersectionObserver,
       requestAnimationFrame: globalThis.requestAnimationFrame,
+      CSS: (globalThis as { CSS?: unknown }).CSS,
     };
     // The control assigns `select.value`, which linkedom exposes as a getter
     // only. Give it a setter so its filter row renders.
@@ -162,6 +194,10 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
       MutationObserver: window.MutationObserver,
       // linkedom ships no rAF; the control only uses it to position the panel.
       requestAnimationFrame: () => 0,
+      // Nor `CSS.escape`, which `rowSelector` uses to build its attribute
+      // selector. Basemap ids are kebab-case, so escaping anything else is
+      // enough for these tests.
+      CSS: { escape: (value: string) => value.replace(/[^\w-]/g, (ch) => `\\${ch}`) },
     });
     restoreGlobals = () => Object.assign(globalThis, previous);
   });
@@ -224,6 +260,48 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
     // MutationObserver callbacks are queued, not synchronous.
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(thumbnailCount(), 1, "the rebuilt panel was never enhanced");
+    thumbnails.dispose();
+  });
+
+  it("drops a style row to name-only when neither preview can be produced", async () => {
+    // Neither preview path can succeed here: there is no canvas 2d context for
+    // the swatch and no WebGL for the snapshot, which is exactly how a style
+    // host that is unreachable behaves. Both have to degrade quietly to the
+    // name-only row rather than reject or strand the placeholder.
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+    const fetched: string[] = [];
+    Object.assign(globalThis, {
+      fetch: (url: string) => {
+        fetched.push(String(url));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ layers: [] }) });
+      },
+    });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const control = new BasemapControl({
+      collapsed: false,
+      includeDefaultBasemaps: false,
+      basemaps: [styleBasemap("https://tiles.example/style.json")],
+    } as never);
+    control.onAdd(fakeMap(container));
+    const thumbnails = installBasemapThumbnails(control);
+
+    const row = container.querySelector(BASEMAP_ROW_SELECTOR);
+    assert.ok(row, "no row was rendered");
+    assert.equal(fetched.length, 1, "the style json was not fetched");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(
+      row.getAttribute("data-geolibre-basemap-preview"),
+      "skip",
+      "the row kept its placeholder instead of falling back to name-only",
+    );
+    assert.equal(container.querySelectorAll(".geolibre-basemap-thumbnail").length, 0);
+    assert.deepEqual(rejections, [], "a failed preview rejected instead of resolving null");
+    process.off("unhandledRejection", onRejection);
     thumbnails.dispose();
   });
 

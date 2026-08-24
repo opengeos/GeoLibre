@@ -31,8 +31,20 @@ const PAUSE_MS = 1500;
  * and the fetch needs it for the same reason.
  */
 const PREVIEW_TIMEOUT_MS = 6000;
-/** A row only ever moves forward — see `paint`. */
 const STATE_RANK: Record<string, number> = { skip: 0, pending: 1, ready: 2, loaded: 3 };
+
+/**
+ * Whether a row currently showing `current` may be repainted as `next`.
+ *
+ * The flat-colour swatch and the real render race independently, and
+ * `snapCache` outlives dispose(), so a reopened panel can paint "loaded" before
+ * a slow swatch fetch settles. A row only ever moves forward. An unrecognized
+ * state is treated as advancing, so a future state cannot silently freeze a row.
+ */
+export function advances(current: string | null, next: string): boolean {
+  if (!current) return true;
+  return !(STATE_RANK[current] >= STATE_RANK[next]);
+}
 const swatchCache = new Map<string, Promise<string | null>>();
 const snapCache = new Map<string, string>();
 
@@ -295,11 +307,7 @@ function rowSelector(id: string): string {
 }
 
 function apply(row: HTMLElement, src: string, state: string): void {
-  // The flat-colour swatch and the real render race independently, and
-  // `snapCache` outlives dispose(), so a reopened panel can paint "loaded"
-  // before a slow swatch fetch settles. Never let a row move backwards.
-  const current = row.getAttribute(ATTR);
-  if (current && STATE_RANK[current] >= STATE_RANK[state]) return;
+  if (!advances(row.getAttribute(ATTR), state)) return;
   row.setAttribute(ATTR, state);
   stamp(row, src);
 }
