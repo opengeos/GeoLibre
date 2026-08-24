@@ -1,8 +1,11 @@
 {
   "name": "@geolibre/map",
   "version": "2.7.0",
-  "type": "module",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "main": "./dist/headless.mjs",
   "types": "./dist/headless.d.mts",
   "exports": {
@@ -23,7 +26,6 @@
       "import": "./dist/pmtiles-layer.mjs"
     }
   },
-  "files": ["dist"],
   "scripts": {
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts --format esm --dts"
   },

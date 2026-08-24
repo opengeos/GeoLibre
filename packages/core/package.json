@@ -1,16 +1,15 @@
 {
   "name": "@geolibre/core",
   "version": "2.7.0",
-  "type": "module",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
-  },
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsdown src/index.ts --format esm --dts"
   },
   "publishConfig": {
     "main": "./dist/index.mjs",
@@ -21,6 +20,9 @@
         "import": "./dist/index.mjs"
       }
     }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts"
   },
   "dependencies": {
     "@maplibre/maplibre-gl-style-spec": "^26.2.1",
