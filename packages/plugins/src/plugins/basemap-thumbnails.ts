@@ -178,7 +178,10 @@ export function installBasemapThumbnails(control: BasemapControl): {
               });
             }
           },
-          { root: root.classList.contains("basemap-control-panel") ? root : null, rootMargin: "80px" },
+          {
+            root: root.classList.contains("basemap-control-panel") ? root : null,
+            rootMargin: "80px",
+          },
         )
       : null;
 

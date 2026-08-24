@@ -2697,8 +2697,8 @@ body,
 }
 
 .basemap-control-result[data-geolibre-basemap-preview="pending"]:not(
-    :has(.geolibre-basemap-thumbnail)
-  )::before {
+  :has(.geolibre-basemap-thumbnail)
+)::before {
   content: "";
   width: 56px;
   height: 42px;
