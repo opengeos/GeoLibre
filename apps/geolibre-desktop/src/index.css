@@ -2691,6 +2691,20 @@ body,
    onto the app design tokens when the app is in dark mode. Scoped to the
    package's own root/child classes, mirroring the STAC `.pc-control-*` block
    above. Never edit the package's stylesheet in node_modules. */
+.basemap-control-result:has(.geolibre-basemap-thumbnail) {
+  grid-template-columns: 56px 1fr auto;
+}
+
+.geolibre-basemap-thumbnail {
+  grid-row: 1 / span 3;
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+}
+
 .dark .basemap-control {
   background: hsl(var(--popover));
   color: hsl(var(--popover-foreground));
