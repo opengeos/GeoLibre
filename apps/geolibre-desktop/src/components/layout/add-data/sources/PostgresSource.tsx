@@ -5,7 +5,7 @@ import {
   type PostgisTableInfo,
 } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ensureMartinBinary,
@@ -19,7 +19,7 @@ import { postgisFeatureKeys, registerPostgisConnection } from "../../../../lib/p
 import { postgisTableKey, postgisTableLabel } from "../../../../lib/postgis-table-selection";
 import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
-import { isTauri } from "../../../../lib/tauri-io";
+import { isDesktopRuntime } from "../../../../lib/is-mobile";
 import {
   createBaseLayer,
   errorMessage,
@@ -42,6 +42,12 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.postgres.defaultName"));
   const { martin } = source.shell;
+  // Both load modes need a local helper process the desktop shell alone can
+  // start: the Martin tile server for vector tiles, the Python sidecar for the
+  // editable mode. `isTauri()` is true in the packaged Android/iOS apps too, so
+  // gating on it let a tablet run straight into a raw sidecar connection error
+  // (GeoLibre#2091). The user agent is stable for the session, so evaluate once.
+  const desktopRuntime = useMemo(() => isDesktopRuntime(), []);
   const [postgresConnectionString, setPostgresConnectionString] = useState(
     () => initialPostgres?.connection ?? readSavedPostgresConnections()[0] ?? "",
   );
@@ -130,7 +136,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     setSelectedGeometryColumn("");
 
     try {
-      if (!isTauri()) {
+      if (!desktopRuntime) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
       // Defensive: the source is hidden from the Add Data menu in the Mac App
@@ -215,7 +221,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     martin.setSelectedSourceId("");
 
     try {
-      if (!isTauri()) {
+      if (!desktopRuntime) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
       // Defensive, mirroring handleConnectEditable: no martin server in the
@@ -448,7 +454,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       }
     >
       <div className="space-y-3">
-        {!isTauri() ? (
+        {!desktopRuntime ? (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             {t("addData.postgres.desktopOnlyNotice")}
           </p>
@@ -555,7 +561,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 type="button"
                 variant="outline"
                 onClick={loadMode === "editable" ? handleConnectEditable : handleConnectPostgres}
-                disabled={source.isSubmitting || !isTauri()}
+                disabled={source.isSubmitting || !desktopRuntime}
               >
                 {t("addData.postgres.connect")}
               </Button>

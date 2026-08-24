@@ -1,4 +1,5 @@
 import { isIpadDesktopUserAgent } from "@geolibre/core";
+import { isTauri } from "./is-tauri";
 
 /**
  * Whether the app is running on a mobile operating system (Android or iOS).
@@ -49,4 +50,22 @@ export function isMobile(
   // with @geolibre/plugins' Earth Engine availability check so a future
   // correction to the heuristic lands in both.
   return isIpadDesktopUserAgent(userAgent, maxTouchPoints);
+}
+
+/**
+ * Whether the app runs in the *desktop* Tauri shell — the Tauri webview on a
+ * desktop OS, excluding the packaged Android/iOS apps.
+ *
+ * {@link isTauri} alone is true in the mobile apps too, so a feature that needs
+ * a local helper process (the Python sidecar, the Martin tile server) must gate
+ * on this instead. Gating on `isTauri()` lets the flow run on a phone or tablet
+ * and fail with a raw "could not connect to the sidecar at 127.0.0.1:8765"
+ * error, which is what GeoLibre#2091 reported on iPadOS.
+ *
+ * @param userAgent - Override for testing; defaults to `navigator.userAgent`.
+ * @param maxTouchPoints - Override for testing; see {@link isMobile}.
+ * @returns True only inside the Tauri shell on a desktop operating system.
+ */
+export function isDesktopRuntime(userAgent?: string, maxTouchPoints?: number): boolean {
+  return isTauri() && !isMobile(userAgent, maxTouchPoints);
 }

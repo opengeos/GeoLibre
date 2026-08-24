@@ -699,7 +699,7 @@
       "errorConnectFirst": "Connettiti prima a PostgreSQL.",
       "errorNoVectorLayers": "La sorgente Martin selezionata non ha livelli vettoriali.",
       "errorSelectSource": "Seleziona una sorgente Martin da aggiungere.",
-      "desktopOnlyNotice": "I livelli PostgreSQL sono disponibili solo in GeoLibre Desktop. Questa funzione avvia un server di tile Martin locale, che l'app web non può eseguire.",
+      "desktopOnlyNotice": "I livelli PostgreSQL sono disponibili solo in GeoLibre Desktop. Questa funzione avvia un server di tile Martin locale, che le app web e mobile non possono eseguire.",
       "savedConnection": "Connessione salvata",
       "selectSavedConnection": "Seleziona connessione salvata",
       "connectionString": "Stringa di connessione PostgreSQL",

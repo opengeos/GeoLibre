@@ -759,7 +759,7 @@
       "errorConnectFirst": "اتصل بـ PostgreSQL أولًا.",
       "errorNoVectorLayers": "مصدر Martin المحدد لا يحتوي على طبقات متجهة.",
       "errorSelectSource": "حدد مصدر Martin لإضافته.",
-      "desktopOnlyNotice": "طبقات PostgreSQL متاحة فقط في GeoLibre Desktop. تشغّل هذه الميزة خادم بلاطات Martin محليًا، وهو ما لا يستطيع تطبيق الويب تشغيله.",
+      "desktopOnlyNotice": "طبقات PostgreSQL متاحة فقط في GeoLibre Desktop. تشغّل هذه الميزة خادم بلاطات Martin محليًا، وهو ما لا تستطيع تطبيقات الويب والهاتف تشغيله.",
       "savedConnection": "اتصال محفوظ",
       "selectSavedConnection": "اختيار اتصال محفوظ",
       "connectionString": "سلسلة اتصال PostgreSQL",

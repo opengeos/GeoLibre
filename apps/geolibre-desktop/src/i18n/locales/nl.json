@@ -699,7 +699,7 @@
       "errorConnectFirst": "Maak eerst verbinding met PostgreSQL.",
       "errorNoVectorLayers": "De geselecteerde Martin-bron heeft geen vectorlagen.",
       "errorSelectSource": "Selecteer een Martin-bron om toe te voegen.",
-      "desktopOnlyNotice": "PostgreSQL-lagen zijn alleen beschikbaar in GeoLibre Desktop. Deze functie start een lokale Martin-tegelserver, die de webapp niet kan starten.",
+      "desktopOnlyNotice": "PostgreSQL-lagen zijn alleen beschikbaar in GeoLibre Desktop. Deze functie start een lokale Martin-tegelserver, die de web- en mobiele apps niet kunnen starten.",
       "savedConnection": "Opgeslagen verbinding",
       "selectSavedConnection": "Opgeslagen verbinding selecteren",
       "connectionString": "PostgreSQL-verbindingsreeks",

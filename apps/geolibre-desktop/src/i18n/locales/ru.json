@@ -729,7 +729,7 @@
       "errorConnectFirst": "Сначала подключитесь к PostgreSQL.",
       "errorNoVectorLayers": "У выбранного источника Martin нет векторных слоёв.",
       "errorSelectSource": "Выберите источник Martin для добавления.",
-      "desktopOnlyNotice": "Слои PostgreSQL доступны только в GeoLibre Desktop. Эта функция запускает локальный тайловый сервер Martin, который веб-приложение запустить не может.",
+      "desktopOnlyNotice": "Слои PostgreSQL доступны только в GeoLibre Desktop. Эта функция запускает локальный тайловый сервер Martin, который веб- и мобильные приложения запустить не могут.",
       "savedConnection": "Сохранённое подключение",
       "selectSavedConnection": "Выбрать сохранённое подключение",
       "connectionString": "Строка подключения PostgreSQL",

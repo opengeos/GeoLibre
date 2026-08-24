@@ -684,7 +684,7 @@
       "errorConnectFirst": "Trước tiên hãy kết nối với PostgreSQL.",
       "errorNoVectorLayers": "Nguồn Martin đã chọn không có lớp vectơ.",
       "errorSelectSource": "Đọc danh mục Martin...",
-      "desktopOnlyNotice": "Các lớp PostgreSQL chỉ có sẵn trong GeoLibre Desktop. Tính năng này chạy một máy chủ ô Martin cục bộ mà ứng dụng web không thể khởi chạy.",
+      "desktopOnlyNotice": "Các lớp PostgreSQL chỉ có sẵn trong GeoLibre Desktop. Tính năng này chạy một máy chủ ô Martin cục bộ mà ứng dụng web và di động không thể khởi chạy.",
       "savedConnection": "Kết nối đã lưu",
       "selectSavedConnection": "Chọn kết nối đã lưu",
       "connectionString": "Chuỗi kết nối PostgreSQL",

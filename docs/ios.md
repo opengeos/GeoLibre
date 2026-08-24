@@ -54,6 +54,12 @@ These are gated by a user-agent `isMobile()` check (which already matches
 iPhone/iPad) so they never appear and then fail. Everything else runs
 client-side.
 
+The Browser panel keeps its **Databases** section on every platform for
+discovery, so the PostgreSQL dialog is still reachable there. It gates on
+`isDesktopRuntime()` — `isTauri() && !isMobile()` — rather than on `isTauri()`
+alone, so on iOS it shows the "requires GeoLibre Desktop" notice and disables
+Connect instead of calling a sidecar that cannot exist (GeoLibre#2091).
+
 ## Location permission (required)
 
 This is the one place iOS differs sharply from Android. Android's geolocation

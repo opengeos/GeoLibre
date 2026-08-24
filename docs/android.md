@@ -35,6 +35,13 @@ Android has no Python sidecar or local helper binaries:
 These are gated by a user-agent `isMobile()` check so they never appear and then
 fail. Everything else runs client-side.
 
+The Browser panel keeps its **Databases** section on every platform for
+discovery, so the PostgreSQL dialog is still reachable there. It gates on
+`isDesktopRuntime()` — `isTauri() && !isMobile()` — rather than on `isTauri()`
+alone, so on Android it shows the "requires GeoLibre Desktop" notice and
+disables Connect instead of calling a sidecar that cannot exist
+(GeoLibre#2091).
+
 ## Toolchain setup (one time)
 
 You need the Android SDK + NDK, a JDK (17 or 21 — newer JDKs can break the
