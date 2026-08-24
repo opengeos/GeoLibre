@@ -175,12 +175,25 @@ def _reports_its_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
     ``ValueError`` is translated, and the original stays attached as ``__cause__``
     for the server log.
 
+    Every tool is synchronous. An ``async def`` one would return an unawaited
+    coroutine from the wrapper and raise its ``ValueError`` after the ``try``
+    below has exited, so its messages would be withheld again with nothing to
+    show for the wrapper -- it is refused here rather than registered that way.
+
     Args:
         fn: The tool function to wrap.
 
     Returns:
         The same function, with anticipated failures restated as ``ToolError``.
+
+    Raises:
+        TypeError: If *fn* is a coroutine function.
     """
+    if inspect.iscoroutinefunction(fn):
+        raise TypeError(
+            f"{fn.__name__} is async, which this wrapper cannot report errors for; "
+            "give it an async wrapper before registering it as a tool."
+        )
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -24,7 +24,10 @@ mcp = pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
 
 from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402 - after the skip guard
 
-from geolibre.mcp.server import build_server  # noqa: E402 - after the skip guard
+from geolibre.mcp.server import (  # noqa: E402 - after the skip guard
+    _reports_its_errors,
+    build_server,
+)
 
 POINT_FC = {
     "type": "FeatureCollection",
@@ -211,6 +214,23 @@ def test_every_tool_reports_its_own_validation_errors(server):
     # And the wrapper is really in force: a rejected call carries its reason.
     message = call_error(server, "create_project", path="map.txt")
     assert "map.txt" in message or "suffix" in message.lower()
+
+
+def test_an_async_tool_is_refused_rather_than_registered_unreported():
+    """A coroutine tool cannot be wrapped, so it is rejected where it is wrapped.
+
+    The wrapper is synchronous: an ``async def`` tool would hand the SDK an
+    unawaited coroutine, and the ``ValueError`` inside it would be raised after
+    the wrapper's ``try`` had exited, putting the tool right back to answering
+    with "Error executing tool <name>". Failing at registration keeps that from
+    reaching a caller unnoticed.
+    """
+
+    async def make_map():
+        raise ValueError("never reached: the wrapper refuses this function")
+
+    with pytest.raises(TypeError, match="async"):
+        _reports_its_errors(make_map)
 
 
 def test_create_project_writes_a_file(server, tmp_path):

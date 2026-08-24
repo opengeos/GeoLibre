@@ -159,7 +159,7 @@ def registers_a_tool(node: ast.FunctionDef) -> bool:
     """
     for decorator in node.decorator_list:
         text = ast.unparse(decorator)
-        if "server.tool" in text or text == "tool()" or text.startswith("tool("):
+        if "server.tool" in text or text.startswith("tool("):
             return True
     return False
 
