@@ -2025,18 +2025,7 @@ body,
   }
 
   .maplibregl-ctrl-attrib {
-    max-width: 32px !important;
-    min-height: 32px;
-    overflow: hidden !important;
-    padding: 0 !important;
-  }
-
-  .maplibregl-ctrl-attrib-inner {
     display: none !important;
-  }
-
-  .maplibregl-ctrl-attrib-button {
-    display: block !important;
   }
 }
 
