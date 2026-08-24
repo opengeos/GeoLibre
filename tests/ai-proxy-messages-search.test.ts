@@ -3,25 +3,8 @@ import { describe, it } from "node:test";
 import {
   buildMessagesSearchRequest,
   parseMessagesSearchResponse,
-  resolveSearchBackend,
   searchResultLimit,
 } from "../workers/ai-proxy/src/index";
-
-describe("AI proxy search backend selection", () => {
-  it("defaults to Tavily so existing deployments are unaffected", () => {
-    assert.equal(resolveSearchBackend({} as Env), "tavily");
-    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "" } as Env), "tavily");
-    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "tavily" } as Env), "tavily");
-  });
-
-  it("selects the messages backend case- and whitespace-insensitively", () => {
-    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: " Messages " } as Env), "messages");
-  });
-
-  it("treats an unknown backend as Tavily rather than failing closed", () => {
-    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "bing" } as Env), "tavily");
-  });
-});
 
 describe("AI proxy messages search request", () => {
   it("turns a news lookback into an explicit recency instruction", () => {

@@ -17,8 +17,6 @@ const SEARCH_HEADER_TIMEOUT_MS = 60_000;
 // Tavily deployment that legitimately does not set it.
 declare global {
   interface Env {
-    /** "tavily" (default) or "messages". */
-    SEARCH_BACKEND?: string;
     /** Base URL of an Anthropic-messages-compatible endpoint, e.g. a cli-proxy-api. */
     SEARCH_MESSAGES_URL?: string;
     SEARCH_MESSAGES_API_KEY?: string;
@@ -162,14 +160,6 @@ export function buildTavilySearchRequest(
     request.start_date = startDate.toISOString().slice(0, 10);
   }
   return request;
-}
-
-/**
- * Which backend answers /tavily. Tavily stays the default so an existing
- * deployment is unaffected until SEARCH_BACKEND is set deliberately.
- */
-export function resolveSearchBackend(env: Env): "tavily" | "messages" {
-  return env.SEARCH_BACKEND?.trim().toLowerCase() === "messages" ? "messages" : "tavily";
 }
 
 const MESSAGES_SEARCH_MODEL_DEFAULT = "gpt-5.6-luna";
@@ -452,16 +442,6 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
-/**
- * /tavily keeps its name and its response shape; SEARCH_BACKEND decides who
- * actually answers it, so clients need no change to switch providers.
- */
-async function proxySearch(request: Request, env: Env, origin: string | null): Promise<Response> {
-  return resolveSearchBackend(env) === "messages"
-    ? proxyMessagesSearch(request, env, origin)
-    : proxyTavily(request, env, origin);
-}
-
 async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
   // Limit first, as proxyChat does, so an unconfigured Worker cannot be probed
   // without bound: the 503 below is cheap, but "cheap" is not "free".
@@ -663,7 +643,11 @@ export default {
         headers: responseHeaders(origin),
       });
     }
-    if (url.pathname !== "/v1/chat/completions" && url.pathname !== "/tavily") {
+    if (
+      url.pathname !== "/v1/chat/completions" &&
+      url.pathname !== "/search" &&
+      url.pathname !== "/tavily"
+    ) {
       return jsonError("Not found", 404, responseHeaders(origin));
     }
     if (request.method !== "POST") {
@@ -671,9 +655,13 @@ export default {
     }
 
     try {
-      return url.pathname === "/tavily"
-        ? await proxySearch(request, env, origin)
-        : await proxyChat(request, env, origin);
+      if (url.pathname === "/search") {
+        return await proxyMessagesSearch(request, env, origin);
+      }
+      if (url.pathname === "/tavily") {
+        return await proxyTavily(request, env, origin);
+      }
+      return await proxyChat(request, env, origin);
     } catch (error) {
       console.error(
         JSON.stringify({

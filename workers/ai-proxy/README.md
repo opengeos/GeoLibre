@@ -27,16 +27,24 @@ output-token cap, and per-client rate limit.
    value in the Docker deployment's secret environment; never add it to source
    control or a frontend build.
 
-   To enable the optional `/tavily` search route used by the external NASA
-   OPERA plugin, also store the Tavily key on the Worker:
+  The NASA OPERA plugin uses `/search` for GPT-native web search. Configure its
+  Anthropic-messages-compatible upstream and store its API key:
+
+  ```sh
+  npx wrangler secret put SEARCH_MESSAGES_API_KEY
+  ```
+
+  Set `SEARCH_MESSAGES_URL` to the CLIProxyAPI base URL and optionally
+  `SEARCH_MESSAGES_MODEL` (default `gpt-5.6-luna`). To enable the separate
+  `/tavily` route for users who explicitly request Tavily, also store:
 
    ```sh
    npx wrangler secret put TAVILY_API_KEY
    ```
 
-   The Worker can be deployed without this optional secret. Chat remains
-   available, and `/tavily` returns `503 Search is not configured` until the
-   secret is added. Both routes share the one `AI_RATE_LIMITER` budget per
+  The Worker can be deployed without either optional search secret. Chat remains
+  available, and the corresponding search route returns `503 Search is not
+  configured` until its secret is added. All routes share one `AI_RATE_LIMITER` budget per
    client, so the configured limit is what a single user may cost you in total
    rather than a separate allowance each for chat and search.
 
@@ -50,14 +58,13 @@ output-token cap, and per-client rate limit.
 
    | Setting | Required | Meaning |
    | --- | --- | --- |
-   | `SEARCH_BACKEND` | no | `tavily` (default) or `messages`. Any other value is treated as `tavily`. |
    | `SEARCH_MESSAGES_URL` | for `messages` | Base URL, e.g. `https://cli-proxy.example.org`. `/v1/messages` is appended. |
    | `SEARCH_MESSAGES_API_KEY` | for `messages` | Bearer token for that endpoint. Store with `wrangler secret put`. |
    | `SEARCH_MESSAGES_MODEL` | no | Defaults to `gpt-5.6-luna`. |
 
    Tavily remains the default, so an existing deployment is unchanged until
-   `SEARCH_BACKEND=messages` is set deliberately. Like the Tavily path, the
-   route returns `503 Search is not configured` when its settings are missing.
+   `/search` is always GPT-native web search; `/tavily` is always Tavily. Both
+   return `503 Search is not configured` when their settings are missing.
 
    Two differences are worth knowing before switching. Anthropic returns each
    hit's page text as opaque `encrypted_content`, so the model writes the
