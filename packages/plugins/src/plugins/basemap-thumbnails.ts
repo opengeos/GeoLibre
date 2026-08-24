@@ -9,7 +9,7 @@ function needsKey(value: string): boolean {
   return /\{(api-key|access_token|key)\}/.test(value);
 }
 
-function rasterPreviewUrl(basemap: BasemapDefinition): string | null {
+export function rasterPreviewUrl(basemap: BasemapDefinition): string | null {
   if (basemap.source.type !== "raster" || !basemap.source.tiles?.[0]) return null;
   const template = basemap.source.tiles[0];
   if (needsKey(template)) return null;
@@ -20,7 +20,7 @@ function rasterPreviewUrl(basemap: BasemapDefinition): string | null {
     .replace(/\{s\}/g, "a");
 }
 
-function styleUrlOf(basemap: BasemapDefinition): string | null {
+export function styleUrlOf(basemap: BasemapDefinition): string | null {
   if (basemap.source.type !== "style" && basemap.source.type !== "vector-style") return null;
   return needsKey(basemap.source.url) ? null : basemap.source.url;
 }
