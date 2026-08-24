@@ -20,6 +20,10 @@ function raster(tiles: string[]): BasemapDefinition {
   };
 }
 
+function tmsRaster(tiles: string[]): BasemapDefinition {
+  return { ...raster(tiles), source: { type: "raster", tiles, scheme: "tms" } };
+}
+
 function style(url: string): BasemapDefinition {
   return {
     id: "positron",
@@ -68,6 +72,21 @@ describe("basemap preview urls", () => {
     );
     assert.equal(rasterPreviewUrl(raster(["https://tiles.example/{quadkey}.png"])), null);
     assert.equal(rasterPreviewUrl(raster(["https://tiles.example/{z}/{x}/{-y}.png"])), null);
+  });
+
+  it("flips the row index for a tms source", () => {
+    // Tencent's basemaps number rows from the bottom; an xyz row index would
+    // preview the vertically mirrored tile.
+    assert.equal(
+      rasterPreviewUrl(tmsRaster(["https://tiles.example/tile?z={z}&x={x}&y={y}"])),
+      "https://tiles.example/tile?z=2&x=1&y=2",
+    );
+  });
+
+  it("skips a style url carrying any placeholder at all", () => {
+    // A style URL is fetched verbatim, so even a tile token nothing substitutes
+    // for it makes the URL unusable.
+    assert.equal(styleUrlOf(style("https://{s}.example.com/style.json")), null);
   });
 
   it("ignores the other source kind", () => {
@@ -130,6 +149,9 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
 
     const panel = container.querySelector(BASEMAP_PANEL_SELECTOR);
     assert.ok(panel, `no ${BASEMAP_PANEL_SELECTOR} — the control renamed its panel`);
+    // `watchForPanel` observes the panel's parent to notice a rebuilt panel, so
+    // the panel has to stay a direct child of the map container.
+    assert.equal(panel.parentElement, container, "the panel is no longer a map-container child");
     const rows = [...panel.querySelectorAll(BASEMAP_ROW_SELECTOR)];
     assert.ok(rows.length > 0, `no ${BASEMAP_ROW_SELECTOR} rows — the control renamed its rows`);
 

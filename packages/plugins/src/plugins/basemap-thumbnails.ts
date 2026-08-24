@@ -45,23 +45,32 @@ const SUBSTITUTED_TOKEN = /^\{[zxys]\}$/;
  * scheme is not filled in here (`{quadkey}`, `{-y}`, ...), which would render a
  * broken tile rather than a preview.
  */
-function hasUnresolvedPlaceholder(value: string): boolean {
-  return (value.match(/\{[^{}]*\}/g) ?? []).some((token) => !SUBSTITUTED_TOKEN.test(token));
+function hasUnresolvedPlaceholder(value: string, substituted?: RegExp): boolean {
+  return (value.match(/\{[^{}]*\}/g) ?? []).some((token) => !substituted?.test(token));
 }
+
+/** The zoom every raster preview tile is sampled at. */
+const PREVIEW_Z = 2;
 
 export function rasterPreviewUrl(basemap: BasemapDefinition): string | null {
   if (basemap.source.type !== "raster" || !basemap.source.tiles?.[0]) return null;
   const template = basemap.source.tiles[0];
-  if (hasUnresolvedPlaceholder(template)) return null;
+  if (hasUnresolvedPlaceholder(template, SUBSTITUTED_TOKEN)) return null;
+  // A `tms` source numbers rows from the bottom (MapLibre flips `{y}` for it),
+  // so an xyz row index would fetch the vertically mirrored tile — a different
+  // part of the world than the basemap actually renders there.
+  const y = basemap.source.scheme === "tms" ? 2 ** PREVIEW_Z - 1 - 1 : 1;
   return template
-    .replace(/\{z\}/g, "2")
+    .replace(/\{z\}/g, String(PREVIEW_Z))
     .replace(/\{x\}/g, "1")
-    .replace(/\{y\}/g, "1")
+    .replace(/\{y\}/g, String(y))
     .replace(/\{s\}/g, "a");
 }
 
 export function styleUrlOf(basemap: BasemapDefinition): string | null {
   if (basemap.source.type !== "style" && basemap.source.type !== "vector-style") return null;
+  // Nothing substitutes a token in a style URL — it is fetched verbatim — so
+  // even the tile tokens rasterPreviewUrl fills in make it unusable here.
   return hasUnresolvedPlaceholder(basemap.source.url) ? null : basemap.source.url;
 }
 
@@ -108,6 +117,8 @@ function createStyleCamera(): {
   let gate: Promise<void> = Promise.resolve();
   let openGate: (() => void) | null = null;
   let resumeTimer = 0;
+  /** Settles the job that is already waiting on the hidden map, if any. */
+  let cancelInFlight: (() => void) | null = null;
 
   const resume = () => {
     window.clearTimeout(resumeTimer);
@@ -117,6 +128,11 @@ function createStyleCamera(): {
   };
 
   const teardown = () => {
+    // A job already past the gate has its listeners on the map about to be
+    // removed, so `style.load` can never fire for it: without this it could
+    // only settle through the 6s timeout, and since jobs are serialized that
+    // would stall every later preview well past PAUSE_MS.
+    cancelInFlight?.();
     hidden?.map.remove();
     hidden?.el.remove();
     hidden = null;
@@ -156,15 +172,19 @@ function createStyleCamera(): {
           const { map } = ensure();
           let settled = false;
           let loaded = false;
+          let captureTimer = 0;
           const finish = (src: string | null) => {
             if (settled) return;
             settled = true;
+            if (cancelInFlight === cancel) cancelInFlight = null;
             window.clearTimeout(timer);
+            window.clearTimeout(captureTimer);
             map.off("style.load", onLoad);
             map.off("error", onError);
             resolve(src);
           };
-          const timer = window.setTimeout(() => finish(null), 6000);
+          const cancel = () => finish(null);
+          const timer = window.setTimeout(cancel, 6000);
           // An unreachable or invalid style URL emits `error` and never fires
           // `style.load`. Without this the job would hold the serialized queue
           // for the full timeout, delaying every later preview by 6s. Errors
@@ -175,7 +195,7 @@ function createStyleCamera(): {
           };
           const onLoad = () => {
             loaded = true;
-            window.setTimeout(() => {
+            captureTimer = window.setTimeout(() => {
               try {
                 const src = map.getCanvas().toDataURL("image/jpeg", 0.72);
                 if (src) snapCache.set(url, src);
@@ -187,6 +207,7 @@ function createStyleCamera(): {
           };
           map.once("style.load", onLoad);
           map.on("error", onError);
+          cancelInFlight = cancel;
           map.setStyle(url, { diff: false });
         });
       };
@@ -239,20 +260,35 @@ function stamp(row: HTMLElement, src: string): void {
   row.prepend(img);
 }
 
+function rowSelector(id: string): string {
+  return `${BASEMAP_ROW_SELECTOR}[${BASEMAP_ROW_ID_ATTR}="${CSS.escape(id)}"]`;
+}
+
 function paint(id: string, src: string, state: string): void {
-  document
-    .querySelectorAll<HTMLElement>(
-      `${BASEMAP_ROW_SELECTOR}[${BASEMAP_ROW_ID_ATTR}="${CSS.escape(id)}"]`,
-    )
-    .forEach((row) => {
-      // The flat-colour swatch and the real render race independently, and
-      // `snapCache` outlives dispose(), so a reopened panel can paint "loaded"
-      // before a slow swatch fetch settles. Never let a row move backwards.
-      const current = row.getAttribute(ATTR);
-      if (current && STATE_RANK[current] >= STATE_RANK[state]) return;
-      row.setAttribute(ATTR, state);
-      stamp(row, src);
-    });
+  document.querySelectorAll<HTMLElement>(rowSelector(id)).forEach((row) => {
+    // The flat-colour swatch and the real render race independently, and
+    // `snapCache` outlives dispose(), so a reopened panel can paint "loaded"
+    // before a slow swatch fetch settles. Never let a row move backwards.
+    const current = row.getAttribute(ATTR);
+    if (current && STATE_RANK[current] >= STATE_RANK[state]) return;
+    row.setAttribute(ATTR, state);
+    stamp(row, src);
+  });
+}
+
+/**
+ * Drop a row back to the name-only layout when no preview could be produced —
+ * an unreachable style host, CORS, or the snapshot timeout. Without this the
+ * row keeps its "pending" placeholder for good, where a failed *raster* tile
+ * already degrades this way through `stamp`'s error handler. Rows that did get
+ * an image are left alone, and a later snapshot can still upgrade a skipped row
+ * because "loaded" outranks "skip".
+ */
+function markSkipped(id: string): void {
+  document.querySelectorAll<HTMLElement>(rowSelector(id)).forEach((row) => {
+    if (row.querySelector(".geolibre-basemap-thumbnail")) return;
+    row.setAttribute(ATTR, "skip");
+  });
 }
 
 export function installBasemapThumbnails(control: BasemapControl): {
@@ -263,6 +299,9 @@ export function installBasemapThumbnails(control: BasemapControl): {
   if (typeof window === "undefined" || !document.body) return noop;
 
   const camera = createStyleCamera();
+  // Cleared by dispose() so an in-flight preview cannot repaint rows belonging
+  // to a control the plugin has already torn down.
+  let active = true;
   let panel: HTMLElement | null = null;
   let visible: IntersectionObserver | null = null;
 
@@ -275,7 +314,9 @@ export function installBasemapThumbnails(control: BasemapControl): {
       const id = row.getAttribute(BASEMAP_ROW_ID_ATTR);
       if (!url || !id) continue;
       void camera.snapshot(url).then((src) => {
+        if (!active) return;
         if (src) paint(id, src, "loaded");
+        else markSkipped(id);
       });
     }
   }
@@ -297,7 +338,9 @@ export function installBasemapThumbnails(control: BasemapControl): {
         row.dataset.previewUrl = jsonUrl;
         row.setAttribute(ATTR, "pending");
         void styleSwatch(jsonUrl).then((src) => {
+          if (!active) return;
           if (src) paint(id, src, "ready");
+          else markSkipped(id);
         });
         visible?.observe(row);
         return;
@@ -319,6 +362,7 @@ export function installBasemapThumbnails(control: BasemapControl): {
     scoped.disconnect();
     visible?.disconnect();
     visible = null;
+    watchForPanel();
     if (!panel) return;
     scoped.observe(panel, { childList: true, subtree: true });
     if (typeof IntersectionObserver === "function") {
@@ -329,17 +373,36 @@ export function installBasemapThumbnails(control: BasemapControl): {
 
   // The control builds a fresh panel element in every `onAdd`, so the one this
   // watched can be replaced (a position change) or not exist yet. This callback
-  // costs a single `isConnected` check per mutation batch while the panel is
-  // healthy, and only then falls back to a lookup.
+  // costs a single `isConnected` check per mutation batch, and only then falls
+  // back to a lookup.
   const bootstrap = new MutationObserver(() => {
     if (!panel?.isConnected) attach();
   });
-  bootstrap.observe(document.body, { childList: true, subtree: true });
+
+  /**
+   * `BasemapControl` does not expose its panel, but it appends it as a direct
+   * child of the map container — so once the panel has been seen, watch that
+   * one element's child list rather than the whole application's DOM. A
+   * body-wide subtree observer would fire on every unrelated UI mutation for as
+   * long as the plugin is active, which is the whole session. The body is only
+   * a bootstrap for the window before the panel first appears.
+   */
+  function watchForPanel(): void {
+    bootstrap.disconnect();
+    const host = panel?.parentElement;
+    if (host) bootstrap.observe(host, { childList: true });
+    else bootstrap.observe(document.body, { childList: true, subtree: true });
+  }
+
   attach();
+  // `attach` installs the watch when it finds a panel; cover the case where it
+  // did not.
+  if (!panel) watchForPanel();
 
   return {
     pause: () => camera.pause(),
     dispose() {
+      active = false;
       bootstrap.disconnect();
       scoped.disconnect();
       visible?.disconnect();
