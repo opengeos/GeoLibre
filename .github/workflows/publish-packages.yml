@@ -1,0 +1,71 @@
+name: Publish core and map packages
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for npm trusted publishing and provenance.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1, which the runner's
+      # bundled npm is not guaranteed to be. Pin to a known-good version rather
+      # than `npm@latest`: that tag briefly shipped a build missing the bundled
+      # `sigstore` module, which breaks `npm publish --provenance`.
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@11.5.1
+
+      - run: npm ci
+
+      - name: Build the distributed bundles
+        run: npm run build -w @geolibre/core -w @geolibre/map
+
+      # The manifests in git point at TypeScript source so the monorepo needs no
+      # build step; npm consumers need `dist`. npm ignores entry fields nested
+      # under `publishConfig`, so hoist them here, just before publishing.
+      # @geolibre/core is prepared alongside @geolibre/map so the `"*"`
+      # dependency between them is pinned to this release's version.
+      - name: Rewrite the manifests for publishing
+        run: node scripts/prepare-npm-package.mjs packages/core packages/map
+
+      - id: version
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          for pkg in core map; do
+            if npm view "@geolibre/$pkg@$version" version >/dev/null 2>&1; then
+              echo "$pkg=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "$pkg=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      # No NODE_AUTH_TOKEN: npm authenticates via the OIDC id-token from the
+      # trusted publisher configured on each package (opengeos/GeoLibre, this
+      # workflow file) and attaches build provenance. npm has no PyPI-style
+      # pending publisher, so a package has to exist before that connection can
+      # be made: the first version is published from a maintainer's machine
+      # once, then every later release goes through here.
+      - name: Publish @geolibre/core
+        if: steps.version.outputs.core == 'true'
+        run: npm publish -w @geolibre/core --provenance --access public
+
+      # Published after core so a consumer installing @geolibre/map never
+      # resolves a pinned @geolibre/core that is not on the registry yet.
+      - name: Publish @geolibre/map
+        if: steps.version.outputs.map == 'true'
+        run: npm publish -w @geolibre/map --provenance --access public

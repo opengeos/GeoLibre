@@ -110,7 +110,7 @@ The app is **store-driven**. `@geolibre/core` holds the Zustand store, domain ty
 
 Rendering is MapLibre GL JS in the webview, with **deck.gl** for raster/point-cloud/3D overlays.
 
-**Packages:** `@geolibre/core` (types, project format, store) · `@geolibre/map` (MapLibre lifecycle + layer sync) · `@geolibre/ui` (shadcn-style primitives) · `@geolibre/processing` (client-side algorithm registry) · `@geolibre/plugins` (plugin interface + built-in plugins) · `@geolibre/embed` (typed iframe embed client, the one package published to npm — `.github/workflows/publish-embed.yml` publishes it on each GitHub Release, skipping a version already there) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
+**Packages:** `@geolibre/core` (types, project format, store) · `@geolibre/map` (MapLibre lifecycle + layer sync) · `@geolibre/ui` (shadcn-style primitives) · `@geolibre/processing` (client-side algorithm registry) · `@geolibre/plugins` (plugin interface + built-in plugins) · `@geolibre/embed` (typed iframe embed client — `.github/workflows/publish-embed.yml` publishes it on each GitHub Release, skipping a version already there) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
 
 **Plugins:** Built-in plugins live in `packages/plugins/src/plugins/`, are exported from that package's `index.ts`, and registered in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. External plugins load from zips or a `plugin.json` manifest; bundled drop-ins under `apps/geolibre-desktop/public/plugins/<id>/` bake into both web and desktop builds. See `docs/plugin-api.md`.
 
@@ -123,6 +123,27 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 ## Conventions
 
 - Never commit directly to `main`; branch and open a PR.
+- **`@geolibre/core` and `@geolibre/map` are published to npm** by
+  `.github/workflows/publish-packages.yml` on each GitHub Release, alongside
+  `@geolibre/embed`. Their checked-in `main`/`types`/`exports` point at
+  TypeScript **source**, because that is how the monorepo consumes them: Vite,
+  `tsc` and tsx all resolve `./src/index.ts` through the package's own
+  `exports`, so `npm run dev` and `node --import tsx --test tests/<name>.test.ts`
+  need no build step. The npm tarball ships `dist` instead, and npm cannot
+  express that split on its own: unlike pnpm and Yarn it deliberately **ignores
+  entry fields nested under `publishConfig`** (npm/cli#7586), so a manifest that
+  only states its dist entries there publishes `./src/index.ts` to consumers who
+  never receive `src`. The published entries therefore live under
+  `publishConfig`, and `scripts/prepare-npm-package.mjs` hoists them (and pins
+  the `"*"` `@geolibre/core` dependency to the release version) just before
+  `npm publish`. Point those top-level fields at `dist` and every frontend test
+  that imports a `@geolibre/map` subpath fails with `ERR_MODULE_NOT_FOUND`,
+  because `dist` is gitignored and nothing builds it before the suite.
+  `tests/prepare-npm-package.test.ts` guards both halves, including that each
+  published path is one the package's own `tsdown` entries actually emit
+  (`--format esm --dts` writes `<entry>.mjs` and `<entry>.d.mts`, **not**
+  `.d.ts`) — no workflow runs those builds, so nothing else would notice the
+  drift.
 - **`backend/geolibre_server/uv.lock` is committed** (the root `.gitignore` ignores `uv.lock` everywhere else and negates it for this one path). That project is bundled into the desktop installers and launched with `uv run --frozen --project <resource dir>` from `src-tauri/src/lib.rs` — a directory the user cannot write (`C:\Program Files\…`, `/usr/lib/GeoLibre Desktop/…`). Ship it lockless and uv resolves, then tries to _write_ `uv.lock` there, fails with "Permission denied" and exits 2 — which reaches the user as "Jupyter server exited before it was ready (exit code: 2)" with the cause invisible. So: any edit to that `pyproject.toml`'s dependencies must land with a refreshed lock (`uv lock --project backend/geolibre_server`). CI's "Check the bundled sidecar lockfile is in sync" step (`uv lock --check`) fails if they drift.
 - Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external map/tile hosts must be added there.
 - Map/tile-host CORS for selected release assets is handled by a dev-server raster proxy.

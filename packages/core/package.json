@@ -1,9 +1,26 @@
 {
   "name": "@geolibre/core",
   "version": "2.7.0",
+  "description": "GeoLibre domain types, project schema, and Zustand store",
+  "keywords": [
+    "geolibre",
+    "geospatial",
+    "gis",
+    "maplibre",
+    "zustand"
+  ],
+  "homepage": "https://geolibre.app",
+  "bugs": "https://github.com/opengeos/GeoLibre/issues",
   "license": "MIT",
+  "author": "Qiusheng Wu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengeos/GeoLibre",
+    "directory": "packages/core"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "type": "module",
   "main": "./src/index.ts",
@@ -13,13 +30,14 @@
   },
   "publishConfig": {
     "main": "./dist/index.mjs",
-    "types": "./dist/index.d.ts",
+    "types": "./dist/index.d.mts",
     "exports": {
       ".": {
-        "types": "./dist/index.d.ts",
+        "types": "./dist/index.d.mts",
         "import": "./dist/index.mjs"
       }
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown src/index.ts --format esm --dts"
@@ -32,6 +50,7 @@
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   }
 }

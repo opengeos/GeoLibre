@@ -29,11 +29,34 @@ export function createLayerSync(map: maplibregl.Map): LayerSync {
   return {
     sync(layers) {
       const nextIds = new Set(layers.map((layer) => layer.id));
+      const previousById = new Map(synced.map((layer) => [layer.id, layer]));
       for (const previous of synced) {
         if (!nextIds.has(previous.id)) removeLayerFromMap(map, previous.id, previous);
       }
+
       // Input order is bottom-to-top: each addLayer without an anchor lands on
-      // top of the previous one, so the final stack matches the input order.
+      // top of the previous one, so re-adding the whole tail in order rebuilds
+      // the stack. MapLibre leaves an existing layer exactly where it is, so a
+      // layer that only moved has to be removed first or it keeps its old
+      // position and the documented order silently stops holding. Find the
+      // lowest position whose occupant changed -- a layer that moved, or a new
+      // layer inserted below existing ones -- and rebuild from there up.
+      const keptIds = synced.map((layer) => layer.id).filter((id) => nextIds.has(id));
+      let rebuildFrom = layers.length;
+      let keptIndex = 0;
+      for (let index = 0; index < layers.length; index += 1) {
+        const id = layers[index].id;
+        if (!previousById.has(id) || id !== keptIds[keptIndex]) {
+          rebuildFrom = index;
+          break;
+        }
+        keptIndex += 1;
+      }
+      for (let index = rebuildFrom; index < layers.length; index += 1) {
+        const previous = previousById.get(layers[index].id);
+        if (previous) removeLayerFromMap(map, layers[index].id, previous);
+      }
+
       for (const layer of layers) syncLayer(map, layer);
       synced = [...layers];
     },

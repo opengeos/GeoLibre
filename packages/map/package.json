@@ -1,30 +1,59 @@
 {
   "name": "@geolibre/map",
   "version": "2.7.0",
+  "description": "Headless MapLibre layer synchronization and style engine from GeoLibre",
+  "keywords": [
+    "geolibre",
+    "geospatial",
+    "gis",
+    "headless",
+    "maplibre",
+    "pmtiles"
+  ],
+  "homepage": "https://geolibre.app",
+  "bugs": "https://github.com/opengeos/GeoLibre/issues",
   "license": "MIT",
+  "author": "Qiusheng Wu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengeos/GeoLibre",
+    "directory": "packages/map"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "type": "module",
-  "main": "./dist/headless.mjs",
-  "types": "./dist/headless.d.mts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": {
-      "types": "./dist/headless.d.mts",
-      "import": "./dist/headless.mjs"
+    ".": "./src/index.ts",
+    "./headless": "./src/headless.ts",
+    "./derived-geometry": "./src/derived-geometry.ts",
+    "./pmtiles-layer": "./src/pmtiles-layer.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/headless.mjs",
+    "types": "./dist/headless.d.mts",
+    "exports": {
+      ".": {
+        "types": "./dist/headless.d.mts",
+        "import": "./dist/headless.mjs"
+      },
+      "./headless": {
+        "types": "./dist/headless.d.mts",
+        "import": "./dist/headless.mjs"
+      },
+      "./derived-geometry": {
+        "types": "./dist/derived-geometry.d.mts",
+        "import": "./dist/derived-geometry.mjs"
+      },
+      "./pmtiles-layer": {
+        "types": "./dist/pmtiles-layer.d.mts",
+        "import": "./dist/pmtiles-layer.mjs"
+      }
     },
-    "./headless": {
-      "types": "./dist/headless.d.mts",
-      "import": "./dist/headless.mjs"
-    },
-    "./derived-geometry": {
-      "types": "./dist/derived-geometry.d.mts",
-      "import": "./dist/derived-geometry.mjs"
-    },
-    "./pmtiles-layer": {
-      "types": "./dist/pmtiles-layer.d.mts",
-      "import": "./dist/pmtiles-layer.mjs"
-    }
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts --format esm --dts"
@@ -59,7 +88,7 @@
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }
