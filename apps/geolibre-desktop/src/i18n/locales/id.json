@@ -684,7 +684,7 @@
       "errorConnectFirst": "Hubungkan ke PostgreSQL terlebih dahulu.",
       "errorNoVectorLayers": "Sumber Martin yang dipilih tidak memiliki layer vektor.",
       "errorSelectSource": "Pilih sumber Martin untuk ditambahkan.",
-      "desktopOnlyNotice": "Layer PostgreSQL hanya tersedia di GeoLibre Desktop. Fitur ini menjalankan server ubin Martin lokal, yang tidak dapat diluncurkan oleh aplikasi web.",
+      "desktopOnlyNotice": "Layer PostgreSQL hanya tersedia di GeoLibre Desktop. Fitur ini menjalankan server ubin Martin lokal, yang tidak dapat diluncurkan oleh aplikasi web dan seluler.",
       "savedConnection": "Koneksi tersimpan",
       "selectSavedConnection": "Pilih koneksi tersimpan",
       "connectionString": "String koneksi PostgreSQL",

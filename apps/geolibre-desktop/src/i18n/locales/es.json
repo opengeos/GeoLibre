@@ -699,7 +699,7 @@
       "errorConnectFirst": "Conéctese primero a PostgreSQL.",
       "errorNoVectorLayers": "La fuente Martin seleccionada no tiene capas vectoriales.",
       "errorSelectSource": "Seleccione una fuente Martin para añadir.",
-      "desktopOnlyNotice": "Las capas de PostgreSQL solo están disponibles en GeoLibre Desktop. Esta función ejecuta un servidor de teselas Martin local, que la aplicación web no puede iniciar.",
+      "desktopOnlyNotice": "Las capas de PostgreSQL solo están disponibles en GeoLibre Desktop. Esta función ejecuta un servidor de teselas Martin local, que las aplicaciones web y móviles no pueden iniciar.",
       "savedConnection": "Conexión guardada",
       "selectSavedConnection": "Seleccionar conexión guardada",
       "connectionString": "Cadena de conexión de PostgreSQL",

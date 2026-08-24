@@ -51,8 +51,15 @@ spawning subprocesses:
 - Add Data → **PostgreSQL** (served by the local Martin tile server)
 
 These are gated by a user-agent `isMobile()` check (which already matches
-iPhone/iPad) so they never appear and then fail. Everything else runs
-client-side.
+iPhone/iPad), so the Add Data menu and the Layer panel's add-data group never
+offer them. Everything else runs client-side.
+
+PostgreSQL has one entry point that check does not cover: the Browser panel
+keeps its **Databases** section on every platform for discovery, so its ＋ still
+opens the PostgreSQL dialog. The dialog gates on `isDesktopRuntime()`
+(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on iOS it
+shows the "requires GeoLibre Desktop" notice and disables Connect instead of
+calling a sidecar that cannot exist (GeoLibre#2091).
 
 ## Location permission (required)
 

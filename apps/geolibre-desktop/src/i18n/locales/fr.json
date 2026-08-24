@@ -699,7 +699,7 @@
       "errorConnectFirst": "Connectez-vous d'abord à PostgreSQL.",
       "errorNoVectorLayers": "La source Martin sélectionnée n'a pas de couches vectorielles.",
       "errorSelectSource": "Sélectionnez une source Martin à ajouter.",
-      "desktopOnlyNotice": "Les couches PostgreSQL ne sont disponibles que dans GeoLibre Desktop. Cette fonctionnalité exécute un serveur de tuiles Martin local, que l'application web ne peut pas lancer.",
+      "desktopOnlyNotice": "Les couches PostgreSQL ne sont disponibles que dans GeoLibre Desktop. Cette fonctionnalité exécute un serveur de tuiles Martin local, que les applications web et mobiles ne peuvent pas lancer.",
       "savedConnection": "Connexion enregistrée",
       "selectSavedConnection": "Sélectionner une connexion enregistrée",
       "connectionString": "Chaîne de connexion PostgreSQL",

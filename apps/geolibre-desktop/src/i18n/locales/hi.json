@@ -699,7 +699,7 @@
       "errorConnectFirst": "पहले PostgreSQL से कनेक्ट करें।",
       "errorNoVectorLayers": "चयनित Martin स्रोत में कोई वेक्टर लेयर नहीं है।",
       "errorSelectSource": "जोड़ने के लिए एक Martin स्रोत चुनें।",
-      "desktopOnlyNotice": "PostgreSQL लेयर केवल GeoLibre Desktop में उपलब्ध हैं। यह सुविधा एक स्थानीय Martin टाइल सर्वर चलाती है, जिसे वेब ऐप शुरू नहीं कर सकता।",
+      "desktopOnlyNotice": "PostgreSQL लेयर केवल GeoLibre Desktop में उपलब्ध हैं। यह सुविधा एक स्थानीय Martin टाइल सर्वर चलाती है, जिसे वेब और मोबाइल ऐप शुरू नहीं कर सकते।",
       "savedConnection": "सहेजा गया कनेक्शन",
       "selectSavedConnection": "सहेजा गया कनेक्शन चुनें",
       "connectionString": "PostgreSQL कनेक्शन स्ट्रिंग",

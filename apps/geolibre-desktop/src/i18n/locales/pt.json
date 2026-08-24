@@ -699,7 +699,7 @@
       "errorConnectFirst": "Conecte-se ao PostgreSQL primeiro.",
       "errorNoVectorLayers": "A fonte Martin selecionada não tem camadas vetoriais.",
       "errorSelectSource": "Selecione uma fonte Martin para adicionar.",
-      "desktopOnlyNotice": "As camadas PostgreSQL estão disponíveis apenas no GeoLibre Desktop. Este recurso executa um servidor de tiles Martin local, que o aplicativo web não pode iniciar.",
+      "desktopOnlyNotice": "As camadas PostgreSQL estão disponíveis apenas no GeoLibre Desktop. Este recurso executa um servidor de tiles Martin local, que os aplicativos web e móveis não podem iniciar.",
       "savedConnection": "Conexão salva",
       "selectSavedConnection": "Selecionar conexão salva",
       "connectionString": "String de conexão PostgreSQL",

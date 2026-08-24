@@ -32,8 +32,15 @@ Android has no Python sidecar or local helper binaries:
   (all need the Python sidecar)
 - Add Data → **PostgreSQL** (served by the local Martin tile server)
 
-These are gated by a user-agent `isMobile()` check so they never appear and then
-fail. Everything else runs client-side.
+These are gated by a user-agent `isMobile()` check, so the Add Data menu and the
+Layer panel's add-data group never offer them. Everything else runs client-side.
+
+PostgreSQL has one entry point that check does not cover: the Browser panel
+keeps its **Databases** section on every platform for discovery, so its ＋ still
+opens the PostgreSQL dialog. The dialog gates on `isDesktopRuntime()`
+(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on Android it
+shows the "requires GeoLibre Desktop" notice and disables Connect instead of
+calling a sidecar that cannot exist (GeoLibre#2091).
 
 ## Toolchain setup (one time)
 

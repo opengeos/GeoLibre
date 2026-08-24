@@ -699,7 +699,7 @@
       "errorConnectFirst": "نخست به PostgreSQL متصل شوید.",
       "errorNoVectorLayers": "منبع Martin انتخاب‌شده هیچ لایهٔ برداری ندارد.",
       "errorSelectSource": "یک منبع Martin را برای افزودن برگزینید.",
-      "desktopOnlyNotice": "لایه‌های PostgreSQL تنها در GeoLibre Desktop در دسترس‌اند. این قابلیت یک سرور کاشی محلی Martin را اجرا می‌کند که برنامهٔ وب توان راه‌اندازی‌اش را ندارد.",
+      "desktopOnlyNotice": "لایه‌های PostgreSQL تنها در GeoLibre Desktop در دسترس‌اند. این قابلیت یک سرور کاشی محلی Martin را اجرا می‌کند که برنامه‌های وب و موبایل توان راه‌اندازی‌اش را ندارند.",
       "savedConnection": "اتصال ذخیره‌شده",
       "selectSavedConnection": "انتخاب اتصال ذخیره‌شده",
       "connectionString": "رشتهٔ اتصال PostgreSQL",

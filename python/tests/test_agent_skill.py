@@ -142,6 +142,28 @@ def parameters(node: ast.FunctionDef) -> list[tuple[str, str | None]]:
     return collected
 
 
+def registers_a_tool(node: ast.FunctionDef) -> bool:
+    """Whether a function is decorated as an MCP tool.
+
+    Both spellings count: the server's own ``@server.tool()``, and the
+    ``@tool()`` wrapper ``build_server`` defines around it (which restates an
+    anticipated ``ValueError`` as the SDK's ``ToolError`` so the caller still
+    reads why a call was rejected). Matching only one of the two would silently
+    empty this scan and pass every check that reads from it.
+
+    Args:
+        node: The function definition to test.
+
+    Returns:
+        True when one of its decorators registers it as a tool.
+    """
+    for decorator in node.decorator_list:
+        text = ast.unparse(decorator)
+        if "server.tool" in text or text.startswith("tool("):
+            return True
+    return False
+
+
 def mcp_tool_signatures() -> dict[str, list[tuple[str, str | None]]]:
     """Return every tool the MCP server registers, with its parameters.
 
@@ -149,14 +171,13 @@ def mcp_tool_signatures() -> dict[str, list[tuple[str, str | None]]]:
     optional ``mcp`` SDK installed.
 
     Returns:
-        A mapping of ``@server.tool()`` function name to its parameters.
+        A mapping of tool function name to its parameters.
     """
     source = (Path(mcp_package.__file__).parent / "server.py").read_text(encoding="utf-8")
     return {
         node.name: parameters(node)
         for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.FunctionDef)
-        and any("server.tool" in ast.unparse(d) for d in node.decorator_list)
+        if isinstance(node, ast.FunctionDef) and registers_a_tool(node)
     }
 
 
@@ -164,7 +185,7 @@ def mcp_tool_names() -> set[str]:
     """Return the names of every tool the MCP server registers.
 
     Returns:
-        The set of ``@server.tool()`` function names.
+        The set of tool function names.
     """
     return set(mcp_tool_signatures())
 

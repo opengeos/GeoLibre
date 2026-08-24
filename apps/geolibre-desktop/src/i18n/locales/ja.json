@@ -684,7 +684,7 @@
       "errorConnectFirst": "先にPostgreSQLに接続してください。",
       "errorNoVectorLayers": "選択したMartinソースにはベクターレイヤーがありません。",
       "errorSelectSource": "追加するMartinソースを選択してください。",
-      "desktopOnlyNotice": "PostgreSQLレイヤーはGeoLibre Desktopでのみ利用できます。この機能はローカルのMartinタイルサーバーを実行しますが、Webアプリでは起動できません。",
+      "desktopOnlyNotice": "PostgreSQLレイヤーはGeoLibre Desktopでのみ利用できます。この機能はローカルのMartinタイルサーバーを実行しますが、Webアプリやモバイルアプリでは起動できません。",
       "savedConnection": "保存済み接続",
       "selectSavedConnection": "保存済み接続を選択",
       "connectionString": "PostgreSQL接続文字列",
