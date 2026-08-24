@@ -34,9 +34,17 @@ output-token cap, and per-client rate limit.
    npx wrangler secret put SEARCH_MESSAGES_API_KEY
    ```
 
-   Set `SEARCH_MESSAGES_URL` to the CLIProxyAPI base URL and optionally
-   `SEARCH_MESSAGES_MODEL` (default `gpt-5.6-luna`). To enable the separate
-   `/tavily` route for users who explicitly request Tavily, also store:
+   `SEARCH_MESSAGES_URL` (the CLIProxyAPI base URL) and the optional
+   `SEARCH_MESSAGES_MODEL` (default `gpt-5.6-luna`) are read off `Env` the same
+   way the key is, so set each either as a `vars` entry in your own
+   `wrangler.jsonc` or, to keep the URL out of source control, with
+   `npx wrangler secret put`. Neither is in the checked-in `wrangler.jsonc`,
+   because both are deployment-specific; `/search` answers `503 Search is not
+   configured` until `SEARCH_MESSAGES_URL` *and* `SEARCH_MESSAGES_API_KEY` are
+   both set.
+
+   To enable the separate `/tavily` route for users who explicitly request
+   Tavily, also store:
 
    ```sh
    npx wrangler secret put TAVILY_API_KEY
