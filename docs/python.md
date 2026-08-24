@@ -57,23 +57,28 @@ m.add_tile_layer(
     attribution="(c) OpenStreetMap contributors",
 )
 m.add_cog("https://example.com/dem.tif", name="DEM", colormap="terrain")
-
-# Earth Engine layers need `pip install earthengine-api` and credentials
-# (run `ee.Authenticate()` once, if you have not already).
-import ee
-ee.Authenticate()
-ee.Initialize(project="your-google-cloud-project")
-m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
-
 m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
+Google Earth Engine layers are optional and need `pip install earthengine-api`
+plus credentials (`ee.Authenticate()` once, then a Google Cloud project):
+
+```python
+import ee
+
+ee.Authenticate()  # once per machine
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
+```
+
 `add_ee_layer` evaluates the Earth Engine object in the kernel and adds the
 resulting tile URL as a raster layer (ImageCollections are mosaicked, vector
-objects are styled into raster tiles with `vis_params`). That URL is tied to an
-Earth Engine map id that expires, so a saved project may need the Earth Engine
-layer regenerated when it is reopened.
+objects are styled into raster tiles — for those, `vis_params` takes
+`ee.FeatureCollection.style()` keys such as `color`, `fillColor`, `width`, and
+`pointSize`, not image keys). That URL is tied to an Earth Engine map id that
+expires, so a saved project may need the Earth Engine layer regenerated when it
+is reopened.
 
 `add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host:
 the file is served by the bundled localhost server so the app can read it. This

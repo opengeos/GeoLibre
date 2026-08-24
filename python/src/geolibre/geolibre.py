@@ -41,6 +41,24 @@ _VALID_THEMES = frozenset({"light", "dark"})
 # same 50 MB ceiling applies to a fetched response or a local file.
 _MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
 
+# ``ee.FeatureCollection.style()`` is declared with explicit keyword parameters,
+# not ``**kwargs``, so an image-shaped ``vis_params`` (``min``/``max``/``palette``)
+# would reach it as ``TypeError: style() got an unexpected keyword argument`` --
+# indistinguishable, to the caller, from the ``TypeError`` add_ee_layer raises for
+# an unsupported object. Validate against the accepted keys instead.
+_EE_VECTOR_STYLE_KEYS = frozenset(
+    {
+        "color",
+        "pointSize",
+        "pointShape",
+        "width",
+        "fillColor",
+        "styleProperty",
+        "neighborhood",
+        "lineType",
+    }
+)
+
 # Column name for CSV fields beyond the header row. csv.DictReader's default
 # restkey is ``None``, which would put a non-string key in the feature
 # properties and break JSON serialization on the way to the widget.
@@ -1653,7 +1671,11 @@ class Map(anywidget.AnyWidget):
                 ``ee.FeatureCollection``, ``ee.Feature``, or ``ee.Geometry``.
                 A compatible object exposing ``getMapId`` is also accepted.
             vis_params: Earth Engine visualization parameters, such as
-                ``bands``, ``min``, ``max``, and ``palette``.
+                ``bands``, ``min``, ``max``, and ``palette``. For vector
+                objects these are ``ee.FeatureCollection.style()`` keys
+                instead (``color``, ``fillColor``, ``width``, ``pointSize``,
+                ``pointShape``, ``lineType``, ``styleProperty``,
+                ``neighborhood``).
             name: Layer display name.
             shown: Whether the layer is initially visible.
             opacity: Initial opacity between 0 and 1.
@@ -1665,11 +1687,12 @@ class Map(anywidget.AnyWidget):
             ImportError: If conversion requires the optional Earth Engine
                 Python package and it is not installed.
             TypeError: If ``ee_object`` is not a supported Earth Engine object.
-            ValueError: If Earth Engine returns no usable tile URL or opacity
-                is outside the range 0--1.
-            RuntimeError: If Earth Engine fails to create map tiles (for
-                example when it is not initialized, or the request is
-                rejected).
+            ValueError: If Earth Engine returns no usable tile URL, opacity is
+                outside the range 0--1, or ``vis_params`` carries a key
+                ``ee.FeatureCollection.style()`` does not accept.
+            RuntimeError: If Earth Engine fails to prepare the object or to
+                create map tiles (for example when it is not initialized, or
+                the request is rejected).
 
         Note:
             The generated tile URL is tied to the Earth Engine map ID. A saved
@@ -1703,23 +1726,37 @@ class Map(anywidget.AnyWidget):
             else ()
         )
         if ee is not None and isinstance(map_object, ee_types):
-            if isinstance(map_object, ee.ImageCollection):
-                map_object = map_object.mosaic()
-            elif isinstance(map_object, (ee.FeatureCollection, ee.Feature, ee.Geometry)):
-                if isinstance(map_object, ee.Geometry):
-                    map_object = ee.Feature(map_object)
-                if isinstance(map_object, ee.Feature):
-                    map_object = ee.FeatureCollection([map_object])
-                vector_style = {
-                    "color": "000000",
-                    "fillColor": "00000000",
-                    "width": 2,
-                    "pointSize": 3,
-                    "pointShape": "circle",
-                    **params,
-                }
-                map_object = map_object.style(**vector_style)
-                map_params = {}
+            is_vector = isinstance(map_object, (ee.FeatureCollection, ee.Feature, ee.Geometry))
+            if is_vector:
+                unsupported = sorted(set(params) - _EE_VECTOR_STYLE_KEYS)
+                if unsupported:
+                    raise ValueError(
+                        "vis_params for an Earth Engine FeatureCollection, Feature, or "
+                        f"Geometry may only contain {sorted(_EE_VECTOR_STYLE_KEYS)}; got "
+                        f"{unsupported}"
+                    )
+            try:
+                if isinstance(map_object, ee.ImageCollection):
+                    map_object = map_object.mosaic()
+                elif is_vector:
+                    if isinstance(map_object, ee.Geometry):
+                        map_object = ee.Feature(map_object)
+                    if isinstance(map_object, ee.Feature):
+                        map_object = ee.FeatureCollection([map_object])
+                    vector_style = {
+                        "color": "000000",
+                        "fillColor": "00000000",
+                        "width": 2,
+                        "pointSize": 3,
+                        "pointShape": "circle",
+                        **params,
+                    }
+                    map_object = map_object.style(**vector_style)
+                    map_params = {}
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Earth Engine could not prepare this object for display: {exc}"
+                ) from exc
         elif not callable(getattr(map_object, "getMapId", None)):
             if ee is None:
                 raise ImportError(

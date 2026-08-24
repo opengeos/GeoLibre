@@ -44,15 +44,19 @@ m.add_tile_layer(
     attribution="(c) OpenStreetMap contributors",
 )
 m.add_cog("https://example.com/dem.tif", name="DEM", colormap="terrain")
-
-# Earth Engine layers need `pip install earthengine-api` and credentials
-# (run `ee.Authenticate()` once, if you have not already).
-import ee
-ee.Authenticate()
-ee.Initialize(project="your-google-cloud-project")
-m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
 m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
+```
+
+Google Earth Engine layers are optional and need `pip install earthengine-api`
+plus credentials (`ee.Authenticate()` once, then a Google Cloud project):
+
+```python
+import ee
+
+ee.Authenticate()  # once per machine
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
 ```
 
 Round-trip the project:

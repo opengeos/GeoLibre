@@ -66,9 +66,12 @@ strokeWidth=3)`).
 `add_ee_layer` accepts an authenticated Earth Engine Image, ImageCollection,
 FeatureCollection, Feature, or Geometry. Initialize the Earth Engine Python API
 before calling it; ImageCollections are mosaicked and vector objects are styled
-into raster tiles using `vis_params`. The stored tile URL is tied to an Earth
-Engine map id that expires, so a project loaded later may need the Earth Engine
-layer regenerated.
+into raster tiles — for a FeatureCollection/Feature/Geometry, `vis_params` takes
+`ee.FeatureCollection.style()` keys (`color`, `fillColor`, `width`, `pointSize`,
+`pointShape`, `lineType`, `styleProperty`, `neighborhood`), not image keys like
+`min`/`max`/`palette`. The stored tile URL is tied to an Earth Engine map id
+that expires, so a project loaded later may need the Earth Engine layer
+regenerated.
 
 ### Symbology without precomputing
 

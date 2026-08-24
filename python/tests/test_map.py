@@ -202,6 +202,40 @@ def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
     assert captured["map_params"] == {}
 
 
+def test_add_ee_layer_rejects_image_vis_params_on_vector(monkeypatch, m):
+    class FeatureCollection:
+        def style(self, **_style):  # pragma: no cover - must not be reached
+            raise AssertionError("style() must not be called with bad vis_params")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(ValueError, match="may only contain"):
+        m.add_ee_layer(FeatureCollection(), {"min": 0, "max": 3000})
+
+
+def test_add_ee_layer_wraps_preparation_errors(monkeypatch, m):
+    class ImageCollection:
+        def mosaic(self):
+            raise RuntimeError("collection is empty")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=ImageCollection,
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(RuntimeError, match="could not prepare this object"):
+        m.add_ee_layer(ImageCollection())
+
+
 def test_add_raster_is_cog(m):
     m.add_raster("https://e/dem.tif", bands=[1, 2, 3])
     layer = _last_layer(m)
