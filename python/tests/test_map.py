@@ -202,6 +202,73 @@ def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
     assert captured["map_params"] == {}
 
 
+def _fake_vector_ee(captured):
+    """Fake `ee` module whose vector types record the conversion chain."""
+
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/vector/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            captured["map_params"] = vis_params
+            return {"tile_fetcher": TileFetcher()}
+
+    class Geometry:
+        pass
+
+    class Feature:
+        def __init__(self, geometry=None):
+            captured["feature_from"] = geometry
+
+    class FeatureCollection:
+        def __init__(self, features=None):
+            captured["collection_from"] = features
+
+        def style(self, **style):
+            captured["style"] = style
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=Feature,
+        Geometry=Geometry,
+    )
+    return fake_ee, TileFetcher.url_format
+
+
+def test_add_ee_layer_wraps_feature_in_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    feature = fake_ee.Feature()
+    m.add_ee_layer(feature, {"color": "00ff00"})
+
+    assert captured["collection_from"] == [feature]
+    assert captured["style"]["color"] == "00ff00"
+    assert captured["style"]["pointSize"] == 3
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
+def test_add_ee_layer_wraps_geometry_in_feature_and_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    geometry = fake_ee.Geometry()
+    m.add_ee_layer(geometry, {"width": 5})
+
+    assert captured["feature_from"] is geometry
+    assert isinstance(captured["collection_from"][0], fake_ee.Feature)
+    assert captured["style"]["width"] == 5
+    assert captured["style"]["fillColor"] == "00000000"
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
 def test_add_ee_layer_rejects_image_vis_params_on_vector(monkeypatch, m):
     class FeatureCollection:
         def style(self, **_style):  # pragma: no cover - must not be reached
