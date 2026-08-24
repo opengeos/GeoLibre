@@ -26,12 +26,15 @@ describe("buildProjectHtml", () => {
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
     assert.match(
       html,
-      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/,
+      /<iframe id="geolibre-frame" data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/,
     );
     // The project rides in a JSON <script> block and is replayed over the bridge.
     assert.match(html, /id="geolibre-project"/);
     assert.match(html, /"geolibre:load-project"/);
     assert.match(html, /"geolibre:ready"/);
+    assert.match(html, /window\.location\.protocol === "file:"/);
+    assert.match(html, /#geolibreProject=/);
+    assert.match(html, /frame\.src = directFile/);
     // The inlined JSON round-trips back to the original project.
     const json = html.match(
       /<script type="application\/json" id="geolibre-project">([\s\S]*?)<\/script>/,
@@ -62,7 +65,7 @@ describe("buildProjectHtml", () => {
 
   it("defaults the app URL to the hosted viewer", () => {
     const html = buildProjectHtml({ project: PROJECT, title: "T" });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("escapes '<' in the inlined JSON so a value cannot break out", () => {
@@ -93,7 +96,7 @@ describe("buildProjectHtml", () => {
       appUrl: "https://example.com/app?lang=fr",
     });
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
-    assert.match(html, /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/);
   });
 
   it("falls back to the default viewer for an unsafe appUrl", () => {
@@ -104,7 +107,7 @@ describe("buildProjectHtml", () => {
       appUrl: "javascript:alert(1)",
     });
     assert.ok(!html.includes("javascript:alert(1)"));
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("does not append embed=1 twice when the app URL already has it", () => {
@@ -113,7 +116,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://web.geolibre.app/?embed=1",
     });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
     assert.ok(!html.includes("embed=1&amp;embed=1"));
   });
 
@@ -123,7 +126,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://web.geolibre.app/?welcome=off",
     });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?welcome=off&amp;embed=1"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?welcome=off&amp;embed=1"/);
     assert.ok(!html.includes("welcome=off&amp;welcome=0"));
   });
 
@@ -143,7 +146,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://example.com/app#/view",
     });
-    assert.match(html, /src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
+    assert.match(html, /data-src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
   });
 
   it("accepts calc() dimensions with division", () => {

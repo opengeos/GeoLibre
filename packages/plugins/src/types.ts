@@ -2,6 +2,7 @@ import type {
   ExternalNativePaintBridge,
   ExternalNativePaintMode,
   GeoLibreLayer,
+  GeoLibreProject,
   LayerStyle,
 } from "@geolibre/core";
 import type {
@@ -595,6 +596,12 @@ export interface GeoLibreAppAPI {
    * GeoJSON).
    */
   exportTextFile?: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => void;
+  /**
+   * Return a redacted, serializable snapshot of the current GeoLibre project.
+   * Plugins can embed this snapshot in portable HTML viewers without copying
+   * the host's layer/style serialization logic.
+   */
+  getProjectSnapshot?: () => GeoLibreProject;
   /**
    * Prompt the user to pick a text file and return its contents (a native open
    * dialog under Tauri, a file input on the web). Resolves to null when the

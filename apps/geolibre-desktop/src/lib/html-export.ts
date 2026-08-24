@@ -2,6 +2,7 @@
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
 import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
+import { encodeInlineProjectFragment, INLINE_PROJECT_FRAGMENT_KEY } from "./inline-project-fragment";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
@@ -101,6 +102,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   const iframeSrc = withViewerFlags(appUrl);
   // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
+  const inlineProject = encodeInlineProjectFragment(redactCredentials(project));
 
   // The iframe sandbox below withholds top-navigation and popups, but each of
   // the tokens it does grant is load-bearing - don't trim them:
@@ -126,17 +128,19 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
 </style>
 </head>
 <body>
-<iframe id="geolibre-frame" src="${escapeHtml(iframeSrc)}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" allow="fullscreen" allowfullscreen></iframe>
+<iframe id="geolibre-frame" data-src="${escapeHtml(iframeSrc)}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" allow="fullscreen" allowfullscreen></iframe>
 <script type="application/json" id="geolibre-project">${projectJson}</script>
 <script>
 (function () {
   var frame = document.getElementById("geolibre-frame");
+  var viewerSrc = frame.getAttribute("data-src");
   var project = JSON.parse(
     document.getElementById("geolibre-project").textContent
   );
-  // The src attribute is fixed, so this pins to the viewer origin: both the
-  // inbound "ready" check and the outbound post are scoped to it.
-  var viewerOrigin = new URL(frame.src).origin;
+  var viewerOrigin = new URL(viewerSrc).origin;
+  var directFile = window.location.protocol === "file:";
+  // Keep the postMessage fallback active for hosted viewers that predate
+  // support for loading an inline project from the URL fragment.
   var loaded = false;
   function load() {
     if (loaded || !frame.contentWindow) return;
@@ -152,6 +156,12 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
     var data = event.data;
     if (data && data.type === "geolibre:ready") load();
   });
+  // A URL fragment stays entirely in the browser and is consumed/erased by the
+  // viewer during startup. This avoids opaque file-origin messaging in WebKit.
+  // HTTP(S) exports keep the existing scoped postMessage bridge.
+  frame.src = directFile
+    ? viewerSrc.split("#")[0] + "#${INLINE_PROJECT_FRAGMENT_KEY}=${inlineProject}"
+    : viewerSrc;
 })();
 </script>
 </body>
