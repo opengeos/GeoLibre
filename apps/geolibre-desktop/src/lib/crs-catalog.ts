@@ -125,6 +125,7 @@ const GEOGRAPHIC_CRS: CrsEntry[] = (
     [4123, "KKJ"],
     [4207, "Lisbon"],
     [4265, "Monte Mario"],
+    [4121, "GGRS87"],
     [4237, "HD72"],
     [4284, "Pulkovo 1942"],
     [4200, "Pulkovo 1995"],

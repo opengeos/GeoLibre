@@ -17,7 +17,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 
-Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives.
+Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. The source CRS is read from the file itself — the layer metadata for the GDAL-read formats, a Shapefile's `.prj` sidecar, or a GeoParquet's `geo` metadata — so a national grid such as EPSG:2100 (GGRS87 / Greek Grid) lands in the right place with nothing to configure.
 
 !!! warning "Large vector files"
     There is no fixed size limit. Files **under 100 MB** are read by the
