@@ -113,9 +113,9 @@ export interface EmbedVectorDataPrompt {
   /** Total embedded size in bytes, for the size warning. */
   bytes: number;
   /**
-   * Desktop hosts can save the layers as file references (reloaded from disk on
-   * reopen) instead of embedding, so the "don't embed" choice is labelled and
-   * described differently than on the web (where it discards the data).
+   * Non-sandboxed desktop hosts can save layers as file references (reloaded
+   * from disk on reopen) instead of embedding. Mac App Store builds are desktop
+   * hosts too, but must embed because their file access expires after relaunch.
    */
   desktop: boolean;
   /** Whether the host can persist a path-only project that survives relaunch. */
