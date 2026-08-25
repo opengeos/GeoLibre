@@ -70,6 +70,7 @@ nav:
       - Troubleshooting: user-guide/troubleshooting.md
   - Tutorials:
       - Overview: tutorials/index.md
+      - Video Tutorials: tutorials/videos.md
       - Your First Map: tutorials/first-map.md
       - Cloud-Native Data: tutorials/cloud-native-data.md
       - Vector Analysis: tutorials/vector-analysis.md

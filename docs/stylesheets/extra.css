@@ -187,3 +187,20 @@
     width: 100%;
   }
 }
+
+/* Responsive 16:9 wrapper for the YouTube embeds on the Video Tutorials page.
+   `aspect-ratio` on the iframe alone is enough in every browser the docs
+   target; the wrapper caps the width and carries the rounded frame. */
+.video-embed {
+  border-radius: 0.5rem;
+  margin: 1.2rem 0 1rem;
+  overflow: hidden;
+}
+
+.video-embed iframe {
+  aspect-ratio: 16 / 9;
+  border: 0;
+  display: block;
+  height: auto;
+  width: 100%;
+}
