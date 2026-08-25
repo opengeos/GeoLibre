@@ -1080,7 +1080,11 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
 
   const layer = findSketchesLayer(useAppStore.getState().layers);
   if (!layer?.geojson?.features?.length) {
-    if (layer) sketchesLayerId = layer.id;
+    if (layer) {
+      sketchesLayerId = layer.id;
+      await clearSketchesFromEditor();
+      scheduleApplySketchesMapDisplay();
+    }
     return;
   }
 
