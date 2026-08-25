@@ -14,7 +14,7 @@ def main() -> None:
     )
     notebooks = [path.decode() for path in result.stdout.split(b"\0") if path]
     if notebooks:
-        subprocess.run(["nbstripout", *notebooks], check=True)
+        subprocess.run(["nbstripout", "--", *notebooks], check=True)
 
 
 if __name__ == "__main__":
