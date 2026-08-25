@@ -27,7 +27,7 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(
       rewritten.layers[0].source.url,
       "https://session-41123-colab.googleusercontent.com/_geolibre_local/token/" +
-        "geolibre-xarray.tif?download=1",
+        "geolibre-xarray.tif?download=1&__geolibre_range_proxy=1",
     );
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });
@@ -72,7 +72,7 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(
       rewritten.layers[0].source.url,
       "https://current-view-41123-colab.googleusercontent.com/" +
-        "_geolibre_local/token/geolibre-xarray.tif",
+        "_geolibre_local/token/geolibre-xarray.tif?__geolibre_range_proxy=1",
     );
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });

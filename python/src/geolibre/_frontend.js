@@ -76,7 +76,15 @@ function proxiedLocalFileUrl(raw, base, port) {
     return raw;
   }
   const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
-  return new URL(relative, base).href;
+  const rewritten = new URL(relative, base);
+  // Colab's port proxy removes the Range request header used by geotiff.js.
+  // Mark these URLs so the embedded app can carry each requested byte range in
+  // the query string instead; the token-protected Python route translates it
+  // back into a normal 206 response. Other Jupyter proxies keep using headers.
+  if (rewritten.hostname.endsWith(`-${port}-colab.googleusercontent.com`)) {
+    rewritten.searchParams.set("__geolibre_range_proxy", "1");
+  }
+  return rewritten.href;
 }
 
 export function rewriteProxiedLocalFileUrls(project, base, port) {

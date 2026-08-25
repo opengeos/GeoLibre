@@ -22,7 +22,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 _lock = threading.Lock()
 _server: ThreadingHTTPServer | None = None
@@ -83,6 +83,14 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             size = os.fstat(handle.fileno()).st_size
             start, end, status = 0, size - 1, 200
             range_header = self.headers.get("Range")
+            # Google Colab's port proxy strips Range request headers. The
+            # embedded app moves the value into this query parameter only for a
+            # marked, tokenized local-file URL, preserving exact COG partial
+            # reads without downloading the full raster through the proxy.
+            if not range_header:
+                range_header = parse_qs(urlsplit(self.path).query).get(
+                    "__geolibre_range", [None]
+                )[0]
             if range_header and range_header.startswith("bytes="):
                 parsed = self._parse_single_range(range_header, size)
                 if parsed is None:

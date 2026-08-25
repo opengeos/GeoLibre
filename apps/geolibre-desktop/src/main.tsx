@@ -64,6 +64,7 @@ import "./lib/auth-return-url-boot";
 import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
 import { startAnalytics } from "./lib/analytics";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
+import { installKernelProxyRangeFetch } from "./lib/kernel-proxy-range";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
@@ -75,6 +76,7 @@ import {
   sharedSettingsLanguage,
 } from "./lib/desktop-settings-url";
 
+installKernelProxyRangeFetch();
 installDiagnosticsCapture();
 // In the desktop build, route geocoding (place search / reverse geocode)
 // through Tauri's native HTTP client so it bypasses WebView CORS: public
