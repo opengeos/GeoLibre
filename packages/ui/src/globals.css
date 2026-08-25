@@ -82,8 +82,12 @@
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 220 18% 22%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive is also the app-wide error-text and invalid-control colour.
+       Keep it light enough to clear WCAG AA on every dark surface, including
+       accent (4.70:1). Its foreground is correspondingly dark so destructive
+       buttons retain strong contrast (6.78:1). */
+    --destructive: 0 84.2% 72%;
+    --destructive-foreground: 222.2 47.4% 11.2%;
     --border: 220 14% 26%;
     --input: 220 12% 38%;
     /* Tailwind's built-in shadow scale bakes in a 10%-black colour, which is
