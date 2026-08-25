@@ -53,6 +53,7 @@ describe("annotation toolbar collapse toggle", () => {
 
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
     assert.equal(toggle.getAttribute("aria-label"), "Collapse toolbar");
+    assert.ok(tools.id, "Tools region must have an id");
     assert.equal(toggle.getAttribute("aria-controls"), tools.id);
     assert.equal(tools.hidden, false);
 
