@@ -39,6 +39,53 @@ function proxyBase(port) {
   return new URL(`${jupyterBaseUrl()}proxy/${port}/`, window.location.href).href;
 }
 
+function colabKernel() {
+  return (
+    typeof window !== "undefined" &&
+    window.google &&
+    window.google.colab &&
+    window.google.colab.kernel
+  );
+}
+
+// Local raster URLs are authored in the kernel as loopback URLs. In Colab the
+// iframe itself is loaded through proxyPort(), so the browser cannot fetch that
+// raw 127.0.0.1 address. Point only GeoLibre's tokenized local-file routes on
+// this widget's own port at the same proxy base. Copy on write keeps the synced
+// Python project unchanged until the app reports its restored state.
+export function rewriteColabLocalFileUrls(project, base, port) {
+  if (!project || typeof project !== "object" || !Array.isArray(project.layers) || !port) {
+    return project;
+  }
+  let changed = false;
+  const layers = project.layers.map((layer) => {
+    const raw = layer && typeof layer === "object" ? layer.source?.url : null;
+    if (typeof raw !== "string") return layer;
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return layer;
+    }
+    if (
+      !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
+      parsed.port !== String(port) ||
+      !parsed.pathname.startsWith("/_geolibre_local/")
+    ) {
+      return layer;
+    }
+    const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
+    const url = new URL(relative, base).href;
+    changed = true;
+    return {
+      ...layer,
+      source: { ...layer.source, url },
+      ...(layer.sourcePath === raw ? { sourcePath: url } : {}),
+    };
+  });
+  return changed ? { ...project, layers } : project;
+}
+
 // Ordered same-origin candidates to try under "remote" mode. Both serve the
 // identical bundle from the notebook's own origin; the front-end uses whichever
 // is live, so a host needs only ONE of them (the extension, or
@@ -67,11 +114,7 @@ function remoteCandidates(model) {
 // null in remote mode when no candidate is reachable.
 async function resolveBase(model) {
   const port = model.get("_app_port");
-  const colab =
-    typeof window !== "undefined" &&
-    window.google &&
-    window.google.colab &&
-    window.google.colab.kernel;
+  const colab = colabKernel();
   if (port && colab && typeof colab.proxyPort === "function") {
     try {
       const url = await colab.proxyPort(port, { cache: true });
@@ -186,10 +229,13 @@ async function render({ model, el }) {
 
   const pushProject = () => {
     if (!ready) return;
+    const project = colabKernel()
+      ? rewriteColabLocalFileUrls(model.get("project"), base, model.get("_app_port"))
+      : model.get("project");
     post({
       type: "geolibre:load-project",
       seq: model.get("_seq"),
-      project: model.get("project"),
+      project,
       trustedWidget: true,
     });
   };
