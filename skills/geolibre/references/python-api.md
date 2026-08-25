@@ -48,6 +48,7 @@ m.add_csv(data, x="longitude", y="latitude", name="CSV")
 m.add_cog(url, name="COG", bands=None, colormap=None, rescale=None)
 m.add_raster(source, name="Raster", bands=None, colormap=None, rescale=None,
              array_args=None)                         # same, plus xarray DataArray/Dataset
+             # `url=` still works as a deprecated keyword alias of `source`
 m.add_tile_layer(url, name, tile_size=256, attribution=None)
 m.add_ee_layer(ee_object, vis_params=None, name="Earth Engine", shown=True,
                opacity=1.0)
@@ -92,8 +93,10 @@ m.add_polyline(...)
 
 `add_raster` also accepts an `xarray.DataArray` or `xarray.Dataset`, which needs
 `pip install "geolibre[raster]"` (xarray + rioxarray + rasterio). The kernel
-writes it to a temporary Cloud-Optimized GeoTIFF and serves that the same way it
-serves a local file, so every caveat in the next section applies to it as well.
+writes it to a temporary GeoTIFF — Cloud-Optimized by default — and serves that
+the same way it serves a local file, so every caveat in the next section applies
+to it as well. Keep the default: the app range-reads a COG directly, and a plain
+GeoTIFF makes it warn and convert the whole file in the browser first.
 
 ```python
 m.add_raster(data_array, name="Temperature", colormap="viridis")
@@ -113,7 +116,8 @@ and is ignored). It takes:
 | `nodata` | Nodata value to write. |
 
 Anything else in `array_args` is forwarded to `rio.to_raster` (`compress`, and
-so on; `driver` defaults to `"COG"`).
+so on). `driver` only *defaults* to `"COG"`, so passing
+`array_args={"driver": "GTiff"}` really does write a plain GeoTIFF instead.
 
 Only `lon`/`lat` and `longitude`/`latitude` dimensions imply EPSG:4326. Any
 other object must already carry a CRS (`.rio.write_crs(...)`) or be given
