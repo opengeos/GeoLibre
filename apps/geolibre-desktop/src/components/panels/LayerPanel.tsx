@@ -1215,7 +1215,14 @@ export function LayerPanel({
   /** Copy the editor-managed Sketches overlay into an ordinary project layer. */
   const exportSketchesAsLayer = useCallback(
     (layer: GeoLibreLayer, clearAfterExport = false) => {
-      if (layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND || !layer.geojson) return;
+      if (
+        layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND ||
+        !Array.isArray(layer.geojson?.features) ||
+        layer.geojson.features.length === 0 ||
+        (clearAfterExport && !canEditLayer(layer.id))
+      ) {
+        return;
+      }
 
       const baseName = t("layers.exportedSketchesName");
       const names = new Set(useAppStore.getState().layers.map((item) => item.name));
@@ -1233,7 +1240,7 @@ export function LayerPanel({
       }
       selectLayer(id);
     },
-    [addGeoJsonLayer, moveLayersToGroup, selectLayer, t, updateLayer],
+    [addGeoJsonLayer, canEditLayer, moveLayersToGroup, selectLayer, t, updateLayer],
   );
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
@@ -3721,7 +3728,10 @@ export function LayerPanel({
                             <>
                               <DropdownMenuSub>
                                 <DropdownMenuSubTrigger
-                                  disabled={(layer.geojson?.features.length ?? 0) === 0}
+                                  disabled={
+                                    !Array.isArray(layer.geojson?.features) ||
+                                    layer.geojson.features.length === 0
+                                  }
                                 >
                                   <FilePlus2 className="h-3.5 w-3.5" />
                                   {t("layers.exportSketchesAsLayer")}
@@ -3731,6 +3741,7 @@ export function LayerPanel({
                                     {t("layers.exportSketchesKeep")}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
+                                    disabled={!layerEditable}
                                     onSelect={() => exportSketchesAsLayer(layer, true)}
                                   >
                                     {t("layers.exportSketchesClear")}
