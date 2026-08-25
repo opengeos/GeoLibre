@@ -1893,9 +1893,12 @@ class Map(anywidget.AnyWidget):
                 kernel host. A local file is served by the bundled static server
                 so the app can read it; that URL lives only for this kernel
                 session, so a project saved with a local raster will not restore
-                the raster when reopened later, and the file is only reachable
-                when the browser runs on the same host as the kernel (local
-                Jupyter, VS Code).
+                the raster when reopened later. It is read directly in local
+                Jupyter and VS Code. Colab renders it as PNG XYZ tiles in the
+                kernel instead, and JupyterHub can route it through the kernel
+                port when ``jupyter-server-proxy`` is available; a deployment
+                that can only serve the app extension cannot expose kernel
+                files, so pass a hosted URL there.
             name: Layer display name.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
