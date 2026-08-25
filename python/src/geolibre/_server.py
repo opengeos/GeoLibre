@@ -117,9 +117,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             if range_header:
                 if query_range:
-                    self.send_header(
-                        "X-GeoLibre-Content-Range", f"bytes {start}-{end}/{size}"
-                    )
+                    self.send_header("X-GeoLibre-Content-Range", f"bytes {start}-{end}/{size}")
                 else:
                     self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.end_headers()
