@@ -55,6 +55,28 @@ describe("rewriteProxiedLocalFileUrls", () => {
     );
   });
 
+  it("rebases a local-file URL synced by another Colab widget view", () => {
+    const stale =
+      "https://old-view-41123-colab.googleusercontent.com/" +
+      "_geolibre_local/token/geolibre-xarray.tif";
+    const project = {
+      layers: [{ source: { url: stale }, sourcePath: stale }],
+    };
+
+    const rewritten = rewriteProxiedLocalFileUrls(
+      project,
+      "https://current-view-41123-colab.googleusercontent.com/",
+      41123,
+    );
+
+    assert.equal(
+      rewritten.layers[0].source.url,
+      "https://current-view-41123-colab.googleusercontent.com/" +
+        "_geolibre_local/token/geolibre-xarray.tif",
+    );
+    assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
+  });
+
   it("does not rewrite unrelated, wrong-port, or already-remote URLs", () => {
     const project = {
       layers: [

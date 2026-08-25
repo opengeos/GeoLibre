@@ -61,9 +61,16 @@ function proxiedLocalFileUrl(raw, base, port) {
   } catch {
     return raw;
   }
+  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname);
+  // Colab assigns a distinct proxy subdomain to each output/widget view. A
+  // project synced back by an older view can therefore carry a valid token on
+  // that view's now-foreign origin. Recognize the same-port proxy hostname and
+  // rebase it onto the current view's proxy URL below.
+  const colabProxy =
+    parsed.protocol === "https:" &&
+    parsed.hostname.endsWith(`-${port}-colab.googleusercontent.com`);
   if (
-    !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
-    parsed.port !== String(port) ||
+    ((!loopback || parsed.port !== String(port)) && !colabProxy) ||
     !parsed.pathname.startsWith("/_geolibre_local/")
   ) {
     return raw;
