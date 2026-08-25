@@ -696,6 +696,7 @@ export function LayerPanel({
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const moveLayersRelative = useAppStore((s) => s.moveLayersRelative);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const copyLayerStyle = useAppStore((s) => s.copyLayerStyle);
@@ -1210,6 +1211,30 @@ export function LayerPanel({
     setEditingLayerId(null);
     setEditingName("");
   };
+
+  /** Copy the editor-managed Sketches overlay into an ordinary project layer. */
+  const exportSketchesAsLayer = useCallback(
+    (layer: GeoLibreLayer, clearAfterExport = false) => {
+      if (layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND || !layer.geojson) return;
+
+      const baseName = t("layers.exportedSketchesName");
+      const names = new Set(useAppStore.getState().layers.map((item) => item.name));
+      let name = baseName;
+      for (let suffix = 2; names.has(name); suffix += 1) name = `${baseName} ${suffix}`;
+
+      const id = addGeoJsonLayer(name, structuredClone(layer.geojson));
+      updateLayer(id, {
+        opacity: layer.opacity,
+        style: structuredClone(layer.style),
+      });
+      if (layer.groupId) moveLayersToGroup([id], layer.groupId);
+      if (clearAfterExport) {
+        updateLayer(layer.id, { geojson: { type: "FeatureCollection", features: [] } });
+      }
+      selectLayer(id);
+    },
+    [addGeoJsonLayer, moveLayersToGroup, selectLayer, t, updateLayer],
+  );
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
     const timer = refreshStatusTimersRef.current.get(layerId);
@@ -3692,6 +3717,29 @@ export function LayerPanel({
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
+                          {layer.metadata.sourceKind === SKETCHES_SOURCE_KIND && (
+                            <>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger
+                                  disabled={(layer.geojson?.features.length ?? 0) === 0}
+                                >
+                                  <FilePlus2 className="h-3.5 w-3.5" />
+                                  {t("layers.exportSketchesAsLayer")}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem onSelect={() => exportSketchesAsLayer(layer)}>
+                                    {t("layers.exportSketchesKeep")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => exportSketchesAsLayer(layer, true)}
+                                  >
+                                    {t("layers.exportSketchesClear")}
+                                  </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           {canMaterializeDuckDB && (
                             <>
                               <DropdownMenuItem
