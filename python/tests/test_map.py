@@ -544,7 +544,12 @@ def _fake_xarray_modules(monkeypatch):
             self.data_vars[key] = value
 
         def copy(self):
-            return self
+            """Model xarray's shallow copy: a new Dataset over the same variables."""
+            duplicate = Dataset(dict(self.data_vars))
+            duplicate.dims = self.dims
+            duplicate.crs = self.crs
+            duplicate.rio.crs = self.crs
+            return duplicate
 
     monkeypatch.setitem(
         sys.modules, "xarray", types.SimpleNamespace(DataArray=DataArray, Dataset=Dataset)
@@ -602,6 +607,8 @@ def test_add_raster_xarray_dataset_applies_nodata_to_each_variable(monkeypatch, 
 
     assert red.nodata == 255
     assert green.nodata == 255
+    # The GeoTIFF must be written from the copy, not from the caller's Dataset.
+    assert not hasattr(dataset, "raster_options")
     m.close()
 
 
