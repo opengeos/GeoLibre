@@ -92,11 +92,10 @@ m.add_polyline(...)
 ### In-memory xarray rasters
 
 `add_raster` also accepts an `xarray.DataArray` or `xarray.Dataset`, which needs
-`pip install "geolibre[raster]"` (xarray + rioxarray + rasterio). The kernel
-writes it to a temporary GeoTIFF — Cloud-Optimized by default — and serves that
-the same way it serves a local file, so every caveat in the next section applies
-to it as well. Keep the default: the app range-reads a COG directly, and a plain
-GeoTIFF makes it warn and convert the whole file in the browser first.
+`pip install "geolibre[raster]"` (xarray + rioxarray + rasterio + rio-tiler). The kernel
+writes it to a temporary GeoTIFF — Cloud-Optimized by default. Locally the app
+range-reads that COG directly. In Colab, whose proxy does not preserve COG byte
+ranges, rio-tiler renders ordinary PNG XYZ tiles in the kernel instead.
 
 ```python
 m.add_raster(data_array, name="Temperature", colormap="viridis")
@@ -136,7 +135,8 @@ durable.
 
 `add_raster` / `add_cog` accept a **local** GeoTIFF path on the kernel host: the
 bundled localhost server serves it so the app can read it. This works directly
-in local Jupyter and VS Code, through Colab's built-in kernel port proxy, and on
+in local Jupyter and VS Code. Colab uses kernel-rendered PNG XYZ tiles instead
+of browser COG reads. JupyterHub works through the kernel port proxy when
 JupyterHub when `jupyter-server-proxy` is available. A deployment that can only
 serve the static app extension cannot expose kernel files, so use a hosted URL.
 The served URL is session-scoped, so a saved project or exported HTML will not

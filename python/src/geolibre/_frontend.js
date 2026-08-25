@@ -71,7 +71,7 @@ function proxiedLocalFileUrl(raw, base, port) {
     parsed.hostname.endsWith(`-${port}-colab.googleusercontent.com`);
   if (
     ((!loopback || parsed.port !== String(port)) && !colabProxy) ||
-    !parsed.pathname.startsWith("/_geolibre_local/")
+    !["/_geolibre_local/", "/_geolibre_tiles/"].some((prefix) => parsed.pathname.startsWith(prefix))
   ) {
     return raw;
   }
@@ -81,10 +81,15 @@ function proxiedLocalFileUrl(raw, base, port) {
   // Mark these URLs so the embedded app can carry each requested byte range in
   // the query string instead; the token-protected Python route translates it
   // back into a normal 206 response. Other Jupyter proxies keep using headers.
-  if (rewritten.hostname.endsWith(`-${port}-colab.googleusercontent.com`)) {
+  if (
+    rewritten.pathname.startsWith("/_geolibre_local/") &&
+    rewritten.hostname.endsWith(`-${port}-colab.googleusercontent.com`)
+  ) {
     rewritten.searchParams.set("__geolibre_range_proxy", "1");
   }
-  return rewritten.href;
+  // URL serialisation escapes XYZ placeholders, but MapLibre requires the
+  // literal braces in its template in order to substitute tile coordinates.
+  return rewritten.href.replace(/%7B([zxy])%7D/gi, "{$1}");
 }
 
 export function rewriteProxiedLocalFileUrls(project, base, port) {
@@ -96,12 +101,26 @@ export function rewriteProxiedLocalFileUrls(project, base, port) {
     if (!layer || typeof layer !== "object") return layer;
     const rawUrl = layer.source?.url;
     const url = proxiedLocalFileUrl(rawUrl, base, port);
+    const rawTiles = layer.source?.tiles;
+    const tiles = Array.isArray(rawTiles)
+      ? rawTiles.map((tile) => proxiedLocalFileUrl(tile, base, port))
+      : rawTiles;
     const sourcePath = proxiedLocalFileUrl(layer.sourcePath, base, port);
-    if (url === rawUrl && sourcePath === layer.sourcePath) return layer;
+    const tilesChanged =
+      Array.isArray(rawTiles) && tiles.some((tile, index) => tile !== rawTiles[index]);
+    if (url === rawUrl && !tilesChanged && sourcePath === layer.sourcePath) return layer;
     changed = true;
     return {
       ...layer,
-      ...(url !== rawUrl ? { source: { ...layer.source, url } } : {}),
+      ...(url !== rawUrl || tilesChanged
+        ? {
+            source: {
+              ...layer.source,
+              ...(url !== rawUrl ? { url } : {}),
+              ...(tilesChanged ? { tiles } : {}),
+            },
+          }
+        : {}),
       ...(sourcePath !== layer.sourcePath ? { sourcePath } : {}),
     };
   });

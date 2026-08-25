@@ -77,6 +77,25 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });
 
+  it("routes kernel-rendered XYZ tiles through the Colab proxy", () => {
+    const template = "http://127.0.0.1:41123/_geolibre_tiles/token/{z}/{x}/{y}.png";
+    const project = {
+      layers: [{ source: { tiles: [template], url: template } }],
+    };
+
+    const rewritten = rewriteProxiedLocalFileUrls(
+      project,
+      "https://session-41123-colab.googleusercontent.com/",
+      41123,
+    );
+
+    const expected =
+      "https://session-41123-colab.googleusercontent.com/" +
+      "_geolibre_tiles/token/{z}/{x}/{y}.png";
+    assert.equal(rewritten.layers[0].source.url, expected);
+    assert.deepEqual(rewritten.layers[0].source.tiles, [expected]);
+  });
+
   it("does not rewrite unrelated, wrong-port, or already-remote URLs", () => {
     const project = {
       layers: [

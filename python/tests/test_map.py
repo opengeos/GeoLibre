@@ -685,6 +685,38 @@ def test_add_raster_xarray_round_trip_with_real_rioxarray(monkeypatch, m):
     assert not captured["path"].exists()
 
 
+def test_add_raster_xarray_uses_xyz_tiles_on_colab(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **options: (
+            captured.update(path=path, options=options)
+            or "http://127.0.0.1:1234/_geolibre_tiles/token/{z}/{x}/{y}.png"
+        ),
+    )
+
+    m.add_raster(
+        DataArray(),
+        name="Temperature",
+        bands=[1],
+        colormap="turbo",
+        rescale=[[-5, 35]],
+    )
+
+    layer = _last_layer(m)
+    assert layer["type"] == "xyz"
+    assert layer["name"] == "Temperature"
+    assert "_geolibre_tiles/token/{z}/{x}/{y}.png" in layer["source"]["tiles"][0]
+    assert captured["options"] == {
+        "bands": [1],
+        "colormap": "turbo",
+        "rescale": [[-5, 35]],
+    }
+
+
 def test_add_raster_accepts_deprecated_url_keyword(m):
     """The pre-rename `url=` keyword still works, with a DeprecationWarning."""
     with pytest.warns(DeprecationWarning, match="add_raster\\(url=...\\) is deprecated"):

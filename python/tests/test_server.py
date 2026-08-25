@@ -29,6 +29,7 @@ def served(tmp_path, monkeypatch):
     monkeypatch.setattr(_server, "_base_url", None)
     monkeypatch.setattr(_server, "_port", None)
     monkeypatch.setattr(_server, "_local_files", {})
+    monkeypatch.setattr(_server, "_raster_tiles", {})
 
     bundle = tmp_path / "app"
     bundle.mkdir()
@@ -130,6 +131,33 @@ def test_register_same_file_reuses_token(served):
     )
     assert again == url
     assert len(_server._local_files) == 1
+
+
+def test_registered_raster_tile_returns_png(served, tmp_path):
+    rasterio = pytest.importorskip("rasterio")
+    pytest.importorskip("rio_tiler")
+    np = pytest.importorskip("numpy")
+    from rasterio.transform import from_bounds
+
+    raster = tmp_path / "world.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=8,
+        height=8,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_bounds(-180, -85, 180, 85, 8, 8),
+    ) as dst:
+        dst.write(np.arange(64, dtype="float32").reshape(1, 8, 8))
+
+    template = _server.register_raster_tiles(raster, bands=[1], colormap="turbo", rescale=[[0, 63]])
+    status, headers, body = _get(template.format(z=0, x=0, y=0))
+    assert status == 200
+    assert headers["Content-Type"] == "image/png"
+    assert body.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_unregister_local_file_drops_the_token(served, tmp_path):

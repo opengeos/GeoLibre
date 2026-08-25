@@ -203,7 +203,9 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
 - Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),
-  plus xarray/rioxarray/rasterio support for in-memory rasters. `[vector]` and
+  plus xarray/rioxarray/rasterio/rio-tiler support for in-memory rasters.
+  Colab uses rio-tiler to serve these as PNG XYZ tiles because its proxy does
+  not preserve browser COG byte ranges. `[vector]` and
   `[raster]` install just one half each -- `[all]` pulls in rasterio (and GDAL).
   The kernel reads local vectors and inlines them as GeoJSON; remote URLs for
   those formats stream through the in-browser vector control and need no extras.
