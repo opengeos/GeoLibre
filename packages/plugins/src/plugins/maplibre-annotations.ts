@@ -198,6 +198,8 @@ const WIDTH_VALUES = [2, 3, 5] as const;
  */
 export interface AnnotationLabels {
   toolbar: string;
+  collapse: string;
+  expand: string;
   /** Name of the layer the annotations are stored in (shown in the Layers panel). */
   layerName: string;
   elementsPanelTitle: string;
@@ -220,6 +222,8 @@ export interface AnnotationLabels {
 
 let labels: AnnotationLabels = {
   toolbar: "Annotation tools",
+  collapse: "Collapse annotation tools",
+  expand: "Expand annotation tools",
   layerName: ANNOTATIONS_LAYER_NAME,
   elementsPanelTitle: "Elements",
   tools: {
@@ -273,7 +277,10 @@ function widthOptionLabel(value: number): string {
 /** A plain-DOM MapLibre control hosting the annotation tools and style inputs. */
 class AnnotationToolbarControl implements maplibregl.IControl {
   private container: HTMLElement | null = null;
+  private toolsContainer: HTMLElement | null = null;
+  private collapseButton: HTMLButtonElement | null = null;
   private toolButtons = new Map<AnnotationTool, HTMLButtonElement>();
+  private collapsed = false;
   // Closures that re-apply each element's translated text from `labels`, run on
   // mount and again whenever the active language changes (see relabel()).
   private relabelers: (() => void)[] = [];
@@ -282,6 +289,22 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
     this.relabelers = [() => container.setAttribute("aria-label", labels.toolbar)];
+
+    const collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "geolibre-annotations-collapse";
+    collapseButton.addEventListener("click", () => {
+      this.collapsed = !this.collapsed;
+      if (this.collapsed) setActiveTool(null);
+      this.syncCollapsedState();
+      this.relabel();
+    });
+    this.applyLabel(collapseButton, () => (this.collapsed ? labels.expand : labels.collapse));
+    container.appendChild(collapseButton);
+
+    const toolsContainer = document.createElement("div");
+    toolsContainer.className = "geolibre-annotations-tools";
+    container.appendChild(toolsContainer);
 
     for (const tool of TOOL_ORDER) {
       const button = document.createElement("button");
@@ -293,7 +316,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       });
       this.applyLabel(button, () => labels.tools[tool] || tool);
       this.toolButtons.set(tool, button);
-      container.appendChild(button);
+      toolsContainer.appendChild(button);
     }
 
     const color = document.createElement("input");
@@ -304,7 +327,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       strokeColor = color.value;
     });
     this.applyLabel(color, () => labels.color);
-    container.appendChild(color);
+    toolsContainer.appendChild(color);
 
     // A cycling button (thin → medium → thick) rather than a native <select>:
     // the icon uses currentColor so it themes with the other tools, and there is
@@ -326,23 +349,26 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     });
     renderWidth();
     this.applyLabel(width, () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`);
-    container.appendChild(width);
+    toolsContainer.appendChild(width);
 
     const deleteLast = this.makeActionButton(
       () => labels.deleteLast,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>',
       () => deleteLastAnnotation(),
     );
-    container.appendChild(deleteLast);
+    toolsContainer.appendChild(deleteLast);
 
     const clearAll = this.makeActionButton(
       () => labels.clearAll,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
       () => clearAllAnnotations(),
     );
-    container.appendChild(clearAll);
+    toolsContainer.appendChild(clearAll);
 
     this.container = container;
+    this.toolsContainer = toolsContainer;
+    this.collapseButton = collapseButton;
+    this.syncCollapsedState();
     this.relabel();
     return container;
   }
@@ -350,6 +376,8 @@ class AnnotationToolbarControl implements maplibregl.IControl {
   onRemove(): void {
     this.container?.remove();
     this.container = null;
+    this.toolsContainer = null;
+    this.collapseButton = null;
     this.toolButtons.clear();
     this.relabelers = [];
   }
@@ -387,6 +415,17 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     for (const [tool, button] of this.toolButtons) {
       button.classList.toggle("is-active", activeTool === tool);
     }
+  }
+
+  /** Reduce the tall toolbar to its toggle while keeping it discoverable. */
+  private syncCollapsedState(): void {
+    if (!this.container || !this.toolsContainer || !this.collapseButton) return;
+    this.container.classList.toggle("is-collapsed", this.collapsed);
+    this.toolsContainer.hidden = this.collapsed;
+    this.collapseButton.setAttribute("aria-expanded", String(!this.collapsed));
+    this.collapseButton.innerHTML = this.collapsed
+      ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
   }
 }
 
