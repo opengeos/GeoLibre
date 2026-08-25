@@ -252,7 +252,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               {t(
                 projectFiles.embedVectorDataPrompt?.allowFileReferences
                   ? "toolbar.item.embedVectorDescDesktop"
-                  : "toolbar.item.embedVectorDesc",
+                  : projectFiles.embedVectorDataPrompt?.desktop
+                    ? "toolbar.item.embedVectorDescMas"
+                    : "toolbar.item.embedVectorDesc",
                 {
                   count: projectFiles.embedVectorDataPrompt?.count ?? 0,
                   size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),

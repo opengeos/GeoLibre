@@ -2765,6 +2765,7 @@
       "embedVectorTitle": "Nhúng dữ liệu vectơ cục bộ?",
       "embedVectorDesc": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Trình duyệt không thể đọc lại chúng khi dự án được mở lại, do đó dữ liệu của chúng phải được nhúng vào tệp dự án để được khôi phục. Việc nhúng sẽ thêm khoảng {{size}} vào tệp.",
       "embedVectorDescDesktop": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Nhúng dữ liệu của họ để làm cho dự án trở nên độc lập (thêm khoảng {{size}}) hoặc lưu các tham chiếu tệp sẽ tải lại từ đĩa khi dự án được mở lại. Các tham chiếu giữ cho tệp có kích thước nhỏ nhưng sẽ bị hỏng nếu tệp nguồn sau đó bị di chuyển hoặc xóa.",
+      "embedVectorDescMas": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Hộp cát Mac App Store không thể duy trì quyền truy cập vào các tệp đó sau khi GeoLibre đóng, vì vậy dữ liệu phải được nhúng vào tệp dự án để có thể khôi phục. Việc nhúng sẽ thêm khoảng {{size}} vào tệp.",
       "embedVectorLargeWarning": "Việc nhúng {{size}} sẽ tạo ra một tệp dự án rất lớn. Việc mở lại nó có thể chậm hoặc thất bại hoàn toàn vì mọi tính năng phải được phân tích cú pháp và lưu trong bộ nhớ cùng một lúc. Đối với dữ liệu có kích thước này, hãy chuyển đổi các lớp thành PMTiles hoặc FlatGeobuf và thêm chúng dưới dạng các lớp từ xa thay vì nhúng chúng.",
       "embedVectorEmbedButton": "Nhúng dữ liệu",
       "embedVectorReferenceButton": "Lưu tài liệu tham khảo tập tin",
