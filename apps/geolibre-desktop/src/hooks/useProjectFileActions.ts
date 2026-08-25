@@ -911,8 +911,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // be embedded (no filesystem path), so the prompt offers Embed or Save
   // without data. On desktop they can also be saved as file references that
   // reload from disk on reopen, so the prompt offers Embed or Save file
-  // references. Returns the layers override to serialize, an empty result to use
-  // the live layers as-is, or "cancel" to abort the save.
+  // references. The Mac App Store build is the exception: its sandbox drops
+  // access to user-selected files once the process exits, so references cannot
+  // reload and Embed is the only durable mode (see the guard below). Returns
+  // the layers override to serialize, an empty result to use the live layers
+  // as-is, or "cancel" to abort the save.
   const resolveLayersForSave = async (): Promise<{ layers?: GeoLibreLayer[] } | "cancel"> => {
     const state = useAppStore.getState();
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
