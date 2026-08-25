@@ -89,6 +89,23 @@ the localhost route is unreachable, so pass a hosted URL there. The served URL i
 also session-scoped, so a project saved with a local raster will not restore it
 when reopened later — pass a hosted URL for durable projects.
 
+Install `geolibre[raster]` to visualize an in-memory xarray object. Spatial
+dimensions named `lon`/`lat` or `longitude`/`latitude` default to EPSG:4326;
+otherwise provide CRS and dimension names explicitly. Dataset variables become
+bands unless one is selected:
+
+```python
+m.add_raster(data_array, name="Temperature", colormap="viridis")
+m.add_raster(
+    dataset,
+    name="Temperature",
+    array_args={"variable": "temperature", "isel": {"time": 0}},
+)
+```
+
+The temporary Cloud-Optimized GeoTIFF backing an xarray layer is removed when the widget is
+closed, so xarray layers have the same session-only limitation as local files.
+
 Add markers and data-driven symbology without precomputing styles:
 
 ```python
@@ -265,7 +282,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=, **style)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
-| `add_raster(url, name=, bands=, colormap=, rescale=, **style)` | Add a raster (COG/GeoTIFF), URL or local path; alias of `add_cog`. |
+| `add_raster(source, name=, bands=, colormap=, rescale=, array_args=, **style)` | Add a COG/GeoTIFF URL or path, or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |

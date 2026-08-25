@@ -22,7 +22,8 @@ classifiers = [
 dependencies = ["anywidget>=0.9", "traitlets>=5", "jupyter-ui-poll>=0.2"]
 
 [project.optional-dependencies]
-all = ["geopandas", "shapely"]
+all = ["geopandas", "shapely", "xarray", "rioxarray", "rasterio"]
+raster = ["xarray", "rioxarray", "rasterio"]
 # The MCP server (geolibre.mcp) is the only thing that imports the SDK, so it
 # stays optional: the widget and the project builders work without it.
 mcp = ["mcp>=2.0"]

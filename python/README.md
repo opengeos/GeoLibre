@@ -90,7 +90,7 @@ m.to_project()["mapView"]["center"]
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
-| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (alias of `add_cog`). |
+| `add_raster(source, name=, bands=, colormap=, rescale=, array_args=)` | Add a COG/GeoTIFF or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |

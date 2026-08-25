@@ -46,7 +46,7 @@ m.add_geoparquet(data, name="GeoParquet")
 m.add_flatgeobuf(data, name="FlatGeobuf")
 m.add_csv(data, x="longitude", y="latitude", name="CSV")
 m.add_cog(url, name="COG", bands=None, colormap=None, rescale=None)
-m.add_raster(...)                                     # same, incl. a local GeoTIFF
+m.add_raster(...)                                     # same, plus xarray DataArray/Dataset
 m.add_tile_layer(url, name, tile_size=256, attribution=None)
 m.add_ee_layer(ee_object, vis_params=None, name="Earth Engine", shown=True,
                opacity=1.0)

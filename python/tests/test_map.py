@@ -494,6 +494,109 @@ def test_add_raster_url_not_served(monkeypatch, m):
     assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
 
 
+def _fake_xarray_modules(monkeypatch):
+    """Install tiny xarray/rioxarray stand-ins for conversion unit tests."""
+
+    class Rio:
+        def __init__(self, owner):
+            self.owner = owner
+            self.crs = owner.crs
+
+        def set_spatial_dims(self, *, x_dim, y_dim, inplace):
+            assert not inplace
+            self.owner.spatial_dims = (x_dim, y_dim)
+            return self.owner
+
+        def write_crs(self, crs, *, inplace):
+            assert not inplace
+            self.owner.crs = crs
+            self.crs = crs
+            return self.owner
+
+        def write_nodata(self, nodata, *, inplace):
+            assert not inplace
+            self.owner.nodata = nodata
+            return self.owner
+
+        def to_raster(self, path, **options):
+            self.owner.raster_options = options
+            path.write_bytes(b"fake geotiff")
+
+    class DataArray:
+        def __init__(self, dims=("lat", "lon"), crs=None):
+            self.dims = dims
+            self.crs = crs
+            self.rio = Rio(self)
+
+        def isel(self, indexers):
+            self.indexers = indexers
+            return self
+
+    class Dataset(DataArray):
+        def __init__(self, variables):
+            super().__init__()
+            self.data_vars = variables
+
+        def __getitem__(self, key):
+            return self.data_vars[key]
+
+    monkeypatch.setitem(
+        sys.modules, "xarray", types.SimpleNamespace(DataArray=DataArray, Dataset=Dataset)
+    )
+    monkeypatch.setitem(sys.modules, "rioxarray", types.SimpleNamespace())
+    return DataArray, Dataset
+
+
+def test_add_raster_xarray_dataarray_materializes_geotiff(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://127.0.0.1/xarray.tif",
+    )
+
+    array = DataArray()
+    m.add_raster(array, colormap="viridis", array_args={"nodata": -9999, "compress": "LZW"})
+
+    assert array.spatial_dims == ("lon", "lat")
+    assert array.crs == "EPSG:4326"
+    assert array.nodata == -9999
+    assert array.raster_options == {"driver": "COG", "compress": "LZW"}
+    assert captured["path"].read_bytes() == b"fake geotiff"
+    assert _last_layer(m)["source"]["url"] == "http://127.0.0.1/xarray.tif"
+    m.close()
+    assert not captured["path"].exists()
+
+
+def test_add_raster_xarray_dataset_selects_variable(monkeypatch, m):
+    DataArray, Dataset = _fake_xarray_modules(monkeypatch)
+    selected = DataArray(dims=("time", "y", "x"), crs="EPSG:3857")
+    dataset = Dataset({"temperature": selected})
+    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/x.tif")
+
+    m.add_raster(
+        dataset,
+        array_args={"variable": "temperature", "isel": {"time": 0}},
+    )
+
+    assert selected.indexers == {"time": 0}
+    assert selected.spatial_dims == ("x", "y")
+    m.close()
+
+
+def test_add_raster_xarray_requires_recognizable_spatial_dims(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    with pytest.raises(ValueError, match="Could not identify x/y dimensions"):
+        m.add_raster(DataArray(dims=("row", "column")))
+
+
+def test_add_raster_rejects_non_raster_object(monkeypatch, m):
+    _fake_xarray_modules(monkeypatch)
+    with pytest.raises(TypeError, match="xarray DataArray/Dataset"):
+        m.add_raster(object())
+
+
 # -- markers --------------------------------------------------------------
 
 
