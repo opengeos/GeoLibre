@@ -1908,8 +1908,11 @@ class Map(anywidget.AnyWidget):
         if self._running_on_colab() and not (
             isinstance(url, str) and url.startswith(("http://", "https://"))
         ):
+            # Resolve once so rasterio sees the same file the tile route
+            # registered; GDAL does not expand "~" on its own.
+            local_path = pathlib.Path(url).expanduser().resolve()
             tile_url = register_raster_tiles(
-                url,
+                local_path,
                 bands=bands,
                 colormap=colormap,
                 rescale=rescale,
@@ -1918,7 +1921,7 @@ class Map(anywidget.AnyWidget):
                 import rasterio
                 from rasterio.warp import transform_bounds
 
-                with rasterio.open(url) as dataset:
+                with rasterio.open(local_path) as dataset:
                     bounds = list(
                         transform_bounds(
                             dataset.crs,

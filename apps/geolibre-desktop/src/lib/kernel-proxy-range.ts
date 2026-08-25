@@ -1,8 +1,15 @@
+// These three strings are the wire contract of the Colab range bridge, and each
+// is spelled out again on the Python side — the marker in
+// `python/src/geolibre/_frontend.js`, the query parameter and the header in
+// `python/src/geolibre/_server.py`. Neither can import from this module, so
+// `tests/python-widget-frontend.test.ts` asserts those sources against the
+// constants here; keep all three in step.
 /** Query marker added by the Python widget to local raster URLs in Colab. */
 export const KERNEL_RANGE_PROXY_MARKER = "__geolibre_range_proxy";
 /** Query parameter carrying a Range header through proxies that remove it. */
 export const KERNEL_RANGE_QUERY = "__geolibre_range";
-const KERNEL_CONTENT_RANGE_HEADER = "X-GeoLibre-Content-Range";
+/** Response header carrying the served span past a proxy that flattens 206. */
+export const KERNEL_CONTENT_RANGE_HEADER = "X-GeoLibre-Content-Range";
 
 /**
  * Move a byte-range header into the URL for a marked kernel-local request.

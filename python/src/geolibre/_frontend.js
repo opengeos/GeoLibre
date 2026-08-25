@@ -66,8 +66,11 @@ function proxiedLocalFileUrl(raw, base, port) {
   // project synced back by an older view can therefore carry a valid token on
   // that view's now-foreign origin. Recognize the same-port proxy hostname and
   // rebase it onto the current view's proxy URL below.
+  // The proxy origin carries no explicit port; requiring an empty one keeps a
+  // look-alike host on some other network port out of the rewrite path.
   const colabProxy =
     parsed.protocol === "https:" &&
+    parsed.port === "" &&
     parsed.hostname.endsWith(`-${port}-colab.googleusercontent.com`);
   if (
     ((!loopback || parsed.port !== String(port)) && !colabProxy) ||
@@ -81,6 +84,9 @@ function proxiedLocalFileUrl(raw, base, port) {
   // Mark these URLs so the embedded app can carry each requested byte range in
   // the query string instead; the token-protected Python route translates it
   // back into a normal 206 response. Other Jupyter proxies keep using headers.
+  // The marker mirrors KERNEL_RANGE_PROXY_MARKER in
+  // apps/geolibre-desktop/src/lib/kernel-proxy-range.ts, which reads it back;
+  // tests/python-widget-frontend.test.ts fails if the two drift.
   if (
     rewritten.pathname.startsWith("/_geolibre_local/") &&
     rewritten.hostname.endsWith(`-${port}-colab.googleusercontent.com`)
@@ -90,6 +96,17 @@ function proxiedLocalFileUrl(raw, base, port) {
   // URL serialisation escapes XYZ placeholders, but MapLibre requires the
   // literal braces in its template in order to substitute tile coordinates.
   return rewritten.href.replace(/%7B([zxy])%7D/gi, "{$1}");
+}
+
+// Whether the browser can reach the kernel's tokenized local-file routes by
+// rebasing them onto `base`. True in Colab, where the iframe itself is loaded
+// through the per-port proxy, and wherever the app is already served by
+// jupyter-server-proxy on that same kernel port. Under the Jupyter Server
+// extension the app comes from a different route than the kernel's port, so
+// the loopback URL cannot be rewritten and is left alone.
+export function canProxyLocalFiles(base, port) {
+  if (!port) return false;
+  return Boolean(colabKernel()) || base === proxyBase(port);
 }
 
 export function rewriteProxiedLocalFileUrls(project, base, port) {
@@ -271,8 +288,7 @@ async function render({ model, el }) {
   const pushProject = () => {
     if (!ready) return;
     const port = model.get("_app_port");
-    const canProxyLocalFiles = colabKernel() || base === proxyBase(port);
-    const project = canProxyLocalFiles
+    const project = canProxyLocalFiles(base, port)
       ? rewriteProxiedLocalFileUrls(model.get("project"), base, port)
       : model.get("project");
     post({

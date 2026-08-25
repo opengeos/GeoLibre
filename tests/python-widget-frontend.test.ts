@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { afterEach, describe, it } from "node:test";
 
-import { rewriteProxiedLocalFileUrls } from "../python/src/geolibre/_frontend.js";
+import {
+  KERNEL_CONTENT_RANGE_HEADER,
+  KERNEL_RANGE_PROXY_MARKER,
+  KERNEL_RANGE_QUERY,
+} from "../apps/geolibre-desktop/src/lib/kernel-proxy-range";
+import {
+  canProxyLocalFiles,
+  rewriteProxiedLocalFileUrls,
+} from "../python/src/geolibre/_frontend.js";
+
+const readSource = (relative: string) =>
+  readFileSync(fileURLToPath(new URL(`../${relative}`, import.meta.url)), "utf8");
 
 describe("rewriteProxiedLocalFileUrls", () => {
   it("routes registered raster files through the Colab proxy without mutating the project", () => {
@@ -108,6 +121,98 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(
       rewriteProxiedLocalFileUrls(project, "https://session-colab.example/", 41123),
       project,
+    );
+  });
+
+  it("leaves a look-alike Colab host on a foreign port alone", () => {
+    const project = {
+      layers: [
+        {
+          source: {
+            url:
+              "https://old-view-41123-colab.googleusercontent.com:9999/" +
+              "_geolibre_local/token/a.tif",
+          },
+        },
+      ],
+    };
+
+    assert.equal(
+      rewriteProxiedLocalFileUrls(
+        project,
+        "https://session-41123-colab.googleusercontent.com/",
+        41123,
+      ),
+      project,
+    );
+  });
+});
+
+describe("canProxyLocalFiles", () => {
+  const setWindow = (extras: Record<string, unknown> = {}) => {
+    (globalThis as Record<string, unknown>).window = {
+      location: { href: "https://hub.example/user/alice/lab" },
+      ...extras,
+    };
+    (globalThis as Record<string, unknown>).document = {
+      getElementById: () => ({ textContent: JSON.stringify({ baseUrl: "/user/alice/" }) }),
+    };
+  };
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).window;
+    delete (globalThis as Record<string, unknown>).document;
+  });
+
+  it("rewrites when the app is itself served by jupyter-server-proxy", () => {
+    setWindow();
+    assert.equal(canProxyLocalFiles("https://hub.example/user/alice/proxy/41123/", 41123), true);
+  });
+
+  it("leaves loopback URLs alone under the Jupyter Server extension", () => {
+    setWindow();
+    assert.equal(canProxyLocalFiles("https://hub.example/user/alice/geolibre/app/", 41123), false);
+    // The proxy route for another port is not this widget's transport either.
+    assert.equal(canProxyLocalFiles("https://hub.example/user/alice/proxy/9999/", 41123), false);
+  });
+
+  it("rewrites on any base once a Colab kernel is present", () => {
+    setWindow({ google: { colab: { kernel: {} } } });
+    assert.equal(
+      canProxyLocalFiles("https://session-41123-colab.googleusercontent.com/", 41123),
+      true,
+    );
+  });
+
+  it("declines before the app port is known", () => {
+    setWindow({ google: { colab: { kernel: {} } } });
+    assert.equal(
+      canProxyLocalFiles("https://session-41123-colab.googleusercontent.com/", 0),
+      false,
+    );
+  });
+});
+
+describe("the Colab range-bridge wire contract", () => {
+  it("is spelled the same way on the Python side", () => {
+    const frontend = readSource("python/src/geolibre/_frontend.js");
+    const server = readSource("python/src/geolibre/_server.py");
+
+    assert.ok(
+      frontend.includes(`searchParams.set("${KERNEL_RANGE_PROXY_MARKER}", "1")`),
+      "the widget must mark proxied local-file URLs with KERNEL_RANGE_PROXY_MARKER",
+    );
+    assert.ok(
+      server.includes(`.get("${KERNEL_RANGE_QUERY}", [None])`),
+      "the local-file route must read the range from KERNEL_RANGE_QUERY",
+    );
+    assert.ok(
+      server.includes(`self.send_header("${KERNEL_CONTENT_RANGE_HEADER}"`),
+      "the local-file route must report its span in KERNEL_CONTENT_RANGE_HEADER",
+    );
+    assert.ok(
+      server.includes(`"Access-Control-Expose-Headers", "${KERNEL_CONTENT_RANGE_HEADER}"`),
+      "the custom range header must be exposed to cross-origin fetches",
     );
   });
 });

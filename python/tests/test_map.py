@@ -717,6 +717,58 @@ def test_add_raster_xarray_uses_xyz_tiles_on_colab(monkeypatch, m):
     }
 
 
+def test_add_cog_on_colab_computes_bounds_from_the_local_raster(monkeypatch, m, tmp_path):
+    """The Colab tile branch reads the raster's own extent, reprojected to WGS84."""
+    rasterio = pytest.importorskip("rasterio")
+    np = pytest.importorskip("numpy")
+    from rasterio.transform import from_bounds
+
+    raster = tmp_path / "dem.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=4,
+        height=4,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_bounds(-120, 30, -100, 45, 4, 4),
+    ) as dst:
+        dst.write(np.zeros((1, 4, 4), dtype="float32"))
+
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
+    )
+    # "~" is what GDAL will not expand on its own, so hand add_cog that form.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    m.add_cog("~/dem.tif", name="DEM")
+
+    bounds = _last_layer(m)["source"]["bounds"]
+    assert bounds == pytest.approx([-120, 30, -100, 45], abs=1e-6)
+
+
+def test_add_cog_on_colab_tolerates_an_unreadable_raster(monkeypatch, m, tmp_path):
+    """A file rasterio cannot open still yields a layer, just without bounds."""
+    raster = tmp_path / "not-a.tif"
+    raster.write_bytes(b"fake geotiff")
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
+    )
+
+    m.add_cog(raster, name="DEM")
+
+    assert _last_layer(m)["source"].get("bounds") is None
+
+
 def test_add_raster_accepts_deprecated_url_keyword(m):
     """The pre-rename `url=` keyword still works, with a DeprecationWarning."""
     with pytest.warns(DeprecationWarning, match="add_raster\\(url=...\\) is deprecated"):

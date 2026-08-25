@@ -106,6 +106,23 @@ def test_open_ended_range(served):
     assert body == payload[10200:]
 
 
+def test_non_bytes_range_unit_serves_the_whole_file(served):
+    """An unparsable range unit falls back to a plain 200, with no Content-Range."""
+    status, headers, body = _get(served[0], {"Range": "items=0-99"})
+    assert status == 200
+    assert body == served[1]
+    # Content-Range belongs on 206/416 only; emitting it here would contradict
+    # the full-file body.
+    assert "Content-Range" not in headers
+    assert "X-GeoLibre-Content-Range" not in headers
+
+
+def test_query_range_exposes_its_header_cross_origin(served):
+    """The custom header is unreadable from fetch() unless it is exposed."""
+    _status, headers, _body = _get(f"{served[0]}?__geolibre_range=bytes%3D0-9")
+    assert headers["Access-Control-Expose-Headers"] == "X-GeoLibre-Content-Range"
+
+
 def test_unsatisfiable_range_returns_416(served):
     url, payload = served
     with pytest.raises(urllib.error.HTTPError) as excinfo:
