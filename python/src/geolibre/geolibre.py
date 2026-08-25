@@ -1905,9 +1905,10 @@ class Map(anywidget.AnyWidget):
 
     def add_raster(
         self,
-        source: Any,
+        source: Any = None,
         name: str = "Raster",
         *,
+        url: str | os.PathLike[str] | None = None,
         bands: list[int] | None = None,
         colormap: str | None = None,
         rescale: list[list[float]] | None = None,
@@ -1930,6 +1931,9 @@ class Map(anywidget.AnyWidget):
             source: URL or path of a COG / GeoTIFF, or an
                 ``xarray.DataArray`` / ``xarray.Dataset``.
             name: Layer display name.
+            url: Deprecated alias of ``source``, kept because this method used
+                to name its first parameter ``url`` (as :meth:`add_cog` still
+                does). Passing it emits a ``DeprecationWarning``.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
             rescale: Optional ``[[min, max], ...]`` ranges per band.
@@ -1943,6 +1947,19 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
+        if url is not None:
+            if source is not None:
+                raise TypeError("add_raster() got both 'source' and its deprecated alias 'url'")
+            warnings.warn(
+                "add_raster(url=...) is deprecated; pass the raster as the first "
+                "positional argument or as source=...",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            source = url
+        if source is None:
+            raise TypeError("add_raster() missing required argument: 'source'")
+
         raster_source = source
         if not isinstance(source, (str, os.PathLike)):
             raster_source = self._materialize_xarray(source, array_args)

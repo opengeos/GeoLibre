@@ -640,6 +640,23 @@ def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
     assert widget._temporary_rasters == []
 
 
+def test_add_raster_accepts_deprecated_url_keyword(m):
+    """The pre-rename `url=` keyword still works, with a DeprecationWarning."""
+    with pytest.warns(DeprecationWarning, match="add_raster\\(url=...\\) is deprecated"):
+        m.add_raster(url="https://e/dem.tif", name="DEM")
+    assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
+
+
+def test_add_raster_rejects_source_and_url_together(m):
+    with pytest.raises(TypeError, match="deprecated alias"):
+        m.add_raster("https://e/a.tif", url="https://e/b.tif")
+
+
+def test_add_raster_requires_a_source(m):
+    with pytest.raises(TypeError, match="missing required argument"):
+        m.add_raster()
+
+
 def test_add_raster_rejects_non_raster_object(monkeypatch, m):
     _fake_xarray_modules(monkeypatch)
     with pytest.raises(TypeError, match="xarray DataArray/Dataset"):
