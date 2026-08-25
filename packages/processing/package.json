@@ -13,7 +13,7 @@
     "@geolibre/core": "*",
     "@turf/area": "^7.4.0",
     "@turf/bbox": "^7.4.0",
-    "@turf/bearing": "^7.3.5",
+    "@turf/bearing": "^7.4.0",
     "@turf/boolean-contains": "^7.4.0",
     "@turf/boolean-intersects": "^7.4.0",
     "@turf/boolean-within": "^7.4.0",
