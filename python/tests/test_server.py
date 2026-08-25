@@ -114,6 +114,25 @@ def test_register_same_file_reuses_token(served):
     assert len(_server._local_files) == 1
 
 
+def test_unregister_local_file_drops_the_token(served, tmp_path):
+    url, _payload = served
+    assert len(_server._local_files) == 1
+    registered = next(iter(_server._local_files.values()))
+
+    _server.unregister_local_file(registered)
+    assert _server._local_files == {}
+
+    # The route is gone once the token is dropped.
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _get(url)
+    assert excinfo.value.code == 404
+
+
+def test_unregister_unknown_file_is_a_no_op(served, tmp_path):
+    _server.unregister_local_file(tmp_path / "never-registered.tif")
+    assert len(_server._local_files) == 1
+
+
 def test_options_preflight_allows_range(served):
     url, _payload = served
     request = urllib.request.Request(url, method="OPTIONS")

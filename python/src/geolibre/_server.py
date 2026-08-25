@@ -294,6 +294,31 @@ def register_local_file(path: str | os.PathLike[str]) -> str:
     return f"{base}{_LOCAL_FILE_PREFIX.lstrip('/')}{token}/{quote(file_path.name)}"
 
 
+def unregister_local_file(path: str | os.PathLike[str]) -> None:
+    """Drop the registration for ``path``, if it has one.
+
+    The counterpart of :func:`register_local_file`, so a caller that owns the
+    file's lifetime (``Map`` deleting a GeoTIFF it materialized from an xarray
+    object) can also drop the token instead of leaving a dead entry behind. Each
+    materialization writes to a fresh temporary path, so without this the
+    registry — which ``register_local_file`` scans linearly to dedup — would grow
+    for the life of the kernel.
+
+    Args:
+        path: A path previously passed to :func:`register_local_file`. It is
+            resolved the same way, so the caller can pass what it handed in.
+            A path that is not registered is ignored.
+    """
+    try:
+        file_path = Path(path).expanduser().resolve()
+    except OSError:  # pragma: no cover - best-effort during interpreter exit
+        return
+    with _lock:
+        for token, registered in list(_local_files.items()):
+            if registered == file_path:
+                del _local_files[token]
+
+
 def app_port() -> int | None:
     """Return the port the static app server is listening on, if started.
 

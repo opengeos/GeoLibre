@@ -27,7 +27,7 @@ import traitlets
 
 from . import authoring as _authoring
 from . import project as _project
-from ._server import app_port, register_local_file, serve_app
+from ._server import app_port, register_local_file, serve_app, unregister_local_file
 from .basemaps import resolve_basemap
 from .polyline import polyline_to_geojson
 
@@ -75,6 +75,10 @@ def _remove_temporary_rasters(paths: list[pathlib.Path]) -> None:
             object can be shared with a ``weakref.finalize`` safety net.
     """
     for path in paths:
+        # Drop the static server's token as well: each materialization writes to
+        # a fresh temporary path, so the registry would otherwise keep an entry
+        # per call for the life of the kernel.
+        unregister_local_file(path)
         try:
             path.unlink(missing_ok=True)
         except OSError:  # pragma: no cover - best-effort cleanup at exit

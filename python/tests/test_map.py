@@ -630,6 +630,9 @@ def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
         lambda path: captured.update(path=path) or "http://local/x.tif",
     )
 
+    unregistered = []
+    monkeypatch.setattr(gmod, "unregister_local_file", unregistered.append)
+
     widget = Map()
     widget.add_raster(DataArray())
     assert captured["path"].exists()
@@ -638,6 +641,48 @@ def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
     widget._raster_cleanup()  # what weakref runs at interpreter exit
     assert not captured["path"].exists()
     assert widget._temporary_rasters == []
+    # The static server's token goes with the file, so a looping session does
+    # not leave a registry entry per materialization behind.
+    assert unregistered == [captured["path"]]
+
+
+def test_add_raster_xarray_round_trip_with_real_rioxarray(monkeypatch, m):
+    """Pin real rioxarray behavior the fake modules above cannot model.
+
+    The Dataset nodata path copies the Dataset and reassigns every variable,
+    which drops rio's cached spatial dims (hence the explicit re-set) but not
+    the CRS, which lives in each variable's ``spatial_ref``. Assert the written
+    COG really keeps both, so a rioxarray change is caught here rather than by
+    a user staring at an unplaced raster.
+    """
+    xr = pytest.importorskip("xarray")
+    pytest.importorskip("rioxarray")
+    rasterio = pytest.importorskip("rasterio")
+    np = pytest.importorskip("numpy")
+
+    dataset = xr.Dataset(
+        {
+            "red": (("lat", "lon"), np.zeros((4, 5), dtype="float32")),
+            "green": (("lat", "lon"), np.ones((4, 5), dtype="float32")),
+        },
+        coords={"lat": np.linspace(40, 30, 4), "lon": np.linspace(-100, -90, 5)},
+    )
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://local/ds.tif",
+    )
+
+    m.add_raster(dataset, array_args={"nodata": 255})
+
+    with rasterio.open(captured["path"]) as src:
+        assert src.crs.to_string() == "EPSG:4326"  # inferred from lon/lat
+        assert src.count == 2
+        assert src.nodata == 255
+        assert src.driver == "GTiff"  # what rasterio reports for a COG
+    m.close()
+    assert not captured["path"].exists()
 
 
 def test_add_raster_accepts_deprecated_url_keyword(m):
