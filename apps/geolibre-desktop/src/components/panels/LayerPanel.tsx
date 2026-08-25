@@ -1232,6 +1232,7 @@ export function LayerPanel({
       const id = addGeoJsonLayer(name, structuredClone(layer.geojson));
       updateLayer(id, {
         opacity: layer.opacity,
+        visible: layer.visible,
         style: structuredClone(layer.style),
       });
       if (layer.groupId) moveLayersToGroup([id], layer.groupId);
