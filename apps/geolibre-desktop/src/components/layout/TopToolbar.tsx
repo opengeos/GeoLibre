@@ -239,8 +239,8 @@ export function TopToolbar({
     });
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
-      collapse: t("pluginPanel.collapse"),
-      expand: t("pluginPanel.expand"),
+      collapse: t("sharedRail.collapse", { title: t("annotations.toolbar") }),
+      expand: t("sharedRail.expand", { title: t("annotations.toolbar") }),
       layerName: t("annotations.layerName"),
       elementsPanelTitle: t("annotations.elementsPanelTitle"),
       tools: {

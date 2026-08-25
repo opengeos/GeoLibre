@@ -1173,12 +1173,6 @@ body,
   overflow: hidden;
 }
 
-.geolibre-annotations-control.is-collapsed {
-  /* MapLibre gives grouped controls a minimum height through their children;
-   * keep only the toggle's single control cell when the tools are folded. */
-  height: var(--geolibre-annotations-cell-size);
-}
-
 .geolibre-annotations-control .geolibre-annotations-tools {
   display: flex;
   flex-direction: column;
