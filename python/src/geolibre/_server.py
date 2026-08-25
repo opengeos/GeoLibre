@@ -83,6 +83,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             size = os.fstat(handle.fileno()).st_size
             start, end, status = 0, size - 1, 200
             range_header = self.headers.get("Range")
+            query_range = False
             # Google Colab's port proxy strips Range request headers. The
             # embedded app moves the value into this query parameter only for a
             # marked, tokenized local-file URL, preserving exact COG partial
@@ -91,6 +92,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                 range_header = parse_qs(urlsplit(self.path).query).get("__geolibre_range", [None])[
                     0
                 ]
+                query_range = range_header is not None
             if range_header and range_header.startswith("bytes="):
                 parsed = self._parse_single_range(range_header, size)
                 if parsed is None:
@@ -99,7 +101,11 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                     self.end_headers()
                     return
                 start, end = parsed
-                status = 206
+                # Colab's proxy can normalize an upstream 206 into a full-file
+                # 200 response. For the query transport, send the requested
+                # slice as an ordinary 200 and let the embedded app reconstruct
+                # the 206 after the response has crossed the proxy.
+                status = 200 if query_range else 206
             length = end - start + 1
             self.send_response(status)
             self.send_header("Content-Type", self.guess_type(str(file_path)))
@@ -109,8 +115,13 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             # working if the app is served from a different origin (the file
             # server is loopback-only and serves only registered tokens).
             self.send_header("Access-Control-Allow-Origin", "*")
-            if status == 206:
-                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            if range_header:
+                if query_range:
+                    self.send_header(
+                        "X-GeoLibre-Content-Range", f"bytes {start}-{end}/{size}"
+                    )
+                else:
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.end_headers()
             if head_only:
                 return

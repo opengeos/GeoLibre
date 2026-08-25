@@ -75,8 +75,8 @@ def test_range_request_returns_206_slice(served):
 def test_query_range_returns_206_when_proxy_strips_header(served):
     url, payload = served
     status, headers, body = _get(f"{url}?__geolibre_range=bytes%3D100-199")
-    assert status == 206
-    assert headers["Content-Range"] == f"bytes 100-199/{len(payload)}"
+    assert status == 200
+    assert headers["X-GeoLibre-Content-Range"] == f"bytes 100-199/{len(payload)}"
     assert body == payload[100:200]
 
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   KERNEL_RANGE_QUERY,
+  restoreKernelProxyRangeResponse,
   rewriteKernelProxyRangeRequest,
 } from "../apps/geolibre-desktop/src/lib/kernel-proxy-range";
 
@@ -40,5 +41,28 @@ describe("kernel proxy byte ranges", () => {
     const rewritten = rewriteKernelProxyRangeRequest(input, init);
     assert.equal(rewritten[0], input);
     assert.equal(rewritten[1], init);
+  });
+
+  it("reconstructs a 206 response from the Colab-safe range envelope", async () => {
+    const response = restoreKernelProxyRangeResponse(
+      new Response(new Uint8Array([10, 11, 12]), {
+        status: 200,
+        headers: {
+          "Content-Length": "3",
+          "X-GeoLibre-Content-Range": "bytes 10-12/100",
+        },
+      }),
+    );
+
+    assert.equal(response.status, 206);
+    assert.equal(response.statusText, "Partial Content");
+    assert.equal(response.headers.get("Content-Range"), "bytes 10-12/100");
+    assert.equal(response.headers.get("X-GeoLibre-Content-Range"), null);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([10, 11, 12]));
+  });
+
+  it("leaves ordinary 200 responses unchanged", () => {
+    const response = new Response("whole file");
+    assert.equal(restoreKernelProxyRangeResponse(response), response);
   });
 });

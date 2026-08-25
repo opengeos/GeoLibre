@@ -2,6 +2,7 @@
 export const KERNEL_RANGE_PROXY_MARKER = "__geolibre_range_proxy";
 /** Query parameter carrying a Range header through proxies that remove it. */
 export const KERNEL_RANGE_QUERY = "__geolibre_range";
+const KERNEL_CONTENT_RANGE_HEADER = "X-GeoLibre-Content-Range";
 
 /**
  * Move a byte-range header into the URL for a marked kernel-local request.
@@ -42,15 +43,32 @@ export function rewriteKernelProxyRangeRequest(
   return [url, { ...init, headers }];
 }
 
+/** Reconstruct the partial response after it has crossed the Colab proxy. */
+export function restoreKernelProxyRangeResponse(response: Response): Response {
+  if (response.status !== 200) return response;
+  const contentRange = response.headers.get(KERNEL_CONTENT_RANGE_HEADER);
+  if (!contentRange) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set("Content-Range", contentRange);
+  headers.delete(KERNEL_CONTENT_RANGE_HEADER);
+  return new Response(response.body, {
+    status: 206,
+    statusText: "Partial Content",
+    headers,
+  });
+}
+
 let installed = false;
 
 /** Install the narrowly scoped Colab Range-header compatibility wrapper. */
 export function installKernelProxyRangeFetch(): void {
   if (installed || typeof globalThis.fetch !== "function") return;
   const browserFetch = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = (input, init) => {
+  globalThis.fetch = async (input, init) => {
     const [rewrittenInput, rewrittenInit] = rewriteKernelProxyRangeRequest(input, init);
-    return browserFetch(rewrittenInput, rewrittenInit);
+    const response = await browserFetch(rewrittenInput, rewrittenInit);
+    return restoreKernelProxyRangeResponse(response);
   };
   installed = true;
 }
