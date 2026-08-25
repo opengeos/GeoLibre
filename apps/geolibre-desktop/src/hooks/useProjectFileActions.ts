@@ -935,11 +935,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // per-project choice is remembered. On desktop that second case cannot
     // arise: "without data" writes file references, so nothing is discarded.
     const discardedLayerIds = isTauri() ? [] : [...embeddable.keys()];
-    const rememberedVectorChoice = reusableVectorDataChoice(remembered, {
+    const reusableChoice = reusableVectorDataChoice(remembered, {
       embedBytes: bytes,
       warningBytes: LARGE_EMBED_WARNING_BYTES,
       discardedLayerIds,
     });
+    // A remembered choice the durability guard below would have to override is
+    // not reusable: silently upgrading it to Embed would skip the prompt, and
+    // with it both the large-data warning and the acknowledged-size bookkeeping
+    // that a silent reuse deliberately leaves alone.
+    const rememberedVectorChoice =
+      reusableChoice !== undefined &&
+      durableVectorDataChoice(reusableChoice, IS_MAS_BUILD) !== reusableChoice
+        ? undefined
+        : reusableChoice;
     const requestedChoice =
       rememberedVectorChoice ??
       (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
