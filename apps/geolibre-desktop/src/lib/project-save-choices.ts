@@ -4,6 +4,19 @@ export type CredentialSaveChoice = "strip" | "keep";
 /** How local vector data should be handled when the current project is saved. */
 export type VectorDataSaveChoice = "embed" | "noembed";
 
+/** Whether this host can safely reopen a project that stores local vector paths. */
+export function canSaveVectorFileReferences(desktop: boolean, masBuild: boolean): boolean {
+  return desktop && !masBuild;
+}
+
+/** Force durable embedded data when the Mac App Store sandbox cannot retain file access. */
+export function durableVectorDataChoice(
+  choice: VectorDataSaveChoice | "cancel",
+  masBuild: boolean,
+): VectorDataSaveChoice | "cancel" {
+  return masBuild && choice === "noembed" ? "embed" : choice;
+}
+
 /**
  * How far embedded data may grow past an acknowledged size before the
  * large-embed warning is shown again. A project gains features between saves,

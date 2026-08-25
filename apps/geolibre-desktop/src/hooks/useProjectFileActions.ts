@@ -47,6 +47,8 @@ import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { recordExplicitProjectSave } from "../lib/project-history-session";
 import {
+  canSaveVectorFileReferences,
+  durableVectorDataChoice,
   rememberProjectSaveChoices,
   reusableCredentialChoice,
   reusableVectorDataChoice,
@@ -62,6 +64,7 @@ import {
 } from "../lib/qgis-project-import";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
+import { IS_MAS_BUILD } from "../lib/build-flags";
 
 /** A pending "strip credentials before saving?" prompt. */
 export interface CredentialStripPrompt {
@@ -115,6 +118,8 @@ export interface EmbedVectorDataPrompt {
    * described differently than on the web (where it discards the data).
    */
   desktop: boolean;
+  /** Whether the host can persist a path-only project that survives relaunch. */
+  allowFileReferences: boolean;
   /** Project generation that opened the prompt. */
   projectGeneration: number;
   resolve: (choice: "embed" | "noembed" | "cancel") => void;
@@ -839,6 +844,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         count,
         bytes,
         desktop,
+        allowFileReferences: canSaveVectorFileReferences(desktop, IS_MAS_BUILD),
         projectGeneration: promptProjectGeneration,
         resolve,
       });
@@ -931,9 +937,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       warningBytes: LARGE_EMBED_WARNING_BYTES,
       discardedLayerIds,
     });
-    const choice =
+    const requestedChoice =
       rememberedVectorChoice ??
       (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
+    // A Mac App Store app receives temporary access to user-selected files.
+    // That access expires when the sandboxed process exits, so a path-only
+    // project cannot restore its local vectors after the next launch. Embed is
+    // the only durable save mode there. Keep this guard behind the dialog as
+    // well, so an old remembered "reference" choice cannot bypass it.
+    const choice = durableVectorDataChoice(requestedChoice, IS_MAS_BUILD);
     if (choice === "cancel") return "cancel";
     // A project can be opened while a prompt is visible. Do not apply that
     // prompt's answer to the replacement project or continue saving stale data.
