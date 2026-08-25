@@ -1163,6 +1163,7 @@ body,
  * buttons, the active-tool highlight, and the inline color/width inputs.
  */
 .geolibre-annotations-control {
+  --geolibre-annotations-cell-size: 29px;
   background-color: hsl(var(--background)) !important;
   border: 1px solid hsl(var(--border)) !important;
   border-radius: 4px;
@@ -1175,7 +1176,7 @@ body,
 .geolibre-annotations-control.is-collapsed {
   /* MapLibre gives grouped controls a minimum height through their children;
    * keep only the toggle's single control cell when the tools are folded. */
-  height: 29px;
+  height: var(--geolibre-annotations-cell-size);
 }
 
 .geolibre-annotations-control .geolibre-annotations-tools {
@@ -1197,10 +1198,10 @@ body,
   color: hsl(var(--foreground));
   cursor: pointer;
   display: flex !important;
-  height: 29px;
+  height: var(--geolibre-annotations-cell-size);
   justify-content: center;
   padding: 0;
-  width: 29px;
+  width: var(--geolibre-annotations-cell-size);
 }
 
 .geolibre-annotations-control button > svg {

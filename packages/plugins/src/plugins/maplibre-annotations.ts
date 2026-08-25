@@ -33,6 +33,7 @@ const TEXT_MARKER_SHAPE = "text_marker";
 const PREVIEW_SOURCE_ID = "geolibre-annotation-preview";
 const PREVIEW_FILL_LAYER_ID = "geolibre-annotation-preview-fill";
 const PREVIEW_LINE_LAYER_ID = "geolibre-annotation-preview-line";
+const ANNOTATION_TOOLS_ID = "geolibre-annotation-tools";
 
 const DEFAULT_COLOR = "#ef4444";
 const DEFAULT_WIDTH = 3;
@@ -293,6 +294,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     const collapseButton = document.createElement("button");
     collapseButton.type = "button";
     collapseButton.className = "geolibre-annotations-collapse";
+    collapseButton.setAttribute("aria-controls", ANNOTATION_TOOLS_ID);
     collapseButton.addEventListener("click", () => {
       this.collapsed = !this.collapsed;
       if (this.collapsed) setActiveTool(null);
@@ -303,6 +305,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     container.appendChild(collapseButton);
 
     const toolsContainer = document.createElement("div");
+    toolsContainer.id = ANNOTATION_TOOLS_ID;
     toolsContainer.className = "geolibre-annotations-tools";
     container.appendChild(toolsContainer);
 

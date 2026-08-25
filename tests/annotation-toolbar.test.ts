@@ -53,6 +53,7 @@ describe("annotation toolbar collapse toggle", () => {
 
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
     assert.equal(toggle.getAttribute("aria-label"), "Collapse toolbar");
+    assert.equal(toggle.getAttribute("aria-controls"), tools.id);
     assert.equal(tools.hidden, false);
 
     textTool.click();
@@ -68,6 +69,7 @@ describe("annotation toolbar collapse toggle", () => {
     toggle.click();
     assert.equal(container.classList.contains("is-collapsed"), false);
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(toggle.getAttribute("aria-label"), "Collapse toolbar");
     assert.equal(tools.hidden, false);
   });
 });
