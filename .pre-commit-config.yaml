@@ -100,7 +100,11 @@ repos:
 
   # Strip every tracked notebook on every commit, not only notebooks included
   # in that commit. This prevents locally executed outputs from lingering when
-  # a contributor commits an unrelated file.
+  # a contributor commits an unrelated file. Note the blast radius that buys:
+  # nbstripout rewrites in place, so outputs a contributor is holding onto in
+  # an unstaged notebook are erased from the working copy by any commit at all.
+  # Narrowing this to staged files would reopen exactly the gap it closes; the
+  # tradeoff is documented in docs/contributing.md.
   - repo: local
     hooks:
       - id: strip-notebook-outputs

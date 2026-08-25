@@ -73,24 +73,6 @@ def test_range_request_returns_206_slice(served):
     assert body == payload[100:200]
 
 
-def test_query_range_returns_206_when_proxy_strips_header(served):
-    url, payload = served
-    status, headers, body = _get(f"{url}?__geolibre_range=bytes%3D100-199")
-    assert status == 200
-    assert headers["X-GeoLibre-Content-Range"] == f"bytes 100-199/{len(payload)}"
-    assert body == payload[100:200]
-
-
-def test_range_header_takes_precedence_over_query(served):
-    url, payload = served
-    status, headers, body = _get(
-        f"{url}?__geolibre_range=bytes%3D100-199", {"Range": "bytes=200-299"}
-    )
-    assert status == 206
-    assert headers["Content-Range"] == f"bytes 200-299/{len(payload)}"
-    assert body == payload[200:300]
-
-
 def test_suffix_range(served):
     url, payload = served
     status, _headers, body = _get(url, {"Range": "bytes=-50"})
@@ -114,13 +96,6 @@ def test_non_bytes_range_unit_serves_the_whole_file(served):
     # Content-Range belongs on 206/416 only; emitting it here would contradict
     # the full-file body.
     assert "Content-Range" not in headers
-    assert "X-GeoLibre-Content-Range" not in headers
-
-
-def test_query_range_exposes_its_header_cross_origin(served):
-    """The custom header is unreadable from fetch() unless it is exposed."""
-    _status, headers, _body = _get(f"{served[0]}?__geolibre_range=bytes%3D0-9")
-    assert headers["Access-Control-Expose-Headers"] == "X-GeoLibre-Content-Range"
 
 
 def test_unsatisfiable_range_returns_416(served):

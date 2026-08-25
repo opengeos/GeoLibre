@@ -1,20 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "node:test";
 
-import {
-  KERNEL_CONTENT_RANGE_HEADER,
-  KERNEL_RANGE_PROXY_MARKER,
-  KERNEL_RANGE_QUERY,
-} from "../apps/geolibre-desktop/src/lib/kernel-proxy-range";
 import {
   canProxyLocalFiles,
   rewriteProxiedLocalFileUrls,
 } from "../python/src/geolibre/_frontend.js";
-
-const readSource = (relative: string) =>
-  readFileSync(fileURLToPath(new URL(`../${relative}`, import.meta.url)), "utf8");
 
 describe("rewriteProxiedLocalFileUrls", () => {
   it("routes registered raster files through the Colab proxy without mutating the project", () => {
@@ -40,7 +30,7 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(
       rewritten.layers[0].source.url,
       "https://session-41123-colab.googleusercontent.com/_geolibre_local/token/" +
-        "geolibre-xarray.tif?download=1&__geolibre_range_proxy=1",
+        "geolibre-xarray.tif?download=1",
     );
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });
@@ -85,7 +75,7 @@ describe("rewriteProxiedLocalFileUrls", () => {
     assert.equal(
       rewritten.layers[0].source.url,
       "https://current-view-41123-colab.googleusercontent.com/" +
-        "_geolibre_local/token/geolibre-xarray.tif?__geolibre_range_proxy=1",
+        "_geolibre_local/token/geolibre-xarray.tif",
     );
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });
@@ -189,30 +179,6 @@ describe("canProxyLocalFiles", () => {
     assert.equal(
       canProxyLocalFiles("https://session-41123-colab.googleusercontent.com/", 0),
       false,
-    );
-  });
-});
-
-describe("the Colab range-bridge wire contract", () => {
-  it("is spelled the same way on the Python side", () => {
-    const frontend = readSource("python/src/geolibre/_frontend.js");
-    const server = readSource("python/src/geolibre/_server.py");
-
-    assert.ok(
-      frontend.includes(`searchParams.set("${KERNEL_RANGE_PROXY_MARKER}", "1")`),
-      "the widget must mark proxied local-file URLs with KERNEL_RANGE_PROXY_MARKER",
-    );
-    assert.ok(
-      server.includes(`.get("${KERNEL_RANGE_QUERY}", [None])`),
-      "the local-file route must read the range from KERNEL_RANGE_QUERY",
-    );
-    assert.ok(
-      server.includes(`self.send_header("${KERNEL_CONTENT_RANGE_HEADER}"`),
-      "the local-file route must report its span in KERNEL_CONTENT_RANGE_HEADER",
-    );
-    assert.ok(
-      server.includes(`"Access-Control-Expose-Headers", "${KERNEL_CONTENT_RANGE_HEADER}"`),
-      "the custom range header must be exposed to cross-origin fetches",
     );
   });
 });

@@ -80,19 +80,6 @@ function proxiedLocalFileUrl(raw, base, port) {
   }
   const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
   const rewritten = new URL(relative, base);
-  // Colab's port proxy removes the Range request header used by geotiff.js.
-  // Mark these URLs so the embedded app can carry each requested byte range in
-  // the query string instead; the token-protected Python route translates it
-  // back into a normal 206 response. Other Jupyter proxies keep using headers.
-  // The marker mirrors KERNEL_RANGE_PROXY_MARKER in
-  // apps/geolibre-desktop/src/lib/kernel-proxy-range.ts, which reads it back;
-  // tests/python-widget-frontend.test.ts fails if the two drift.
-  if (
-    rewritten.pathname.startsWith("/_geolibre_local/") &&
-    rewritten.hostname.endsWith(`-${port}-colab.googleusercontent.com`)
-  ) {
-    rewritten.searchParams.set("__geolibre_range_proxy", "1");
-  }
   // URL serialisation escapes XYZ placeholders, but MapLibre requires the
   // literal braces in its template in order to substitute tile coordinates.
   return rewritten.href.replace(/%7B([zxy])%7D/gi, "{$1}");

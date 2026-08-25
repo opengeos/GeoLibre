@@ -22,7 +22,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 _lock = threading.Lock()
 _server: ThreadingHTTPServer | None = None
@@ -88,26 +88,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             size = os.fstat(handle.fileno()).st_size
             start, end, status = 0, size - 1, 200
             range_header = self.headers.get("Range")
-            query_range = False
-            # Set only once a range actually parses. `status` cannot stand in
-            # for it: the query transport deliberately keeps a matched range at
-            # 200, and an unparsable unit (e.g. "items=0-1") leaves both the
-            # status and the full-file span untouched.
+            # Set only once a range actually parses, so an unparsable unit
+            # (e.g. "items=0-1") does not attach a Content-Range to the
+            # full-file 200 it falls back to.
             range_matched = False
-            # Google Colab's port proxy strips Range request headers. The
-            # embedded app moves the value into this query parameter only for a
-            # marked, tokenized local-file URL, preserving exact COG partial
-            # reads without downloading the full raster through the proxy. The
-            # parameter and the response header below mirror KERNEL_RANGE_QUERY
-            # and KERNEL_CONTENT_RANGE_HEADER in
-            # apps/geolibre-desktop/src/lib/kernel-proxy-range.ts, which writes
-            # and reads them; tests/python-widget-frontend.test.ts asserts this
-            # file against those constants.
-            if not range_header:
-                range_header = parse_qs(urlsplit(self.path).query).get("__geolibre_range", [None])[
-                    0
-                ]
-                query_range = range_header is not None
             if range_header and range_header.startswith("bytes="):
                 parsed = self._parse_single_range(range_header, size)
                 if parsed is None:
@@ -117,11 +101,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                     return
                 start, end = parsed
                 range_matched = True
-                # Colab's proxy can normalize an upstream 206 into a full-file
-                # 200 response. For the query transport, send the requested
-                # slice as an ordinary 200 and let the embedded app reconstruct
-                # the 206 after the response has crossed the proxy.
-                status = 200 if query_range else 206
+                status = 206
             length = end - start + 1
             self.send_response(status)
             self.send_header("Content-Type", self.guess_type(str(file_path)))
@@ -132,14 +112,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             # server is loopback-only and serves only registered tokens).
             self.send_header("Access-Control-Allow-Origin", "*")
             if range_matched:
-                if query_range:
-                    self.send_header("X-GeoLibre-Content-Range", f"bytes {start}-{end}/{size}")
-                    # A non-safelisted response header is hidden from fetch()
-                    # unless it is exposed, and the app needs to read it to
-                    # rebuild the 206 the proxy flattened.
-                    self.send_header("Access-Control-Expose-Headers", "X-GeoLibre-Content-Range")
-                else:
-                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.end_headers()
             if head_only:
                 return

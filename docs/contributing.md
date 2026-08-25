@@ -167,6 +167,14 @@ uploads its report as an artifact on failure.
     `e2e/fixtures/malformed.geojson` fixture is also excluded.
   - **ESLint** enforces the React Hooks rules on TS/JS; a `npm run build`
     typecheck runs too.
+- **Notebook outputs are stripped repo-wide on every commit.** The
+  `strip-notebook-outputs` hook runs `nbstripout` over *every tracked*
+  `.ipynb`, not just the notebooks in your commit, so an output that was
+  executed locally cannot ride along in a later, unrelated commit. Because
+  `nbstripout` rewrites in place, this also erases outputs from a notebook you
+  are still iterating on the next time you commit anything — re-run the
+  notebook to get them back, or keep an untracked scratch copy. No `.ipynb`
+  should ever carry outputs in git.
 - All text files are normalized to LF via `.gitattributes` (`* text=auto eol=lf`),
   so line endings are consistent across platforms; `core.autocrlf` is overridden.
 - The remaining pre-commit hooks enforce LF line endings (`mixed-line-ending
