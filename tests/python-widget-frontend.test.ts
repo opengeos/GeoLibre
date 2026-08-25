@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { rewriteColabLocalFileUrls } from "../python/src/geolibre/_frontend.js";
+import { rewriteProxiedLocalFileUrls } from "../python/src/geolibre/_frontend.js";
 
-describe("rewriteColabLocalFileUrls", () => {
+describe("rewriteProxiedLocalFileUrls", () => {
   it("routes registered raster files through the Colab proxy without mutating the project", () => {
     const localUrl = "http://127.0.0.1:41123/_geolibre_local/token/geolibre-xarray.tif?download=1";
     const project = {
@@ -16,7 +16,7 @@ describe("rewriteColabLocalFileUrls", () => {
       ],
     };
 
-    const rewritten = rewriteColabLocalFileUrls(
+    const rewritten = rewriteProxiedLocalFileUrls(
       project,
       "https://session-41123-colab.googleusercontent.com/",
       41123,
@@ -32,6 +32,29 @@ describe("rewriteColabLocalFileUrls", () => {
     assert.equal(rewritten.layers[0].sourcePath, rewritten.layers[0].source.url);
   });
 
+  it("preserves a Jupyter server proxy path and rewrites sourcePath independently", () => {
+    const project = {
+      layers: [
+        {
+          source: { url: "https://example.com/remote.tif" },
+          sourcePath: "http://localhost:41123/_geolibre_local/token/local.tif",
+        },
+      ],
+    };
+
+    const rewritten = rewriteProxiedLocalFileUrls(
+      project,
+      "https://hub.example/user/alice/proxy/41123/",
+      41123,
+    );
+
+    assert.equal(rewritten.layers[0].source.url, "https://example.com/remote.tif");
+    assert.equal(
+      rewritten.layers[0].sourcePath,
+      "https://hub.example/user/alice/proxy/41123/_geolibre_local/token/local.tif",
+    );
+  });
+
   it("does not rewrite unrelated, wrong-port, or already-remote URLs", () => {
     const project = {
       layers: [
@@ -42,7 +65,7 @@ describe("rewriteColabLocalFileUrls", () => {
     };
 
     assert.equal(
-      rewriteColabLocalFileUrls(project, "https://session-colab.example/", 41123),
+      rewriteProxiedLocalFileUrls(project, "https://session-colab.example/", 41123),
       project,
     );
   });

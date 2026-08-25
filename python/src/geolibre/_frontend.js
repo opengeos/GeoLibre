@@ -53,34 +53,41 @@ function colabKernel() {
 // raw 127.0.0.1 address. Point only GeoLibre's tokenized local-file routes on
 // this widget's own port at the same proxy base. Copy on write keeps the synced
 // Python project unchanged until the app reports its restored state.
-export function rewriteColabLocalFileUrls(project, base, port) {
+function proxiedLocalFileUrl(raw, base, port) {
+  if (typeof raw !== "string") return raw;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (
+    !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
+    parsed.port !== String(port) ||
+    !parsed.pathname.startsWith("/_geolibre_local/")
+  ) {
+    return raw;
+  }
+  const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
+  return new URL(relative, base).href;
+}
+
+export function rewriteProxiedLocalFileUrls(project, base, port) {
   if (!project || typeof project !== "object" || !Array.isArray(project.layers) || !port) {
     return project;
   }
   let changed = false;
   const layers = project.layers.map((layer) => {
-    const raw = layer && typeof layer === "object" ? layer.source?.url : null;
-    if (typeof raw !== "string") return layer;
-    let parsed;
-    try {
-      parsed = new URL(raw);
-    } catch {
-      return layer;
-    }
-    if (
-      !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
-      parsed.port !== String(port) ||
-      !parsed.pathname.startsWith("/_geolibre_local/")
-    ) {
-      return layer;
-    }
-    const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
-    const url = new URL(relative, base).href;
+    if (!layer || typeof layer !== "object") return layer;
+    const rawUrl = layer.source?.url;
+    const url = proxiedLocalFileUrl(rawUrl, base, port);
+    const sourcePath = proxiedLocalFileUrl(layer.sourcePath, base, port);
+    if (url === rawUrl && sourcePath === layer.sourcePath) return layer;
     changed = true;
     return {
       ...layer,
-      source: { ...layer.source, url },
-      ...(layer.sourcePath === raw ? { sourcePath: url } : {}),
+      ...(url !== rawUrl ? { source: { ...layer.source, url } } : {}),
+      ...(sourcePath !== layer.sourcePath ? { sourcePath } : {}),
     };
   });
   return changed ? { ...project, layers } : project;
@@ -229,8 +236,10 @@ async function render({ model, el }) {
 
   const pushProject = () => {
     if (!ready) return;
-    const project = colabKernel()
-      ? rewriteColabLocalFileUrls(model.get("project"), base, model.get("_app_port"))
+    const port = model.get("_app_port");
+    const canProxyLocalFiles = colabKernel() || base === proxyBase(port);
+    const project = canProxyLocalFiles
+      ? rewriteProxiedLocalFileUrls(model.get("project"), base, port)
       : model.get("project");
     post({
       type: "geolibre:load-project",

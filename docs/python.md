@@ -87,11 +87,11 @@ the app's own Earth Engine panel manages.
 `add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host:
 the file is served by the bundled localhost server so the app can read it. This
 works directly in local Jupyter and VS Code. Google Colab routes the file through
-its built-in kernel port proxy. Other remote/browser-separated setups such as
-JupyterHub cannot use the local file when the app is served by the static server
-extension, so pass a hosted URL there. The served URL is session-scoped, so a
-project saved with a local raster will not restore it when reopened later — pass
-a hosted URL for durable projects.
+its built-in kernel port proxy; JupyterHub can do the same when
+`jupyter-server-proxy` is available. A static-server-extension-only deployment
+cannot expose kernel files, so pass a hosted URL there. The served URL is
+session-scoped, so a project saved with a local raster will not restore it when
+reopened later — pass a hosted URL for durable projects.
 
 Install `geolibre[raster]` to visualize an in-memory xarray object. Spatial
 dimensions named `lon`/`lat` or `longitude`/`latitude` default to EPSG:4326;

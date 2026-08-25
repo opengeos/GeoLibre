@@ -10,7 +10,7 @@ def main() -> None:
     result = subprocess.run(
         ["git", "ls-files", "-z", "--", "*.ipynb"],
         check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
     )
     notebooks = [path.decode() for path in result.stdout.split(b"\0") if path]
     if notebooks:

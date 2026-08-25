@@ -136,11 +136,12 @@ durable.
 
 `add_raster` / `add_cog` accept a **local** GeoTIFF path on the kernel host: the
 bundled localhost server serves it so the app can read it. This works directly
-in local Jupyter and VS Code, and through Colab's built-in kernel port proxy.
-On JupyterHub or another remote kernel, pass a hosted URL unless the app and
-file are both reachable through a kernel-port proxy. The served URL is
-session-scoped, so a saved project or exported HTML will not restore a local
-raster later. **For anything durable or shareable, use a hosted URL.**
+in local Jupyter and VS Code, through Colab's built-in kernel port proxy, and on
+JupyterHub when `jupyter-server-proxy` is available. A deployment that can only
+serve the static app extension cannot expose kernel files, so use a hosted URL.
+The served URL is session-scoped, so a saved project or exported HTML will not
+restore a local raster later. **For anything durable or shareable, use a hosted
+URL.**
 
 ## Camera, basemap, layers
 
