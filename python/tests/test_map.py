@@ -611,6 +611,28 @@ def test_add_raster_xarray_requires_recognizable_spatial_dims(monkeypatch, m):
         m.add_raster(DataArray(dims=("row", "column")))
 
 
+def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
+    """The finalizer must clean up when the user never calls Map.close()."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://local/x.tif",
+    )
+
+    widget = Map()
+    widget.add_raster(DataArray())
+    assert captured["path"].exists()
+
+    assert widget._raster_cleanup.alive
+    widget._raster_cleanup()  # what weakref runs at interpreter exit
+    assert not captured["path"].exists()
+    assert widget._temporary_rasters == []
+
+
 def test_add_raster_rejects_non_raster_object(monkeypatch, m):
     _fake_xarray_modules(monkeypatch)
     with pytest.raises(TypeError, match="xarray DataArray/Dataset"):

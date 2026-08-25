@@ -30,8 +30,13 @@ Optional extras provide GeoPandas/Shapely support for GeoDataFrames and local
 vector files, plus xarray/rioxarray/rasterio support for in-memory rasters:
 
 ```bash
-pip install "geolibre[all]"
+pip install "geolibre[all]"      # both
+pip install "geolibre[vector]"   # GeoPandas/Shapely only
+pip install "geolibre[raster]"   # xarray/rioxarray/rasterio only
 ```
+
+`[all]` is the union of the two, so it now installs rasterio (and GDAL with it);
+use `[vector]` to keep an existing vector-only environment as light as before.
 
 The optional `[all]` extra is pip-only. If you installed via conda, add it with
 `pip install "geolibre[all]"` inside the same environment.
@@ -103,6 +108,9 @@ m.add_raster(
 
 The temporary Cloud-Optimized GeoTIFF backing an xarray layer is removed when the widget is
 closed, so xarray layers have the same session-only limitation as local files.
+Call `m.close()` when you are done to remove it promptly; otherwise it is removed
+when the `Map` is garbage collected or when the kernel exits normally. A kernel
+that is killed outright leaves the file behind in the system temp directory.
 
 Add markers and data-driven symbology without precomputing styles:
 

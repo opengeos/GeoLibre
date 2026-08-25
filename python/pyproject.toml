@@ -22,7 +22,11 @@ classifiers = [
 dependencies = ["anywidget>=0.9", "traitlets>=5", "jupyter-ui-poll>=0.2"]
 
 [project.optional-dependencies]
+# `all` is the union of the data extras. It now pulls in the raster stack
+# (rasterio ships GDAL), so installs that only need GeoDataFrames and local
+# vector files can ask for `vector` instead.
 all = ["geopandas", "shapely", "xarray", "rioxarray", "rasterio"]
+vector = ["geopandas", "shapely"]
 raster = ["xarray", "rioxarray", "rasterio"]
 # The MCP server (geolibre.mcp) is the only thing that imports the SDK, so it
 # stays optional: the widget and the project builders work without it.

@@ -17,6 +17,7 @@ import time
 import urllib.parse
 import uuid
 import warnings
+import weakref
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.error import URLError
@@ -64,6 +65,21 @@ _EE_VECTOR_STYLE_KEYS = frozenset(
 # restkey is ``None``, which would put a non-string key in the feature
 # properties and break JSON serialization on the way to the widget.
 _CSV_RESTKEY = "_extra"
+
+
+def _remove_temporary_rasters(paths: list[pathlib.Path]) -> None:
+    """Delete GeoTIFFs materialized from in-memory xarray objects.
+
+    Args:
+        paths: Paths to remove. The list is cleared in place so the same
+            object can be shared with a ``weakref.finalize`` safety net.
+    """
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - best-effort cleanup at exit
+            pass
+    paths.clear()
 
 
 def _read_local_vector(
@@ -388,6 +404,14 @@ class Map(anywidget.AnyWidget):
         # disk while the widget is alive because the app reads them lazily via
         # HTTP Range requests.
         self._temporary_rasters: list[pathlib.Path] = []
+        # ``close()`` is easy to forget, so the same list is handed to a
+        # finalizer, which weakref runs when the Map is collected and, because
+        # ipywidgets keeps widgets referenced until then, at interpreter exit.
+        # ``close()`` clears the list in place rather than rebinding it, so this
+        # finalizer stays valid for anything materialized afterwards.
+        self._raster_cleanup = weakref.finalize(
+            self, _remove_temporary_rasters, self._temporary_rasters
+        )
         self.on_msg(self._on_custom_msg)
 
     def close(self) -> None:
@@ -395,9 +419,7 @@ class Map(anywidget.AnyWidget):
         try:
             super().close()
         finally:
-            for path in getattr(self, "_temporary_rasters", []):
-                path.unlink(missing_ok=True)
-            self._temporary_rasters = []
+            _remove_temporary_rasters(getattr(self, "_temporary_rasters", []))
 
     @staticmethod
     def _running_on_colab() -> bool:
@@ -1900,6 +1922,10 @@ class Map(anywidget.AnyWidget):
         EPSG:4326; other dimension names require georeferencing through the
         object's ``.rio`` accessor or ``array_args``.
 
+        The temporary GeoTIFF is removed by :meth:`close`, and, if that is never
+        called, when the ``Map`` is garbage collected or the interpreter exits
+        normally. A killed kernel leaves the file in the system temp directory.
+
         Args:
             source: URL or path of a COG / GeoTIFF, or an
                 ``xarray.DataArray`` / ``xarray.Dataset``.
@@ -1921,7 +1947,11 @@ class Map(anywidget.AnyWidget):
         if not isinstance(source, (str, os.PathLike)):
             raster_source = self._materialize_xarray(source, array_args)
         elif array_args:
-            warnings.warn("array_args is ignored unless source is an xarray object", UserWarning)
+            warnings.warn(
+                "array_args is ignored unless source is an xarray object",
+                UserWarning,
+                stacklevel=2,
+            )
         return self.add_cog(
             raster_source,
             name,
