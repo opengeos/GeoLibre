@@ -15,8 +15,7 @@ export function rewriteKernelProxyRangeRequest(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): [RequestInfo | URL, RequestInit | undefined] {
-  const rawUrl =
-    typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -27,7 +26,9 @@ export function rewriteKernelProxyRangeRequest(
     return [input, init];
   }
 
-  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+  const headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined),
+  );
   const range = headers.get("Range");
   if (!range) return [input, init];
 

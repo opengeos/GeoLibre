@@ -88,9 +88,9 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             # marked, tokenized local-file URL, preserving exact COG partial
             # reads without downloading the full raster through the proxy.
             if not range_header:
-                range_header = parse_qs(urlsplit(self.path).query).get(
-                    "__geolibre_range", [None]
-                )[0]
+                range_header = parse_qs(urlsplit(self.path).query).get("__geolibre_range", [None])[
+                    0
+                ]
             if range_header and range_header.startswith("bytes="):
                 parsed = self._parse_single_range(range_header, size)
                 if parsed is None:
