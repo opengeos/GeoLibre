@@ -26,13 +26,11 @@ Or with conda from [conda-forge](https://anaconda.org/conda-forge/geolibre):
 conda install -c conda-forge geolibre
 ```
 
-Optional extras for `add_geojson()` from a GeoDataFrame and for reading **local**
-vector files with `add_vector()` / `add_geoparquet()` / `add_flatgeobuf()` /
-`add_shp()` / `add_kml()` / `add_gpkg()` (remote URLs for those formats need no
-extras):
+Optional extras provide GeoPandas/Shapely support for GeoDataFrames and local
+vector files, plus xarray/rioxarray/rasterio support for in-memory rasters:
 
 ```bash
-pip install "geolibre[all]"   # adds GeoPandas and Shapely
+pip install "geolibre[all]"
 ```
 
 The optional `[all]` extra is pip-only. If you installed via conda, add it with

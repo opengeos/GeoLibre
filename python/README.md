@@ -203,8 +203,9 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
 - Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),
-  which the kernel reads and inlines as GeoJSON. Remote URLs for the same formats stream through
-  the in-browser vector control and need no extras.
+  plus xarray/rioxarray/rasterio support for in-memory rasters. The kernel reads
+  local vectors and inlines them as GeoJSON; remote URLs for those formats
+  stream through the in-browser vector control and need no extras.
 - `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large
   dataset is held in memory and re-synced on every project update. For very large
   layers, prefer a tile or COG source (`add_tile_layer`/`add_cog`) the app fetches

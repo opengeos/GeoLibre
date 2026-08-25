@@ -540,6 +540,12 @@ def _fake_xarray_modules(monkeypatch):
         def __getitem__(self, key):
             return self.data_vars[key]
 
+        def __setitem__(self, key, value):
+            self.data_vars[key] = value
+
+        def copy(self):
+            return self
+
     monkeypatch.setitem(
         sys.modules, "xarray", types.SimpleNamespace(DataArray=DataArray, Dataset=Dataset)
     )
@@ -582,6 +588,20 @@ def test_add_raster_xarray_dataset_selects_variable(monkeypatch, m):
 
     assert selected.indexers == {"time": 0}
     assert selected.spatial_dims == ("x", "y")
+    m.close()
+
+
+def test_add_raster_xarray_dataset_applies_nodata_to_each_variable(monkeypatch, m):
+    DataArray, Dataset = _fake_xarray_modules(monkeypatch)
+    red = DataArray()
+    green = DataArray()
+    dataset = Dataset({"red": red, "green": green})
+    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/rgb.tif")
+
+    m.add_raster(dataset, array_args={"nodata": 255})
+
+    assert red.nodata == 255
+    assert green.nodata == 255
     m.close()
 
 

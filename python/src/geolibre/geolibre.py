@@ -1997,7 +1997,19 @@ class Map(anywidget.AnyWidget):
                     "array_args={'crs': 'EPSG:...'} ."
                 )
         if nodata is not None:
-            data = data.rio.write_nodata(nodata, inplace=False)
+            if isinstance(data, xr.Dataset):
+                # RasterDataset has no write_nodata method; nodata metadata
+                # belongs to each DataArray variable instead. Assign the
+                # results explicitly because Dataset.map() discards the
+                # per-variable _FillValue attributes written by rioxarray.
+                data = data.copy()
+                for variable_name in data.data_vars:
+                    data[variable_name] = data[variable_name].rio.write_nodata(
+                        nodata, inplace=False
+                    )
+                data = data.rio.set_spatial_dims(x_dim=x_dim, y_dim=y_dim, inplace=False)
+            else:
+                data = data.rio.write_nodata(nodata, inplace=False)
 
         handle, raw_path = tempfile.mkstemp(prefix="geolibre-xarray-", suffix=".tif")
         os.close(handle)
