@@ -80,6 +80,35 @@ const EPOCH_SECONDS_MIN = 1e8;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 
+/** Text that reads as a plain number. Mirrors the Time Slider's own detector. */
+const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
+
+/**
+ * A padded integer (`02134`, `007`) is an identifier that happens to be made of
+ * digits, not a measure: a ZIP code or a FIPS code belongs in a value list, and
+ * turning it into a range slider would both misrepresent it and lose the
+ * padding. Excluded from numeric-string detection for that reason.
+ */
+const LEADING_ZERO_INTEGER = /^-?0\d/;
+
+/**
+ * The number a value holds for profiling, or `null` when it is not numeric.
+ *
+ * Numeric text counts: a CSV, a delimited-text import, or a service that does
+ * not preserve JS number types can deliver `"1200"` where another source
+ * delivers `1200`, and the compiled filter coerces with `to-number` either way
+ * — so refusing to profile the string form would withhold the range and date
+ * controls from a field they would filter correctly.
+ */
+function numericValue(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!NUMERIC_STRING.test(trimmed) || LEADING_ZERO_INTEGER.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /** Values that carry no information for a filter control. */
 function isEmptyValue(value: unknown): boolean {
   return value === null || value === undefined || value === "";
@@ -95,6 +124,8 @@ function isoDay(ms: number): string | undefined {
 interface FieldTally {
   present: number;
   strings: number;
+  /** Values that read as numbers, whether stored as numbers or as numeric text. */
+  numericLike: number;
   numbers: number;
   booleans: number;
   others: number;
@@ -115,6 +146,7 @@ function newTally(): FieldTally {
   return {
     present: 0,
     strings: 0,
+    numericLike: 0,
     numbers: 0,
     booleans: 0,
     others: 0,
@@ -134,18 +166,21 @@ function newTally(): FieldTally {
 function tallyValue(tally: FieldTally, value: unknown): void {
   tally.present += 1;
 
-  if (typeof value === "number" && Number.isFinite(value)) {
-    tally.numbers += 1;
-    tally.min = Math.min(tally.min, value);
-    tally.max = Math.max(tally.max, value);
-    const magnitude = Math.abs(value);
+  const numeric = numericValue(value);
+  if (numeric !== null) {
+    tally.numericLike += 1;
+    if (typeof value === "number") tally.numbers += 1;
+    else tally.strings += 1;
+    tally.min = Math.min(tally.min, numeric);
+    tally.max = Math.max(tally.max, numeric);
+    const magnitude = Math.abs(numeric);
     if (magnitude >= EPOCH_SECONDS_MIN) {
       // Only a clearly epoch-scale number is a timestamp candidate. A bare
       // year (1998) or a population count stays an ordinary measure, which is
       // what a range slider is for.
       tally.epochCandidates += 1;
       tally.maxEpochMagnitude = Math.max(tally.maxEpochMagnitude, magnitude);
-      const ms = magnitude >= EPOCH_MS_THRESHOLD ? value : value * 1000;
+      const ms = magnitude >= EPOCH_MS_THRESHOLD ? numeric : numeric * 1000;
       tally.minEpochMs = Math.min(tally.minEpochMs, ms);
       tally.maxEpochMs = Math.max(tally.maxEpochMs, ms);
     }
@@ -191,7 +226,10 @@ function profileFromTally(
   sampled: number,
 ): QuickFilterFieldProfile {
   const { present } = tally;
-  const allNumbers = present > 0 && tally.numbers === present;
+  // Numeric text counts as numeric: the compiled filter coerces with
+  // `to-number`, so a CSV column of `"1200"` deserves the same range control a
+  // column of `1200` gets.
+  const allNumbers = present > 0 && tally.numericLike === present;
   const allStrings = present > 0 && tally.strings === present;
   const isoTotal = tally.isoDates + tally.isoDateTimes;
   // A date column is one whose text values are *all* ISO timestamps, or whose

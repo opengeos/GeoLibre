@@ -83,9 +83,17 @@ function compileCategorical(filter: LayerQuickFilter): unknown[] | null {
 }
 
 function compileRange(filter: LayerQuickFilter): unknown[] | null {
-  const min = finite(filter.min);
-  const max = finite(filter.max);
-  if (min === null && max === null) return null;
+  const first = finite(filter.min);
+  const second = finite(filter.max);
+  if (first === null && second === null) return null;
+  // Order the bounds rather than trusting which box they were typed into. The
+  // slider's thumbs cannot cross, but the two number inputs commit
+  // independently, so a bound is briefly inverted on the way to any value whose
+  // first digit is smaller (typing `200000` into a max already showing `800000`
+  // passes through `2`). Compiling that literally yields an unsatisfiable
+  // filter, which empties the layer with nothing on screen to explain why.
+  const min = first !== null && second !== null ? Math.min(first, second) : first;
+  const max = first !== null && second !== null ? Math.max(first, second) : second;
   const value = ["to-number", ["get", filter.field]];
   const clauses: unknown[] = [presenceGuard(filter.field)];
   if (min !== null) clauses.push([">=", value, min]);
@@ -98,9 +106,15 @@ function compileDate(filter: LayerQuickFilter): unknown[] | null {
   // bound valid and the other malformed the filter still compiles, and pushing
   // the raw text would compare against a value no real date can satisfy — which
   // hides every feature instead of leaving that side open.
-  const start = parseIsoDayBound(filter.start);
-  const end = parseIsoDayBound(filter.end);
-  if (start === null && end === null) return null;
+  const first = parseIsoDayBound(filter.start);
+  const second = parseIsoDayBound(filter.end);
+  if (first === null && second === null) return null;
+  // Ordered for the same reason as `compileRange`: a date typed into the wrong
+  // box (or a from/to pair edited out of order) should read as the interval
+  // between them, not as an empty layer.
+  const inverted = first !== null && second !== null && first.ms > second.ms;
+  const start = inverted ? second : first;
+  const end = inverted ? first : second;
   const clauses: unknown[] = [presenceGuard(filter.field)];
 
   if ((filter.dateKind ?? "iso") === "iso") {

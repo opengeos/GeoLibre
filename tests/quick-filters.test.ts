@@ -144,6 +144,19 @@ describe("compileQuickFilters", () => {
     );
   });
 
+  it("orders an inverted numeric range instead of emptying the layer", () => {
+    // The two number inputs commit independently, so a max is briefly smaller
+    // than its min while being typed. Compiling that literally is unsatisfiable.
+    const kept = keptRows(
+      [{ id: "a", field: "pop", kind: "range", min: 700_000, max: 200_000 }],
+      CITIES,
+    );
+    assert.deepEqual(
+      kept.map((row) => row.name),
+      ["Portland", "Boise"],
+    );
+  });
+
   it("filters ISO dates inclusively on both bounds", () => {
     const kept = keptRows(
       [
@@ -292,6 +305,17 @@ describe("compileQuickFilters", () => {
     );
   });
 
+  it("orders an inverted date range too", () => {
+    const kept = keptRows(
+      [{ id: "a", field: "founded", kind: "date", start: "1845-02-08", end: "1842-01-12" }],
+      CITIES,
+    );
+    assert.deepEqual(
+      kept.map((row) => row.name),
+      ["Portland", "Salem"],
+    );
+  });
+
   it("matches text case-insensitively for each operator", () => {
     const rows = [{ name: "Portland" }, { name: "Port Angeles" }, { name: "Salem" }];
     const names = (filter: LayerQuickFilter) => keptRows([filter], rows).map((row) => row.name);
@@ -428,6 +452,28 @@ describe("profileQuickFilterFields", () => {
     const profiles = byField(profileQuickFilterFields(rows));
     assert.equal(profiles.get("ms")?.dateKind, "epochMs");
     assert.equal(profiles.get("s")?.dateKind, "epochS");
+  });
+
+  it("profiles numeric text as numeric, so a CSV column still gets a range", () => {
+    const rows = [{ pop: "1200" }, { pop: "34" }, { pop: "-7.5" }];
+    const pop = byField(profileQuickFilterFields(rows)).get("pop");
+    assert.equal(pop?.kind, "range");
+    assert.equal(pop?.min, -7.5);
+    assert.equal(pop?.max, 1200);
+  });
+
+  it("keeps a zero-padded code a value list, not a measure", () => {
+    // A ZIP or FIPS code is an identifier made of digits; a slider would both
+    // misrepresent it and lose the padding.
+    const rows = [{ zip: "02134" }, { zip: "02139" }, { zip: "90210" }];
+    const zip = byField(profileQuickFilterFields(rows)).get("zip");
+    assert.equal(zip?.kind, "categorical");
+    assert.ok(!zip?.availableKinds.includes("range"));
+  });
+
+  it("detects an epoch timestamp stored as text", () => {
+    const rows = [{ at: String(Date.UTC(2026, 0, 1)) }];
+    assert.equal(byField(profileQuickFilterFields(rows)).get("at")?.dateKind, "epochMs");
   });
 
   it("keeps a bare year column a numeric range, not a date", () => {
