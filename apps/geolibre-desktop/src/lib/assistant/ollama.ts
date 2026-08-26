@@ -11,6 +11,13 @@ interface OllamaTagsResponse {
 const DISCOVERY_TIMEOUT_MS = 10_000;
 
 /**
+ * Where Ollama listens out of the box. Prefilled into a new profile's base-URL
+ * field — the field is required, so leaving it blank reads as "incomplete" even
+ * on the default install where discovery would have worked untouched.
+ */
+export const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
+
+/**
  * Fetch the model ids installed in an Ollama server. `signal`, when given, is
  * combined with the discovery budget so a caller that discards the result (a
  * provider change, a profile switch) can abort the request instead of leaving
@@ -20,7 +27,7 @@ export async function discoverOllamaModels(
   baseUrl: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  let normalized = baseUrl.trim() || "http://localhost:11434";
+  let normalized = baseUrl.trim() || DEFAULT_OLLAMA_BASE_URL;
   if (!/^https?:\/\//i.test(normalized)) normalized = `http://${normalized}`;
   normalized = normalized.replace(/\/+$/, "").replace(/\/v1$/i, "");
   const budget = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);

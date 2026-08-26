@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { discoverOllamaModels } from "../../lib/assistant/ollama";
+import { DEFAULT_OLLAMA_BASE_URL, discoverOllamaModels } from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
@@ -70,7 +70,12 @@ function useOllamaModels() {
   const requestGeneration = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
 
-  const refresh = async (baseUrl: string) => {
+  /**
+   * Discover the models installed at `baseUrl`. Resolves to the discovered list,
+   * or `null` when the request failed or was superseded — so a caller can
+   * reconcile its selection without having to re-check staleness itself.
+   */
+  const refresh = async (baseUrl: string): Promise<string[] | null> => {
     const generation = ++requestGeneration.current;
     inFlight.current?.abort();
     const controller = new AbortController();
@@ -79,10 +84,12 @@ function useOllamaModels() {
     setError(null);
     try {
       const discovered = await discoverOllamaModels(baseUrl, controller.signal);
-      if (generation === requestGeneration.current) setModels(discovered);
+      if (generation !== requestGeneration.current) return null;
+      setModels(discovered);
+      return discovered;
     } catch (cause) {
-      if (generation !== requestGeneration.current) return;
-      if (controller.signal.aborted) return;
+      if (generation !== requestGeneration.current) return null;
+      if (controller.signal.aborted) return null;
       // Route through the repo's fetch-failure classification: the browser
       // collapses a CORS rejection (Ollama needs OLLAMA_ORIGINS to allow this
       // origin) and an unreachable host into the same opaque "Failed to fetch",
@@ -101,6 +108,7 @@ function useOllamaModels() {
               }),
       );
       console.error("[GeoLibre] Could not load Ollama models", cause);
+      return null;
     } finally {
       if (generation === requestGeneration.current) setLoading(false);
     }
@@ -188,12 +196,23 @@ export function AiSectionContent({
     setIsCreatingProfile(false);
   };
 
+  /**
+   * The credential values a freshly-selected provider starts with. Ollama's base
+   * URL is required but has a well-known default, so it is prefilled rather than
+   * left blank — unless the OS environment already supplies one, which the field
+   * surfaces on its own and must not be shadowed by the default.
+   */
+  const initialFieldValues = (provider: AssistantProviderId): Record<string, string> =>
+    provider === "ollama" && !scopedOsEnv.OLLAMA_BASE_URL && !scopedOsEnv.OLLAMA_HOST
+      ? { OLLAMA_BASE_URL: DEFAULT_OLLAMA_BASE_URL }
+      : {};
+
   /** Start creating a new profile (shows full editor with credential fields). */
   const startCreating = () => {
     setNewProfileName("");
     setNewProfileProvider("google");
     setNewProfileModel(defaultModelFor("google"));
-    setNewProfileFieldValues({});
+    setNewProfileFieldValues(initialFieldValues("google"));
     ollamaDiscovery.reset();
     setIsCreatingProfile(true);
     setEditingProfileId(null);
@@ -299,7 +318,7 @@ export function AiSectionContent({
                 const provider = e.target.value as AssistantProviderId;
                 setNewProfileProvider(provider);
                 setNewProfileModel(defaultModelFor(provider));
-                setNewProfileFieldValues({});
+                setNewProfileFieldValues(initialFieldValues(provider));
                 ollamaDiscovery.reset();
               }}
             >
@@ -321,7 +340,7 @@ export function AiSectionContent({
                   onChange={(e) => setNewProfileModel(e.target.value)}
                 >
                   {(newProfileProvider === "ollama" && ollamaDiscovery.models.length > 0
-                    ? [...new Set([newProfileModel, ...ollamaDiscovery.models].filter(Boolean))]
+                    ? ollamaDiscovery.models
                     : PROVIDER_MODELS[newProfileProvider]
                   ).map((id) => (
                     <option key={id} value={id}>
@@ -338,12 +357,22 @@ export function AiSectionContent({
                     aria-label={t("settings.ai.refreshModels")}
                     title={t("settings.ai.refreshModels")}
                     onClick={() =>
-                      void ollamaDiscovery.refresh(
-                        newProfileFieldValues.OLLAMA_BASE_URL ||
-                          scopedOsEnv.OLLAMA_BASE_URL ||
-                          scopedOsEnv.OLLAMA_HOST ||
-                          "",
-                      )
+                      void ollamaDiscovery
+                        .refresh(
+                          newProfileFieldValues.OLLAMA_BASE_URL ||
+                            scopedOsEnv.OLLAMA_BASE_URL ||
+                            scopedOsEnv.OLLAMA_HOST ||
+                            "",
+                        )
+                        .then((discovered) => {
+                          // The presets are a guess at what a user might have
+                          // pulled; once discovery says otherwise, a selection
+                          // the server does not offer cannot be used, so fall
+                          // back to one it does.
+                          if (discovered?.length && !discovered.includes(newProfileModel)) {
+                            setNewProfileModel(discovered[0]);
+                          }
+                        })
                     }
                   >
                     <RefreshCw
@@ -543,10 +572,25 @@ function ProfileEditor({
 
   const updateProvider = (provider: AssistantProviderId) => {
     ollamaDiscovery.reset();
+    // Ollama's base URL is required but has a well-known default, so prefill it
+    // rather than leaving the profile reading "incomplete" on the stock install.
+    // An OS-supplied value wins: the field surfaces that on its own.
+    const seedBaseUrl =
+      provider === "ollama" && !scopedOsEnv.OLLAMA_BASE_URL && !scopedOsEnv.OLLAMA_HOST;
     setDraftDesktopSettings((current: any) => ({
       ...current,
       aiProfiles: current.aiProfiles.map((p: any) =>
-        p.id === profile.id ? { ...p, provider, modelId: defaultModelFor(provider) } : p,
+        p.id === profile.id
+          ? {
+              ...p,
+              provider,
+              modelId: defaultModelFor(provider),
+              fieldValues:
+                seedBaseUrl && !p.fieldValues?.OLLAMA_BASE_URL
+                  ? { ...p.fieldValues, OLLAMA_BASE_URL: DEFAULT_OLLAMA_BASE_URL }
+                  : p.fieldValues,
+            }
+          : p,
       ),
     }));
   };
@@ -563,25 +607,24 @@ function ProfileEditor({
   const models = PROVIDER_MODELS[profile.provider];
   const selectableModels =
     profile.provider === "ollama" && ollamaDiscovery.models.length > 0
-      ? [
-          ...new Set(
-            [
-              profile.modelId || defaultModelFor(profile.provider),
-              ...ollamaDiscovery.models,
-            ].filter(Boolean),
-          ),
-        ]
+      ? ollamaDiscovery.models
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
 
-  const refreshOllamaModels = () => {
+  const refreshOllamaModels = async () => {
     const baseUrlField = PROVIDER_FIELDS.ollama.find((field) => field.envKey === "OLLAMA_BASE_URL");
-    return ollamaDiscovery.refresh(
+    const discovered = await ollamaDiscovery.refresh(
       (baseUrlField ? getProviderField(baseUrlField) : "") ||
         scopedOsEnv.OLLAMA_BASE_URL ||
         scopedOsEnv.OLLAMA_HOST ||
         "",
     );
+    // The saved model is only worth keeping if the server still offers it — the
+    // provider presets are a guess, and `defaultModelFor` in particular is a
+    // placeholder no local Ollama is guaranteed to have pulled.
+    if (discovered?.length && !discovered.includes(profile.modelId)) {
+      updateModel(discovered[0]);
+    }
   };
 
   return (
