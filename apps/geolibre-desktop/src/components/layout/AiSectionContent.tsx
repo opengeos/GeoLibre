@@ -28,6 +28,7 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { discoverOllamaModels } from "../../lib/assistant/ollama";
+import { classifyFetchFailure } from "../../lib/fetch-error";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -62,6 +63,7 @@ interface AiSectionContentProps {
 
 /** Shared Ollama discovery state for profile editors. */
 function useOllamaModels() {
+  const { t } = useTranslation();
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +78,20 @@ function useOllamaModels() {
       if (generation === requestGeneration.current) setModels(discovered);
     } catch (cause) {
       if (generation !== requestGeneration.current) return;
-      const message = cause instanceof Error ? cause.message : String(cause);
-      setError(message);
+      // Route through the repo's fetch-failure classification: the browser
+      // collapses a CORS rejection (Ollama needs OLLAMA_ORIGINS to allow this
+      // origin) and an unreachable host into the same opaque "Failed to fetch",
+      // so surfacing that message verbatim tells the user nothing actionable.
+      const { kind } = classifyFetchFailure(cause);
+      setError(
+        kind === "network"
+          ? t("settings.ai.ollamaNetworkFailure")
+          : kind === "timeout"
+            ? t("settings.ai.ollamaTimedOut")
+            : cause instanceof Error
+              ? cause.message
+              : String(cause),
+      );
       console.error("[GeoLibre] Could not load Ollama models", cause);
     } finally {
       if (generation === requestGeneration.current) setLoading(false);

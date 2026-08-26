@@ -36,7 +36,7 @@ describe("discoverOllamaModels", () => {
     }
   });
 
-  it("falls back to model when name is blank", async () => {
+  it("falls back to model when name is blank and tolerates malformed entries", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>
       Response.json({
@@ -44,6 +44,8 @@ describe("discoverOllamaModels", () => {
           { name: "   ", model: "llama3:8b" },
           { name: "   ", model: "   " },
           { name: "   " },
+          null,
+          "not-an-object",
         ],
       });
 
