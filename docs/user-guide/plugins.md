@@ -31,7 +31,7 @@ The built-in plugins are:
 | **Flight Simulator** | Fly over terrain and 3D layers with keyboard controls. |
 | **SamGeo** | Segment imagery into vector features. See [AI Segmentation](segmentation.md). |
 
-For plugins that add an on-map control, each entry has a submenu that **activates** the plugin and **positions** its control in any corner: top left, top right, bottom left, or bottom right.
+Most entries open a submenu that **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. A few behave differently: **Flight Simulator** and **SamGeo** toggle directly with no submenu, and **Web Services** and **DGGS** open a list of their sub-plugins instead.
 
 ![A plugin submenu, with Activate above the four map-corner positions](https://assets.geolibre.app/images/geolibre-plugin-position-menu.webp)
 

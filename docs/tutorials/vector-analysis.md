@@ -23,7 +23,7 @@ Add at least one vector layer (see [Adding Data](../user-guide/adding-data.md)).
 5. Click **Run**. A buffered layer is added to the map.
 
 !!! tip "Projection-aware distances"
-    The client engine buffers in geographic coordinates. For accurate metric distances over large areas, use the GeoPandas sidecar engine, which reprojects before buffering.
+    The client engine buffers in geographic coordinates. For accurate metric distances over large areas, use one of the two GeoPandas engines, which reproject before buffering: **Sidecar (GeoPandas)** on the desktop app, or **Python (Pyodide)** anywhere, including the web build.
 
 ## 3. Overlay two layers
 
