@@ -2230,9 +2230,22 @@ export const MapCanvas = memo(function MapCanvas({
       lngLat: maplibregl.LngLat;
     } | null = null;
     let pendingFrame = 0;
+    // A `mouseleave` waiting for the same frame to decide. One logical layer
+    // renders as several MapLibre style layers (a polygon's fill and its own
+    // stroke, a point's circle and its marker), and this effect binds to each
+    // of them, so crossing from a feature's fill onto that feature's own
+    // stroke fires `mouseleave` on the first and `mousemove` on the second
+    // from a single pointer event. Removing on the spot would tear the popup
+    // down and rebuild it on every such crossing — and if the leave arrived
+    // after the move, it would cancel the redraw and blank the tip until the
+    // pointer moved again. Deferring the decision to the frame lets a move
+    // anywhere in the same layer outvote the leave.
+    let pendingLeave = false;
 
+    /** Drop the tooltip now, discarding anything waiting on a frame. */
     const removeTooltip = () => {
       pending = null;
+      pendingLeave = false;
       if (pendingFrame) {
         cancelAnimationFrame(pendingFrame);
         pendingFrame = 0;
@@ -2244,8 +2257,15 @@ export const MapCanvas = memo(function MapCanvas({
     const drawPending = () => {
       pendingFrame = 0;
       const next = pending;
+      const leaving = pendingLeave;
       pending = null;
-      if (!next) return;
+      pendingLeave = false;
+      // A move seen this frame means the pointer is still over one of this
+      // layer's style layers, whichever one it left.
+      if (!next) {
+        if (leaving) removeTooltip();
+        return;
+      }
       // Read the layer from the store rather than from a captured array, so an
       // edit to the tooltip's fields shows on the very next pointer move.
       const layer = useAppStore.getState().layers.find((item) => item.id === next.layerId);
@@ -2277,6 +2297,11 @@ export const MapCanvas = memo(function MapCanvas({
       hoverTooltip.current.setLngLat(next.lngLat).setDOMContent(content);
     };
 
+    const handleLeave = () => {
+      pendingLeave = true;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
+    };
+
     /** Build the pointer handler for one hovered layer. */
     const moveHandlerFor = (layerId: string) => (event: maplibregl.MapLayerMouseEvent) => {
       // A selection gesture owns the pointer while it draws, and the Identify
@@ -2292,6 +2317,7 @@ export const MapCanvas = memo(function MapCanvas({
         return;
       }
       pending = { layerId, feature, lngLat: event.lngLat };
+      pendingLeave = false;
       if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
     };
 
@@ -2304,7 +2330,7 @@ export const MapCanvas = memo(function MapCanvas({
     const unbind = () => {
       for (const entry of bound) {
         map.off("mousemove", entry.id, entry.move);
-        map.off("mouseleave", entry.id, removeTooltip);
+        map.off("mouseleave", entry.id, handleLeave);
       }
       bound = [];
     };
@@ -2318,7 +2344,7 @@ export const MapCanvas = memo(function MapCanvas({
         for (const styleLayerId of identifyStyleLayerIds(layer)) {
           if (!map.getLayer(styleLayerId)) continue;
           map.on("mousemove", styleLayerId, move);
-          map.on("mouseleave", styleLayerId, removeTooltip);
+          map.on("mouseleave", styleLayerId, handleLeave);
           bound.push({ id: styleLayerId, move });
         }
       }

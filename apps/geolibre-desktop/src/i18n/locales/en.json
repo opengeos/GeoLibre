@@ -6769,7 +6769,7 @@
       "openBuilder": "Open expression builder",
       "showFeatureId": "Show the feature id row",
       "fields": "Fields",
-      "allFields": "Every visible field is shown, in the data's own order.",
+      "allFields": "No fields chosen, so every visible field is shown, in the data's own order.",
       "addField": "Add a field…",
       "noFieldsLeft": "Every field is already listed",
       "chooseFields": "Choose fields",
