@@ -25,7 +25,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { discoverOllamaModels } from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
@@ -102,6 +102,11 @@ function useOllamaModels() {
       if (generation === requestGeneration.current) setLoading(false);
     }
   };
+
+  // Cancel a pending discovery when the editor unmounts (a profile switch or
+  // "back" mid-refresh), for the same reason `reset` aborts rather than only
+  // invalidating: an orphaned request otherwise runs on to the deadline.
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   const reset = () => {
     requestGeneration.current += 1;

@@ -24,8 +24,13 @@ export async function discoverOllamaModels(
   if (!/^https?:\/\//i.test(normalized)) normalized = `http://${normalized}`;
   normalized = normalized.replace(/\/+$/, "").replace(/\/v1$/i, "");
   const budget = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+  // AbortSignal.any shipped in Chrome 116 / Firefox 124 / Safari 17.4 — later
+  // than the WebViews `crypto-random-uuid-polyfill` exists for. On an older
+  // engine fall back to the budget alone (mirroring `offline-tiles.ts`), so the
+  // request still times out rather than throwing before it is even made.
+  const combine = signal && typeof AbortSignal.any === "function";
   const response = await fetch(`${normalized}/api/tags`, {
-    signal: signal ? AbortSignal.any([signal, budget]) : budget,
+    signal: combine ? AbortSignal.any([signal, budget]) : budget,
   });
   if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
   // `Response.json()` resolves to `null` for a literal `null` body, so the
