@@ -3,8 +3,12 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
   type ProcessingAlgorithm,
+  type ResultLayerOptions,
   STATISTICS_TOOLS,
   averageNearestNeighborTool,
+  compositeScoreTool,
+  computeCompositeScores,
+  normalizeFieldValues,
   emergingHotSpotTool,
   emergingPattern,
   getStatisticsTool,
@@ -40,7 +44,7 @@ function pointLayer(
 
 interface RunOutcome {
   messages: string[];
-  results: Array<{ name: string; geojson: FeatureCollection }>;
+  results: Array<{ name: string; geojson: FeatureCollection; options?: ResultLayerOptions }>;
 }
 
 /** Run a statistics tool against a single layer, capturing logs and outputs. */
@@ -56,7 +60,7 @@ function run(
     // Every value-field tool here reads property "v"; ANN/KDE ignore "field".
     parameters: { layer: layer.id, field: "v", ...parameters },
     log: (message) => messages.push(message),
-    addResultLayer: (name, geojson) => results.push({ name, geojson }),
+    addResultLayer: (name, geojson, options) => results.push({ name, geojson, options }),
   });
   return { messages, results };
 }
@@ -83,6 +87,7 @@ describe("statistics tools registry", () => {
     // (fragile) length assertion is needed.
     assert.deepEqual(STATISTICS_TOOLS.map((t) => t.id).sort(), [
       "average-nearest-neighbor",
+      "composite-score",
       "emerging-hot-spot",
       "getis-ord-gi",
       "global-morans-i",
@@ -431,5 +436,269 @@ describe("emerging pattern classification", () => {
     const z = new Array(12).fill(-3);
     z[3] = 3;
     assert.equal(emergingPattern(z, CRIT, NO_TREND, 0.05).pattern, "Persistent Cold Spot");
+  });
+});
+
+describe("composite score normalization", () => {
+  it("min-max puts the extremes on 0 and 1", () => {
+    assert.deepEqual(normalizeFieldValues([0, 5, 10], "min-max"), [0, 0.5, 1]);
+  });
+
+  it("flips the scale when lower is better", () => {
+    assert.deepEqual(normalizeFieldValues([0, 5, 10], "min-max", "lower"), [1, 0.5, 0]);
+  });
+
+  it("gives a field with no spread the neutral 0.5", () => {
+    assert.deepEqual(normalizeFieldValues([7, 7, 7], "min-max"), [0.5, 0.5, 0.5]);
+    assert.deepEqual(normalizeFieldValues([7, 7, 7], "z-score"), [0.5, 0.5, 0.5]);
+  });
+
+  it("keeps missing values missing", () => {
+    assert.deepEqual(normalizeFieldValues([0, null, 10], "min-max"), [0, null, 1]);
+    assert.deepEqual(normalizeFieldValues([0, null, 10], "rank"), [0, null, 1]);
+  });
+
+  it("averages ranks across ties, so equal inputs score equally", () => {
+    // Values 1, 2, 2, 4 → ranks 1, 2.5, 2.5, 4 → (r - 1) / (n - 1).
+    assert.deepEqual(normalizeFieldValues([1, 2, 2, 4], "rank"), [0, 0.5, 0.5, 1]);
+  });
+
+  it("quantile uses the same mid-ranks but never reaches 0 or 1", () => {
+    // (r - 0.5) / n for ranks 1, 2.5, 2.5, 4 over four values.
+    assert.deepEqual(normalizeFieldValues([1, 2, 2, 4], "quantile"), [0.125, 0.5, 0.5, 0.875]);
+  });
+
+  it("z-score maps the mean onto 0.5 and stays monotonic", () => {
+    const scores = normalizeFieldValues([1, 2, 3], "z-score") as number[];
+    assert.ok(Math.abs(scores[1] - 0.5) < 1e-6);
+    assert.ok(scores[0] < scores[1] && scores[1] < scores[2]);
+    assert.ok(scores.every((value) => value > 0 && value < 1));
+  });
+});
+
+describe("composite score aggregation", () => {
+  const columns = new Map<string, (number | null)[]>([
+    ["a", [0, 5, 10]],
+    ["b", [10, 5, 0]],
+  ]);
+  const evenFields = [
+    { field: "a", normalization: "min-max" as const, weight: 1, direction: "higher" as const },
+    { field: "b", normalization: "min-max" as const, weight: 1, direction: "higher" as const },
+  ];
+
+  it("renormalizes the configured weights to sum to 1", () => {
+    const { weights } = computeCompositeScores(columns, {
+      fields: [
+        { ...evenFields[0], weight: 3 },
+        { ...evenFields[1], weight: 1 },
+      ],
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.equal(weights.get("a"), 0.75);
+    assert.equal(weights.get("b"), 0.25);
+  });
+
+  it("combines opposing fields into a flat weighted mean", () => {
+    const { scores } = computeCompositeScores(columns, {
+      fields: evenFields,
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.deepEqual(scores, [50, 50, 50]);
+  });
+
+  it("weights shift the score toward the heavier field", () => {
+    const { scores } = computeCompositeScores(columns, {
+      fields: [
+        { ...evenFields[0], weight: 3 },
+        { ...evenFields[1], weight: 1 },
+      ],
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.deepEqual(scores, [25, 50, 75]);
+  });
+
+  it("scores a zero component near zero under the geometric mean", () => {
+    const { scores } = computeCompositeScores(columns, {
+      fields: evenFields,
+      aggregation: "geometric-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    // The lowest feature in a field has a zero component, floored to 0.01: the
+    // geometric mean stays above zero (sqrt(0.01 x 1) = 0.1) without the other
+    // field, at a full 1, being able to rescue it.
+    assert.equal(scores[0], 10);
+    assert.equal(scores[1], 50);
+  });
+
+  it("drops a feature missing a field, or renormalizes over what it has", () => {
+    const sparse = new Map<string, (number | null)[]>([
+      ["a", [0, 8, 10]],
+      ["b", [10, null, 0]],
+    ]);
+    const dropped = computeCompositeScores(sparse, {
+      fields: evenFields,
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.deepEqual(dropped.scores, [50, null, 50]);
+    assert.equal(dropped.unscored, 1);
+
+    const renormalized = computeCompositeScores(sparse, {
+      fields: evenFields,
+      aggregation: "weighted-mean",
+      nullHandling: "renormalize",
+      scale: 100,
+    });
+    // With "b" absent the feature is scored on "a" alone: 8 of 0..10 → 80.
+    assert.deepEqual(renormalized.scores, [50, 80, 50]);
+    assert.equal(renormalized.unscored, 0);
+  });
+
+  it("reports components on the same scale as the score", () => {
+    const { components } = computeCompositeScores(columns, {
+      fields: evenFields,
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.deepEqual(components.get("a"), [0, 50, 100]);
+    assert.deepEqual(components.get("b"), [100, 50, 0]);
+  });
+});
+
+describe("composite score tool", () => {
+  /** Three points carrying two numeric fields that run in opposite directions. */
+  function scoreLayer(): GeoLibreLayer {
+    return pointLayer([
+      [0, 0, { pop: 0, rent: 10 }],
+      [0.001, 0, { pop: 5, rent: 5 }],
+      [0.002, 0, { pop: 10, rent: 0 }],
+    ]);
+  }
+
+  const twoFields = [
+    { field: "pop", normalization: "min-max", weight: 1, direction: "higher" },
+    { field: "rent", normalization: "min-max", weight: 1, direction: "lower" },
+  ];
+
+  it("writes a 0-100 score and asks the host to style by it", () => {
+    const { results, messages } = run(compositeScoreTool, scoreLayer(), {
+      fields: twoFields,
+      nullHandling: "drop",
+      aggregation: "weighted-mean",
+      scoreField: "score",
+    });
+    assert.equal(results.length, 1);
+    assert.equal(results[0].options?.graduatedField, "score");
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.score),
+      [0, 50, 100],
+    );
+    assert.ok(messages.some((m) => m.includes("Weights: pop 50%, rent 50% (lower is better)")));
+    assert.ok(messages.some((m) => m.includes("Scored 3 of 3 features")));
+  });
+
+  it("honors a 0-1 range and a custom score field name", () => {
+    const { results } = run(compositeScoreTool, scoreLayer(), {
+      fields: twoFields,
+      nullHandling: "drop",
+      scoreRange: "0-1",
+      scoreField: "suitability",
+    });
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.suitability),
+      [0, 0.5, 1],
+    );
+    assert.equal(results[0].options?.graduatedField, "suitability");
+  });
+
+  it("keeps the normalized components when asked", () => {
+    const { results } = run(compositeScoreTool, scoreLayer(), {
+      fields: twoFields,
+      nullHandling: "drop",
+      keepComponents: true,
+    });
+    // The cheapest, most populous point scores 100 on both components; the
+    // first feature is its opposite, so both of its components are 0.
+    const first = results[0].geojson.features[0].properties as Record<string, number>;
+    const last = results[0].geojson.features[2].properties as Record<string, number>;
+    assert.equal(first.score_pop, 0);
+    assert.equal(first.score_rent, 0);
+    assert.equal(last.score_pop, 100);
+    assert.equal(last.score_rent, 100);
+  });
+
+  it("drops features missing a value, and says how many", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: 0, rent: 10 }],
+      [0.001, 0, { pop: 5 }],
+      [0.002, 0, { pop: 10, rent: 0 }],
+    ]);
+    const { results, messages } = run(compositeScoreTool, layer, {
+      fields: twoFields,
+      nullHandling: "drop",
+    });
+    assert.equal(results[0].geojson.features.length, 2);
+    assert.ok(messages.some((m) => m.includes("1 feature(s) missing a value were dropped")));
+  });
+
+  it("renormalizes the weights over the fields a feature has", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: 0, rent: 10 }],
+      [0.001, 0, { pop: 8 }],
+      [0.002, 0, { pop: 10, rent: 0 }],
+    ]);
+    const { results } = run(compositeScoreTool, layer, {
+      fields: twoFields,
+      nullHandling: "renormalize",
+    });
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.score),
+      [0, 80, 100],
+    );
+  });
+
+  it("requires two fields, distinct fields, and an explicit null rule", () => {
+    const layer = scoreLayer();
+    assert.ok(
+      run(compositeScoreTool, layer, {
+        fields: [twoFields[0]],
+        nullHandling: "drop",
+      }).messages.some((m) => m.includes("at least two numeric fields")),
+    );
+    assert.ok(
+      run(compositeScoreTool, layer, {
+        fields: [twoFields[0], { ...twoFields[0] }],
+        nullHandling: "drop",
+      }).messages.some((m) => m.includes("listed more than once")),
+    );
+    assert.ok(
+      run(compositeScoreTool, layer, { fields: twoFields }).messages.some((m) =>
+        m.includes("how features missing a value are handled"),
+      ),
+    );
+  });
+
+  it("errors when a chosen field holds no numeric values", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: 1, label: "a" }],
+      [0.001, 0, { pop: 2, label: "b" }],
+    ]);
+    const { messages } = run(compositeScoreTool, layer, {
+      fields: [
+        twoFields[0],
+        { field: "label", normalization: "min-max", weight: 1, direction: "higher" },
+      ],
+      nullHandling: "drop",
+    });
+    assert.ok(messages.some((m) => m.includes('"label" has no numeric values')));
   });
 });

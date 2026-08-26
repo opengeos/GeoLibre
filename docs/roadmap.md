@@ -469,6 +469,7 @@
 - [x] **A shared link can carry presentation settings**: `settingsUrl=` loads language, layout, accent theme, and UI profile before the first render, restricted to presentation fields so a link cannot inject credentials, plugins, or local paths, and lasting for that page only instead of replacing what the user has saved. See [Embedding & Sharing](user-guide/embedding.md)
 - [x] **Geometry generators become attribute-driven**: derived centroids scale with a field as proportional symbols, and each feature's buffer takes its distance from a column instead of one typed number, following QGIS's data-defined overrides
 - [x] **Excel workbooks import as point layers** from their X and Y columns, with a worksheet picker
+- [x] **A composite score builder for suitability and index analysis**: normalize two or more numeric fields (min-max, z-score, rank, or quantile), weight them, combine them with a weighted arithmetic or geometric mean, and write one 0-100 index the layer is immediately styled by, with how a feature missing a value is treated made an explicit choice rather than a silent default
 - [x] A Style panel button on every layer card, field statistics scoped to the selected features, USGS LiDAR clipped and downloaded as COPC, ArcGIS ImageServer raster functions browsed from the service's own list, and `?data=` accepting several URLs at once
 
 ## Plugin marketplace and registry (design)

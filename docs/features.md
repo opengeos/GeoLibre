@@ -211,6 +211,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Plus in-browser extraction of COG, WMS, and XYZ bounding-box subsets, and a normalized-difference index builder for any HTTP COG
 - Spectral Index toolbox (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts, evaluated client-side with geotiff.js or on the rasterio sidecar
 - Spatial Statistics toolbox, including Emerging Hot Spot Analysis that builds a space-time cube from timestamped points, runs Getis-Ord Gi\* per time slice, and classifies each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot or cold spot
+    - Plus a Composite score builder for suitability and index analysis: normalize, weight, and combine several numeric fields into one 0-100 index, with an explicit choice of how features missing a value are treated, and the result styled by the score on arrival
 - Model Builder, an ArcGIS-style canvas for processing workflows: drop tools as nodes, wire an output into the next tool's input, and save the graph as a model that re-runs as one job, with the whole graph validated (cycles, missing connections, invented parameters, wrong parameter types) before anything executes
     - The AI assistant can author a validated model from a plain-English description and open it for review before it runs, over the same palette the canvas uses: client-side vector tools plus the full Whitebox catalog
     - Any model copies out as a runnable Python script for the Notebook panel or JupyterLite

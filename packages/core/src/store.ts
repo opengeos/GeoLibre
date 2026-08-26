@@ -162,7 +162,8 @@ export type StatisticsToolKind =
   | "getis-ord-gi"
   | "average-nearest-neighbor"
   | "kernel-density"
-  | "emerging-hot-spot";
+  | "emerging-hot-spot"
+  | "composite-score";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

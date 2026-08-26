@@ -2551,7 +2551,8 @@
       "getisOrd": "Getis-Ord Gi* hotspots",
       "averageNearestNeighbor": "Average nearest neighbor",
       "kernelDensity": "Kernel density (heatmap)",
-      "emergingHotSpot": "Emerging Hot Spot (space-time cube)"
+      "emergingHotSpot": "Emerging Hot Spot (space-time cube)",
+      "compositeScore": "Composite score (suitability index)"
     },
     "rasterTool": {
       "hillshade": "Hillshade",
@@ -4301,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Select a layer...",
       "selectField": "Select a field...",
+      "selectOption": "Select an option...",
       "selectLayerFirst": "Select a layer first",
       "layersSelected_one": "{{count}} layer selected",
       "layersSelected_other": "{{count}} layers selected"
+    },
+    "fieldWeights": {
+      "columnField": "Field",
+      "columnNormalization": "Normalize",
+      "columnWeight": "Weight",
+      "columnDirection": "Direction",
+      "addField": "Add field",
+      "removeAria": "Remove {{field}}",
+      "empty": "No fields yet. Add at least two to build a score.",
+      "shares": "Weights: {{shares}}",
+      "noWeight": "Give at least one field a weight above zero.",
+      "normalization": {
+        "minMax": "Min-max",
+        "zScore": "Z-score",
+        "rank": "Rank",
+        "quantile": "Quantile"
+      },
+      "direction": {
+        "higher": "Higher is better",
+        "lower": "Lower is better"
+      }
     },
     "whitebox": {
       "run": "Run",
@@ -5585,6 +5608,50 @@
                 "95": "95%",
                 "99": "99%"
               }
+            }
+          }
+        },
+        "composite-score": {
+          "name": "Composite score (suitability index)",
+          "description": "Normalize, weight, and combine several numeric fields into a single 0-100 index, then style the layer by it.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "fields": {
+              "label": "Fields and weights",
+              "description": "Two or more numeric fields. Each gets a normalization, a relative weight, and the end of its range that scores well."
+            },
+            "aggregation": {
+              "label": "Aggregation",
+              "description": "The geometric mean lets a weak field pull the score down: a strong field cannot fully compensate for it.",
+              "options": {
+                "weighted-mean": "Weighted arithmetic mean",
+                "geometric-mean": "Weighted geometric mean"
+              }
+            },
+            "nullHandling": {
+              "label": "Features missing a value",
+              "description": "There is no safe default: dropping and renormalizing produce different maps, so choose which one this index means.",
+              "options": {
+                "drop": "Drop the feature from the result",
+                "renormalize": "Renormalize weights over the fields it has"
+              }
+            },
+            "scoreField": {
+              "label": "Score field name",
+              "description": "Name of the numeric column the score is written to."
+            },
+            "scoreRange": {
+              "label": "Score range",
+              "options": {
+                "0-100": "0 to 100",
+                "0-1": "0 to 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Keep normalized components",
+              "description": "Write each field's normalized value as its own column, so the score can be audited instead of taken on trust."
             }
           }
         }

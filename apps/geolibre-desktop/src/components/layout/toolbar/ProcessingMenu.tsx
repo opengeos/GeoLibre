@@ -427,6 +427,9 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setStatisticsToolOpen("emerging-hot-spot")}>
                       {t("toolbar.statisticsTool.emergingHotSpot")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("composite-score")}>
+                      {t("toolbar.statisticsTool.compositeScore")}
+                    </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}

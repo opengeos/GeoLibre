@@ -4,8 +4,10 @@ import {
   STATISTICS_TOOLS,
   getStatisticsTool,
   type AlgorithmParameter,
+  type FieldWeight,
   type GeometryFamily,
   type ProcessingContext,
+  type ResultLayerOptions,
 } from "@geolibre/processing";
 import {
   Button,
@@ -21,6 +23,7 @@ import type { FeatureCollection } from "geojson";
 import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import {
   translateParameter,
@@ -42,6 +45,12 @@ interface StatisticsToolsDialogProps {
  * @returns True when the value is missing or, for numbers, NaN.
  */
 function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
+  // A composite score needs at least two fields to combine, so a single row is
+  // as unset as no rows at all.
+  if (param.type === "field-weights") {
+    const rows = Array.isArray(value) ? (value as FieldWeight[]) : [];
+    return rows.filter((row) => row?.field).length < 2;
+  }
   return (
     value === undefined ||
     value === "" ||
@@ -67,6 +76,7 @@ export function StatisticsToolsDialog({
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const rerun = useAppStore((s) => s.ui.processingRerun);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
@@ -150,18 +160,26 @@ export function StatisticsToolsDialog({
   );
 
   // Attribute-field names per layer, sampled from the first features (GeoJSON is
-  // schemaless). Memoized on the layer set and the dialog being open.
+  // schemaless). Numeric fields are tracked separately: a field-weights
+  // parameter can only score numbers, so offering the text columns there just
+  // invites a run that fails. Memoized on the layer set and the dialog being open.
   const fieldsByLayer = useMemo(() => {
     const FIELD_SCAN_SAMPLE = 1000;
-    const map = new Map<string, string[]>();
+    const map = new Map<string, { all: string[]; numeric: string[] }>();
     if (!open) return map;
     for (const layer of layers) {
       if (layer.type !== "geojson" || !layer.geojson) continue;
       const keys = new Set<string>();
+      const numeric = new Set<string>();
       for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
-        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+        for (const [key, value] of Object.entries(feature.properties ?? {})) {
+          keys.add(key);
+          // A field counts as numeric as soon as one sampled feature carries a
+          // finite number for it, so a scattering of nulls does not hide it.
+          if (value !== null && value !== "" && Number.isFinite(Number(value))) numeric.add(key);
+        }
       }
-      map.set(layer.id, [...keys]);
+      map.set(layer.id, { all: [...keys], numeric: [...numeric] });
     }
     return map;
   }, [layers, open]);
@@ -169,13 +187,15 @@ export function StatisticsToolsDialog({
   const fieldOptions = useCallback(
     (param: AlgorithmParameter): string[] => {
       const sourceId = params[param.fieldSource ?? "layer"] as string | undefined;
-      return (sourceId && fieldsByLayer.get(sourceId)) || [];
+      const fields = sourceId ? fieldsByLayer.get(sourceId) : undefined;
+      if (!fields) return [];
+      return param.type === "field-weights" ? fields.numeric : fields.all;
     },
     [fieldsByLayer, params],
   );
 
   const addResultLayer = useCallback(
-    (name: string, fc: FeatureCollection) => {
+    (name: string, fc: FeatureCollection, options?: ResultLayerOptions) => {
       if (!fc.features.length) {
         appendLog(`No features produced for "${name}"`);
         return;
@@ -183,9 +203,28 @@ export function StatisticsToolsDialog({
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      // A score column says nothing under the default single color, so a tool
+      // that produces one hands the field to the graduated renderer and the
+      // layer lands on the map already styled by it.
+      if (layer && options?.graduatedField) {
+        try {
+          setLayerStyle(
+            layerId,
+            buildSymbologyStyle(layer, {
+              mode: "graduated",
+              property: options.graduatedField,
+              colorRamp: options.colorRamp ?? "viridis",
+              classCount: options.classCount ?? 5,
+              scheme: "quantile",
+            }),
+          );
+        } catch (error) {
+          appendLog(`Could not style "${name}": ${(error as Error).message}`);
+        }
+      }
       if (layer) mapControllerRef.current?.fitLayer(layer);
     },
-    [addGeoJsonLayer, appendLog, mapControllerRef],
+    [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle],
   );
 
   // When a layer parameter changes, clear any field parameter that draws its
@@ -195,7 +234,10 @@ export function StatisticsToolsDialog({
       setParams((prev) => {
         const next = { ...prev, [id]: value };
         for (const param of tool.parameters) {
-          if (param.type === "field" && (param.fieldSource ?? "layer") === id) {
+          if (
+            (param.type === "field" || param.type === "field-weights") &&
+            (param.fieldSource ?? "layer") === id
+          ) {
             next[param.id] = undefined;
           }
         }
@@ -336,7 +378,11 @@ export function StatisticsToolsDialog({
                   param={translateParameter(t, "statistics", tool.id, param)}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
+                  fieldOptions={
+                    param.type === "field" || param.type === "field-weights"
+                      ? fieldOptions(param)
+                      : undefined
+                  }
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}

@@ -270,6 +270,28 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **Average nearest neighbor** | Whether a point pattern is more clustered or dispersed than random. |
 | **Kernel density (heatmap)** | A continuous density surface from a point layer. |
 | **Emerging Hot Spot** | Hot-spot trends over time from a space-time cube. |
+| **Composite score (suitability index)** | Normalize, weight, and combine several numeric fields into one 0-100 index, styled on the map by the score. |
+
+
+The **Composite score** builder is the suitability and index workflow: pick two
+or more numeric fields, give each a normalization (min-max, z-score, rank, or
+quantile), a relative weight, and the end of its range that scores well, then
+combine them with a weighted arithmetic mean, or a geometric mean when a strong
+field should not be able to compensate for a weak one. The weights are shown as
+the share of the total each field carries, so their effect is legible while
+editing.
+
+Two choices decide what the map means, so the dialog asks rather than assumes:
+
+- **Features missing a value** either drop out of the result or have their
+  weights renormalized over the fields they do have. There is no default; both
+  produce plausible maps, and only one of them is the index you meant.
+- **Keep normalized components** writes each field's normalized value as its own
+  column, so a score can be audited instead of taken on trust.
+
+Rank and quantile normalization share ranks across ties (the mid-rank
+convention), so equal inputs always score equally. The result lands as a new
+layer already styled by the graduated renderer on the score.
 
 ### DGGS
 

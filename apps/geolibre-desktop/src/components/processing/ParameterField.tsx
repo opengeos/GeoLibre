@@ -1,21 +1,22 @@
-import type { AlgorithmParameter } from "@geolibre/processing";
+import type { AlgorithmParameter, FieldWeight } from "@geolibre/processing";
 import { Input, Label, Select } from "@geolibre/ui";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { FieldWeightsField } from "./FieldWeightsField";
 
 export interface ParameterFieldProps {
   param: AlgorithmParameter;
   value: unknown;
   layerOptions: { id: string; name: string }[];
-  /** Attribute-field names for a `type: "field"` parameter. */
+  /** Attribute-field names for a `type: "field"` or `"field-weights"` parameter. */
   fieldOptions?: string[];
   onChange: (value: unknown) => void;
 }
 
 /**
  * Renders a single processing-tool parameter input (layer/select/field/
- * boolean/number/string). Shared by the Vector tools and Network analysis
- * dialogs so they stay visually and behaviorally consistent.
+ * field-weights/boolean/number/string). Shared by the Vector tools and Network
+ * analysis dialogs so they stay visually and behaviorally consistent.
  *
  * @param props - The parameter, its current value, the layer/field options,
  *   and an onChange callback.
@@ -93,6 +94,10 @@ export function ParameterField({
   }
 
   if (param.type === "select") {
+    // A required select with no default is a deliberate "you must choose"
+    // (e.g. how a composite score treats missing values): show a placeholder
+    // rather than letting the browser present the first option as if chosen.
+    const needsPlaceholder = Boolean(param.required) && param.default === undefined;
     return (
       <div className="flex flex-col gap-1">
         {label}
@@ -101,13 +106,30 @@ export function ParameterField({
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
         >
+          {needsPlaceholder ? (
+            <option value="">{t("processing.parameterField.selectOption")}</option>
+          ) : null}
           {param.options?.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </Select>
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
       </div>
+    );
+  }
+
+  if (param.type === "field-weights") {
+    return (
+      <FieldWeightsField
+        param={param}
+        value={value}
+        fieldOptions={fieldOptions ?? []}
+        onChange={(rows: FieldWeight[]) => onChange(rows)}
+      />
     );
   }
 

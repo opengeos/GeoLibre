@@ -5,13 +5,20 @@ import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { earthAreaToBody, getActiveMeanRadiusMeters } from "@geolibre/core";
-import type { ProcessingAlgorithm, ProcessingContext } from "./types";
+import type {
+  FieldDirection,
+  FieldNormalization,
+  FieldWeight,
+  ProcessingAlgorithm,
+  ProcessingContext,
+} from "./types";
 import { parseTimestamp } from "./vector-tools";
 
 /**
  * Spatial Statistics processing tools (issue #342): global and local Moran's I
  * (LISA), Getis-Ord Gi* hotspot analysis, kernel density estimation, average
- * nearest neighbor, and Emerging Hot Spot Analysis over a space-time cube. These
+ * nearest neighbor, Emerging Hot Spot Analysis over a space-time cube, and the
+ * composite score builder for suitability and index analysis. These
  * run entirely client-side in TypeScript — the spatial-weights matrices and
  * statistics are implemented here, with conditional-permutation inference for
  * the autocorrelation measures (matching PySAL's pseudo p-value convention).
@@ -1239,6 +1246,427 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
   },
 };
 
+// -- Composite score ---------------------------------------------------------
+
+/**
+ * Value a component is clamped up to before entering a geometric mean.
+ *
+ * The geometric mean is zero as soon as one component is zero, and min-max
+ * normalization gives the lowest feature in a field exactly zero — without a
+ * floor, every feature that ranks last in any one field collapses onto the same
+ * zero and the low end of the map stops carrying information. Composite-indicator
+ * practice handles this by shifting the components off zero (the OECD handbook
+ * rescales to a small positive floor before geometric aggregation); 0.01 keeps
+ * the penalty severe while leaving the weakest features ranked against each
+ * other rather than tied at the bottom.
+ */
+const GEOMETRIC_FLOOR = 0.01;
+
+/** Aggregations the composite score offers. */
+const AGGREGATION_OPTIONS = [
+  { value: "weighted-mean", label: "Weighted arithmetic mean" },
+  { value: "geometric-mean", label: "Weighted geometric mean" },
+];
+
+/** What to do with a feature that has no value for one of the scored fields. */
+const NULL_HANDLING_OPTIONS = [
+  { value: "drop", label: "Drop the feature from the result" },
+  { value: "renormalize", label: "Renormalize weights over the fields it has" },
+];
+
+const SCORE_RANGE_OPTIONS = [
+  { value: "0-100", label: "0 to 100" },
+  { value: "0-1", label: "0 to 1" },
+];
+
+/** Round to `decimals` places, keeping the value a plain number. */
+function roundTo(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+/**
+ * Mid-ranks (1-based) of the finite entries of `values`, aligned with the input.
+ *
+ * Ties share the average of the ranks they span — the same convention Spearman's
+ * rho and PySAL use — so equal inputs always produce equal scores regardless of
+ * their order in the file. Missing entries stay null.
+ */
+function midRanks(values: (number | null)[]): (number | null)[] {
+  const present: number[] = [];
+  values.forEach((value, index) => {
+    if (value !== null) present.push(index);
+  });
+  present.sort((a, b) => (values[a] as number) - (values[b] as number));
+  const ranks: (number | null)[] = values.map(() => null);
+  let start = 0;
+  while (start < present.length) {
+    let end = start + 1;
+    while (end < present.length && values[present[end]] === values[present[start]]) end++;
+    // Ranks are 1-based, so the block spans [start + 1, end]; its mid-rank is
+    // the average of those two endpoints.
+    const midRank = (start + 1 + end) / 2;
+    for (let i = start; i < end; i++) ranks[present[i]] = midRank;
+    start = end;
+  }
+  return ranks;
+}
+
+/**
+ * Rescale one field onto 0..1, where 1 is always the end that scores best.
+ *
+ * Every method is bounded so the components stay comparable across fields:
+ *
+ * - `min-max`: `(v - min) / (max - min)`, the plain linear rescale.
+ * - `z-score`: the standard score passed through the normal CDF, which maps the
+ *   unbounded z onto (0, 1) monotonically instead of clipping the tails.
+ * - `rank`: mid-rank scaled to `[0, 1]` as `(r - 1) / (n - 1)`, so the extremes
+ *   sit exactly on 0 and 1.
+ * - `quantile`: the Hazen plotting position `(r - 0.5) / n` of the mid-rank, an
+ *   empirical percentile that never reaches 0 or 1.
+ *
+ * A field with no spread (a single distinct value, or a single feature) has no
+ * information to contribute, so every feature gets the neutral 0.5 rather than
+ * an arbitrary 0 or 1.
+ *
+ * @param values - Field values, with null for features that have none.
+ * @param method - Normalization to apply.
+ * @param direction - `"lower"` flips the result so small inputs score high.
+ * @returns Normalized values on 0..1, null where the input was null.
+ */
+export function normalizeFieldValues(
+  values: (number | null)[],
+  method: FieldNormalization,
+  direction: FieldDirection = "higher",
+): (number | null)[] {
+  const present = values.filter((value): value is number => value !== null);
+  const n = present.length;
+  let normalized: (number | null)[];
+  if (n === 0) {
+    normalized = values.map(() => null);
+  } else if (method === "rank" || method === "quantile") {
+    const ranks = midRanks(values);
+    normalized = ranks.map((rank) => {
+      if (rank === null) return null;
+      if (method === "quantile") return (rank - 0.5) / n;
+      return n === 1 ? 0.5 : (rank - 1) / (n - 1);
+    });
+  } else if (method === "z-score") {
+    const mean = present.reduce((acc, value) => acc + value, 0) / n;
+    const variance = present.reduce((acc, value) => acc + (value - mean) ** 2, 0) / n;
+    const sd = Math.sqrt(variance);
+    normalized =
+      sd === 0
+        ? values.map((value) => (value === null ? null : 0.5))
+        : values.map((value) => (value === null ? null : normalCdf((value - mean) / sd)));
+  } else {
+    const min = Math.min(...present);
+    const max = Math.max(...present);
+    normalized =
+      max === min
+        ? values.map((value) => (value === null ? null : 0.5))
+        : values.map((value) => (value === null ? null : (value - min) / (max - min)));
+  }
+  if (direction === "lower") {
+    return normalized.map((value) => (value === null ? null : 1 - value));
+  }
+  return normalized;
+}
+
+/** How a composite score combines its normalized components. */
+export type CompositeAggregation = "weighted-mean" | "geometric-mean";
+
+/** What a composite score does with a feature missing one of its fields. */
+export type CompositeNullHandling = "drop" | "renormalize";
+
+/** Everything {@link computeCompositeScores} needs beyond the raw values. */
+export interface CompositeScoreOptions {
+  fields: FieldWeight[];
+  aggregation: CompositeAggregation;
+  nullHandling: CompositeNullHandling;
+  /** Upper end of the output range (100 for a 0-100 index, 1 for a 0-1 one). */
+  scale: number;
+}
+
+/** Per-feature output of {@link computeCompositeScores}. */
+export interface CompositeScoreResult {
+  /** The composite score per feature, null where the feature was not scored. */
+  scores: (number | null)[];
+  /** Normalized, direction-corrected components per field, on the same scale. */
+  components: Map<string, (number | null)[]>;
+  /** Each field's weight after renormalizing the configured weights to sum to 1. */
+  weights: Map<string, number>;
+  /** Features that could not be scored (missing values under the chosen rule). */
+  unscored: number;
+}
+
+/**
+ * Normalize, weight, and combine several numeric fields into one score.
+ *
+ * Pure: it takes the raw per-field values already read off the features, so it
+ * is exercised directly by the tests without building a layer.
+ *
+ * The configured weights are relative and get renormalized to sum to 1, which is
+ * what makes the mean of the components an index on the same 0..1 scale they
+ * live on. Under `"renormalize"` null handling that happens again per feature,
+ * over the fields the feature actually has; under `"drop"` a feature missing any
+ * field scores null and the caller leaves it out of the result.
+ *
+ * @param columns - Raw field values per scored field, aligned across features.
+ * @param options - Fields with their weights, the aggregation, and null rule.
+ * @returns Scores, components, effective weights, and the unscored count.
+ */
+export function computeCompositeScores(
+  columns: Map<string, (number | null)[]>,
+  options: CompositeScoreOptions,
+): CompositeScoreResult {
+  const { fields, aggregation, nullHandling, scale } = options;
+  const featureCount = fields.length ? (columns.get(fields[0].field)?.length ?? 0) : 0;
+  const totalWeight = fields.reduce((acc, entry) => acc + entry.weight, 0);
+
+  const weights = new Map<string, number>();
+  const components = new Map<string, (number | null)[]>();
+  for (const entry of fields) {
+    weights.set(entry.field, entry.weight / totalWeight);
+    components.set(
+      entry.field,
+      normalizeFieldValues(columns.get(entry.field) ?? [], entry.normalization, entry.direction),
+    );
+  }
+
+  const decimals = scale >= 100 ? 2 : 4;
+  const scores: (number | null)[] = [];
+  let unscored = 0;
+  for (let index = 0; index < featureCount; index++) {
+    let weightSum = 0;
+    let arithmetic = 0;
+    let logSum = 0;
+    let missing = false;
+    for (const entry of fields) {
+      const value = components.get(entry.field)?.[index] ?? null;
+      if (value === null) {
+        missing = true;
+        continue;
+      }
+      const weight = weights.get(entry.field) as number;
+      weightSum += weight;
+      arithmetic += weight * value;
+      logSum += weight * Math.log(Math.max(value, GEOMETRIC_FLOOR));
+    }
+    if ((missing && nullHandling === "drop") || weightSum === 0) {
+      scores.push(null);
+      unscored++;
+      continue;
+    }
+    // Dividing by the weight sum is what "renormalize over the fields it has"
+    // means; with every field present it is 1 and this is a plain weighted mean.
+    const combined =
+      aggregation === "geometric-mean" ? Math.exp(logSum / weightSum) : arithmetic / weightSum;
+    scores.push(roundTo(combined * scale, decimals));
+  }
+
+  for (const [field, values] of components) {
+    components.set(
+      field,
+      values.map((value) => (value === null ? null : roundTo(value * scale, decimals))),
+    );
+  }
+
+  return { scores, components, weights, unscored };
+}
+
+/** Normalization ids a stored parameter value is validated against. */
+const NORMALIZATION_VALUES: FieldNormalization[] = ["min-max", "z-score", "rank", "quantile"];
+
+/**
+ * Read the field-weight rows off a parameter value, dropping anything the
+ * dialog left half-filled. Rows arrive as plain JSON (the dialog stores them in
+ * the parameter map, and a saved History re-run replays them), so every entry is
+ * validated rather than trusted.
+ */
+function readFieldWeights(value: unknown): FieldWeight[] {
+  if (!Array.isArray(value)) return [];
+  const rows: FieldWeight[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Partial<FieldWeight>;
+    const field = typeof entry.field === "string" ? entry.field.trim() : "";
+    if (!field) continue;
+    const weight = Number(entry.weight);
+    rows.push({
+      field,
+      normalization: NORMALIZATION_VALUES.includes(entry.normalization as FieldNormalization)
+        ? (entry.normalization as FieldNormalization)
+        : "min-max",
+      weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
+      direction: entry.direction === "lower" ? "lower" : "higher",
+    });
+  }
+  return rows;
+}
+
+/** Read one field's values off the features, with null where there is none. */
+function fieldColumn(features: Feature[], field: string): (number | null)[] {
+  return features.map((feature) => {
+    const raw = feature.properties?.[field];
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
+export const compositeScoreTool: ProcessingAlgorithm = {
+  id: "composite-score",
+  name: "Composite score (suitability index)",
+  description:
+    "Normalize, weight, and combine several numeric fields into a single 0-100 index, then style the layer by it.",
+  group: "Spatial Statistics",
+  parameters: [
+    { id: "layer", label: "Layer", type: "layer", required: true },
+    {
+      id: "fields",
+      label: "Fields and weights",
+      type: "field-weights",
+      required: true,
+      description:
+        "Two or more numeric fields. Each gets a normalization, a relative weight, and the end of its range that scores well.",
+    },
+    {
+      id: "aggregation",
+      label: "Aggregation",
+      type: "select",
+      default: "weighted-mean",
+      options: AGGREGATION_OPTIONS,
+      description:
+        "The geometric mean lets a weak field pull the score down: a strong field cannot fully compensate for it.",
+    },
+    {
+      id: "nullHandling",
+      label: "Features missing a value",
+      type: "select",
+      required: true,
+      options: NULL_HANDLING_OPTIONS,
+      description:
+        "There is no safe default: dropping and renormalizing produce different maps, so choose which one this index means.",
+    },
+    {
+      id: "scoreField",
+      label: "Score field name",
+      type: "string",
+      default: "score",
+      description: "Name of the numeric column the score is written to.",
+    },
+    {
+      id: "scoreRange",
+      label: "Score range",
+      type: "select",
+      default: "0-100",
+      options: SCORE_RANGE_OPTIONS,
+    },
+    {
+      id: "keepComponents",
+      label: "Keep normalized components",
+      type: "boolean",
+      default: false,
+      description:
+        "Write each field's normalized value as its own column, so the score can be audited instead of taken on trust.",
+    },
+  ],
+  run: (ctx) => {
+    const layer = getLayer(ctx);
+    if (!layer?.geojson) {
+      ctx.log("Error: layer has no GeoJSON data");
+      return;
+    }
+    const fields = readFieldWeights(ctx.parameters.fields);
+    if (fields.length < 2) {
+      ctx.log("Error: choose at least two numeric fields to combine.");
+      return;
+    }
+    const seen = new Set<string>();
+    for (const entry of fields) {
+      if (seen.has(entry.field)) {
+        ctx.log(`Error: "${entry.field}" is listed more than once.`);
+        return;
+      }
+      seen.add(entry.field);
+    }
+    const nullHandling = ctx.parameters.nullHandling as CompositeNullHandling;
+    if (nullHandling !== "drop" && nullHandling !== "renormalize") {
+      ctx.log("Error: choose how features missing a value are handled.");
+      return;
+    }
+    const aggregation =
+      ctx.parameters.aggregation === "geometric-mean" ? "geometric-mean" : "weighted-mean";
+    const scale = ctx.parameters.scoreRange === "0-1" ? 1 : 100;
+    const scoreField = ((ctx.parameters.scoreField as string) || "score").trim() || "score";
+    const keepComponents = Boolean(ctx.parameters.keepComponents);
+
+    const features = layer.geojson.features;
+    const columns = new Map<string, (number | null)[]>();
+    for (const entry of fields) {
+      const column = fieldColumn(features, entry.field);
+      if (!column.some((value) => value !== null)) {
+        ctx.log(`Error: "${entry.field}" has no numeric values on this layer.`);
+        return;
+      }
+      columns.set(entry.field, column);
+    }
+
+    const { scores, components, weights, unscored } = computeCompositeScores(columns, {
+      fields,
+      aggregation,
+      nullHandling,
+      scale,
+    });
+
+    const out: Feature[] = [];
+    clone(features).forEach((feature, index) => {
+      const score = scores[index];
+      if (score === null) return;
+      const props = feature.properties as Record<string, unknown>;
+      props[scoreField] = score;
+      if (keepComponents) {
+        for (const entry of fields) {
+          props[`${scoreField}_${entry.field}`] = components.get(entry.field)?.[index] ?? null;
+        }
+      }
+      out.push(feature);
+    });
+
+    if (!out.length) {
+      ctx.log("Error: no feature had enough values to score.");
+      return;
+    }
+
+    const weightSummary = fields
+      .map(
+        (entry) =>
+          `${entry.field} ${Math.round((weights.get(entry.field) as number) * 100)}%` +
+          `${entry.direction === "lower" ? " (lower is better)" : ""}`,
+      )
+      .join(", ");
+    const scored = out.map((feature) => (feature.properties as Record<string, number>)[scoreField]);
+    const mean = scored.reduce((acc, value) => acc + value, 0) / scored.length;
+    ctx.log(`Weights: ${weightSummary}.`);
+    ctx.log(
+      `Scored ${out.length} of ${features.length} features — ` +
+        `min ${Math.min(...scored)}, mean ${roundTo(mean, scale >= 100 ? 2 : 4)}, ` +
+        `max ${Math.max(...scored)}.`,
+    );
+    if (unscored > 0) {
+      ctx.log(
+        nullHandling === "drop"
+          ? `${unscored} feature(s) missing a value were dropped.`
+          : `${unscored} feature(s) had no value for any field and were dropped.`,
+      );
+    }
+    ctx.addResultLayer?.(`${layer.name} — ${scoreField}`, featureCollection(out), {
+      graduatedField: scoreField,
+    });
+  },
+};
+
 export const STATISTICS_TOOLS: ProcessingAlgorithm[] = [
   globalMoransITool,
   localMoransITool,
@@ -1246,6 +1674,7 @@ export const STATISTICS_TOOLS: ProcessingAlgorithm[] = [
   averageNearestNeighborTool,
   kernelDensityTool,
   emergingHotSpotTool,
+  compositeScoreTool,
 ];
 
 export function getStatisticsTool(id: string): ProcessingAlgorithm | undefined {
