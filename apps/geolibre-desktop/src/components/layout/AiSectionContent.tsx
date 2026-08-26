@@ -536,9 +536,10 @@ function ProfileEditor({
     profile.provider === "ollama" && ollamaDiscovery.models.length > 0
       ? [
           ...new Set(
-            [profile.modelId || defaultModelFor(profile.provider), ...ollamaDiscovery.models].filter(
-              Boolean,
-            ),
+            [
+              profile.modelId || defaultModelFor(profile.provider),
+              ...ollamaDiscovery.models,
+            ].filter(Boolean),
           ),
         ]
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
