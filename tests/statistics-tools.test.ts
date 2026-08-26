@@ -562,6 +562,30 @@ describe("composite score aggregation", () => {
     assert.equal(renormalized.unscored, 0);
   });
 
+  it("keeps a zero-weight field out of the score instead of scoring it", () => {
+    const { scores, weights } = computeCompositeScores(columns, {
+      fields: [evenFields[0], { ...evenFields[1], weight: 0 }],
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    assert.equal(weights.get("b"), 0);
+    // "a" carries the whole index: 0, 5, 10 of 0..10.
+    assert.deepEqual(scores, [0, 50, 100]);
+  });
+
+  it("leaves every feature unscored when no field carries weight", () => {
+    const { scores, unscored } = computeCompositeScores(columns, {
+      fields: evenFields.map((entry) => ({ ...entry, weight: 0 })),
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    // Guarding the zero total is what keeps these null rather than NaN.
+    assert.deepEqual(scores, [null, null, null]);
+    assert.equal(unscored, 3);
+  });
+
   it("reports components on the same scale as the score", () => {
     const { components } = computeCompositeScores(columns, {
       fields: evenFields,
@@ -684,6 +708,57 @@ describe("composite score tool", () => {
       run(compositeScoreTool, layer, { fields: twoFields }).messages.some((m) =>
         m.includes("how features missing a value are handled"),
       ),
+    );
+  });
+
+  it("honors a zero weight rather than quietly restoring it to one", () => {
+    const { results } = run(compositeScoreTool, scoreLayer(), {
+      fields: [twoFields[0], { ...twoFields[1], weight: 0 }],
+      nullHandling: "drop",
+    });
+    // Only "pop" counts, so the score follows it: 0, 5, 10 of 0..10.
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.score),
+      [0, 50, 100],
+    );
+  });
+
+  it("errors when every field's weight is zero", () => {
+    const { messages, results } = run(compositeScoreTool, scoreLayer(), {
+      fields: twoFields.map((entry) => ({ ...entry, weight: 0 })),
+      nullHandling: "drop",
+    });
+    assert.equal(results.length, 0);
+    assert.ok(messages.some((m) => m.includes("weight above zero")));
+  });
+
+  it("does not read a boolean field as numeric", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: 0, park: true }],
+      [0.001, 0, { pop: 10, park: false }],
+    ]);
+    const { messages } = run(compositeScoreTool, layer, {
+      fields: [
+        twoFields[0],
+        { field: "park", normalization: "min-max", weight: 1, direction: "higher" },
+      ],
+      nullHandling: "drop",
+    });
+    assert.ok(messages.some((m) => m.includes('"park" has no numeric values')));
+  });
+
+  it("scores a field whose numbers arrive as strings", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: "0", rent: "10" }],
+      [0.001, 0, { pop: "10", rent: "0" }],
+    ]);
+    const { results } = run(compositeScoreTool, layer, {
+      fields: twoFields,
+      nullHandling: "drop",
+    });
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.score),
+      [0, 100],
     );
   });
 

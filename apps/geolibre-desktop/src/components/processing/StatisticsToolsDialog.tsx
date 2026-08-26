@@ -46,10 +46,13 @@ interface StatisticsToolsDialogProps {
  */
 function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
   // A composite score needs at least two fields to combine, so a single row is
-  // as unset as no rows at all.
+  // as unset as no rows at all. Weights that are all zero carry no information
+  // either, and the editor already says so, so they leave the parameter unset
+  // rather than letting a run produce an index nothing weighted.
   if (param.type === "field-weights") {
     const rows = Array.isArray(value) ? (value as FieldWeight[]) : [];
-    return rows.filter((row) => row?.field).length < 2;
+    const named = rows.filter((row) => row?.field);
+    return named.length < 2 || !named.some((row) => Number(row.weight) > 0);
   }
   return (
     value === undefined ||
@@ -57,6 +60,19 @@ function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
     value === null ||
     (param.type === "number" && typeof value === "number" && Number.isNaN(value))
   );
+}
+
+/**
+ * Whether a GeoJSON property value is a number a scoring tool can use: a finite
+ * number, or a non-blank string holding one (GeoJSON from a CSV or a database
+ * export routinely quotes its numbers).
+ *
+ * @param value - Raw property value.
+ * @returns True when the value reads as a finite number.
+ */
+function isNumericValue(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
 }
 
 /**
@@ -176,7 +192,10 @@ export function StatisticsToolsDialog({
           keys.add(key);
           // A field counts as numeric as soon as one sampled feature carries a
           // finite number for it, so a scattering of nulls does not hide it.
-          if (value !== null && value !== "" && Number.isFinite(Number(value))) numeric.add(key);
+          // Booleans, blank strings, and single-element arrays all survive
+          // `Number()`, so the check is on the value's own type, not on what it
+          // coerces to.
+          if (isNumericValue(value)) numeric.add(key);
         }
       }
       map.set(layer.id, { all: [...keys], numeric: [...numeric] });

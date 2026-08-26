@@ -1360,8 +1360,16 @@ export function normalizeFieldValues(
         ? values.map((value) => (value === null ? null : 0.5))
         : values.map((value) => (value === null ? null : normalCdf((value - mean) / sd)));
   } else {
-    const min = Math.min(...present);
-    const max = Math.max(...present);
+    // Looped rather than spread: a composite score is not capped at
+    // MAX_WEIGHTS_FEATURES the way the weights-based tools are, and spreading a
+    // per-feature array as call arguments blows the engine's argument limit on a
+    // large layer.
+    let min = Infinity;
+    let max = -Infinity;
+    for (const value of present) {
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
     normalized =
       max === min
         ? values.map((value) => (value === null ? null : 0.5))
@@ -1427,7 +1435,9 @@ export function computeCompositeScores(
   const weights = new Map<string, number>();
   const components = new Map<string, (number | null)[]>();
   for (const entry of fields) {
-    weights.set(entry.field, entry.weight / totalWeight);
+    // Every weight at zero carries no information; the shares stay at zero
+    // rather than becoming NaN, and every feature comes back unscored.
+    weights.set(entry.field, totalWeight > 0 ? entry.weight / totalWeight : 0);
     components.set(
       entry.field,
       normalizeFieldValues(columns.get(entry.field) ?? [], entry.normalization, entry.direction),
@@ -1498,19 +1508,30 @@ function readFieldWeights(value: unknown): FieldWeight[] {
       normalization: NORMALIZATION_VALUES.includes(entry.normalization as FieldNormalization)
         ? (entry.normalization as FieldNormalization)
         : "min-max",
-      weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
+      // A zero weight means "no contribution", which is what the editor's share
+      // preview already shows; only a missing or malformed weight falls back
+      // to 1. Negatives are not a meaningful share, so they read as zero too.
+      weight: Number.isFinite(weight) ? Math.max(weight, 0) : 1,
       direction: entry.direction === "lower" ? "lower" : "higher",
     });
   }
   return rows;
 }
 
-/** Read one field's values off the features, with null where there is none. */
+/**
+ * Read one field's values off the features, with null where there is none.
+ *
+ * Quoted numbers count (GeoJSON exported from a CSV or a database routinely
+ * carries them as strings), but a boolean or an array does not, even though
+ * both survive `Number()` — the field picker applies the same rule, so what the
+ * dialog offers and what the tool scores stay the same set.
+ */
 function fieldColumn(features: Feature[], field: string): (number | null)[] {
   return features.map((feature) => {
     const raw = feature.properties?.[field];
-    if (raw === null || raw === undefined || raw === "") return null;
-    const value = typeof raw === "number" ? raw : Number(raw);
+    if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+    if (typeof raw !== "string" || raw.trim() === "") return null;
+    const value = Number(raw);
     return Number.isFinite(value) ? value : null;
   });
 }
@@ -1591,6 +1612,10 @@ export const compositeScoreTool: ProcessingAlgorithm = {
       }
       seen.add(entry.field);
     }
+    if (fields.every((entry) => entry.weight <= 0)) {
+      ctx.log("Error: give at least one field a weight above zero.");
+      return;
+    }
     const nullHandling = ctx.parameters.nullHandling as CompositeNullHandling;
     if (nullHandling !== "drop" && nullHandling !== "renormalize") {
       ctx.log("Error: choose how features missing a value are handled.");
@@ -1646,13 +1671,21 @@ export const compositeScoreTool: ProcessingAlgorithm = {
           `${entry.direction === "lower" ? " (lower is better)" : ""}`,
       )
       .join(", ");
-    const scored = out.map((feature) => (feature.properties as Record<string, number>)[scoreField]);
-    const mean = scored.reduce((acc, value) => acc + value, 0) / scored.length;
+    // One pass, no spreading: `out` holds a score per surviving feature.
+    let min = Infinity;
+    let max = -Infinity;
+    let sum = 0;
+    for (const feature of out) {
+      const score = (feature.properties as Record<string, number>)[scoreField];
+      if (score < min) min = score;
+      if (score > max) max = score;
+      sum += score;
+    }
+    const decimals = scale >= 100 ? 2 : 4;
     ctx.log(`Weights: ${weightSummary}.`);
     ctx.log(
       `Scored ${out.length} of ${features.length} features — ` +
-        `min ${Math.min(...scored)}, mean ${roundTo(mean, scale >= 100 ? 2 : 4)}, ` +
-        `max ${Math.max(...scored)}.`,
+        `min ${min}, mean ${roundTo(sum / out.length, decimals)}, max ${max}.`,
     );
     if (unscored > 0) {
       ctx.log(
