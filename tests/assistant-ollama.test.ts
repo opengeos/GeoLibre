@@ -55,4 +55,34 @@ describe("discoverOllamaModels", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("treats a null payload as an empty model list", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => Response.json(null);
+
+    try {
+      assert.deepEqual(await discoverOllamaModels("localhost:11434"), []);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("aborts the request when the caller's signal aborts", async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    globalThis.fetch = async (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("Aborted", "AbortError")),
+        );
+      });
+
+    try {
+      const pending = discoverOllamaModels("localhost:11434", controller.signal);
+      controller.abort();
+      await assert.rejects(pending, { name: "AbortError" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -68,16 +68,21 @@ function useOllamaModels() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestGeneration = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
 
   const refresh = async (baseUrl: string) => {
     const generation = ++requestGeneration.current;
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const discovered = await discoverOllamaModels(baseUrl);
+      const discovered = await discoverOllamaModels(baseUrl, controller.signal);
       if (generation === requestGeneration.current) setModels(discovered);
     } catch (cause) {
       if (generation !== requestGeneration.current) return;
+      if (controller.signal.aborted) return;
       // Route through the repo's fetch-failure classification: the browser
       // collapses a CORS rejection (Ollama needs OLLAMA_ORIGINS to allow this
       // origin) and an unreachable host into the same opaque "Failed to fetch",
@@ -100,6 +105,10 @@ function useOllamaModels() {
 
   const reset = () => {
     requestGeneration.current += 1;
+    // Abort rather than only invalidating, so a discarded request stops
+    // immediately instead of running on to the discovery deadline.
+    inFlight.current?.abort();
+    inFlight.current = null;
     setModels([]);
     setError(null);
     setLoading(false);
@@ -318,8 +327,8 @@ export function AiSectionContent({
                     size="icon"
                     variant="outline"
                     disabled={ollamaDiscovery.loading}
-                    aria-label={t("managePlugins.refresh")}
-                    title={t("managePlugins.refresh")}
+                    aria-label={t("settings.ai.refreshModels")}
+                    title={t("settings.ai.refreshModels")}
                     onClick={() =>
                       void ollamaDiscovery.refresh(
                         newProfileFieldValues.OLLAMA_BASE_URL ||
@@ -337,7 +346,7 @@ export function AiSectionContent({
               </div>
               {ollamaDiscovery.error ? (
                 <p className="text-xs text-destructive">
-                  {t("managePlugins.failedToLoad", { message: ollamaDiscovery.error })}
+                  {t("settings.ai.modelsFailedToLoad", { message: ollamaDiscovery.error })}
                 </p>
               ) : null}
             </div>
@@ -628,8 +637,8 @@ function ProfileEditor({
                 size="icon"
                 variant="outline"
                 disabled={ollamaDiscovery.loading}
-                aria-label={t("managePlugins.refresh")}
-                title={t("managePlugins.refresh")}
+                aria-label={t("settings.ai.refreshModels")}
+                title={t("settings.ai.refreshModels")}
                 onClick={() => void refreshOllamaModels()}
               >
                 <RefreshCw
@@ -640,7 +649,7 @@ function ProfileEditor({
           </div>
           {ollamaDiscovery.error ? (
             <p className="text-xs text-destructive">
-              {t("managePlugins.failedToLoad", { message: ollamaDiscovery.error })}
+              {t("settings.ai.modelsFailedToLoad", { message: ollamaDiscovery.error })}
             </p>
           ) : null}
         </div>
