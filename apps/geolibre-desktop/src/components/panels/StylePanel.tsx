@@ -1800,13 +1800,21 @@ export function StylePanel({
     (isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer);
   const hasTextMarkerControls = layer.type === "geojson" && hasTextMarkerFeatures(layer);
   // Quick filters compile to the per-feature MapLibre filter layer sync already
-  // applies, so they are offered wherever that filter reaches: the vector
-  // paint surfaces plus vector PMTiles (which paint through the control's own
-  // native layers rather than through the vector paint controls).
+  // applies, so they are offered exactly where that filter reaches: the layer
+  // types `withFeatureFilters` covers, plus any layer whose control registered
+  // native MapLibre layers for `applyExternalNativeFeatureFilters` to narrow
+  // (Add Vector Layer, vector PMTiles, and the plugin-painted vectors —
+  // filtering is independent of who owns the paint).
+  //
+  // Deliberately *not* keyed off `hasVectorPaintControls`: that set excludes
+  // plugin-painted layers, which do accept a filter, and includes deck.gl
+  // layers, which are MapLibre custom layers and accept none — offering a
+  // control there would be a control that quietly does nothing.
   const hasQuickFilterControls =
-    hasVectorPaintControls ||
-    (layer.type === "pmtiles" &&
-      (layer.metadata.tileType === "vector" || layer.source.type === "vector"));
+    layer.type === "geojson" ||
+    layer.type === "vector-tiles" ||
+    layer.type === "mbtiles" ||
+    (hasExternalNativeLayers(layer) && !hasExternalDeckLayer(layer));
   // isPointOnly is memoized above the early returns to keep hook order stable.
   const supportsPointRenderer = supportsPointRendererFor(layer, isPointOnly);
   // The "Sketches" layer mixes geometry types under one style, so "Circle
@@ -4880,6 +4888,20 @@ export function StylePanel({
               <p className="text-xs text-muted-foreground">{t("style.noControls")}</p>
             )}
             {hasNetcdfSymbology && <NetcdfProfilePanel layerId={layer.id} />}
+            {/* A layer with no paint controls of its own (a plugin owns its
+                paint, or a control paints it) can still be filtered, so the
+                Quick filters section is offered here too rather than only in
+                the full vector panel below. */}
+            {hasQuickFilterControls ? (
+              <>
+                <Separator />
+                <QuickFiltersSection
+                  key={`qf-${layer.id}`}
+                  layer={layer}
+                  mapControllerRef={mapControllerRef}
+                />
+              </>
+            ) : null}
           </div>
         </ScrollArea>
         <Separator />

@@ -142,6 +142,11 @@ function CategoricalControl({
           );
         })}
       </div>
+      {/* Both buttons act on what the search box is showing and leave the rest
+          of the selection alone: with a search active, "Select all" adds the
+          matches rather than silently dropping the values scrolled out of view,
+          and "Select none" removes only those matches. With no search every
+          option is visible, so they read as plain select-all / clear. */}
       <div className="flex items-center gap-2 text-xs">
         <button
           type="button"
@@ -149,7 +154,7 @@ function CategoricalControl({
           onClick={() =>
             onChange({
               ...filter,
-              values: visible.map((option) => option.value),
+              values: [...new Set([...selected, ...visible.map((option) => option.value)])],
             })
           }
         >
@@ -158,7 +163,10 @@ function CategoricalControl({
         <button
           type="button"
           className="text-primary hover:underline"
-          onClick={() => onChange({ ...filter, values: [] })}
+          onClick={() => {
+            const shown = new Set(visible.map((option) => option.value));
+            onChange({ ...filter, values: [...selected].filter((value) => !shown.has(value)) });
+          }}
         >
           {t("quickFilters.selectNone")}
         </button>

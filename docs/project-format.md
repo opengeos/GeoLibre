@@ -381,6 +381,12 @@ comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
 A control with nothing chosen places no constraint, so an emptied selection
 shows every feature rather than none.
 
+A quick filter narrows the *rendered* features, so a point layer using the
+cluster renderer is an exception worth noting: MapLibre clusters at the source,
+from the layer's whole dataset, so cluster bubbles and their counts describe the
+unfiltered data while clustering is on (as they already do for a Time Slider
+window or a rule filter).
+
 The compiled filter is combined with the transient `timeFilter` and
 `embedFilter` and with the rule-based renderer's hide-unmatched filter under a
 single `all`, so a host page's `setFilter`, a Time Slider window, and a user's

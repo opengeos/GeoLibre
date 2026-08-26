@@ -32,17 +32,31 @@ function isEnabled(filter: LayerQuickFilter): boolean {
   return filter.enabled !== false;
 }
 
+/** A validated date bound: its canonical `YYYY-MM-DD` text and UTC midnight. */
+interface IsoDayBound {
+  day: string;
+  ms: number;
+}
+
 /**
- * Parse a `YYYY-MM-DD` bound to its UTC midnight epoch, or `null` when the
- * text is blank or not a calendar date. Rejecting non-dates here means a
- * half-typed bound compiles to no clause instead of to `NaN`.
+ * Validate a `YYYY-MM-DD` bound, returning its canonical text and UTC midnight,
+ * or `null` when the text is blank, malformed, or not a real calendar day.
+ *
+ * The round-trip check is what rejects a day that does not exist: `Date.parse`
+ * happily reads `2026-02-30` as March 2, so shape-checking alone would compile
+ * a bound the user never chose. Rejecting here means a half-typed or impossible
+ * bound compiles to no clause at all, leaving that side unconstrained rather
+ * than filtering on a date nobody asked for.
  */
-function isoDayToEpochMs(day: string | null | undefined): number | null {
+function parseIsoDayBound(day: string | null | undefined): IsoDayBound | null {
   if (typeof day !== "string") return null;
   const trimmed = day.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
   const ms = Date.parse(`${trimmed}T00:00:00Z`);
-  return Number.isFinite(ms) ? ms : null;
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString().slice(0, ISO_DAY_LENGTH) === trimmed
+    ? { day: trimmed, ms }
+    : null;
 }
 
 /** A finite number, or `null` for every other input (including `NaN`). */
@@ -80,9 +94,13 @@ function compileRange(filter: LayerQuickFilter): unknown[] | null {
 }
 
 function compileDate(filter: LayerQuickFilter): unknown[] | null {
-  const startMs = isoDayToEpochMs(filter.start);
-  const endMs = isoDayToEpochMs(filter.end);
-  if (startMs === null && endMs === null) return null;
+  // Both branches read the *validated* bounds, never the raw strings: with one
+  // bound valid and the other malformed the filter still compiles, and pushing
+  // the raw text would compare against a value no real date can satisfy — which
+  // hides every feature instead of leaving that side open.
+  const start = parseIsoDayBound(filter.start);
+  const end = parseIsoDayBound(filter.end);
+  if (start === null && end === null) return null;
   const clauses: unknown[] = [presenceGuard(filter.field)];
 
   if ((filter.dateKind ?? "iso") === "iso") {
@@ -91,8 +109,8 @@ function compileDate(filter: LayerQuickFilter): unknown[] | null {
     // bound without parsing. Both bounds are inclusive because the slice drops
     // the time of day.
     const value = ["slice", ["to-string", ["get", filter.field]], 0, ISO_DAY_LENGTH];
-    if (filter.start) clauses.push([">=", value, filter.start]);
-    if (filter.end) clauses.push(["<=", value, filter.end]);
+    if (start !== null) clauses.push([">=", value, start.day]);
+    if (end !== null) clauses.push(["<=", value, end.day]);
     return ["all", ...clauses];
   }
 
@@ -100,8 +118,8 @@ function compileDate(filter: LayerQuickFilter): unknown[] | null {
   // the chosen end day is kept in full rather than only its midnight instant.
   const scale = filter.dateKind === "epochS" ? 0.001 : 1;
   const value = ["to-number", ["get", filter.field]];
-  if (startMs !== null) clauses.push([">=", value, startMs * scale]);
-  if (endMs !== null) clauses.push(["<", value, (endMs + DAY_MS) * scale]);
+  if (start !== null) clauses.push([">=", value, start.ms * scale]);
+  if (end !== null) clauses.push(["<", value, (end.ms + DAY_MS) * scale]);
   return ["all", ...clauses];
 }
 

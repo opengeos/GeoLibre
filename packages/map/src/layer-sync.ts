@@ -180,6 +180,14 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * is active. Per-feature layers (fill, line, point, heatmap, text) filter
  * correctly.
  *
+ * The corollary, shared by every filter in this set: MapLibre clusters at the
+ * *source*, from the layer's raw features, and no layer filter can change what
+ * a cluster already aggregated. So while a point layer renders as clusters, the
+ * bubbles and their counts describe the unfiltered data even though the
+ * unclustered points respect the filter. Filtering a clustered layer by its
+ * individual features means either switching the renderer off clustering or
+ * narrowing the source data itself, neither of which a per-feature filter does.
+ *
  * Tile-backed layers (vector tiles, vector MBTiles) use this too. The filter is
  * an expression evaluated per feature as each tile decodes, so it needs no local
  * copy of the data and stays correct for tiles loaded later; control-owned

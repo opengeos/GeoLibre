@@ -249,6 +249,49 @@ describe("compileQuickFilters", () => {
     );
   });
 
+  it("ignores a bound that is not a real calendar day", () => {
+    // `Date.parse` reads 2026-02-30 as March 2, so shape-checking alone would
+    // filter on a date nobody chose.
+    assert.equal(
+      compileQuickFilter({ id: "a", field: "founded", kind: "date", start: "2026-02-30" }),
+      null,
+    );
+    assert.equal(
+      compileQuickFilter({
+        id: "a",
+        field: "founded",
+        kind: "date",
+        dateKind: "epochMs",
+        end: "2026-13-01",
+      }),
+      null,
+    );
+  });
+
+  it("leaves the malformed side of a half-valid date range unconstrained", () => {
+    // Pushing the raw text would compare against a string no ISO day can reach,
+    // which hides every feature instead of leaving that bound open.
+    const kept = keptRows(
+      [{ id: "a", field: "founded", kind: "date", start: "not-a-date", end: "1863-07-07" }],
+      CITIES,
+    );
+    assert.deepEqual(
+      kept.map((row) => row.name),
+      ["Portland", "Salem", "Boise"],
+    );
+  });
+
+  it("tolerates whitespace around a date bound", () => {
+    const kept = keptRows(
+      [{ id: "a", field: "founded", kind: "date", start: " 1842-01-12 ", end: "1845-02-08" }],
+      CITIES,
+    );
+    assert.deepEqual(
+      kept.map((row) => row.name),
+      ["Portland", "Salem"],
+    );
+  });
+
   it("matches text case-insensitively for each operator", () => {
     const rows = [{ name: "Portland" }, { name: "Port Angeles" }, { name: "Salem" }];
     const names = (filter: LayerQuickFilter) => keptRows([filter], rows).map((row) => row.name);

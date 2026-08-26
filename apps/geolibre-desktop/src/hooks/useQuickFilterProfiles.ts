@@ -59,15 +59,27 @@ export function useQuickFilterProfiles(
   // so does not reset a half-made selection — while the tiles are unchanged.
   const tileSignature = useRef("");
 
+  // `updateLayer` hands back a new `layer` object for every patch, including
+  // the paint edits a colour or opacity drag fires many times a second, none of
+  // which change what there is to profile. The sampler therefore reads the
+  // layer through a ref and the effect keys only on what decides *which* source
+  // it subscribes to, so dragging a slider no longer tears down and rebuilds
+  // the tile subscription on every tick.
+  const layerRef = useRef(layer);
+  layerRef.current = layer;
+  const layerId = layer?.id;
+
   useEffect(() => {
     tileSignature.current = "";
     setTileRecords([]);
-    if (!tileBacked || !layer) return;
+    if (!tileBacked || !layerId) return;
     const map = mapControllerRef.current?.getMap();
     if (!map) return;
 
     const sample = (): void => {
-      const sampled = loadedVectorTileFeatures(map, layer);
+      const current = layerRef.current;
+      if (!current) return;
+      const sampled = loadedVectorTileFeatures(map, current);
       const records = sampled.map((feature) => feature.properties ?? {});
       const signature = `${records.length}:${[
         ...new Set(records.flatMap((record) => Object.keys(record))),
@@ -84,23 +96,25 @@ export function useQuickFilterProfiles(
     return () => {
       map.off("idle", sample);
     };
-    // `layer` is read inside the sampler; only its identity and the source it
-    // reads from matter for re-subscribing.
-  }, [layer, mapControllerRef, tileBacked]);
+  }, [layerId, mapControllerRef, tileBacked]);
+
+  // A field the layer hides from its attribute table has been declared
+  // uninteresting; do not offer a filter control for it either. Read outside
+  // the memo and reduced to a string key for the same reason as `layerRef`
+  // above: the settings object is rebuilt on every layer patch, so depending on
+  // it directly would re-profile up to 5,000 records per paint tick.
+  const hiddenKey = (getColumnSettings(layer).hidden ?? []).join("\u0000");
 
   return useMemo(() => {
-    if (!layer) return EMPTY_PROFILES;
+    if (!layerId) return EMPTY_PROFILES;
     const records = hasLocalFeatures
       ? (features ?? []).map((feature) => feature.properties ?? {})
       : tileRecords;
     if (records.length === 0) {
       return { ...EMPTY_PROFILES, sampledFromViewport: tileBacked };
     }
-    // A field the layer hides from its attribute table has been declared
-    // uninteresting; do not offer a filter control for it either.
-    const hidden = getColumnSettings(layer).hidden ?? [];
     const profiles = profileQuickFilterFields(records, {
-      exclude: hidden,
+      exclude: hiddenKey === "" ? [] : hiddenKey.split("\u0000"),
     }).sort((a, b) =>
       a.field.localeCompare(b.field, undefined, {
         numeric: true,
@@ -113,5 +127,5 @@ export function useQuickFilterProfiles(
       sampledFromViewport: tileBacked,
       empty: profiles.length === 0,
     };
-  }, [features, hasLocalFeatures, layer, tileBacked, tileRecords]);
+  }, [features, hasLocalFeatures, hiddenKey, layerId, tileBacked, tileRecords]);
 }

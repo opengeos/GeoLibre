@@ -91,6 +91,12 @@ Tile-backed layers (vector tiles, PMTiles, MBTiles) carry no local features, so
 their value lists are read from the tiles currently loaded and grow as you pan
 and zoom; the section says so under the controls.
 
+One limit is worth knowing: a point layer using the **cluster** renderer builds
+its clusters from the layer's whole dataset before any filter applies, so while
+clustering is on the bubbles and their counts describe the unfiltered data. The
+same is true of a Time Slider window and a rule-based filter. Switch the point
+renderer back to single symbols to see a filtered layer's real counts.
+
 ### Style interchange and URL styles
 
 The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Export one when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.
