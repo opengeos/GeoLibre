@@ -432,9 +432,15 @@ export function installDiagnosticsCapture(): () => void {
         forwarded.init !== undefined
           ? await originalFetch(forwarded.input, forwarded.init)
           : await originalFetch(forwarded.input);
+      // A completed `no-cors` fetch resolves to an opaque response whose real
+      // status is deliberately hidden as 0 and whose `ok` flag is false. That
+      // is not evidence of a failed request: genuine network failures reject
+      // the fetch and are handled by the catch block below. The same applies to
+      // a manually followed cross-origin redirect (`opaqueredirect`).
+      const opaque = response.type === "opaque" || response.type === "opaqueredirect";
       appendDiagnostic({
         category: "network",
-        level: response.ok || optional ? "info" : "error",
+        level: response.ok || optional || opaque ? "info" : "error",
         message: `${method} ${response.status} ${response.statusText}`.trim(),
         durationMs: Math.round(performance.now() - startedAt),
         method,
