@@ -121,7 +121,8 @@ the MCP tools delegate to `authoring.py`. `server.py` is the only module that
 imports the `mcp` SDK (optional extra `geolibre[mcp]`), and `workspace.py`
 confines every path to `GEOLIBRE_MCP_ROOTS`/`--root` the way the sidecar confines
 to `GEOLIBRE_CONVERSION_ROOTS`. `python/tests/test_mcp_server.py` skips itself
-without the SDK, so `publish-python.yml` installs `mcp` explicitly.
+without the SDK, so `publish-python.yml` installs `mcp` explicitly — drop it
+and the server ships untested.
 
 ## Conventions
 

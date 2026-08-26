@@ -21,7 +21,9 @@ suite.
   auto-generated catalog, `apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts`
   (do not hand-edit). Run `node scripts/gen-whitebox-menu-catalog.mjs` and commit
   the result, or new/renamed WASM tools silently miss the menu. The Processing
-  *dialog* lists tools dynamically, so the gap only shows in the menu.
+  *dialog* lists tools dynamically, so the gap only shows in the menu. Whitebox
+  translations are optional external packs in `opengeos/geolibre-language-packs`,
+  not entries generated into GeoLibre's bundled locale JSON.
 - **`MAX_VECTOR_PMTILES_ZOOM`** (`packages/processing/src/wasm-convert.ts`)
   mirrors the deepest zoom `vector_to_pmtiles` accepts (18 — past it the tool
   exits with `validation error: max_zoom must be <= 18`). The cap lives inside
