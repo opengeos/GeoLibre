@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  holdsOwnedSelection,
   isSearchableLayer,
   searchLayerFeatures,
   searchableText,
@@ -53,6 +54,12 @@ describe("searchableText", () => {
     assert.equal(searchableText(-0.5), "-0.5");
     assert.equal(searchableText(true), "true");
     assert.equal(searchableText(10n), "10");
+  });
+
+  it("skips a data URL, which is an embedded blob rather than text", () => {
+    assert.equal(searchableText("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ"), null);
+    // A value that merely mentions the word is ordinary text.
+    assert.equal(searchableText("data collection site"), "data collection site");
   });
 
   it("skips values with no useful text form", () => {
@@ -194,6 +201,64 @@ describe("searchLayerFeatures — group visibility", () => {
   });
 });
 
+describe("searchLayerFeatures — internal fields", () => {
+  it("skips the photo thumbnail, full image, and internal keys", () => {
+    const photos = layer("photos", "Photos", [
+      point({
+        name: "IMG_0042.jpg",
+        photo: "data:image/jpeg;base64,c2l0ZQ",
+        photo_full: "data:image/jpeg;base64,c2l0ZQ",
+        __geolibre_id: "site-7",
+      }),
+    ]);
+    // "site" is the base64 payload of each of those values, and the internal
+    // key's own value; only a field the user authored may answer for it.
+    assert.deepEqual(searchLayerFeatures([photos], "site"), []);
+    assert.equal(searchLayerFeatures([photos], "img_0042")[0].matches[0].field, "name");
+  });
+});
+
+describe("holdsOwnedSelection", () => {
+  const owned = { layerId: "cities", featureId: "3" };
+
+  it("holds while the selection is exactly the feature that was picked", () => {
+    assert.equal(
+      holdsOwnedSelection(owned, { selectedLayerId: "cities", selectedFeatureIds: ["3"] }),
+      true,
+    );
+  });
+
+  it("lets go once the selection moved elsewhere", () => {
+    // Picked here, then another feature picked in the attribute table.
+    assert.equal(
+      holdsOwnedSelection(owned, { selectedLayerId: "cities", selectedFeatureIds: ["9"] }),
+      false,
+    );
+    // Or another layer became the active one.
+    assert.equal(
+      holdsOwnedSelection(owned, { selectedLayerId: "roads", selectedFeatureIds: ["3"] }),
+      false,
+    );
+    // Or the selection grew past the one feature this box picked.
+    assert.equal(
+      holdsOwnedSelection(owned, { selectedLayerId: "cities", selectedFeatureIds: ["3", "4"] }),
+      false,
+    );
+    // Or it was cleared already.
+    assert.equal(
+      holdsOwnedSelection(owned, { selectedLayerId: null, selectedFeatureIds: [] }),
+      false,
+    );
+  });
+
+  it("never holds when this box picked nothing", () => {
+    assert.equal(
+      holdsOwnedSelection(null, { selectedLayerId: "cities", selectedFeatureIds: ["3"] }),
+      false,
+    );
+  });
+});
+
 describe("searchLayerFeatures — caps", () => {
   it("caps rows per layer and flags the group as partial", () => {
     const many = layer(
@@ -230,6 +295,24 @@ describe("searchLayerFeatures — caps", () => {
     });
     assert.equal(group.truncated, true);
     assert.equal(group.matches.length, 10);
+  });
+
+  it("enforces the per-layer budget on a layer smaller than one check interval", () => {
+    const few = layer(
+      "few",
+      "Few",
+      Array.from({ length: 10 }, (_, i) => point({ name: `Site ${i}` })),
+    );
+    let ticks = 0;
+    const [group] = searchLayerFeatures([few], "site", {
+      maxPerLayer: 10,
+      layerBudgetMs: 10,
+      totalBudgetMs: 100_000,
+      now: () => (ticks += 1000),
+    });
+    assert.equal(group.truncated, true);
+    // The first feature is read, then the clock is checked and the scan stops.
+    assert.equal(group.matches.length, 1);
   });
 
   it("stops when the per-layer time budget is spent", () => {

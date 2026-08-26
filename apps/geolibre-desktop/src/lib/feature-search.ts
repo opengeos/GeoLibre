@@ -11,6 +11,8 @@
 import {
   effectiveLayerRenderState,
   featureSelectionId,
+  isInternalPopupField,
+  PHOTO_PROPERTY,
   type GeoLibreLayer,
   type LayerGroup,
 } from "@geolibre/core";
@@ -99,7 +101,12 @@ const BUDGET_CHECK_INTERVAL = 128;
  * @returns The searchable text, or null when the value is not searchable.
  */
 export function searchableText(value: unknown): string | null {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    // A data URL is an embedded blob, not text: matching it wastes the scan on
+    // megabytes of base64, and a base64 alphabet makes a two-character query
+    // hit almost every one of them, which would put the whole blob in a row.
+    return value.startsWith("data:") ? null : value;
+  }
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (typeof value === "boolean" || typeof value === "bigint") return String(value);
   return null;
@@ -198,7 +205,14 @@ function searchLayer(
       truncated = true;
       break;
     }
-    if (scanned > 0 && scanned % BUDGET_CHECK_INTERVAL === 0 && now() - started > layerBudgetMs) {
+    // Check after the first feature as well as every interval: a layer smaller
+    // than one interval would otherwise never have its budget enforced at all,
+    // however expensive its property sets are.
+    if (
+      scanned > 0 &&
+      (scanned === 1 || scanned % BUDGET_CHECK_INTERVAL === 0) &&
+      now() - started > layerBudgetMs
+    ) {
       truncated = true;
       break;
     }
@@ -210,7 +224,10 @@ function searchLayer(
     const featureId = featureSelectionId(feature, index);
 
     for (const [field, raw] of Object.entries(properties)) {
-      if (skip.has(field)) continue;
+      // `isInternalPopupField` is the codebase's existing answer to "not a field
+      // the user authored" (`photo_full`, `__geolibre_*`); `photo` is a real
+      // field but holds a thumbnail data URL, so it is no more searchable.
+      if (skip.has(field) || field === PHOTO_PROPERTY || isInternalPopupField(field)) continue;
       const text = searchableText(raw);
       if (text === null) continue;
       const kind = classify(text.toLowerCase(), needle);
@@ -249,6 +266,34 @@ function searchLayer(
     .sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.value.length - b.value.length)
     .slice(0, maxPerLayer);
   return { layerId: layer.id, layerName: layer.name, matches, truncated };
+}
+
+/** A feature a search row selected: enough to recognize it again later. */
+export interface OwnedSelection {
+  layerId: string;
+  featureId: string;
+}
+
+/**
+ * Whether the live selection is still the single feature a search row put
+ * there. The selection is app-wide — the attribute table and the map's own
+ * click-select write the same state — so the search box may only take back a
+ * selection that is still, exactly, its own.
+ *
+ * @param owned The feature a search row selected, or null if none did.
+ * @param selection The store's current selection state.
+ * @returns True when clearing the selection would clear only that feature.
+ */
+export function holdsOwnedSelection(
+  owned: OwnedSelection | null,
+  selection: { selectedLayerId: string | null; selectedFeatureIds: readonly string[] },
+): boolean {
+  if (!owned) return false;
+  return (
+    selection.selectedLayerId === owned.layerId &&
+    selection.selectedFeatureIds.length === 1 &&
+    selection.selectedFeatureIds[0] === owned.featureId
+  );
 }
 
 /**

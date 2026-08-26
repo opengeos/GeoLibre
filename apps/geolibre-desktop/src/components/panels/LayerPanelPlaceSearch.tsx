@@ -25,7 +25,9 @@ import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
 import {
   type FeatureSearchGroup,
   type FeatureSearchMatch,
+  holdsOwnedSelection,
   MIN_FEATURE_QUERY_LENGTH,
+  type OwnedSelection,
   searchLayerFeatures,
 } from "../../lib/feature-search";
 
@@ -113,11 +115,12 @@ export function LayerPanelPlaceSearch({
   // to clear it: the input's own onChange does that, which keeps the two halves
   // from depending on the order React happens to run them in.
   const settledQuery = useRef<string | null>(null);
-  // Whether the live feature selection is one this box made. Selecting a
-  // feature row writes the app-wide selection that the attribute table and the
-  // map's own click-select share, so clearing the box may only take back a
-  // selection it put there.
-  const ownsSelection = useRef(false);
+  // The feature a search row selected, if one did. Selecting a feature row
+  // writes the app-wide selection that the attribute table and the map's own
+  // click-select share, so the identity is kept rather than a "this box did it"
+  // flag: whatever selection is live by the time the box is cleared may no
+  // longer be the one it made.
+  const ownedSelection = useRef<OwnedSelection | null>(null);
 
   // Honor the provider's request-spacing policy: the public Nominatim host
   // requires >=1.1s between requests, so the debounce never drops below that
@@ -271,7 +274,11 @@ export function LayerPanelPlaceSearch({
   // The place half is a plain list only when the geocoder is idle; otherwise it
   // renders its own status line, which never hides the data groups above it.
   const showPlaceRows = status === "idle" && placeRows.length > 0;
-  const showPlaceHeading = featureGroups.length > 0;
+  // The heading labels the places half, so it appears only when that half has
+  // something under it — a list, a spinner, or a message. Keeping it tied to
+  // what renders rather than to the two minimum-length constants agreeing means
+  // a query short enough for one half but not the other cannot strand it.
+  const showPlaceHeading = featureGroups.length > 0 && (showPlaceRows || status !== "idle");
 
   /**
    * Every selectable row, data groups first, in the order they render. Place
@@ -321,11 +328,19 @@ export function LayerPanelPlaceSearch({
         // explicit fit is what the row promises ("fly to it"), regardless of the
         // "zoom to selected feature" preference the map effect honors.
         const store = useAppStore.getState();
-        store.selectLayer(row.match.layerId);
-        store.selectFeature(row.match.featureId);
-        ownsSelection.current = true;
+        // The row comes from a debounced scan, so the layer can have been
+        // removed since. Bail rather than point `selectedLayerId` at an id that
+        // no longer resolves — `removeLayer` is careful to null that out.
         const layer = store.layers.find((item) => item.id === row.match.layerId);
-        mapControllerRef.current?.highlightFeature(layer, row.match.featureId, { fit: true });
+        if (layer) {
+          store.selectLayer(row.match.layerId);
+          store.selectFeature(row.match.featureId);
+          ownedSelection.current = {
+            layerId: row.match.layerId,
+            featureId: row.match.featureId,
+          };
+          mapControllerRef.current?.highlightFeature(layer, row.match.featureId, { fit: true });
+        }
         settle(row.match.value);
         return;
       }
@@ -382,10 +397,9 @@ export function LayerPanelPlaceSearch({
     // this box's own pick is dropped: Escape runs this handler too, and a
     // selection made in the attribute table or by clicking the map is not the
     // search box's to discard.
-    if (ownsSelection.current) {
-      useAppStore.getState().selectFeature(null);
-      ownsSelection.current = false;
-    }
+    const store = useAppStore.getState();
+    if (holdsOwnedSelection(ownedSelection.current, store)) store.selectFeature(null);
+    ownedSelection.current = null;
     settledQuery.current = null;
     setQuery("");
     setPlaceRows([]);
