@@ -939,7 +939,8 @@ export interface LayerPopupConfig {
   titleField?: string;
   /**
    * MapLibre expression source producing the popup title. Wins over
-   * {@link titleField}; falls back to the layer name when it fails.
+   * {@link titleField}; when it fails or produces nothing the title falls
+   * through to `titleField`, and only then to the layer name.
    */
   titleExpression?: string;
   /**

@@ -19,7 +19,7 @@
  *   existed: every property, in the feature's own key order, unformatted.
  */
 import type { Feature } from "geojson";
-import { evaluateMapExpression } from "./expressions";
+import { compileFeatureExpression, type CompiledFeatureExpression } from "./expressions";
 import { PHOTO_FULL_PROPERTY } from "./photo";
 import type {
   FieldVisibility,
@@ -211,6 +211,11 @@ export function formatPopupValue(
   return `${format.prefix ?? ""}${body}${format.suffix ?? ""}`;
 }
 
+/** Whether a row would draw as a picture rather than as text. */
+function rendersAsImage(kind: PopupFieldKind, value: unknown): boolean {
+  return kind === "image" || (kind === "auto" && isInlineImageValue(value));
+}
+
 /** Options for {@link resolvePopupRows}. */
 export interface ResolvePopupRowsOptions extends PopupFormatOptions {
   popup?: LayerPopupConfig;
@@ -269,8 +274,14 @@ export function resolvePopupRows(
     if (isInternalPopupField(config.field)) continue;
     if (!(config.field in properties)) continue;
     if (seen.has(config.field)) continue;
-    seen.add(config.field);
     const value = properties[config.field];
+    // A hover tip is a glance, and it re-renders on every animation frame the
+    // pointer is over the feature. An image row has no useful text form — its
+    // value is a multi-kilobyte data URL — so it would print that URL as the
+    // tip's body, over and over. Skip it and let the click popup show the
+    // picture.
+    if (hover && rendersAsImage(config.kind ?? "auto", value)) continue;
+    seen.add(config.field);
     rows.push({
       field: config.field,
       label: popupFieldLabel(config),
@@ -283,6 +294,54 @@ export function resolvePopupRows(
     });
   }
   return rows;
+}
+
+/**
+ * Compiled title/body expressions, keyed by zoom and source.
+ *
+ * `createHoverTooltipElement` calls {@link resolvePopupTitle} once per
+ * animation frame for as long as the pointer sits on a hovered feature, and
+ * compiling means a `JSON.parse` plus a full style-spec validation. Without
+ * this the same unchanged source string would be re-parsed sixty times a
+ * second. Zoom is part of the key because a compiled expression bakes it in
+ * for `["zoom"]`; it is constant through a hover, so the cache still hits.
+ */
+const EXPRESSION_CACHE = new Map<string, CompiledFeatureExpression>();
+/** Bound on the cache, so a project full of layers cannot grow it without end. */
+const EXPRESSION_CACHE_LIMIT = 64;
+
+function compiledPopupExpression(source: string, zoom: number): CompiledFeatureExpression {
+  const key = `${zoom}\u0000${source}`;
+  const cached = EXPRESSION_CACHE.get(key);
+  if (cached) return cached;
+  const compiled = compileFeatureExpression(source, { zoom });
+  // Map iterates in insertion order, so the first key is the oldest entry.
+  if (EXPRESSION_CACHE.size >= EXPRESSION_CACHE_LIMIT) {
+    const oldest = EXPRESSION_CACHE.keys().next().value;
+    if (oldest !== undefined) EXPRESSION_CACHE.delete(oldest);
+  }
+  EXPRESSION_CACHE.set(key, compiled);
+  return compiled;
+}
+
+/**
+ * Evaluate a popup expression against a feature's properties, or return
+ * `undefined` when it does not compile or throws. Both failures mean the same
+ * thing to every caller here: fall back to what the popup would show without
+ * the expression.
+ */
+function evaluatePopupExpression(
+  source: string,
+  properties: Record<string, unknown>,
+  options: PopupExpressionOptions,
+): unknown {
+  const compiled = compiledPopupExpression(source, options.zoom ?? 0);
+  if (!compiled.ok || !compiled.evaluate) return undefined;
+  try {
+    return compiled.evaluate(featureFor(properties, options.feature));
+  } catch {
+    return undefined;
+  }
 }
 
 /** Build the synthetic feature an expression is evaluated against. */
@@ -315,14 +374,8 @@ export function resolvePopupTitle(
 ): string {
   const source = trimmedString(popup?.titleExpression);
   if (source) {
-    const preview = evaluateMapExpression(source, {
-      feature: featureFor(properties, options.feature),
-      zoom: options.zoom ?? 0,
-    });
-    if (preview.kind === "value") {
-      const text = stringifyPopupValue(preview.value).trim();
-      if (text) return text;
-    }
+    const text = stringifyPopupValue(evaluatePopupExpression(source, properties, options)).trim();
+    if (text) return text;
   }
   const field = trimmedString(popup?.titleField);
   if (field && !options.fieldVisibility?.[field] && !isInternalPopupField(field)) {
@@ -343,12 +396,9 @@ export function resolvePopupBody(
 ): string | null {
   const source = trimmedString(popup?.bodyExpression);
   if (!source) return null;
-  const preview = evaluateMapExpression(source, {
-    feature: featureFor(properties, options.feature),
-    zoom: options.zoom ?? 0,
-  });
-  if (preview.kind !== "value") return null;
-  const text = stringifyPopupValue(preview.value);
+  const preview = evaluatePopupExpression(source, properties, options);
+  if (preview === undefined) return null;
+  const text = stringifyPopupValue(preview);
   return text.trim() ? text : null;
 }
 

@@ -253,6 +253,39 @@ describe("popup rows", () => {
     );
   });
 
+  it("keeps image rows out of the hover tooltip", () => {
+    const popup: LayerPopupConfig = {
+      fields: [
+        { field: "thumb", kind: "image", hover: true },
+        { field: "logo", hover: true },
+        { field: "name", hover: true },
+      ],
+    };
+    const properties = {
+      ...CITY,
+      thumb: "https://example.com/a.png",
+      // An unconfigured value that the "auto" renderer would draw as a
+      // thumbnail: its text form is the whole data URL.
+      logo: "data:image/png;base64,AAAA",
+    };
+    const rows = resolvePopupRows(properties, { popup, hover: true });
+    assert.deepEqual(
+      rows.map((row) => row.field),
+      ["name"],
+    );
+  });
+
+  it("still shows image rows in the click popup", () => {
+    const popup: LayerPopupConfig = {
+      fields: [{ field: "thumb", kind: "image", hover: true }],
+    };
+    const rows = resolvePopupRows({ ...CITY, thumb: "https://example.com/a.png" }, { popup });
+    assert.deepEqual(
+      rows.map((row) => [row.field, row.kind]),
+      [["thumb", "image"]],
+    );
+  });
+
   it("carries the author's link text through to the row", () => {
     const rows = resolvePopupRows(CITY, {
       popup: {
@@ -367,6 +400,25 @@ describe("untrusted configuration", () => {
       rows.map((row) => [row.field, row.label]),
       [["name", "name"]],
     );
+  });
+});
+
+describe("expression caching", () => {
+  // The hover tooltip resolves the title once per animation frame, so the same
+  // source string must not be recompiled every time — but a cached compile must
+  // still evaluate against whatever feature it is handed.
+  it("evaluates a repeated title expression against each feature", () => {
+    const popup: LayerPopupConfig = { titleExpression: '["get", "name"]' };
+    assert.equal(resolvePopupTitle("layer", CITY, popup), "St. Paul");
+    assert.equal(resolvePopupTitle("layer", { ...CITY, name: "Olympia" }, popup), "Olympia");
+    assert.equal(resolvePopupTitle("layer", CITY, popup), "St. Paul");
+  });
+
+  it("honors the zoom it is given for a zoom-dependent expression", () => {
+    const popup: LayerPopupConfig = { titleExpression: '["to-string", ["zoom"]]' };
+    assert.equal(resolvePopupTitle("layer", CITY, popup, { zoom: 4 }), "4");
+    assert.equal(resolvePopupTitle("layer", CITY, popup, { zoom: 9 }), "9");
+    assert.equal(resolvePopupTitle("layer", CITY, popup, { zoom: 4 }), "4");
   });
 });
 

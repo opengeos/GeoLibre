@@ -375,7 +375,10 @@ function createHoverTooltipElement(
     label.textContent = row.label;
     const value = document.createElement("span");
     value.className = "min-w-0 break-words";
-    // A tooltip is a one-line read: images and links render as their text.
+    // A tooltip is a one-line read, so a link shows as its text rather than as
+    // a clickable anchor — the tip has `pointer-events: none` and could not be
+    // clicked anyway. Image rows never reach here: resolvePopupRows drops them
+    // from the hover subset rather than printing a data URL.
     value.textContent = row.text;
     line.append(label, value);
     root.appendChild(line);
