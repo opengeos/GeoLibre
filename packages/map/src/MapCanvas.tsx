@@ -12,6 +12,7 @@ import {
   NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
+  resolveConfiguredPopupTitle,
   resolvePopupBody,
   resolvePopupRows,
   resolvePopupTitle,
@@ -274,8 +275,12 @@ function createIdentifyPopupElement(
   rows.className = "geolibre-identify-popup-rows pe-2";
   root.appendChild(rows);
 
-  // An author-supplied body expression replaces the field table outright: the
-  // point of it is a sentence rather than rows.
+  // An author-supplied body expression replaces the whole body outright — the
+  // field table AND the synthetic id row. The point of it is a sentence
+  // instead of rows, and a raw feature id dangling under that sentence would
+  // undo it. The designer disables the "Show the feature id row" checkbox
+  // while a body expression is set, so the UI does not offer a control that
+  // cannot take effect.
   const body = resolvePopupBody(properties, popup, { feature, zoom });
   if (body !== null) {
     const paragraph = document.createElement("div");
@@ -350,14 +355,18 @@ function createHoverTooltipElement(
     hover: true,
     locale: documentLocale(),
   });
-  const title = resolvePopupTitle(layerName, properties, popup, {
+  const configuredTitle = resolveConfiguredPopupTitle(properties, popup, {
     feature,
     zoom,
     fieldVisibility,
   });
-  // Nothing to say: no flagged field, and no title beyond the layer name the
-  // user can already read in the Layers panel.
-  if (rows.length === 0 && title === layerName) return null;
+  // Nothing to say: no flagged field, and no title the author configured, so
+  // the tip would be a box repeating the layer name the user can already read
+  // in the Layers panel. Keyed on whether a title was configured rather than on
+  // whether it happens to equal the layer name — a feature legitimately called
+  // the same thing as its layer still deserves its tooltip.
+  if (rows.length === 0 && configuredTitle === null) return null;
+  const title = configuredTitle ?? layerName;
 
   const root = document.createElement("div");
   root.className = "geolibre-hover-tooltip-root flex max-w-[16rem] flex-col gap-0.5 text-xs";

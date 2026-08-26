@@ -288,18 +288,26 @@ export function PopupSection({ layer }: PopupSectionProps) {
         )}
       </div>
 
+      {/* A body expression replaces the whole popup body, the id row with it,
+          so the checkbox would silently do nothing while one is set. */}
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
           checked={popup?.showFeatureId !== false}
+          disabled={Boolean(popup?.bodyExpression)}
           onChange={(event) =>
             patchPopup({
               showFeatureId: event.target.checked ? undefined : false,
             })
           }
         />
-        <span>{t("style.popup.showFeatureId")}</span>
+        <span className={popup?.bodyExpression ? "text-muted-foreground" : undefined}>
+          {t("style.popup.showFeatureId")}
+        </span>
       </label>
+      {popup?.bodyExpression ? (
+        <p className="text-xs text-muted-foreground">{t("style.popup.bodyReplacesRows")}</p>
+      ) : null}
 
       <div className="space-y-2">
         <Label>{t("style.popup.fields")}</Label>

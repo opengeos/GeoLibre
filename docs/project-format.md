@@ -393,7 +393,9 @@ is just the layer name.
 `titleField` leads the popup with a feature's own value instead of the layer
 name; `titleExpression` (a MapLibre expression source) wins over it, and both
 fall back to the layer name when they produce nothing. `bodyExpression`
-replaces the field rows with a sentence built from the feature's properties.
+replaces the whole body — the field rows and the `id` row with them — with a
+sentence built from the feature's properties, so `showFeatureId` has no effect
+while one is set.
 
 `fieldVisibility` stays authoritative: a field marked `"hidden"` or
 `"excluded"` never reaches a popup, even when the `popup` block names it — the

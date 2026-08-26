@@ -6765,6 +6765,7 @@
       "bodyExpression": "Body expression",
       "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
       "bodyExpressionHint": "A body expression replaces the field rows with its own text.",
+      "bodyReplacesRows": "While a body expression is set it replaces the field rows and the id row.",
       "invalidExpression": "Invalid expression",
       "openBuilder": "Open expression builder",
       "showFeatureId": "Show the feature id row",

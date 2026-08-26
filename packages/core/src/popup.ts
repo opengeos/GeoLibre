@@ -372,6 +372,28 @@ export function resolvePopupTitle(
     fieldVisibility?: Record<string, FieldVisibility>;
   } = {},
 ): string {
+  return resolveConfiguredPopupTitle(properties, popup, options) ?? layerName;
+}
+
+/**
+ * The title the author's own configuration produced, or `null` when there is
+ * none — no title field or expression, or one that evaluated to nothing, or a
+ * field the author hid.
+ *
+ * {@link resolvePopupTitle} is this plus the layer-name fallback. The hover
+ * tooltip needs the two apart: a tip with no fields and no configured title
+ * would be a box repeating the layer name, so it is suppressed — but that
+ * decision has to rest on whether a title was *configured*, not on whether the
+ * resolved text happens to equal the layer name. A city layer named "Olympia"
+ * whose feature is also called "Olympia" is a real title, not a fallback.
+ */
+export function resolveConfiguredPopupTitle(
+  properties: Record<string, unknown>,
+  popup: LayerPopupConfig | undefined,
+  options: PopupExpressionOptions & {
+    fieldVisibility?: Record<string, FieldVisibility>;
+  } = {},
+): string | null {
   const source = trimmedString(popup?.titleExpression);
   if (source) {
     const text = stringifyPopupValue(evaluatePopupExpression(source, properties, options)).trim();
@@ -382,7 +404,7 @@ export function resolvePopupTitle(
     const text = stringifyPopupValue(properties[field]).trim();
     if (text) return text;
   }
-  return layerName;
+  return null;
 }
 
 /**

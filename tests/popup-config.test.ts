@@ -9,6 +9,7 @@ import {
   isPopupHoverEnabled,
   isSafePopupUrl,
   popupFieldLabel,
+  resolveConfiguredPopupTitle,
   resolvePopupBody,
   resolvePopupRows,
   resolvePopupTitle,
@@ -340,6 +341,37 @@ describe("popup title", () => {
         { fieldVisibility: { name: "hidden" } },
       ),
       "us_cities",
+    );
+  });
+});
+
+describe("configured popup title", () => {
+  // The hover tooltip suppresses itself when there is nothing to say, and that
+  // decision has to rest on whether a title was configured — not on whether the
+  // resolved text happens to match the layer name.
+  it("reports null when no title is configured", () => {
+    assert.equal(resolveConfiguredPopupTitle(CITY, undefined), null);
+    assert.equal(resolveConfiguredPopupTitle(CITY, { fields: [{ field: "name" }] }), null);
+  });
+
+  it("reports a configured title that equals the layer's own name", () => {
+    const properties = { ...CITY, name: "us_cities" };
+    assert.equal(resolveConfiguredPopupTitle(properties, { titleField: "name" }), "us_cities");
+    // The layer-name fallback would return the same string, so only the
+    // null-vs-value distinction tells a real title from no title at all.
+    assert.equal(resolvePopupTitle("us_cities", properties, { titleField: "name" }), "us_cities");
+  });
+
+  it("reports null when the configured title produces nothing", () => {
+    assert.equal(resolveConfiguredPopupTitle(CITY, { titleField: "missing" }), null);
+    assert.equal(resolveConfiguredPopupTitle(CITY, { titleExpression: '["nope", 1]' }), null);
+    assert.equal(
+      resolveConfiguredPopupTitle(
+        CITY,
+        { titleField: "name" },
+        { fieldVisibility: { name: "hidden" } },
+      ),
+      null,
     );
   });
 });
