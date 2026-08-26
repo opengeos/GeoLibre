@@ -19,6 +19,7 @@ import {
   Eye,
   EyeOff,
   Plus,
+  RefreshCw,
   Star,
   Terminal,
   Trash2,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { discoverOllamaModels } from "../../lib/assistant/ollama";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -88,6 +90,21 @@ export function AiSectionContent({
   const [newProfileModel, setNewProfileModel] = useState(() => defaultModelFor("google"));
   /** Draft field values keyed by env var name for the new profile. */
   const [newProfileFieldValues, setNewProfileFieldValues] = useState<Record<string, string>>({});
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [loadingOllamaModels, setLoadingOllamaModels] = useState(false);
+
+  const refreshOllamaModels = async () => {
+    setLoadingOllamaModels(true);
+    try {
+      const models = await discoverOllamaModels(newProfileFieldValues.OLLAMA_BASE_URL ?? "");
+      setOllamaModels(models);
+      if (models.length > 0 && !models.includes(newProfileModel)) setNewProfileModel(models[0]);
+    } catch (error) {
+      console.error("[GeoLibre] Could not load Ollama models", error);
+    } finally {
+      setLoadingOllamaModels(false);
+    }
+  };
 
   // Resolve which providers are configured from the effective env (from parent).
   // Re-derived here for internal status use.
@@ -243,13 +260,36 @@ export function AiSectionContent({
           {PROVIDER_MODELS[newProfileProvider].length > 0 ? (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("assistant.model")}</Label>
-              <Select value={newProfileModel} onChange={(e) => setNewProfileModel(e.target.value)}>
-                {PROVIDER_MODELS[newProfileProvider].map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={newProfileModel}
+                  onChange={(e) => setNewProfileModel(e.target.value)}
+                >
+                  {(newProfileProvider === "ollama" && ollamaModels.length > 0
+                    ? ollamaModels
+                    : PROVIDER_MODELS[newProfileProvider]
+                  ).map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </Select>
+                {newProfileProvider === "ollama" ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    disabled={loadingOllamaModels}
+                    aria-label={t("managePlugins.refresh")}
+                    title={t("managePlugins.refresh")}
+                    onClick={() => void refreshOllamaModels()}
+                  >
+                    <RefreshCw
+                      className={cn("h-3.5 w-3.5", loadingOllamaModels && "animate-spin")}
+                    />
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -427,6 +467,8 @@ function ProfileEditor({
   osFieldEnvName,
 }: ProfileEditorProps) {
   const { t } = useTranslation();
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [loadingOllamaModels, setLoadingOllamaModels] = useState(false);
 
   const updateName = (name: string) => {
     setDraftDesktopSettings((current: any) => ({
@@ -454,7 +496,29 @@ function ProfileEditor({
   const providerFields = PROVIDER_FIELDS[profile.provider];
   const hasOsEnvNote = providerFields.some((field) => osFieldEnvName(field) !== null);
   const models = PROVIDER_MODELS[profile.provider];
+  const selectableModels =
+    profile.provider === "ollama" && ollamaModels.length > 0
+      ? ollamaModels
+      : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
+
+  const refreshOllamaModels = async () => {
+    const baseUrlField = PROVIDER_FIELDS.ollama.find((field) => field.envKey === "OLLAMA_BASE_URL");
+    setLoadingOllamaModels(true);
+    try {
+      const discovered = await discoverOllamaModels(
+        baseUrlField ? getProviderField(baseUrlField) : "",
+      );
+      setOllamaModels(discovered);
+      if (discovered.length > 0 && !discovered.includes(profile.modelId)) {
+        updateModel(discovered[0]);
+      }
+    } catch (error) {
+      console.error("[GeoLibre] Could not load Ollama models", error);
+    } finally {
+      setLoadingOllamaModels(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -497,16 +561,31 @@ function ProfileEditor({
       {models.length > 0 ? (
         <div className="space-y-1.5">
           <Label className="text-xs">{t("assistant.model")}</Label>
-          <Select
-            value={profile.modelId || defaultModelFor(profile.provider)}
-            onChange={(e) => updateModel(e.target.value)}
-          >
-            {models.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select
+              value={profile.modelId || defaultModelFor(profile.provider)}
+              onChange={(e) => updateModel(e.target.value)}
+            >
+              {selectableModels.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </Select>
+            {profile.provider === "ollama" ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={loadingOllamaModels}
+                aria-label={t("managePlugins.refresh")}
+                title={t("managePlugins.refresh")}
+                onClick={() => void refreshOllamaModels()}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", loadingOllamaModels && "animate-spin")} />
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

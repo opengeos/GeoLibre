@@ -625,7 +625,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   disabled={running}
                   onChange={(event) => onModelChange(event.target.value)}
                 >
-                  {PROVIDER_MODELS[activeProfile.provider].map((modelId) => (
+                  {[
+                    ...new Set(
+                      [activeProfile.modelId, ...PROVIDER_MODELS[activeProfile.provider]].filter(
+                        Boolean,
+                      ),
+                    ),
+                  ].map((modelId) => (
                     <option key={modelId} value={modelId}>
                       {modelId}
                     </option>
