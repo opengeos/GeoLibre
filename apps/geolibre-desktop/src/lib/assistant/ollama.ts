@@ -9,25 +9,24 @@ export async function discoverOllamaModels(baseUrl: string): Promise<string[]> {
   normalized = normalized.replace(/\/+$/, "").replace(/\/v1$/i, "");
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), 10_000);
-  let response: Response;
   try {
-    response = await fetch(`${normalized}/api/tags`, { signal: controller.signal });
+    const response = await fetch(`${normalized}/api/tags`, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
+    const payload = (await response.json()) as OllamaTagsResponse;
+    return [
+      ...new Set(
+        (payload.models ?? [])
+          .map((entry) =>
+            typeof entry.name === "string"
+              ? entry.name.trim()
+              : typeof entry.model === "string"
+                ? entry.model.trim()
+                : "",
+          )
+          .filter(Boolean),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
   } finally {
     globalThis.clearTimeout(timeout);
   }
-  if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
-  const payload = (await response.json()) as OllamaTagsResponse;
-  return [
-    ...new Set(
-      (payload.models ?? [])
-        .map((entry) =>
-          typeof entry.name === "string"
-            ? entry.name.trim()
-            : typeof entry.model === "string"
-              ? entry.model.trim()
-              : "",
-        )
-        .filter(Boolean),
-    ),
-  ].sort((a, b) => a.localeCompare(b));
 }

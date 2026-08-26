@@ -25,7 +25,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { discoverOllamaModels } from "../../lib/assistant/ollama";
 
@@ -65,22 +65,33 @@ function useOllamaModels() {
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
   const refresh = async (baseUrl: string) => {
+    const generation = ++requestGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      setModels(await discoverOllamaModels(baseUrl));
+      const discovered = await discoverOllamaModels(baseUrl);
+      if (generation === requestGeneration.current) setModels(discovered);
     } catch (cause) {
+      if (generation !== requestGeneration.current) return;
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
       console.error("[GeoLibre] Could not load Ollama models", cause);
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) setLoading(false);
     }
   };
 
-  return { models, loading, error, refresh, reset: () => setModels([]) };
+  const reset = () => {
+    requestGeneration.current += 1;
+    setModels([]);
+    setError(null);
+    setLoading(false);
+  };
+
+  return { models, loading, error, refresh, reset };
 }
 
 /**
@@ -296,7 +307,12 @@ export function AiSectionContent({
                     aria-label={t("managePlugins.refresh")}
                     title={t("managePlugins.refresh")}
                     onClick={() =>
-                      void ollamaDiscovery.refresh(newProfileFieldValues.OLLAMA_BASE_URL ?? "")
+                      void ollamaDiscovery.refresh(
+                        newProfileFieldValues.OLLAMA_BASE_URL ||
+                          scopedOsEnv.OLLAMA_BASE_URL ||
+                          scopedOsEnv.OLLAMA_HOST ||
+                          "",
+                      )
                     }
                   >
                     <RefreshCw
@@ -518,7 +534,13 @@ function ProfileEditor({
   const models = PROVIDER_MODELS[profile.provider];
   const selectableModels =
     profile.provider === "ollama" && ollamaDiscovery.models.length > 0
-      ? [...new Set([profile.modelId, ...ollamaDiscovery.models].filter(Boolean))]
+      ? [
+          ...new Set(
+            [profile.modelId || defaultModelFor(profile.provider), ...ollamaDiscovery.models].filter(
+              Boolean,
+            ),
+          ),
+        ]
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
 
