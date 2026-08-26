@@ -2230,10 +2230,20 @@ export const MapCanvas = memo(function MapCanvas({
   const hoverTooltipKey = useMemo(
     () =>
       layers
-        .filter((layer) => layer.visible && isPopupHoverEnabled(layer.popup))
+        // Group-aware, like the Identify handler and the selection query: a
+        // layer whose own switch is on can still be hidden by its group, and
+        // binding pointer handlers to it would be binding to something the
+        // user cannot see. `applyGroupEffects` also sets the synced MapLibre
+        // layer's visibility to `none`, so nothing fires today either way —
+        // this keeps the two from drifting if that ever stops being true.
+        .filter(
+          (layer) =>
+            effectiveLayerRenderState(layer, layerGroups).visible &&
+            isPopupHoverEnabled(layer.popup),
+        )
         .map((layer) => `${layer.id}\u0000${JSON.stringify(layer.popup ?? {})}`)
         .join("\u0001"),
-    [layers],
+    [layers, layerGroups],
   );
 
   useEffect(() => {
