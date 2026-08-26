@@ -80,8 +80,13 @@ const DEFAULT_MAX_LAYERS = 4;
 const DEFAULT_MAX_FEATURES_PER_LAYER = 50_000;
 const DEFAULT_LAYER_BUDGET_MS = 40;
 const DEFAULT_TOTAL_BUDGET_MS = 120;
-/** Features scanned between two clock reads: `now()` is not free either. */
-const BUDGET_CHECK_INTERVAL = 512;
+/**
+ * Features scanned between two clock reads: `now()` is not free either. The
+ * budgets are therefore best-effort to within this many features, not hard
+ * ceilings — a small enough window that a layer with wide property sets cannot
+ * overrun a budget by much, and still one clock read per hundred-odd features.
+ */
+const BUDGET_CHECK_INTERVAL = 128;
 
 /**
  * Render a property value as the string the query is matched against.
@@ -233,6 +238,9 @@ function searchLayer(
   }
 
   if (best.size === 0) return null;
+  // Rows dropped by the row cap make the group partial just as surely as a scan
+  // that ran out of budget: the layer holds matches this group does not show.
+  if (best.size > maxPerLayer) truncated = true;
   // Within a rank, the shorter value is the closer match ("India" before
   // "Indonesia" for "ind"), which matters because only a handful of rows
   // survive the cap. Ties keep the layer's own order: Map preserves insertion

@@ -107,10 +107,17 @@ export function LayerPanelPlaceSearch({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Skip the debounce effects for the one query change caused by selecting a
-  // result (which fills the input with the place or feature name); without this
-  // the selection would immediately re-trigger a search for that full name.
-  const skipNextSearch = useRef(false);
+  // The query text a selection wrote into the input, so neither debounce effect
+  // searches for the name it just filled in. It holds the text rather than a
+  // "skip once" flag because both effects read it and neither would be the one
+  // to clear it: the input's own onChange does that, which keeps the two halves
+  // from depending on the order React happens to run them in.
+  const settledQuery = useRef<string | null>(null);
+  // Whether the live feature selection is one this box made. Selecting a
+  // feature row writes the app-wide selection that the attribute table and the
+  // map's own click-select share, so clearing the box may only take back a
+  // selection it put there.
+  const ownsSelection = useRef(false);
 
   // Honor the provider's request-spacing policy: the public Nominatim host
   // requires >=1.1s between requests, so the debounce never drops below that
@@ -176,7 +183,11 @@ export function LayerPanelPlaceSearch({
   // runs on its own short debounce, independent of the geocoder above, so the
   // data groups appear while the network call is still outstanding.
   useEffect(() => {
-    if (skipNextSearch.current) return;
+    if (settledQuery.current !== null) return;
+    // Nothing reads the groups while the box is idle, and a layers change
+    // re-runs this effect: without this gate every layer mutation (a refresh, a
+    // time filter, a visibility toggle) would pay for a scan nobody sees.
+    if (!open && document.activeElement !== inputRef.current) return;
     const trimmed = query.trim();
     if (trimmed.length < MIN_FEATURE_QUERY_LENGTH) {
       setFeatureGroups([]);
@@ -196,13 +207,10 @@ export function LayerPanelPlaceSearch({
       if (groups.length > 0 && document.activeElement === inputRef.current) setOpen(true);
     }, FEATURE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [query, layers, layerGroups]);
+  }, [query, layers, layerGroups, open]);
 
   useEffect(() => {
-    if (skipNextSearch.current) {
-      skipNextSearch.current = false;
-      return;
-    }
+    if (settledQuery.current !== null) return;
     const trimmed = query.trim();
     if (trimmed.length < MIN_QUERY_LENGTH) {
       abortRef.current?.abort();
@@ -247,21 +255,38 @@ export function LayerPanelPlaceSearch({
       setOpen(true);
       return;
     }
+    // Enter the loading state now rather than when the timer fires. The local
+    // scan can open the dropdown within FEATURE_DEBOUNCE_MS, long before the
+    // geocoder's own (>=500ms) debounce, and until then the places half would
+    // otherwise show a heading over nothing, or over the previous query's rows.
+    abortRef.current?.abort();
+    setPlaceRows([]);
+    setStatus("loading");
     const handle = setTimeout(() => {
       void runSearch(trimmed);
     }, debounceMs);
     return () => clearTimeout(handle);
   }, [query, debounceMs, runSearch]);
 
-  /** Every selectable row, data groups first, in the order they render. */
+  // The place half is a plain list only when the geocoder is idle; otherwise it
+  // renders its own status line, which never hides the data groups above it.
+  const showPlaceRows = status === "idle" && placeRows.length > 0;
+  const showPlaceHeading = featureGroups.length > 0;
+
+  /**
+   * Every selectable row, data groups first, in the order they render. Place
+   * rows join only when they are actually on screen: a row the keyboard can
+   * reach but the user cannot see would move the active highlight into nothing
+   * and point `aria-activedescendant` at an id with no element.
+   */
   const rows = useMemo<SearchRow[]>(
     () => [
       ...featureGroups.flatMap((group) =>
         group.matches.map((match): SearchRow => ({ kind: "feature", match })),
       ),
-      ...placeRows,
+      ...(showPlaceRows ? placeRows : []),
     ],
-    [featureGroups, placeRows],
+    [featureGroups, placeRows, showPlaceRows],
   );
 
   /** Reset the input and dropdown after a row has been acted on. */
@@ -271,7 +296,7 @@ export function LayerPanelPlaceSearch({
     // in flight, and letting it resolve would repopulate the dropdown with
     // results for a query the user has already moved on from.
     abortRef.current?.abort();
-    skipNextSearch.current = true;
+    settledQuery.current = label;
     setQuery(label);
     setPlaceRows([]);
     setFeatureGroups([]);
@@ -298,6 +323,7 @@ export function LayerPanelPlaceSearch({
         const store = useAppStore.getState();
         store.selectLayer(row.match.layerId);
         store.selectFeature(row.match.featureId);
+        ownsSelection.current = true;
         const layer = store.layers.find((item) => item.id === row.match.layerId);
         mapControllerRef.current?.highlightFeature(layer, row.match.featureId, { fit: true });
         settle(row.match.value);
@@ -352,8 +378,15 @@ export function LayerPanelPlaceSearch({
     clearH3Highlight();
     // Clearing the box clears what the box put on the map, and a picked feature
     // row leaves a live selection behind. Dropping it here takes the highlight
-    // overlay with it, through the store rather than by touching MapLibre.
-    useAppStore.getState().selectFeature(null);
+    // overlay with it, through the store rather than by touching MapLibre. Only
+    // this box's own pick is dropped: Escape runs this handler too, and a
+    // selection made in the attribute table or by clicking the map is not the
+    // search box's to discard.
+    if (ownsSelection.current) {
+      useAppStore.getState().selectFeature(null);
+      ownsSelection.current = false;
+    }
+    settledQuery.current = null;
     setQuery("");
     setPlaceRows([]);
     setFeatureGroups([]);
@@ -363,10 +396,6 @@ export function LayerPanelPlaceSearch({
   }, [clearH3Highlight]);
 
   const hasRows = rows.length > 0;
-  // The place half is a plain list only when the geocoder is idle; otherwise it
-  // renders its own status line, which never hides the data groups above it.
-  const showPlaceRows = status === "idle" && placeRows.length > 0;
-  const showPlaceHeading = featureGroups.length > 0;
 
   /**
    * Render one selectable row. `index` is the row's position in the flat
@@ -505,7 +534,12 @@ export function LayerPanelPlaceSearch({
           placeholder={t("layers.searchPlacesPlaceholder")}
           aria-label={t("layers.searchPlaces")}
           className="h-8 ps-7 pe-7 text-xs"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            // The user editing the text is what ends a selection's hold on the
+            // input, wherever the effects happen to run in the commit.
+            settledQuery.current = null;
+            setQuery(event.target.value);
+          }}
           onFocus={() => {
             if (hasRows || status !== "idle") setOpen(true);
           }}

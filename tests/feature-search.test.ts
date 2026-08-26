@@ -203,6 +203,19 @@ describe("searchLayerFeatures — caps", () => {
     );
     const [group] = searchLayerFeatures([many], "site", { maxPerLayer: 3 });
     assert.equal(group.matches.length, 3);
+    // The layer holds matches the group does not show, so it reads as partial.
+    assert.equal(group.truncated, true);
+  });
+
+  it("does not mark a group partial when every match fits", () => {
+    const few = layer(
+      "few",
+      "Few",
+      Array.from({ length: 3 }, (_, i) => point({ name: `Site ${i}` })),
+    );
+    const [group] = searchLayerFeatures([few], "site", { maxPerLayer: 5 });
+    assert.equal(group.matches.length, 3);
+    assert.equal(group.truncated, false);
   });
 
   it("stops at the feature ceiling and marks the group truncated", () => {
