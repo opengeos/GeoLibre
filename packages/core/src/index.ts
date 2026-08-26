@@ -17,6 +17,7 @@ export * from "./attribute-form";
 export * from "./popup";
 export * from "./joins";
 export * from "./virtual-fields";
+export * from "./quick-filters";
 export * from "./capabilities";
 export * from "./selection";
 export * from "./selection-actions";

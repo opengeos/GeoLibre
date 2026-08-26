@@ -36,6 +36,17 @@ function liveSourceId(layer: GeoLibreLayer): string {
     : sourceId(layer.id);
 }
 
+/**
+ * Whether a layer draws from vector tiles, and so carries no local features:
+ * anything read from it has to come from the tiles currently loaded.
+ *
+ * @param layer - The layer to test.
+ * @returns `true` for vector-tile, PMTiles, and MBTiles layers.
+ */
+export function isVectorTileLayer(layer: GeoLibreLayer): boolean {
+  return VECTOR_TILE_TYPES.has(layer.type);
+}
+
 /** A bounded sample of features currently loaded for a vector-tile layer. */
 export function loadedVectorTileFeatures(
   map: MapLibreMap,

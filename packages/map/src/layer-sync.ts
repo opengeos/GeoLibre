@@ -1,4 +1,5 @@
 import {
+  compileQuickFilters,
   controlRendersLayer,
   DEFAULT_LAYER_STYLE,
   generatorCircleRadiusValue,
@@ -163,9 +164,13 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
  * only renders features inside the current timeline window), the transient
  * {@link GeoLibreLayer.embedFilter} (the embed API's `setFilter`, set by the
- * host page that frames the app), and the rule-based visibility filter (a
- * rule-based layer whose else rule is switched off hides features matching no
- * rule — see {@link ruleBasedVisibilityFilter}). Returns the geometry filter
+ * host page that frames the app), the persisted
+ * {@link GeoLibreLayer.quickFilters} compiled by `compileQuickFilters` (the
+ * layer's own data-driven filter controls), and the rule-based visibility
+ * filter (a rule-based layer whose else rule is switched off hides features
+ * matching no rule — see {@link ruleBasedVisibilityFilter}). They are combined
+ * with `all`, so a host page's filter and a user's quick filter narrow the
+ * layer together instead of clobbering each other. Returns the geometry filter
  * unchanged when none applies, so the common path
  * produces an identical spec and `ensureLayer` performs no filter update.
  *
@@ -174,6 +179,14 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * `["all", ...]` wrap would drop every cluster whenever a window or rule filter
  * is active. Per-feature layers (fill, line, point, heatmap, text) filter
  * correctly.
+ *
+ * The corollary, shared by every filter in this set: MapLibre clusters at the
+ * *source*, from the layer's raw features, and no layer filter can change what
+ * a cluster already aggregated. So while a point layer renders as clusters, the
+ * bubbles and their counts describe the unfiltered data even though the
+ * unclustered points respect the filter. Filtering a clustered layer by its
+ * individual features means either switching the renderer off clustering or
+ * narrowing the source data itself, neither of which a per-feature filter does.
  *
  * Tile-backed layers (vector tiles, vector MBTiles) use this too. The filter is
  * an expression evaluated per feature as each tile decodes, so it needs no local
@@ -197,6 +210,8 @@ function withFeatureFilters(
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     filters.push(layer.embedFilter);
   }
+  const quickFilter = compileQuickFilters(layer.quickFilters);
+  if (quickFilter) filters.push(quickFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
   if (layer.metadata?.sourceKind === "annotation") {
@@ -249,8 +264,9 @@ function nativeLayerSupportsFilter(type: string): boolean {
 /**
  * The active per-feature filters GeoLibre applies on top of an external
  * layer's own filters: the transient Time-Slider window, the embed API's
- * host-set `setFilter` expression, and the rule-based hide-unmatched filter
- * (see {@link ruleBasedVisibilityFilter}). Empty when none applies.
+ * host-set `setFilter` expression, the layer's compiled quick filters, and the
+ * rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter}).
+ * Empty when none applies.
  */
 function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   const extras: unknown[] = [];
@@ -261,6 +277,8 @@ function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     extras.push(layer.embedFilter);
   }
+  const quickFilter = compileQuickFilters(layer.quickFilters);
+  if (quickFilter) extras.push(quickFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) extras.push(ruleFilter);
   return extras;
@@ -285,7 +303,8 @@ function combineExternalFilters(
 
 /**
  * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window, the
- * embed API's host-set `setFilter` expression, and the rule-based
+ * embed API's host-set `setFilter` expression, the layer's compiled quick
+ * filters, and the rule-based
  * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}, and
  * {@link externalFeatureFilterExtras} for the set this reads)
  * — on an external-native vector layer that a control owns and paints itself
@@ -298,8 +317,8 @@ function combineExternalFilters(
  *
  * @param map - The MapLibre map.
  * @param nativeLayerId - A control-owned native layer id.
- * @param layer - The store layer (reads `timeFilter`, `embedFilter`, and the
- *   rule filter).
+ * @param layer - The store layer (reads `timeFilter`, `embedFilter`,
+ *   `quickFilters`, and the rule filter).
  */
 function applyExternalNativeFeatureFilters(
   map: maplibregl.Map,
@@ -1931,6 +1950,7 @@ function applyVectorDataRenderLayers(
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
+    compileQuickFilters(layer.quickFilters) !== null ||
     ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {

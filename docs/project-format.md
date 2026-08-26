@@ -343,6 +343,57 @@ rewritten on every apply: `addedFields` lists the output columns the join added
 against the loaded layer set on project open, so a saved copy of the joined
 output self-heals if the join table changed.
 
+A vector layer may carry **quick filters** (Layer properties → Quick filters):
+data-driven filter controls that narrow what the layer draws without anyone
+writing a MapLibre expression. What persists is the *control state*, never the
+compiled output, so a saved filter can always be reopened and changed:
+
+```json
+{
+  "quickFilters": [
+    {
+      "id": "uuid",
+      "field": "state",
+      "kind": "categorical",
+      "values": ["OR", "WA"]
+    },
+    { "id": "uuid", "field": "pop", "kind": "range", "min": 200000, "max": null },
+    {
+      "id": "uuid",
+      "field": "founded",
+      "kind": "date",
+      "dateKind": "iso",
+      "start": "1840-01-01",
+      "end": "1900-12-31"
+    },
+    { "id": "uuid", "field": "name", "kind": "text", "operator": "contains", "text": "port" }
+  ]
+}
+```
+
+`kind` picks the control and the comparison: `categorical` (checkboxes over
+`values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
+open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
+(case-insensitive `contains` / `startsWith` / `equals` against `text`).
+`dateKind` says how the field stores its timestamps — `iso` (the default,
+comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
+`enabled: false` mutes a control without discarding what it was answered with.
+A control with nothing chosen places no constraint, so an emptied selection
+shows every feature rather than none.
+
+A quick filter narrows the *rendered* features, so a point layer using the
+cluster renderer is an exception worth noting: MapLibre clusters at the source,
+from the layer's whole dataset, so cluster bubbles and their counts describe the
+unfiltered data while clustering is on (as they already do for a Time Slider
+window or a rule filter).
+
+The compiled filter is combined with the transient `timeFilter` and
+`embedFilter` and with the rule-based renderer's hide-unmatched filter under a
+single `all`, so a host page's `setFilter`, a Time Slider window, and a user's
+quick filter narrow the layer together instead of replacing one another. Quick
+filters are also shown in the read-only `layout=viewer` chrome: filtering is a
+way of reading a shared map, not of editing it.
+
 When a `geojson` layer enables `style.simpleStyleEnabled`, individual features
 may override the layer style with [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
 properties (`stroke`, `fill`, `stroke-width`, `fill-opacity`, ...). GeoLibre also

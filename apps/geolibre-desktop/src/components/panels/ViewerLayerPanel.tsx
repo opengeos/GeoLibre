@@ -1,11 +1,78 @@
-import { useAppStore } from "@geolibre/core";
-import type { LayerGroup } from "@geolibre/core";
+import { clearQuickFilterValues, hasActiveQuickFilter, useAppStore } from "@geolibre/core";
+import type { GeoLibreLayer, LayerGroup, LayerQuickFilter } from "@geolibre/core";
+import type { MapController } from "@geolibre/map";
+import { Button } from "@geolibre/ui";
 import { Eye, EyeOff, Folder, Layers } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuickFilterProfiles } from "../../hooks/useQuickFilterProfiles";
+import { QuickFilterControl } from "./QuickFilterControl";
 
 /** Indent per group nesting level, in rem, mirroring the Layers panel's tree. */
 const GROUP_INDENT_REM = 0.75;
+
+interface ViewerLayerPanelProps {
+  mapControllerRef: RefObject<MapController | null>;
+  /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
+  mapReadyGeneration?: number;
+}
+
+interface ViewerQuickFiltersProps {
+  layer: GeoLibreLayer;
+  mapControllerRef: RefObject<MapController | null>;
+  mapReadyGeneration?: number;
+  indentRem: number;
+}
+
+/**
+ * A viewer-mode layer's quick filters.
+ *
+ * `layout=viewer` hides the authoring surfaces, but a quick filter is a way of
+ * *reading* the map, not of editing it: without these controls a shared project
+ * is merely readable, and the person it was shared with cannot ask it anything.
+ * Only the controls the project's author configured are shown — there is no way
+ * to add or remove one here — and clearing them is one obvious action.
+ */
+function ViewerQuickFilters({
+  layer,
+  mapControllerRef,
+  mapReadyGeneration,
+  indentRem,
+}: ViewerQuickFiltersProps) {
+  const { t } = useTranslation();
+  const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
+  const { byField } = useQuickFilterProfiles(layer, mapControllerRef, mapReadyGeneration);
+  const filters = useMemo(() => layer.quickFilters ?? [], [layer.quickFilters]);
+  const active = hasActiveQuickFilter(layer);
+
+  const update = (next: LayerQuickFilter[]): void => setLayerQuickFilters(layer.id, next);
+
+  return (
+    <div className="space-y-1.5 pb-1" style={{ marginInlineStart: `${indentRem}rem` }}>
+      {filters.map((filter) => (
+        <QuickFilterControl
+          key={filter.id}
+          filter={filter}
+          profile={byField.get(filter.field)}
+          idPrefix={`viewer-${layer.id}`}
+          onChange={(next) =>
+            update(filters.map((current) => (current.id === filter.id ? next : current)))
+          }
+        />
+      ))}
+      {active && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-full justify-start px-2 text-xs"
+          onClick={() => update(clearQuickFilterValues(filters))}
+        >
+          {t("quickFilters.clearAll")}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 /**
  * Read-only layer legend used by the viewer embed preset.
@@ -15,9 +82,11 @@ const GROUP_INDENT_REM = 0.75;
  * "Overlays") reads the same in the viewer. Group members are kept contiguous
  * in the store's layer order, so each folder header is drawn inline above its
  * first member. Unlike the Layers panel this is a legend: folders are labels,
- * not drop targets, and only the per-layer visibility toggle is offered.
+ * not drop targets, and the per-layer controls are limited to the visibility
+ * toggle and whatever quick filters the project's author configured (see
+ * {@link ViewerQuickFilters}).
  */
-export function ViewerLayerPanel() {
+export function ViewerLayerPanel({ mapControllerRef, mapReadyGeneration }: ViewerLayerPanelProps) {
   const { t } = useTranslation();
   const layers = useAppStore((state) => state.layers);
   const layerGroups = useAppStore((state) => state.layerGroups);
@@ -88,6 +157,14 @@ export function ViewerLayerPanel() {
               )}
               <span className="truncate">{layer.name}</span>
             </label>
+            {(layer.quickFilters?.length ?? 0) > 0 && (
+              <ViewerQuickFilters
+                layer={layer}
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+                indentRem={depth * GROUP_INDENT_REM}
+              />
+            )}
           </Fragment>
         ))}
       </div>

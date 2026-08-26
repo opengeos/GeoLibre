@@ -78,6 +78,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Copy and paste of a layer's style onto another layer
     - A metadata dialog that reads a raster's real georeferencing from the GeoTIFF header: CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews
     - A Search places box in the footer that geocodes to a location, flies straight to a typed coordinate in decimal degrees, DMS, or DDM, or flies to an H3 cell index typed as either a hexadecimal string or a 64-bit integer (framing and outlining the cell) — all without leaving the panel
+    - The same box also searches the loaded vector layers' own attributes, so a parcel id, a station code, or a well name is found in the data you just added. Matches are grouped by layer above the place results and ranked exact match first, then prefix, then contains; picking one selects that feature on its layer and flies to it with the attribute table's highlight. Fields marked hidden or excluded are skipped, as are hidden layers and tile-backed layers that hold no local features
 - Nested layer groups that give the layer stack a real hierarchy. See [Layer groups](user-guide/layers.md#layer-groups)
     - Create a group from scratch, from the current layer, or from a multi-selection
     - Move one layer or a whole selection into a group in one step, or add new data straight into a group
@@ -121,6 +122,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Columns**: rename, delete, hide/show, and reorder, plus a column explorer for finding and toggling fields in wide tables
     - **Export** to GeoJSON, GeoParquet, Shapefile, GeoPackage, CSV, KML, or KMZ, honoring the fields hidden in the table so a hidden column stays out of the exported file
     - A **Raster Attribute Table** for single-band categorical rasters
+- **Quick filters** in layer properties: per-field controls derived from the data — checkboxes with value counts, a numeric range, a date range, or a text match — that narrow what a layer draws without writing an expression. The chosen values are saved with the project (so a filter can always be reopened and changed), they combine with a Time Slider window, an embed `setFilter`, and rule-based symbology rather than replacing them, a filtered layer is flagged in the Layers panel so nobody reads it as missing data, and they stay available in the read-only `layout=viewer` chrome so a shared map can be questioned as well as read
 - Shared Expression Builder with a function reference, searchable field list, live preview, and reusable variables, wired into filters, labels, styling, field calculation, and selection, plus Select by Expression and Select by Location for building feature selections
 - Select features by drawing on the map, QGIS-style: click, rectangle, polygon, freehand, and radius gestures from the layer's Select features menu, with Shift and Alt combining the result into the existing selection and Clear selection alongside them
 

@@ -1001,6 +1001,65 @@ export interface LayerVirtualField {
   errorCount?: number;
 }
 
+/**
+ * Quick filters (issue #2114): the data-driven filter controls a layer offers
+ * in its Quick Filters section. What persists is the *control state* — field,
+ * kind, chosen values — not the compiled output; `quick-filters.ts` compiles it
+ * to a MapLibre filter at sync time so a saved filter can always be reopened
+ * and edited.
+ */
+
+/** Which control a quick filter renders, and how it compiles. */
+export type QuickFilterKind = "categorical" | "range" | "date" | "text";
+
+/** The comparison a `text` quick filter applies (always case-insensitive). */
+export type QuickFilterTextOperator = "contains" | "startsWith" | "equals";
+
+/**
+ * How a date field stores its values, deciding whether a `date` quick filter
+ * compares ISO text or epoch numbers. `iso` covers both `YYYY-MM-DD` and full
+ * `YYYY-MM-DDTHH:MM:SSZ` timestamps: only the leading `YYYY-MM-DD` slice is
+ * compared, so a trailing time, a milliseconds fraction, or a `Z` cannot break
+ * a boundary. Mirrors (deliberately, in a smaller form) the value kinds the
+ * Time Slider's `detectValueKind` reports.
+ */
+export type QuickFilterDateKind = "iso" | "epochMs" | "epochS";
+
+/** A single filter control persisted on a layer. */
+export interface LayerQuickFilter {
+  /** Stable id, used as the React key and for edits/removal. */
+  id: string;
+  /** The feature property this control narrows. */
+  field: string;
+  kind: QuickFilterKind;
+  /**
+   * `false` keeps the control configured but inert, so a filter can be muted
+   * without losing the values chosen for it. Defaults to enabled.
+   */
+  enabled?: boolean;
+  /**
+   * `categorical`: the chosen values. An empty (or omitted) selection means
+   * "every value" and compiles to nothing — unchecking the last box clears the
+   * filter rather than emptying the map.
+   */
+  values?: (string | number | boolean)[];
+  /** `range`: inclusive bounds. `null`/omitted leaves that side open. */
+  min?: number | null;
+  max?: number | null;
+  /**
+   * `date`: inclusive `YYYY-MM-DD` bounds. The end day is included in full, so
+   * a timestamp field filtered to a single day keeps that whole day.
+   */
+  start?: string | null;
+  end?: string | null;
+  /** `date`: how the field stores its values. Defaults to `iso`. */
+  dateKind?: QuickFilterDateKind;
+  /** `text`: the comparison. Defaults to `contains`. */
+  operator?: QuickFilterTextOperator;
+  /** `text`: the needle. Blank means no constraint. */
+  text?: string;
+}
+
 /** Persisted refresh policy and most recent synchronization result for a layer. */
 export interface LayerConnection {
   /** Owning layer id. Repeated here so records remain self-describing when exported. */
@@ -1121,6 +1180,15 @@ export interface GeoLibreLayer {
   timeFilter?: unknown[];
   /** Transient MapLibre expression applied by the iframe embed API. */
   embedFilter?: unknown[];
+  /**
+   * Data-driven filter controls authored in the layer's Quick Filters section
+   * (issue #2114). Unlike {@link timeFilter} and {@link embedFilter} this is
+   * persisted control *state*, not a compiled expression: `@geolibre/map`
+   * compiles it at sync time (see `compileQuickFilters`) and combines the
+   * result with the transient filters and the rule-based visibility filter, so
+   * a host page's filter and a user's filter narrow the layer together.
+   */
+  quickFilters?: LayerQuickFilter[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the

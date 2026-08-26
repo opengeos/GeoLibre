@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  compileQuickFilters,
   ruleBasedVisibilityFilter,
   styleValue,
   type GeoLibreLayer,
@@ -69,7 +70,7 @@ export interface MapboxStyleExportResult {
  */
 export type ExportableLayer = Pick<
   GeoLibreLayer,
-  "id" | "name" | "type" | "style" | "opacity" | "visible"
+  "id" | "name" | "type" | "style" | "opacity" | "visible" | "quickFilters"
 >;
 
 export interface MapboxStyleExportOptions {
@@ -166,10 +167,11 @@ function labelTextField(style: LayerStyle, warnings: string[]): ExpressionSpecif
 }
 
 /**
- * The symbol (label) layer for a layer whose labels are enabled. `ruleFilter`
- * is the rule-based hide-unmatched filter (or null) — the live map filters
- * labels too, so the exported label layer must not label features the render
- * layers drop.
+ * The symbol (label) layer for a layer whose labels are enabled.
+ * `visibilityFilter` is the layer's per-feature filter — the rule-based
+ * hide-unmatched filter and the compiled quick filters, or null — because the
+ * live map filters labels too, so the exported label layer must not label
+ * features the render layers drop.
  */
 function buildLabelLayer(
   layer: ExportableLayer,
@@ -178,7 +180,7 @@ function buildLabelLayer(
   visibility: "visible" | "none",
   pointOnly: boolean,
   warnings: string[],
-  ruleFilter: unknown[] | null,
+  visibilityFilter: unknown[] | null,
 ): LayerSpecification | null {
   const style = layer.style;
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
@@ -218,7 +220,7 @@ function buildLabelLayer(
     type: "symbol",
     source: sourceKey,
     ...range,
-    ...(ruleFilter ? { filter: ruleFilter as unknown as ExpressionSpecification } : {}),
+    ...(visibilityFilter ? { filter: visibilityFilter as unknown as ExpressionSpecification } : {}),
     layout: {
       "text-field": textField,
       "text-font": DEFAULT_TEXT_FONT,
@@ -297,14 +299,26 @@ export function buildMapboxStyle(
   const zoom = zoomRange(style);
 
   // A rule-based layer whose else rule is switched off hides features matching
-  // no rule; the live map does that with a per-feature filter, so fold the same
-  // filter into every exported render layer or the exported style would draw
-  // features GeoLibre hides.
-  const ruleFilter = ruleBasedVisibilityFilter(style);
+  // no rule, and the layer's quick filters hide whatever they exclude; the live
+  // map does both with a per-feature filter, so fold the same filters into
+  // every exported render layer or the exported style would draw features
+  // GeoLibre hides.
+  const visibilityFilters = [
+    ruleBasedVisibilityFilter(style),
+    compileQuickFilters(layer.quickFilters),
+  ].filter((filter): filter is unknown[] => filter !== null);
   const withRuleVisibility = (geometryFilter: ExpressionSpecification): ExpressionSpecification =>
-    ruleFilter
-      ? (["all", geometryFilter, ruleFilter] as unknown as ExpressionSpecification)
+    visibilityFilters.length > 0
+      ? (["all", geometryFilter, ...visibilityFilters] as unknown as ExpressionSpecification)
       : geometryFilter;
+  // The label layer carries the same filter on its own (it has no geometry
+  // filter to combine with), so collapse the list once for it.
+  const visibilityFilter =
+    visibilityFilters.length === 0
+      ? null
+      : visibilityFilters.length === 1
+        ? visibilityFilters[0]
+        : (["all", ...visibilityFilters] as unknown[]);
 
   // Only warn about a dropped fill pattern when the layer actually has polygons
   // to fill (and is not extruded, where the pattern never applies).
@@ -411,7 +425,15 @@ export function buildMapboxStyle(
   const labelLayer =
     style.extrusionEnabled || effectiveRenderer === "heatmap"
       ? null
-      : buildLabelLayer(layer, sourceKey, idBase, visibility, pointOnly, warnings, ruleFilter);
+      : buildLabelLayer(
+          layer,
+          sourceKey,
+          idBase,
+          visibility,
+          pointOnly,
+          warnings,
+          visibilityFilter,
+        );
   if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a

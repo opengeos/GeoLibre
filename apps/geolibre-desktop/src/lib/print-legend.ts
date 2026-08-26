@@ -6,6 +6,7 @@ import {
   diagramsSuppressedByPointRenderer,
   effectiveVectorRules,
   generatorSizeRange,
+  hasActiveQuickFilter,
   isHexColor,
   normalizeHexColor,
   proportionalSizeRange,
@@ -229,8 +230,9 @@ export function legendSwatchesForLayer(
  * Derive legend symbols for the companion geometry-generator layers.
  *
  * The visibility guards mirror `applyGeometryGeneratorLayers`: generators
- * require local features and are suppressed while extrusion or a transient
- * feature filter is active. Centroids carry their actual fixed radius or the
+ * require local features and are suppressed while extrusion or a per-feature
+ * filter (a Time-Slider window, an embed filter, a quick filter, or the
+ * rule-based hide-unmatched filter) is active. Centroids carry their actual fixed radius or the
  * same validated proportional-size range used by the map. Other generator
  * types are represented by their generated polygon fill.
  */
@@ -242,6 +244,7 @@ export function geometryGeneratorLegendParts(
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
+    hasActiveQuickFilter(layer) ||
     ruleBasedVisibilityFilter(layer.style) !== null;
   const hasExternalNativeLayers =
     Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;

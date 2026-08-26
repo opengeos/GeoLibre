@@ -53,6 +53,51 @@ Nothing reaches the map until you click **Apply style type**, so you can adjust 
 
 Below the renderer controls, a **Diagram** control draws a small chart on each feature instead of (or as well as) a plain symbol: **Pie chart**, **Donut chart**, **Bar chart**, or **Stacked bar chart**, built from the numeric fields you pick. Set it to **None** to turn diagrams off. It is the usual way to show a composition — vote share, land-cover mix, age structure — per polygon or per point.
 
+### Quick filters
+
+Below the renderer and label controls, the **Quick filters** section narrows what
+the layer draws without writing an expression. Pick a field from **Add a
+filter...** and GeoLibre reads the data to decide which control it deserves:
+
+- a **Values** list of checkboxes with a count beside each value (with a search
+  box once there are more than a handful),
+- a **Range** slider plus typed minimum and maximum for a numeric field,
+- a **Dates** from/to pair for a timestamp field, with both days included in full,
+- a **Text** match — *contains*, *starts with*, or *is exactly* — which ignores case.
+
+The **Filter type** dropdown beside a field switches between the controls it
+supports, so a numeric code column that opens as a range can be answered with
+checkboxes instead. Several filters on one layer narrow it together, and they
+combine with a Time Slider window, an embed `setFilter`, and rule-based
+symbology rather than replacing them.
+
+A quick filter hides features; it does not select them. Use **Select by
+Expression** or the selection tools when you want to act on features rather than
+take them off the map.
+
+A layer with an active filter shows a funnel icon on its row in the Layers
+panel, so a filtered layer is never mistaken for missing data, and its **Layer
+actions -> Clear filters** empties every control at once while keeping the
+controls themselves. Clearing the last checkbox in a Values list is the same as
+clearing that filter: it shows every value, not none. **Remove all** at the top of
+the section deletes the controls outright.
+
+Filters are saved with the project, so a shared map opens with the same view of
+the data. They also appear in the read-only viewer chrome (`?layout=viewer`) —
+filtering is a way of reading a map, so the person you shared it with can ask it
+questions even though the authoring panels are hidden.
+
+Tile-backed layers (vector tiles, PMTiles, MBTiles) carry no local features, so
+their value lists are read from the tiles currently loaded and grow as you pan
+and zoom; the section says so under the controls.
+
+One limit is worth knowing: a point layer using the **cluster** renderer builds
+its clusters from the layer's whole dataset before any filter applies, so while
+clustering is on the bubbles and their counts describe the unfiltered data. The
+same is true of a Time Slider window and a rule-based filter. Switch the point
+renderer back to **Single symbol** to see the filtered features drawn
+individually, one circle each, with no cluster counts to misread.
+
 ### Style interchange and URL styles
 
 The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Export one when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.

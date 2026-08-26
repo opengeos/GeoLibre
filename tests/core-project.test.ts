@@ -262,6 +262,35 @@ describe("project parsing", () => {
     assert.ok(!("embedFilter" in reparsed));
   });
 
+  it("keeps quick filters, which are project state rather than session state", () => {
+    // The contrast with the test above is the point: `timeFilter`/`embedFilter`
+    // are set at runtime by the Time Slider and the host page, but a quick
+    // filter is something the author chose and expects to find again — and it
+    // persists as control state, not as a compiled expression, so it can be
+    // reopened and changed.
+    const quickFilters = [
+      { id: "qf-1", field: "state", kind: "categorical", values: ["OR", "WA"] },
+      { id: "qf-2", field: "pop", kind: "range", min: 1000, max: null },
+    ];
+    const layer = {
+      ...geojsonLayer({ id: "cities" }),
+      quickFilters,
+    } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
+    const project = projectFromStore({
+      projectName: "Filters",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    assert.deepEqual(reparsed.quickFilters, quickFilters);
+  });
+
   it("round-trips a legend config through projectFromStore", () => {
     const legend = {
       title: "Custom",

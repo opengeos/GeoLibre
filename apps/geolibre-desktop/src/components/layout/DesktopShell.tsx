@@ -2401,7 +2401,10 @@ export function DesktopShell({
             ) : layoutOptions.layerPanelVisible ? (
               <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
                 {layoutOptions.viewer ? (
-                  <ViewerLayerPanel />
+                  <ViewerLayerPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
                 ) : (
                   <LayerPanel
                     mapControllerRef={mapControllerRef}
@@ -2659,6 +2662,7 @@ export function DesktopShell({
                   renderBuiltin={({ collapsed, onCollapsedChange }) => (
                     <StylePanel
                       mapControllerRef={mapControllerRef}
+                      mapReadyGeneration={mapReadyGeneration}
                       onResizeStart={startStylePanelResize}
                       openRequest={stylePanelOpenRequest}
                       collapsed={collapsed}
@@ -2680,6 +2684,7 @@ export function DesktopShell({
               <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
                 <StylePanel
                   mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
                   onResizeStart={startStylePanelResize}
                   openRequest={stylePanelOpenRequest}
                   autoCollapse={
