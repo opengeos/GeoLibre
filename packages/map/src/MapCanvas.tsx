@@ -2218,32 +2218,43 @@ export const MapCanvas = memo(function MapCanvas({
     if (!map || !hoverTooltipKey) return;
     const hoverLayerIds = hoverTooltipKey.split("\u0001").map((part) => part.split("\u0000")[0]);
 
+    // The pointer move that has not been drawn yet, and the frame that will
+    // draw it. `mousemove` fires far more often than the screen refreshes, and
+    // each tip rebuilds a small DOM tree, so moves are coalesced to one render
+    // per frame rather than one per event.
+    let pending: {
+      layerId: string;
+      feature: maplibregl.MapGeoJSONFeature;
+      lngLat: maplibregl.LngLat;
+    } | null = null;
+    let pendingFrame = 0;
+
     const removeTooltip = () => {
+      pending = null;
+      if (pendingFrame) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = 0;
+      }
       hoverTooltip.current?.remove();
       hoverTooltip.current = null;
     };
 
-    /** Build the pointer handler for one hovered layer. */
-    const moveHandlerFor = (layerId: string) => (event: maplibregl.MapLayerMouseEvent) => {
-      // A selection gesture owns the pointer while it draws, and the Identify
-      // crosshair means the user is about to click for the full popup: neither
-      // wants a tip trailing the cursor.
-      if (featureSelectionActive.current || useAppStore.getState().identifyLayerId) {
-        removeTooltip();
-        return;
-      }
-      const feature = event.features?.[0];
+    const drawPending = () => {
+      pendingFrame = 0;
+      const next = pending;
+      pending = null;
+      if (!next) return;
       // Read the layer from the store rather than from a captured array, so an
       // edit to the tooltip's fields shows on the very next pointer move.
-      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (!feature || !layer) {
+      const layer = useAppStore.getState().layers.find((item) => item.id === next.layerId);
+      if (!layer) {
         removeTooltip();
         return;
       }
-      const content = createHoverTooltipElement(layer.name, feature.properties ?? {}, {
+      const content = createHoverTooltipElement(layer.name, next.feature.properties ?? {}, {
         popup: layer.popup,
         fieldVisibility: layer.fieldVisibility,
-        feature,
+        feature: next.feature,
         zoom: map.getZoom(),
       });
       if (!content) {
@@ -2261,7 +2272,25 @@ export const MapCanvas = memo(function MapCanvas({
           maxWidth: "280px",
         }).addTo(map);
       }
-      hoverTooltip.current.setLngLat(event.lngLat).setDOMContent(content);
+      hoverTooltip.current.setLngLat(next.lngLat).setDOMContent(content);
+    };
+
+    /** Build the pointer handler for one hovered layer. */
+    const moveHandlerFor = (layerId: string) => (event: maplibregl.MapLayerMouseEvent) => {
+      // A selection gesture owns the pointer while it draws, and the Identify
+      // crosshair means the user is about to click for the full popup: neither
+      // wants a tip trailing the cursor.
+      if (featureSelectionActive.current || useAppStore.getState().identifyLayerId) {
+        removeTooltip();
+        return;
+      }
+      const feature = event.features?.[0];
+      if (!feature) {
+        removeTooltip();
+        return;
+      }
+      pending = { layerId, feature, lngLat: event.lngLat };
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
     };
 
     // Style-layer id -> the handler bound to it, so unbinding detaches the very
