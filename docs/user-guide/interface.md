@@ -50,7 +50,7 @@ The built-in global shortcuts are:
 | `Ctrl`/`Cmd` + `O` | Open project from file |
 | `Ctrl`/`Cmd` + `S` | Save project |
 | `Ctrl`/`Cmd` + `Shift` + `S` | Save project as… |
-| `C` | Add a [review comment](map-controls.md#review-comments) at the map center |
+| `C` | Toggle the [review comment](map-controls.md#review-comments) tool, then click the map to place the pin |
 | `N` | Reset bearing (north up) |
 | `U` | Reset pitch (top-down view) |
 | `R` | Reset pitch and bearing |
