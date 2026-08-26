@@ -60,6 +60,29 @@ interface AiSectionContentProps {
   osFieldEnvName: (field: ProviderField) => string | null;
 }
 
+/** Shared Ollama discovery state for profile editors. */
+function useOllamaModels() {
+  const [models, setModels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async (baseUrl: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setModels(await discoverOllamaModels(baseUrl));
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      console.error("[GeoLibre] Could not load Ollama models", cause);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { models, loading, error, refresh, reset: () => setModels([]) };
+}
+
 /**
  * The "AI Providers" section content inside Settings. Shows a profile list when
  * no profile is being edited, and a profile editor when one is selected.
@@ -90,20 +113,7 @@ export function AiSectionContent({
   const [newProfileModel, setNewProfileModel] = useState(() => defaultModelFor("google"));
   /** Draft field values keyed by env var name for the new profile. */
   const [newProfileFieldValues, setNewProfileFieldValues] = useState<Record<string, string>>({});
-  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
-  const [loadingOllamaModels, setLoadingOllamaModels] = useState(false);
-
-  const refreshOllamaModels = async () => {
-    setLoadingOllamaModels(true);
-    try {
-      const models = await discoverOllamaModels(newProfileFieldValues.OLLAMA_BASE_URL ?? "");
-      setOllamaModels(models);
-    } catch (error) {
-      console.error("[GeoLibre] Could not load Ollama models", error);
-    } finally {
-      setLoadingOllamaModels(false);
-    }
-  };
+  const ollamaDiscovery = useOllamaModels();
 
   // Resolve which providers are configured from the effective env (from parent).
   // Re-derived here for internal status use.
@@ -142,7 +152,7 @@ export function AiSectionContent({
     setNewProfileProvider("google");
     setNewProfileModel(defaultModelFor("google"));
     setNewProfileFieldValues({});
-    setOllamaModels([]);
+    ollamaDiscovery.reset();
     setIsCreatingProfile(true);
     setEditingProfileId(null);
   };
@@ -242,13 +252,13 @@ export function AiSectionContent({
             <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
             <Select
               value={newProfileProvider}
-              disabled={loadingOllamaModels}
+              disabled={ollamaDiscovery.loading}
               onChange={(e) => {
                 const provider = e.target.value as AssistantProviderId;
                 setNewProfileProvider(provider);
                 setNewProfileModel(defaultModelFor(provider));
                 setNewProfileFieldValues({});
-                setOllamaModels([]);
+                ollamaDiscovery.reset();
               }}
             >
               {ASSISTANT_PROVIDER_IDS.map((id) => (
@@ -268,8 +278,8 @@ export function AiSectionContent({
                   value={newProfileModel}
                   onChange={(e) => setNewProfileModel(e.target.value)}
                 >
-                  {(newProfileProvider === "ollama" && ollamaModels.length > 0
-                    ? [...new Set([newProfileModel, ...ollamaModels].filter(Boolean))]
+                  {(newProfileProvider === "ollama" && ollamaDiscovery.models.length > 0
+                    ? [...new Set([newProfileModel, ...ollamaDiscovery.models].filter(Boolean))]
                     : PROVIDER_MODELS[newProfileProvider]
                   ).map((id) => (
                     <option key={id} value={id}>
@@ -282,17 +292,24 @@ export function AiSectionContent({
                     type="button"
                     size="icon"
                     variant="outline"
-                    disabled={loadingOllamaModels}
+                    disabled={ollamaDiscovery.loading}
                     aria-label={t("managePlugins.refresh")}
                     title={t("managePlugins.refresh")}
-                    onClick={() => void refreshOllamaModels()}
+                    onClick={() =>
+                      void ollamaDiscovery.refresh(newProfileFieldValues.OLLAMA_BASE_URL ?? "")
+                    }
                   >
                     <RefreshCw
-                      className={cn("h-3.5 w-3.5", loadingOllamaModels && "animate-spin")}
+                      className={cn("h-3.5 w-3.5", ollamaDiscovery.loading && "animate-spin")}
                     />
                   </Button>
                 ) : null}
               </div>
+              {ollamaDiscovery.error ? (
+                <p className="text-xs text-destructive">
+                  {t("managePlugins.failedToLoad", { message: ollamaDiscovery.error })}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -470,8 +487,7 @@ function ProfileEditor({
   osFieldEnvName,
 }: ProfileEditorProps) {
   const { t } = useTranslation();
-  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
-  const [loadingOllamaModels, setLoadingOllamaModels] = useState(false);
+  const ollamaDiscovery = useOllamaModels();
 
   const updateName = (name: string) => {
     setDraftDesktopSettings((current: any) => ({
@@ -481,7 +497,7 @@ function ProfileEditor({
   };
 
   const updateProvider = (provider: AssistantProviderId) => {
-    setOllamaModels([]);
+    ollamaDiscovery.reset();
     setDraftDesktopSettings((current: any) => ({
       ...current,
       aiProfiles: current.aiProfiles.map((p: any) =>
@@ -501,27 +517,19 @@ function ProfileEditor({
   const hasOsEnvNote = providerFields.some((field) => osFieldEnvName(field) !== null);
   const models = PROVIDER_MODELS[profile.provider];
   const selectableModels =
-    profile.provider === "ollama" && ollamaModels.length > 0
-      ? [...new Set([profile.modelId, ...ollamaModels].filter(Boolean))]
+    profile.provider === "ollama" && ollamaDiscovery.models.length > 0
+      ? [...new Set([profile.modelId, ...ollamaDiscovery.models].filter(Boolean))]
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
 
-  const refreshOllamaModels = async () => {
+  const refreshOllamaModels = () => {
     const baseUrlField = PROVIDER_FIELDS.ollama.find((field) => field.envKey === "OLLAMA_BASE_URL");
-    setLoadingOllamaModels(true);
-    try {
-      const discovered = await discoverOllamaModels(
-        (baseUrlField ? getProviderField(baseUrlField) : "") ||
-          scopedOsEnv.OLLAMA_BASE_URL ||
-          scopedOsEnv.OLLAMA_HOST ||
-          "",
-      );
-      setOllamaModels(discovered);
-    } catch (error) {
-      console.error("[GeoLibre] Could not load Ollama models", error);
-    } finally {
-      setLoadingOllamaModels(false);
-    }
+    return ollamaDiscovery.refresh(
+      (baseUrlField ? getProviderField(baseUrlField) : "") ||
+        scopedOsEnv.OLLAMA_BASE_URL ||
+        scopedOsEnv.OLLAMA_HOST ||
+        "",
+    );
   };
 
   return (
@@ -551,7 +559,7 @@ function ProfileEditor({
         <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
         <Select
           value={profile.provider}
-          disabled={loadingOllamaModels}
+          disabled={ollamaDiscovery.loading}
           onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
         >
           {ASSISTANT_PROVIDER_IDS.map((id) => (
@@ -582,15 +590,22 @@ function ProfileEditor({
                 type="button"
                 size="icon"
                 variant="outline"
-                disabled={loadingOllamaModels}
+                disabled={ollamaDiscovery.loading}
                 aria-label={t("managePlugins.refresh")}
                 title={t("managePlugins.refresh")}
                 onClick={() => void refreshOllamaModels()}
               >
-                <RefreshCw className={cn("h-3.5 w-3.5", loadingOllamaModels && "animate-spin")} />
+                <RefreshCw
+                  className={cn("h-3.5 w-3.5", ollamaDiscovery.loading && "animate-spin")}
+                />
               </Button>
             ) : null}
           </div>
+          {ollamaDiscovery.error ? (
+            <p className="text-xs text-destructive">
+              {t("managePlugins.failedToLoad", { message: ollamaDiscovery.error })}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
