@@ -16,13 +16,10 @@ export async function discoverOllamaModels(baseUrl: string): Promise<string[]> {
     return [
       ...new Set(
         (payload.models ?? [])
-          .map((entry) =>
-            typeof entry.name === "string"
-              ? entry.name.trim()
-              : typeof entry.model === "string"
-                ? entry.model.trim()
-                : "",
-          )
+          .map((entry) => {
+            const name = typeof entry.name === "string" ? entry.name.trim() : "";
+            return name || (typeof entry.model === "string" ? entry.model.trim() : "");
+          })
           .filter(Boolean),
       ),
     ].sort((a, b) => a.localeCompare(b));

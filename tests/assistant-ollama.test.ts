@@ -35,4 +35,22 @@ describe("discoverOllamaModels", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("falls back to model when name is blank", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      Response.json({
+        models: [
+          { name: "   ", model: "llama3:8b" },
+          { name: "   ", model: "   " },
+          { name: "   " },
+        ],
+      });
+
+    try {
+      assert.deepEqual(await discoverOllamaModels("localhost:11434"), ["llama3:8b"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
