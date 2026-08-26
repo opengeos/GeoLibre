@@ -313,7 +313,6 @@ export function AiSectionContent({
             <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
             <Select
               value={newProfileProvider}
-              disabled={ollamaDiscovery.loading}
               onChange={(e) => {
                 const provider = e.target.value as AssistantProviderId;
                 setNewProfileProvider(provider);
@@ -585,8 +584,11 @@ function ProfileEditor({
               ...p,
               provider,
               modelId: defaultModelFor(provider),
+              // `getProviderField` resolves OLLAMA_BASE_URL before its
+              // OLLAMA_HOST alias, so seeding the default over a profile that
+              // only carries the alias would shadow a real custom value.
               fieldValues:
-                seedBaseUrl && !p.fieldValues?.OLLAMA_BASE_URL
+                seedBaseUrl && !p.fieldValues?.OLLAMA_BASE_URL && !p.fieldValues?.OLLAMA_HOST
                   ? { ...p.fieldValues, OLLAMA_BASE_URL: DEFAULT_OLLAMA_BASE_URL }
                   : p.fieldValues,
             }
@@ -654,7 +656,6 @@ function ProfileEditor({
         <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
         <Select
           value={profile.provider}
-          disabled={ollamaDiscovery.loading}
           onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
         >
           {ASSISTANT_PROVIDER_IDS.map((id) => (
