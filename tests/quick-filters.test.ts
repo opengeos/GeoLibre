@@ -471,6 +471,16 @@ describe("profileQuickFilterFields", () => {
     assert.ok(!zip?.availableKinds.includes("range"));
   });
 
+  it("still reads a padded decimal as a measure", () => {
+    // The padded-identifier exclusion is for whole integers; `01.25` is a
+    // number that merely happens to be written with a leading zero.
+    const rows = [{ ratio: "01.25" }, { ratio: "2.5" }, { ratio: "0" }];
+    const ratio = byField(profileQuickFilterFields(rows)).get("ratio");
+    assert.equal(ratio?.kind, "range");
+    assert.equal(ratio?.min, 0);
+    assert.equal(ratio?.max, 2.5);
+  });
+
   it("detects an epoch timestamp stored as text", () => {
     const rows = [{ at: String(Date.UTC(2026, 0, 1)) }];
     assert.equal(byField(profileQuickFilterFields(rows)).get("at")?.dateKind, "epochMs");

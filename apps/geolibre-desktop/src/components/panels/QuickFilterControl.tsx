@@ -1,6 +1,15 @@
 import type { LayerQuickFilter, QuickFilterKind, QuickFilterTextOperator } from "@geolibre/core";
-import { Button, Input, RangeSlider, Select } from "@geolibre/ui";
-import { Trash2, X } from "lucide-react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+  Input,
+  RangeSlider,
+} from "@geolibre/ui";
+import { ChevronDown, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -299,23 +308,36 @@ function TextControl({
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
-      <Select
-        className="w-32 shrink-0"
-        value={filter.operator ?? "contains"}
-        aria-label={t("quickFilters.textOperator")}
-        onChange={(event) =>
-          onChange({
-            ...filter,
-            operator: event.target.value as QuickFilterTextOperator,
-          })
-        }
-      >
-        {TEXT_OPERATORS.map((operator) => (
-          <option key={operator} value={operator}>
-            {t(`quickFilters.operator.${operator}` as const)}
-          </option>
-        ))}
-      </Select>
+      {/* A menu for the same reason as the other two dropdowns in this
+          section: a controlled `<select>` is re-asserted on every commit, so a
+          re-render underneath an open native popup dismisses it. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-32 shrink-0 justify-between px-2 text-xs font-normal"
+            aria-label={t("quickFilters.textOperator")}
+          >
+            {t(`quickFilters.operator.${filter.operator ?? "contains"}` as const)}
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuRadioGroup
+            value={filter.operator ?? "contains"}
+            onValueChange={(operator) =>
+              onChange({ ...filter, operator: operator as QuickFilterTextOperator })
+            }
+          >
+            {TEXT_OPERATORS.map((operator) => (
+              <DropdownMenuRadioItem key={operator} value={operator}>
+                {t(`quickFilters.operator.${operator}` as const)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Input
         id={`${idPrefix}-${filter.id}-text`}
         className="h-7 text-xs"
@@ -401,33 +423,51 @@ export function QuickFilterControl({
         )}
         {editable && (
           <>
+            {/* A menu, not a `<select>`, for the same reason as the field
+                picker in QuickFiltersSection: React re-asserts a controlled
+                select's value on every commit, which dismisses the native popup
+                if the section re-renders while it is open. */}
             {kinds.length > 1 && (
-              <Select
-                className="w-28 shrink-0"
-                value={filter.kind}
-                aria-label={t("quickFilters.controlType")}
-                onChange={(event) =>
-                  onChange({
-                    ...filter,
-                    kind: event.target.value as QuickFilterKind,
-                    // The chosen values belong to the old control, so switching
-                    // type starts from "no constraint" rather than carrying a
-                    // selection the new control cannot show.
-                    values: [],
-                    min: null,
-                    max: null,
-                    start: null,
-                    end: null,
-                    text: "",
-                  })
-                }
-              >
-                {kinds.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {t(`quickFilters.kind.${kind}` as const)}
-                  </option>
-                ))}
-              </Select>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-28 shrink-0 justify-between px-2 text-xs font-normal"
+                    aria-label={t("quickFilters.controlType")}
+                  >
+                    {t(`quickFilters.kind.${filter.kind}` as const)}
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup
+                    value={filter.kind}
+                    onValueChange={(kind) =>
+                      onChange({
+                        ...filter,
+                        kind: kind as QuickFilterKind,
+                        // The chosen values belong to the old control, so
+                        // switching type starts from "no constraint" rather
+                        // than carrying a selection the new control cannot
+                        // show.
+                        values: [],
+                        min: null,
+                        max: null,
+                        start: null,
+                        end: null,
+                        text: "",
+                      })
+                    }
+                  >
+                    {kinds.map((kind) => (
+                      <DropdownMenuRadioItem key={kind} value={kind}>
+                        {t(`quickFilters.kind.${kind}` as const)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <Button
               variant="ghost"

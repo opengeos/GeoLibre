@@ -84,12 +84,16 @@ const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
 
 /**
- * A padded integer (`02134`, `007`) is an identifier that happens to be made of
- * digits, not a measure: a ZIP code or a FIPS code belongs in a value list, and
- * turning it into a range slider would both misrepresent it and lose the
+ * A padded *integer* (`02134`, `007`) is an identifier that happens to be made
+ * of digits, not a measure: a ZIP code or a FIPS code belongs in a value list,
+ * and turning it into a range slider would both misrepresent it and lose the
  * padding. Excluded from numeric-string detection for that reason.
+ *
+ * Anchored at both ends so it matches only whole padded integers. A decimal
+ * that happens to start with a padded zero (`01.25`) is still a measure, and a
+ * bare `0` carries no padding at all.
  */
-const LEADING_ZERO_INTEGER = /^-?0\d/;
+const LEADING_ZERO_INTEGER = /^-?0\d+$/;
 
 /**
  * The number a value holds for profiling, or `null` when it is not numeric.

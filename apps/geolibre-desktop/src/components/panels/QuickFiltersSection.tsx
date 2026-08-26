@@ -5,8 +5,14 @@ import {
   type LayerQuickFilter,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button, Select } from "@geolibre/ui";
-import { Filter, Info } from "lucide-react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@geolibre/ui";
+import { ChevronDown, Filter, Info } from "lucide-react";
 import { useMemo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuickFilterProfiles } from "../../hooks/useQuickFilterProfiles";
@@ -128,24 +134,36 @@ export function QuickFiltersSection({
       ) : (
         <div className="flex items-center gap-2">
           <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <Select
-            className="flex-1"
-            value=""
-            disabled={addable.length === 0}
-            aria-label={t("quickFilters.addFilter")}
-            onChange={(event) => {
-              if (event.target.value) addField(event.target.value);
-            }}
-          >
-            <option value="">
-              {addable.length === 0 ? t("quickFilters.allFieldsUsed") : t("quickFilters.addFilter")}
-            </option>
-            {addable.map((profile) => (
-              <option key={profile.field} value={profile.field}>
-                {profile.field}
-              </option>
-            ))}
-          </Select>
+          {/* A menu rather than a `<select>`: this is a command ("add a filter
+              on this field"), not a value, and a controlled `<select value="">`
+              is re-asserted on every commit — which closes the native popup
+              whenever the section re-renders underneath it (a tile-backed layer
+              re-samples on every map `idle` while its tiles settle). The menu
+              owns its own open state and portals its content, so a re-render
+              cannot dismiss it. It also scrolls, which a long attribute table
+              needs. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 flex-1 justify-between font-normal"
+                disabled={addable.length === 0}
+              >
+                {addable.length === 0
+                  ? t("quickFilters.allFieldsUsed")
+                  : t("quickFilters.addFilter")}
+                <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+              {addable.map((profile) => (
+                <DropdownMenuItem key={profile.field} onSelect={() => addField(profile.field)}>
+                  {profile.field}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
