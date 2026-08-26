@@ -762,6 +762,12 @@ function createVectorControl(
     // The panel doubles as the Add Vector Layer dialog, so it stays open
     // until the user closes it; clicking the map must not collapse it.
     closeOnOutsideClick: false,
+    // The control's own attribute popup defaults to on upstream, so a click on
+    // a feature opened its unstyled table alongside whatever the layer's Popup
+    // design says. GeoLibre owns feature popups (the Style panel's Popup
+    // section, issue #2113), so the picker is opt-in here: the panel's Popup
+    // checkbox starts clear and per-layer `picker` still turns it on.
+    enablePicker: false,
     // Desktop routes arbitrary remote datasets through its guarded native
     // downloader, bypassing WebView CORS. The browser build leaves this unset.
     ...(app.fetchVectorUrl ? { urlLoader: app.fetchVectorUrl } : {}),

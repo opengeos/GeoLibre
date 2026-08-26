@@ -73,6 +73,8 @@ Further down the Style panel, the **Popup** section designs what a viewer sees w
 - **Value type** formats the value: **Number** (decimals, thousands separator), **Date** (date, date and time, time, ISO 8601, or year), **Link**, **Image**, or plain **Text**. For **Automatic**, **Text**, **Number** and **Date** fields, **Prefix** and **Suffix** wrap the result, which is where a currency symbol or a unit goes.
 - **In hover tooltip** puts a field in the tooltip's short subset. Keep it to one or two fields: the tip follows the pointer, so it is a glance, not a table. Image fields are skipped there and stay in the click popup, where there is room to show the picture.
 
+Layers loaded through **Add Vector Layer** are designed here too. That panel has its own **Popup** checkbox per layer, which opens a separate, unstyled attribute table on click; it is off by default so the two do not both answer the same click, and the design above is what a viewer gets. Tick it only if you want the control's raw table back.
+
 Fields you hid or excluded from the [attribute table](attribute-table.md) stay out of the popup: the popup design selects from the visible fields and cannot re-expose a hidden one. A layer with nothing configured behaves exactly as before, and the whole design saves with the project, so it travels to the Python package and the MCP authoring tools as well.
 
 ## Raster styling

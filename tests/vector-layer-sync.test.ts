@@ -141,7 +141,9 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.sourcePath, "https://example.com/countries.geojson");
     assert.equal(layer.metadata.externalNativeLayer, true);
     assert.equal(layer.metadata.customLayerType, "fill");
-    assert.equal(layer.metadata.identifiable, false);
+    // Identify (and so the Style panel's Popup design) owns feature inspection
+    // for these layers; the control's own attribute popup is off by default.
+    assert.equal(layer.metadata.identifiable, true);
     assert.equal(layer.metadata.panelCollapsed, true);
     assert.equal(layer.metadata.sourceKind, "maplibre-gl-vector");
     assert.equal(layer.metadata.vectorSource, "url");

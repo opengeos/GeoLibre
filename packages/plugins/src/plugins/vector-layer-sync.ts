@@ -168,9 +168,12 @@ export function createVectorStoreLayer(
       // not also re-apply paint — that would clobber control-only renderers like
       // the cluster bubble's stepped radius.
       controlOwnsPaint: true,
-      // The control's own picker popup handles feature inspection; the
-      // app-level identify tool does not target these layers.
-      identifiable: false,
+      // Feature inspection goes through GeoLibre's Identify tool and the Style
+      // panel's Popup design, not the control's own attribute popup — that one
+      // is off by default (`enablePicker: false` in maplibre-vector.ts) so the
+      // two do not both answer a click. Identify queries `nativeLayerIds`
+      // below, which the control does create, so it works here unchanged.
+      identifiable: true,
       // The control creates real MapLibre style layers (fill/outline/
       // line/circle per geometry), so ordering moves reach them directly.
       nativeLayerIds: [...info.layerIds],
