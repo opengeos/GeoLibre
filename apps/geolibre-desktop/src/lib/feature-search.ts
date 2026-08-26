@@ -8,7 +8,12 @@
  * tested in isolation, mirroring `coordinates.ts` and `h3-search.ts`.
  */
 
-import { featureSelectionId, type GeoLibreLayer } from "@geolibre/core";
+import {
+  effectiveLayerRenderState,
+  featureSelectionId,
+  type GeoLibreLayer,
+  type LayerGroup,
+} from "@geolibre/core";
 
 /**
  * How a value matched the query, in ranking order: an exact (case-insensitive)
@@ -55,6 +60,14 @@ export interface FeatureSearchOptions {
   maxFeaturesPerLayer?: number;
   /** Wall-clock budget per layer, in milliseconds. */
   layerBudgetMs?: number;
+  /**
+   * Wall-clock budget for the whole call, in milliseconds. Bounds the cost of a
+   * project with many large layers, where the per-layer budget alone would let
+   * the total grow with the layer count.
+   */
+  totalBudgetMs?: number;
+  /** The project's layer groups, so group visibility can be folded in. */
+  groups?: LayerGroup[];
   /** Clock source, injectable so the budget can be exercised in tests. */
   now?: () => number;
 }
@@ -66,6 +79,7 @@ const DEFAULT_MAX_PER_LAYER = 5;
 const DEFAULT_MAX_LAYERS = 4;
 const DEFAULT_MAX_FEATURES_PER_LAYER = 50_000;
 const DEFAULT_LAYER_BUDGET_MS = 40;
+const DEFAULT_TOTAL_BUDGET_MS = 120;
 /** Features scanned between two clock reads: `now()` is not free either. */
 const BUDGET_CHECK_INTERVAL = 512;
 
@@ -106,11 +120,22 @@ function classify(haystack: string, needle: string): FeatureMatchKind | null {
  * are skipped too — flying to a feature the user turned off would show only the
  * highlight overlay hovering over nothing.
  *
+ * Visibility is the *effective* one: `layer.visible` is a raw per-layer flag
+ * that a hidden parent group never writes to, so the group chain is folded in
+ * the way every renderer does it, and a layer inside a hidden group counts as
+ * hidden.
+ *
  * @param layer A store layer.
+ * @param groups The project's layer groups, as an array or a prebuilt id → group
+ *   map. Omit when the project has none.
  * @returns True when the layer's own features can be matched.
  */
-export function isSearchableLayer(layer: GeoLibreLayer): boolean {
-  return layer.visible && (layer.geojson?.features?.length ?? 0) > 0;
+export function isSearchableLayer(
+  layer: GeoLibreLayer,
+  groups: LayerGroup[] | ReadonlyMap<string, LayerGroup> = [],
+): boolean {
+  if ((layer.geojson?.features?.length ?? 0) === 0) return false;
+  return effectiveLayerRenderState(layer, groups).visible;
 }
 
 /**
@@ -147,7 +172,12 @@ function skippedFields(layer: GeoLibreLayer): Set<string> {
 function searchLayer(
   layer: GeoLibreLayer,
   needle: string,
-  options: Required<Omit<FeatureSearchOptions, "maxLayers">>,
+  options: {
+    maxPerLayer: number;
+    maxFeaturesPerLayer: number;
+    layerBudgetMs: number;
+    now: () => number;
+  },
 ): FeatureSearchGroup | null {
   const { maxPerLayer, maxFeaturesPerLayer, layerBudgetMs, now } = options;
   const features = layer.geojson?.features ?? [];
@@ -181,8 +211,10 @@ function searchLayer(
       const kind = classify(text.toLowerCase(), needle);
       if (!kind) continue;
       const previous = best.get(featureId);
+      // A previous match of equal or better rank stands, so nothing reaching
+      // past this guard can be downgrading an exact match: `exactCount` only
+      // ever counts up.
       if (previous && KIND_RANK[previous.kind] <= KIND_RANK[kind]) continue;
-      if (previous?.kind === "exact") exactCount -= 1;
       if (kind === "exact") exactCount += 1;
       best.set(featureId, {
         layerId: layer.id,
@@ -217,8 +249,10 @@ function searchLayer(
  * Runs entirely on data already in the store, so it is independent of the
  * geocoder's network call and its results can be shown before the geocoder
  * answers. Layers are scanned in the order given (the layer panel's order, top
- * layer first) and each is capped independently, so one huge layer cannot
- * starve the rest.
+ * layer first), each capped on its own so one huge layer cannot starve the
+ * rest, and the whole call is capped again by `totalBudgetMs` so the cost does
+ * not grow with the number of loaded layers — a layer that matches nothing
+ * still costs its scan, and a project can hold many of them.
  *
  * @param layers The store's layers.
  * @param query The raw typed query.
@@ -233,18 +267,26 @@ export function searchLayerFeatures(
   const needle = query.trim().toLowerCase();
   if (needle.length < MIN_FEATURE_QUERY_LENGTH) return [];
   const maxLayers = options.maxLayers ?? DEFAULT_MAX_LAYERS;
-  const resolved = {
-    maxPerLayer: options.maxPerLayer ?? DEFAULT_MAX_PER_LAYER,
-    maxFeaturesPerLayer: options.maxFeaturesPerLayer ?? DEFAULT_MAX_FEATURES_PER_LAYER,
-    layerBudgetMs: options.layerBudgetMs ?? DEFAULT_LAYER_BUDGET_MS,
-    now: options.now ?? (() => performance.now()),
-  };
+  const layerBudgetMs = options.layerBudgetMs ?? DEFAULT_LAYER_BUDGET_MS;
+  const totalBudgetMs = options.totalBudgetMs ?? DEFAULT_TOTAL_BUDGET_MS;
+  const now = options.now ?? (() => performance.now());
+  // Build the group map once: folding it per layer would rebuild it per layer.
+  const groupById = new Map((options.groups ?? []).map((group) => [group.id, group]));
+  const started = now();
 
   const groups: FeatureSearchGroup[] = [];
   for (const layer of layers) {
     if (groups.length >= maxLayers) break;
-    if (!isSearchableLayer(layer)) continue;
-    const group = searchLayer(layer, needle, resolved);
+    const remaining = totalBudgetMs - (now() - started);
+    if (remaining <= 0) break;
+    if (!isSearchableLayer(layer, groupById)) continue;
+    const group = searchLayer(layer, needle, {
+      maxPerLayer: options.maxPerLayer ?? DEFAULT_MAX_PER_LAYER,
+      maxFeaturesPerLayer: options.maxFeaturesPerLayer ?? DEFAULT_MAX_FEATURES_PER_LAYER,
+      // Never let one layer spend more than the call has left.
+      layerBudgetMs: Math.min(layerBudgetMs, remaining),
+      now,
+    });
     if (group) groups.push(group);
   }
   return groups;

@@ -171,6 +171,29 @@ describe("searchLayerFeatures — field visibility", () => {
   });
 });
 
+describe("searchLayerFeatures — group visibility", () => {
+  it("skips a visible layer whose parent group is hidden", () => {
+    const grouped = layer("grouped", "Grouped", [point({ name: "Site A" })], {
+      groupId: "g1",
+    });
+    const groups = [
+      { id: "g1", name: "Group", visible: false, opacity: 1 },
+    ] as unknown as Parameters<typeof searchLayerFeatures>[2]["groups"];
+    assert.equal(searchLayerFeatures([grouped], "site").length, 1);
+    assert.deepEqual(searchLayerFeatures([grouped], "site", { groups }), []);
+  });
+
+  it("keeps a layer whose parent group is visible", () => {
+    const grouped = layer("grouped", "Grouped", [point({ name: "Site A" })], {
+      groupId: "g1",
+    });
+    const groups = [
+      { id: "g1", name: "Group", visible: true, opacity: 1 },
+    ] as unknown as Parameters<typeof searchLayerFeatures>[2]["groups"];
+    assert.equal(searchLayerFeatures([grouped], "site", { groups }).length, 1);
+  });
+});
+
 describe("searchLayerFeatures — caps", () => {
   it("caps rows per layer and flags the group as partial", () => {
     const many = layer(
@@ -203,14 +226,32 @@ describe("searchLayerFeatures — caps", () => {
       Array.from({ length: 5000 }, (_, i) => point({ name: `Site ${i}` })),
     );
     // A clock that jumps a second per read blows the budget at the first check.
+    // The call-wide budget is left generous so this exercises the per-layer one.
     let ticks = 0;
     const [group] = searchLayerFeatures([many], "site", {
       maxPerLayer: 5000,
       layerBudgetMs: 10,
+      totalBudgetMs: 100_000,
       now: () => (ticks += 1000),
     });
     assert.equal(group.truncated, true);
     assert.ok(group.matches.length < 5000);
+  });
+
+  it("stops scanning further layers once the whole call's budget is spent", () => {
+    const layers = Array.from({ length: 6 }, (_, i) =>
+      layer(`l${i}`, `Layer ${i}`, [point({ name: "Site A" })]),
+    );
+    // A clock that jumps 50ms per read exhausts a 120ms total budget quickly,
+    // whatever the per-layer budget allows.
+    let ticks = 0;
+    const groups = searchLayerFeatures(layers, "site", {
+      maxLayers: 6,
+      totalBudgetMs: 120,
+      now: () => (ticks += 50),
+    });
+    assert.ok(groups.length > 0);
+    assert.ok(groups.length < 6, `expected fewer than 6 groups, got ${groups.length}`);
   });
 
   it("caps the number of layers reported", () => {
@@ -230,6 +271,7 @@ describe("searchLayerFeatures — caps", () => {
     const groups = searchLayerFeatures([big, small], "site", {
       maxFeaturesPerLayer: 10,
       maxPerLayer: 3,
+      totalBudgetMs: 100_000,
     });
     assert.deepEqual(
       groups.map((group) => group.layerId),

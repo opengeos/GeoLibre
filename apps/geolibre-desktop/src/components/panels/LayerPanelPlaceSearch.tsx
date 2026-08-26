@@ -25,6 +25,7 @@ import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
 import {
   type FeatureSearchGroup,
   type FeatureSearchMatch,
+  MIN_FEATURE_QUERY_LENGTH,
   searchLayerFeatures,
 } from "../../lib/feature-search";
 
@@ -42,7 +43,11 @@ const DEBOUNCE_MS = 500;
 const FEATURE_DEBOUNCE_MS = 120;
 /** Cap the result list so the dropdown stays compact at the panel foot. */
 const MAX_RESULTS = 6;
-/** Don't search until the query is at least this many characters. */
+/**
+ * Don't forward-geocode until the query is at least this many characters. The
+ * local scan has its own minimum, `MIN_FEATURE_QUERY_LENGTH`, which
+ * `searchLayerFeatures` enforces itself.
+ */
 const MIN_QUERY_LENGTH = 2;
 /** Ephemeral map ids for the outline drawn around a searched H3 cell. */
 const H3_SOURCE_ID = "geolibre-h3-search-cell";
@@ -91,6 +96,7 @@ export function LayerPanelPlaceSearch({
   const resultsId = `${useId()}-results`;
   const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
   const layers = useAppStore((s) => s.layers);
+  const layerGroups = useAppStore((s) => s.layerGroups);
   const [query, setQuery] = useState("");
   const [placeRows, setPlaceRows] = useState<SearchRow[]>([]);
   const [featureGroups, setFeatureGroups] = useState<FeatureSearchGroup[]>([]);
@@ -172,20 +178,25 @@ export function LayerPanelPlaceSearch({
   useEffect(() => {
     if (skipNextSearch.current) return;
     const trimmed = query.trim();
-    if (trimmed.length < MIN_QUERY_LENGTH) {
+    if (trimmed.length < MIN_FEATURE_QUERY_LENGTH) {
       setFeatureGroups([]);
+      setActiveIndex(-1);
       return;
     }
     const handle = setTimeout(() => {
-      const groups = searchLayerFeatures(layers, trimmed);
+      const groups = searchLayerFeatures(layers, trimmed, { groups: layerGroups });
       setFeatureGroups(groups);
+      // A layers change re-runs this effect without touching `query`, so the
+      // query-change effect below never gets to reset the highlight: rebuilding
+      // the rows under a stale index could leave it past the end of the list.
+      setActiveIndex(-1);
       // Only pop the dropdown open while the user is actually typing here: a
       // later layer change re-runs this effect, and reopening then would be a
       // dropdown appearing out of nowhere.
       if (groups.length > 0 && document.activeElement === inputRef.current) setOpen(true);
     }, FEATURE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [query, layers]);
+  }, [query, layers, layerGroups]);
 
   useEffect(() => {
     if (skipNextSearch.current) {
@@ -255,6 +266,11 @@ export function LayerPanelPlaceSearch({
 
   /** Reset the input and dropdown after a row has been acted on. */
   const settle = useCallback((label: string) => {
+    // Abort the outstanding forward-geocode: the local scan answers on a much
+    // shorter debounce, so a row can be picked while the network call is still
+    // in flight, and letting it resolve would repopulate the dropdown with
+    // results for a query the user has already moved on from.
+    abortRef.current?.abort();
     skipNextSearch.current = true;
     setQuery(label);
     setPlaceRows([]);
@@ -334,6 +350,10 @@ export function LayerPanelPlaceSearch({
     markerRef.current?.remove();
     markerRef.current = null;
     clearH3Highlight();
+    // Clearing the box clears what the box put on the map, and a picked feature
+    // row leaves a live selection behind. Dropping it here takes the highlight
+    // overlay with it, through the store rather than by touching MapLibre.
+    useAppStore.getState().selectFeature(null);
     setQuery("");
     setPlaceRows([]);
     setFeatureGroups([]);
@@ -505,7 +525,8 @@ export function LayerPanelPlaceSearch({
               setActiveIndex((i) => Math.max(i - 1, 0));
             } else if (event.key === "Enter" && hasRows) {
               event.preventDefault();
-              handleSelect(rows[activeIndex >= 0 ? activeIndex : 0]);
+              const row = rows[activeIndex >= 0 ? activeIndex : 0];
+              if (row) handleSelect(row);
             } else if (event.key === "Escape") {
               handleClear();
             }
