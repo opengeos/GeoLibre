@@ -95,7 +95,8 @@ One limit is worth knowing: a point layer using the **cluster** renderer builds
 its clusters from the layer's whole dataset before any filter applies, so while
 clustering is on the bubbles and their counts describe the unfiltered data. The
 same is true of a Time Slider window and a rule-based filter. Switch the point
-renderer back to single symbols to see a filtered layer's real counts.
+renderer back to **Single symbol** to see the filtered features drawn
+individually, one circle each, with no cluster counts to misread.
 
 ### Style interchange and URL styles
 

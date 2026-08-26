@@ -187,8 +187,15 @@ function RangeControl({
   onChange,
 }: Pick<QuickFilterControlProps, "filter" | "profile" | "idPrefix" | "onChange">) {
   const { t } = useTranslation();
+  // A degenerate extent (a constant column, or a single-feature layer) has no
+  // slider to draw: Radix positions each thumb at `(value - min) / (max - min)`,
+  // which is `0 / 0` when the ends coincide. The typed bounds below still work,
+  // so the control stays usable.
   const bounds =
-    profile && Number.isFinite(profile.min ?? NaN) && Number.isFinite(profile.max ?? NaN)
+    profile &&
+    Number.isFinite(profile.min ?? NaN) &&
+    Number.isFinite(profile.max ?? NaN) &&
+    (profile.min as number) < (profile.max as number)
       ? { min: profile.min as number, max: profile.max as number }
       : null;
 

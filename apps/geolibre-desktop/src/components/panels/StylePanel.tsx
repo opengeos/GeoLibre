@@ -183,6 +183,8 @@ function labelOverrideInvalid(
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
+  /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
+  mapReadyGeneration?: number;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Incremented when another part of the UI explicitly requests this panel. */
   openRequest?: number;
@@ -998,6 +1000,7 @@ function RasterStyleSlider({
 
 export function StylePanel({
   mapControllerRef,
+  mapReadyGeneration,
   onResizeStart,
   openRequest = 0,
   autoCollapse = false,
@@ -1811,10 +1814,14 @@ export function StylePanel({
   // layers, which are MapLibre custom layers and accept none — offering a
   // control there would be a control that quietly does nothing.
   const hasQuickFilterControls =
-    layer.type === "geojson" ||
-    layer.type === "vector-tiles" ||
-    layer.type === "mbtiles" ||
-    (hasExternalNativeLayers(layer) && !hasExternalDeckLayer(layer));
+    // The deck.gl guard is outermost: a deck-rendered layer keeps its original
+    // `type` (a deck GeoJSON layer is still `"geojson"`), so testing the type
+    // first would let it through even though a custom layer accepts no filter.
+    !hasExternalDeckLayer(layer) &&
+    (layer.type === "geojson" ||
+      layer.type === "vector-tiles" ||
+      layer.type === "mbtiles" ||
+      hasExternalNativeLayers(layer));
   // isPointOnly is memoized above the early returns to keep hook order stable.
   const supportsPointRenderer = supportsPointRendererFor(layer, isPointOnly);
   // The "Sketches" layer mixes geometry types under one style, so "Circle
@@ -4693,6 +4700,20 @@ export function StylePanel({
                 onChange={(value) => setLayerOpacity(layer.id, value)}
               />
             )}
+            {/* Filtering is independent of who owns the paint: layer sync
+                narrows a plugin-painted layer's native layers just like any
+                other, so the section belongs here too. */}
+            {hasQuickFilterControls ? (
+              <>
+                <Separator />
+                <QuickFiltersSection
+                  key={`qf-${layer.id}`}
+                  layer={layer}
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+              </>
+            ) : null}
           </div>
         </ScrollArea>
         <Separator />
@@ -4899,6 +4920,7 @@ export function StylePanel({
                   key={`qf-${layer.id}`}
                   layer={layer}
                   mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
                 />
               </>
             ) : null}
@@ -5083,6 +5105,7 @@ export function StylePanel({
                 key={`qf-${layer.id}`}
                 layer={layer}
                 mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
               />
             </>
           ) : null}

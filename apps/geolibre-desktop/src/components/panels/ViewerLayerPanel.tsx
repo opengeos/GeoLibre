@@ -13,11 +13,14 @@ const GROUP_INDENT_REM = 0.75;
 
 interface ViewerLayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
+  /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
+  mapReadyGeneration?: number;
 }
 
 interface ViewerQuickFiltersProps {
   layer: GeoLibreLayer;
   mapControllerRef: RefObject<MapController | null>;
+  mapReadyGeneration?: number;
   indentRem: number;
 }
 
@@ -30,10 +33,15 @@ interface ViewerQuickFiltersProps {
  * Only the controls the project's author configured are shown — there is no way
  * to add or remove one here — and clearing them is one obvious action.
  */
-function ViewerQuickFilters({ layer, mapControllerRef, indentRem }: ViewerQuickFiltersProps) {
+function ViewerQuickFilters({
+  layer,
+  mapControllerRef,
+  mapReadyGeneration,
+  indentRem,
+}: ViewerQuickFiltersProps) {
   const { t } = useTranslation();
   const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
-  const { byField } = useQuickFilterProfiles(layer, mapControllerRef);
+  const { byField } = useQuickFilterProfiles(layer, mapControllerRef, mapReadyGeneration);
   const filters = useMemo(() => layer.quickFilters ?? [], [layer.quickFilters]);
   const active = hasActiveQuickFilter(layer);
 
@@ -78,7 +86,7 @@ function ViewerQuickFilters({ layer, mapControllerRef, indentRem }: ViewerQuickF
  * toggle and whatever quick filters the project's author configured (see
  * {@link ViewerQuickFilters}).
  */
-export function ViewerLayerPanel({ mapControllerRef }: ViewerLayerPanelProps) {
+export function ViewerLayerPanel({ mapControllerRef, mapReadyGeneration }: ViewerLayerPanelProps) {
   const { t } = useTranslation();
   const layers = useAppStore((state) => state.layers);
   const layerGroups = useAppStore((state) => state.layerGroups);
@@ -153,6 +161,7 @@ export function ViewerLayerPanel({ mapControllerRef }: ViewerLayerPanelProps) {
               <ViewerQuickFilters
                 layer={layer}
                 mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
                 indentRem={depth * GROUP_INDENT_REM}
               />
             )}

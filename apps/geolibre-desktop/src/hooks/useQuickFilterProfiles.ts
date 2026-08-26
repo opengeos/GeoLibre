@@ -43,11 +43,18 @@ const EMPTY_PROFILES: QuickFilterProfiles = {
  *   selected.
  * @param mapControllerRef - The live map, needed to sample a tile-backed
  *   layer's loaded features.
+ * @param mapReadyGeneration - Bumped by the shell each time the map
+ *   (re)initializes. A dependency because `mapControllerRef` is a stable ref
+ *   object: without it, a hook that mounted before the map existed would return
+ *   before attaching its `idle` listener and never retry, leaving a tile-backed
+ *   layer stuck on "no features loaded". Mirrors
+ *   {@link useVectorTileGeometryBackfill}, which closes the same race.
  * @returns The field profiles and where they came from.
  */
 export function useQuickFilterProfiles(
   layer: GeoLibreLayer | null | undefined,
   mapControllerRef: RefObject<MapController | null>,
+  mapReadyGeneration = 0,
 ): QuickFilterProfiles {
   const features = layer?.geojson?.features;
   const hasLocalFeatures = (features?.length ?? 0) > 0;
@@ -96,7 +103,7 @@ export function useQuickFilterProfiles(
     return () => {
       map.off("idle", sample);
     };
-  }, [layerId, mapControllerRef, tileBacked]);
+  }, [layerId, mapControllerRef, mapReadyGeneration, tileBacked]);
 
   // A field the layer hides from its attribute table has been declared
   // uninteresting; do not offer a filter control for it either. Read outside

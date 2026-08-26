@@ -16,6 +16,8 @@ import { QuickFilterControl } from "./QuickFilterControl";
 interface QuickFiltersSectionProps {
   layer: GeoLibreLayer;
   mapControllerRef: RefObject<MapController | null>;
+  /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
+  mapReadyGeneration?: number;
 }
 
 function newFilterId(): string {
@@ -53,12 +55,17 @@ function filterForProfile(profile: QuickFilterFieldProfile): LayerQuickFilter {
  * (or the selection tools) when the goal is to act on features rather than to
  * take them off the map.
  */
-export function QuickFiltersSection({ layer, mapControllerRef }: QuickFiltersSectionProps) {
+export function QuickFiltersSection({
+  layer,
+  mapControllerRef,
+  mapReadyGeneration,
+}: QuickFiltersSectionProps) {
   const { t } = useTranslation();
   const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
   const { profiles, byField, sampledFromViewport, empty } = useQuickFilterProfiles(
     layer,
     mapControllerRef,
+    mapReadyGeneration,
   );
 
   const filters = useMemo(() => layer.quickFilters ?? [], [layer.quickFilters]);
