@@ -30,6 +30,18 @@ const DATE_FORMATS: PopupDateFormat[] = ["date", "datetime", "time", "iso", "yea
 type BuilderTarget = "title" | "body";
 
 /**
+ * Coerce the decimals input to what the formatter will actually honor: a whole
+ * number of places in `Intl.NumberFormat`'s 0-20 range. Storing the raw entry
+ * instead would let the control show `2.5` (or `-1`) while the popup rendered
+ * 2 (or 0) places, so the setting and the rendering would disagree.
+ */
+function decimalsFromInput(raw: string): number | undefined {
+  const parsed = Number(raw.trim());
+  if (raw.trim() === "" || !Number.isFinite(parsed)) return undefined;
+  return Math.max(0, Math.min(20, Math.round(parsed)));
+}
+
+/**
  * The Popup section of the layer style panel (issue #2113): design what a
  * viewer sees when they click or hover a feature — which fields appear, in
  * what order, under what labels and value formatting, with an optional title
@@ -413,15 +425,11 @@ export function PopupSection({ layer }: PopupSectionProps) {
                       min={0}
                       max={20}
                       value={config.format?.decimals ?? ""}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
+                      onChange={(event) =>
                         patchFormat(config, {
-                          decimals:
-                            event.target.value.trim() === "" || !Number.isFinite(parsed)
-                              ? undefined
-                              : parsed,
-                        });
-                      }}
+                          decimals: decimalsFromInput(event.target.value),
+                        })
+                      }
                     />
                   </div>
                   <label className="flex items-end gap-2 pb-2 text-xs">

@@ -189,7 +189,9 @@ function renderPopupValue(cell: HTMLElement, row: PopupRow): void {
   if (row.kind === "image") {
     if (isSafePopupUrl(row.value, true)) {
       const image = document.createElement("img");
-      image.src = row.value;
+      // Trimmed, because that is the copy isSafePopupUrl actually validated —
+      // as in the link branch below.
+      image.src = row.value.trim();
       image.alt = row.label;
       image.loading = "lazy";
       image.className = "max-h-40 max-w-full rounded";
@@ -2326,9 +2328,19 @@ export const MapCanvas = memo(function MapCanvas({
     // syncLayers creates the style layers and then dispatches this event, so
     // re-bind on it to catch layers that did not exist yet on the first run.
     window.addEventListener("geolibre-layer-labels-change", bind);
+    // Identify is armed from the toolbar, with no pointer event to hide a tip
+    // that is already open. `mouseleave` does not fire under a motionless
+    // cursor, so without this the tooltip would sit there while the Identify
+    // popup opened beside it. Same off->on guard as the photo-popup effect:
+    // this listener runs on every store change, so testing the current value
+    // alone would keep clearing a tip the user is still reading.
+    const unsubscribeIdentify = useAppStore.subscribe((state, prev) => {
+      if (state.identifyLayerId && !prev.identifyLayerId) removeTooltip();
+    });
 
     return () => {
       window.removeEventListener("geolibre-layer-labels-change", bind);
+      unsubscribeIdentify();
       unbind();
       removeTooltip();
     };

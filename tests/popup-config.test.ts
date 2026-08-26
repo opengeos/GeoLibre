@@ -127,7 +127,12 @@ describe("value formatting", () => {
       }),
       "1854",
     );
-    assert.equal(formatPopupValue(0, { kind: "date", format: { dateFormat: "year" } }), "1970");
+    // Mid-year epoch on purpose: the year format reads local time, so a value
+    // on a year boundary would assert differently per timezone.
+    assert.equal(
+      formatPopupValue(Date.UTC(1990, 5, 15), { kind: "date", format: { dateFormat: "year" } }),
+      "1990",
+    );
   });
 
   it("falls back to the raw text when a date field does not parse", () => {
@@ -326,6 +331,45 @@ describe("popup body expression", () => {
   });
 });
 
+describe("untrusted configuration", () => {
+  // A popup block reaches the renderer from a hand-edited `.geolibre.json`, an
+  // imported layer-library bundle, or an MCP-authored project, so a key typed
+  // as `string` may hold anything. None of it may throw.
+  const junk = {
+    titleField: 42,
+    titleExpression: { nope: true },
+    bodyExpression: 7,
+    fields: "not an array",
+  } as unknown as LayerPopupConfig;
+
+  it("falls back to the layer name for a non-string title", () => {
+    assert.equal(resolvePopupTitle("us_cities", CITY, junk), "us_cities");
+  });
+
+  it("renders no body for a non-string body expression", () => {
+    assert.equal(resolvePopupBody(CITY, junk), null);
+  });
+
+  it("treats a non-array field list as no configuration at all", () => {
+    const rows = resolvePopupRows(CITY, { popup: junk });
+    assert.deepEqual(
+      rows.map((row) => row.field),
+      ["name", "sov_a3", "pop_max", "founded", "site", "created_by"],
+    );
+  });
+
+  it("drops field entries whose name is not a string", () => {
+    const popup = {
+      fields: [null, { field: 3 }, { field: "name", label: 9 }],
+    } as unknown as LayerPopupConfig;
+    const rows = resolvePopupRows(CITY, { popup });
+    assert.deepEqual(
+      rows.map((row) => [row.field, row.label]),
+      [["name", "name"]],
+    );
+  });
+});
+
 describe("popup URL safety", () => {
   it("accepts http(s) links and refuses everything else", () => {
     assert.equal(isSafePopupUrl("https://example.com/a"), true);
@@ -370,7 +414,7 @@ describe("project round trip", () => {
     const layer: GeoLibreLayer = {
       id: "cities",
       name: "us_cities",
-      type: "vector",
+      type: "geojson",
       source: { type: "geojson" },
       visible: true,
       opacity: 1,

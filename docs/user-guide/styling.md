@@ -20,11 +20,11 @@ You can also set a per-style minimum and maximum zoom so a style only applies wi
 
 For point-only GeoJSON layers — whether dropped on the map, produced by a tool, or loaded through **Add Vector Layer** in the geojson render mode — the Style panel adds a **Point renderer** control:
 
-| Renderer | Description |
-| --- | --- |
-| **Single symbol** | One circle per point (the default). |
-| **Heatmap** | A density surface colored from cold to hot. Adjust **Heatmap radius** (the kernel size in pixels) and **Heatmap intensity**. |
-| **Clustered** | Group nearby points into bubbles labeled with the count; zooming in splits them apart. Adjust the **Cluster radius** (in pixels) and the **Cluster max zoom** above which points stop clustering. Individual (unclustered) points keep the layer's circle style. |
+| Renderer          | Description                                                                                                                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single symbol** | One circle per point (the default).                                                                                                                                                                                                                              |
+| **Heatmap**       | A density surface colored from cold to hot. Adjust **Heatmap radius** (the kernel size in pixels) and **Heatmap intensity**.                                                                                                                                     |
+| **Clustered**     | Group nearby points into bubbles labeled with the count; zooming in splits them apart. Adjust the **Cluster radius** (in pixels) and the **Cluster max zoom** above which points stop clustering. Individual (unclustered) points keep the layer's circle style. |
 
 The renderer choice is saved with the project.
 
@@ -32,13 +32,13 @@ The renderer choice is saved with the project.
 
 The **Style type** control chooses how feature values map to color:
 
-| Style type | Description |
-| --- | --- |
-| **Single symbology** | One uniform style for every feature. |
-| **Graduated** | Classify a numeric attribute into classes and colour them from a ramp. |
-| **Categorized** | Give each of an attribute's distinct values its own colour. |
-| **Rule-based** | Build a list of rules, each with its own filter, symbol properties, and optional scale-dependent visibility. |
-| **Advanced expression** | Drive styling with a custom MapLibre expression for full control. |
+| Style type              | Description                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Single symbology**    | One uniform style for every feature.                                                                         |
+| **Graduated**           | Classify a numeric attribute into classes and colour them from a ramp.                                       |
+| **Categorized**         | Give each of an attribute's distinct values its own colour.                                                  |
+| **Rule-based**          | Build a list of rules, each with its own filter, symbol properties, and optional scale-dependent visibility. |
+| **Advanced expression** | Drive styling with a custom MapLibre expression for full control.                                            |
 
 Graduated and categorized styles share four more controls, and then list the generated stops so you can fine-tune an individual colour before applying:
 
@@ -60,7 +60,7 @@ The selected vector layer's **Layer actions → Styles** submenu imports and exp
 See [Managing Layers](layers.md#importing-and-exporting-styles) for the menu workflow and [Embedding & Sharing](embedding.md#open-remote-data) for the JSON conventions.
 
 !!! tip "Choropleth maps"
-    To make a choropleth, select **Graduated**, pick a numeric attribute, choose a colormap, and click **Apply style type**. See the [Your First Map tutorial](../tutorials/first-map.md).
+To make a choropleth, select **Graduated**, pick a numeric attribute, choose a colormap, and click **Apply style type**. See the [Your First Map tutorial](../tutorials/first-map.md).
 
 ### Popups and hover tooltips
 
@@ -70,7 +70,7 @@ Further down the Style panel, the **Popup** section designs what a viewer sees w
 - **Title field** leads the popup with the feature's own name rather than the layer's. **Title expression** does the same from an expression, and wins over the field.
 - **Body expression** replaces the field rows with a sentence built from the feature's properties, for authors who want prose rather than a table. Both boxes open the same expression builder that backs [data-driven styling](#style-type-data-driven-styling), labels, and filters.
 - **Fields** chooses which attributes appear and in what order. Add a field from the picker, drag its handle (or use the arrow buttons) to reorder, and give it a **Label** to show instead of the raw column name. Leave the list empty to keep the default: every visible field, in the data's own order.
-- **Value type** formats the value: **Number** (decimals, thousands separator), **Date** (date, date and time, time, ISO 8601, or year), **Link**, **Image**, or plain **Text**. **Prefix** and **Suffix** wrap the result, which is where a currency symbol or a unit goes.
+- **Value type** formats the value: **Number** (decimals, thousands separator), **Date** (date, date and time, time, ISO 8601, or year), **Link**, **Image**, or plain **Text**. For **Automatic**, **Text**, **Number** and **Date** fields, **Prefix** and **Suffix** wrap the result, which is where a currency symbol or a unit goes.
 - **In hover tooltip** puts a field in the tooltip's short subset. Keep it to one or two fields: the tip follows the pointer, so it is a glance, not a table.
 
 Fields you hid or excluded from the [attribute table](attribute-table.md) stay out of the popup: the popup design selects from the visible fields and cannot re-expose a hidden one. A layer with nothing configured behaves exactly as before, and the whole design saves with the project, so it travels to the Python package and the MCP authoring tools as well.

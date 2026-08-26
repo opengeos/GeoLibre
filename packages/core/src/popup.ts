@@ -49,6 +49,21 @@ export interface PopupRow {
   linkLabel?: string;
 }
 
+/**
+ * A trimmed non-empty string, or `undefined` for anything else.
+ *
+ * Popup configs arrive from untrusted JSON — a hand-edited `.geolibre.json`, an
+ * imported layer-library bundle, an MCP-authored project — so a field typed as
+ * `string` may hold a number, an object or null. `value.trim()` on one of those
+ * throws and takes the whole popup render with it, so every string read here
+ * goes through this.
+ */
+function trimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
 /** Whether the Identify popup should open for a layer. Default: yes. */
 export function isPopupClickEnabled(popup: LayerPopupConfig | undefined): boolean {
   return popup?.click !== false;
@@ -61,7 +76,7 @@ export function isPopupHoverEnabled(popup: LayerPopupConfig | undefined): boolea
 
 /** The label a popup shows for a configured field. */
 export function popupFieldLabel(config: PopupFieldConfig): string {
-  return config.label?.trim() || config.field;
+  return trimmedString(config.label) ?? config.field;
 }
 
 /**
@@ -136,7 +151,12 @@ function formatDate(date: Date, dateFormat: PopupDateFormat, locale?: string): s
     case "iso":
       return date.toISOString();
     case "year":
-      return String(date.getUTCFullYear());
+      // Local, like the date/datetime/time cases above — only `iso` is
+      // deliberately UTC, because that is what the format itself means. Reading
+      // the year in UTC while the neighbouring formats read local would make
+      // "Year" disagree with "Date" for the same timestamp near a year
+      // boundary (2026-01-01T02:00:00Z is Dec 31 2025 in UTC-8).
+      return String(date.getFullYear());
     case "date":
     default:
       return date.toLocaleDateString(locale);
@@ -220,7 +240,13 @@ export function resolvePopupRows(
   options: ResolvePopupRowsOptions = {},
 ): PopupRow[] {
   const { popup, fieldVisibility, hover = false, locale } = options;
-  const configured = popup?.fields ?? [];
+  // Untrusted JSON again: `fields` may be absent, a non-array, or hold entries
+  // whose `field` is not a string. Anything unusable is dropped here so the
+  // loop below can treat every entry as a real field name.
+  const configured = (Array.isArray(popup?.fields) ? popup.fields : []).filter(
+    (config): config is PopupFieldConfig =>
+      Boolean(config) && typeof (config as PopupFieldConfig).field === "string",
+  );
 
   if (configured.length === 0) {
     if (hover) return [];
@@ -251,7 +277,9 @@ export function resolvePopupRows(
       value,
       text: formatPopupValue(value, config, { locale }),
       kind: config.kind ?? "auto",
-      ...(config.format?.linkLabel?.trim() ? { linkLabel: config.format.linkLabel.trim() } : {}),
+      ...(trimmedString(config.format?.linkLabel)
+        ? { linkLabel: trimmedString(config.format?.linkLabel) }
+        : {}),
     });
   }
   return rows;
@@ -285,7 +313,7 @@ export function resolvePopupTitle(
     fieldVisibility?: Record<string, FieldVisibility>;
   } = {},
 ): string {
-  const source = popup?.titleExpression?.trim();
+  const source = trimmedString(popup?.titleExpression);
   if (source) {
     const preview = evaluateMapExpression(source, {
       feature: featureFor(properties, options.feature),
@@ -296,7 +324,7 @@ export function resolvePopupTitle(
       if (text) return text;
     }
   }
-  const field = popup?.titleField?.trim();
+  const field = trimmedString(popup?.titleField);
   if (field && !options.fieldVisibility?.[field] && !isInternalPopupField(field)) {
     const text = stringifyPopupValue(properties[field]).trim();
     if (text) return text;
@@ -313,7 +341,7 @@ export function resolvePopupBody(
   popup: LayerPopupConfig | undefined,
   options: PopupExpressionOptions = {},
 ): string | null {
-  const source = popup?.bodyExpression?.trim();
+  const source = trimmedString(popup?.bodyExpression);
   if (!source) return null;
   const preview = evaluateMapExpression(source, {
     feature: featureFor(properties, options.feature),
