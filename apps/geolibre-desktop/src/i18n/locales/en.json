@@ -6773,6 +6773,51 @@
       "columnTaken": "“{{name}}” is already an attribute column. Tracking would overwrite its values."
     }
   },
+  "quickFilters": {
+    "heading": "Quick filters",
+    "empty": "No filters yet. Add one below to narrow this layer by any of its fields.",
+    "addFilter": "Add a filter…",
+    "allFieldsUsed": "Every field already has a filter",
+    "removeAll": "Remove all",
+    "clearAll": "Clear filters",
+    "clearOne": "Clear this filter",
+    "clearOneNamed": "Clear the filter on {{field}}",
+    "remove": "Remove filter",
+    "removeNamed": "Remove the filter on {{field}}",
+    "controlType": "Filter type",
+    "enabledTitle": "Apply this filter",
+    "kind": {
+      "categorical": "Values",
+      "range": "Range",
+      "date": "Dates",
+      "text": "Text"
+    },
+    "operator": {
+      "contains": "Contains",
+      "startsWith": "Starts with",
+      "equals": "Is exactly"
+    },
+    "searchValues": "Search values",
+    "noValues": "This field has no values to choose from.",
+    "noMatchingValues": "No values match your search.",
+    "selectAll": "Select all",
+    "selectNone": "Select none",
+    "allValues": "All values",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maximum",
+    "rangeSeparator": "to",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "textOperator": "Match",
+    "textValue": "Text to match",
+    "textPlaceholder": "Type to filter",
+    "noFields": "This layer has no attributes to filter on.",
+    "noTileFeatures": "No features are loaded yet. Pan or zoom to the data, then reopen this section.",
+    "viewportSampleHint": "Values come from the tiles currently loaded, so the list grows as you pan and zoom.",
+    "layerFilteredHint": "A quick filter is hiding some of this layer's features."
+  },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML export could not write feature {{position}} because it has invalid coordinates.",
     "invalidKmlCoordinatesById": "KML export could not write feature ID {{id}} because it has invalid coordinates."

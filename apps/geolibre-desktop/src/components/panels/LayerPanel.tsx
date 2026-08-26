@@ -24,8 +24,10 @@ import {
   isStyleLibraryTargetLayer,
   canSaveLayerToLibrary,
   captureLayerLibraryEntry,
+  clearQuickFilterValues,
   createLayerLibraryEntryId,
   copyableLayerStyleKind,
+  hasActiveQuickFilter,
   pluginOwnsPaint,
   supportsBridgedOpacity,
   useAppStore,
@@ -143,6 +145,7 @@ import {
   Eye,
   EyeOff,
   FilePlus2,
+  Filter,
   Folder,
   FolderMinus,
   FolderOpen,
@@ -693,6 +696,7 @@ export function LayerPanel({
   }, [selectedPlanet, basemapStyleUrl]);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
+  const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const moveLayersRelative = useAppStore((s) => s.moveLayersRelative);
@@ -3459,6 +3463,16 @@ export function LayerPanel({
                           />
                         </span>
                       )}
+                      {/* A quick filter hides features, so say so on the row:
+                          without this a filtered layer reads as missing data. */}
+                      {hasActiveQuickFilter(layer) && (
+                        <span title={t("quickFilters.layerFilteredHint")}>
+                          <Filter
+                            className="h-3 w-3 shrink-0 text-primary"
+                            aria-label={t("quickFilters.layerFilteredHint")}
+                          />
+                        </span>
+                      )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
                         {layerTypeLabel(layer, t)}
                       </span>
@@ -3676,6 +3690,22 @@ export function LayerPanel({
                             >
                               <Palette className="me-2 h-3.5 w-3.5" />
                               {t("layers.openStylePanel")}
+                            </DropdownMenuItem>
+                          )}
+                          {/* Clearing keeps the controls the author configured
+                              and only empties what they were answered with, so
+                              the next question does not start from scratch. */}
+                          {hasActiveQuickFilter(layer) && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setLayerQuickFilters(
+                                  layer.id,
+                                  clearQuickFilterValues(layer.quickFilters),
+                                )
+                              }
+                            >
+                              <Filter className="me-2 h-3.5 w-3.5" />
+                              {t("quickFilters.clearAll")}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem

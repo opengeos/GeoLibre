@@ -2401,7 +2401,7 @@ export function DesktopShell({
             ) : layoutOptions.layerPanelVisible ? (
               <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
                 {layoutOptions.viewer ? (
-                  <ViewerLayerPanel />
+                  <ViewerLayerPanel mapControllerRef={mapControllerRef} />
                 ) : (
                   <LayerPanel
                     mapControllerRef={mapControllerRef}

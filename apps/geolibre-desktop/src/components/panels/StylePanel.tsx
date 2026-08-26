@@ -64,6 +64,7 @@ import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
 import { EditorTrackingSection } from "./EditorTrackingSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
+import { QuickFiltersSection } from "./QuickFiltersSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { getNetcdfLayerState, NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
 import { NetcdfProfilePanel } from "./NetcdfProfilePanel";
@@ -1798,6 +1799,14 @@ export function StylePanel({
     !isPluginPaintedLayer &&
     (isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer);
   const hasTextMarkerControls = layer.type === "geojson" && hasTextMarkerFeatures(layer);
+  // Quick filters compile to the per-feature MapLibre filter layer sync already
+  // applies, so they are offered wherever that filter reaches: the vector
+  // paint surfaces plus vector PMTiles (which paint through the control's own
+  // native layers rather than through the vector paint controls).
+  const hasQuickFilterControls =
+    hasVectorPaintControls ||
+    (layer.type === "pmtiles" &&
+      (layer.metadata.tileType === "vector" || layer.source.type === "vector"));
   // isPointOnly is memoized above the early returns to keep hook order stable.
   const supportsPointRenderer = supportsPointRendererFor(layer, isPointOnly);
   // The "Sketches" layer mixes geometry types under one style, so "Circle
@@ -5040,6 +5049,19 @@ export function StylePanel({
               <Separator />
               <p className="text-sm font-semibold">{t("style.labels.heading")}</p>
               {labelControls}
+            </>
+          ) : null}
+          {/* Quick filters narrow what the layer draws, so they apply to every
+              vector layer — including tile-backed ones, which profile the
+              features currently loaded rather than a local copy. */}
+          {hasQuickFilterControls ? (
+            <>
+              <Separator />
+              <QuickFiltersSection
+                key={`qf-${layer.id}`}
+                layer={layer}
+                mapControllerRef={mapControllerRef}
+              />
             </>
           ) : null}
           {/* Persistent attribute joins need the layer's features in the store

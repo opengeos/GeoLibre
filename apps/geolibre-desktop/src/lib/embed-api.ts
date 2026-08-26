@@ -336,7 +336,9 @@ function parseToolParams(value: unknown): Record<string, string> {
  * null when it is a usable filter.
  *
  * `setFilter` stores its expression as `layer.embedFilter`, which `layer-sync`
- * merges into every render layer's filter (`["all", <geometry>, …]`). A
+ * merges into every render layer's filter (`["all", <geometry>, …]`) alongside
+ * the layer's own quick filters, so a host filter and a user's filter narrow
+ * the layer together rather than clobbering each other. A
  * malformed one cannot be reported from there: the store write always succeeds,
  * so the host would get `ok: true` and the failure would surface later, on a
  * `setFilter` call the host is no longer waiting on — or not at all. Compiling
