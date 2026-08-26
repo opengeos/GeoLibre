@@ -98,7 +98,6 @@ export function AiSectionContent({
     try {
       const models = await discoverOllamaModels(newProfileFieldValues.OLLAMA_BASE_URL ?? "");
       setOllamaModels(models);
-      if (models.length > 0 && !models.includes(newProfileModel)) setNewProfileModel(models[0]);
     } catch (error) {
       console.error("[GeoLibre] Could not load Ollama models", error);
     } finally {
@@ -143,6 +142,7 @@ export function AiSectionContent({
     setNewProfileProvider("google");
     setNewProfileModel(defaultModelFor("google"));
     setNewProfileFieldValues({});
+    setOllamaModels([]);
     setIsCreatingProfile(true);
     setEditingProfileId(null);
   };
@@ -205,6 +205,7 @@ export function AiSectionContent({
       {editingProfileId && editingProfile ? (
         // ── Profile editor ──
         <ProfileEditor
+          key={editingProfile.id}
           profile={editingProfile}
           setDraftDesktopSettings={setDraftDesktopSettings}
           onBack={cancelEditing}
@@ -241,11 +242,13 @@ export function AiSectionContent({
             <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
             <Select
               value={newProfileProvider}
+              disabled={loadingOllamaModels}
               onChange={(e) => {
                 const provider = e.target.value as AssistantProviderId;
                 setNewProfileProvider(provider);
                 setNewProfileModel(defaultModelFor(provider));
                 setNewProfileFieldValues({});
+                setOllamaModels([]);
               }}
             >
               {ASSISTANT_PROVIDER_IDS.map((id) => (
@@ -266,7 +269,7 @@ export function AiSectionContent({
                   onChange={(e) => setNewProfileModel(e.target.value)}
                 >
                   {(newProfileProvider === "ollama" && ollamaModels.length > 0
-                    ? ollamaModels
+                    ? [...new Set([newProfileModel, ...ollamaModels].filter(Boolean))]
                     : PROVIDER_MODELS[newProfileProvider]
                   ).map((id) => (
                     <option key={id} value={id}>
@@ -478,6 +481,7 @@ function ProfileEditor({
   };
 
   const updateProvider = (provider: AssistantProviderId) => {
+    setOllamaModels([]);
     setDraftDesktopSettings((current: any) => ({
       ...current,
       aiProfiles: current.aiProfiles.map((p: any) =>
@@ -498,7 +502,7 @@ function ProfileEditor({
   const models = PROVIDER_MODELS[profile.provider];
   const selectableModels =
     profile.provider === "ollama" && ollamaModels.length > 0
-      ? ollamaModels
+      ? [...new Set([profile.modelId, ...ollamaModels].filter(Boolean))]
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
 
@@ -507,12 +511,12 @@ function ProfileEditor({
     setLoadingOllamaModels(true);
     try {
       const discovered = await discoverOllamaModels(
-        baseUrlField ? getProviderField(baseUrlField) : "",
+        (baseUrlField ? getProviderField(baseUrlField) : "") ||
+          scopedOsEnv.OLLAMA_BASE_URL ||
+          scopedOsEnv.OLLAMA_HOST ||
+          "",
       );
       setOllamaModels(discovered);
-      if (discovered.length > 0 && !discovered.includes(profile.modelId)) {
-        updateModel(discovered[0]);
-      }
     } catch (error) {
       console.error("[GeoLibre] Could not load Ollama models", error);
     } finally {
@@ -547,6 +551,7 @@ function ProfileEditor({
         <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
         <Select
           value={profile.provider}
+          disabled={loadingOllamaModels}
           onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
         >
           {ASSISTANT_PROVIDER_IDS.map((id) => (

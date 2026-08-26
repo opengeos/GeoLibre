@@ -7,7 +7,14 @@ export async function discoverOllamaModels(baseUrl: string): Promise<string[]> {
   let normalized = baseUrl.trim() || "http://localhost:11434";
   if (!/^https?:\/\//i.test(normalized)) normalized = `http://${normalized}`;
   normalized = normalized.replace(/\/+$/, "").replace(/\/v1$/i, "");
-  const response = await fetch(`${normalized}/api/tags`);
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetch(`${normalized}/api/tags`, { signal: controller.signal });
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
   const payload = (await response.json()) as OllamaTagsResponse;
   return [
