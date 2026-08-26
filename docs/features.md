@@ -78,6 +78,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Copy and paste of a layer's style onto another layer
     - A metadata dialog that reads a raster's real georeferencing from the GeoTIFF header: CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews
     - A Search places box in the footer that geocodes to a location, flies straight to a typed coordinate in decimal degrees, DMS, or DDM, or flies to an H3 cell index typed as either a hexadecimal string or a 64-bit integer (framing and outlining the cell) — all without leaving the panel
+    - The same box also searches the loaded vector layers' own attributes, so a parcel id, a station code, or a well name is found in the data you just added. Matches are grouped by layer above the place results and ranked exact match first, then prefix, then contains; picking one selects that feature on its layer and flies to it with the attribute table's highlight. Fields marked hidden or excluded are skipped, as are hidden layers and tile-backed layers that hold no local features
 - Nested layer groups that give the layer stack a real hierarchy. See [Layer groups](user-guide/layers.md#layer-groups)
     - Create a group from scratch, from the current layer, or from a multi-selection
     - Move one layer or a whole selection into a group in one step, or add new data straight into a group

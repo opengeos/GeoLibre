@@ -469,6 +469,7 @@
 - [x] **A shared link can carry presentation settings**: `settingsUrl=` loads language, layout, accent theme, and UI profile before the first render, restricted to presentation fields so a link cannot inject credentials, plugins, or local paths, and lasting for that page only instead of replacing what the user has saved. See [Embedding & Sharing](user-guide/embedding.md)
 - [x] **Geometry generators become attribute-driven**: derived centroids scale with a field as proportional symbols, and each feature's buffer takes its distance from a column instead of one typed number, following QGIS's data-defined overrides
 - [x] **Excel workbooks import as point layers** from their X and Y columns, with a worksheet picker
+- [x] **The Layers panel search box searches the map's own data**: the typed query is matched against the attributes of the loaded vector layers alongside the geocoder, running locally so data matches appear before the network answers, grouped by layer above the place results and ranked exact match first, then prefix, then contains, with picking a feature selecting it on its layer and flying to it with the attribute table's highlight
 - [x] A Style panel button on every layer card, field statistics scoped to the selected features, USGS LiDAR clipped and downloaded as COPC, ArcGIS ImageServer raster functions browsed from the service's own list, and `?data=` accepting several URLs at once
 
 ## Plugin marketplace and registry (design)

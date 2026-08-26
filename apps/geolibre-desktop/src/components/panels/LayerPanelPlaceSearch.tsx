@@ -19,9 +19,14 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
-import { Hexagon, Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
+import { Hexagon, Loader2, LocateFixed, MapPin, Search, Table2, X } from "lucide-react";
 import { formatLatLon, parseLatLon } from "../../lib/coordinates";
 import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
+import {
+  type FeatureSearchGroup,
+  type FeatureSearchMatch,
+  searchLayerFeatures,
+} from "../../lib/feature-search";
 
 interface LayerPanelPlaceSearchProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -29,6 +34,12 @@ interface LayerPanelPlaceSearchProps {
 
 /** Fast-UI minimum debounce before firing a forward-geocode while typing. */
 const DEBOUNCE_MS = 500;
+/**
+ * Debounce for the local attribute scan. Much shorter than the geocoder's,
+ * because the work is local and capped: data results land while the network
+ * call is still in flight, which is the point of running the two separately.
+ */
+const FEATURE_DEBOUNCE_MS = 120;
 /** Cap the result list so the dropdown stays compact at the panel foot. */
 const MAX_RESULTS = 6;
 /** Don't search until the query is at least this many characters. */
@@ -43,10 +54,29 @@ const H3_HIGHLIGHT_COLOR = "#ef4444";
 type SearchStatus = "idle" | "loading" | "error" | "empty";
 
 /**
+ * One selectable row of the dropdown. Place, coordinate, and H3 rows come from
+ * the geocoder half; feature rows come from the loaded layers. Keeping them in
+ * one flat list is what lets the arrow keys walk the whole dropdown while the
+ * two halves still render as visually separate groups.
+ */
+type SearchRow =
+  | { kind: "place"; match: GeocodeMatch }
+  | { kind: "coordinate"; match: GeocodeMatch }
+  | { kind: "h3"; match: GeocodeMatch; cell: H3CellMatch }
+  | { kind: "feature"; match: FeatureSearchMatch };
+
+/**
  * A compact "Search places" geocoder input pinned to the bottom of the Layers
- * panel. Forward-geocodes the typed query through the configured provider,
- * lists matches in a dropdown above the input, and on selection flies the map
- * to the place and drops a marker. Replaces the former advanced-formats note.
+ * panel. It searches two things at once, independently:
+ *
+ * - **The data on the map.** The typed query is matched against the attributes
+ *   of the loaded vector layers (`feature-search.ts`), grouped by layer at the
+ *   top of the dropdown. This is local and capped, so it answers immediately,
+ *   before the geocoder does. Selecting a feature selects it in the store and
+ *   flies to it with the same highlight the attribute table uses.
+ * - **Places.** The query is forward-geocoded through the configured provider
+ *   and the matches are listed below the data groups; selecting one flies the
+ *   map to the place and drops a marker.
  *
  * Two query forms bypass the geocoder entirely and resolve locally: a lat/lon
  * coordinate (see `coordinates.ts`) and an H3 cell index in either spelling
@@ -60,23 +90,20 @@ export function LayerPanelPlaceSearch({
   // Per-instance id so multiple mounts never collide on the aria-controls link.
   const resultsId = `${useId()}-results`;
   const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
+  const layers = useAppStore((s) => s.layers);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GeocodeMatch[]>([]);
-  // True when the single result is a parsed lat/lon jump rather than a geocoder
-  // match, so the row is labeled and iconed as a coordinate instead of a place.
-  const [isCoordinate, setIsCoordinate] = useState(false);
-  // Set when the single result is a parsed H3 cell index, both to label the row
-  // and to supply the outline drawn on selection.
-  const [h3Cell, setH3Cell] = useState<H3CellMatch | null>(null);
+  const [placeRows, setPlaceRows] = useState<SearchRow[]>([]);
+  const [featureGroups, setFeatureGroups] = useState<FeatureSearchGroup[]>([]);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [activeIndex, setActiveIndex] = useState(-1);
   const abortRef = useRef<AbortController | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Skip the debounce effect for the one query change caused by selecting a
-  // result (which fills the input with the place name); without this the
-  // selection would immediately re-trigger a search for that full name.
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Skip the debounce effects for the one query change caused by selecting a
+  // result (which fills the input with the place or feature name); without this
+  // the selection would immediately re-trigger a search for that full name.
   const skipNextSearch = useRef(false);
 
   // Honor the provider's request-spacing policy: the public Nominatim host
@@ -118,10 +145,7 @@ export function LayerPanelPlaceSearch({
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      setIsCoordinate(false);
-      setH3Cell(null);
       setStatus("loading");
-      setActiveIndex(-1);
       setOpen(true);
       try {
         const config = resolveGeocoderConfig(geocodingPrefs);
@@ -131,16 +155,37 @@ export function LayerPanelPlaceSearch({
           limit: MAX_RESULTS,
         });
         if (controller.signal.aborted) return;
-        setResults(matches);
+        setPlaceRows(matches.map((match) => ({ kind: "place", match })));
         setStatus(matches.length ? "idle" : "empty");
       } catch {
         if (controller.signal.aborted) return;
-        setResults([]);
+        setPlaceRows([]);
         setStatus("error");
       }
     },
     [geocodingPrefs],
   );
+
+  // The local half: match the query against the loaded layers' attributes. It
+  // runs on its own short debounce, independent of the geocoder above, so the
+  // data groups appear while the network call is still outstanding.
+  useEffect(() => {
+    if (skipNextSearch.current) return;
+    const trimmed = query.trim();
+    if (trimmed.length < MIN_QUERY_LENGTH) {
+      setFeatureGroups([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      const groups = searchLayerFeatures(layers, trimmed);
+      setFeatureGroups(groups);
+      // Only pop the dropdown open while the user is actually typing here: a
+      // later layer change re-runs this effect, and reopening then would be a
+      // dropdown appearing out of nowhere.
+      if (groups.length > 0 && document.activeElement === inputRef.current) setOpen(true);
+    }, FEATURE_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [query, layers]);
 
   useEffect(() => {
     if (skipNextSearch.current) {
@@ -150,24 +195,26 @@ export function LayerPanelPlaceSearch({
     const trimmed = query.trim();
     if (trimmed.length < MIN_QUERY_LENGTH) {
       abortRef.current?.abort();
-      setResults([]);
+      setPlaceRows([]);
       setActiveIndex(-1);
-      setIsCoordinate(false);
-      setH3Cell(null);
       setStatus("idle");
       setOpen(false);
       return;
     }
+    setActiveIndex(-1);
     // H3 short-circuit: a query that parses as an H3 cell index (hexadecimal or
     // unsigned 64-bit integer) resolves locally to that cell's center, so the
     // exact cell is used rather than whatever the geocoder makes of the digits.
     const cell = parseH3Cell(trimmed);
     if (cell) {
       abortRef.current?.abort();
-      setResults([{ lat: cell.lat, lon: cell.lon, displayName: cell.cell, score: null }]);
-      setActiveIndex(0);
-      setIsCoordinate(false);
-      setH3Cell(cell);
+      setPlaceRows([
+        {
+          kind: "h3",
+          cell,
+          match: { lat: cell.lat, lon: cell.lon, displayName: cell.cell, score: null },
+        },
+      ]);
       setStatus("idle");
       setOpen(true);
       return;
@@ -179,12 +226,12 @@ export function LayerPanelPlaceSearch({
     const coord = parseLatLon(trimmed);
     if (coord) {
       abortRef.current?.abort();
-      setResults([
-        { lat: coord.lat, lon: coord.lon, displayName: formatLatLon(coord), score: null },
+      setPlaceRows([
+        {
+          kind: "coordinate",
+          match: { lat: coord.lat, lon: coord.lon, displayName: formatLatLon(coord), score: null },
+        },
       ]);
-      setActiveIndex(0);
-      setIsCoordinate(true);
-      setH3Cell(null);
       setStatus("idle");
       setOpen(true);
       return;
@@ -195,8 +242,30 @@ export function LayerPanelPlaceSearch({
     return () => clearTimeout(handle);
   }, [query, debounceMs, runSearch]);
 
+  /** Every selectable row, data groups first, in the order they render. */
+  const rows = useMemo<SearchRow[]>(
+    () => [
+      ...featureGroups.flatMap((group) =>
+        group.matches.map((match): SearchRow => ({ kind: "feature", match })),
+      ),
+      ...placeRows,
+    ],
+    [featureGroups, placeRows],
+  );
+
+  /** Reset the input and dropdown after a row has been acted on. */
+  const settle = useCallback((label: string) => {
+    skipNextSearch.current = true;
+    setQuery(label);
+    setPlaceRows([]);
+    setFeatureGroups([]);
+    setActiveIndex(-1);
+    setStatus("idle");
+    setOpen(false);
+  }, []);
+
   const handleSelect = useCallback(
-    (match: GeocodeMatch) => {
+    (row: SearchRow) => {
       const map = mapControllerRef.current?.getMap();
       // Drop the previous marker and cell outline unconditionally so neither is
       // ever orphaned when the map is briefly unavailable (mount/teardown/
@@ -204,7 +273,22 @@ export function LayerPanelPlaceSearch({
       markerRef.current?.remove();
       markerRef.current = null;
       clearH3Highlight();
-      if (map && h3Cell) {
+
+      if (row.kind === "feature") {
+        // Reuse the attribute table's path: make the feature the live selection
+        // on its layer, then let the shared highlight overlay frame it. The
+        // explicit fit is what the row promises ("fly to it"), regardless of the
+        // "zoom to selected feature" preference the map effect honors.
+        const store = useAppStore.getState();
+        store.selectLayer(row.match.layerId);
+        store.selectFeature(row.match.featureId);
+        const layer = store.layers.find((item) => item.id === row.match.layerId);
+        mapControllerRef.current?.highlightFeature(layer, row.match.featureId, { fit: true });
+        settle(row.match.value);
+        return;
+      }
+
+      if (map && row.kind === "h3") {
         // An H3 cell spans anything from a continent (resolution 0) to under a
         // square meter (resolution 15), so frame the cell itself rather than
         // flying to a fixed zoom, and outline it so the match is visible.
@@ -212,8 +296,8 @@ export function LayerPanelPlaceSearch({
           type: "geojson",
           data: {
             type: "Feature",
-            properties: { h3: h3Cell.cell, resolution: h3Cell.resolution },
-            geometry: { type: "Polygon", coordinates: [h3Cell.boundary] },
+            properties: { h3: row.cell.cell, resolution: row.cell.resolution },
+            geometry: { type: "Polygon", coordinates: [row.cell.boundary] },
           },
         });
         map.addLayer({
@@ -229,27 +313,20 @@ export function LayerPanelPlaceSearch({
           paint: { "line-color": H3_HIGHLIGHT_COLOR, "line-width": 2 },
         });
         const bounds = new maplibregl.LngLatBounds();
-        for (const position of h3Cell.boundary) bounds.extend(position);
+        for (const position of row.cell.boundary) bounds.extend(position);
         map.fitBounds(bounds, { padding: 60 });
       } else if (map) {
         map.flyTo({
-          center: [match.lon, match.lat],
+          center: [row.match.lon, row.match.lat],
           zoom: Math.max(map.getZoom(), 12),
         });
         markerRef.current = new maplibregl.Marker({ color: H3_HIGHLIGHT_COLOR })
-          .setLngLat([match.lon, match.lat])
+          .setLngLat([row.match.lon, row.match.lat])
           .addTo(map);
       }
-      skipNextSearch.current = true;
-      setQuery(match.displayName);
-      setResults([]);
-      setActiveIndex(-1);
-      setIsCoordinate(false);
-      setH3Cell(null);
-      setStatus("idle");
-      setOpen(false);
+      settle(row.match.displayName);
     },
-    [clearH3Highlight, h3Cell, mapControllerRef],
+    [clearH3Highlight, mapControllerRef, settle],
   );
 
   const handleClear = useCallback(() => {
@@ -258,89 +335,151 @@ export function LayerPanelPlaceSearch({
     markerRef.current = null;
     clearH3Highlight();
     setQuery("");
-    setResults([]);
+    setPlaceRows([]);
+    setFeatureGroups([]);
     setActiveIndex(-1);
-    setIsCoordinate(false);
-    setH3Cell(null);
     setStatus("idle");
     setOpen(false);
   }, [clearH3Highlight]);
 
-  const showResults = status === "idle" && results.length > 0;
+  const hasRows = rows.length > 0;
+  // The place half is a plain list only when the geocoder is idle; otherwise it
+  // renders its own status line, which never hides the data groups above it.
+  const showPlaceRows = status === "idle" && placeRows.length > 0;
+  const showPlaceHeading = featureGroups.length > 0;
+
+  /**
+   * Render one selectable row. `index` is the row's position in the flat
+   * `rows` list, which is what the keyboard navigation and `aria-activedescendant`
+   * address.
+   */
+  const renderRow = (row: SearchRow, index: number): ReactElement => (
+    <button
+      key={`${row.kind}-${index}`}
+      type="button"
+      role="option"
+      aria-selected={index === activeIndex}
+      id={`${resultsId}-option-${index}`}
+      className={`flex w-full items-start gap-2 px-3 py-1.5 text-start text-xs hover:bg-muted ${
+        index === activeIndex ? "bg-muted" : ""
+      }`}
+      // Use mousedown so the selection runs before the input's blur handler
+      // closes the dropdown.
+      onMouseDown={(event) => {
+        event.preventDefault();
+        handleSelect(row);
+      }}
+      onMouseEnter={() => setActiveIndex(index)}
+    >
+      {row.kind === "feature" ? (
+        <Table2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      ) : row.kind === "h3" ? (
+        <Hexagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      ) : row.kind === "coordinate" ? (
+        <LocateFixed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      ) : (
+        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      )}
+      {row.kind === "feature" ? (
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 block">{row.match.value}</span>
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {row.match.field}
+          </span>
+        </span>
+      ) : (
+        <span className="line-clamp-2">
+          {row.kind === "h3"
+            ? t("layers.searchPlacesGoToH3Cell", {
+                cell: row.cell.cell,
+                resolution: row.cell.resolution,
+              })
+            : row.kind === "coordinate"
+              ? t("layers.searchPlacesGoToCoordinate", {
+                  coordinate: row.match.displayName,
+                })
+              : row.match.displayName}
+        </span>
+      )}
+    </button>
+  );
+
+  // Flat row index each group starts at: the groups render in order and every
+  // group's rows are contiguous, so a running total is all it takes to keep the
+  // grouped markup addressing the one flat index space the keyboard walks.
+  const groupOffsets = featureGroups.reduce<number[]>((offsets, _group, index) => {
+    offsets.push(index === 0 ? 0 : offsets[index - 1] + featureGroups[index - 1].matches.length);
+    return offsets;
+  }, []);
+  /** Row index of the first place row: every feature row precedes them. */
+  const placeOffset = rows.length - placeRows.length;
 
   return (
     <div className="relative p-2">
       {open ? (
         <div className="absolute bottom-full left-2 right-2 z-20 mb-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
-          {status === "loading" ? (
-            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("layers.searchPlacesSearching")}
-            </div>
-          ) : status === "error" ? (
-            <div className="px-3 py-2 text-xs text-destructive">
-              {t("layers.searchPlacesError")}
-            </div>
-          ) : status === "empty" ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">
-              {t("layers.searchPlacesNoResults")}
-            </div>
-          ) : (
-            <ul id={resultsId} role="listbox" className="max-h-60 overflow-auto py-1">
-              {results.map((match, index) => (
-                <li key={index}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={index === activeIndex}
-                    id={`${resultsId}-option-${index}`}
-                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-start text-xs hover:bg-muted ${
-                      index === activeIndex ? "bg-muted" : ""
-                    }`}
-                    // Use mousedown so the selection runs before the input's
-                    // blur handler closes the dropdown.
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      handleSelect(match);
-                    }}
-                    onMouseEnter={() => setActiveIndex(index)}
-                  >
-                    {h3Cell ? (
-                      <Hexagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : isCoordinate ? (
-                      <LocateFixed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="line-clamp-2">
-                      {h3Cell
-                        ? t("layers.searchPlacesGoToH3Cell", {
-                            cell: h3Cell.cell,
-                            resolution: h3Cell.resolution,
-                          })
-                        : isCoordinate
-                          ? t("layers.searchPlacesGoToCoordinate", {
-                              coordinate: match.displayName,
-                            })
-                          : match.displayName}
+          <div
+            id={resultsId}
+            role="listbox"
+            aria-label={t("layers.searchPlaces")}
+            className="max-h-60 overflow-auto"
+          >
+            {featureGroups.map((group, groupIndex) => (
+              <div key={group.layerId} role="group" aria-label={group.layerName}>
+                <div className="flex items-baseline gap-1 border-b bg-muted/50 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="truncate">{group.layerName}</span>
+                  {group.truncated ? (
+                    <span className="shrink-0 normal-case tracking-normal opacity-80">
+                      {t("layers.searchFeaturesPartial")}
                     </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                  ) : null}
+                </div>
+                <div className="py-1">
+                  {group.matches.map((match, offset) =>
+                    renderRow({ kind: "feature", match }, groupOffsets[groupIndex] + offset),
+                  )}
+                </div>
+              </div>
+            ))}
+            {/* The places half keeps its own heading only when data groups sit
+                above it, so a query with no data match looks exactly as before. */}
+            {showPlaceHeading ? (
+              <div className="border-b border-t bg-muted/50 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("layers.searchPlacesGroup")}
+              </div>
+            ) : null}
+            {status === "loading" ? (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("layers.searchPlacesSearching")}
+              </div>
+            ) : status === "error" ? (
+              <div className="px-3 py-2 text-xs text-destructive">
+                {t("layers.searchPlacesError")}
+              </div>
+            ) : status === "empty" ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                {t("layers.searchPlacesNoResults")}
+              </div>
+            ) : showPlaceRows ? (
+              <div className="py-1">
+                {placeRows.map((row, offset) => renderRow(row, placeOffset + offset))}
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div className="relative">
         <Search className="pointer-events-none absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
+          ref={inputRef}
           type="text"
           role="combobox"
           aria-expanded={open}
           aria-autocomplete="list"
-          aria-controls={showResults ? resultsId : undefined}
+          aria-controls={hasRows ? resultsId : undefined}
           aria-activedescendant={
-            showResults && activeIndex >= 0 ? `${resultsId}-option-${activeIndex}` : undefined
+            hasRows && activeIndex >= 0 ? `${resultsId}-option-${activeIndex}` : undefined
           }
           value={query}
           placeholder={t("layers.searchPlacesPlaceholder")}
@@ -348,7 +487,7 @@ export function LayerPanelPlaceSearch({
           className="h-8 ps-7 pe-7 text-xs"
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => {
-            if (results.length > 0 || status !== "idle") setOpen(true);
+            if (hasRows || status !== "idle") setOpen(true);
           }}
           onBlur={() => {
             // Defer so a click/mousedown on a result still resolves first.
@@ -357,16 +496,16 @@ export function LayerPanelPlaceSearch({
             blurTimerRef.current = setTimeout(() => setOpen(false), 150);
           }}
           onKeyDown={(event) => {
-            if (event.key === "ArrowDown" && showResults) {
+            if (event.key === "ArrowDown" && hasRows) {
               event.preventDefault();
               setOpen(true);
-              setActiveIndex((i) => Math.min(i + 1, results.length - 1));
-            } else if (event.key === "ArrowUp" && showResults) {
+              setActiveIndex((i) => Math.min(i + 1, rows.length - 1));
+            } else if (event.key === "ArrowUp" && hasRows) {
               event.preventDefault();
               setActiveIndex((i) => Math.max(i - 1, 0));
-            } else if (event.key === "Enter" && showResults) {
+            } else if (event.key === "Enter" && hasRows) {
               event.preventDefault();
-              handleSelect(results[activeIndex >= 0 ? activeIndex : 0]);
+              handleSelect(rows[activeIndex >= 0 ? activeIndex : 0]);
             } else if (event.key === "Escape") {
               handleClear();
             }
