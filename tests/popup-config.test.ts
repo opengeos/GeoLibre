@@ -17,6 +17,7 @@ import {
   projectFromStore,
   serializeProject,
   visiblePopupFields,
+  visiblePopupProperties,
   type GeoLibreLayer,
   type LayerPopupConfig,
 } from "@geolibre/core";
@@ -106,6 +107,24 @@ describe("value formatting", () => {
       ),
       "$1,250 USD",
     );
+  });
+
+  it("leaves an auto field's affixes unapplied, since auto is the untyped rendering", () => {
+    // The designer offers Prefix/Suffix only for text/number/date for this
+    // reason: an "auto" value may be sanitized KML markup or an inline
+    // thumbnail, which a prefix cannot meaningfully wrap.
+    assert.equal(formatPopupValue(12, { format: { prefix: "$", suffix: " USD" } }), "12");
+    assert.equal(formatPopupValue(12, { kind: "auto", format: { prefix: "$" } }), "12");
+    assert.equal(formatPopupValue(12, { kind: "text", format: { prefix: "$" } }), "$12");
+  });
+
+  it("treats a whitespace-only value as missing, not as zero", () => {
+    // `Number(" ")` is 0 in JS, and a blank cell exported as a space is common
+    // in CSV and GeoJSON, so this is the same "confident zero" the null guard
+    // exists to prevent.
+    assert.equal(formatPopupValue(" ", { kind: "number", format: { thousands: true } }), "");
+    assert.equal(formatPopupValue("\t\n", { kind: "number" }), "");
+    assert.equal(formatPopupValue(" ", { kind: "text", format: { prefix: "$" } }), "");
   });
 
   it("does not decorate an empty value with a lone prefix or unit", () => {
@@ -393,6 +412,68 @@ describe("popup body expression", () => {
 
   it("returns null for a broken expression rather than printing the error", () => {
     assert.equal(resolvePopupBody(CITY, { bodyExpression: '["get"]' }), null);
+  });
+});
+
+describe("expressions honor field visibility", () => {
+  // The module's stated invariant is that a hidden or excluded field never
+  // reaches a popup. An expression has no field list to filter, so its input
+  // has to be filtered instead — otherwise `["get", "ssn"]` in a title or body
+  // walks straight past fieldVisibility, and does it on hover with no click.
+  const SENSITIVE = { name: "St. Paul", ssn: "123-45-6789", __geolibre_row: 3 };
+
+  it("hides a hidden field from a body expression", () => {
+    assert.equal(
+      resolvePopupBody(
+        SENSITIVE,
+        { bodyExpression: '["to-string", ["get", "ssn"]]' },
+        {
+          fieldVisibility: { ssn: "hidden" },
+        },
+      ),
+      null,
+    );
+  });
+
+  it("hides an excluded field from a title expression", () => {
+    assert.equal(
+      resolveConfiguredPopupTitle(
+        SENSITIVE,
+        { titleExpression: '["get", "ssn"]' },
+        {
+          fieldVisibility: { ssn: "excluded" },
+        },
+      ),
+      null,
+    );
+  });
+
+  it("hides GeoLibre's internal columns from an expression", () => {
+    assert.equal(
+      resolveConfiguredPopupTitle(SENSITIVE, {
+        titleExpression: '["to-string", ["get", "__geolibre_row"]]',
+      }),
+      null,
+    );
+  });
+
+  it("still reads a visible field", () => {
+    assert.equal(
+      resolveConfiguredPopupTitle(
+        SENSITIVE,
+        { titleExpression: '["get", "name"]' },
+        {
+          fieldVisibility: { ssn: "hidden" },
+        },
+      ),
+      "St. Paul",
+    );
+  });
+
+  it("filters the property record the expressions are handed", () => {
+    assert.deepEqual(visiblePopupProperties(SENSITIVE, { ssn: "hidden" }), {
+      name: "St. Paul",
+    });
   });
 });
 

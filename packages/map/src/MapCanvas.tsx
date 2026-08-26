@@ -52,6 +52,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
 
+/**
+ * Dispatched when a feature-selection gesture arms. `featureSelectionActive` is
+ * a ref rather than store state, so the map overlays that must stand down for a
+ * gesture (the hover tooltip) have nothing to subscribe to — a gesture armed
+ * from a menu produces no pointer event, and a tip already open under a
+ * motionless cursor would sit there until the first drag.
+ */
+const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
@@ -281,7 +289,7 @@ function createIdentifyPopupElement(
   // undo it. The designer disables the "Show the feature id row" checkbox
   // while a body expression is set, so the UI does not offer a control that
   // cannot take effect.
-  const body = resolvePopupBody(properties, popup, { feature, zoom });
+  const body = resolvePopupBody(properties, popup, { feature, zoom, fieldVisibility });
   if (body !== null) {
     const paragraph = document.createElement("div");
     paragraph.className = "whitespace-pre-wrap break-words text-foreground";
@@ -1624,6 +1632,7 @@ export const MapCanvas = memo(function MapCanvas({
         canvas.style.cursor = "";
       });
       featureSelectionActive.current = true;
+      window.dispatchEvent(new Event(FEATURE_SELECTION_BEGIN_EVENT));
 
       let points: maplibregl.Point[] = [];
       let dragging = false;
@@ -2366,6 +2375,9 @@ export const MapCanvas = memo(function MapCanvas({
     // syncLayers creates the style layers and then dispatches this event, so
     // re-bind on it to catch layers that did not exist yet on the first run.
     window.addEventListener("geolibre-layer-labels-change", bind);
+    // A selection gesture takes the pointer the same way Identify does, and can
+    // be armed from a menu with the cursor sitting still on a hovered feature.
+    window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
     // Identify is armed from the toolbar, with no pointer event to hide a tip
     // that is already open. `mouseleave` does not fire under a motionless
     // cursor, so without this the tooltip would sit there while the Identify
@@ -2378,6 +2390,7 @@ export const MapCanvas = memo(function MapCanvas({
 
     return () => {
       window.removeEventListener("geolibre-layer-labels-change", bind);
+      window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
       unsubscribeIdentify();
       unbind();
       removeTooltip();

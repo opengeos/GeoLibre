@@ -26,6 +26,9 @@ interface PopupSectionProps {
 const KINDS: PopupFieldKind[] = ["auto", "text", "number", "date", "link", "image"];
 const DATE_FORMATS: PopupDateFormat[] = ["date", "datetime", "time", "iso", "year"];
 
+/** The kinds whose rendered value `formatPopupValue` wraps in prefix/suffix. */
+const AFFIX_KINDS = new Set<PopupFieldKind>(["text", "number", "date"]);
+
 /** Which expression slot the modal builder is editing, if any. */
 type BuilderTarget = "title" | "body";
 
@@ -181,10 +184,14 @@ export function PopupSection({ layer }: PopupSectionProps) {
   const handleDrop = (event: ReactDragEvent<HTMLDivElement>, field: string) => {
     event.preventDefault();
     if (!draggedField || draggedField === field) return;
-    moveField(
-      draggedField,
-      configs.findIndex((entry) => entry.field === field),
-    );
+    const from = configs.findIndex((entry) => entry.field === draggedField);
+    const target = configs.findIndex((entry) => entry.field === field);
+    // `moveField` splices the dragged entry out before inserting, so every
+    // index after it shifts down by one. Dragging forward therefore has to aim
+    // one short of the target to land before it — without that correction a
+    // forward drag drops *after* the target while a backward drag drops
+    // *before* it, and the same gesture means two different things.
+    moveField(draggedField, from < target ? target - 1 : target);
     setDraggedField(null);
   };
 
@@ -295,6 +302,7 @@ export function PopupSection({ layer }: PopupSectionProps) {
           type="checkbox"
           checked={popup?.showFeatureId !== false}
           disabled={Boolean(popup?.bodyExpression)}
+          aria-describedby={popup?.bodyExpression ? `popup-body-replaces-${layer.id}` : undefined}
           onChange={(event) =>
             patchPopup({
               showFeatureId: event.target.checked ? undefined : false,
@@ -306,7 +314,9 @@ export function PopupSection({ layer }: PopupSectionProps) {
         </span>
       </label>
       {popup?.bodyExpression ? (
-        <p className="text-xs text-muted-foreground">{t("style.popup.bodyReplacesRows")}</p>
+        <p id={`popup-body-replaces-${layer.id}`} className="text-xs text-muted-foreground">
+          {t("style.popup.bodyReplacesRows")}
+        </p>
       ) : null}
 
       <div className="space-y-2">
@@ -496,7 +506,14 @@ export function PopupSection({ layer }: PopupSectionProps) {
                 </div>
               )}
 
-              {config.kind !== "image" && config.kind !== "link" && (
+              {/* Only the typed text kinds. `formatPopupValue` returns an
+                  "auto" value verbatim — the point of "auto" is the rendering
+                  the popup always did, and a prefix on a sanitized KML block
+                  or an inline thumbnail is meaningless — so offering the
+                  inputs there would be offering a control that does nothing.
+                  `link` and `image` draw their own element and skip the text
+                  path entirely. */}
+              {AFFIX_KINDS.has(config.kind ?? "auto") && (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label htmlFor={`popup-prefix-${layer.id}-${config.field}`}>

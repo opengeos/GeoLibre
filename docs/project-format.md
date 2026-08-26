@@ -400,7 +400,9 @@ while one is set.
 `fieldVisibility` stays authoritative: a field marked `"hidden"` or
 `"excluded"` never reaches a popup, even when the `popup` block names it — the
 popup design selects from what is visible, it cannot re-expose what the author
-hid. Raster pixel identify goes through a different path and ignores `popup`.
+hid. That holds for the expressions too: `titleExpression` and `bodyExpression`
+are evaluated against the visible properties only, so a `["get", …]` cannot
+pull back a hidden column or one of GeoLibre's internal ones. Raster pixel identify goes through a different path and ignores `popup`.
 
 ## Layer types
 

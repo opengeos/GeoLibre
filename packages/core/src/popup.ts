@@ -188,7 +188,7 @@ export function formatPopupValue(
   // A missing value stays missing under every kind. Without this a `number`
   // field would coerce null (and "") through `Number("")` to a confident 0,
   // reporting a population of zero for a city that simply has no figure.
-  if (value == null || value === "") return "";
+  if (value == null || (typeof value === "string" && value.trim() === "")) return "";
 
   let body: string;
   if (kind === "number") {
@@ -214,6 +214,27 @@ export function formatPopupValue(
 /** Whether a row would draw as a picture rather than as text. */
 function rendersAsImage(kind: PopupFieldKind, value: unknown): boolean {
   return kind === "image" || (kind === "auto" && isInlineImageValue(value));
+}
+
+/**
+ * The properties a popup may read, with the author's hidden and excluded
+ * fields and GeoLibre's internal columns removed.
+ *
+ * Expressions get this rather than the raw record. `["get", "ssn"]` in a title
+ * or body would otherwise reach a column the author hid, printing it into the
+ * popup — and onto the hover tooltip, which needs no click at all. The rest of
+ * this module already honors `fieldVisibility` field by field; an expression
+ * has no field list to filter, so the filtering has to happen to its input.
+ */
+export function visiblePopupProperties(
+  properties: Record<string, unknown>,
+  fieldVisibility?: Record<string, FieldVisibility>,
+): Record<string, unknown> {
+  const visible: Record<string, unknown> = {};
+  for (const key of visiblePopupFields(properties, fieldVisibility)) {
+    visible[key] = properties[key];
+  }
+  return visible;
 }
 
 /** Options for {@link resolvePopupRows}. */
@@ -338,7 +359,9 @@ function evaluatePopupExpression(
   const compiled = compiledPopupExpression(source, options.zoom ?? 0);
   if (!compiled.ok || !compiled.evaluate) return undefined;
   try {
-    return compiled.evaluate(featureFor(properties, options.feature));
+    return compiled.evaluate(
+      featureFor(visiblePopupProperties(properties, options.fieldVisibility), options.feature),
+    );
   } catch {
     return undefined;
   }
@@ -352,6 +375,11 @@ function featureFor(properties: Record<string, unknown>, feature?: Feature | nul
 
 /** Options for {@link resolvePopupTitle} and {@link resolvePopupBody}. */
 export interface PopupExpressionOptions {
+  /**
+   * The author's field visibility, so an expression cannot read a hidden or
+   * excluded column. Omitting it means nothing is hidden.
+   */
+  fieldVisibility?: Record<string, FieldVisibility>;
   /** The real feature, when the caller has one — feeds `["geometry-type"]`. */
   feature?: Feature | null;
   /** Map zoom for `["zoom"]`; defaults to 0. */
@@ -368,9 +396,7 @@ export function resolvePopupTitle(
   layerName: string,
   properties: Record<string, unknown>,
   popup: LayerPopupConfig | undefined,
-  options: PopupExpressionOptions & {
-    fieldVisibility?: Record<string, FieldVisibility>;
-  } = {},
+  options: PopupExpressionOptions = {},
 ): string {
   return resolveConfiguredPopupTitle(properties, popup, options) ?? layerName;
 }
@@ -390,9 +416,7 @@ export function resolvePopupTitle(
 export function resolveConfiguredPopupTitle(
   properties: Record<string, unknown>,
   popup: LayerPopupConfig | undefined,
-  options: PopupExpressionOptions & {
-    fieldVisibility?: Record<string, FieldVisibility>;
-  } = {},
+  options: PopupExpressionOptions = {},
 ): string | null {
   const source = trimmedString(popup?.titleExpression);
   if (source) {
