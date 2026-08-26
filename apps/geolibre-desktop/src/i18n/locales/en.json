@@ -6804,7 +6804,8 @@
       "linkLabelPlaceholder": "The URL itself",
       "prefix": "Prefix",
       "suffix": "Suffix",
-      "inHover": "In hover tooltip"
+      "inHover": "In hover tooltip",
+      "imageNotInHover": "Image fields stay in the click popup; a tooltip has no room for a picture."
     },
     "editorTracking": {
       "heading": "Editor Tracking",

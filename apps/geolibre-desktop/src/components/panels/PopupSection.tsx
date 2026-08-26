@@ -29,6 +29,35 @@ const DATE_FORMATS: PopupDateFormat[] = ["date", "datetime", "time", "iso", "yea
 /** The kinds whose rendered value `formatPopupValue` wraps in prefix/suffix. */
 const AFFIX_KINDS = new Set<PopupFieldKind>(["text", "number", "date"]);
 
+/**
+ * The `format` keys each kind actually reads, so switching a field's kind can
+ * drop the ones that no longer mean anything. `formatPopupValue` ignores a
+ * stale `decimals` on a text field, but it would still be written into the
+ * saved project and the layer-library entry, where the next person to open the
+ * JSON has to work out that it does nothing.
+ */
+const FORMAT_KEYS_BY_KIND: Record<PopupFieldKind, readonly string[]> = {
+  auto: [],
+  text: ["prefix", "suffix"],
+  number: ["decimals", "thousands", "prefix", "suffix"],
+  date: ["dateFormat", "prefix", "suffix"],
+  link: ["linkLabel"],
+  image: [],
+};
+
+/** Keep only the format entries the given kind reads. */
+function formatForKind(
+  format: PopupFieldConfig["format"],
+  kind: PopupFieldKind,
+): PopupFieldConfig["format"] {
+  if (!format) return undefined;
+  const allowed = FORMAT_KEYS_BY_KIND[kind];
+  const kept = Object.fromEntries(
+    Object.entries(format).filter(([key, value]) => allowed.includes(key) && value !== undefined),
+  );
+  return Object.keys(kept).length ? (kept as PopupFieldConfig["format"]) : undefined;
+}
+
 /** Which expression slot the modal builder is editing, if any. */
 type BuilderTarget = "title" | "body";
 
@@ -141,9 +170,18 @@ export function PopupSection({ layer }: PopupSectionProps) {
       fields: configs.map((entry) => {
         if (entry.field !== field) return entry;
         const merged: PopupFieldConfig = { ...entry, ...patch };
+        // A kind change drops the format entries the new kind does not read,
+        // so switching number -> text does not leave `decimals` behind in the
+        // saved project as debris that renders nothing.
+        const format =
+          patch.kind !== undefined
+            ? formatForKind(merged.format, merged.kind ?? "auto")
+            : merged.format;
         // Drop the format block once it holds nothing, so a config that was
         // fiddled with and reset does not persist an empty object.
-        if (merged.format && Object.values(merged.format).every((value) => value === undefined)) {
+        if (format && Object.values(format).some((value) => value !== undefined)) {
+          merged.format = format;
+        } else {
           delete merged.format;
         }
         return merged;
@@ -546,18 +584,37 @@ export function PopupSection({ layer }: PopupSectionProps) {
                 </div>
               )}
 
+              {/* An image row is dropped from the hover subset by
+                  `resolvePopupRows` — a tip has no useful text form for a data
+                  URL — so the checkbox would tick and do nothing here. */}
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
-                  checked={config.hover === true}
+                  checked={config.hover === true && config.kind !== "image"}
+                  disabled={config.kind === "image"}
+                  aria-describedby={
+                    config.kind === "image"
+                      ? `popup-hover-image-${layer.id}-${config.field}`
+                      : undefined
+                  }
                   onChange={(event) =>
                     patchField(config.field, {
                       hover: event.target.checked ? true : undefined,
                     })
                   }
                 />
-                <span>{t("style.popup.inHover")}</span>
+                <span className={config.kind === "image" ? "text-muted-foreground" : undefined}>
+                  {t("style.popup.inHover")}
+                </span>
               </label>
+              {config.kind === "image" ? (
+                <p
+                  id={`popup-hover-image-${layer.id}-${config.field}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  {t("style.popup.imageNotInHover")}
+                </p>
+              ) : null}
             </div>
           ))
         )}
