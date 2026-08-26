@@ -84,6 +84,7 @@ nav:
   - Reference:
       - Architecture: architecture.md
       - Self-Hosting: self-hosting.md
+      - Server API: server-api.md
       - Android: android.md
       - iOS: ios.md
       - Mac App Store: mac-app-store.md

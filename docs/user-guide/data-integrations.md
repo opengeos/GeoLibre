@@ -2,7 +2,7 @@
 
 Beyond the [Add Data](adding-data.md) menu, GeoLibre connects to several hosted catalogs and imagery providers through dedicated panels and plugins. This page is a map of what is available and where to find it.
 
-![Planetary Computer panel](https://data.geolibre.app/images/geolibre-planetary-computer.webp)
+![Planetary Computer panel](https://assets.geolibre.app/images/geolibre-planetary-computer.webp)
 
 ## Cloud catalogs
 

@@ -5,11 +5,15 @@ A GeoLibre project captures your whole workspace in a single `.geolibre.json` fi
 !!! note "Some entries may be hidden"
     The Project menu is filtered by the active [UI profile](../ui-profiles.md), and a few entries are desktop-only. If an item described below is missing, check the profile in use and whether you are running the browser build.
 
-![The Project menu](https://data.geolibre.app/images/geolibre-project-menu.webp)
+![The Project menu](https://assets.geolibre.app/images/geolibre-project-menu.webp)
 
 ## New
 
 **Project → New...** starts a fresh project. GeoLibre offers to save the current project first, then resets the layers, map view, controls, and plugin state to defaults.
+
+The **New project** dialog names the project and picks its starting basemap: the OpenFreeMap styles, a **Regional** group, sections for the Moon, Mars, and other celestial bodies, a blank background, or a custom MapLibre style or PMTiles URL.
+
+![The New project dialog, with a project name field and the basemap gallery](https://assets.geolibre.app/images/geolibre-new-project.webp)
 
 ## Open
 
@@ -92,6 +96,8 @@ The check runs in the browser, without your credentials attached, so it sees wha
 **Project → Offline Basemap...** pre-caches the current map view's basemap tiles so the map still draws when the device is offline. See [Troubleshooting](troubleshooting.md) if tiles are missing after a download.
 
 ## Print
+
+![The Print Layout composer, with the page settings on the left and a live preview on the right](https://assets.geolibre.app/images/geolibre-print-layout.webp)
 
 **Project → Print Layout...** opens the layout composer, which exports the current map to PNG or PDF. It carries a title block with an editable title and footer, a user-editable legend, an explicit map-scale input, page-size controls, a custom print extent, attribute-table and chart blocks, Atlas / map series generation (one page per feature, or a uniform series along a line), and Copy to Clipboard. The composer is backed by the MapLibre components plugin.
 

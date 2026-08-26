@@ -4,7 +4,7 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 
 To collect supported dataset links from a catalog or other webpage and open several at once, use the [GeoLibre Chrome extension](chrome-extension.md), available from the [Chrome Web Store](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj).
 
-![Add Data menu](https://data.geolibre.app/images/geolibre-add-data-menu.webp)
+![The Add Data menu, grouped into Files, Web services, Cloud formats, 3D layers, and Databases](https://assets.geolibre.app/images/geolibre-add-data-menu.webp)
 
 ## Files
 
@@ -13,9 +13,13 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
-| **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
+| **CAD (DXF/DWG) Layer** | Loads AutoCAD drawings, converting their entities to vector features. |
+| **File Geodatabase (GDB)** | Opens an Esri file geodatabase and adds one of its feature classes as a layer. |
+| **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
+| **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
+| **OSM PBF Layer** | Reads an OpenStreetMap `.osm.pbf` extract and adds the features you select from it. |
 
 Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. The source CRS is read from the file itself — the layer metadata for the GDAL-read formats, a Shapefile's `.prj` sidecar, or a GeoParquet's `geo` metadata — so a national grid such as EPSG:2100 (GGRS87 / Greek Grid) lands in the right place with nothing to configure.
 
@@ -54,8 +58,13 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
 | **WMS Layer** | A Web Map Service layer, with click-to-identify through GetFeatureInfo where supported. |
 | **WFS Layer** | A Web Feature Service layer, with optional automatic refresh. |
 | **WMTS Layer** | A Web Map Tile Service layer. |
+| **OGC API - Features** | An OGC API - Features endpoint; pick a collection and add it as a vector layer. |
+| **OGC Vector Tiles** | An OGC API - Tiles vector tile service. |
 | **ArcGIS Layer** | An ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer. See [ArcGIS services](#arcgis-services). |
+| **GeoRSS Layer** | A GeoRSS feed, added as points and lines with the feed's titles and descriptions as attributes. |
 | **STAC Layer** | Searches a STAC catalog and adds the matching raster items. |
+| **Video Layer** | Drapes a video over four map corner coordinates, the way MapLibre's video source does. |
+| **Deck.gl Layer** | Renders a deck.gl layer specification over the map, for visualizations MapLibre's own layer types do not cover. |
 
 ### ArcGIS services
 
@@ -95,14 +104,16 @@ were rendered before the choice existed and cannot honor it.
 | **FlatGeobuf Layer** | Cloud-optimized vector format with spatial indexing. |
 | **PMTiles Layer** | A single-file vector or raster tile archive. |
 | **Zarr Layer** | Chunked, cloud-native multidimensional arrays. |
+| **NetCDF / HDF** | Multidimensional scientific data cubes, with a setup step for picking the variable and the time and vertical dimensions. |
 
 ## 3D layers
 
 | Item | Notes |
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
-| **Splatting Layer** | Gaussian splat scenes. |
+| **Gaussian Splatting** | Gaussian splat scenes. |
 | **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
+| **3D Model (glTF)** | Places a glTF/GLB model at a coordinate, with scale, rotation, and altitude controls. |
 
 ## Databases
 
@@ -110,14 +121,32 @@ were rendered before the choice existed and cannot honor it.
 | --- | --- |
 | **DuckDB Layer** | Query a DuckDB or DuckDB Spatial source and add the result as a layer, with identify, selection, and attribute table support. |
 | **PostgreSQL Layer** | Add a layer from a PostgreSQL/PostGIS connection (desktop app, served through a local tile server). |
+| **Apache Iceberg Layer** | Read an Iceberg table through DuckDB and add its spatial column as a layer. |
 
 ## Drag and drop
 
 Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/COG raster directly onto the map to add it as a layer. GPX files dropped on the map are split into named waypoint, track, and route layers.
 
+## The Browser panel
+
+The **Browser** tab on the left edge of the window opens a QGIS-style Data Source Manager: a tree of everything you can add without going through a menu. Use it when you add the same sources repeatedly, or when you want to explore a service or a database before committing to a layer.
+
+![The Browser panel, with My Data, Services, Recent, and Databases sections](https://assets.geolibre.app/images/geolibre-browser-panel.webp)
+
+| Section | What it holds |
+| --- | --- |
+| **My Data** | Your personal layer library. **Layer actions → Save to My Data** stores a fully configured layer — source, style, labels, filters, joins, virtual fields, and attribute form — and one click here re-adds it to any later project. Import and export the library with the buttons on the section header. |
+| **Services** | Saved map services, grouped by kind (XYZ, WMS, WFS, WMTS, ArcGIS). GeoLibre ships a starter set; the **+** on a group adds a new connection of that kind. Expand a service to browse its layers and add one. |
+| **Recent** | The sources you added most recently, so a repeat is one click. |
+| **Databases** | PostGIS connections. Expand one to browse its schemas and tables; on a table that registers more than one geometry column, pick the column explicitly. |
+
+Type in the search box to filter the whole tree, and navigate it entirely from the keyboard with the arrow keys.
+
 ## Basemaps
 
-The basemap sits at the bottom of the [Layers panel](layers.md) as the **Background** entry. Activate the **Basemaps** plugin from the [Plugins menu](plugins.md) to switch between OpenFreeMap styles (Liberty, Positron, Bright, Dark, Fiord, 3D), a blank background, or a custom style URL. You can toggle basemap visibility and adjust its opacity from the Layers panel.
+The basemap sits at the bottom of the [Layers panel](layers.md) as the **Background** entry. **Double-click that row** to open the **Change basemap** dialog, or activate the **Basemaps** plugin from the [Plugins menu](plugins.md) to switch between OpenFreeMap styles (Liberty, Liberty 3D, Positron, Bright, Dark, Fiord), a collapsible **Regional** group, a blank background, or a custom style URL. You can toggle basemap visibility and adjust its opacity from the Layers panel.
+
+![The Change basemap dialog, with OpenFreeMap styles at the top and Moon, Mars, and other celestial-body sections below](https://assets.geolibre.app/images/geolibre-change-basemap.webp)
 
 ### Other celestial bodies
 

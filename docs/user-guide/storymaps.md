@@ -19,6 +19,8 @@ project.
     world tour. Hit **Present** and scroll to see it in action, then edit or
     replace the chapters with your own.
 
+![The Story Map builder, with the story settings above and the chapter list below](https://assets.geolibre.app/images/geolibre-story-map.webp)
+
 ## Story settings
 
 - **Title / Subtitle / Byline / Footer** appear in the presentation header and
@@ -26,6 +28,15 @@ project.
 - **Panel theme** switches the chapter panels between light and dark.
 - **Show markers** drops a marker at each chapter's center; pick its color.
 - **Inset minimap** shows a small overview map in a chosen corner.
+- **Hide chapter list** removes the navigation pane from the presentation, for a
+  story meant to be read straight through.
+- **Enable start view** adds an opening screen before the first chapter, carrying
+  the story's title block. Choose what the map shows behind it: an **Empty
+  screen**, a **Black screen**, a **Global view**, or a **Preview of first
+  chapter**.
+- **Enable closing slide** adds a final screen after the last chapter, for
+  credits or a closing note. The same backdrop choices apply, plus **Hold on last
+  chapter** to leave the camera where the story ended.
 
 ## Chapters
 
@@ -71,6 +82,8 @@ progresses.
 
 Click **Present** to start the scroll-driven presentation over the live map.
 Scroll to move between chapters; press **Esc** or **Exit** to return to editing.
+
+![A story map in presentation mode, with the chapter navigation pane, a chapter card, and the inset minimap over the live map](https://assets.geolibre.app/images/geolibre-story-map-present.webp)
 
 A **navigation pane** on the left lists every chapter for a quick overview;
 click any entry to jump straight to it. Toggle the pane with the list button next

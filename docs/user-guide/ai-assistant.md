@@ -16,6 +16,8 @@ The assistant is **optional and disabled until you configure a provider or the
 deployment operator enables the managed AI proxy**. No data leaves your machine
 until you send a prompt to the configured provider.
 
+![The AI Assistant panel before setup, listing the providers it accepts credentials for](https://assets.geolibre.app/images/geolibre-ai-assistant.webp)
+
 ## Setup: choose an AI provider
 
 The assistant is **provider-pluggable** — it uses the

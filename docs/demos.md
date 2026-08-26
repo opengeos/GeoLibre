@@ -85,7 +85,7 @@ Run DuckDB Spatial SQL against loaded layers, local files, and remote URLs
 without leaving the map, then add the result as a layer or export it. PostGIS
 (PGlite) and Apache Sedona engines are available from the same panel.
 
-[![The SQL Workspace panel docked beside the map, running a spatial query](https://data.geolibre.app/images/geolibre-sql-workspace.webp)](https://data.geolibre.app/images/geolibre-sql-workspace.webp)
+[![The SQL Workspace panel docked beside the map, running a spatial query](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)
 
 See [SQL Workspace](user-guide/sql-workspace.md) and the
 [Spatial SQL tutorial](tutorials/spatial-sql.md).
@@ -95,7 +95,7 @@ See [SQL Workspace](user-guide/sql-workspace.md) and the
 Any shared project can be embedded with `maponly` for a pure map with no
 toolbar, panels, or status bar.
 
-[![Chrome-free maponly embed of a 3D Tiles project](https://data.geolibre.app/images/geolibre-embed-maponly.webp)](https://data.geolibre.app/images/geolibre-embed-maponly.webp)
+[![Chrome-free maponly embed of a 3D Tiles project](https://assets.geolibre.app/images/geolibre-embed-maponly.webp)](https://assets.geolibre.app/images/geolibre-embed-maponly.webp)
 
 See [Embedding & Sharing](user-guide/embedding.md) for every URL parameter.
 

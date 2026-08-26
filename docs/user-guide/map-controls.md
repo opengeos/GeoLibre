@@ -2,7 +2,7 @@
 
 The **Controls** menu toggles two kinds of on-map helpers: the built-in MapLibre map controls, and the component panels that add tools like Measure and Bookmark. A check mark next to an item means it is currently shown.
 
-![Controls menu](https://data.geolibre.app/images/geolibre-controls-menu.webp)
+![The Controls menu, with map controls above and component panels and recording tools below](https://assets.geolibre.app/images/geolibre-controls-menu.webp)
 
 ## Map controls
 
@@ -10,15 +10,16 @@ These are the standard MapLibre controls that sit in the map corners:
 
 | Control | Description |
 | --- | --- |
-| **Navigation** | Zoom in/out and a compass to reset bearing. |
+| **Navigation** | The zoom in / zoom out buttons. |
+| **Compass** | A north arrow that resets the bearing to north when clicked. |
 | **Fullscreen** | Expand the map to fill the screen. |
 | **Geolocate** | Center the map on your current location. |
 | **Globe** | Switch between the flat map and a 3D globe projection. |
-| **Terrain** | Toggle terrain (3D elevation) rendering. |
-| **Scale** | Show a scale bar. |
+| **Terrain** | Toggle terrain (3D elevation) rendering. Double-click the control to set the vertical exaggeration. |
+| **Scale** | Show a scale bar, in the units set by [Scale bar units](settings.md#map-preferences). |
 | **Elevation** | Report the ground elevation under the pointer in the status bar. Off by default — see [Elevation readout](interface.md#elevation-readout). |
 | **Attribution** | Show data attributions. |
-| **MapLibre logo** | Show or hide the MapLibre logo. |
+| **Logos** | Show or hide the MapLibre and provider logos. |
 
 ## Component tools
 
@@ -42,7 +43,13 @@ The **Print Layout** composer lives under the [Project menu](projects.md#print).
 
 ## Measuring distance, area, and heading
 
-**Controls → Measure** draws a line or polygon on the map and reports it in the Measure panel. Beyond distance and area, the panel adds two further sections:
+**Controls → Measure** opens a panel with three modes — **Distance** (a multi-segment line), **Area** (a polygon), and **Circle** (a radius from a center point) — plus a **Unit** picker. Click **Start**, then click the map to add points and double-click or right-click to finish; **Clear All** removes the measurements.
+
+![The Measure panel, with its Distance, Area, and Circle modes and the exact-segment entry](https://assets.geolibre.app/images/geolibre-measure.webp)
+
+**Exact segment** is the keyboard route to the same thing: type a length and a bearing and click **Add** to extend the measurement by a segment of exactly those dimensions, instead of clicking for it. Useful for retracing a deed description or a survey traverse.
+
+Beyond distance and area, the panel adds two further sections:
 
 - **Heading** — the direction of the measured line, as degrees plus a 16-point compass label (for example `310° NW`). This is a true great-circle initial bearing, not the angle the line makes on screen: on a Mercator map Washington to London *looks* due east, while the real initial bearing is about 50°. On a path with more than two points, the heading is the overall first-to-last direction rather than one row per segment.
 - **Final heading** — the bearing arriving at the far end. A great circle changes direction along its length, so this row appears only on lines long enough for the convergence to reach a degree; short measurements stay a single row.
@@ -60,6 +67,8 @@ Right-clicking the map opens a context menu built around the coordinate you clic
 | **Center map here** / **Zoom in here** | Fly the camera to the point, optionally one zoom level closer. |
 | **Quick analysis** | A submenu of one-click analyses — see below. |
 | **View in Google Maps** / **View in Google Earth** | Open the same location in an external map. |
+
+![The map's right-click menu, with the Quick analysis submenu open on its buffer, drive-time, walk-time, and viewshed presets](https://assets.geolibre.app/images/geolibre-map-context-menu.webp)
 
 ### Quick analysis from a clicked point
 

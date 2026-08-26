@@ -16,7 +16,7 @@ A project URL like this comes from **Project → Share**. See [Projects](project
 
 A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles project:
 
-![Chrome-free maponly embed of a 3D Tiles project](https://data.geolibre.app/images/geolibre-embed-maponly.webp)
+![Chrome-free maponly embed of a 3D Tiles project](https://assets.geolibre.app/images/geolibre-embed-maponly.webp)
 
 ## URL parameters
 

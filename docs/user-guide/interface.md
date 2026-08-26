@@ -2,15 +2,17 @@
 
 GeoLibre opens to a single workspace that is the same on desktop and in the browser. This page is a tour of that workspace so the rest of the User Guide can refer to its parts by name.
 
-![GeoLibre interface overview](https://data.geolibre.app/images/geolibre-interface-overview.webp)
+![GeoLibre interface overview: the Layers panel on the left, the map in the centre, the Style panel on the right, and the status bar along the bottom](https://assets.geolibre.app/images/geolibre-interface-overview.webp)
 
 ## The top toolbar
 
-The toolbar across the top of the window groups every action into seven menus:
+The toolbar across the top of the window groups every action into nine menus:
 
 | Menu | What it does |
 | --- | --- |
-| **Project** | Create, open, save, share, and print projects. See [Projects](projects.md). |
+| **Project** | Create, open, save, share, import, and print projects. See [Projects](projects.md). |
+| **Edit** | Undo and redo, and the feature-selection tools: Select by Expression, Select by Location, zoom to / invert / clear the selection, and Export Selected Features as Layer. |
+| **View** | Zoom in and out, step back and forward through the viewport history, reset the camera orientation, Set View… (type an exact center, zoom, bearing, and pitch), Split View, and View in Google Maps / Google Earth. |
 | **Add Data** | Add layers from files, web services, cloud formats, 3D data, and databases. See [Adding Data](adding-data.md). |
 | **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools, plus the [AI Assistant](ai-assistant.md). The menu holds [two separate toolboxes](processing.md#two-toolboxes-in-one-menu), so some category names appear twice. See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
@@ -20,6 +22,12 @@ The toolbar across the top of the window groups every action into seven menus:
 
 On the right side of the toolbar are the light/dark theme toggle and the editable project name.
 
+The **Edit** and **View** menus are the two most easily missed, because their contents live nowhere else:
+
+![The Edit menu: undo and redo above the selection tools](https://assets.geolibre.app/images/geolibre-edit-menu.webp)
+
+![The View menu: zoom, viewport history, Set View, Split View, and the external-map actions](https://assets.geolibre.app/images/geolibre-view-menu.webp)
+
 !!! tip "Toolbar labels"
     On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings → Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).
 
@@ -27,8 +35,10 @@ On the right side of the toolbar are the light/dark theme toggle and the editabl
 
 Every menu and toolbar action is also reachable from the keyboard, so you don't have to hunt through nested menus.
 
-- **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**, or **Settings → Command Palette**) to open a searchable list of actions: Add Data sources, Processing tools, Controls, Plugins, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
-- **Keyboard shortcuts cheat sheet** — press `?` (or **Help → Keyboard Shortcuts**, or **Settings → Keyboard Shortcuts**) to see the full list of global shortcuts.
+- **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**) to open a searchable list of actions: Add Data sources, Processing tools, Controls, Plugins, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
+- **Keyboard shortcuts cheat sheet** — press `?` (or **Help → Keyboard Shortcuts**) to see the full list of global shortcuts.
+
+![The command palette, listing every Add Data source, Processing tool, control, and plugin in one searchable list](https://assets.geolibre.app/images/geolibre-command-palette.webp)
 
 The built-in global shortcuts are:
 
@@ -40,6 +50,7 @@ The built-in global shortcuts are:
 | `Ctrl`/`Cmd` + `O` | Open project from file |
 | `Ctrl`/`Cmd` + `S` | Save project |
 | `Ctrl`/`Cmd` + `Shift` + `S` | Save project as… |
+| `C` | Add a [review comment](map-controls.md#review-comments) at the map center |
 | `N` | Reset bearing (north up) |
 | `U` | Reset pitch (top-down view) |
 | `R` | Reset pitch and bearing |
@@ -47,6 +58,8 @@ The built-in global shortcuts are:
 | `]` | Next view |
 
 The single-key view shortcuts mirror Google Earth Pro (`N` for north up, `U` for top-down, `R` to reset the view) and work anywhere in the app.
+
+![The keyboard shortcuts cheat sheet, grouped by General, Project, Add Data, View, and Map navigation](https://assets.geolibre.app/images/geolibre-keyboard-shortcuts.webp)
 
 While the map has keyboard focus, MapLibre's own navigation keys are also available:
 
@@ -59,15 +72,19 @@ While the map has keyboard focus, MapLibre's own navigation keys are also availa
 
 Shortcuts are ignored while you are typing in a text field, so they never interfere with search boxes or attribute editing. On macOS the `Cmd` key is used; on Windows and Linux the `Ctrl` key is used.
 
-## The three panels
+## The side panels
 
-GeoLibre has three dockable panels around the map:
+Four dockable panels surround the map, plus the attribute table along the bottom. The left and right edges carry a vertical rail of tabs — **Browser** and **Layers** on the left, **Comments** and **Style** on the right — and clicking a tab expands that panel.
 
-- **Layers panel** (left): the layer stack, including the basemap. Toggle visibility, change opacity, reorder layers, zoom to a layer, identify features, and open per-layer actions. See [Managing Layers](layers.md).
-- **Style panel** (right): the styling controls for the selected layer, including data-driven styling for vector layers and image adjustments for rasters. See [Styling Layers](styling.md).
-- **Attribute table** (bottom): the attributes of the selected vector or DuckDB layer. Expand it from the status bar. See [Attribute Table](attribute-table.md).
+| Panel | Where | What it holds |
+| --- | --- | --- |
+| **Layers** | Left | The layer stack, including the basemap. Toggle visibility, change opacity, reorder layers, zoom to a layer, identify features, and open per-layer actions. See [Managing Layers](layers.md). |
+| **Browser** | Left | A QGIS-style Data Source Manager: saved map services, database connections, recent items, and your personal **My Data** layer library, all addable without going through a menu. See [Adding Data](adding-data.md#the-browser-panel). |
+| **Style** | Right | The styling controls for the selected layer, including data-driven styling for vector layers and image adjustments for rasters. See [Styling Layers](styling.md). |
+| **Comments** | Right | Anchored review notes and their threads. See [Review comments](map-controls.md#review-comments). |
+| **Attribute table** | Bottom | The attributes of the selected vector or DuckDB layer, with its own explorer, statistics, chart, and export tools. Expand it from the status bar. See [Attribute Table](attribute-table.md). |
 
-Each panel can be shown or hidden from **Settings → Layout**, and panels auto-hide on small screens. You can resize the Layers and Style panels by dragging their inner edge.
+The Layers, Style, and Attribute panels can each be shown or hidden from **Settings → Layout**, and panels auto-hide on small screens. Resize the Layers and Style panels by dragging their inner edge, and the attribute table by dragging its top edge.
 
 ## The map
 

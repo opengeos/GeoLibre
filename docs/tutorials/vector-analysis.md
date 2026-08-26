@@ -2,6 +2,11 @@
 
 This tutorial runs a small vector workflow: buffer a layer, overlay it with another, and export the result. It uses the [Vector tools](../user-guide/processing.md#vector) under **Processing → GeoLibre Toolbox → Vector**.
 
+![The Processing menu with GeoLibre Toolbox → Vector open on its Geometry, Overlay, Join, and Select groups](https://assets.geolibre.app/images/geolibre-toolbox-vector-menu.webp)
+
+!!! note "Two toolboxes share this menu"
+    **Processing → Vector** (above the separator) is the Whitebox catalog's vector category; **Processing → GeoLibre Toolbox → Vector** is the dialog this tutorial uses. See [Two toolboxes in one menu](../user-guide/processing.md#two-toolboxes-in-one-menu).
+
 ## 1. Load input data
 
 Add at least one vector layer (see [Adding Data](../user-guide/adding-data.md)). For an overlay you will need two layers, for example a set of points or lines and a polygon layer to clip against.
@@ -14,6 +19,7 @@ Add at least one vector layer (see [Adding Data](../user-guide/adding-data.md)).
 4. Choose an **Engine**:
    - **Client (Turf.js)** runs in the browser with no setup.
    - **Sidecar (GeoPandas)** runs on the Python sidecar for projection-aware distances (desktop app).
+   - **Python (Pyodide)** runs the same GeoPandas code as the sidecar, but in your browser, so the results match the sidecar without one being installed. The runtime downloads once on first use.
 5. Click **Run**. A buffered layer is added to the map.
 
 !!! tip "Projection-aware distances"
@@ -34,7 +40,7 @@ Open the tool from **Processing → GeoLibre Toolbox → Vector**, pick the inpu
 
 ## 4. Inspect and refine
 
-Open the [Attribute table](../user-guide/attribute-table.md) on the result layer to check the output, and adjust its [style](../user-guide/styling.md) so it stands out from the inputs.
+Open the [Attribute table](../user-guide/attribute-table.md) on the result layer to check the output, and adjust its [style](../user-guide/styling.md) so it stands out from the inputs. Every run is also recorded in **Processing → History**, which re-runs an entry with one click and copies the equivalent Python code.
 
 ## 5. Export the result
 

@@ -2,7 +2,7 @@
 
 The **Style panel** on the right edits the appearance of the layer selected in the [Layers panel](layers.md). Vector and raster layers each get their own set of controls.
 
-![Style panel showing categorized styling](https://data.geolibre.app/images/geolibre-styling.webp)
+![The Style panel with a categorized style: an attribute, a colormap, and one colour per category](https://assets.geolibre.app/images/geolibre-style-panel.webp)
 
 ## Vector styling
 
@@ -35,11 +35,23 @@ The **Style type** control chooses how feature values map to color:
 | Style type | Description |
 | --- | --- |
 | **Single symbology** | One uniform style for every feature. |
-| **Graduated** | Classify a numeric field into classes with a color ramp. Choose the field, the number of classes, a classification scheme (such as equal interval or quantile), and a colormap. |
-| **Categorized** | Assign a color per unique category value of a field. |
-| **Expression** | Drive styling with a custom MapLibre expression for full control. |
+| **Graduated** | Classify a numeric attribute into classes and colour them from a ramp. |
+| **Categorized** | Give each of an attribute's distinct values its own colour. |
+| **Rule-based** | Build a list of rules, each with its own filter, symbol properties, and optional scale-dependent visibility. |
+| **Advanced expression** | Drive styling with a custom MapLibre expression for full control. |
 
-For graduated and categorized styles, GeoLibre generates the class breaks or category stops and shows them in the panel, where you can fine-tune individual colors before applying.
+Graduated and categorized styles share four more controls, and then list the generated stops so you can fine-tune an individual colour before applying:
+
+- **Attribute** — the field the style reads.
+- **Classes** — 2 to 12 classes for a graduated style; 1 to 12 for a categorized one, plus an **All (n)** option that gives every distinct value its own colour.
+- **Scheme** — how the stops are chosen. Graduated offers **Equal interval**, **Quantile**, and **Natural breaks**; categorized offers **Most frequent**, **Alphabetical**, and **First values**.
+- **Colormap** — the named colour ramp the classes are drawn from.
+
+Nothing reaches the map until you click **Apply style type**, so you can adjust the classification and watch the stop list update first.
+
+### Diagram symbology
+
+Below the renderer controls, a **Diagram** control draws a small chart on each feature instead of (or as well as) a plain symbol: **Pie chart**, **Donut chart**, **Bar chart**, or **Stacked bar chart**, built from the numeric fields you pick. Set it to **None** to turn diagrams off. It is the usual way to show a composition — vote share, land-cover mix, age structure — per polygon or per point.
 
 ### Style interchange and URL styles
 

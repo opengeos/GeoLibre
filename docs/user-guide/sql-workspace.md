@@ -2,7 +2,7 @@
 
 The **SQL Workspace** runs DuckDB Spatial SQL right in the app, against your loaded layers, local files, and remote URLs. Open it from **Processing → SQL Workspace**. The spatial extension is loaded for you, so `ST_*` functions are available.
 
-![SQL Workspace](https://data.geolibre.app/images/geolibre-sql-workspace.webp)
+![The SQL Workspace docked below the map, with a query on the left and its result table on the right](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)
 
 ## Querying loaded layers
 

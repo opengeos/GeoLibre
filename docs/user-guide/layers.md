@@ -2,7 +2,7 @@
 
 The **Layers panel** on the left lists every layer in the project, from the topmost drawing layer down to the basemap. Selecting a layer here drives the [Style panel](styling.md) and the [Attribute table](attribute-table.md).
 
-![Layers panel with a vector layer and the basemap](https://data.geolibre.app/images/geolibre-layer-panel.webp)
+![The Layers panel with a vector layer and the basemap](https://assets.geolibre.app/images/geolibre-interface-overview.webp)
 
 ## Layer order and visibility
 
@@ -81,15 +81,41 @@ WMS, WMTS), PMTiles, MBTiles, and vector tiles.
 
 ## Per-layer actions
 
-Each layer exposes a set of actions:
+Selecting a layer expands a row of icon buttons on its card:
 
-- **Open Style panel**: when the built-in Style panel is enabled, use the palette button on the layer card to select the layer and open its styling controls.
-- **Zoom to layer**: fit the map to the layer's extent (for layers whose bounds are known).
-- **Identify features**: click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile).
-- **Labels**: toggle text labels for vector layers that have a label field.
-- **Metadata / Properties**: inspect the layer's source and configuration.
-- **Remove layer**: delete the layer from the project.
-- **Insert before**: control where a new layer is placed in the stack.
+| Button | What it does |
+| --- | --- |
+| **Move up** / **Move down** | Shift the layer one position in the stack. |
+| **Zoom to layer** | Fit the map to the layer's extent (for layers whose bounds are known). |
+| **Identify features** | Click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile). |
+| **Open Style panel** | Select the layer and open its [styling controls](styling.md). |
+| **Layer actions** | The full menu, below. |
+| **Metadata** | Inspect the layer's source and configuration. |
+| **Remove layer** | Delete the layer from the project. |
+
+The **Layer actions** menu (the `…` button) holds everything else:
+
+![The Layer actions menu on a vector layer](https://assets.geolibre.app/images/geolibre-layer-actions.webp)
+
+| Item | What it does |
+| --- | --- |
+| **Rename** | Change the layer's display name. |
+| **Open Style panel** | Same as the palette button on the card. |
+| **New group from layer** | Wrap this layer in a new [group](#layer-groups). |
+| **Edit geometry** | Hand the layer to the GeoEditor for vertex-level editing. |
+| **Load features into editor…** | Copy features from this layer into the GeoEditor's sketch layer. |
+| **Open attribute table** | Show this layer's records in the [Attribute table](attribute-table.md). |
+| **Quick analysis** | Run a buffer, centroids, convex hull, or bounding box over the whole layer with no dialog. See [Right-click quick actions](map-controls.md#right-click-quick-actions). |
+| **Select features** | The interactive selection modes: by click, rectangle, polygon, freehand, or radius, plus **Clear Selection**. Hold `Shift` to add, `Alt` to remove, `Shift`+`Alt` to intersect, and `Esc` to cancel. |
+| **Select by Expression…** / **Select by Location…** | Build a selection from an attribute expression or a spatial relationship. Both are also on the [Edit menu](interface.md#the-top-toolbar). |
+| **Bind to Time Slider…** | Drive the Time Slider from one of this layer's date or number fields. |
+| **Export** | Write the layer out as GeoJSON, GeoParquet, GeoPackage, KML, KMZ, zipped Shapefile, or CSV (attributes only). |
+| **Styles** | Import and export symbology — see [below](#importing-and-exporting-styles). |
+| **Save to My Data** | Store the fully configured layer in your personal library, ready to re-add from the [Browser panel](adding-data.md#the-browser-panel) in any later project. |
+| **Copy style** / **Paste style** | Carry symbology from one layer to another. |
+| **Refresh** / **Auto refresh** | Reload the source now, or on an interval — see [Refreshing live layers](#refreshing-live-layers). |
+
+Some entries are unavailable on layers they do not apply to: **Select by Location** needs a second layer to compare against, and **Paste style** needs a style on the clipboard.
 
 ### Importing and exporting styles
 
@@ -99,6 +125,7 @@ Vector layers have a **Layer actions → Styles** submenu for symbology intercha
 - **Export as Mapbox GL style** writes a self-contained Mapbox/MapLibre style with the layer's GeoJSON embedded.
 - **Export as OGC SLD** and **Export as QGIS QML** produce styles for other desktop and server GIS software.
 - **Import style (GeoLibre URL / Mapbox GL / SLD / QML)…** applies a supported style file to the selected layer. When importing a GeoLibre URL style interactively, the filename-based `source` association is ignored because the selected layer is the target.
+- **Saved styles (Style Manager)…** applies a preset from your style library, or saves the current symbology into it. The same library is reachable from **Settings → Style Manager**.
 
 To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLibre with both URLs:
 

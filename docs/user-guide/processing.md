@@ -2,7 +2,7 @@
 
 The **Processing** menu collects GeoLibre's analysis and conversion tools. It holds **two separate toolboxes** ([why](#two-toolboxes-in-one-menu)), plus the [SQL Workspace](sql-workspace.md), [Python Console](python-console.md), [AI Assistant](ai-assistant.md), and [AI Segmentation](segmentation.md), which have their own pages.
 
-![Vector tools dialog](https://data.geolibre.app/images/geolibre-processing-vector.webp)
+![The Processing menu, with the Whitebox categories above the separator and the GeoLibre Toolbox below it](https://assets.geolibre.app/images/geolibre-processing-menu.webp)
 
 ## Two toolboxes in one menu
 
@@ -34,11 +34,12 @@ Processing
 │   ├─ DGGS               ▸
 │   ├──────────────────────
 │   ├─ Geocode Addresses
-│   ├─ Batch & Models
+│   ├─ Batch tools
 │   ├─ AI Segmentation
 │   ├─ Object Detection
 │   └─ Segment Everything
 ├─────────────────────────
+├─ Model Builder
 ├─ SQL Workspace
 ├─ Python Console
 ├─ Jupyter Notebook
@@ -101,6 +102,8 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | **Explode** | Split multipart geometries into single-part features, one per part, keeping the parent's attributes. |
 | **Aggregate by attribute** | Dissolve features sharing an attribute value into one geometry per group, with a summary statistic. |
 | **Smooth** | Round the corners of lines and polygons with Chaikin's algorithm (this *adds* vertices, unlike Simplify). Z values are preserved. |
+| **Extract vertices** | Turn every vertex of a line or polygon layer into a point feature, keeping the parent's attributes. |
+| **Points along geometry** | Place points at a fixed spacing (or a fixed count) along each line or polygon boundary. |
 | **Regular grid** | Generate a rectangular grid (fishnet) over the map view, a layer's extent, or a manual bounding box. |
 | **Voronoi / Delaunay** | Build a Voronoi diagram (one polygon per point, clipped to the points' extent) or a Delaunay triangulation from a point layer. |
 | **Cell-site coverage** | Build antenna sector polygons from point sites using azimuth, radius, and beamwidth read from fields or fixed values. |
@@ -139,6 +142,12 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | **Detect stops** | Find where a target dwells: runs of consecutive fixes staying within a distance for at least a minimum duration. One point per stop. |
 | **Space-time proximity** | Find pairs of points close in both space and time (two targets meeting, say). Outputs a line per qualifying pair with the distance and time gap. |
 
+**Data management**
+
+| Tool | Description |
+| --- | --- |
+| **Merge layers** | Combine several layers into one, through a multi-layer picker that unites their attribute schemas and can record each feature's source layer in a new field. |
+
 **Data quality**
 
 | Tool | Description |
@@ -160,7 +169,11 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ### Raster
 
-**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. Most raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map. Several also offer a **Client (browser)** engine that computes on the loaded raster without a sidecar.
+**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. Most raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
+
+![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
+
+Eight of them also offer a **Client (browser)** engine that computes on the loaded raster with no sidecar at all, so they work on the web build and on mobile: **Hillshade**, **Slope**, **Aspect**, **Clip by extent**, **Raster calculator**, **Spectral index**, **Reclassify**, and **Focal statistics**. The rest — Reproject, Resample, Clip by mask layer, Polygonize, Contour, Interpolation, Zonal statistics, and Mosaic / merge — need the sidecar. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do.
 
 **Terrain**
 
@@ -268,12 +281,12 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **DGGS Binning** | Aggregate a point layer into DGGS cells (count, or sum/mean/min/max of a numeric field). |
 | **DGGS Compact** | Compact DGGS polygon cells, or expand them to a uniform resolution. |
 
-### Geocode Addresses, Batch & Models
+### Geocode Addresses and Batch tools
 
 Two more entries sit below the separator in the GeoLibre Toolbox submenu:
 
 - **Geocode Addresses** turns a table of addresses into a point layer.
-- **Batch & Models** runs one tool across many input layers (*Batch*), or chains tools so each step's output feeds the next and saves the chain with the project (*Models*). Both modes draw on the Vector tools above and run on the client engine.
+- **Batch tools** runs one tool across many input layers (*Batch*), or chains tools so each step's output feeds the next and saves the chain with the project (*Models*). Both modes draw on the Vector tools above and run on the client engine. For a graphical way to build the same kind of chain, see [Model Builder](#model-builder).
 
 ### AI Segmentation, Object Detection, Segment Everything
 
@@ -306,10 +319,55 @@ Either way the tool list is the same; only the executing engine changes.
 - **Fill in the form** — the dialog builds it from the tool's own parameter manifest, with a file picker for path inputs and an output-format dropdown for vector outputs. Parameters that are ground distances get a metric unit picker.
 - **Run**, and the output is added to the map. Raster outputs are Cloud Optimized GeoTIFFs.
 
+![The Whitebox Toolbox dialog, with the tool search on the left and the selected tool's generated form on the right](https://assets.geolibre.app/images/geolibre-whitebox-toolbox.webp)
+
 !!! tip "Share a link to a tool"
     **Copy link** builds a URL with a `?tool=` parameter that reopens the app with that tool preselected and its form pre-filled — handy for documentation, teaching, and bug reports.
 
-Every run is recorded in **Processing → History**, which re-runs any entry with one click and copies the equivalent Python code. Both toolboxes write to the same history.
+Every run is recorded in **Processing → History**, newest first, with the tool, the engine it ran on, how long it took, and the layers in and out. Each entry offers **Re-run**, **Edit & re-run** (reopens the tool with the same parameters), **Copy JSON**, and **Copy Python**. Both toolboxes write to the same history, and so do the [quick analyses](map-controls.md#right-click-quick-actions).
+
+![Processing History, listing past runs with their engine, duration, input and output layers, and re-run actions](https://assets.geolibre.app/images/geolibre-processing-history.webp)
+
+## Model Builder
+
+**Processing → Model Builder** opens an ArcGIS-style canvas for building a processing workflow as a graph instead of running one tool at a time.
+
+![The Model Builder canvas, with the tool palette on the left, the graph in the middle, and the selected node's settings on the right](https://assets.geolibre.app/images/geolibre-model-builder.webp)
+
+- **Drag a tool from the palette** onto the canvas to add it as a node, then wire one node's output into the next node's input. **+ Input** and **+ Output** add the model's own entry and exit points, so the same graph can be re-run against different layers.
+- The palette draws on the same catalog as everything else in this menu: the client-side [GeoLibre Toolbox](#geolibre-toolbox) tools plus the full [Whitebox](#whitebox-toolbox) catalog, so a raster chain such as fill depressions → flow accumulation → extract streams is a valid model.
+- Select a node to edit its parameters in the right-hand panel. **Arrange** lays the graph out automatically.
+- **Run** validates the whole graph first — cycles, missing connections, parameters that do not exist on the tool, and wrong parameter types are all reported before anything executes — then runs the chain as one job, with progress in the message log at the bottom.
+- **Save** stores the model with the project, **Import** / **Export** move it between projects as a file, and **Copy Python script** puts the equivalent [`geolibre` Python](../python.md) code on the clipboard.
+
+The [AI Assistant](ai-assistant.md) can author a model from a plain-language description and open it here for review before you run it.
+
+## Dashboard
+
+**Processing → Dashboard** opens a panel of chart widgets below the map that summarize the layers in the project. Unlike the [attribute table's Charts dialog](attribute-table.md#charts), dashboard widgets are saved with the project and cross-filter each other.
+
+![The Dashboard panel with pie, histogram, indicator, and bar widgets bound to a vector layer](https://assets.geolibre.app/images/geolibre-dashboard.webp)
+
+**Add widget** asks for a layer, a widget type, and the fields to plot:
+
+| Widget | What it shows |
+| --- | --- |
+| **Histogram** | The distribution of one numeric field, with a configurable bin count. |
+| **Scatter** | Two numeric fields against each other. |
+| **Bar** / **Line** | An aggregate per category or per ordered value. |
+| **Box plot** | The spread of a numeric field, optionally grouped. |
+| **Pie** | The share of each category. |
+| **Indicator** | A single big number — count, sum, mean, min, max, or median — with an optional prefix and suffix. |
+| **Selector** | A categorical field rendered as chips that cross-filter every other widget bound to the same layer, in single- or multi-select mode. |
+| **List** | A field's values as a scrollable list, for reading records rather than aggregating them. |
+
+Each widget carries a title and a color, and the **Columns** control sets how many sit side by side. A selector never filters itself, so a choice can always be changed or cleared, and selections start empty each time the dashboard opens — they are a way of looking at the data rather than a property of it.
+
+Any vector or DuckDB query layer can be charted; the panel says so when the project holds none yet.
+
+## Jupyter Notebook
+
+**Processing → Jupyter Notebook** docks a notebook beside the map: [JupyterLite](https://jupyterlite.readthedocs.io) on a Pyodide kernel in the web build, and a real JupyterLab server on the desktop app, which gives you full CPython with geopandas, rasterio, and GDAL. Either way a `geolibre` client is preloaded, so a cell can drive the live map next to it. See [Notebook Panel](../notebook.md).
 
 ## Planetary Computer and Earth Engine
 
@@ -320,4 +378,4 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 The raster tools, the sidecar conversion tools, and the optional GeoPandas vector engine use a local FastAPI sidecar that the desktop app starts on demand. The Whitebox Toolbox can *optionally* use it too, but does not need it — it runs in WebAssembly by default. The vector tools' client engine and the browser-based conversions need no sidecar either. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
-    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, and every [Conversion](#conversion) tool run in the browser. Vector to Vector's full any-format output and the full raster tool set require the desktop app and the Python sidecar.
+    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, every [Conversion](#conversion) tool, and the eight [raster tools with a client engine](#raster) run in the browser. Vector to Vector's full any-format output and the remaining raster tools require the desktop app and the Python sidecar.

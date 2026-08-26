@@ -15,6 +15,8 @@ LIMIT 10;
 
 Click **Run** to see the ten countries with the highest estimated GDP.
 
+![The SQL Workspace with a query on the left and its result table on the right](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)
+
 !!! note "Sample dataset columns"
     `NAME`, `CONTINENT`, `POP_EST`, and `GDP_MD_EST` are Natural Earth field names in the sample `countries.parquet`, whose geometry column is `geom`. A different dataset will have its own column names. To discover them, run `DESCRIBE SELECT * FROM 'your-file-url'` first.
 
@@ -42,11 +44,11 @@ ORDER BY area DESC;
 
 ## 4. Add the result to the map
 
-When a query returns a geometry column, use **add to map** to create a new layer from the result, optionally naming it. The result layer supports [identify, selection, and the attribute table](../user-guide/attribute-table.md) like any vector layer, and you can add several result layers at once.
+When a query returns a geometry column, click **Add as layer** to create a new layer from the result, optionally naming it. The result layer supports [identify, selection, and the attribute table](../user-guide/attribute-table.md) like any vector layer, and you can add several result layers at once.
 
 ## 5. Export
 
-Export the query result as **CSV** or **GeoParquet** straight from the workspace. See [SQL Workspace](../user-guide/sql-workspace.md).
+Export the query result as **CSV** or **GeoParquet** straight from the workspace — the **Export CSV** and **Export GeoParquet** buttons sit beside **Add as layer**. See [SQL Workspace](../user-guide/sql-workspace.md).
 
 !!! tip "Sample queries and history"
     Use the **Sample queries** menus to start from a working query, and the **history** to rerun a previous one.
