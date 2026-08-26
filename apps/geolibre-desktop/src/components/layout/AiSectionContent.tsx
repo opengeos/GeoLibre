@@ -88,14 +88,17 @@ function useOllamaModels() {
       // origin) and an unreachable host into the same opaque "Failed to fetch",
       // so surfacing that message verbatim tells the user nothing actionable.
       const { kind } = classifyFetchFailure(cause);
+      // The classified messages are complete sentences, so only the unclassified
+      // fallback (an HTTP status, a parse error) gets the "Could not load
+      // models:" prefix — prefixing all three would read redundantly.
       setError(
         kind === "network"
           ? t("settings.ai.ollamaNetworkFailure")
           : kind === "timeout"
             ? t("settings.ai.ollamaTimedOut")
-            : cause instanceof Error
-              ? cause.message
-              : String(cause),
+            : t("settings.ai.modelsFailedToLoad", {
+                message: cause instanceof Error ? cause.message : String(cause),
+              }),
       );
       console.error("[GeoLibre] Could not load Ollama models", cause);
     } finally {
@@ -350,9 +353,7 @@ export function AiSectionContent({
                 ) : null}
               </div>
               {ollamaDiscovery.error ? (
-                <p className="text-xs text-destructive">
-                  {t("settings.ai.modelsFailedToLoad", { message: ollamaDiscovery.error })}
-                </p>
+                <p className="text-xs text-destructive">{ollamaDiscovery.error}</p>
               ) : null}
             </div>
           ) : null}
@@ -653,9 +654,7 @@ function ProfileEditor({
             ) : null}
           </div>
           {ollamaDiscovery.error ? (
-            <p className="text-xs text-destructive">
-              {t("settings.ai.modelsFailedToLoad", { message: ollamaDiscovery.error })}
-            </p>
+            <p className="text-xs text-destructive">{ollamaDiscovery.error}</p>
           ) : null}
         </div>
       ) : null}
