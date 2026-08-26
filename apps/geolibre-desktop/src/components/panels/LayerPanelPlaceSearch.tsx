@@ -337,6 +337,17 @@ export function LayerPanelPlaceSearch({
       markerRef.current = null;
       clearH3Highlight();
 
+      // A place, a coordinate, or a cell takes the box's attention off the
+      // feature it had selected, so release that selection the way clearing the
+      // box does — otherwise the map flies away while the old feature stays
+      // selected and its highlight renders off-screen. A feature row replaces
+      // the selection instead, so it keeps its own branch below.
+      if (row.kind !== "feature") {
+        const store = useAppStore.getState();
+        if (holdsOwnedSelection(ownedSelection.current, store)) store.selectFeature(null);
+        ownedSelection.current = null;
+      }
+
       if (row.kind === "feature") {
         // Reuse the attribute table's path: make the feature the live selection
         // on its layer, then let the shared highlight overlay frame it. The
