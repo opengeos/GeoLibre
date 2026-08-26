@@ -3113,6 +3113,15 @@ html.dark .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-content
   box-shadow: 0 1px 6px hsl(0 0% 0% / 0.5);
 }
 
+/* `.vector-control-popup` is itself the scroll container (upstream caps it at
+   240px), so its scrollbar runs the popup's full height and the inset close
+   button below would land on top of the track. Reserve a band above the
+   scroller — 0.375rem of inset plus the button's 1.25rem — so the button sits
+   clear of it whatever width the platform draws the scrollbar. */
+.maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-content {
+  padding-block-start: 1.75rem;
+}
+
 /* Upstream leaves the picker popup on MapLibre's default close button, pinned
    flush into the corner where the glyph crowds the border and the hit target
    is only a few pixels wide. Inset it and give it a real square target, the
@@ -3140,11 +3149,6 @@ html:not(.dark) .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-c
 html.dark .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-close-button:hover {
   background: hsl(var(--accent));
   color: hsl(var(--accent-foreground));
-}
-
-/* Clear the inset button, which the title would otherwise run under. */
-.maplibregl-popup .vector-control-popup-title {
-  padding-inline-end: 1.25rem;
 }
 
 html:not(.dark) .maplibregl-popup-anchor-top:has(.vector-control-popup) .maplibregl-popup-tip,
