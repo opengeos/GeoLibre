@@ -52,7 +52,7 @@ const DEFAULT_FILE_NAME = "map-recording";
 // *rendered* overlays (`maplibre-gl-html-control` / `maplibre-gl-legend` /
 // `maplibre-gl-colorbar`), NOT the `*-gui-control` authoring editors -- we burn
 // the info in, not the editor chrome. Those class names mirror
-// maplibre-gl-components internals; see CLAUDE.md and re-check them when that
+// maplibre-gl-components internals; see docs/maintenance.md and re-check them when that
 // package is bumped.
 const MAP_PANEL_SELECTOR =
   ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar, .geolibre-legend-panel";

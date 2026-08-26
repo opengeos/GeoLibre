@@ -69,7 +69,7 @@ const DISTANCE_NAMES = new Set(["cell_size", "width", "height"]);
  * The catalog scan behind this list looked for a matching `double` whose
  * description reads as a fraction, ratio, angle or weight; re-run it when
  * `geolibre-wasm` is bumped, since the tool-level gate that saves these today is
- * incidental. That re-check is recorded in `CLAUDE.md`'s Conventions section
+ * incidental. That re-check is recorded in `docs/maintenance.md`
  * alongside the repo's other name/version mirrors.
  */
 const NON_DISTANCE_NAMES = new Set(["corridor_tolerance", "densify_spacing"]);

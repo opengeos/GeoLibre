@@ -1,6 +1,6 @@
 // The registry subpath rather than the package barrel: this module is a leaf the
 // test suite imports directly, and the barrel pulls in the whole built-in plugin
-// registry (including CSS imports Node cannot load). See CLAUDE.md on testing
+// registry (including CSS imports Node cannot load). See docs/maintenance.md on testing
 // against a leaf module.
 import {
   collapseRightPanel,

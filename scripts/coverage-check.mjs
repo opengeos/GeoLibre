@@ -24,7 +24,7 @@ import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Kept in sync with the floors documented in CLAUDE.md. Raise them when
+// Kept in sync with the floors documented in docs/maintenance.md. Raise them when
 // coverage rises comfortably above, which is what makes this a ratchet.
 const LINES = 78;
 const BRANCHES = 78;
@@ -165,7 +165,7 @@ async function main() {
     `\ncoverage-check: line coverage was short twice in a row (${firstLine.actual}% then ` +
       `${secondLine ? `${secondLine.actual}%` : "short again"}, floor ${firstLine.floor}%). ` +
       "A real regression reproduces; this is one. Add tests or, if the drop is a module newly " +
-      "pulled into the report rather than code getting less tested, see the coverage notes in CLAUDE.md.",
+      "pulled into the report rather than code getting less tested, see the coverage notes in docs/maintenance.md.",
   );
   return 1;
 }
