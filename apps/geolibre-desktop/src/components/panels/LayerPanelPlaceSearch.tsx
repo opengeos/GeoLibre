@@ -109,6 +109,10 @@ export function LayerPanelPlaceSearch({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // `open` read by the local scan's gate. It is a ref rather than a dependency
+  // because the scan is also what opens the dropdown: as a dependency, the
+  // first match would re-run the effect and schedule a second, identical scan.
+  const openRef = useRef(false);
   // The query text a selection wrote into the input, so neither debounce effect
   // searches for the name it just filled in. It holds the text rather than a
   // "skip once" flag because both effects read it and neither would be the one
@@ -186,11 +190,15 @@ export function LayerPanelPlaceSearch({
   // runs on its own short debounce, independent of the geocoder above, so the
   // data groups appear while the network call is still outstanding.
   useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
     if (settledQuery.current !== null) return;
     // Nothing reads the groups while the box is idle, and a layers change
     // re-runs this effect: without this gate every layer mutation (a refresh, a
     // time filter, a visibility toggle) would pay for a scan nobody sees.
-    if (!open && document.activeElement !== inputRef.current) return;
+    if (!openRef.current && document.activeElement !== inputRef.current) return;
     const trimmed = query.trim();
     if (trimmed.length < MIN_FEATURE_QUERY_LENGTH) {
       setFeatureGroups([]);
@@ -198,6 +206,10 @@ export function LayerPanelPlaceSearch({
       return;
     }
     const handle = setTimeout(() => {
+      // Re-check: a selection whose label matches the text already in the input
+      // makes `setQuery` a no-op, so this effect never re-runs and its cleanup
+      // never cancels this timer.
+      if (settledQuery.current !== null) return;
       const groups = searchLayerFeatures(layers, trimmed, { groups: layerGroups });
       setFeatureGroups(groups);
       // A layers change re-runs this effect without touching `query`, so the
@@ -210,7 +222,7 @@ export function LayerPanelPlaceSearch({
       if (groups.length > 0 && document.activeElement === inputRef.current) setOpen(true);
     }, FEATURE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [query, layers, layerGroups, open]);
+  }, [query, layers, layerGroups]);
 
   useEffect(() => {
     if (settledQuery.current !== null) return;
@@ -266,6 +278,9 @@ export function LayerPanelPlaceSearch({
     setPlaceRows([]);
     setStatus("loading");
     const handle = setTimeout(() => {
+      // Same re-check as the local scan: a settled input must not be searched,
+      // and a no-op `setQuery` leaves this timer for the cleanup to miss.
+      if (settledQuery.current !== null) return;
       void runSearch(trimmed);
     }, debounceMs);
     return () => clearTimeout(handle);

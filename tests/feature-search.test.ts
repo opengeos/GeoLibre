@@ -58,6 +58,8 @@ describe("searchableText", () => {
 
   it("skips a data URL, which is an embedded blob rather than text", () => {
     assert.equal(searchableText("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ"), null);
+    // The URL scheme is case-insensitive, so this is the same blob.
+    assert.equal(searchableText("DATA:image/jpeg;base64,/9j/4AAQSkZJRgABAQ"), null);
     // A value that merely mentions the word is ordinary text.
     assert.equal(searchableText("data collection site"), "data collection site");
   });

@@ -105,7 +105,8 @@ export function searchableText(value: unknown): string | null {
     // A data URL is an embedded blob, not text: matching it wastes the scan on
     // megabytes of base64, and a base64 alphabet makes a two-character query
     // hit almost every one of them, which would put the whole blob in a row.
-    return value.startsWith("data:") ? null : value;
+    // The scheme is case-insensitive, so `DATA:` is the same blob.
+    return value.slice(0, 5).toLowerCase() === "data:" ? null : value;
   }
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (typeof value === "boolean" || typeof value === "bigint") return String(value);
