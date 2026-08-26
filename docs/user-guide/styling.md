@@ -62,6 +62,19 @@ See [Managing Layers](layers.md#importing-and-exporting-styles) for the menu wor
 !!! tip "Choropleth maps"
     To make a choropleth, select **Graduated**, pick a numeric attribute, choose a colormap, and click **Apply style type**. See the [Your First Map tutorial](../tutorials/first-map.md).
 
+### Popups and hover tooltips
+
+Further down the Style panel, the **Popup** section designs what a viewer sees when they interact with a feature, rather than the raw column dump the Identify popup shows by default. It matters most for a map you share: a `layout=viewer` embed, a shared project, or a story-map chapter, where the recipient clicks a feature and would otherwise get join artifacts, editor-tracking columns, and internal ids alongside the fields you meant them to read.
+
+- **Show popup on click (Identify)** and **Show tooltip on hover** are independent switches. The click popup is on by default; the hover tooltip is off.
+- **Title field** leads the popup with the feature's own name rather than the layer's. **Title expression** does the same from an expression, and wins over the field.
+- **Body expression** replaces the field rows with a sentence built from the feature's properties, for authors who want prose rather than a table. Both boxes open the same expression builder that backs [data-driven styling](#style-type-data-driven-styling), labels, and filters.
+- **Fields** chooses which attributes appear and in what order. Add a field from the picker, drag its handle (or use the arrow buttons) to reorder, and give it a **Label** to show instead of the raw column name. Leave the list empty to keep the default: every visible field, in the data's own order.
+- **Value type** formats the value: **Number** (decimals, thousands separator), **Date** (date, date and time, time, ISO 8601, or year), **Link**, **Image**, or plain **Text**. **Prefix** and **Suffix** wrap the result, which is where a currency symbol or a unit goes.
+- **In hover tooltip** puts a field in the tooltip's short subset. Keep it to one or two fields: the tip follows the pointer, so it is a glance, not a table.
+
+Fields you hid or excluded from the [attribute table](attribute-table.md) stay out of the popup: the popup design selects from the visible fields and cannot re-expose a hidden one. A layer with nothing configured behaves exactly as before, and the whole design saves with the project, so it travels to the Python package and the MCP authoring tools as well.
+
 ## Raster styling
 
 For raster layers the Style panel exposes image adjustments:

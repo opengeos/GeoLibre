@@ -18,6 +18,7 @@ import {
   type GeoLibreLayer,
   type LayerJoin,
   type LayerLibraryEntry,
+  type LayerPopupConfig,
   type LayerStyle,
   type LayerType,
   type LayerVirtualField,
@@ -321,6 +322,7 @@ export function captureLayerLibraryEntry(
     ...(layer.joins?.length ? { joins: structuredClone(layer.joins) } : {}),
     ...(layer.virtualFields?.length ? { virtualFields: structuredClone(layer.virtualFields) } : {}),
     ...(layer.attributeForm ? { attributeForm: structuredClone(layer.attributeForm) } : {}),
+    ...(layer.popup ? { popup: structuredClone(layer.popup) } : {}),
   };
   const withFeatures = embed && !controlPainted ? { ...base, geojson: embed } : base;
 
@@ -361,6 +363,7 @@ export interface LayerLibraryConfigPatch {
   joins?: LayerJoin[];
   virtualFields?: LayerVirtualField[];
   attributeForm?: AttributeFormConfig;
+  popup?: LayerPopupConfig;
 }
 
 /** How an entry should be re-added to the current project. */
@@ -411,6 +414,7 @@ export function planLayerLibraryAdd(
       ...(entry.joins ? { joins: structuredClone(entry.joins) } : {}),
       ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
       ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
+      ...(entry.popup ? { popup: structuredClone(entry.popup) } : {}),
     },
   };
 }
@@ -430,6 +434,7 @@ export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryC
     ...(entry.joins ? { joins: structuredClone(entry.joins) } : {}),
     ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
     ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
+    ...(entry.popup ? { popup: structuredClone(entry.popup) } : {}),
   };
 }
 
@@ -525,6 +530,30 @@ function validAttributeForm(value: unknown): AttributeFormConfig | undefined {
   );
   if (fields.length === 0) return undefined;
   return structuredClone({ ...config, fields }) as unknown as AttributeFormConfig;
+}
+
+/**
+ * A structurally plausible popup design, or undefined. `fields` is optional (a
+ * config may carry only a title or the hover flag), so unlike the attribute
+ * form an empty field list does not disqualify the block — but a config with
+ * nothing set at all is dropped rather than stored as an empty object.
+ */
+function validPopup(value: unknown): LayerPopupConfig | undefined {
+  const config = plainObject(value);
+  if (!config) return undefined;
+  const fields = Array.isArray(config.fields)
+    ? config.fields.filter(
+        (field) =>
+          plainObject(field) !== undefined && nonEmptyString((field as { field?: unknown }).field),
+      )
+    : undefined;
+  const rest = { ...config };
+  delete rest.fields;
+  if (!fields?.length && Object.keys(rest).length === 0) return undefined;
+  return structuredClone({
+    ...rest,
+    ...(fields?.length ? { fields } : {}),
+  }) as unknown as LayerPopupConfig;
 }
 
 /** An array of plain JSON objects, or undefined when nothing usable is present. */
@@ -630,10 +659,12 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
         const joins = validJoins(candidate.joins);
         const virtualFields = validVirtualFields(candidate.virtualFields);
         const attributeForm = validAttributeForm(candidate.attributeForm);
+        const popup = validPopup(candidate.popup);
         return {
           ...(joins ? { joins } : {}),
           ...(virtualFields ? { virtualFields } : {}),
           ...(attributeForm ? { attributeForm } : {}),
+          ...(popup ? { popup } : {}),
         };
       })(),
       ...(geojson ? { geojson: structuredClone(geojson) } : {}),

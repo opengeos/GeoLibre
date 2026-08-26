@@ -62,6 +62,7 @@ import {
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
+import { PopupSection } from "./PopupSection";
 import { EditorTrackingSection } from "./EditorTrackingSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
@@ -5065,6 +5066,16 @@ export function StylePanel({
             <>
               <Separator />
               <AttributeFormSection key={`af-${layer.id}`} layer={layer} />
+            </>
+          ) : null}
+          {/* The Popup designer reads the layer's field profile to offer the
+              fields, so like the sections above it needs the features in the
+              store. Keyed by layer so a half-edited expression never carries
+              over to the next layer. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              <PopupSection key={`popup-${layer.id}`} layer={layer} />
             </>
           ) : null}
           {/* Editor tracking stamps the features as they are created and edited,

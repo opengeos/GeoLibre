@@ -2208,8 +2208,27 @@ body,
   text-decoration: underline;
 }
 
+/* MapLibre pins its close button flush into the popup's corner, where the
+   glyph crowds the border and the hit target is only a few pixels wide. Inset
+   it and give it a real square target. `right: auto` first so the logical
+   inset wins over MapLibre's own physical `right: 0` in both directions — the
+   popup content mirrors with the UI in a right-to-left locale. */
 .geolibre-identify-popup .maplibregl-popup-close-button {
+  /* `right: auto` must precede the logical inset: within one block the two
+     resolve in source order, so declaring it after would win in LTR and leave
+     the button unpositioned. */
+  right: auto;
+  align-items: center;
+  border-radius: 0.25rem;
   color: hsl(var(--muted-foreground));
+  display: flex;
+  height: 1.25rem;
+  inset-block-start: 0.375rem;
+  inset-inline-end: 0.375rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 1.25rem;
 }
 
 .geolibre-identify-popup .maplibregl-popup-close-button:hover {
@@ -2227,6 +2246,47 @@ body,
 .geolibre-identify-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
 .geolibre-identify-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
   border-top-color: hsl(var(--popover));
+}
+
+/* The hover tooltip (Style panel -> Popup -> "Show tooltip on hover"). It
+   follows the pointer, so it must never take the pointer: without
+   `pointer-events: none` the tip lands under the cursor, MapLibre fires
+   mouseleave on the feature, the tip is removed, the cursor is back over the
+   feature, and the two flicker against each other. */
+.geolibre-hover-tooltip {
+  pointer-events: none;
+  z-index: 5;
+}
+
+.geolibre-hover-tooltip .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.14),
+    0 2px 4px -2px rgb(0 0 0 / 0.14);
+  color: hsl(var(--popover-foreground));
+  padding: 0.375rem 0.5rem;
+}
+
+.geolibre-hover-tooltip.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.geolibre-hover-tooltip.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.geolibre-hover-tooltip.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+
+.geolibre-hover-tooltip.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.geolibre-hover-tooltip.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.geolibre-hover-tooltip.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
+.geolibre-hover-tooltip.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+.geolibre-hover-tooltip.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
 }
 
 @media (max-width: 767px) {

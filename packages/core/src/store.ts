@@ -52,6 +52,7 @@ import {
   type LayerGroup,
   type LayerLibraryEntry,
   type AttributeFormConfig,
+  type LayerPopupConfig,
   type EditorTrackingConfig,
   type LayerJoin,
   type LayerVirtualField,
@@ -622,6 +623,12 @@ export interface AppState {
    * the form config entirely.
    */
   setLayerAttributeForm: (id: string, attributeForm: AttributeFormConfig | undefined) => void;
+  /**
+   * Replace the layer's popup/tooltip design (which fields the Identify popup
+   * shows, in what order and under what labels, plus the hover tooltip). Pass
+   * `undefined` to restore the default full-property dump.
+   */
+  setLayerPopup: (id: string, popup: LayerPopupConfig | undefined) => void;
   /**
    * Replace the layer's editor tracking configuration (whether creation/edit
    * author and timestamp columns are maintained, and under which names). Pass
@@ -1779,6 +1786,7 @@ export const useAppStore = create<AppState>()(
         }),
 
       setLayerAttributeForm: (id, attributeForm) => get().updateLayer(id, { attributeForm }),
+      setLayerPopup: (id, popup) => get().updateLayer(id, { popup }),
 
       setLayerEditorTracking: (id, editorTracking) => get().updateLayer(id, { editorTracking }),
 

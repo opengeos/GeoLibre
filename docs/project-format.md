@@ -349,6 +349,57 @@ properties (`stroke`, `fill`, `stroke-width`, `fill-opacity`, ...). GeoLibre als
 honors a per-feature `text-color` on text-marker points (used by the Annotations
 layer), falling back to `style.textColor` when a feature does not set it.
 
+A vector layer may carry a `popup` block (Style panel → Popup): the design for
+what a viewer sees when they click or hover a feature. It decides which fields
+appear, in what order, under what labels and value formatting, what titles the
+popup, and whether a hover tooltip follows the pointer:
+
+```json
+{
+  "popup": {
+    "click": true,
+    "hover": true,
+    "titleField": "name",
+    "showFeatureId": false,
+    "fields": [
+      {
+        "field": "pop_max",
+        "label": "Population",
+        "kind": "number",
+        "format": { "thousands": true, "suffix": " people" },
+        "hover": true
+      },
+      { "field": "region", "label": "Region" },
+      { "field": "homepage", "kind": "link", "format": { "linkLabel": "City website" } }
+    ]
+  }
+}
+```
+
+Every key is optional, and **a layer with no `popup` block keeps the historical
+behavior**: the layer name as the heading, then every property as a row. `click`
+defaults to `true` (`false` suppresses the Identify popup); `hover` defaults to
+`false`. `fields` narrows and orders what is shown — an absent or empty list
+means every visible field, in the data's own order — and a listed field the
+feature does not carry is skipped rather than printed empty. Each field's `kind`
+is one of `auto` (the untyped rendering: sanitized KML `description` markup and
+inline `data:image/*;base64` values as thumbnails), `text`, `number`, `date`,
+`link`, or `image`, and `format` carries `decimals`, `thousands`, `dateFormat`
+(`date` | `datetime` | `time` | `iso` | `year`), `prefix`, `suffix`, and
+`linkLabel`. `hover: true` on a field puts it in the tooltip's short subset; a
+tooltip with no flagged field shows the title alone, or nothing when the title
+is just the layer name.
+
+`titleField` leads the popup with a feature's own value instead of the layer
+name; `titleExpression` (a MapLibre expression source) wins over it, and both
+fall back to the layer name when they produce nothing. `bodyExpression`
+replaces the field rows with a sentence built from the feature's properties.
+
+`fieldVisibility` stays authoritative: a field marked `"hidden"` or
+`"excluded"` never reaches a popup, even when the `popup` block names it — the
+popup design selects from what is visible, it cannot re-expose what the author
+hid. Raster pixel identify goes through a different path and ignores `popup`.
+
 ## Layer types
 
 | Type             | Status                                                                                             |

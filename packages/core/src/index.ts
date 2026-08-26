@@ -14,6 +14,7 @@ export * from "./vector-color";
 export * from "./expressions";
 export * from "./external-native-paint";
 export * from "./attribute-form";
+export * from "./popup";
 export * from "./joins";
 export * from "./virtual-fields";
 export * from "./capabilities";
