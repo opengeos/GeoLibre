@@ -459,9 +459,6 @@ function createIdentifyMessagePopupElement(layerName: string, message: string): 
   return createIdentifyPopupElement(layerName, { status: message });
 }
 
-/** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
-const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
-
 // Feature-property keys for geotagged/field-collection photos, from the shared
 // @geolibre/core schema: the popup shows the light thumbnail while the fullscreen
 // viewer and "Save image" use the embedded full-resolution image.
@@ -471,7 +468,7 @@ const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
 /** Return the value at `key` when it is an inline raster image data URL. */
 function imageDataUrlAt(properties: Record<string, unknown>, key: string): string | null {
   const value = properties[key];
-  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value) ? value : null;
+  return isInlineImageValue(value) ? value : null;
 }
 
 /**
@@ -483,7 +480,7 @@ function imageDataUrlAt(properties: Record<string, unknown>, key: string): strin
  */
 function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(properties)) {
-    if (key !== PHOTO_FULL_KEY && typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
+    if (key !== PHOTO_FULL_KEY && isInlineImageValue(value)) {
       return value;
     }
   }
