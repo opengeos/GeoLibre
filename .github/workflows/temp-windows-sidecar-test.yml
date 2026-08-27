@@ -1,0 +1,63 @@
+name: Temporary Windows Sidecar Test Build
+
+on:
+  push:
+    branches: [fix/discussion-2132-windows-sidecar-fetch]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temp-windows-sidecar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build portable Windows x64 app
+    runs-on: windows-2025
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: apps/geolibre-desktop/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build unsigned Windows app
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+        with:
+          projectPath: apps/geolibre-desktop
+          args: --no-sign
+
+      - name: Build portable zip
+        id: portable
+        shell: pwsh
+        run: ./packaging/portable/build-portable.ps1
+
+      - name: Upload portable Windows app
+        uses: actions/upload-artifact@v7
+        with:
+          name: geolibre-windows-sidecar-fix-portable
+          path: ${{ steps.portable.outputs.portable_path }}
+          if-no-files-found: error
+          retention-days: 7
