@@ -77,6 +77,7 @@ import {
 } from "./lib/desktop-settings-url";
 
 installDiagnosticsCapture();
+let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
 // In the desktop build, route geocoding (place search / reverse geocode)
 // through Tauri's native HTTP client so it bypasses WebView CORS: public
 // Nominatim's CDN intermittently omits the CORS header on cached responses,
@@ -87,7 +88,7 @@ if (isTauri()) {
   // the loopback processing server. Route those requests through Tauri's
   // scoped native client so Windows uses the same reliable path as the shell
   // that launched the server.
-  void import("./lib/sidecar-fetch")
+  nativeSidecarFetchReady = import("./lib/sidecar-fetch")
     .then(({ installNativeSidecarFetch }) => installNativeSidecarFetch())
     .catch((error: unknown) => {
       console.error("[GeoLibre] Failed to install native sidecar fetch", error);
@@ -251,6 +252,9 @@ void Promise.all([
   import("./App"),
   import("./components/common/error-boundaries"),
   loadAuthGate(authGate),
+  // Sidecar-dependent panels can issue a request as soon as App mounts. On
+  // Windows, wait until those requests have the native transport installed.
+  nativeSidecarFetchReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
   startupLanguageReady,

@@ -5,6 +5,7 @@ import {
   setSidecarAuthToken,
   setSidecarFetch,
 } from "../packages/processing/src";
+import { isNativeSidecarRequest } from "../apps/geolibre-desktop/src/lib/sidecar-fetch";
 
 describe("sidecar fetch override", () => {
   afterEach(() => {
@@ -41,5 +42,15 @@ describe("sidecar fetch override", () => {
 
     await checkSidecarHealth();
     assert.equal(token, "desktop-token");
+  });
+});
+
+describe("native sidecar scope", () => {
+  it("matches only the configured loopback origin", () => {
+    assert.equal(isNativeSidecarRequest("http://127.0.0.1:8765/whitebox/status"), true);
+    assert.equal(isNativeSidecarRequest(new URL("http://127.0.0.1:8765/health")), true);
+    assert.equal(isNativeSidecarRequest("http://127.0.0.1:9000/health"), false);
+    assert.equal(isNativeSidecarRequest("http://localhost:8765/health"), false);
+    assert.equal(isNativeSidecarRequest("not a url"), false);
   });
 });
