@@ -19,6 +19,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](ui-profiles.md)
 - Internationalization framework with react-i18next and 18 complete per-build translation catalogs — including right-to-left Arabic and Persian with a fully mirrored interface, Persian set in Vazirmatn — plus a `?locale`/`?lang` query parameter to set the embed language
     - Plugin display names resolve through one place, so a plugin reads the same in the Plugins menu, the command palette, Settings, and Manage Plugins, and every processing tool name, description, group label, parameter, and select option is generated into the English catalog for translators to work from. See [Internationalization](i18n.md)
+    - The Whitebox toolbox is translated too: its 1066 tool names, 45 subcategory labels, and unlocked tool parameters are generated into the catalogs and rendered through `t()` in the Processing menu, the tool dialog, and Model Builder search, with Simplified Chinese complete and other locales falling back to English per string
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
 - Undo/redo for layer and style operations
@@ -30,6 +31,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Basemaps**: OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart, with stacking of multiple raster basemaps, blank background support, and double-click to swap the core basemap from the layer panel
     - **Regional basemaps**: a collapsed Regional section in both the New Project and Change Basemap panels for providers with local coverage the global defaults lack, starting with five keyless Chinese basemaps (高德地图, 高德卫星, 高德混合, 腾讯地图, 腾讯深色), with the same providers plus Tianditu available through the Basemaps control plugin
     - **A remembered basemap**: an empty startup workspace opens on the basemap you last selected, while a project's own basemap stays authoritative
+    - **Previews, not just names**: each raster entry in the Basemaps panel shows a z=2 tile of itself, and each keyless style entry shows its background color and then a small offscreen MapLibre snapshot once the row scrolls into view, so a basemap can be told apart before it is applied
     - **Planetary basemaps**: Mars and the Moon (OpenPlanetaryMap), plus Mercury, Venus, the Galilean moons (Io, Europa, Ganymede, Callisto), Titan, Pluto, and Charon (USGS Astrogeology, reprojected to Web Mercator by the tiles Worker). A per-project ellipsoid drives distance, area, and scale measurements from that body's radius, and a planet switcher sits in the Layers panel
     - **Toggleable controls**: navigation, fullscreen, geolocation, globe, terrain, scale (metric, imperial, or nautical), attribution, and logo, plus a double-click terrain control for setting vertical exaggeration
     - **Your own DEM as the terrain source**: terrain settings accept a single-band EPSG:3857 or EPSG:4326 Cloud Optimized GeoTIFF over HTTP or from a local file, read in ranges and encoded to Terrarium tiles through a custom MapLibre protocol, so higher-resolution local elevation can shape the 3D view and the hillshade instead of the global tile set
@@ -47,6 +49,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 - Load local vector layers supported by DuckDB-WASM Spatial, including GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text (including CSV without coordinates, loaded as a standalone attribute table), GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
     - KML/KMZ is read by an in-house parser that honors embedded symbology (a file it cannot handle falls back to the DuckDB Spatial reader, which loads the geometry without the styling), renders `GroundOverlay` images as map overlays that animate through the Time Slider when time-tagged, displays embedded Collada `.dae` 3D models, and serves tiled `NetworkLink`-driven Super-Overlays to the map rather than loading the whole pyramid at once
+    - A KML file's folder structure survives the import: placemarks that sit inside a `Folder` become one layer per folder, everything else stays merged into one layer per file, and the map frames the combined extent rather than the last placemark
 - Reproject vector layers to EPSG:4326 on load, render vector layers that carry Z coordinates in true 3D rather than flattening them onto the ground plane, and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu covering every remote and cloud-native source:
@@ -54,7 +57,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers. The last two load as ordinary raster layers, so opacity, the Style panel's brightness/contrast/saturation, reordering, and project save all apply, drawing from the service's own fused cache when it was built on the standard Web Mercator scheme and from `/export` or `/exportImage` otherwise. MapServer sublayers and ImageServer raster functions are browsed and picked from each service's advertised list, with custom raster function JSON still available for advanced ImageServer rules
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
-    - **Cloud-native archives**: PMTiles, and Zarr from a remote store, an Icechunk repository, or a folder on disk, with variable and dimension pickers that offer the store's real coordinate values rather than raw indices
+    - **Cloud-native archives**: PMTiles, and Zarr from a remote store, an Icechunk repository, or a folder on disk, with variable and dimension pickers that offer the store's real coordinate values rather than raw indices. A tiled archive carrying several source layers is added as a group of them — one named, individually styleable layer per source layer — instead of a single opaque row
     - **Files with pickers**: multi-layer GeoPackages, with a layer picker so only the chosen feature tables load; Excel workbooks imported as point layers from their X and Y columns, with a worksheet picker; delimited text with a source CRS field so projected easting/northing columns reproject correctly, or an Addresses mode that concatenates the columns you pick and geocodes each row through the project's provider (unmatched rows are kept as null-geometry features so they stay visible and fixable in the attribute table); CAD drawings (DXF/DWG) with a drawing-layer picker and CRS selector; and Esri File Geodatabases (`.gdb` folders, desktop) with a feature-class picker and automatic reprojection
     - **3D and media**: LiDAR; 3D Tiles, including authenticated tilesets via custom request headers; ArcGIS I3S scene layers (Integrated Mesh and 3D Object, rendered on deck.gl); Gaussian splats; glTF/GLB 3D models placed at coordinates; georeferenced video overlays; and geotagged photos imported as a point layer from their EXIF GPS, with manual placement and drag for photos lacking coordinates and a true native-resolution photo viewer
     - **Throughout**: a fully internationalized dialog, comma decimal support, drag-and-dropped CSV coordinate files, sample-data dropdowns on every upstream-backed panel for loading ready-made example datasets, and a saved service library for storing and re-adding frequently used web-service endpoints
@@ -80,6 +83,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - A Search places box in the footer that geocodes to a location, flies straight to a typed coordinate in decimal degrees, DMS, or DDM, or flies to an H3 cell index typed as either a hexadecimal string or a 64-bit integer (framing and outlining the cell) — all without leaving the panel
     - The same box also searches the loaded vector layers' own attributes, so a parcel id, a station code, or a well name is found in the data you just added. Matches are grouped by layer above the place results and ranked exact match first, then prefix, then contains; picking one selects that feature on its layer and flies to it with the attribute table's highlight. Fields marked hidden or excluded are skipped, as are hidden layers and tile-backed layers that hold no local features
 - Nested layer groups that give the layer stack a real hierarchy. See [Layer groups](user-guide/layers.md#layer-groups)
+- Per-layer capabilities that mark a layer read-only or restrict it to creating, updating, or deleting features, enforced in the UI and again on the backend, so a reference layer in a shared project stays as its author left it
     - Create a group from scratch, from the current layer, or from a multi-selection
     - Move one layer or a whole selection into a group in one step, or add new data straight into a group
     - Set a group-level opacity, collapse and expand groups, and reorder them
@@ -104,6 +108,11 @@ kepler.gl, see the [Comparison](comparison.md).
     - ArcGIS-style placement and styling controls: anchor, X/Y offset, rotation, wrap width, and letter case
     - Expression-driven label properties and placement priority
     - A Duplicate labels option, plus unique and concatenate modes that collapse points stacked at the same coordinate into a single deduplicated label
+- Popup and tooltip designer that decides what a viewer sees on click and hover, per layer, instead of dumping every property into the Identify popup
+    - Pick which fields appear and in what order, relabel them, and format each value as text, a number with decimals and thousands separators, a date, a link, or an image, with an optional prefix and suffix
+    - Title the popup from a field or an expression, or replace the rows entirely with an expression-built sentence, and show or hide the feature id
+    - Independent click and hover switches, so a layer can carry a full popup, a light tooltip that follows the pointer, both, or neither
+    - Saved with the project, so a shared map, a `layout=viewer` embed, and a story-map chapter show the reader the fields that were meant to be read rather than join artifacts, editor-tracking columns, and internal ids. See [Project format](project-format.md)
 - Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
 - NetCDF and HDF grids are first-class raster layers rather than a single grey band
     - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
@@ -144,7 +153,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 - Controls menu
     - Measure (including terrain-aware 3D measurements and a heading readout — a true great-circle initial bearing with a 16-point compass label, plus a final bearing on lines long enough for the great circle to converge), Bookmark, Minimap, View State, and a Search panel
-    - Map annotation tools that draw text, arrows, and highlights on the map, saved with the project
+    - Map annotation tools that draw text, arrows, and highlights on the map, saved with the project, on a toolbar that collapses to a single button when the drawing tools are not in use
     - Persistent mode banners for the Directions and Reverse Geocode tools
     - A Camera Tour recorder that captures an animated keyframe tour to video, with per-keyframe recapture, per-keyframe hold and transition duration controls, and saving or loading a named tour setup as JSON
     - A Dashboard panel of configurable chart widgets that summarize the loaded layers: histogram, scatter, bar, line, box, and pie charts, plus big-number indicator tiles with count, sum, mean, min, max, or median aggregation and a custom prefix and suffix
@@ -183,8 +192,11 @@ kepler.gl, see the [Comparison](comparison.md).
     - An expanded leafmap-style API: local raster, marker/cluster, and choropleth layers; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected and drawn features; and `to_html` export
     - Layer management and camera control as plain project mutations on `Map` and `Layer` — reorder, duplicate, rename, and remove layers, read attribute values, and frame the map — with the project authoring helpers exported for scripts that never display a widget, and credentials swept out of the layer records and basemap URLs a notebook cell prints back
     - The bundled Whitebox WASM catalog runs from the widget through `list_whitebox_tools` and `run_whitebox_tool`, resolving `Layer` handles to layer ids and adding both vector and raster outputs back to the map, so terrain and raster work no longer means leaving the notebook for the UI
+    - `add_ee_layer` turns an authenticated Earth Engine image, image collection, feature collection, or feature into a restorable tile layer, geemap-style, mosaicking a collection and styling vectors before asking Earth Engine for the map id (needs `earthengine-api`)
+    - An xarray `DataArray` or `Dataset` is materialized as a session-scoped Cloud Optimized GeoTIFF and rendered directly in the browser, cleaned up when the `Map` is closed or collected
 - MCP server (`geolibre-mcp`) that lets an AI client author real `.geolibre.json` projects headlessly over stdio — no browser, no running app, and no bundled web build — composing them with the same builders the Python package uses, so anything it writes opens unchanged in the desktop app, the web app, and the Jupyter widget. Every read and write is confined to the roots given by `--root` or `GEOLIBRE_MCP_ROOTS`. See [MCP server](mcp.md)
 - R package (`geolibre`) for interactive GeoLibre maps in RStudio, Quarto, R Markdown, and Shiny, with GeoJSON, `sf`, remote raster, camera, and project-file support. See the [R package guide](r.md)
+- A shipped agent skill (`skills/geolibre/`) for people driving GeoLibre from Claude Code or any other skill-loading runtime: a SKILL.md plus progressive-disclosure references for the MCP tool surface, the Python API, hand-written project JSON, and the basemap, color-ramp, legend-preset, and layer-type catalog, so an agent knows which entry point to reach for and in what order to call it. Its copy is checked against the real registries by a test. See [Agent skill](agent-skill.md)
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Processing and analysis
@@ -242,6 +254,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - ArcGIS Pro project import (`.aprx` and `.mapx`) that reads CIM JSON without ArcPy and restores the first 2D map's extent, local vector and GeoTIFF layers, nested groups, visibility, simple symbols, field labels, vector-tile portal items, and cached map services, with per-layer warnings for unsupported sources. See [Projects](user-guide/projects.md#importing-an-arcgis-pro-project)
 - Reusable project templates saved to a personal library, with an option to keep the basemap, groups, styles, legend, widgets, and layout while stripping the data layer content
 - Startup preferences on the desktop app: open the default workspace, reopen the last local project, or always open one chosen project, and choose whether an empty workspace starts as a 3D globe or a Mercator map. Remote share links are never replayed on launch, a project URL in the address bar takes precedence, and a startup project that has gone missing falls back to the default workspace with an explanation instead of an error. See [Settings](user-guide/settings.md#startup)
+- A configurable startup map view — longitude, latitude, and zoom — so an empty workspace opens over the area you work in rather than on the whole world. See [Settings](user-guide/settings.md#startup)
 
 ## Plugins
 
@@ -257,6 +270,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Elevation Profile charts a drawn line or the line features currently selected on a layer, so a route already on the map does not have to be traced again
     - USGS LiDAR clips a point cloud to an area of interest and downloads the result as COPC
     - The GeoEditor can pull the vector features currently visible in the map view into the editor for editing without re-importing the source, and write edits back to their origin, including GeoPackage and GeoJSON files and PostGIS database tables
+    - GeoEditor sketches export as an ordinary project layer, carrying their style, opacity, and visibility, so drawn work leaves the editor without being redrawn or re-imported
     - Topological polygon digitizing, so a polygon drawn against its neighbor shares that edge instead of leaving a sliver or an overlap behind
     - Building massing: sketch a footprint, give it a height, and get an extruded mass, with the extrusion style managed as massing features come and go and ordinary polygon sketches left flat
 - Configurable control positions and external plugin manifests, and external plugins can:
@@ -301,6 +315,7 @@ See the [Plugin API](plugin-api.md) to build your own.
     - Protocol v2 is current, and v1 hosts stay supported
     - Off unless the deployment names its trusted origins (`GEOLIBRE_EMBED_ORIGINS`), which are enforced in both directions
 - Dependency-free `@geolibre/embed` npm client for that protocol: `connect()` resolves once the app is ready, each typed command returns a promise settled from its correlated acknowledgement, and events are subscribed by name. Published from each GeoLibre release, so its version tracks the app. See [The typed client](user-guide/embedding.md#the-typed-client)
+- `@geolibre/core` and `@geolibre/map` published to npm alongside it, so another application can build on GeoLibre's Zustand store, `.geolibre.json` project schema, and MapLibre layer-sync engine without vendoring the monorepo. See [Maintenance](maintenance.md)
 - Desktop app capabilities
     - A diagnostics panel that captures native Tauri HTTP requests in the network log and classifies failed `fetch()` errors
     - OS trust store and mTLS client-certificate support for native HTTP

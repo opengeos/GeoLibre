@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/embed",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Typed client for GeoLibre's iframe embed API",
   "keywords": [
     "embed",
