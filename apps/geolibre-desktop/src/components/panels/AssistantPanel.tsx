@@ -38,6 +38,7 @@ import {
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
+  resolveProviderConfig,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -393,7 +394,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       // run's cancellation as a failure.
       if (cancelledGenerationRef.current !== myGeneration) {
         const message =
-          activeProfile?.provider === "ollama" && isOllamaNetworkFailure(error)
+          (activeProfile?.provider ?? resolveProviderConfig()?.provider) === "ollama" &&
+          isOllamaNetworkFailure(error)
             ? withOllamaOriginHint(t("settings.ai.ollamaNetworkFailure"))
             : error instanceof Error
               ? error.message
