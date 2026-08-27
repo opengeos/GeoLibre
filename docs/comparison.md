@@ -202,7 +202,7 @@ here.
   Delete the "none submitted yet" line below once the first one lands.
 -->
 
-*No external comparisons have been submitted yet. Yours can be the first.*
+- [Maptitude vs GeoLibre](https://www.caliper.com/maptitude/solutions/maptitude-vs-geolibre.htm), maintained by Caliper Corporation
 
 To add one, follow the [documentation contribution
 instructions](contributing.md#documentation) and open a pull request adding a
