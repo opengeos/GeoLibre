@@ -18,7 +18,7 @@ describe("Ollama network errors", () => {
   it("shows the exact origin to add to OLLAMA_ORIGINS", () => {
     assert.equal(
       withOllamaOriginHint("Could not reach Ollama.", "http://192.168.1.98:4000"),
-      "Could not reach Ollama. OLLAMA_ORIGINS=http://192.168.1.98:4000",
+      "Could not reach Ollama. CORS: OLLAMA_ORIGINS=http://192.168.1.98:4000",
     );
   });
 });
