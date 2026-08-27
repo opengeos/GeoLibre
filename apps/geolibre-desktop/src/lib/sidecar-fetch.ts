@@ -1,6 +1,6 @@
-import { setSidecarFetch } from "@geolibre/processing";
+import { LOCAL_SIDECAR_URL, setSidecarFetch } from "@geolibre/processing";
 
-const NATIVE_SIDECAR_ORIGIN = "http://127.0.0.1:8765";
+const NATIVE_SIDECAR_ORIGIN = new URL(LOCAL_SIDECAR_URL).origin;
 
 /** Whether a request is inside the native client's exact sidecar scope. */
 export function isNativeSidecarRequest(input: RequestInfo | URL): boolean {
@@ -10,6 +10,29 @@ export function isNativeSidecarRequest(input: RequestInfo | URL): boolean {
   } catch {
     return false;
   }
+}
+
+/** The subset of Tauri's native `fetch` init that this adapter sets. */
+type NativeFetchInit = RequestInit & { maxRedirections?: number };
+type NativeFetch = (input: RequestInfo | URL, init?: NativeFetchInit) => Promise<Response>;
+
+/**
+ * Build the sidecar transport that runs on top of a native `fetch`.
+ *
+ * Requests outside the loopback sidecar origin fall back to the browser fetch,
+ * so a `VITE_SIDECAR_URL` development override still works instead of failing a
+ * capability-scope check. Sidecar requests carry the per-launch
+ * `X-GeoLibre-Token`, and unlike the WebView fetch the native client would
+ * replay that header on a redirect to another host, so redirects are disabled.
+ *
+ * @param tauriFetch - Tauri's native HTTP client fetch.
+ * @returns A transport suitable for {@link setSidecarFetch}.
+ */
+export function createNativeSidecarFetch(tauriFetch: NativeFetch): typeof globalThis.fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (!isNativeSidecarRequest(input)) return globalThis.fetch(input, init);
+    return tauriFetch(input, { ...init, maxRedirections: 0 });
+  }) as typeof globalThis.fetch;
 }
 
 /**
@@ -22,10 +45,5 @@ export function isNativeSidecarRequest(input: RequestInfo | URL): boolean {
  */
 export async function installNativeSidecarFetch(): Promise<void> {
   const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-  setSidecarFetch((input, init) => {
-    // Preserve VITE_SIDECAR_URL development overrides that point outside the
-    // narrowly scoped native capability.
-    if (!isNativeSidecarRequest(input)) return globalThis.fetch(input, init);
-    return tauriFetch(input, init);
-  });
+  setSidecarFetch(createNativeSidecarFetch(tauriFetch));
 }

@@ -1,7 +1,12 @@
 import type { FeatureCollection } from "geojson";
 import type { LayerCapabilities } from "@geolibre/core";
 
-const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
+/**
+ * Loopback origin of the desktop/dev sidecar. Exported so the desktop shell can
+ * scope its native HTTP transport to the same host and port instead of
+ * redeclaring the literal.
+ */
+export const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
 
 /** Build-time override, e.g. `VITE_SIDECAR_URL=http://127.0.0.1:9000`. */
 function explicitSidecarUrl(): string | undefined {

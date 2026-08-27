@@ -5,7 +5,10 @@ import {
   setSidecarAuthToken,
   setSidecarFetch,
 } from "../packages/processing/src";
-import { isNativeSidecarRequest } from "../apps/geolibre-desktop/src/lib/sidecar-fetch";
+import {
+  createNativeSidecarFetch,
+  isNativeSidecarRequest,
+} from "../apps/geolibre-desktop/src/lib/sidecar-fetch";
 
 describe("sidecar fetch override", () => {
   afterEach(() => {
@@ -52,5 +55,54 @@ describe("native sidecar scope", () => {
     assert.equal(isNativeSidecarRequest("http://127.0.0.1:9000/health"), false);
     assert.equal(isNativeSidecarRequest("http://localhost:8765/health"), false);
     assert.equal(isNativeSidecarRequest("not a url"), false);
+  });
+});
+
+describe("native sidecar transport", () => {
+  afterEach(() => {
+    setSidecarAuthToken(null);
+    setSidecarFetch(null);
+  });
+
+  it("disables native redirects so the token is never replayed off-host", async () => {
+    let seenInit: (RequestInit & { maxRedirections?: number }) | undefined;
+    const transport = createNativeSidecarFetch((_input, init) => {
+      seenInit = init;
+      return Promise.resolve(
+        new Response(JSON.stringify({ status: "ok" }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+
+    setSidecarAuthToken("desktop-token");
+    setSidecarFetch(transport);
+
+    assert.deepEqual(await checkSidecarHealth(), { status: "ok" });
+    assert.equal(seenInit?.maxRedirections, 0);
+    assert.equal(new Headers(seenInit?.headers).get("X-GeoLibre-Token"), "desktop-token");
+  });
+
+  it("falls back to the browser fetch outside the native capability scope", async () => {
+    let nativeCalls = 0;
+    const transport = createNativeSidecarFetch(() => {
+      nativeCalls += 1;
+      return Promise.resolve(new Response(null));
+    });
+
+    const originalFetch = globalThis.fetch;
+    let browserUrl: string | null = null;
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      browserUrl = input.toString();
+      return Promise.resolve(new Response(null));
+    }) as typeof globalThis.fetch;
+    try {
+      await transport("http://127.0.0.1:9000/health");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal(nativeCalls, 0);
+    assert.equal(browserUrl, "http://127.0.0.1:9000/health");
   });
 });
