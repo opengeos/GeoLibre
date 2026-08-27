@@ -73,4 +73,6 @@ path = "hatch_build.py"
 path = "hatch_build.py"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "." puts hatch_build.py on the path so tests/test_credential_scan.py can import
+# the credential scanner the build hook uses.
+pythonpath = ["src", "."]

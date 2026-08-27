@@ -253,23 +253,23 @@ const BUILD_ENV_KEYS = [
   "VITE_WELCOME_DISABLED",
 ] as const;
 
-// Vars that authenticate as, and bill to, whoever ran the build. Public-by-design
-// identifiers (the Clerk *publishable* key, the Auth0 client ID/domain, the GEE
-// OAuth client ID, the GA measurement ID) are deliberately NOT here: they are
-// meant to ship, and publish-python.yml already injects the GEE client ID.
-const CREDENTIAL_ENV_KEYS = new Set<string>([
-  "VITE_AMAZON_LOCATION_API_KEY",
-  "VITE_CESIUM_TOKEN",
-  "VITE_GEOCODER_API_KEY",
-  "VITE_GOOGLE_MAPS_API_KEY",
-  "VITE_HERE_API_KEY",
-  "VITE_MAPBOX_ACCESS_TOKEN",
-  "VITE_MAPILLARY_ACCESS_TOKEN",
-  "VITE_PROTOMAPS_API_KEY",
-  "VITE_STADIA_API_KEY",
-  "VITE_TIANDITU_API_KEY",
-  "VITE_TOMTOM_API_KEY",
-]);
+// Vars that authenticate as, and bill to, whoever ran the build. Read from the
+// same file the output scanners use, so the name this config strips and the name
+// they look for can never drift apart -- a credential added to only one of two
+// hand-maintained lists is silently uncovered on that side.
+//
+// Public-by-design identifiers (the Clerk *publishable* key, the Auth0 client
+// ID/domain, the GEE OAuth client ID, the GA measurement ID) are deliberately
+// absent from that list: they are meant to ship, and publish-python.yml already
+// injects the GEE client ID.
+const CREDENTIAL_PATTERNS_FILE = path.resolve(CONFIG_DIR, "../../scripts/credential-patterns.json");
+const CREDENTIAL_ENV_KEYS = new Set<string>(
+  (
+    JSON.parse(readFileSync(CREDENTIAL_PATTERNS_FILE, "utf8")) as {
+      credentialEnvNames: string[];
+    }
+  ).credentialEnvNames,
+);
 
 // A build whose output is installed by someone else must not carry our keys.
 // Today that is the Jupyter wheel; `GEOLIBRE_STRIP_CREDENTIALS=1` lets any other
@@ -279,10 +279,18 @@ const IS_REDISTRIBUTABLE_BUILD = IS_EMBED || process.env.GEOLIBRE_STRIP_CREDENTI
 const ALLOWED_BUILD_ENV_KEYS = new Set<string>(BUILD_ENV_KEYS);
 
 /**
- * Prunes `process.env` so Vite has nothing sensitive left to inline, then
+ * Prunes the build env so Vite has nothing sensitive left to inline, then
  * returns the surviving allowlisted values.
  *
  * Must run at module load, before Vite resolves the env for the bundle.
+ *
+ * Covers `.env*` files as well as the shell. Vite resolves `import.meta.env` by
+ * reading the `.env*` files and then letting `process.env` win for any prefixed
+ * key it already holds -- including when that value is `""`. So deleting a key
+ * from `process.env` does NOT suppress a value the file supplies; only writing
+ * `""` over it does. Since `docs/getting-started.md` tells people to configure
+ * most of these keys in `apps/geolibre-desktop/.env.local` and never export
+ * them, a `process.env`-only sweep would miss the common case entirely.
  *
  * @returns The allowlisted build-time env for `__GEOLIBRE_BUILD_ENV__`.
  */
@@ -290,14 +298,26 @@ function pruneBuildEnv(): Record<string, string> {
   const unknown: string[] = [];
   const withheld: string[] = [];
 
-  for (const key of Object.keys(process.env)) {
-    if (!key.startsWith("VITE_")) continue;
+  const candidates = new Set(
+    [...Object.keys(process.env), ...Object.keys(FILE_ENV)].filter((key) =>
+      key.startsWith("VITE_"),
+    ),
+  );
+
+  for (const key of candidates) {
+    const fromFile = Boolean(FILE_ENV[key]);
     if (!ALLOWED_BUILD_ENV_KEYS.has(key)) {
       delete process.env[key];
+      // A deleted key still resolves from the file, so blank it instead.
+      if (fromFile) process.env[key] = "";
       unknown.push(key);
       continue;
     }
-    if (IS_REDISTRIBUTABLE_BUILD && CREDENTIAL_ENV_KEYS.has(key) && process.env[key]) {
+    if (
+      IS_REDISTRIBUTABLE_BUILD &&
+      CREDENTIAL_ENV_KEYS.has(key) &&
+      (process.env[key] || fromFile)
+    ) {
       process.env[key] = "";
       withheld.push(key);
     }
@@ -317,9 +337,12 @@ function pruneBuildEnv(): Record<string, string> {
     );
   }
 
+  // Mirror what Vite will resolve: a blanked key stays blank, everything else
+  // falls back to its file value so a `.env.local`-configured var still reaches
+  // getBuildEnvironment() and not just `import.meta.env`.
   const record: Record<string, string> = {};
   for (const key of BUILD_ENV_KEYS) {
-    const value = process.env[key];
+    const value = process.env[key] ?? FILE_ENV[key];
     if (value) record[key] = value;
   }
   return record;

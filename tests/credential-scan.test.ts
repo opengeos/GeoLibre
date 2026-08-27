@@ -46,6 +46,17 @@ describe("credential scan", () => {
     );
   });
 
+  it("catches a Google key ending in a dash", () => {
+    // `\b` would fail here: `-` is not a word character, so no boundary exists
+    // between it and the closing quote. The pattern uses a lookahead instead.
+    const key = "AIza" + "A".repeat(34) + "-";
+    assert.equal(scan({ "a.js": `k="${key}"` }).length, 1);
+  });
+
+  it("does not match a run longer than a Google key", () => {
+    assert.deepEqual(scan({ "a.js": `k="AIza${"A".repeat(40)}"` }), []);
+  });
+
   it("masks matched values so build logs never republish them", () => {
     const secret = "AIza" + "C".repeat(35);
     const findings = scan({ "a.js": `k="${secret}"` });

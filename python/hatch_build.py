@@ -25,7 +25,13 @@ import re
 import subprocess
 from pathlib import Path
 
-from hatchling.builders.hooks.plugin.interface import BuildHookInterface
+try:
+    from hatchling.builders.hooks.plugin.interface import BuildHookInterface
+except ModuleNotFoundError:  # pragma: no cover - always present during a build
+    # Only the build backend needs hatchling. Degrading here keeps the credential
+    # scanner below importable on its own, so python/tests can exercise it
+    # against the same fixtures as tests/credential-scan.test.ts.
+    BuildHookInterface = object  # type: ignore[assignment, misc]
 
 PACKAGE_ROOT = Path(__file__).parent
 STATIC_APP = PACKAGE_ROOT / "src" / "geolibre" / "static" / "app"
@@ -53,17 +59,28 @@ def _mask(value: str) -> str:
     return f"{value[:6]}...{value[-4:]} ({len(value)} chars)"
 
 
-def _load_patterns() -> dict | None:
+def _load_patterns() -> dict:
     """Loads the shared credential-pattern definitions.
 
     Returns:
-        The parsed definitions, or None when the file is absent (an
-        installed-package context where there is nothing to scan).
+        The parsed definitions.
+
+    Raises:
+        RuntimeError: If neither copy of the definitions can be found. This is
+            deliberately fatal: returning "no patterns" would make the scan pass
+            silently, which is indistinguishable in the build log from a genuine
+            clean scan and is the opposite of the fail-closed intent.
     """
     for candidate in (PATTERNS_FILE, VENDORED_PATTERNS_FILE):
         if candidate.is_file():
             return json.loads(candidate.read_text(encoding="utf-8"))
-    return None
+    raise RuntimeError(
+        "The credential-pattern definitions were not found at "
+        f"{PATTERNS_FILE} or {VENDORED_PATTERNS_FILE}, so the bundled app cannot "
+        "be checked before packaging. Build from a full checkout of the GeoLibre "
+        "monorepo, or restore the sdist's vendored copy (see "
+        "[tool.hatch.build.targets.sdist.force-include] in pyproject.toml)."
+    )
 
 
 def scan_for_credentials(directory: Path) -> list[str]:
@@ -79,8 +96,6 @@ def scan_for_credentials(directory: Path) -> list[str]:
         Sorted, unique, masked findings; empty when the directory is clean.
     """
     config = _load_patterns()
-    if config is None:
-        return []
 
     scannable = set(config["scannableExtensions"])
     allowed = set(config.get("allowedValueHashes", {}))
