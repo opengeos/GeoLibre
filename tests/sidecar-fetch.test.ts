@@ -83,6 +83,28 @@ describe("native sidecar transport", () => {
     assert.equal(new Headers(seenInit?.headers).get("X-GeoLibre-Token"), "desktop-token");
   });
 
+  it("forwards a multipart body to the native transport untouched", async () => {
+    let seenBody: BodyInit | null | undefined;
+    let seenMethod: string | undefined;
+    const transport = createNativeSidecarFetch((_input, init) => {
+      seenBody = init?.body;
+      seenMethod = init?.method;
+      return Promise.resolve(new Response(null));
+    });
+
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array([1, 2, 3])]), "scene.tif");
+    form.append("model_version", "sam3");
+
+    await transport("http://127.0.0.1:8765/ml/segment/text", { method: "POST", body: form });
+
+    // The adapter must hand the FormData through by reference: Tauri's native
+    // fetch serializes it with `new Request(...)`, which is what generates the
+    // multipart boundary and the matching Content-Type header.
+    assert.equal(seenMethod, "POST");
+    assert.equal(seenBody, form);
+  });
+
   it("falls back to the browser fetch outside the native capability scope", async () => {
     let nativeCalls = 0;
     const transport = createNativeSidecarFetch(() => {
