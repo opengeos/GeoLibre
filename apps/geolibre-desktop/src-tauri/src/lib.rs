@@ -4020,11 +4020,21 @@ fn linux_uses_nvidia_renderer(
 }
 
 #[cfg(target_os = "linux")]
-fn linux_dmabuf_workaround(webkit_version: (u32, u32), uses_nvidia: bool) -> Option<&'static str> {
+#[derive(Debug, PartialEq, Eq)]
+enum LinuxDmabufWorkaround {
+    Disable,
+    ForceShm,
+}
+
+#[cfg(target_os = "linux")]
+fn linux_dmabuf_workaround(
+    webkit_version: (u32, u32),
+    uses_nvidia: bool,
+) -> Option<LinuxDmabufWorkaround> {
     if webkit_version < (2, 48) || (uses_nvidia && webkit_version < (2, 52)) {
-        Some("disable")
+        Some(LinuxDmabufWorkaround::Disable)
     } else if uses_nvidia {
-        Some("force-shm")
+        Some(LinuxDmabufWorkaround::ForceShm)
     } else {
         None
     }
@@ -4099,20 +4109,23 @@ fn configure_linux_webkit() {
         };
         let prime_offload = std::env::var_os("__NV_PRIME_RENDER_OFFLOAD");
         let glx_vendor = std::env::var_os("__GLX_VENDOR_LIBRARY_NAME");
-        let uses_nvidia = linux_uses_nvidia_renderer(
-            Path::new("/sys/class/drm"),
-            prime_offload.as_deref(),
-            glx_vendor.as_deref(),
-        );
+        let uses_nvidia = webkit_version >= (2, 48)
+            && linux_uses_nvidia_renderer(
+                Path::new("/sys/class/drm"),
+                prime_offload.as_deref(),
+                glx_vendor.as_deref(),
+            );
         match linux_dmabuf_workaround(webkit_version, uses_nvidia) {
-            Some("disable") => std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
-            Some("force-shm")
-                if std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none() =>
-            {
-                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "0");
-                std::env::set_var("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1");
+            Some(LinuxDmabufWorkaround::Disable) => {
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             }
-            _ => {}
+            Some(LinuxDmabufWorkaround::ForceShm) => {
+                if std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none() {
+                    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "0");
+                    std::env::set_var("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1");
+                }
+            }
+            None => {}
         }
     }
     // WebAssembly tier-up kills the renderer on x86-64 CPUs without AVX
@@ -4180,7 +4193,7 @@ mod tests {
     use super::{
         cpu_supports_avx, jsc_option_is_off, linux_dmabuf_workaround,
         linux_needs_wasm_osr_workaround, linux_uses_nvidia_renderer, nvidia_is_primary_gpu,
-        WASM_OSR_ENTRY_JSC_OPTIONS,
+        LinuxDmabufWorkaround, WASM_OSR_ENTRY_JSC_OPTIONS,
     };
     // Everything these imports feed is compiled out of the `mas` build, so the
     // tests that exercise it (and their scaffolding) are gated with it.
@@ -4320,9 +4333,18 @@ mod tests {
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
     #[test]
     fn selects_modern_shm_fallback_for_current_nvidia_webkitgtk() {
-        assert_eq!(linux_dmabuf_workaround((2, 47), false), Some("disable"));
-        assert_eq!(linux_dmabuf_workaround((2, 51), true), Some("disable"));
-        assert_eq!(linux_dmabuf_workaround((2, 52), true), Some("force-shm"));
+        assert_eq!(
+            linux_dmabuf_workaround((2, 47), false),
+            Some(LinuxDmabufWorkaround::Disable)
+        );
+        assert_eq!(
+            linux_dmabuf_workaround((2, 51), true),
+            Some(LinuxDmabufWorkaround::Disable)
+        );
+        assert_eq!(
+            linux_dmabuf_workaround((2, 52), true),
+            Some(LinuxDmabufWorkaround::ForceShm)
+        );
         assert_eq!(linux_dmabuf_workaround((2, 52), false), None);
     }
 
