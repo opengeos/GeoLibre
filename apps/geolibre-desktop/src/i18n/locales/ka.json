@@ -6928,7 +6928,7 @@
     "selectedCount_other": "მონიშნულია {{count}}",
     "rangeMin": "მინიმუმი",
     "rangeMax": "მაქსიმუმი",
-    "rangeSeparator": "-დან",
+    "rangeSeparator": "–",
     "dateFrom": "-დან",
     "dateTo": "-მდე",
     "textOperator": "დამთხვევა",
