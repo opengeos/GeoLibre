@@ -52,6 +52,30 @@ export function isMobile(
   return isIpadDesktopUserAgent(userAgent, maxTouchPoints);
 }
 
+const WINDOWS_UA_PATTERN = /Windows/i;
+
+/**
+ * Whether the app is running on Windows.
+ *
+ * Used to scope workarounds for WebView2-only behavior, such as routing the
+ * loopback sidecar through Tauri's native HTTP client (see
+ * `lib/sidecar-fetch.ts`): macOS and Linux use different webview stacks that
+ * never hit that restriction, so they keep the direct WebView fetch rather than
+ * paying the native client's IPC body serialization.
+ *
+ * User-agent based for the same reason as {@link isMobile} — no extra Tauri
+ * plugin, Rust crate, or capability wiring — and every WebView2 user agent
+ * carries a "Windows NT" token.
+ *
+ * @param userAgent - Override for testing; defaults to `navigator.userAgent`.
+ * @returns True when the user agent identifies Windows.
+ */
+export function isWindows(
+  userAgent: string = typeof navigator !== "undefined" ? navigator.userAgent : "",
+): boolean {
+  return WINDOWS_UA_PATTERN.test(userAgent);
+}
+
 /**
  * Whether the app runs in the *desktop* Tauri shell — the Tauri webview on a
  * desktop OS, excluding the packaged Android/iOS apps.

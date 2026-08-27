@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isAndroid, isDesktopRuntime, isMobile } from "../apps/geolibre-desktop/src/lib/is-mobile";
+import {
+  isAndroid,
+  isDesktopRuntime,
+  isMobile,
+  isWindows,
+} from "../apps/geolibre-desktop/src/lib/is-mobile";
 
 describe("isMobile", () => {
   it("detects Android (incl. the Tauri webview UA)", () => {
@@ -59,6 +64,30 @@ describe("isAndroid", () => {
   it("does not classify iOS or desktop user agents as Android", () => {
     assert.equal(isAndroid("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"), false);
     assert.equal(isAndroid("Mozilla/5.0 (X11; Linux x86_64) Chrome/138 Safari/537.36"), false);
+  });
+});
+
+describe("isWindows", () => {
+  it("matches the WebView2 user agent", () => {
+    assert.equal(
+      isWindows(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138 Safari/537.36 Edg/138",
+      ),
+      true,
+    );
+  });
+
+  it("does not match the other desktop webviews", () => {
+    assert.equal(
+      isWindows(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1",
+      ),
+      false,
+    );
+    assert.equal(
+      isWindows("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 Safari/605.1"),
+      false,
+    );
   });
 });
 

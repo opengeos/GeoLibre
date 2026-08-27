@@ -65,6 +65,7 @@ import "./lib/auth-return-url-boot";
 import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
 import { startAnalytics } from "./lib/analytics";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
+import { isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
@@ -87,12 +88,17 @@ if (isTauri()) {
   // WebView2 can apply browser CORS and Local Network Access restrictions to
   // the loopback processing server. Route those requests through Tauri's
   // scoped native client so Windows uses the same reliable path as the shell
-  // that launched the server.
-  nativeSidecarFetchReady = import("./lib/sidecar-fetch")
-    .then(({ installNativeSidecarFetch }) => installNativeSidecarFetch())
-    .catch((error: unknown) => {
-      console.error("[GeoLibre] Failed to install native sidecar fetch", error);
-    });
+  // that launched the server. Windows-only: the macOS and Linux webviews reach
+  // the sidecar directly, and the native client serializes request bodies over
+  // IPC, which would tax large uploads (ML segmentation) on platforms that were
+  // never broken.
+  if (isWindows()) {
+    nativeSidecarFetchReady = import("./lib/sidecar-fetch")
+      .then(({ installNativeSidecarFetch }) => installNativeSidecarFetch())
+      .catch((error: unknown) => {
+        console.error("[GeoLibre] Failed to install native sidecar fetch", error);
+      });
+  }
   void import("./lib/geocoding-fetch")
     .then(({ installNativeGeocodingFetch }) => installNativeGeocodingFetch())
     .catch((error: unknown) => {
