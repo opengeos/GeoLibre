@@ -65,7 +65,12 @@ describe("native sidecar transport", () => {
   });
 
   it("disables native redirects so the token is never replayed off-host", async () => {
-    let seenInit: (RequestInit & { maxRedirections?: number }) | undefined;
+    let seenInit:
+      | (RequestInit & {
+          maxRedirections?: number;
+          proxy?: { all?: { url: string; noProxy?: string } };
+        })
+      | undefined;
     const transport = createNativeSidecarFetch((_input, init) => {
       seenInit = init;
       return Promise.resolve(
@@ -80,6 +85,9 @@ describe("native sidecar transport", () => {
 
     assert.deepEqual(await checkSidecarHealth(), { status: "ok" });
     assert.equal(seenInit?.maxRedirections, 0);
+    // Any proxy entry disables reqwest's system-proxy lookup, and `*` stops the
+    // supplied one from intercepting, so the request stays on the loopback.
+    assert.equal(seenInit?.proxy?.all?.noProxy, "*");
     assert.equal(new Headers(seenInit?.headers).get("X-GeoLibre-Token"), "desktop-token");
   });
 
