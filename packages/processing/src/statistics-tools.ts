@@ -1396,6 +1396,20 @@ export interface CompositeScoreOptions {
   scale: number;
 }
 
+/**
+ * How many decimals a composite score on this scale is rounded to.
+ *
+ * A 0-100 index carries its useful resolution in two; a 0-1 one needs four to
+ * say the same thing. One definition, so the summary statistics the tool logs
+ * round exactly the way the scores they describe were rounded.
+ *
+ * @param scale - Upper end of the output range.
+ * @returns The decimal count to round to.
+ */
+function scoreDecimals(scale: number): number {
+  return scale >= 100 ? 2 : 4;
+}
+
 /** Per-feature output of {@link computeCompositeScores}. */
 export interface CompositeScoreResult {
   /** The composite score per feature, null where the feature was not scored. */
@@ -1450,7 +1464,7 @@ export function computeCompositeScores(
     );
   }
 
-  const decimals = scale >= 100 ? 2 : 4;
+  const decimals = scoreDecimals(scale);
   const scores: (number | null)[] = [];
   let unscored = 0;
   for (let index = 0; index < featureCount; index++) {
@@ -1712,7 +1726,7 @@ export const compositeScoreTool: ProcessingAlgorithm = {
       if (score > max) max = score;
       sum += score;
     }
-    const decimals = scale >= 100 ? 2 : 4;
+    const decimals = scoreDecimals(scale);
     ctx.log(`Weights: ${weightSummary}.`);
     ctx.log(
       `Scored ${out.length} of ${features.length} features — ` +
