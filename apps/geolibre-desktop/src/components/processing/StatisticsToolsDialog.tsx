@@ -6,6 +6,7 @@ import {
   type AlgorithmParameter,
   type FieldWeight,
   type GeometryFamily,
+  numericFieldValue,
   type ProcessingContext,
   type ResultLayerOptions,
 } from "@geolibre/processing";
@@ -63,16 +64,17 @@ function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
 }
 
 /**
- * Whether a GeoJSON property value is a number a scoring tool can use: a finite
- * number, or a non-blank string holding one (GeoJSON from a CSV or a database
- * export routinely quotes its numbers).
+ * Whether a GeoJSON property value is a number a scoring tool can use.
+ *
+ * Delegates to the processing package's own rule so the fields this picker
+ * offers are exactly the ones a tool will score, rather than two copies of the
+ * same check drifting apart.
  *
  * @param value - Raw property value.
  * @returns True when the value reads as a finite number.
  */
 function isNumericValue(value: unknown): boolean {
-  if (typeof value === "number") return Number.isFinite(value);
-  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
+  return numericFieldValue(value) !== null;
 }
 
 /**

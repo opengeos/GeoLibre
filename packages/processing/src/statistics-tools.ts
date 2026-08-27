@@ -1430,14 +1430,20 @@ export function computeCompositeScores(
 ): CompositeScoreResult {
   const { fields, aggregation, nullHandling, scale } = options;
   const featureCount = fields.length ? (columns.get(fields[0].field)?.length ?? 0) : 0;
-  const totalWeight = fields.reduce((acc, entry) => acc + entry.weight, 0);
+  // A share below zero is not a weight, and it would push the combined mean
+  // outside the [0, 1] the components live on, so the score would leave its
+  // documented range. `readFieldWeights` already clamps on the dialog's path;
+  // clamping here covers a caller reaching this exported function directly.
+  const share = (entry: FieldWeight) =>
+    Number.isFinite(entry.weight) ? Math.max(entry.weight, 0) : 0;
+  const totalWeight = fields.reduce((acc, entry) => acc + share(entry), 0);
 
   const weights = new Map<string, number>();
   const components = new Map<string, (number | null)[]>();
   for (const entry of fields) {
     // Every weight at zero carries no information; the shares stay at zero
     // rather than becoming NaN, and every feature comes back unscored.
-    weights.set(entry.field, totalWeight > 0 ? entry.weight / totalWeight : 0);
+    weights.set(entry.field, totalWeight > 0 ? share(entry) / totalWeight : 0);
     components.set(
       entry.field,
       normalizeFieldValues(columns.get(entry.field) ?? [], entry.normalization, entry.direction),
@@ -1523,21 +1529,29 @@ function readFieldWeights(value: unknown): FieldWeight[] {
 }
 
 /**
- * Read one field's values off the features, with null where there is none.
+ * The number a feature property holds for scoring, or null when it holds none.
  *
  * Quoted numbers count (GeoJSON exported from a CSV or a database routinely
  * carries them as strings), but a boolean or an array does not, even though
- * both survive `Number()` — the field picker applies the same rule, so what the
- * dialog offers and what the tool scores stay the same set.
+ * both survive `Number()`.
+ *
+ * Exported because the field picker has to offer exactly the values the tools
+ * can score: sharing this one rule is what keeps the dropdown and the run from
+ * disagreeing about what "numeric" means.
+ *
+ * @param value - Raw property value off a feature.
+ * @returns The finite number it reads as, or null.
  */
+export function numericFieldValue(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Read one field's values off the features, with null where there is none. */
 function fieldColumn(features: Feature[], field: string): (number | null)[] {
-  return features.map((feature) => {
-    const raw = feature.properties?.[field];
-    if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
-    if (typeof raw !== "string" || raw.trim() === "") return null;
-    const value = Number(raw);
-    return Number.isFinite(value) ? value : null;
-  });
+  return features.map((feature) => numericFieldValue(feature.properties?.[field]));
 }
 
 export const compositeScoreTool: ProcessingAlgorithm = {

@@ -591,6 +591,19 @@ describe("composite score aggregation", () => {
     assert.equal(unscored, 0);
   });
 
+  it("clamps a negative weight rather than scoring outside the range", () => {
+    const { scores, weights } = computeCompositeScores(columns, {
+      fields: [evenFields[0], { ...evenFields[1], weight: -1 }],
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    // A negative share would drag the mean below zero; clamped, "b" simply
+    // carries nothing and "a" is the whole index.
+    assert.equal(weights.get("b"), 0);
+    assert.deepEqual(scores, [0, 50, 100]);
+  });
+
   it("leaves every feature unscored when no field carries weight", () => {
     const { scores, unscored } = computeCompositeScores(columns, {
       fields: evenFields.map((entry) => ({ ...entry, weight: 0 })),

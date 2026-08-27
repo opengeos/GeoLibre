@@ -50,6 +50,7 @@ export {
   compositeScoreTool,
   computeCompositeScores,
   normalizeFieldValues,
+  numericFieldValue,
   type CompositeAggregation,
   type CompositeNullHandling,
   type CompositeScoreOptions,
