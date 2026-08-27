@@ -12,12 +12,14 @@ export function isNativeSidecarRequest(input: RequestInfo | URL): boolean {
   }
 }
 
-/** The subset of Tauri's native `fetch` init that this adapter sets. */
-type NativeFetchInit = RequestInit & {
-  maxRedirections?: number;
-  proxy?: { all?: { url: string; noProxy?: string } };
-};
-type NativeFetch = (input: RequestInfo | URL, init?: NativeFetchInit) => Promise<Response>;
+/**
+ * Tauri's native `fetch` and its init, taken from the plugin rather than
+ * re-declared, so a renamed or dropped option fails `npm run typecheck` instead
+ * of silently drifting. A type-only import: nothing is emitted, so the web and
+ * embedded bundles still never pull in the Tauri HTTP plugin.
+ */
+type NativeFetch = typeof import("@tauri-apps/plugin-http").fetch;
+type NativeFetchInit = NonNullable<Parameters<NativeFetch>[1]>;
 
 /**
  * Force a direct connection to the loopback sidecar.
@@ -30,8 +32,12 @@ type NativeFetch = (input: RequestInfo | URL, init?: NativeFetchInit) => Promise
  * `X-GeoLibre-Token`, to that proxy, where WebView2 had connected directly.
  *
  * The plugin exposes no "disable proxy" switch, but supplying any proxy clears
- * reqwest's automatic system-proxy lookup, and a `*` exclusion list means the
- * supplied proxy never intercepts either — so every sidecar request goes direct.
+ * reqwest's automatic system-proxy lookup (`ClientBuilder::proxy` sets
+ * `auto_sys_proxy = false`), and a `*` exclusion list means the supplied proxy
+ * never intercepts either (hyper-util `NoProxy::from_string("*")` matches every
+ * host) — so every sidecar request goes direct. Both are upstream *behaviors*,
+ * not API contracts, so a `@tauri-apps/plugin-http` bump has to re-check them:
+ * see docs/maintenance.md.
  */
 const NO_PROXY: NativeFetchInit["proxy"] = {
   all: { url: NATIVE_SIDECAR_ORIGIN, noProxy: "*" },

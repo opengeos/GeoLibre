@@ -173,6 +173,41 @@ assignability against the real imported type, so a renamed or dropped engine
 identifier fails `npm run typecheck`. Nothing extra to do on a bump beyond letting
 the build run.
 
+### `@tauri-apps/plugin-http` — two upstream *behaviors*, not APIs
+
+`createNativeSidecarFetch`
+(`apps/geolibre-desktop/src/lib/sidecar-fetch.ts`) routes Windows sidecar traffic
+through the plugin's native `fetch` and hardens it with two options whose effect
+comes from `reqwest`'s implementation rather than from any documented contract.
+The option *names* are compiler-checked — `NativeFetchInit` is derived from
+`typeof import("@tauri-apps/plugin-http").fetch`, so a renamed or dropped option
+fails `npm run typecheck` — but the semantics are not, and both fail silently:
+
+- `maxRedirections: 0` maps to `reqwest::redirect::Policy::none()`
+  (`tauri-plugin-http/src/commands.rs`). Without it the native client follows
+  redirects, and `reqwest` only strips `Authorization`/`Cookie` across hosts, so
+  the per-launch `X-GeoLibre-Token` would be replayed to whatever a 3xx pointed
+  at.
+- `proxy: { all: { url, noProxy: "*" } }` is how the sidecar reaches the loopback
+  directly. The plugin has no "disable proxy" switch, but any `ClientBuilder::proxy`
+  call sets `auto_sys_proxy = false` (`reqwest/src/async_impl/client.rs`), and
+  `NoProxy::from_string("*")` matches every host
+  (`hyper-util/src/client/proxy/matcher.rs`), so the supplied proxy never
+  intercepts either. This matters because reqwest's `system-proxy` feature *is*
+  in the resolved graph (confirm with
+  `cargo tree -e features -i reqwest`; the plugin's default
+  `macos-system-configuration` feature pulls it in), and hyper-util's Windows
+  reader copies the registry `ProxyOverride` list verbatim — it never expands the
+  `<local>` token Windows writes for "bypass proxy server for local addresses".
+  Drop this and a corporate-proxied Windows machine sends the sidecar request
+  body and token to the proxy.
+
+`tests/sidecar-fetch.test.ts` pins the options the adapter passes, which catches a
+careless edit here but cannot exercise the Rust side. On a plugin bump, re-check
+both behaviors against the sources above; the failure modes are a leaked token and
+a sidecar that is unreachable only for proxied users, neither of which shows up in
+CI or on an unproxied dev machine.
+
 ## Adding a blend mode
 
 **Do not add a blend mode without checking it in the browser.** MapLibre's blend
