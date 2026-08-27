@@ -186,6 +186,7 @@ export {
 export {
   checkSidecarHealth,
   setSidecarAuthToken,
+  setSidecarFetch,
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchConversionJob,
   fetchConversionStatus,

@@ -83,6 +83,15 @@ installDiagnosticsCapture();
 // which the WebView rejects as "Search failed. Try again." Lazy + desktop-only
 // so the web/embedded bundles never import the Tauri HTTP plugin.
 if (isTauri()) {
+  // WebView2 can apply browser CORS and Local Network Access restrictions to
+  // the loopback processing server. Route those requests through Tauri's
+  // scoped native client so Windows uses the same reliable path as the shell
+  // that launched the server.
+  void import("./lib/sidecar-fetch")
+    .then(({ installNativeSidecarFetch }) => installNativeSidecarFetch())
+    .catch((error: unknown) => {
+      console.error("[GeoLibre] Failed to install native sidecar fetch", error);
+    });
   void import("./lib/geocoding-fetch")
     .then(({ installNativeGeocodingFetch }) => installNativeGeocodingFetch())
     .catch((error: unknown) => {

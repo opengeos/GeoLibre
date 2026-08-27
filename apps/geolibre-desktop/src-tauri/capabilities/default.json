@@ -37,9 +37,10 @@
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
     {
-      "comment": "Hosts routed through the native HTTP client to bypass the WebView's CORS. Geocoding (place search / reverse geocode): public Nominatim's CDN intermittently omits the CORS header on cached responses (rejected as 'Search failed'), and the native client can send the User-Agent Nominatim's policy requires — keep the geocoder hosts in sync with the GEOCODING_PROVIDERS registry / lib/geocoding-fetch.ts. share.geolibre.app (project Share + gallery) and datasets.geolibre.app (the built-in GeoLens service) have origin-restricted CORS policies that may not include the Tauri WebView origin — see lib/share-fetch.ts and lib/geolens-fetch.ts. Any custom/self-hosted service falls back to the browser fetch.",
+      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The loopback scope is only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, and GeoLens use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. Any custom/self-hosted service falls back to browser fetch.",
       "identifier": "http:default",
       "allow": [
+        { "url": "http://127.0.0.1:8765/*" },
         { "url": "https://nominatim.openstreetmap.org/*" },
         { "url": "https://api.geocode.earth/*" },
         { "url": "https://geocode.arcgis.com/*" },

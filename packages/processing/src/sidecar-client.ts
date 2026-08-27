@@ -53,6 +53,19 @@ const DEFAULT_SIDECAR_URL = resolveSidecarBaseUrl();
  */
 let sidecarAuthToken: string | null = null;
 
+// Desktop installs Tauri's native HTTP client here. Keeping the override in
+// this package makes every sidecar endpoint use the same transport, while web,
+// Docker, and Vite development continue to use the browser fetch.
+let sidecarFetchImpl: typeof globalThis.fetch | null = null;
+
+/**
+ * Override the transport used for requests to the local processing sidecar.
+ * Passing null restores the browser fetch.
+ */
+export function setSidecarFetch(fetchImpl: typeof globalThis.fetch | null): void {
+  sidecarFetchImpl = fetchImpl;
+}
+
 /**
  * Record (or clear) the sidecar auth token. Call after `startGeoLibreSidecar()`
  * returns. Passing an empty/nullish value clears it.
@@ -74,10 +87,11 @@ export function setSidecarAuthToken(token: string | null | undefined): void {
  * @returns The fetch response promise.
  */
 function sidecarFetch(input: string, init?: RequestInit): Promise<Response> {
-  if (!sidecarAuthToken) return fetch(input, init);
+  const fetchImpl = sidecarFetchImpl ?? globalThis.fetch;
+  if (!sidecarAuthToken) return fetchImpl(input, init);
   const headers = new Headers(init?.headers);
   headers.set("X-GeoLibre-Token", sidecarAuthToken);
-  return fetch(input, { ...init, headers });
+  return fetchImpl(input, { ...init, headers });
 }
 
 const WHITEBOX_CATALOG_SNAPSHOT_URL =
