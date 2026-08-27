@@ -140,8 +140,8 @@ and the server ships untested.
   not the physical `ml-`/`left-` forms. **Read `docs/i18n.md` in full before any
   i18n work** — skipping it is the most common source of locale bugs.
 - **Some things upstream doesn't export are mirrored by hand, and drift fails
-  silently.** Before bumping `maplibre-gl`, any `maplibre-gl-*` package, or
-  `geolibre-wasm` — including Dependabot PRs — read
+  silently.** Before bumping `maplibre-gl`, any `maplibre-gl-*` package,
+  `geolibre-wasm`, or `@tauri-apps/plugin-http` — including Dependabot PRs — read
   [`docs/maintenance.md`](docs/maintenance.md) and run the frontend suite. That
   page also covers the coverage floors, the `npm audit` allowlist, the npm
   publish layout for `@geolibre/core`/`@geolibre/map`, the committed
