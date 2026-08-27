@@ -38,10 +38,10 @@ export function isOllamaNetworkFailure(error: unknown): boolean {
   return false;
 }
 
-/** Append the exact browser origin Ollama must allow after a CORS failure. */
+/** Append the exact origin as a language-neutral example for OLLAMA_ORIGINS. */
 export function withOllamaOriginHint(message: string, origin?: string): string {
   const allowedOrigin = origin ?? globalThis.location?.origin;
-  return allowedOrigin ? `${message} CORS: OLLAMA_ORIGINS=${allowedOrigin}` : message;
+  return allowedOrigin ? `${message} (OLLAMA_ORIGINS=${allowedOrigin})` : message;
 }
 
 /**
