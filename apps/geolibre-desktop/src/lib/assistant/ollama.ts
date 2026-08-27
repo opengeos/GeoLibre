@@ -1,3 +1,5 @@
+import { classifyFetchFailure } from "../fetch-error";
+
 interface OllamaTagsResponse {
   models?: unknown;
 }
@@ -16,6 +18,31 @@ const DISCOVERY_TIMEOUT_MS = 10_000;
  * on the default install where discovery would have worked untouched.
  */
 export const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
+
+/**
+ * Whether an Ollama/OpenAI client error ultimately came from the browser's
+ * network layer. The OpenAI SDK wraps `fetch` failures in an API connection
+ * error, so inspect the `cause` chain instead of classifying only the wrapper.
+ */
+export function isOllamaNetworkFailure(error: unknown): boolean {
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  while (current != null && !seen.has(current)) {
+    seen.add(current);
+    if (classifyFetchFailure(current).kind === "network") return true;
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : null;
+  }
+  return false;
+}
+
+/** Append the exact browser origin Ollama must allow after a CORS failure. */
+export function withOllamaOriginHint(message: string, origin?: string): string {
+  const allowedOrigin = origin ?? globalThis.location?.origin;
+  return allowedOrigin ? `${message} OLLAMA_ORIGINS=${allowedOrigin}` : message;
+}
 
 /**
  * Fetch the model ids installed in an Ollama server. `signal`, when given, is

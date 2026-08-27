@@ -27,7 +27,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DEFAULT_OLLAMA_BASE_URL, discoverOllamaModels } from "../../lib/assistant/ollama";
+import {
+  DEFAULT_OLLAMA_BASE_URL,
+  discoverOllamaModels,
+  withOllamaOriginHint,
+} from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
@@ -100,7 +104,7 @@ function useOllamaModels() {
       // models:" prefix — prefixing all three would read redundantly.
       setError(
         kind === "network"
-          ? t("settings.ai.ollamaNetworkFailure")
+          ? withOllamaOriginHint(t("settings.ai.ollamaNetworkFailure"))
           : kind === "timeout"
             ? t("settings.ai.ollamaTimedOut")
             : t("settings.ai.modelsFailedToLoad", {

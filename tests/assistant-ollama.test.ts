@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { discoverOllamaModels } from "../apps/geolibre-desktop/src/lib/assistant/ollama";
+import {
+  discoverOllamaModels,
+  isOllamaNetworkFailure,
+  withOllamaOriginHint,
+} from "../apps/geolibre-desktop/src/lib/assistant/ollama";
+
+describe("Ollama network errors", () => {
+  it("recognizes a browser fetch failure wrapped by the OpenAI client", () => {
+    const fetchError = new TypeError("Failed to fetch");
+    const sdkError = new Error("Connection error", { cause: fetchError });
+
+    assert.equal(isOllamaNetworkFailure(sdkError), true);
+    assert.equal(isOllamaNetworkFailure(new Error("Ollama returned HTTP 500")), false);
+  });
+
+  it("shows the exact origin to add to OLLAMA_ORIGINS", () => {
+    assert.equal(
+      withOllamaOriginHint("Could not reach Ollama.", "http://192.168.1.98:4000"),
+      "Could not reach Ollama. OLLAMA_ORIGINS=http://192.168.1.98:4000",
+    );
+  });
+});
 
 describe("discoverOllamaModels", () => {
   it("normalizes hosts and parses unique model names", async () => {
