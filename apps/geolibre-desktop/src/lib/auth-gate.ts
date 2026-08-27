@@ -1,3 +1,4 @@
+import { getBuildEnvironment } from "@geolibre/core";
 import { AUTH0_CLIENT_ID_ENV, AUTH0_DOMAIN_ENV, resolveAuth0Config } from "./auth0-auth";
 import {
   CLERK_PUBLISHABLE_KEY_ENV,
@@ -27,7 +28,7 @@ export type AuthGateConfig =
  *   the build target alone: a runtime signal the visitor controls (`?embed=1`)
  *   would let anyone switch a configured gate off.
  * @param deploymentEnv - Runtime env; defaults to the value on `window`.
- * @param buildEnv - Build-time env; defaults to `import.meta.env`.
+ * @param buildEnv - Build-time env; defaults to the allowlisted build env.
  * @returns The provider and its settings, or undefined when no gate is configured.
  */
 export function resolveAuthGate(
@@ -37,7 +38,7 @@ export function resolveAuthGate(
 ): AuthGateConfig | undefined {
   if (!webApp) return undefined;
   const deployment = deploymentEnv ?? readDeploymentEnv();
-  const build = buildEnv ?? (import.meta.env as EnvRecord);
+  const build = buildEnv ?? (getBuildEnvironment() as EnvRecord);
 
   const clerkKey = resolveClerkPublishableKey(true, deployment, build);
   const auth0 = resolveAuth0Config(true, deployment, build);

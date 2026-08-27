@@ -6,6 +6,8 @@
  * every translation in every GeoLibre binary would dominate the UI catalogs.
  */
 
+import { getBuildEnvironment } from "@geolibre/core";
+
 export const LANGUAGE_PACK_FORMAT = "geolibre-language-pack";
 export const LANGUAGE_PACK_FORMAT_VERSION = 1;
 export const LANGUAGE_PACK_SCOPE = "whitebox";
@@ -192,10 +194,7 @@ export function parseLanguagePack(text: string): GeoLibreLanguagePack {
 }
 
 function configuredLanguagePackBaseUrl(): string {
-  const configured =
-    typeof import.meta.env === "undefined"
-      ? undefined
-      : (import.meta.env.VITE_LANGUAGE_PACK_BASE_URL as string | undefined);
+  const configured = getBuildEnvironment().VITE_LANGUAGE_PACK_BASE_URL;
   if (configured?.trim()) return configured.trim().replace(/\/+$/, "");
   const noExternalCdn = typeof __NO_EXTERNAL_CDN__ !== "undefined" ? __NO_EXTERNAL_CDN__ : false;
   return noExternalCdn ? "" : DEFAULT_LANGUAGE_PACK_BASE_URL;

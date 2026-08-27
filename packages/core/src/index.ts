@@ -116,6 +116,7 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getBuildEnvironment,
   getCesiumIonToken,
   getGoogleMapsApiKey,
   getMapboxAccessToken,

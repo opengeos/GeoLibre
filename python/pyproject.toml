@@ -59,6 +59,12 @@ artifacts = ["src/geolibre/static/**"]
 
 [tool.hatch.build.targets.sdist]
 artifacts = ["src/geolibre/static/**"]
+# hatch_build.py scans the bundled app for credentials before packaging, using
+# the pattern definitions shared with scripts/scan-credentials.mjs. Those live
+# outside this directory, so vendor a copy into the sdist: an sdist -> wheel
+# build has no monorepo checkout and would otherwise skip the scan.
+[tool.hatch.build.targets.sdist.force-include]
+"../scripts/credential-patterns.json" = "credential-patterns.json"
 
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"

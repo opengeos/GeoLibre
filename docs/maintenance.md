@@ -306,6 +306,96 @@ So: any edit to that `pyproject.toml`'s dependencies must land with a refreshed
 lock (`uv lock --project backend/geolibre_server`). CI's "Check the bundled sidecar
 lockfile is in sync" step (`uv lock --check`) fails if they drift.
 
+## Credentials must never reach a redistributable build
+
+Anything we hand to someone else — the Jupyter wheel above all — must carry no
+credential of ours. Three properties of this build make that easy to get wrong,
+and every guard below blocks one of them.
+
+1. `apps/geolibre-desktop/vite.config.ts` bridges bare shell vars into their
+   `VITE_` names — `GOOGLE_MAPS_API_KEY` → `VITE_GOOGLE_MAPS_API_KEY`, and the
+   same for `MAPBOX_TOKEN` and `CESIUM_TOKEN`. Convenient for local testing;
+   it also means the build machine's shell is build input.
+2. Something in the graph reads `import.meta.env` as a **whole object**. Vite
+   cannot tell which keys such a read wants, so it stops replacing per key and
+   inlines the entire env record — every `VITE_` var on the build machine — into
+   every chunk that read reaches. Ours was `packages/core/src/runtime-env.ts`;
+   the one we cannot fix is `@clerk/shared`'s `getEnvVariable.mjs`, which does
+   `import.meta.env[name]` with a computed name, so the inlined record lands in
+   the `ClerkGate-*.js` chunk.
+3. `python/hatch_build.py` skips the JS build when `static/app` already exists
+   and `GEOLIBRE_FORCE_JS_BUILD` is unset. A local `python -m build` therefore
+   packages whatever an earlier `npm run build:embed` left staged, with no
+   JavaScript running at all.
+
+### The rules now
+
+- **`BUILD_ENV_KEYS`** in `vite.config.ts` is the allowlist of `VITE_` names that
+  may reach a bundle. `pruneBuildEnv()` deletes every other `VITE_` var from
+  `process.env` before Vite reads it. Adding a new build-time var means adding it
+  here — otherwise it silently resolves to undefined.
+- **`CREDENTIAL_ENV_KEYS`** is the subset that authenticates as, and bills to,
+  whoever ran the build. In a *redistributable* build these are blanked to `""`
+  (blanked, not deleted, so a `.env` file cannot reintroduce them). A build is
+  redistributable when `GEOLIBRE_EMBED=1` (the Jupyter wheel) or
+  `GEOLIBRE_STRIP_CREDENTIALS=1`.
+  The web deploy is **not** redistributable: it is our own site using our own
+  referrer-restricted keys, and it keeps them.
+- Public-by-design identifiers stay in every build: the Clerk *publishable* key,
+  the Auth0 client ID and domain, the GEE OAuth client ID, the GA measurement ID.
+  `publish-python.yml` deliberately injects the GEE client ID into the wheel.
+- Prefer `getBuildEnvironment()` from `@geolibre/core` over reading
+  `import.meta.env` yourself. A whole-object read re-opens cause (2) for every
+  chunk it reaches, and nothing in the type system will tell you.
+
+Each stripped credential resolves through `getRuntimeEnvironment()`, which
+overlays `window.__GEOLIBRE_RUNTIME_ENV__` from Settings → Environment variables.
+So a wheel user supplies their own token and the affected surfaces degrade as
+documented: Mapbox prompts in the basemap API-keys view, the 3D globe is not
+offered, Protomaps basemaps are hidden.
+
+### The scan
+
+`scripts/scan-credentials.mjs` verifies the **output**. A build run by hand can
+satisfy every rule above and still be wrong, and a third-party asset dropped into
+the tree can arrive with a key already inside it — neither is visible from the
+config. It runs in two places:
+
+- `scripts/build-embed.mjs`, before staging `dist-embed` into the Python package.
+- `python/hatch_build.py`, before packaging any wheel or sdist — including the
+  stale-assets path (3) above, which no JS-side guard can cover. This one needs
+  no Node.
+
+Both read `scripts/credential-patterns.json`, so the JS and Python scanners
+cannot drift; the file is force-included into the sdist so an sdist → wheel build
+is gated too. `tests/credential-scan.test.ts` covers it.
+
+To scan any built directory by hand:
+
+```bash
+node scripts/scan-credentials.mjs apps/geolibre-desktop/dist-embed
+```
+
+### When the scan fires after a dependency bump
+
+`allowedValueHashes` in `credential-patterns.json` holds the SHA-256 of values
+that match a pattern but are public by design — currently CesiumJS's built-in
+default Ion token, which ships inside `cesium` and appears in every build. A
+Cesium upgrade changes that token, so the guard will fire on the new one.
+
+That is intended. Decode the payload before doing anything: CesiumJS's has
+`sub: "CesiumJS"` and `iss: "https://api.cesium.com"`. Only once you have
+confirmed it is the vendor's own token, replace the hash. Never add a hash to
+silence a finding you have not decoded — the whole point of the list is that it
+is short and every entry was checked.
+
+Bundled plugin drop-ins under `apps/geolibre-desktop/public/plugins/<id>/` are
+scanned too. They are third-party build artifacts that are not committed here, so
+a hardcoded key inside one is fixed in that plugin's own repository, never by
+allowlisting it. Note that removing such a drop-in does not clean a `dist/` built
+while it was present: Vite copies `public/` into the output and only clears that
+output when a build actually runs. Rebuild, or delete the stale directory.
+
 ## Generated files and cross-file sync
 
 - **Processing tool metadata.** Names, descriptions, group labels, parameter

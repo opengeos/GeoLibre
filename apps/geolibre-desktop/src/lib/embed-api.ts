@@ -13,7 +13,12 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
-import { LAYER_TYPES, hasRestorableLayerSource, validateMapExpression } from "@geolibre/core";
+import {
+  LAYER_TYPES,
+  getBuildEnvironment,
+  hasRestorableLayerSource,
+  validateMapExpression,
+} from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
@@ -75,7 +80,7 @@ export function parseEmbedOrigins(raw: unknown): string[] {
  * so an operator can set it with `-e GEOLIBRE_EMBED_ORIGINS=...` without
  * rebuilding) before the build-time Vite env.
  *
- * @param viteEnv - Build-time env; defaults to `import.meta.env`.
+ * @param viteEnv - Build-time env; defaults to the allowlisted build env.
  * @param deploymentEnv - Runtime env; defaults to the value the Docker image
  *   writes onto `window`.
  * @returns The allowed origins, empty when the API is not enabled.
@@ -89,7 +94,7 @@ export function readEmbedOrigins(viteEnv?: EnvRecord, deploymentEnv?: EnvRecord)
           .__GEOLIBRE_DEPLOYMENT_ENV__);
   const fromRuntime = parseEmbedOrigins(runtime?.[EMBED_ORIGINS_ENV]);
   if (fromRuntime.length > 0) return fromRuntime;
-  const build = viteEnv ?? (import.meta.env as EnvRecord);
+  const build = viteEnv ?? (getBuildEnvironment() as EnvRecord);
   return parseEmbedOrigins(build?.[EMBED_ORIGINS_ENV]);
 }
 

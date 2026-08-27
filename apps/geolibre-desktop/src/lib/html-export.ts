@@ -1,7 +1,7 @@
 // Standalone "Export as interactive HTML" builder; the in-app counterpart of the
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
-import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
+import { getBuildEnvironment, redactCredentials, type GeoLibreProject } from "@geolibre/core";
 import {
   encodeInlineProjectFragment,
   INLINE_PROJECT_FRAGMENT_KEY,
@@ -19,7 +19,7 @@ const CSS_DIMENSION_RE = /^[\w%.+\-/\s()]+$/;
 // Resolve the viewer URL from the env, accepting only HTTPS (or loopback HTTP)
 // and matching the hostname exactly; mirrors resolveShareBaseUrl.
 export function resolveViewerBaseUrl(
-  configured: unknown = import.meta.env?.VITE_GEOLIBRE_VIEWER_URL,
+  configured: unknown = getBuildEnvironment().VITE_GEOLIBRE_VIEWER_URL,
 ): string {
   if (typeof configured === "string" && configured.trim()) {
     const trimmed = configured.trim();

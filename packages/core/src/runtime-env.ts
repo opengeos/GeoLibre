@@ -1,16 +1,45 @@
 /**
  * Resolves runtime environment variables shared by the external-service clients
- * (geocoding, routing). Build-time Vite vars (`import.meta.env`) are overlaid
+ * (geocoding, routing). Allowlisted build-time vars (`__GEOLIBRE_BUILD_ENV__`,
+ * injected by `vite.config.ts`) are overlaid
  * with project-supplied runtime vars (`window.__GEOLIBRE_RUNTIME_ENV__`, set
  * from project preferences) so a self-hosted endpoint can be configured without
  * a rebuild. Carries no React/MapLibre dependency so callers stay unit-testable.
  */
 
-const buildEnv = (
-  import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  }
-).env;
+// Injected by `vite.config.ts`'s `define` from an explicit allowlist
+// (BUILD_ENV_KEYS), with credential-bearing names withheld from redistributable
+// builds such as the Jupyter wheel.
+//
+// This deliberately does NOT read `import.meta.env`. That read is a whole-object
+// one — nothing here names a static key — so Vite could not replace it per-key
+// and instead inlined the entire env record into every chunk importing this
+// module. Combined with the bare-to-prefixed shell bridge in `vite.config.ts`,
+// every chunk importing this module would carry whatever the build machine had
+// set. Keep this indirection: reverting to `import.meta.env` silently restores
+// that behaviour, and no test would catch it.
+declare const __GEOLIBRE_BUILD_ENV__: Record<string, string> | undefined;
+
+const buildEnv: Record<string, string | undefined> =
+  typeof __GEOLIBRE_BUILD_ENV__ === "undefined" ? {} : __GEOLIBRE_BUILD_ENV__;
+
+/**
+ * The allowlisted build-time environment, with no runtime overlay.
+ *
+ * For settings that must be fixed by the build and NOT overridable by a
+ * `.geolibre.json` a user opened — the auth gate, the deployment profile, the
+ * embed origin allowlist. Routing those through {@link getRuntimeEnvironment}
+ * would let project-supplied `__GEOLIBRE_RUNTIME_ENV__` values relax them.
+ *
+ * Callers should prefer this over reading `import.meta.env` directly: a
+ * whole-object read defeats Vite's per-key replacement and inlines every
+ * `VITE_` var on the build machine into the chunk.
+ *
+ * @returns The build-time environment record.
+ */
+export function getBuildEnvironment(): Record<string, string | undefined> {
+  return buildEnv;
+}
 
 /**
  * Merges build-time env with project runtime env (the latter wins). Falls back
@@ -19,11 +48,11 @@ const buildEnv = (
  * @returns The resolved environment variables.
  */
 export function getRuntimeEnvironment(): Record<string, string | undefined> {
-  if (typeof window === "undefined") return buildEnv ?? {};
+  if (typeof window === "undefined") return buildEnv;
 
   // __GEOLIBRE_RUNTIME_ENV__ is declared globally in ./types.
   return {
-    ...(buildEnv ?? {}),
+    ...buildEnv,
     ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
   };
 }

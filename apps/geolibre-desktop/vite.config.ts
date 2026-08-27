@@ -166,6 +166,167 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// ---------------------------------------------------------------------------
+// Build-time env exposed to the bundle.
+//
+// A build must never embed a credential belonging to whoever ran it. Two things
+// make that easy to get wrong here:
+//
+//  1. The bare→prefixed bridges above copy `GOOGLE_MAPS_API_KEY`/`MAPBOX_TOKEN`/
+//     `CESIUM_TOKEN` out of the build machine's shell into their `VITE_` names.
+//     Convenient for local testing; it also makes a developer's own environment
+//     build input.
+//  2. Something in the graph reads `import.meta.env` as a WHOLE OBJECT. Vite
+//     cannot tell which keys such a read wants, so it gives up on per-key
+//     replacement and inlines the entire env record — every `VITE_` var set on
+//     the build machine — into every chunk that read reaches.
+//
+// The whole-object read is not ours to delete: `@clerk/shared`'s
+// getEnvVariable.mjs does `import.meta.env[name]` with a computed name, so the
+// inlined record lands in the `ClerkGate-*.js` chunk. The defence therefore
+// cannot be "stop reading the object" — it has to be "there is nothing
+// sensitive in the object to begin with".
+//
+// pruneBuildEnv() enforces that on `process.env`, BEFORE Vite reads it:
+//  1. A `VITE_` var not on BUILD_ENV_KEYS is deleted. An unrecognized var on the
+//     build machine cannot reach the bundle by accident; adding a new one means
+//     adding it here, deliberately.
+//  2. A CREDENTIAL_ENV_KEYS var is blanked in *redistributable* builds. The web
+//     deploy is our own site using our own referrer-restricted keys, so it keeps
+//     them; the Jupyter wheel (GEOLIBRE_EMBED=1) is installed by third parties
+//     and must never carry ours. Blanked rather than deleted so a value in a
+//     `.env` file cannot reintroduce it, and because "" is what every consumer
+//     already treats as unset.
+//
+// Each credential resolves through `getRuntimeEnvironment()`, which overlays
+// `window.__GEOLIBRE_RUNTIME_ENV__` from Settings → Environment variables, so a
+// wheel user supplies their own token at runtime and the affected surfaces
+// degrade as already documented (Mapbox prompts in the basemap API-keys view,
+// the 3D globe is not offered, Protomaps basemaps are hidden).
+//
+// The pruned result is also emitted as `__GEOLIBRE_BUILD_ENV__` for
+// runtime-env.ts, so our own code reads a named allowlist rather than taking a
+// whole-object dependency on `import.meta.env` the way Clerk does.
+//
+// scripts/scan-credentials.mjs verifies the OUTPUT of all this: a build run by
+// hand can satisfy every rule above and still be wrong, so the artifact is
+// checked rather than the configuration.
+// ---------------------------------------------------------------------------
+
+/** Every `VITE_` name the app reads. Anything absent here never reaches the bundle. */
+const BUILD_ENV_KEYS = [
+  "VITE_AMAZON_LOCATION_API_KEY",
+  "VITE_AMAZON_LOCATION_AWS_REGION",
+  "VITE_CESIUM_TOKEN",
+  "VITE_DUCKDB_SPATIAL_EXTENSION_PATH",
+  "VITE_GEE_OAUTH_CLIENT_ID",
+  "VITE_GEE_PROJECT_ID",
+  "VITE_GEOCODER_API_KEY",
+  "VITE_GEOCODER_EMAIL",
+  "VITE_GEOCODER_ENDPOINT",
+  "VITE_GEOCODER_PROVIDER",
+  "VITE_GEOCODER_REVERSE_ENDPOINT",
+  "VITE_GEOLIBRE_AI_MODEL",
+  "VITE_GEOLIBRE_AI_URL",
+  "VITE_GEOLIBRE_AUTH0_CLIENT_ID",
+  "VITE_GEOLIBRE_AUTH0_DOMAIN",
+  "VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY",
+  "VITE_GEOLIBRE_CLERK_WAITLIST",
+  "VITE_GEOLIBRE_COLLAB_URL",
+  "VITE_GEOLIBRE_EMBED_ORIGINS",
+  "VITE_GEOLIBRE_GA_MEASUREMENT_ID",
+  "VITE_GEOLIBRE_PLUGIN_REGISTRY_URL",
+  "VITE_GEOLIBRE_SHARE_URL",
+  "VITE_GEOLIBRE_VIEWER_URL",
+  "VITE_GOOGLE_MAPS_API_KEY",
+  "VITE_HERE_API_KEY",
+  "VITE_LANGUAGE_PACK_BASE_URL",
+  "VITE_MAPBOX_ACCESS_TOKEN",
+  "VITE_MAPILLARY_ACCESS_TOKEN",
+  "VITE_PROTOMAPS_API_KEY",
+  "VITE_PYODIDE_INDEX_URL",
+  "VITE_ROUTING_ENDPOINT",
+  "VITE_SIDECAR_URL",
+  "VITE_STADIA_API_KEY",
+  "VITE_TIANDITU_API_KEY",
+  "VITE_TOMTOM_API_KEY",
+  "VITE_WELCOME_DISABLED",
+] as const;
+
+// Vars that authenticate as, and bill to, whoever ran the build. Public-by-design
+// identifiers (the Clerk *publishable* key, the Auth0 client ID/domain, the GEE
+// OAuth client ID, the GA measurement ID) are deliberately NOT here: they are
+// meant to ship, and publish-python.yml already injects the GEE client ID.
+const CREDENTIAL_ENV_KEYS = new Set<string>([
+  "VITE_AMAZON_LOCATION_API_KEY",
+  "VITE_CESIUM_TOKEN",
+  "VITE_GEOCODER_API_KEY",
+  "VITE_GOOGLE_MAPS_API_KEY",
+  "VITE_HERE_API_KEY",
+  "VITE_MAPBOX_ACCESS_TOKEN",
+  "VITE_MAPILLARY_ACCESS_TOKEN",
+  "VITE_PROTOMAPS_API_KEY",
+  "VITE_STADIA_API_KEY",
+  "VITE_TIANDITU_API_KEY",
+  "VITE_TOMTOM_API_KEY",
+]);
+
+// A build whose output is installed by someone else must not carry our keys.
+// Today that is the Jupyter wheel; `GEOLIBRE_STRIP_CREDENTIALS=1` lets any other
+// redistributable target opt in without another code change.
+const IS_REDISTRIBUTABLE_BUILD = IS_EMBED || process.env.GEOLIBRE_STRIP_CREDENTIALS === "1";
+
+const ALLOWED_BUILD_ENV_KEYS = new Set<string>(BUILD_ENV_KEYS);
+
+/**
+ * Prunes `process.env` so Vite has nothing sensitive left to inline, then
+ * returns the surviving allowlisted values.
+ *
+ * Must run at module load, before Vite resolves the env for the bundle.
+ *
+ * @returns The allowlisted build-time env for `__GEOLIBRE_BUILD_ENV__`.
+ */
+function pruneBuildEnv(): Record<string, string> {
+  const unknown: string[] = [];
+  const withheld: string[] = [];
+
+  for (const key of Object.keys(process.env)) {
+    if (!key.startsWith("VITE_")) continue;
+    if (!ALLOWED_BUILD_ENV_KEYS.has(key)) {
+      delete process.env[key];
+      unknown.push(key);
+      continue;
+    }
+    if (IS_REDISTRIBUTABLE_BUILD && CREDENTIAL_ENV_KEYS.has(key) && process.env[key]) {
+      process.env[key] = "";
+      withheld.push(key);
+    }
+  }
+
+  if (unknown.length > 0) {
+    console.info(
+      `[vite] dropped ${unknown.length} unrecognized VITE_ var(s) from the build ` +
+        `(${unknown.join(", ")}). Add the name to BUILD_ENV_KEYS in vite.config.ts to expose it.`,
+    );
+  }
+  if (withheld.length > 0) {
+    console.info(
+      `[vite] redistributable build: withheld ${withheld.length} credential(s) from the ` +
+        `bundle (${withheld.join(", ")}). Users supply their own via ` +
+        "Settings \u2192 Environment variables.",
+    );
+  }
+
+  const record: Record<string, string> = {};
+  for (const key of BUILD_ENV_KEYS) {
+    const value = process.env[key];
+    if (value) record[key] = value;
+  }
+  return record;
+}
+
+const BUILD_ENV = pruneBuildEnv();
+
 // DuckDB-WASM from jsDelivr instead of the build output. Opt-IN, the reverse of
 // PGLITE_CDN above, because DuckDB is on the critical path for opening a local
 // vector file — making that need the network is a real behaviour change, so only
@@ -943,6 +1104,10 @@ export default defineConfig({
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
     __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
+    // The allowlisted build-time env (see BUILD_ENV_KEYS). runtime-env.ts reads
+    // this instead of `import.meta.env`, so a whole-object read can no longer
+    // drag every VITE_ var on the build machine into the bundle.
+    __GEOLIBRE_BUILD_ENV__: JSON.stringify(BUILD_ENV),
   },
   server: {
     port: 5173,
