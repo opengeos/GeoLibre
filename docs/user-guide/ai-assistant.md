@@ -46,6 +46,77 @@ Hosted keys (and AWS credentials) are used **directly from your browser** to cal
 the provider; they are never sent to GeoLibre's servers. Saving the setting
 enables the panel immediately — no reload needed.
 
+### Using local Ollama from web.geolibre.app
+
+The hosted web app connects directly from your browser to Ollama on your
+computer. Prompts and responses do not pass through a GeoLibre server. Because
+the page origin is `https://web.geolibre.app`, Ollama must explicitly allow that
+origin before the browser can call its API.
+
+Set this environment variable for the Ollama server, then restart Ollama:
+
+```text
+OLLAMA_ORIGINS=https://web.geolibre.app
+```
+
+Then open **Settings → AI Providers**, add or edit an **Ollama** profile, and
+use this Base URL:
+
+```text
+http://localhost:11434
+```
+
+Configure `OLLAMA_ORIGINS` for your operating system:
+
+=== "Linux (systemd)"
+
+    Run `sudo systemctl edit ollama.service` and add:
+
+    ```ini
+    [Service]
+    Environment="OLLAMA_ORIGINS=https://web.geolibre.app"
+    ```
+
+    Save the file, then reload and restart the service:
+
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl restart ollama
+    ```
+
+=== "macOS"
+
+    Set the variable for the Ollama application, then quit and reopen Ollama:
+
+    ```bash
+    launchctl setenv OLLAMA_ORIGINS "https://web.geolibre.app"
+    ```
+
+=== "Windows"
+
+    1. Quit Ollama from the taskbar.
+    2. Open **Edit environment variables for your account**.
+    3. Create a user variable named `OLLAMA_ORIGINS` with the value
+       `https://web.geolibre.app`.
+    4. Start Ollama again from the Start menu.
+
+=== "Docker"
+
+    Pass the allowed origin when starting the container:
+
+    ```bash
+    docker run -d \
+      -e OLLAMA_ORIGINS=https://web.geolibre.app \
+      -p 11434:11434 \
+      ollama/ollama
+    ```
+
+For a self-hosted GeoLibre URL, replace `https://web.geolibre.app` with the
+exact origin shown in GeoLibre's error message, including its scheme and port,
+for example `http://192.168.1.98:4000`. This is an Ollama server permission and
+cannot be enabled automatically by a web page. See Ollama's
+[official server configuration and web-origin instructions](https://docs.ollama.com/faq#how-can-i-allow-additional-web-origins-to-access-ollama).
+
 ### Managed AI in a password-protected Docker deployment
 
 A deployment operator can provide AI without distributing provider API keys.
