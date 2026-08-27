@@ -1453,12 +1453,16 @@ export function computeCompositeScores(
     let logSum = 0;
     let missing = false;
     for (const entry of fields) {
+      // A zero-weight field contributes nothing, so a null there is not a
+      // missing value: reading it would drop the feature over a field the
+      // user has already weighted out of the index.
+      const weight = weights.get(entry.field) as number;
+      if (weight === 0) continue;
       const value = components.get(entry.field)?.[index] ?? null;
       if (value === null) {
         missing = true;
         continue;
       }
-      const weight = weights.get(entry.field) as number;
       weightSum += weight;
       arithmetic += weight * value;
       logSum += weight * Math.log(Math.max(value, GEOMETRIC_FLOOR));
@@ -1628,6 +1632,19 @@ export const compositeScoreTool: ProcessingAlgorithm = {
     const keepComponents = Boolean(ctx.parameters.keepComponents);
 
     const features = layer.geojson.features;
+    // The user names the score field, so unlike the fixed names the other tools
+    // write it can collide with a column the layer already carries. The output
+    // is a copy either way, but overwriting a column silently is the trap.
+    const overwritten = [
+      scoreField,
+      ...(keepComponents ? fields.map((entry) => `${scoreField}_${entry.field}`) : []),
+    ].filter((name) => features.some((feature) => feature.properties?.[name] !== undefined));
+    if (overwritten.length) {
+      ctx.log(
+        `Note: "${overwritten.join('", "')}" already exists on this layer; ` +
+          "the output layer's copy is overwritten.",
+      );
+    }
     const columns = new Map<string, (number | null)[]>();
     for (const entry of fields) {
       const column = fieldColumn(features, entry.field);
@@ -1691,7 +1708,7 @@ export const compositeScoreTool: ProcessingAlgorithm = {
       ctx.log(
         nullHandling === "drop"
           ? `${unscored} feature(s) missing a value were dropped.`
-          : `${unscored} feature(s) had no value for any field and were dropped.`,
+          : `${unscored} feature(s) had no positively-weighted value and were dropped.`,
       );
     }
     ctx.addResultLayer?.(`${layer.name} — ${scoreField}`, featureCollection(out), {

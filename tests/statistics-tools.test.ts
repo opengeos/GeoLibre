@@ -574,6 +574,23 @@ describe("composite score aggregation", () => {
     assert.deepEqual(scores, [0, 50, 100]);
   });
 
+  it("does not drop a feature over a null in a zero-weight field", () => {
+    const sparse = new Map<string, (number | null)[]>([
+      ["a", [0, 5, 10]],
+      ["b", [10, null, 0]],
+    ]);
+    const { scores, unscored } = computeCompositeScores(sparse, {
+      fields: [evenFields[0], { ...evenFields[1], weight: 0 }],
+      aggregation: "weighted-mean",
+      nullHandling: "drop",
+      scale: 100,
+    });
+    // "b" carries no share, so its gap is not a missing value: "a" alone still
+    // scores every feature at 0, 5, 10 of 0..10.
+    assert.deepEqual(scores, [0, 50, 100]);
+    assert.equal(unscored, 0);
+  });
+
   it("leaves every feature unscored when no field carries weight", () => {
     const { scores, unscored } = computeCompositeScores(columns, {
       fields: evenFields.map((entry) => ({ ...entry, weight: 0 })),
@@ -720,6 +737,23 @@ describe("composite score tool", () => {
     assert.deepEqual(
       results[0].geojson.features.map((f) => f.properties?.score),
       [0, 50, 100],
+    );
+  });
+
+  it("warns when the score field name already exists on the layer", () => {
+    const layer = pointLayer([
+      [0, 0, { pop: 0, rent: 10, score: 42 }],
+      [0.001, 0, { pop: 10, rent: 0, score: 7 }],
+    ]);
+    const { messages, results } = run(compositeScoreTool, layer, {
+      fields: twoFields,
+      nullHandling: "drop",
+    });
+    assert.ok(messages.some((m) => m.includes('"score" already exists on this layer')));
+    // The warning is a note, not a refusal: the run still produces the index.
+    assert.deepEqual(
+      results[0].geojson.features.map((f) => f.properties?.score),
+      [0, 100],
     );
   });
 

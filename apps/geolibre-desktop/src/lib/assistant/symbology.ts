@@ -98,8 +98,13 @@ export function buildSymbologyStyle(
       .map((value) => (typeof value === "number" ? value : Number.parseFloat(String(value))))
       .filter((value) => Number.isFinite(value));
     if (numbers.length < 2) {
+      // One numeric value is not a broken property, it is too little data to
+      // break into classes; saying "not numeric" there sends the reader after
+      // the wrong cause.
       throw new Error(
-        `Property "${request.property}" is not numeric; use categorized mode instead.`,
+        numbers.length === 0
+          ? `Property "${request.property}" is not numeric; use categorized mode instead.`
+          : `Property "${request.property}" has only one numeric value on layer "${layer.name}"; graduated mode needs at least two.`,
       );
     }
     // Cap classes by the number of values too, so we never ask for more breaks
