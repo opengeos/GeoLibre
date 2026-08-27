@@ -2506,7 +2506,7 @@
       "averageNearestNeighbor": "平均最近隣距離",
       "kernelDensity": "カーネル密度（ヒートマップ）",
       "emergingHotSpot": "新興ホットスポット（時空間キューブ）",
-      "compositeScore": "総合スコア（適地指数）"
+      "compositeScore": "総合スコア（適合度指数）"
     },
     "rasterTool": {
       "hillshade": "陰影起伏",
@@ -5542,7 +5542,7 @@
           }
         },
         "composite-score": {
-          "name": "総合スコア（適地指数）",
+          "name": "総合スコア（適合度指数）",
           "description": "複数の数値フィールドを正規化し、重み付けして0〜100の単一の指数にまとめ、その指数でレイヤーをスタイル設定します。",
           "params": {
             "layer": {

@@ -6784,7 +6784,7 @@
         "link": "Tautan",
         "image": "Gambar"
       },
-      "decimals": "Angka desimal",
+      "decimals": "Tempat desimal",
       "thousands": "Kelompokkan ribuan",
       "dateFormat": "Format tanggal",
       "dateFormats": {

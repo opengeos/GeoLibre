@@ -6935,8 +6935,8 @@
     "textValue": "Eşleştirilecek metin",
     "textPlaceholder": "Filtrelemek için yazın",
     "noFields": "Bu katmanda filtrelenecek öznitelik yok.",
-    "noTileFeatures": "Henüz hiçbir öğe yüklenmedi. Haritayı verilere kaydırın veya yakınlaştırın, sonra bu bölümü yeniden açın.",
-    "viewportSampleHint": "Değerler şu anda yüklü olan karolardan gelir, bu yüzden haritayı kaydırıp yakınlaştırdıkça liste büyür.",
+    "noTileFeatures": "Henüz hiçbir öğe yüklenmedi. Haritayı verilerin bulunduğu alana kaydırın veya orayı yakınlaştırın, sonra bu bölümü yeniden açın.",
+    "viewportSampleHint": "Değerler şu anda yüklü olan döşemelerden gelir, bu yüzden haritayı kaydırıp yakınlaştırdıkça liste büyür.",
     "layerFilteredHint": "Bir hızlı filtre bu katmanın öğelerinin bir kısmını gizliyor."
   },
   "vectorExport": {

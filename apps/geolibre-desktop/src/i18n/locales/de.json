@@ -6910,7 +6910,7 @@
     "kind": {
       "categorical": "Werte",
       "range": "Bereich",
-      "date": "Daten",
+      "date": "Datum",
       "text": "Text"
     },
     "operator": {
