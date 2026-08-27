@@ -1943,6 +1943,13 @@
       "noProjectSelected": "未选择项目",
       "globeByDefault": "默认启用 3D 地球",
       "globeByDefaultHint": "在未提供启动项目或项目链接时，用于未命名的工作区。",
+      "defaultView": "默认地图视图",
+      "defaultViewHint": "为未命名的工作区设置中心点和缩放级别。",
+      "longitude": "中心经度",
+      "latitude": "中心纬度",
+      "zoom": "缩放级别",
+      "useCurrentView": "使用当前视图",
+      "viewUnavailable": "当前地图视图不可用。",
       "selectError": "无法读取所选项目。",
       "restoring": "正在打开启动项目…",
       "loadWarning": "启动项目不可用。GeoLibre 已改为打开默认工作区。"
@@ -2088,6 +2095,10 @@
       "osEnvNote": "桌面应用还会从系统环境变量读取匹配的 API 密钥。这些会自动使用且永远不会保存到项目文件中 — 留空字段以继续使用环境变量值。",
       "osEnvField": "从系统环境变量 {{name}} 读取。",
       "osEnvPlaceholder": "在系统环境中设置",
+      "refreshModels": "刷新模型列表",
+      "modelsFailedToLoad": "无法加载模型：{{message}}",
+      "ollamaNetworkFailure": "无法连接到 Ollama 服务器。请检查它是否在该地址上运行，OLLAMA_ORIGINS 是否允许本应用的来源，以及相关的防火墙或代理规则。",
+      "ollamaTimedOut": "对 Ollama 服务器的请求超时。主机可能响应缓慢、不可达，或被防火墙/代理阻止。",
       "newProfile": "新建配置文件",
       "cancel": "取消",
       "addProfile": "添加配置文件",
@@ -2494,7 +2505,8 @@
       "getisOrd": "Getis-Ord Gi* 热点分析",
       "averageNearestNeighbor": "平均最近邻",
       "kernelDensity": "核密度估计（热力图）",
-      "emergingHotSpot": "新兴热点分析（时空立方体）"
+      "emergingHotSpot": "新兴热点分析（时空立方体）",
+      "compositeScore": "综合评分（适宜性指数）"
     },
     "rasterTool": {
       "hillshade": "山体阴影",
@@ -4222,8 +4234,30 @@
     "parameterField": {
       "selectLayer": "选择一个图层...",
       "selectField": "选择一个字段...",
+      "selectOption": "请选择一个选项...",
       "selectLayerFirst": "请先选择一个图层",
       "layersSelected_other": "已选择 {{count}} 个图层"
+    },
+    "fieldWeights": {
+      "columnField": "字段",
+      "columnNormalization": "归一化",
+      "columnWeight": "权重",
+      "columnDirection": "方向",
+      "addField": "添加字段",
+      "removeAria": "移除 {{field}}",
+      "empty": "尚未添加字段。至少添加两个字段才能构建评分。",
+      "shares": "权重：{{shares}}",
+      "noWeight": "请至少为一个字段设置大于零的权重。",
+      "normalization": {
+        "minMax": "最小-最大",
+        "zScore": "Z 分数",
+        "rank": "秩次",
+        "quantile": "分位数"
+      },
+      "direction": {
+        "higher": "越高越好",
+        "lower": "越低越好"
+      }
     },
     "whitebox": {
       "run": "运行",
@@ -4348,24 +4382,6 @@
       "run": "运行",
       "outputPlaceholder": "输出将显示在此处。",
       "resolutionRange": "分辨率（0-{{max}}）"
-    },
-    "toolGroup": {
-      "analysis": "分析",
-      "clip": "裁剪",
-      "dataQuality": "数据质量",
-      "dggs": "DGGS",
-      "geometry": "几何",
-      "join": "连接",
-      "movementTime": "移动与时间",
-      "network": "网络",
-      "overlay": "叠加",
-      "rasterToVector": "栅格转矢量",
-      "reproject": "重投影",
-      "select": "选择",
-      "spatialStatistics": "空间统计",
-      "terrain": "地形",
-      "vectorToRaster": "矢量转栅格",
-      "dataManagement": "数据管理"
     },
     "toolMeta": {
       "vector": {
@@ -5370,66 +5386,6 @@
         }
       },
       "statistics": {
-        "kernel-density": {
-          "params": {
-            "cellSize": {
-              "label": "单元大小 (km)"
-            },
-            "layer": {
-              "label": "点图层"
-            },
-            "weightField": {
-              "label": "权重字段（可选）",
-              "description": "为每个点加权的数值字段；留空 = 等权重。"
-            },
-            "bandwidth": {
-              "label": "搜索半径 / 带宽 (km)"
-            }
-          },
-          "name": "核密度估计（热力图）",
-          "description": "使用四次核函数由点估算密度表面，输出为格网单元。"
-        },
-        "emerging-hot-spot": {
-          "name": "新兴热点分析（时空立方体）",
-          "description": "由带时间戳的点构建时空立方体（渔网格网 × 等长时间步），并将每个单元分类为新增、加强、持续、减弱、零星、振荡或历史热点/冷点。对每个时间切片运行 Getis-Ord Gi*，然后对每个单元的 Gi* 序列进行 Mann-Kendall 趋势检验。在客户端运行，类似 ArcGIS 新兴热点分析。",
-          "params": {
-            "layer": {
-              "label": "点图层"
-            },
-            "timeField": {
-              "label": "时间字段",
-              "description": "每个点的时间戳：ISO 日期/时间字符串或纪元时间（秒或毫秒）。"
-            },
-            "cellSize": {
-              "label": "单元大小 (km)",
-              "description": "每个正方形空间分箱的边长，单位为千米。"
-            },
-            "timeStep": {
-              "label": "时间步间隔"
-            },
-            "timeStepUnit": {
-              "label": "时间步单位",
-              "options": {
-                "hours": "小时",
-                "days": "天",
-                "weeks": "周"
-              }
-            },
-            "weightField": {
-              "label": "权重字段（可选）",
-              "description": "在每个时空分箱内求和的数值字段，而不是对点计数；留空 = 对点计数。"
-            },
-            "confidence": {
-              "label": "置信水平",
-              "description": "分箱被判定为热点/冷点以及趋势判定的显著性阈值。",
-              "options": {
-                "90": "90%",
-                "95": "95%",
-                "99": "99%"
-              }
-            }
-          }
-        },
         "global-morans-i": {
           "name": "全局莫兰指数",
           "description": "度量数值属性在整个图层上的总体空间自相关。",
@@ -5522,6 +5478,110 @@
           "params": {
             "layer": {
               "label": "点图层"
+            }
+          }
+        },
+        "kernel-density": {
+          "params": {
+            "cellSize": {
+              "label": "单元大小 (km)"
+            },
+            "layer": {
+              "label": "点图层"
+            },
+            "weightField": {
+              "label": "权重字段（可选）",
+              "description": "为每个点加权的数值字段；留空 = 等权重。"
+            },
+            "bandwidth": {
+              "label": "搜索半径 / 带宽 (km)"
+            }
+          },
+          "name": "核密度估计（热力图）",
+          "description": "使用四次核函数由点估算密度表面，输出为格网单元。"
+        },
+        "emerging-hot-spot": {
+          "name": "新兴热点分析（时空立方体）",
+          "description": "由带时间戳的点构建时空立方体（渔网格网 × 等长时间步），并将每个单元分类为新增、加强、持续、减弱、零星、振荡或历史热点/冷点。对每个时间切片运行 Getis-Ord Gi*，然后对每个单元的 Gi* 序列进行 Mann-Kendall 趋势检验。在客户端运行，类似 ArcGIS 新兴热点分析。",
+          "params": {
+            "layer": {
+              "label": "点图层"
+            },
+            "timeField": {
+              "label": "时间字段",
+              "description": "每个点的时间戳：ISO 日期/时间字符串或纪元时间（秒或毫秒）。"
+            },
+            "cellSize": {
+              "label": "单元大小 (km)",
+              "description": "每个正方形空间分箱的边长，单位为千米。"
+            },
+            "timeStep": {
+              "label": "时间步间隔"
+            },
+            "timeStepUnit": {
+              "label": "时间步单位",
+              "options": {
+                "hours": "小时",
+                "days": "天",
+                "weeks": "周"
+              }
+            },
+            "weightField": {
+              "label": "权重字段（可选）",
+              "description": "在每个时空分箱内求和的数值字段，而不是对点计数；留空 = 对点计数。"
+            },
+            "confidence": {
+              "label": "置信水平",
+              "description": "分箱被判定为热点/冷点以及趋势判定的显著性阈值。",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        },
+        "composite-score": {
+          "name": "综合评分（适宜性指数）",
+          "description": "将多个数值字段归一化、加权并合并为 0 到 100 的单一指数，然后按该指数为图层设置样式。",
+          "params": {
+            "layer": {
+              "label": "图层"
+            },
+            "fields": {
+              "label": "字段与权重",
+              "description": "两个或更多数值字段。每个字段都要指定归一化方式、相对权重，以及其取值范围中得分较高的一端。"
+            },
+            "aggregation": {
+              "label": "聚合方式",
+              "description": "使用几何平均时，某个弱项字段会拉低总分：强项字段无法完全弥补它。",
+              "options": {
+                "weighted-mean": "加权算术平均",
+                "geometric-mean": "加权几何平均"
+              }
+            },
+            "nullHandling": {
+              "label": "缺少取值的要素",
+              "description": "没有绝对安全的默认值：剔除与重新归一化会得到不同的地图，因此请选择该指数的确切含义。",
+              "options": {
+                "drop": "从结果中剔除该要素",
+                "renormalize": "按该要素已有的字段重新归一化权重"
+              }
+            },
+            "scoreField": {
+              "label": "评分字段名称",
+              "description": "写入评分的数值列名称。"
+            },
+            "scoreRange": {
+              "label": "评分范围",
+              "options": {
+                "0-100": "0 到 100",
+                "0-1": "0 到 1"
+              }
+            },
+            "keepComponents": {
+              "label": "保留归一化分量",
+              "description": "将每个字段的归一化值单独写入一列，这样评分可以被核查，而不必凭空信任。"
             }
           }
         }
@@ -5869,6 +5929,24 @@
           }
         }
       }
+    },
+    "toolGroup": {
+      "analysis": "分析",
+      "clip": "裁剪",
+      "dataQuality": "数据质量",
+      "dggs": "DGGS",
+      "geometry": "几何",
+      "join": "连接",
+      "movementTime": "移动与时间",
+      "network": "网络",
+      "overlay": "叠加",
+      "rasterToVector": "栅格转矢量",
+      "reproject": "重投影",
+      "select": "选择",
+      "spatialStatistics": "空间统计",
+      "terrain": "地形",
+      "vectorToRaster": "矢量转栅格",
+      "dataManagement": "数据管理"
     }
   },
   "segmentation": {
@@ -6669,6 +6747,60 @@
       "noFields": "该图层没有可配置的属性字段。",
       "minMaxInvalid": "最小值必须小于或等于最大值。"
     },
+    "popup": {
+      "heading": "弹出窗口",
+      "showOnClick": "单击时显示弹出窗口（识别）",
+      "showOnHover": "悬停时显示提示框",
+      "hoverHint": "提示框会显示标题以及您勾选为“显示在提示框中”的字段。",
+      "titleField": "标题字段",
+      "titleFieldDefault": "图层名称",
+      "titleExpression": "标题表达式",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "正文表达式",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "正文表达式会用它自己的文本替换字段行。",
+      "bodyReplacesRows": "设置正文表达式后，它会替换字段行和要素 ID 行。",
+      "invalidExpression": "表达式无效",
+      "openBuilder": "打开表达式构建器",
+      "showFeatureId": "显示要素 ID 行",
+      "fields": "字段",
+      "allFields": "未选择任何字段，因此按数据自身的顺序显示全部可见字段。",
+      "addField": "添加字段…",
+      "noFieldsLeft": "所有字段均已列出",
+      "chooseFields": "选择字段",
+      "resetFields": "显示全部字段",
+      "removeField": "移除字段",
+      "moveUp": "上移字段",
+      "moveDown": "下移字段",
+      "dragToReorder": "拖动以重新排序",
+      "dragNamedToReorder": "拖动 {{name}} 以重新排序",
+      "label": "标签",
+      "kind": "值类型",
+      "kinds": {
+        "auto": "自动",
+        "text": "文本",
+        "number": "数字",
+        "date": "日期",
+        "link": "链接",
+        "image": "图像"
+      },
+      "decimals": "小数位数",
+      "thousands": "使用千位分隔符",
+      "dateFormat": "日期格式",
+      "dateFormats": {
+        "date": "日期",
+        "datetime": "日期和时间",
+        "time": "时间",
+        "iso": "ISO 8601",
+        "year": "年份"
+      },
+      "linkLabel": "链接文本",
+      "linkLabelPlaceholder": "URL 本身",
+      "prefix": "前缀",
+      "suffix": "后缀",
+      "inHover": "显示在提示框中",
+      "imageNotInHover": "图像字段仅保留在单击弹出窗口中；提示框没有空间显示图片。"
+    },
     "editorTracking": {
       "heading": "编辑跟踪",
       "description": "记录每个要素由谁创建、最后由谁修改。绘制、编辑、计算或采集要素时，下列字段会自动填写。",
@@ -6684,6 +6816,50 @@
       "duplicateName": "每个跟踪字段需要不同的名称。",
       "columnTaken": "“{{name}}”已是属性字段，跟踪会覆盖其中的值。"
     }
+  },
+  "quickFilters": {
+    "heading": "快速过滤器",
+    "empty": "尚无过滤器。在下方添加一个，即可按该图层的任意字段缩小范围。",
+    "addFilter": "添加过滤器…",
+    "allFieldsUsed": "每个字段都已有过滤器",
+    "removeAll": "全部移除",
+    "clearAll": "清除过滤器",
+    "clearOne": "清除此过滤器",
+    "clearOneNamed": "清除 {{field}} 上的过滤器",
+    "remove": "移除过滤器",
+    "removeNamed": "移除 {{field}} 上的过滤器",
+    "controlType": "过滤器类型",
+    "enabledTitle": "应用此过滤器",
+    "kind": {
+      "categorical": "值",
+      "range": "范围",
+      "date": "日期",
+      "text": "文本"
+    },
+    "operator": {
+      "contains": "包含",
+      "startsWith": "开头为",
+      "equals": "完全等于"
+    },
+    "searchValues": "搜索值",
+    "noValues": "该字段没有可供选择的值。",
+    "noMatchingValues": "没有值与您的搜索匹配。",
+    "selectAll": "全选",
+    "selectNone": "全不选",
+    "allValues": "全部值",
+    "selectedCount_other": "已选择 {{count}} 项",
+    "rangeMin": "最小值",
+    "rangeMax": "最大值",
+    "rangeSeparator": "至",
+    "dateFrom": "从",
+    "dateTo": "至",
+    "textOperator": "匹配方式",
+    "textValue": "要匹配的文本",
+    "textPlaceholder": "输入以过滤",
+    "noFields": "该图层没有可供过滤的属性。",
+    "noTileFeatures": "尚未加载任何要素。请平移或缩放到数据处，然后重新打开此部分。",
+    "viewportSampleHint": "取值来自当前已加载的瓦片，因此列表会随着平移和缩放而增加。",
+    "layerFilteredHint": "快速过滤器正在隐藏该图层的部分要素。"
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML 导出无法写入第 {{position}} 个要素，因为它的坐标无效。",
@@ -6792,6 +6968,8 @@
     "searchPlacesClear": "清除搜索",
     "searchPlacesGoToCoordinate": "前往 {{coordinate}}",
     "searchPlacesGoToH3Cell": "前往 H3 单元 {{cell}}（分辨率 {{resolution}}）",
+    "searchPlacesGroup": "地点",
+    "searchFeaturesPartial": "（部分）",
     "background": "背景",
     "backgroundCannotReorder": "背景无法重新排序",
     "hideBackground": "隐藏背景",
@@ -6876,11 +7054,13 @@
     "refreshVectorControlError": "无法刷新此图层。请尝试重新打开“添加矢量图层”面板。",
     "refreshed": "已刷新。",
     "refreshedCount": "已刷新 {{count}} 个要素。",
+    "refreshedTruncated": "已刷新 {{total}} 个要素中的 {{shown}} 个。",
     "refreshError": "无法刷新此图层。",
     "exportNeedsFeatures": "导出需要包含要素的矢量图层。",
     "exportedWithWarnings": "图层已导出。{{warnings}}",
     "exported": "图层已导出。",
     "exportLayerError": "无法导出此图层。",
+    "exportPolyline": "编码折线（精度 {{precision}}）",
     "refreshIntervals": {
       "off": "关闭",
       "s15": "15 秒",
@@ -6888,9 +7068,7 @@
       "m1": "1 分钟",
       "m5": "5 分钟",
       "m15": "15 分钟"
-    },
-    "refreshedTruncated": "已刷新 {{total}} 个要素中的 {{shown}} 个。",
-    "exportPolyline": "编码折线（精度 {{precision}}）"
+    }
   },
   "timeSliderSymbology": {
     "bands": "波段",

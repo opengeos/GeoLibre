@@ -1987,6 +1987,13 @@
       "noProjectSelected": "Ningún proyecto seleccionado",
       "globeByDefault": "Activar el globo 3D de forma predeterminada",
       "globeByDefaultHint": "Se usa para el espacio de trabajo sin título cuando no se indica un proyecto de inicio ni un enlace de proyecto.",
+      "defaultView": "Vista del mapa predeterminada",
+      "defaultViewHint": "Establezca el centro y el zoom del espacio de trabajo sin título.",
+      "longitude": "Longitud del centro",
+      "latitude": "Latitud del centro",
+      "zoom": "Nivel de zoom",
+      "useCurrentView": "Usar la vista actual",
+      "viewUnavailable": "La vista actual del mapa no está disponible.",
       "selectError": "No se pudo leer el proyecto seleccionado.",
       "restoring": "Abriendo su proyecto de inicio…",
       "loadWarning": "El proyecto de inicio no está disponible. GeoLibre abrió el espacio de trabajo predeterminado en su lugar."
@@ -2133,6 +2140,10 @@
       "osEnvNote": "La aplicación de escritorio también lee las claves de API correspondientes de las variables de entorno de su sistema. Esas se usan automáticamente y nunca se guardan en el archivo de proyecto; deje un campo en blanco para seguir usando el valor del entorno.",
       "osEnvField": "Se lee de la variable de entorno de su sistema {{name}}.",
       "osEnvPlaceholder": "Definida en el entorno de su sistema",
+      "refreshModels": "Actualizar la lista de modelos",
+      "modelsFailedToLoad": "No se pudieron cargar los modelos: {{message}}",
+      "ollamaNetworkFailure": "No se pudo contactar con el servidor de Ollama. Compruebe que se está ejecutando en esta dirección y que OLLAMA_ORIGINS permite el origen de esta aplicación, además de las reglas de cortafuegos o proxy.",
+      "ollamaTimedOut": "La solicitud al servidor de Ollama agotó el tiempo de espera. El host puede ser lento, inaccesible o estar bloqueado por un cortafuegos o proxy.",
       "newProfile": "Nuevo perfil",
       "cancel": "Cancelar",
       "addProfile": "Añadir perfil",
@@ -2540,7 +2551,8 @@
       "getisOrd": "Puntos calientes Getis-Ord Gi*",
       "averageNearestNeighbor": "Vecino más cercano promedio",
       "kernelDensity": "Densidad de kernel (mapa de calor)",
-      "emergingHotSpot": "Puntos calientes emergentes (cubo espacio-temporal)"
+      "emergingHotSpot": "Puntos calientes emergentes (cubo espacio-temporal)",
+      "compositeScore": "Puntuación compuesta (índice de aptitud)"
     },
     "rasterTool": {
       "hillshade": "Sombreado de relieve",
@@ -4290,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Seleccionar una capa...",
       "selectField": "Seleccionar un campo...",
+      "selectOption": "Seleccione una opción...",
       "selectLayerFirst": "Seleccione primero una capa",
       "layersSelected_one": "{{count}} capa seleccionada",
       "layersSelected_other": "{{count}} capas seleccionadas"
+    },
+    "fieldWeights": {
+      "columnField": "Campo",
+      "columnNormalization": "Normalizar",
+      "columnWeight": "Peso",
+      "columnDirection": "Dirección",
+      "addField": "Añadir campo",
+      "removeAria": "Quitar {{field}}",
+      "empty": "Aún no hay campos. Añada al menos dos para construir una puntuación.",
+      "shares": "Pesos: {{shares}}",
+      "noWeight": "Dé a al menos un campo un peso mayor que cero.",
+      "normalization": {
+        "minMax": "Mín-máx",
+        "zScore": "Puntuación Z",
+        "rank": "Rango ordinal",
+        "quantile": "Cuantil"
+      },
+      "direction": {
+        "higher": "Cuanto más alto, mejor",
+        "lower": "Cuanto más bajo, mejor"
+      }
     },
     "whitebox": {
       "run": "Ejecutar",
@@ -5576,6 +5610,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Puntuación compuesta (índice de aptitud)",
+          "description": "Normalice, pondere y combine varios campos numéricos en un único índice de 0 a 100, y luego aplique ese índice al estilo de la capa.",
+          "params": {
+            "layer": {
+              "label": "Capa"
+            },
+            "fields": {
+              "label": "Campos y pesos",
+              "description": "Dos o más campos numéricos. Cada uno recibe una normalización, un peso relativo y el extremo de su rango que puntúa bien."
+            },
+            "aggregation": {
+              "label": "Agregación",
+              "description": "La media geométrica permite que un campo débil haga bajar la puntuación: un campo fuerte no puede compensarlo del todo.",
+              "options": {
+                "weighted-mean": "Media aritmética ponderada",
+                "geometric-mean": "Media geométrica ponderada"
+              }
+            },
+            "nullHandling": {
+              "label": "Entidades sin valor",
+              "description": "No hay un valor predeterminado seguro: descartar y renormalizar producen mapas distintos, así que elija qué significa este índice.",
+              "options": {
+                "drop": "Descartar la entidad del resultado",
+                "renormalize": "Renormalizar los pesos sobre los campos que tiene"
+              }
+            },
+            "scoreField": {
+              "label": "Nombre del campo de puntuación",
+              "description": "Nombre de la columna numérica en la que se escribe la puntuación."
+            },
+            "scoreRange": {
+              "label": "Rango de la puntuación",
+              "options": {
+                "0-100": "0 a 100",
+                "0-1": "0 a 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Conservar los componentes normalizados",
+              "description": "Escribe el valor normalizado de cada campo en su propia columna, de modo que la puntuación pueda auditarse en lugar de aceptarse sin más."
+            }
+          }
         }
       },
       "raster": {
@@ -6746,6 +6824,60 @@
       "noFields": "La capa no tiene campos de atributos para configurar.",
       "minMaxInvalid": "El mínimo debe ser menor o igual que el máximo."
     },
+    "popup": {
+      "heading": "Ventana emergente",
+      "showOnClick": "Mostrar la ventana emergente al hacer clic (Identificar)",
+      "showOnHover": "Mostrar la información emergente al pasar el cursor",
+      "hoverHint": "La información emergente muestra el título y los campos que marque como «En la información emergente».",
+      "titleField": "Campo del título",
+      "titleFieldDefault": "Nombre de la capa",
+      "titleExpression": "Expresión del título",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Expresión del cuerpo",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Una expresión de cuerpo sustituye las filas de campos por su propio texto.",
+      "bodyReplacesRows": "Mientras haya una expresión de cuerpo, sustituye las filas de campos y la fila del identificador.",
+      "invalidExpression": "Expresión no válida",
+      "openBuilder": "Abrir el generador de expresiones",
+      "showFeatureId": "Mostrar la fila del identificador de la entidad",
+      "fields": "Campos",
+      "allFields": "No se ha elegido ningún campo, por lo que se muestran todos los campos visibles, en el orden propio de los datos.",
+      "addField": "Añadir un campo…",
+      "noFieldsLeft": "Todos los campos ya están en la lista",
+      "chooseFields": "Elegir campos",
+      "resetFields": "Mostrar todos los campos",
+      "removeField": "Quitar campo",
+      "moveUp": "Mover el campo arriba",
+      "moveDown": "Mover el campo abajo",
+      "dragToReorder": "Arrastrar para reordenar",
+      "dragNamedToReorder": "Arrastrar {{name}} para reordenar",
+      "label": "Etiqueta",
+      "kind": "Tipo de valor",
+      "kinds": {
+        "auto": "Automático",
+        "text": "Texto",
+        "number": "Número",
+        "date": "Fecha",
+        "link": "Enlace",
+        "image": "Imagen"
+      },
+      "decimals": "Decimales",
+      "thousands": "Agrupar los millares",
+      "dateFormat": "Formato de fecha",
+      "dateFormats": {
+        "date": "Fecha",
+        "datetime": "Fecha y hora",
+        "time": "Hora",
+        "iso": "ISO 8601",
+        "year": "Año"
+      },
+      "linkLabel": "Texto del enlace",
+      "linkLabelPlaceholder": "La propia URL",
+      "prefix": "Prefijo",
+      "suffix": "Sufijo",
+      "inHover": "En la información emergente",
+      "imageNotInHover": "Los campos de imagen se quedan en la ventana emergente de clic; una información emergente no tiene espacio para una imagen."
+    },
     "editorTracking": {
       "heading": "Seguimiento de edición",
       "description": "Registra quién creó cada entidad y quién la modificó por última vez. Los campos siguientes se rellenan automáticamente cuando se dibujan, editan, calculan o capturan entidades.",
@@ -6761,6 +6893,51 @@
       "duplicateName": "Cada campo de seguimiento necesita un nombre distinto.",
       "columnTaken": "«{{name}}» ya es una columna de atributos. El seguimiento sobrescribiría sus valores."
     }
+  },
+  "quickFilters": {
+    "heading": "Filtros rápidos",
+    "empty": "Aún no hay filtros. Añada uno abajo para acotar esta capa por cualquiera de sus campos.",
+    "addFilter": "Añadir un filtro…",
+    "allFieldsUsed": "Todos los campos ya tienen un filtro",
+    "removeAll": "Quitar todos",
+    "clearAll": "Borrar filtros",
+    "clearOne": "Borrar este filtro",
+    "clearOneNamed": "Borrar el filtro de {{field}}",
+    "remove": "Quitar filtro",
+    "removeNamed": "Quitar el filtro de {{field}}",
+    "controlType": "Tipo de filtro",
+    "enabledTitle": "Aplicar este filtro",
+    "kind": {
+      "categorical": "Valores",
+      "range": "Rango",
+      "date": "Fechas",
+      "text": "Texto"
+    },
+    "operator": {
+      "contains": "Contiene",
+      "startsWith": "Empieza por",
+      "equals": "Es exactamente"
+    },
+    "searchValues": "Buscar valores",
+    "noValues": "Este campo no tiene valores entre los que elegir.",
+    "noMatchingValues": "Ningún valor coincide con su búsqueda.",
+    "selectAll": "Seleccionar todo",
+    "selectNone": "No seleccionar ninguno",
+    "allValues": "Todos los valores",
+    "selectedCount_one": "{{count}} seleccionado",
+    "selectedCount_other": "{{count}} seleccionados",
+    "rangeMin": "Mínimo",
+    "rangeMax": "Máximo",
+    "rangeSeparator": "a",
+    "dateFrom": "Desde",
+    "dateTo": "Hasta",
+    "textOperator": "Coincidencia",
+    "textValue": "Texto que buscar",
+    "textPlaceholder": "Escriba para filtrar",
+    "noFields": "Esta capa no tiene atributos por los que filtrar.",
+    "noTileFeatures": "Aún no hay entidades cargadas. Desplace o acerque el mapa a los datos y vuelva a abrir esta sección.",
+    "viewportSampleHint": "Los valores provienen de las teselas cargadas en este momento, por lo que la lista crece a medida que desplaza y acerca el mapa.",
+    "layerFilteredHint": "Un filtro rápido está ocultando parte de las entidades de esta capa."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "La exportación KML no pudo escribir la entidad {{position}} porque tiene coordenadas no válidas.",
@@ -6869,6 +7046,8 @@
     "searchPlacesClear": "Borrar búsqueda",
     "searchPlacesGoToCoordinate": "Ir a {{coordinate}}",
     "searchPlacesGoToH3Cell": "Ir a la celda H3 {{cell}} (res. {{resolution}})",
+    "searchPlacesGroup": "Lugares",
+    "searchFeaturesPartial": "(parcial)",
     "background": "Fondo",
     "backgroundCannotReorder": "El fondo no se puede reordenar",
     "hideBackground": "Ocultar fondo",

@@ -1943,6 +1943,13 @@
       "noProjectSelected": "Tidak ada proyek yang dipilih",
       "globeByDefault": "Aktifkan bola dunia 3D secara bawaan",
       "globeByDefaultHint": "Digunakan untuk ruang kerja tanpa judul saat tidak ada proyek saat memulai atau tautan proyek yang diberikan.",
+      "defaultView": "Tampilan peta bawaan",
+      "defaultViewHint": "Tetapkan pusat dan tingkat zoom untuk ruang kerja tanpa judul.",
+      "longitude": "Bujur pusat",
+      "latitude": "Lintang pusat",
+      "zoom": "Tingkat zoom",
+      "useCurrentView": "Gunakan Tampilan Saat Ini",
+      "viewUnavailable": "Tampilan peta saat ini tidak tersedia.",
       "selectError": "Proyek yang dipilih tidak dapat dibaca.",
       "restoring": "Membuka proyek saat memulai Anda…",
       "loadWarning": "Proyek saat memulai tidak tersedia. GeoLibre membuka ruang kerja bawaan sebagai gantinya."
@@ -2088,6 +2095,10 @@
       "osEnvNote": "Aplikasi desktop juga membaca kunci API yang cocok dari variabel lingkungan sistem Anda. Kunci tersebut digunakan secara otomatis dan tidak pernah disimpan ke file proyek — biarkan bidang kosong untuk tetap menggunakan nilai lingkungan.",
       "osEnvField": "Dibaca dari variabel lingkungan sistem Anda {{name}}.",
       "osEnvPlaceholder": "Atur di lingkungan sistem Anda",
+      "refreshModels": "Segarkan daftar model",
+      "modelsFailedToLoad": "Tidak dapat memuat model: {{message}}",
+      "ollamaNetworkFailure": "Tidak dapat menjangkau server Ollama. Periksa apakah server berjalan di alamat ini dan apakah OLLAMA_ORIGINS mengizinkan origin aplikasi ini, beserta aturan firewall atau proxy apa pun.",
+      "ollamaTimedOut": "Permintaan ke server Ollama melebihi batas waktu. Host mungkin lambat, tidak dapat dijangkau, atau diblokir oleh firewall atau proxy.",
       "newProfile": "Profil baru",
       "cancel": "Batal",
       "addProfile": "Tambah profil",
@@ -2494,7 +2505,8 @@
       "getisOrd": "Hotspot Getis-Ord Gi*",
       "averageNearestNeighbor": "Rata-rata tetangga terdekat",
       "kernelDensity": "Kepadatan kernel (heatmap)",
-      "emergingHotSpot": "Hotspot yang muncul (kubus ruang-waktu)"
+      "emergingHotSpot": "Hotspot yang muncul (kubus ruang-waktu)",
+      "compositeScore": "Skor komposit (indeks kesesuaian)"
     },
     "rasterTool": {
       "hillshade": "Hillshade",
@@ -4222,8 +4234,30 @@
     "parameterField": {
       "selectLayer": "Pilih layer...",
       "selectField": "Pilih bidang...",
+      "selectOption": "Pilih sebuah opsi...",
       "selectLayerFirst": "Pilih layer terlebih dahulu",
       "layersSelected_other": "{{count}} layer dipilih"
+    },
+    "fieldWeights": {
+      "columnField": "Bidang",
+      "columnNormalization": "Normalisasi",
+      "columnWeight": "Bobot",
+      "columnDirection": "Arah",
+      "addField": "Tambah bidang",
+      "removeAria": "Hapus {{field}}",
+      "empty": "Belum ada bidang. Tambahkan setidaknya dua untuk menyusun skor.",
+      "shares": "Bobot: {{shares}}",
+      "noWeight": "Beri setidaknya satu bidang bobot di atas nol.",
+      "normalization": {
+        "minMax": "Min-maks",
+        "zScore": "Skor Z",
+        "rank": "Peringkat",
+        "quantile": "Kuantil"
+      },
+      "direction": {
+        "higher": "Makin tinggi makin baik",
+        "lower": "Makin rendah makin baik"
+      }
     },
     "whitebox": {
       "run": "Jalankan",
@@ -5506,6 +5540,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Skor komposit (indeks kesesuaian)",
+          "description": "Normalisasi, beri bobot, dan gabungkan beberapa bidang numerik menjadi satu indeks 0 sampai 100, lalu beri gaya pada layer berdasarkan indeks itu.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "fields": {
+              "label": "Bidang dan bobot",
+              "description": "Dua bidang numerik atau lebih. Masing-masing mendapat metode normalisasi, bobot relatif, dan ujung rentangnya yang dinilai baik."
+            },
+            "aggregation": {
+              "label": "Agregasi",
+              "description": "Rata-rata geometrik membiarkan satu bidang yang lemah menarik skor turun: bidang yang kuat tidak dapat sepenuhnya menutupinya.",
+              "options": {
+                "weighted-mean": "Rata-rata aritmetik berbobot",
+                "geometric-mean": "Rata-rata geometrik berbobot"
+              }
+            },
+            "nullHandling": {
+              "label": "Fitur tanpa nilai",
+              "description": "Tidak ada default yang aman: membuang dan menormalisasi ulang menghasilkan peta yang berbeda, jadi pilih makna indeks ini.",
+              "options": {
+                "drop": "Buang fitur tersebut dari hasil",
+                "renormalize": "Normalisasi ulang bobot pada bidang yang dimilikinya"
+              }
+            },
+            "scoreField": {
+              "label": "Nama bidang skor",
+              "description": "Nama kolom numerik tempat skor ditulis."
+            },
+            "scoreRange": {
+              "label": "Rentang skor",
+              "options": {
+                "0-100": "0 sampai 100",
+                "0-1": "0 sampai 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Pertahankan komponen ternormalisasi",
+              "description": "Menulis nilai ternormalisasi setiap bidang sebagai kolom tersendiri, sehingga skor dapat diaudit alih-alih diterima begitu saja."
+            }
+          }
         }
       },
       "raster": {
@@ -6669,6 +6747,60 @@
       "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi.",
       "minMaxInvalid": "Min harus kurang dari atau sama dengan Maks."
     },
+    "popup": {
+      "heading": "Popup",
+      "showOnClick": "Tampilkan popup saat diklik (Identifikasi)",
+      "showOnHover": "Tampilkan tooltip saat kursor diarahkan",
+      "hoverHint": "Tooltip menampilkan judul dan bidang yang Anda centang sebagai “Di tooltip”.",
+      "titleField": "Bidang judul",
+      "titleFieldDefault": "Nama layer",
+      "titleExpression": "Ekspresi judul",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Ekspresi isi",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Ekspresi isi menggantikan baris-baris bidang dengan teksnya sendiri.",
+      "bodyReplacesRows": "Selama ekspresi isi disetel, ekspresi itu menggantikan baris-baris bidang dan baris id.",
+      "invalidExpression": "Ekspresi tidak valid",
+      "openBuilder": "Buka pembuat ekspresi",
+      "showFeatureId": "Tampilkan baris id fitur",
+      "fields": "Bidang",
+      "allFields": "Tidak ada bidang yang dipilih, jadi semua bidang yang terlihat ditampilkan dalam urutan asli datanya.",
+      "addField": "Tambah bidang…",
+      "noFieldsLeft": "Semua bidang sudah tercantum",
+      "chooseFields": "Pilih bidang",
+      "resetFields": "Tampilkan semua bidang",
+      "removeField": "Hapus bidang",
+      "moveUp": "Pindahkan bidang ke atas",
+      "moveDown": "Pindahkan bidang ke bawah",
+      "dragToReorder": "Seret untuk mengurutkan ulang",
+      "dragNamedToReorder": "Seret {{name}} untuk mengurutkan ulang",
+      "label": "Label",
+      "kind": "Jenis nilai",
+      "kinds": {
+        "auto": "Otomatis",
+        "text": "Teks",
+        "number": "Angka",
+        "date": "Tanggal",
+        "link": "Tautan",
+        "image": "Gambar"
+      },
+      "decimals": "Angka desimal",
+      "thousands": "Kelompokkan ribuan",
+      "dateFormat": "Format tanggal",
+      "dateFormats": {
+        "date": "Tanggal",
+        "datetime": "Tanggal dan waktu",
+        "time": "Waktu",
+        "iso": "ISO 8601",
+        "year": "Tahun"
+      },
+      "linkLabel": "Teks tautan",
+      "linkLabelPlaceholder": "URL itu sendiri",
+      "prefix": "Awalan",
+      "suffix": "Akhiran",
+      "inHover": "Di tooltip",
+      "imageNotInHover": "Bidang gambar tetap berada di popup klik; tooltip tidak punya ruang untuk gambar."
+    },
     "editorTracking": {
       "heading": "Pelacakan Penyuntingan",
       "description": "Catat siapa yang membuat setiap fitur dan siapa yang terakhir mengubahnya. Bidang di bawah diisi otomatis saat fitur digambar, disunting, dihitung, atau dikumpulkan.",
@@ -6684,6 +6816,50 @@
       "duplicateName": "Setiap bidang pelacakan memerlukan nama yang berbeda.",
       "columnTaken": "“{{name}}” sudah menjadi bidang atribut. Pelacakan akan menimpa nilainya."
     }
+  },
+  "quickFilters": {
+    "heading": "Filter cepat",
+    "empty": "Belum ada filter. Tambahkan satu di bawah untuk mempersempit layer ini berdasarkan bidang mana pun miliknya.",
+    "addFilter": "Tambah filter…",
+    "allFieldsUsed": "Setiap bidang sudah memiliki filter",
+    "removeAll": "Hapus semua",
+    "clearAll": "Bersihkan filter",
+    "clearOne": "Bersihkan filter ini",
+    "clearOneNamed": "Bersihkan filter pada {{field}}",
+    "remove": "Hapus filter",
+    "removeNamed": "Hapus filter pada {{field}}",
+    "controlType": "Jenis filter",
+    "enabledTitle": "Terapkan filter ini",
+    "kind": {
+      "categorical": "Nilai",
+      "range": "Rentang",
+      "date": "Tanggal",
+      "text": "Teks"
+    },
+    "operator": {
+      "contains": "Memuat",
+      "startsWith": "Diawali dengan",
+      "equals": "Persis sama dengan"
+    },
+    "searchValues": "Cari nilai",
+    "noValues": "Bidang ini tidak memiliki nilai untuk dipilih.",
+    "noMatchingValues": "Tidak ada nilai yang cocok dengan pencarian Anda.",
+    "selectAll": "Pilih semua",
+    "selectNone": "Pilih tidak ada",
+    "allValues": "Semua nilai",
+    "selectedCount_other": "{{count}} dipilih",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maksimum",
+    "rangeSeparator": "sampai",
+    "dateFrom": "Dari",
+    "dateTo": "Sampai",
+    "textOperator": "Kecocokan",
+    "textValue": "Teks yang dicocokkan",
+    "textPlaceholder": "Ketik untuk memfilter",
+    "noFields": "Layer ini tidak memiliki atribut untuk difilter.",
+    "noTileFeatures": "Belum ada fitur yang dimuat. Geser atau perbesar peta ke data, lalu buka kembali bagian ini.",
+    "viewportSampleHint": "Nilai berasal dari tile yang sedang dimuat, jadi daftarnya bertambah seiring Anda menggeser dan memperbesar peta.",
+    "layerFilteredHint": "Sebuah filter cepat sedang menyembunyikan sebagian fitur layer ini."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Ekspor KML tidak dapat menulis fitur {{position}} karena koordinatnya tidak valid.",
@@ -6792,6 +6968,8 @@
     "searchPlacesClear": "Bersihkan pencarian",
     "searchPlacesGoToCoordinate": "Menuju {{coordinate}}",
     "searchPlacesGoToH3Cell": "Menuju sel H3 {{cell}} (res {{resolution}})",
+    "searchPlacesGroup": "Tempat",
+    "searchFeaturesPartial": "(sebagian)",
     "background": "Latar belakang",
     "backgroundCannotReorder": "Latar belakang tidak dapat diurutkan ulang",
     "hideBackground": "Sembunyikan latar belakang",

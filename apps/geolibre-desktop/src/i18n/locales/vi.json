@@ -1928,7 +1928,6 @@
       }
     },
     "startup": {
-      "loadWarning": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định.",
       "title": "Dự án khởi động",
       "description": "Chọn không gian làm việc GeoLibre mở ra khi ứng dụng gốc khởi động.",
       "mode": {
@@ -1944,8 +1943,16 @@
       "noProjectSelected": "Không có dự án nào được chọn",
       "globeByDefault": "Bật khối cầu 3D theo mặc định",
       "globeByDefaultHint": "Được dùng cho không gian làm việc chưa đặt tên khi không có dự án khởi động hoặc liên kết dự án.",
+      "defaultView": "Chế độ xem bản đồ mặc định",
+      "defaultViewHint": "Đặt tâm và mức thu phóng cho không gian làm việc chưa đặt tên.",
+      "longitude": "Kinh độ tâm",
+      "latitude": "Vĩ độ tâm",
+      "zoom": "Mức thu phóng",
+      "useCurrentView": "Dùng chế độ xem hiện tại",
+      "viewUnavailable": "Chế độ xem bản đồ hiện tại không khả dụng.",
       "selectError": "Không thể đọc được dự án đã chọn.",
-      "restoring": "Đang mở dự án khởi động của bạn…"
+      "restoring": "Đang mở dự án khởi động của bạn…",
+      "loadWarning": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định."
     },
     "map": {
       "constraintsTitle": "Hạn chế về bản đồ",
@@ -2073,6 +2080,39 @@
       "corsNote": "Google không chính thức cho phép các yêu cầu của trình duyệt đối với API mã hóa địa lý của mình, do đó, các yêu cầu có thể bị chặn trừ khi được cung cấp qua proxy có cùng nguồn gốc."
     },
     "ai": {
+      "title": "Nhà cung cấp Trợ lý AI",
+      "description": "Ẩn __PH0__",
+      "providerLabel": "nhà cung cấp",
+      "providerHint": "Chọn một nhà cung cấp để tiết lộ các lĩnh vực chính xác mà nó cần.",
+      "configuredMark": "(được định cấu hình)",
+      "optionalMark": "(không bắt buộc)",
+      "statusReady": "Nhà cung cấp: {{provider}}",
+      "statusIncomplete": "Điền vào các trường bắt buộc bên dưới để bật {{provider}}.",
+      "secretsNote": "Thông tin xác thực được lưu cục bộ trên thiết bị này chứ không phải trong tệp dự án mà bạn chia sẻ, vì vậy chúng vẫn tồn tại trong suốt quá trình khởi động lại. Bất cứ ai có quyền truy cập vào thiết bị này đều có thể đọc chúng.",
+      "getCredentials": "Nơi nhận thông tin xác thực {{provider}}",
+      "showValue": "Hiển thị {{name}}",
+      "hideValue": "{{name}} hồ sơ",
+      "osEnvNote": "Ứng dụng dành cho máy tính để bàn cũng đọc các khóa API phù hợp từ các biến môi trường hệ thống của bạn. Chúng được sử dụng tự động và không bao giờ được lưu vào tệp dự án - hãy để trống trường để tiếp tục sử dụng giá trị môi trường.",
+      "osEnvField": "Đọc từ biến môi trường hệ thống của bạn {{name}}.",
+      "osEnvPlaceholder": "Đặt trong môi trường hệ thống của bạn",
+      "refreshModels": "Làm mới danh sách mô hình",
+      "modelsFailedToLoad": "Không thể tải các mô hình: {{message}}",
+      "ollamaNetworkFailure": "Không thể kết nối tới máy chủ Ollama. Hãy kiểm tra xem nó có đang chạy ở địa chỉ này không, OLLAMA_ORIGINS có cho phép nguồn gốc của ứng dụng này không, cùng với mọi quy tắc tường lửa hoặc proxy.",
+      "ollamaTimedOut": "Yêu cầu tới máy chủ Ollama đã hết thời gian chờ. Máy chủ có thể bị chậm, không thể truy cập được hoặc bị chặn bởi tường lửa hoặc proxy.",
+      "newProfile": "Hồ sơ mới",
+      "cancel": "Dự án",
+      "addProfile": "Thêm hồ sơ",
+      "profileName": "Tên hồ sơ",
+      "profileNamePlaceholder": "ví dụ. Làm việc Gemini, Ollama địa phương",
+      "profileCount_other": "{{count}} hồ sơ",
+      "noProfiles": "Chưa có hồ sơ nào. Thêm một cái bên dưới để định cấu hình Trợ lý AI.",
+      "setDefault": "Đặt làm mặc định",
+      "defaultProfile": "Mặc định",
+      "edit": "Biên tập",
+      "deleteProfile": "Xóa hồ sơ",
+      "backToProfiles": "← Quay lại hồ sơ",
+      "saveProfile": "Lưu hồ sơ",
+      "profileEditSaveHint": "Lưu hoặc hủy các thay đổi hồ sơ của bạn ở trên, sau đó nhấp vào Lưu Cài đặt để thực hiện tất cả các thay đổi.",
       "field": {
         "baseUrl": "URL cơ sở",
         "model": "Người mẫu",
@@ -2095,36 +2135,7 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "id mẫu",
         "customApiKey": "sk-… (nếu cần)"
-      },
-      "profileCount_other": "{{count}} hồ sơ",
-      "noProfiles": "Chưa có hồ sơ nào. Thêm một cái bên dưới để định cấu hình Trợ lý AI.",
-      "setDefault": "Đặt làm mặc định",
-      "defaultProfile": "Mặc định",
-      "edit": "Biên tập",
-      "deleteProfile": "Xóa hồ sơ",
-      "backToProfiles": "← Quay lại hồ sơ",
-      "saveProfile": "Lưu hồ sơ",
-      "profileEditSaveHint": "Lưu hoặc hủy các thay đổi hồ sơ của bạn ở trên, sau đó nhấp vào Lưu Cài đặt để thực hiện tất cả các thay đổi.",
-      "hideValue": "{{name}} hồ sơ",
-      "osEnvNote": "Ứng dụng dành cho máy tính để bàn cũng đọc các khóa API phù hợp từ các biến môi trường hệ thống của bạn. Chúng được sử dụng tự động và không bao giờ được lưu vào tệp dự án - hãy để trống trường để tiếp tục sử dụng giá trị môi trường.",
-      "osEnvField": "Đọc từ biến môi trường hệ thống của bạn {{name}}.",
-      "osEnvPlaceholder": "Đặt trong môi trường hệ thống của bạn",
-      "newProfile": "Hồ sơ mới",
-      "cancel": "Dự án",
-      "addProfile": "Thêm hồ sơ",
-      "profileName": "Tên hồ sơ",
-      "profileNamePlaceholder": "ví dụ. Làm việc Gemini, Ollama địa phương",
-      "description": "Ẩn __PH0__",
-      "providerLabel": "nhà cung cấp",
-      "providerHint": "Chọn một nhà cung cấp để tiết lộ các lĩnh vực chính xác mà nó cần.",
-      "configuredMark": "(được định cấu hình)",
-      "optionalMark": "(không bắt buộc)",
-      "statusReady": "Nhà cung cấp: {{provider}}",
-      "statusIncomplete": "Điền vào các trường bắt buộc bên dưới để bật {{provider}}.",
-      "secretsNote": "Thông tin xác thực được lưu cục bộ trên thiết bị này chứ không phải trong tệp dự án mà bạn chia sẻ, vì vậy chúng vẫn tồn tại trong suốt quá trình khởi động lại. Bất cứ ai có quyền truy cập vào thiết bị này đều có thể đọc chúng.",
-      "getCredentials": "Nơi nhận thông tin xác thực {{provider}}",
-      "showValue": "Hiển thị {{name}}",
-      "title": "Nhà cung cấp Trợ lý AI"
+      }
     }
   },
   "toolbar": {
@@ -2494,7 +2505,8 @@
       "getisOrd": "Điểm nóng Getis-Ord Gi*",
       "averageNearestNeighbor": "Hàng xóm gần nhất trung bình",
       "kernelDensity": "Mật độ nhân (bản đồ nhiệt)",
-      "emergingHotSpot": "Điểm nóng mới nổi (khối không-thời gian)"
+      "emergingHotSpot": "Điểm nóng mới nổi (khối không-thời gian)",
+      "compositeScore": "Điểm tổng hợp (chỉ số thích hợp)"
     },
     "rasterTool": {
       "errorStartTool": "Không thể khởi động công cụ raster.",
@@ -4222,8 +4234,30 @@
     "parameterField": {
       "selectLayer": "Sao chép liên kết có thể chia sẻ để mở công cụ này với cài đặt hiện tại",
       "selectField": "Chọn một trường...",
+      "selectOption": "Chọn một tùy chọn...",
       "selectLayerFirst": "Chọn một lớp đầu tiên",
       "layersSelected_other": "Đã chọn {{count}} lớp"
+    },
+    "fieldWeights": {
+      "columnField": "Trường",
+      "columnNormalization": "Chuẩn hóa",
+      "columnWeight": "Trọng số",
+      "columnDirection": "Hướng",
+      "addField": "Thêm trường",
+      "removeAria": "Xóa {{field}}",
+      "empty": "Chưa có trường nào. Hãy thêm ít nhất hai trường để dựng điểm số.",
+      "shares": "Trọng số: {{shares}}",
+      "noWeight": "Hãy đặt trọng số lớn hơn 0 cho ít nhất một trường.",
+      "normalization": {
+        "minMax": "Nhỏ nhất-lớn nhất",
+        "zScore": "Điểm Z",
+        "rank": "Thứ hạng",
+        "quantile": "Phân vị"
+      },
+      "direction": {
+        "higher": "Càng cao càng tốt",
+        "lower": "Càng thấp càng tốt"
+      }
     },
     "whitebox": {
       "run": "Chạy",
@@ -5506,6 +5540,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Điểm tổng hợp (chỉ số thích hợp)",
+          "description": "Chuẩn hóa, gán trọng số và kết hợp nhiều trường số thành một chỉ số duy nhất từ 0 đến 100, rồi tạo kiểu cho lớp theo chỉ số đó.",
+          "params": {
+            "layer": {
+              "label": "Lớp"
+            },
+            "fields": {
+              "label": "Trường và trọng số",
+              "description": "Từ hai trường số trở lên. Mỗi trường được gán một cách chuẩn hóa, một trọng số tương đối và đầu nào của khoảng giá trị được coi là tốt."
+            },
+            "aggregation": {
+              "label": "Tổng hợp",
+              "description": "Với trung bình nhân, một trường yếu sẽ kéo điểm xuống: một trường mạnh không thể bù đắp hoàn toàn cho nó.",
+              "options": {
+                "weighted-mean": "Trung bình cộng có trọng số",
+                "geometric-mean": "Trung bình nhân có trọng số"
+              }
+            },
+            "nullHandling": {
+              "label": "Đối tượng thiếu giá trị",
+              "description": "Không có mặc định nào là an toàn: loại bỏ và chuẩn hóa lại cho ra những bản đồ khác nhau, vì vậy hãy chọn ý nghĩa của chỉ số này.",
+              "options": {
+                "drop": "Loại đối tượng khỏi kết quả",
+                "renormalize": "Chuẩn hóa lại trọng số trên những trường mà nó có"
+              }
+            },
+            "scoreField": {
+              "label": "Tên trường điểm số",
+              "description": "Tên cột số mà điểm sẽ được ghi vào."
+            },
+            "scoreRange": {
+              "label": "Khoảng điểm",
+              "options": {
+                "0-100": "0 đến 100",
+                "0-1": "0 đến 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Giữ các thành phần đã chuẩn hóa",
+              "description": "Ghi giá trị đã chuẩn hóa của từng trường thành một cột riêng, để có thể kiểm chứng điểm số thay vì tin theo."
+            }
+          }
         }
       },
       "raster": {
@@ -6174,6 +6252,25 @@
   },
   "style": {
     "panelLabel": "Kiểu lớp",
+    "panelLabelCollapsed": "Thang màu xám",
+    "heading": "Phong cách",
+    "headingWithLayer": "Kiểu dáng — {{name}}",
+    "resizePanel": "Thay đổi kích thước bảng Kiểu",
+    "expand": "Mở rộng kiểu",
+    "collapse": "Kiểu thu gọn",
+    "openStyleManager": "Kiểu đã lưu…",
+    "addClass": "Thêm lớp",
+    "removeClass": "Xóa lớp",
+    "beforeIdSavedUnavailable": "Đã lưu (không có sẵn)",
+    "blendMode": "Hòa trộn",
+    "blendModeFor": "Chế độ hòa trộn cho {{name}}",
+    "blendModes": {
+      "normal": "Bình thường",
+      "multiply": "Nhân",
+      "screen": "Màn hình",
+      "lighten": "Làm sáng",
+      "add": "Cộng"
+    },
     "raster": {
       "greyscale": "Thang màu xám",
       "greyscaleHint": "Chuyển đổi sơ đồ cơ sở thang độ xám (tăng độ bão hòa đến mức tối thiểu)",
@@ -6190,6 +6287,34 @@
       "footerMaplibre": "Các thay đổi áp dụng trực tiếp cho thuộc tính sơn raster MapLibre.",
       "valueAria": "Giá trị {{label}}",
       "editValueAria": "Chỉnh sửa giá trị {{label}}"
+    },
+    "visibility": {
+      "minZoom": "Xoay (°)",
+      "maxZoom": "__PH0__ trường",
+      "minZoomTooltip": "Mức thu phóng mà lớp này xuất hiện. Số cao hơn được phóng to hơn.",
+      "maxZoomTooltip": "Mức thu phóng mà lớp này biến mất. Số cao hơn được phóng to hơn."
+    },
+    "joins": {
+      "statsUnmatchedJoin_other": "{{count}} không đánh giá được các tính năng (ô rỗng)",
+      "empty": "Đính kèm các cột từ một lớp hoặc bảng khác bằng cách khớp các trường khóa. Các cột đã tham gia cập nhật khi bảng tham gia thay đổi và tiếp tục tồn tại với dự án.",
+      "addJoin": "Thêm tham gia",
+      "joinLayer": "Tham gia lớp",
+      "selectLayer": "Chọn một lớp…",
+      "joinField": "Tham gia trường",
+      "targetField": "Trường mục tiêu",
+      "selectField": "Chọn một trường…",
+      "fields": "Các trường để tham gia",
+      "fieldCount_other": "{{count}} trường",
+      "heading": "Tham gia",
+      "prefix": "Tiền tố tên trường",
+      "prefixPlaceholder": "ví dụ. điều tra dân số_",
+      "add": "Thêm vào",
+      "cancel": "Hủy bỏ",
+      "remove": "Xóa tham gia",
+      "enabledTitle": "Áp dụng sự tham gia này",
+      "missingLayer": "__PH0__ trường",
+      "noCandidates": "Không có lớp nào khác có bảng thuộc tính để tham gia",
+      "statsMatched": "{{matched}} trong số {{total}} tính năng phù hợp"
     },
     "virtualFields": {
       "evaluationErrors_other": "{{count}} không đánh giá được các tính năng (ô rỗng)",
@@ -6271,53 +6396,6 @@
       "expressionHint": "Biểu thức MapLibre (JSON). Ghi đè trường khi được đặt.",
       "expressionInvalid": "Không phải là biểu thức MapLibre hợp lệ (phải là một mảng JSON). Giá trị này bị bỏ qua."
     },
-    "panelLabelCollapsed": "Thang màu xám",
-    "heading": "Phong cách",
-    "headingWithLayer": "Kiểu dáng — {{name}}",
-    "resizePanel": "Thay đổi kích thước bảng Kiểu",
-    "expand": "Mở rộng kiểu",
-    "collapse": "Kiểu thu gọn",
-    "openStyleManager": "Kiểu đã lưu…",
-    "addClass": "Thêm lớp",
-    "removeClass": "Xóa lớp",
-    "beforeIdSavedUnavailable": "Đã lưu (không có sẵn)",
-    "blendMode": "Hòa trộn",
-    "blendModeFor": "Chế độ hòa trộn cho {{name}}",
-    "blendModes": {
-      "normal": "Bình thường",
-      "multiply": "Nhân",
-      "screen": "Màn hình",
-      "lighten": "Làm sáng",
-      "add": "Cộng"
-    },
-    "joins": {
-      "statsUnmatchedJoin_other": "{{count}} không đánh giá được các tính năng (ô rỗng)",
-      "empty": "Đính kèm các cột từ một lớp hoặc bảng khác bằng cách khớp các trường khóa. Các cột đã tham gia cập nhật khi bảng tham gia thay đổi và tiếp tục tồn tại với dự án.",
-      "addJoin": "Thêm tham gia",
-      "joinLayer": "Tham gia lớp",
-      "selectLayer": "Chọn một lớp…",
-      "joinField": "Tham gia trường",
-      "targetField": "Trường mục tiêu",
-      "selectField": "Chọn một trường…",
-      "fields": "Các trường để tham gia",
-      "fieldCount_other": "{{count}} trường",
-      "heading": "Tham gia",
-      "prefix": "Tiền tố tên trường",
-      "prefixPlaceholder": "ví dụ. điều tra dân số_",
-      "add": "Thêm vào",
-      "cancel": "Hủy bỏ",
-      "remove": "Xóa tham gia",
-      "enabledTitle": "Áp dụng sự tham gia này",
-      "missingLayer": "__PH0__ trường",
-      "noCandidates": "Không có lớp nào khác có bảng thuộc tính để tham gia",
-      "statsMatched": "{{matched}} trong số {{total}} tính năng phù hợp"
-    },
-    "visibility": {
-      "minZoom": "Xoay (°)",
-      "maxZoom": "__PH0__ trường",
-      "minZoomTooltip": "Mức thu phóng mà lớp này xuất hiện. Số cao hơn được phóng to hơn.",
-      "maxZoomTooltip": "Mức thu phóng mà lớp này biến mất. Số cao hơn được phóng to hơn."
-    },
     "elevation3d": {
       "mode": "3D (giá trị Z)",
       "fillColor": "Tô màu",
@@ -6331,6 +6409,30 @@
       "offset": "Độ lệch độ cao (m)",
       "offsetTooltip": "Chiều cao không đổi tính bằng mét được thêm vào mọi tính năng, ví dụ: để nâng đường ray lên trên các tòa nhà hoặc địa hình 3D.",
       "footer": "Được hiển thị ở dạng 3D ở các giá trị tọa độ Z thông qua deck.gl. Những thay đổi được áp dụng trực tiếp. Nhận dạng và làm nổi bật tính năng không có sẵn trong chế độ này."
+    },
+    "diagrams": {
+      "typeNone": "Không có",
+      "typePie": "Biểu đồ hình tròn",
+      "typeDonut": "Biểu đồ bánh rán",
+      "typeBar": "Biểu đồ thanh",
+      "typeStackedBar": "Biểu đồ thanh xếp chồng",
+      "fields": "Thuộc tính",
+      "addField": "Thêm thuộc tính",
+      "removeField": "Xóa thuộc tính",
+      "noFields": "Thêm thuộc tính số vào biểu đồ trên từng tính năng.",
+      "fieldAttribute": "Thuộc tính sơ đồ {{index}}",
+      "heading": "Sơ đồ",
+      "chartType": "Loại biểu đồ",
+      "sizeMode": "Kích cỡ",
+      "sizeFixed": "Kích thước cố định",
+      "sizeSum": "Chia tỷ lệ theo tổng thuộc tính",
+      "sizeAttribute": "Chia tỷ lệ theo thuộc tính",
+      "sizeField": "Thuộc tính kích thước",
+      "size": "Kích thước (px)",
+      "minZoom": "Thu phóng tối thiểu",
+      "declutter": "Ẩn sơ đồ chồng chéo",
+      "truncated": "Sơ đồ chỉ được vẽ cho các tính năng {{count}}; phần còn lại không được lập biểu đồ.",
+      "atlasFull": "Sơ đồ {{count}} không vừa với kích thước này và bị ẩn. Giảm kích thước sơ đồ."
     },
     "symbology": {
       "ruleZoomInvalid": "Thu phóng tối thiểu phải dưới mức thu phóng tối đa - quy tắc này không bao giờ áp dụng khi phạm vi trống.",
@@ -6448,30 +6550,18 @@
       "svgPlaceholder": "<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg> hoặc URL dữ liệu/https",
       "marker": "điểm đánh dấu"
     },
-    "diagrams": {
-      "typeNone": "Không có",
-      "typePie": "Biểu đồ hình tròn",
-      "typeDonut": "Biểu đồ bánh rán",
-      "typeBar": "Biểu đồ thanh",
-      "typeStackedBar": "Biểu đồ thanh xếp chồng",
-      "fields": "Thuộc tính",
-      "addField": "Thêm thuộc tính",
-      "removeField": "Xóa thuộc tính",
-      "noFields": "Thêm thuộc tính số vào biểu đồ trên từng tính năng.",
-      "fieldAttribute": "Thuộc tính sơ đồ {{index}}",
-      "heading": "Sơ đồ",
-      "chartType": "Loại biểu đồ",
-      "sizeMode": "Kích cỡ",
-      "sizeFixed": "Kích thước cố định",
-      "sizeSum": "Chia tỷ lệ theo tổng thuộc tính",
-      "sizeAttribute": "Chia tỷ lệ theo thuộc tính",
-      "sizeField": "Thuộc tính kích thước",
-      "size": "Kích thước (px)",
-      "minZoom": "Thu phóng tối thiểu",
-      "declutter": "Ẩn sơ đồ chồng chéo",
-      "truncated": "Sơ đồ chỉ được vẽ cho các tính năng {{count}}; phần còn lại không được lập biểu đồ.",
-      "atlasFull": "Sơ đồ {{count}} không vừa với kích thước này và bị ẩn. Giảm kích thước sơ đồ."
+    "suggestions": {
+      "title": "Gợi ý phong cách",
+      "dismiss": "Loại bỏ đề xuất",
+      "categorize": "Phân loại theo {{field}}",
+      "graduate": "Tốt nghiệp vào ngày {{field}}",
+      "heatmap": "Bản đồ nhiệt"
     },
+    "selectLayerHint": "Chọn một lớp để chỉnh sửa kiểu của nó.",
+    "layerOrderDefault": "Thứ tự lớp (mặc định)",
+    "increaseValue": "Tăng {{label}}",
+    "decreaseValue": "Giảm {{label}}",
+    "visualization": "Trực quan hóa",
     "mode2d": "biểu hiện chiều cao",
     "mode3dExtrusion": "đùn 3D",
     "noControls": "Điều khiển kiểu chưa có sẵn cho loại lớp này.",
@@ -6490,18 +6580,6 @@
       "apply": "Áp dụng đùn 3D",
       "footer": "Tam giác"
     },
-    "suggestions": {
-      "title": "Gợi ý phong cách",
-      "dismiss": "Loại bỏ đề xuất",
-      "categorize": "Phân loại theo {{field}}",
-      "graduate": "Tốt nghiệp vào ngày {{field}}",
-      "heatmap": "Bản đồ nhiệt"
-    },
-    "selectLayerHint": "Chọn một lớp để chỉnh sửa kiểu của nó.",
-    "layerOrderDefault": "Thứ tự lớp (mặc định)",
-    "increaseValue": "Tăng {{label}}",
-    "decreaseValue": "Giảm {{label}}",
-    "visualization": "Trực quan hóa",
     "expressionLabels": {
       "style": "biểu hiện phong cách",
       "color": "Biểu hiện màu sắc",
@@ -6669,6 +6747,60 @@
       "widgetLabel": "Chỉnh sửa tiện ích",
       "minMaxInvalid": "Tối thiểu phải nhỏ hơn hoặc bằng Max."
     },
+    "popup": {
+      "heading": "Cửa sổ bật lên",
+      "showOnClick": "Hiển thị cửa sổ bật lên khi nhấp (Xác định)",
+      "showOnHover": "Hiển thị chú giải khi di chuột",
+      "hoverHint": "Chú giải hiển thị tiêu đề và những trường bạn đánh dấu là “Trong chú giải”.",
+      "titleField": "Trường tiêu đề",
+      "titleFieldDefault": "Tên lớp",
+      "titleExpression": "Biểu thức tiêu đề",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Biểu thức phần thân",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Biểu thức phần thân thay thế các hàng trường bằng văn bản của chính nó.",
+      "bodyReplacesRows": "Khi đã đặt biểu thức phần thân, nó sẽ thay thế các hàng trường và hàng id.",
+      "invalidExpression": "Biểu thức không hợp lệ",
+      "openBuilder": "Mở trình tạo biểu thức",
+      "showFeatureId": "Hiển thị hàng id của đối tượng",
+      "fields": "Trường",
+      "allFields": "Chưa chọn trường nào, nên mọi trường hiển thị được đều xuất hiện theo đúng thứ tự của dữ liệu.",
+      "addField": "Thêm trường…",
+      "noFieldsLeft": "Mọi trường đều đã có trong danh sách",
+      "chooseFields": "Chọn trường",
+      "resetFields": "Hiển thị mọi trường",
+      "removeField": "Xóa trường",
+      "moveUp": "Di chuyển trường lên",
+      "moveDown": "Di chuyển trường xuống",
+      "dragToReorder": "Kéo để sắp xếp lại",
+      "dragNamedToReorder": "Kéo {{name}} để sắp xếp lại",
+      "label": "Nhãn",
+      "kind": "Loại giá trị",
+      "kinds": {
+        "auto": "Tự động",
+        "text": "Văn bản",
+        "number": "Số",
+        "date": "Ngày",
+        "link": "Liên kết",
+        "image": "Ảnh"
+      },
+      "decimals": "Số chữ số thập phân",
+      "thousands": "Nhóm hàng nghìn",
+      "dateFormat": "Định dạng ngày",
+      "dateFormats": {
+        "date": "Ngày",
+        "datetime": "Ngày và giờ",
+        "time": "Giờ",
+        "iso": "ISO 8601",
+        "year": "Năm"
+      },
+      "linkLabel": "Văn bản liên kết",
+      "linkLabelPlaceholder": "Chính URL đó",
+      "prefix": "Tiền tố",
+      "suffix": "Hậu tố",
+      "inHover": "Trong chú giải",
+      "imageNotInHover": "Các trường ảnh chỉ nằm trong cửa sổ bật lên khi nhấp; chú giải không đủ chỗ cho một bức ảnh."
+    },
     "editorTracking": {
       "heading": "Theo dõi chỉnh sửa",
       "description": "Ghi lại ai đã tạo từng đối tượng và ai chỉnh sửa gần nhất. Các trường bên dưới được điền tự động khi đối tượng được vẽ, chỉnh sửa, tính toán hoặc thu thập.",
@@ -6684,6 +6816,50 @@
       "duplicateName": "Mỗi trường theo dõi cần một tên khác nhau.",
       "columnTaken": "“{{name}}” đã là một trường thuộc tính. Việc theo dõi sẽ ghi đè các giá trị của nó."
     }
+  },
+  "quickFilters": {
+    "heading": "Bộ lọc nhanh",
+    "empty": "Chưa có bộ lọc nào. Hãy thêm một bộ lọc bên dưới để thu hẹp lớp này theo bất kỳ trường nào của nó.",
+    "addFilter": "Thêm bộ lọc…",
+    "allFieldsUsed": "Mọi trường đều đã có bộ lọc",
+    "removeAll": "Xóa tất cả",
+    "clearAll": "Xóa các bộ lọc",
+    "clearOne": "Xóa bộ lọc này",
+    "clearOneNamed": "Xóa bộ lọc trên {{field}}",
+    "remove": "Xóa bộ lọc",
+    "removeNamed": "Xóa bộ lọc trên {{field}}",
+    "controlType": "Loại bộ lọc",
+    "enabledTitle": "Áp dụng bộ lọc này",
+    "kind": {
+      "categorical": "Giá trị",
+      "range": "Phạm vi",
+      "date": "Ngày",
+      "text": "Văn bản"
+    },
+    "operator": {
+      "contains": "Chứa",
+      "startsWith": "Bắt đầu bằng",
+      "equals": "Đúng bằng"
+    },
+    "searchValues": "Tìm kiếm giá trị",
+    "noValues": "Trường này không có giá trị nào để chọn.",
+    "noMatchingValues": "Không có giá trị nào khớp với tìm kiếm của bạn.",
+    "selectAll": "Chọn tất cả",
+    "selectNone": "Bỏ chọn tất cả",
+    "allValues": "Tất cả giá trị",
+    "selectedCount_other": "{{count}} mục đã chọn",
+    "rangeMin": "Tối thiểu",
+    "rangeMax": "Tối đa",
+    "rangeSeparator": "đến",
+    "dateFrom": "Từ",
+    "dateTo": "Đến",
+    "textOperator": "Cách khớp",
+    "textValue": "Văn bản cần khớp",
+    "textPlaceholder": "Nhập để lọc",
+    "noFields": "Lớp này không có thuộc tính nào để lọc.",
+    "noTileFeatures": "Chưa có đối tượng nào được tải. Hãy di chuyển hoặc phóng to bản đồ tới vùng dữ liệu, rồi mở lại phần này.",
+    "viewportSampleHint": "Các giá trị lấy từ những ô bản đồ đang được tải, nên danh sách sẽ dài thêm khi bạn di chuyển và phóng to bản đồ.",
+    "layerFilteredHint": "Một bộ lọc nhanh đang ẩn bớt các đối tượng của lớp này."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Xuất KML không thể ghi tính năng {{position}} vì nó có tọa độ không hợp lệ.",
@@ -6792,6 +6968,8 @@
     "searchPlacesClear": "Xóa tìm kiếm",
     "searchPlacesGoToCoordinate": "Đi đến {{coordinate}}",
     "searchPlacesGoToH3Cell": "Đi đến ô H3 {{cell}} (res {{resolution}})",
+    "searchPlacesGroup": "Địa điểm",
+    "searchFeaturesPartial": "(một phần)",
     "background": "Lý lịch",
     "backgroundCannotReorder": "Không thể sắp xếp lại nền",
     "hideBackground": "Ẩn nền",

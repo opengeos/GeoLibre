@@ -1987,6 +1987,13 @@
       "noProjectSelected": "Aucun projet sélectionné",
       "globeByDefault": "Activer le globe 3D par défaut",
       "globeByDefaultHint": "Utilisé pour l'espace de travail sans titre lorsqu'aucun projet de démarrage ni lien de projet n'est fourni.",
+      "defaultView": "Vue de carte par défaut",
+      "defaultViewHint": "Définissez le centre et le zoom de l'espace de travail sans titre.",
+      "longitude": "Longitude du centre",
+      "latitude": "Latitude du centre",
+      "zoom": "Niveau de zoom",
+      "useCurrentView": "Utiliser la vue actuelle",
+      "viewUnavailable": "La vue actuelle de la carte n'est pas disponible.",
       "selectError": "Impossible de lire le projet sélectionné.",
       "restoring": "Ouverture de votre projet de démarrage…",
       "loadWarning": "Le projet de démarrage est indisponible. GeoLibre a ouvert l'espace de travail par défaut à la place."
@@ -2133,6 +2140,10 @@
       "osEnvNote": "L'application de bureau lit aussi les clés API correspondantes depuis vos variables d'environnement système. Elles sont utilisées automatiquement et ne sont jamais enregistrées dans le fichier de projet — laissez un champ vide pour continuer à utiliser la valeur de l'environnement.",
       "osEnvField": "Lue depuis votre variable d'environnement système {{name}}.",
       "osEnvPlaceholder": "Définie dans votre environnement système",
+      "refreshModels": "Actualiser la liste des modèles",
+      "modelsFailedToLoad": "Impossible de charger les modèles : {{message}}",
+      "ollamaNetworkFailure": "Impossible de joindre le serveur Ollama. Vérifiez qu'il fonctionne à cette adresse et que OLLAMA_ORIGINS autorise l'origine de cette application, ainsi que les règles de pare-feu ou de proxy.",
+      "ollamaTimedOut": "La requête au serveur Ollama a expiré. L'hôte est peut-être lent, inaccessible ou bloqué par un pare-feu ou un proxy.",
       "newProfile": "Nouveau profil",
       "cancel": "Annuler",
       "addProfile": "Ajouter un profil",
@@ -2540,7 +2551,8 @@
       "getisOrd": "Points chauds Getis-Ord Gi*",
       "averageNearestNeighbor": "Plus proche voisin moyen",
       "kernelDensity": "Densité de noyau (carte de chaleur)",
-      "emergingHotSpot": "Points chauds émergents (cube espace-temps)"
+      "emergingHotSpot": "Points chauds émergents (cube espace-temps)",
+      "compositeScore": "Score composite (indice d'aptitude)"
     },
     "rasterTool": {
       "hillshade": "Ombrage du relief",
@@ -4290,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Sélectionner une couche...",
       "selectField": "Sélectionner un champ...",
+      "selectOption": "Sélectionnez une option...",
       "selectLayerFirst": "Sélectionnez d'abord une couche",
       "layersSelected_one": "{{count}} couche sélectionnée",
       "layersSelected_other": "{{count}} couches sélectionnées"
+    },
+    "fieldWeights": {
+      "columnField": "Champ",
+      "columnNormalization": "Normaliser",
+      "columnWeight": "Poids",
+      "columnDirection": "Sens",
+      "addField": "Ajouter un champ",
+      "removeAria": "Supprimer {{field}}",
+      "empty": "Aucun champ pour l'instant. Ajoutez-en au moins deux pour construire un score.",
+      "shares": "Poids : {{shares}}",
+      "noWeight": "Donnez à au moins un champ un poids supérieur à zéro.",
+      "normalization": {
+        "minMax": "Min-max",
+        "zScore": "Score Z",
+        "rank": "Rang",
+        "quantile": "Quantile"
+      },
+      "direction": {
+        "higher": "Plus la valeur est élevée, mieux c'est",
+        "lower": "Plus la valeur est faible, mieux c'est"
+      }
     },
     "whitebox": {
       "run": "Exécuter",
@@ -5576,6 +5610,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Score composite (indice d'aptitude)",
+          "description": "Normalisez, pondérez et combinez plusieurs champs numériques en un seul indice de 0 à 100, puis stylisez la couche d'après cet indice.",
+          "params": {
+            "layer": {
+              "label": "Couche"
+            },
+            "fields": {
+              "label": "Champs et poids",
+              "description": "Deux champs numériques ou plus. Chacun reçoit une normalisation, un poids relatif et l'extrémité de sa plage qui obtient un bon score."
+            },
+            "aggregation": {
+              "label": "Agrégation",
+              "description": "La moyenne géométrique laisse un champ faible tirer le score vers le bas : un champ fort ne peut pas totalement le compenser.",
+              "options": {
+                "weighted-mean": "Moyenne arithmétique pondérée",
+                "geometric-mean": "Moyenne géométrique pondérée"
+              }
+            },
+            "nullHandling": {
+              "label": "Entités sans valeur",
+              "description": "Il n'existe pas de valeur par défaut sûre : abandonner ou renormaliser produit des cartes différentes, choisissez donc ce que signifie cet indice.",
+              "options": {
+                "drop": "Retirer l'entité du résultat",
+                "renormalize": "Renormaliser les poids sur les champs dont elle dispose"
+              }
+            },
+            "scoreField": {
+              "label": "Nom du champ de score",
+              "description": "Nom de la colonne numérique dans laquelle le score est écrit."
+            },
+            "scoreRange": {
+              "label": "Plage du score",
+              "options": {
+                "0-100": "0 à 100",
+                "0-1": "0 à 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Conserver les composantes normalisées",
+              "description": "Écrit la valeur normalisée de chaque champ dans sa propre colonne, afin que le score puisse être vérifié plutôt qu'accepté sur parole."
+            }
+          }
         }
       },
       "raster": {
@@ -6746,6 +6824,60 @@
       "noFields": "La couche n'a aucun champ d'attribut à configurer.",
       "minMaxInvalid": "Le minimum doit être inférieur ou égal au maximum."
     },
+    "popup": {
+      "heading": "Fenêtre contextuelle",
+      "showOnClick": "Afficher la fenêtre contextuelle au clic (Identifier)",
+      "showOnHover": "Afficher l'infobulle au survol",
+      "hoverHint": "L'infobulle affiche le titre et les champs que vous cochez comme « Dans l'infobulle ».",
+      "titleField": "Champ du titre",
+      "titleFieldDefault": "Nom de la couche",
+      "titleExpression": "Expression du titre",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Expression du corps",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Une expression de corps remplace les lignes de champs par son propre texte.",
+      "bodyReplacesRows": "Tant qu'une expression de corps est définie, elle remplace les lignes de champs et la ligne d'identifiant.",
+      "invalidExpression": "Expression non valide",
+      "openBuilder": "Ouvrir le constructeur d'expressions",
+      "showFeatureId": "Afficher la ligne de l'identifiant de l'entité",
+      "fields": "Champs",
+      "allFields": "Aucun champ choisi : tous les champs visibles sont affichés, dans l'ordre propre aux données.",
+      "addField": "Ajouter un champ…",
+      "noFieldsLeft": "Tous les champs sont déjà listés",
+      "chooseFields": "Choisir les champs",
+      "resetFields": "Afficher tous les champs",
+      "removeField": "Supprimer le champ",
+      "moveUp": "Monter le champ",
+      "moveDown": "Descendre le champ",
+      "dragToReorder": "Faites glisser pour réorganiser",
+      "dragNamedToReorder": "Faites glisser {{name}} pour réorganiser",
+      "label": "Étiquette",
+      "kind": "Type de valeur",
+      "kinds": {
+        "auto": "Automatique",
+        "text": "Texte",
+        "number": "Nombre",
+        "date": "Date",
+        "link": "Lien",
+        "image": "Image"
+      },
+      "decimals": "Décimales",
+      "thousands": "Grouper les milliers",
+      "dateFormat": "Format de date",
+      "dateFormats": {
+        "date": "Date",
+        "datetime": "Date et heure",
+        "time": "Heure",
+        "iso": "ISO 8601",
+        "year": "Année"
+      },
+      "linkLabel": "Texte du lien",
+      "linkLabelPlaceholder": "L'URL elle-même",
+      "prefix": "Préfixe",
+      "suffix": "Suffixe",
+      "inHover": "Dans l'infobulle",
+      "imageNotInHover": "Les champs image restent dans la fenêtre contextuelle au clic ; une infobulle n'a pas la place d'afficher une image."
+    },
     "editorTracking": {
       "heading": "Suivi des modifications",
       "description": "Enregistrez qui a créé chaque entité et qui l'a modifiée en dernier. Les champs ci-dessous sont renseignés automatiquement lorsque des entités sont dessinées, modifiées, calculées ou saisies.",
@@ -6761,6 +6893,51 @@
       "duplicateName": "Chaque champ de suivi doit avoir un nom différent.",
       "columnTaken": "« {{name}} » est déjà une colonne d'attributs. Le suivi écraserait ses valeurs."
     }
+  },
+  "quickFilters": {
+    "heading": "Filtres rapides",
+    "empty": "Aucun filtre pour l'instant. Ajoutez-en un ci-dessous pour restreindre cette couche selon n'importe lequel de ses champs.",
+    "addFilter": "Ajouter un filtre…",
+    "allFieldsUsed": "Chaque champ a déjà un filtre",
+    "removeAll": "Tout supprimer",
+    "clearAll": "Effacer les filtres",
+    "clearOne": "Effacer ce filtre",
+    "clearOneNamed": "Effacer le filtre sur {{field}}",
+    "remove": "Supprimer le filtre",
+    "removeNamed": "Supprimer le filtre sur {{field}}",
+    "controlType": "Type de filtre",
+    "enabledTitle": "Appliquer ce filtre",
+    "kind": {
+      "categorical": "Valeurs",
+      "range": "Plage",
+      "date": "Dates",
+      "text": "Texte"
+    },
+    "operator": {
+      "contains": "Contient",
+      "startsWith": "Commence par",
+      "equals": "Est exactement"
+    },
+    "searchValues": "Rechercher des valeurs",
+    "noValues": "Ce champ n'a aucune valeur à proposer.",
+    "noMatchingValues": "Aucune valeur ne correspond à votre recherche.",
+    "selectAll": "Tout sélectionner",
+    "selectNone": "Ne rien sélectionner",
+    "allValues": "Toutes les valeurs",
+    "selectedCount_one": "{{count}} sélectionné",
+    "selectedCount_other": "{{count}} sélectionnés",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maximum",
+    "rangeSeparator": "à",
+    "dateFrom": "Du",
+    "dateTo": "Au",
+    "textOperator": "Correspondance",
+    "textValue": "Texte à rechercher",
+    "textPlaceholder": "Saisissez pour filtrer",
+    "noFields": "Cette couche n'a aucun attribut sur lequel filtrer.",
+    "noTileFeatures": "Aucune entité n'est encore chargée. Déplacez la carte ou zoomez sur les données, puis rouvrez cette section.",
+    "viewportSampleHint": "Les valeurs proviennent des tuiles actuellement chargées : la liste s'étoffe donc à mesure que vous déplacez la carte et zoomez.",
+    "layerFilteredHint": "Un filtre rapide masque une partie des entités de cette couche."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "L'export KML n'a pas pu écrire l'entité {{position}} car ses coordonnées sont invalides.",
@@ -6869,6 +7046,8 @@
     "searchPlacesClear": "Effacer la recherche",
     "searchPlacesGoToCoordinate": "Aller à {{coordinate}}",
     "searchPlacesGoToH3Cell": "Aller à la cellule H3 {{cell}} (rés. {{resolution}})",
+    "searchPlacesGroup": "Lieux",
+    "searchFeaturesPartial": "(partiel)",
     "background": "Arrière-plan",
     "backgroundCannotReorder": "L'arrière-plan ne peut pas être réorganisé",
     "hideBackground": "Masquer l'arrière-plan",

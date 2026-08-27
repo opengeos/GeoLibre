@@ -1987,6 +1987,13 @@
       "noProjectSelected": "Geen project geselecteerd",
       "globeByDefault": "3D-globe standaard inschakelen",
       "globeByDefaultHint": "Wordt gebruikt voor de naamloze werkruimte wanneer er geen opstartproject en geen projectlink is opgegeven.",
+      "defaultView": "Standaardkaartweergave",
+      "defaultViewHint": "Stel het middelpunt en het zoomniveau in voor de naamloze werkruimte.",
+      "longitude": "Lengtegraad van het middelpunt",
+      "latitude": "Breedtegraad van het middelpunt",
+      "zoom": "Zoomniveau",
+      "useCurrentView": "Huidige weergave gebruiken",
+      "viewUnavailable": "De huidige kaartweergave is niet beschikbaar.",
       "selectError": "Het geselecteerde project kon niet worden gelezen.",
       "restoring": "Uw opstartproject wordt geopend…",
       "loadWarning": "Het opstartproject is niet beschikbaar. GeoLibre heeft in plaats daarvan de standaardwerkruimte geopend."
@@ -2133,6 +2140,10 @@
       "osEnvNote": "De desktop-app leest ook overeenkomende API-sleutels uit uw systeemomgevingsvariabelen. Deze worden automatisch gebruikt en nooit in het projectbestand opgeslagen — laat een veld leeg om de omgevingswaarde te blijven gebruiken.",
       "osEnvField": "Gelezen uit uw systeemomgevingsvariabele {{name}}.",
       "osEnvPlaceholder": "Ingesteld in uw systeemomgeving",
+      "refreshModels": "Modellijst vernieuwen",
+      "modelsFailedToLoad": "Kon de modellen niet laden: {{message}}",
+      "ollamaNetworkFailure": "Kon de Ollama-server niet bereiken. Controleer of hij op dit adres draait en of OLLAMA_ORIGINS de origin van deze app toestaat, plus eventuele firewall- of proxyregels.",
+      "ollamaTimedOut": "Het verzoek aan de Ollama-server is verlopen. De host is mogelijk traag, onbereikbaar of geblokkeerd door een firewall of proxy.",
       "newProfile": "Nieuw profiel",
       "cancel": "Annuleren",
       "addProfile": "Profiel toevoegen",
@@ -2540,7 +2551,8 @@
       "getisOrd": "Getis-Ord Gi*-hotspots",
       "averageNearestNeighbor": "Gemiddelde dichtstbijzijnde buur",
       "kernelDensity": "Kernel-dichtheid (heatmap)",
-      "emergingHotSpot": "Opkomende hotspots (ruimte-tijdkubus)"
+      "emergingHotSpot": "Opkomende hotspots (ruimte-tijdkubus)",
+      "compositeScore": "Samengestelde score (geschiktheidsindex)"
     },
     "rasterTool": {
       "hillshade": "Reliëfschaduw",
@@ -4290,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Selecteer een laag...",
       "selectField": "Selecteer een veld...",
+      "selectOption": "Selecteer een optie...",
       "selectLayerFirst": "Selecteer eerst een laag",
       "layersSelected_one": "{{count}} laag geselecteerd",
       "layersSelected_other": "{{count}} lagen geselecteerd"
+    },
+    "fieldWeights": {
+      "columnField": "Veld",
+      "columnNormalization": "Normaliseren",
+      "columnWeight": "Gewicht",
+      "columnDirection": "Richting",
+      "addField": "Veld toevoegen",
+      "removeAria": "{{field}} verwijderen",
+      "empty": "Nog geen velden. Voeg er minstens twee toe om een score op te bouwen.",
+      "shares": "Gewichten: {{shares}}",
+      "noWeight": "Geef minstens één veld een gewicht groter dan nul.",
+      "normalization": {
+        "minMax": "Min-max",
+        "zScore": "Z-score",
+        "rank": "Rang",
+        "quantile": "Kwantiel"
+      },
+      "direction": {
+        "higher": "Hoger is beter",
+        "lower": "Lager is beter"
+      }
     },
     "whitebox": {
       "run": "Uitvoeren",
@@ -5576,6 +5610,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Samengestelde score (geschiktheidsindex)",
+          "description": "Normaliseer, weeg en combineer meerdere numerieke velden tot één index van 0 tot 100 en geef de laag daarna een stijl op basis daarvan.",
+          "params": {
+            "layer": {
+              "label": "Laag"
+            },
+            "fields": {
+              "label": "Velden en gewichten",
+              "description": "Twee of meer numerieke velden. Elk veld krijgt een normalisatie, een relatief gewicht en het uiteinde van zijn bereik dat goed scoort."
+            },
+            "aggregation": {
+              "label": "Aggregatie",
+              "description": "Bij het geometrisch gemiddelde trekt een zwak veld de score omlaag: een sterk veld kan dat niet volledig compenseren.",
+              "options": {
+                "weighted-mean": "Gewogen rekenkundig gemiddelde",
+                "geometric-mean": "Gewogen geometrisch gemiddelde"
+              }
+            },
+            "nullHandling": {
+              "label": "Objecten zonder waarde",
+              "description": "Er is geen veilige standaardwaarde: weglaten en hernormaliseren leveren verschillende kaarten op, dus kies wat deze index betekent.",
+              "options": {
+                "drop": "Het object uit het resultaat weglaten",
+                "renormalize": "De gewichten hernormaliseren over de velden die het wel heeft"
+              }
+            },
+            "scoreField": {
+              "label": "Naam van het scoreveld",
+              "description": "Naam van de numerieke kolom waarin de score wordt geschreven."
+            },
+            "scoreRange": {
+              "label": "Bereik van de score",
+              "options": {
+                "0-100": "0 tot 100",
+                "0-1": "0 tot 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Genormaliseerde componenten behouden",
+              "description": "Schrijft de genormaliseerde waarde van elk veld naar een eigen kolom, zodat de score controleerbaar is in plaats van op goed vertrouwen aangenomen."
+            }
+          }
         }
       },
       "raster": {
@@ -6746,6 +6824,60 @@
       "noFields": "De laag heeft geen attribuutvelden om te configureren.",
       "minMaxInvalid": "Min moet kleiner dan of gelijk aan Max zijn."
     },
+    "popup": {
+      "heading": "Pop-up",
+      "showOnClick": "Pop-up tonen bij klikken (Identificeren)",
+      "showOnHover": "Tooltip tonen bij aanwijzen",
+      "hoverHint": "De tooltip toont de titel en de velden die u aanvinkt als “In tooltip”.",
+      "titleField": "Titelveld",
+      "titleFieldDefault": "Laagnaam",
+      "titleExpression": "Expressie voor de titel",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Expressie voor de inhoud",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Een inhoudsexpressie vervangt de veldrijen door haar eigen tekst.",
+      "bodyReplacesRows": "Zolang er een inhoudsexpressie is ingesteld, vervangt die de veldrijen en de id-rij.",
+      "invalidExpression": "Ongeldige expressie",
+      "openBuilder": "Expressie-editor openen",
+      "showFeatureId": "De rij met de object-id tonen",
+      "fields": "Velden",
+      "allFields": "Geen velden gekozen, dus alle zichtbare velden worden getoond, in de volgorde van de gegevens zelf.",
+      "addField": "Een veld toevoegen…",
+      "noFieldsLeft": "Alle velden staan al in de lijst",
+      "chooseFields": "Velden kiezen",
+      "resetFields": "Alle velden tonen",
+      "removeField": "Veld verwijderen",
+      "moveUp": "Veld omhoog verplaatsen",
+      "moveDown": "Veld omlaag verplaatsen",
+      "dragToReorder": "Sleep om de volgorde te wijzigen",
+      "dragNamedToReorder": "Sleep {{name}} om de volgorde te wijzigen",
+      "label": "Label",
+      "kind": "Type waarde",
+      "kinds": {
+        "auto": "Automatisch",
+        "text": "Tekst",
+        "number": "Getal",
+        "date": "Datum",
+        "link": "Link",
+        "image": "Afbeelding"
+      },
+      "decimals": "Decimalen",
+      "thousands": "Duizendtallen groeperen",
+      "dateFormat": "Datumnotatie",
+      "dateFormats": {
+        "date": "Datum",
+        "datetime": "Datum en tijd",
+        "time": "Tijd",
+        "iso": "ISO 8601",
+        "year": "Jaar"
+      },
+      "linkLabel": "Linktekst",
+      "linkLabelPlaceholder": "De URL zelf",
+      "prefix": "Voorvoegsel",
+      "suffix": "Achtervoegsel",
+      "inHover": "In tooltip",
+      "imageNotInHover": "Afbeeldingsvelden blijven in de klik-pop-up; in een tooltip is geen ruimte voor een afbeelding."
+    },
     "editorTracking": {
       "heading": "Bewerkingsregistratie",
       "description": "Leg vast wie elk object heeft gemaakt en wie het als laatste heeft gewijzigd. De onderstaande velden worden automatisch ingevuld wanneer objecten worden getekend, bewerkt, berekend of vastgelegd.",
@@ -6761,6 +6893,51 @@
       "duplicateName": "Elk registratieveld heeft een eigen naam nodig.",
       "columnTaken": "‘{{name}}’ is al een attribuutkolom. De registratie zou de waarden ervan overschrijven."
     }
+  },
+  "quickFilters": {
+    "heading": "Snelfilters",
+    "empty": "Nog geen filters. Voeg er hieronder een toe om deze laag op een van haar velden te beperken.",
+    "addFilter": "Een filter toevoegen…",
+    "allFieldsUsed": "Elk veld heeft al een filter",
+    "removeAll": "Alles verwijderen",
+    "clearAll": "Filters wissen",
+    "clearOne": "Dit filter wissen",
+    "clearOneNamed": "Het filter op {{field}} wissen",
+    "remove": "Filter verwijderen",
+    "removeNamed": "Het filter op {{field}} verwijderen",
+    "controlType": "Filtertype",
+    "enabledTitle": "Dit filter toepassen",
+    "kind": {
+      "categorical": "Waarden",
+      "range": "Bereik",
+      "date": "Datums",
+      "text": "Tekst"
+    },
+    "operator": {
+      "contains": "Bevat",
+      "startsWith": "Begint met",
+      "equals": "Is precies"
+    },
+    "searchValues": "Waarden zoeken",
+    "noValues": "Dit veld heeft geen waarden om uit te kiezen.",
+    "noMatchingValues": "Geen enkele waarde komt overeen met uw zoekopdracht.",
+    "selectAll": "Alles selecteren",
+    "selectNone": "Niets selecteren",
+    "allValues": "Alle waarden",
+    "selectedCount_one": "{{count}} geselecteerd",
+    "selectedCount_other": "{{count}} geselecteerd",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maximum",
+    "rangeSeparator": "tot",
+    "dateFrom": "Van",
+    "dateTo": "Tot",
+    "textOperator": "Overeenkomst",
+    "textValue": "Te zoeken tekst",
+    "textPlaceholder": "Typ om te filteren",
+    "noFields": "Deze laag heeft geen attributen om op te filteren.",
+    "noTileFeatures": "Er zijn nog geen objecten geladen. Verschuif of zoom naar de gegevens en open dit onderdeel opnieuw.",
+    "viewportSampleHint": "De waarden komen uit de tegels die nu geladen zijn, dus de lijst groeit terwijl u verschuift en inzoomt.",
+    "layerFilteredHint": "Een snelfilter verbergt een deel van de objecten van deze laag."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "De KML-export kon het object op positie {{position}} niet wegschrijven omdat het ongeldige coördinaten heeft.",
@@ -6869,6 +7046,8 @@
     "searchPlacesClear": "Zoekopdracht wissen",
     "searchPlacesGoToCoordinate": "Ga naar {{coordinate}}",
     "searchPlacesGoToH3Cell": "Ga naar H3-cel {{cell}} (res. {{resolution}})",
+    "searchPlacesGroup": "Plaatsen",
+    "searchFeaturesPartial": "(gedeeltelijk)",
     "background": "Achtergrond",
     "backgroundCannotReorder": "De volgorde van de achtergrond kan niet worden gewijzigd",
     "hideBackground": "Achtergrond verbergen",

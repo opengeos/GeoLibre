@@ -1943,6 +1943,13 @@
       "noProjectSelected": "プロジェクトが選択されていません",
       "globeByDefault": "既定で3D地球儀を有効にする",
       "globeByDefaultHint": "起動時のプロジェクトもプロジェクトリンクも指定されていない場合の、無題のワークスペースに使用されます。",
+      "defaultView": "既定の地図表示",
+      "defaultViewHint": "無題のワークスペースの中心とズームを設定します。",
+      "longitude": "中心の経度",
+      "latitude": "中心の緯度",
+      "zoom": "ズームレベル",
+      "useCurrentView": "現在の表示を使用",
+      "viewUnavailable": "現在の地図表示は利用できません。",
       "selectError": "選択したプロジェクトを読み取れませんでした。",
       "restoring": "起動時のプロジェクトを開いています…",
       "loadWarning": "起動時のプロジェクトを利用できません。GeoLibreは代わりに既定のワークスペースを開きました。"
@@ -2088,6 +2095,10 @@
       "osEnvNote": "デスクトップアプリは、システム環境変数から一致するAPIキーも読み取ります。これらは自動的に使用され、プロジェクトファイルには保存されません。環境変数の値を使い続けるには、フィールドを空欄のままにしてください。",
       "osEnvField": "システム環境変数 {{name}} から読み取ります。",
       "osEnvPlaceholder": "システム環境変数で設定",
+      "refreshModels": "モデル一覧を更新",
+      "modelsFailedToLoad": "モデルを読み込めませんでした: {{message}}",
+      "ollamaNetworkFailure": "Ollamaサーバーに接続できませんでした。このアドレスで動作しているか、OLLAMA_ORIGINSがこのアプリのオリジンを許可しているか、ファイアウォールやプロキシの設定も併せて確認してください。",
+      "ollamaTimedOut": "Ollamaサーバーへのリクエストがタイムアウトしました。ホストが遅いか、到達できないか、ファイアウォールまたはプロキシによってブロックされている可能性があります。",
       "newProfile": "新しいプロファイル",
       "cancel": "キャンセル",
       "addProfile": "プロファイルを追加",
@@ -2494,7 +2505,8 @@
       "getisOrd": "Getis-Ord Gi* ホットスポット",
       "averageNearestNeighbor": "平均最近隣距離",
       "kernelDensity": "カーネル密度（ヒートマップ）",
-      "emergingHotSpot": "新興ホットスポット（時空間キューブ）"
+      "emergingHotSpot": "新興ホットスポット（時空間キューブ）",
+      "compositeScore": "総合スコア（適地指数）"
     },
     "rasterTool": {
       "hillshade": "陰影起伏",
@@ -4222,8 +4234,30 @@
     "parameterField": {
       "selectLayer": "レイヤーを選択...",
       "selectField": "フィールドを選択...",
+      "selectOption": "オプションを選択...",
       "selectLayerFirst": "まずレイヤーを選択してください",
       "layersSelected_other": "{{count}}個のレイヤーを選択中"
+    },
+    "fieldWeights": {
+      "columnField": "フィールド",
+      "columnNormalization": "正規化",
+      "columnWeight": "重み",
+      "columnDirection": "方向",
+      "addField": "フィールドを追加",
+      "removeAria": "{{field}}を削除",
+      "empty": "フィールドがまだありません。スコアを作るには少なくとも2つ追加してください。",
+      "shares": "重み: {{shares}}",
+      "noWeight": "少なくとも1つのフィールドに0より大きい重みを設定してください。",
+      "normalization": {
+        "minMax": "最小-最大",
+        "zScore": "Zスコア",
+        "rank": "順位",
+        "quantile": "分位数"
+      },
+      "direction": {
+        "higher": "値が高いほど良い",
+        "lower": "値が低いほど良い"
+      }
     },
     "whitebox": {
       "run": "実行",
@@ -5506,6 +5540,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "総合スコア（適地指数）",
+          "description": "複数の数値フィールドを正規化し、重み付けして0〜100の単一の指数にまとめ、その指数でレイヤーをスタイル設定します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "fields": {
+              "label": "フィールドと重み",
+              "description": "2つ以上の数値フィールド。それぞれに正規化方法、相対的な重み、そして値域のどちら側が高評価になるかを指定します。"
+            },
+            "aggregation": {
+              "label": "集計方法",
+              "description": "幾何平均では弱いフィールドがスコアを引き下げます。強いフィールドがあってもそれを完全には補えません。",
+              "options": {
+                "weighted-mean": "重み付き算術平均",
+                "geometric-mean": "重み付き幾何平均"
+              }
+            },
+            "nullHandling": {
+              "label": "値が欠けているフィーチャ",
+              "description": "安全な既定値はありません。除外と再正規化では地図が変わるため、この指数の意味をどちらにするか選んでください。",
+              "options": {
+                "drop": "そのフィーチャを結果から除外する",
+                "renormalize": "そのフィーチャが持つフィールドで重みを再正規化する"
+              }
+            },
+            "scoreField": {
+              "label": "スコアフィールド名",
+              "description": "スコアを書き込む数値列の名前。"
+            },
+            "scoreRange": {
+              "label": "スコアの範囲",
+              "options": {
+                "0-100": "0〜100",
+                "0-1": "0〜1"
+              }
+            },
+            "keepComponents": {
+              "label": "正規化した成分を残す",
+              "description": "各フィールドの正規化値を個別の列として書き出し、スコアを鵜呑みにせず検証できるようにします。"
+            }
+          }
         }
       },
       "raster": {
@@ -6669,6 +6747,60 @@
       "noFields": "レイヤーに設定できる属性フィールドがありません。",
       "minMaxInvalid": "最小値は最大値以下である必要があります。"
     },
+    "popup": {
+      "heading": "ポップアップ",
+      "showOnClick": "クリック時にポップアップを表示（情報取得）",
+      "showOnHover": "ホバー時にツールチップを表示",
+      "hoverHint": "ツールチップには、タイトルと「ツールチップに表示」をオンにしたフィールドが表示されます。",
+      "titleField": "タイトルのフィールド",
+      "titleFieldDefault": "レイヤー名",
+      "titleExpression": "タイトルの式",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "本文の式",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "本文の式を設定すると、フィールド行の代わりにその式のテキストが表示されます。",
+      "bodyReplacesRows": "本文の式が設定されている間は、フィールド行とID行の代わりにその式が表示されます。",
+      "invalidExpression": "無効な式",
+      "openBuilder": "式ビルダーを開く",
+      "showFeatureId": "フィーチャIDの行を表示",
+      "fields": "フィールド",
+      "allFields": "フィールドが選択されていないため、表示可能なすべてのフィールドをデータ本来の順序で表示します。",
+      "addField": "フィールドを追加…",
+      "noFieldsLeft": "すべてのフィールドが追加済みです",
+      "chooseFields": "フィールドを選択",
+      "resetFields": "すべてのフィールドを表示",
+      "removeField": "フィールドを削除",
+      "moveUp": "フィールドを上に移動",
+      "moveDown": "フィールドを下に移動",
+      "dragToReorder": "ドラッグして並べ替え",
+      "dragNamedToReorder": "{{name}}をドラッグして並べ替え",
+      "label": "ラベル",
+      "kind": "値の種類",
+      "kinds": {
+        "auto": "自動",
+        "text": "テキスト",
+        "number": "数値",
+        "date": "日付",
+        "link": "リンク",
+        "image": "画像"
+      },
+      "decimals": "小数点以下の桁数",
+      "thousands": "3桁区切りを表示",
+      "dateFormat": "日付形式",
+      "dateFormats": {
+        "date": "日付",
+        "datetime": "日時",
+        "time": "時刻",
+        "iso": "ISO 8601",
+        "year": "年"
+      },
+      "linkLabel": "リンクのテキスト",
+      "linkLabelPlaceholder": "URLそのもの",
+      "prefix": "接頭辞",
+      "suffix": "接尾辞",
+      "inHover": "ツールチップに表示",
+      "imageNotInHover": "画像フィールドはクリック時のポップアップにのみ表示されます。ツールチップには画像を表示する余地がありません。"
+    },
     "editorTracking": {
       "heading": "編集トラッキング",
       "description": "各フィーチャを誰が作成し、誰が最後に変更したかを記録します。フィーチャの描画・編集・計算・現地収集の際に、下のフィールドが自動的に入力されます。",
@@ -6684,6 +6816,50 @@
       "duplicateName": "トラッキング フィールドにはそれぞれ異なる名前が必要です。",
       "columnTaken": "「{{name}}」は既に属性フィールドです。トラッキングはその値を上書きします。"
     }
+  },
+  "quickFilters": {
+    "heading": "クイックフィルター",
+    "empty": "フィルターがまだありません。下から追加すると、このレイヤーを任意のフィールドで絞り込めます。",
+    "addFilter": "フィルターを追加…",
+    "allFieldsUsed": "すべてのフィールドにフィルターが設定済みです",
+    "removeAll": "すべて削除",
+    "clearAll": "フィルターをクリア",
+    "clearOne": "このフィルターをクリア",
+    "clearOneNamed": "{{field}}のフィルターをクリア",
+    "remove": "フィルターを削除",
+    "removeNamed": "{{field}}のフィルターを削除",
+    "controlType": "フィルターの種類",
+    "enabledTitle": "このフィルターを適用",
+    "kind": {
+      "categorical": "値",
+      "range": "範囲",
+      "date": "日付",
+      "text": "テキスト"
+    },
+    "operator": {
+      "contains": "含む",
+      "startsWith": "先頭が一致",
+      "equals": "完全に一致"
+    },
+    "searchValues": "値を検索",
+    "noValues": "このフィールドには選択できる値がありません。",
+    "noMatchingValues": "検索に一致する値はありません。",
+    "selectAll": "すべて選択",
+    "selectNone": "選択解除",
+    "allValues": "すべての値",
+    "selectedCount_other": "{{count}}件を選択中",
+    "rangeMin": "最小値",
+    "rangeMax": "最大値",
+    "rangeSeparator": "〜",
+    "dateFrom": "開始",
+    "dateTo": "終了",
+    "textOperator": "一致方法",
+    "textValue": "一致させるテキスト",
+    "textPlaceholder": "入力して絞り込み",
+    "noFields": "このレイヤーには絞り込みに使える属性がありません。",
+    "noTileFeatures": "フィーチャがまだ読み込まれていません。データの位置まで移動または拡大してから、このセクションを開き直してください。",
+    "viewportSampleHint": "値は現在読み込まれているタイルから取得されるため、地図を移動・拡大すると一覧が増えていきます。",
+    "layerFilteredHint": "クイックフィルターがこのレイヤーの一部のフィーチャを非表示にしています。"
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "座標が不正なため、KML エクスポートでフィーチャ {{position}} を書き出せませんでした。",
@@ -6792,6 +6968,8 @@
     "searchPlacesClear": "検索をクリア",
     "searchPlacesGoToCoordinate": "{{coordinate}} へ移動",
     "searchPlacesGoToH3Cell": "H3 セル {{cell}} へ移動 (解像度 {{resolution}})",
+    "searchPlacesGroup": "場所",
+    "searchFeaturesPartial": "（一部）",
     "background": "背景",
     "backgroundCannotReorder": "背景は並べ替えできません",
     "hideBackground": "背景を非表示",

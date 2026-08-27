@@ -1987,6 +1987,13 @@
       "noProjectSelected": "Proje seçilmedi",
       "globeByDefault": "3D küreyi varsayılan olarak etkinleştir",
       "globeByDefaultHint": "Başlangıç projesi veya proje bağlantısı verilmediğinde adsız çalışma alanı için kullanılır.",
+      "defaultView": "Varsayılan harita görünümü",
+      "defaultViewHint": "Adsız çalışma alanı için merkezi ve yakınlaştırmayı belirleyin.",
+      "longitude": "Merkez boylamı",
+      "latitude": "Merkez enlemi",
+      "zoom": "Yakınlaştırma düzeyi",
+      "useCurrentView": "Geçerli Görünümü Kullan",
+      "viewUnavailable": "Geçerli harita görünümü kullanılamıyor.",
       "selectError": "Seçilen proje okunamadı.",
       "restoring": "Başlangıç projeniz açılıyor…",
       "loadWarning": "Başlangıç projesi kullanılamıyor. GeoLibre bunun yerine varsayılan çalışma alanını açtı."
@@ -2133,6 +2140,10 @@
       "osEnvNote": "Masaüstü uygulaması ayrıca sistem ortam değişkenlerinizden eşleşen API anahtarlarını okur. Bunlar otomatik olarak kullanılır ve asla proje dosyasına kaydedilmez — ortam değerini kullanmaya devam etmek için bir alanı boş bırakın.",
       "osEnvField": "Sistem ortam değişkeninizden okunur: {{name}}.",
       "osEnvPlaceholder": "Sistem ortamınızda ayarlanmış",
+      "refreshModels": "Model listesini yenile",
+      "modelsFailedToLoad": "Modeller yüklenemedi: {{message}}",
+      "ollamaNetworkFailure": "Ollama sunucusuna erişilemedi. Bu adreste çalıştığını ve OLLAMA_ORIGINS ayarının bu uygulamanın kaynağına izin verdiğini, ayrıca güvenlik duvarı veya proxy kurallarını denetleyin.",
+      "ollamaTimedOut": "Ollama sunucusuna gönderilen istek zaman aşımına uğradı. Ana bilgisayar yavaş, erişilemez ya da bir güvenlik duvarı veya proxy tarafından engelleniyor olabilir.",
       "newProfile": "Yeni profil",
       "cancel": "İptal",
       "addProfile": "Profil ekle",
@@ -2540,7 +2551,8 @@
       "getisOrd": "Getis-Ord Gi* sıcak noktaları",
       "averageNearestNeighbor": "Ortalama en yakın komşu",
       "kernelDensity": "Çekirdek yoğunluğu (ısı haritası)",
-      "emergingHotSpot": "Yükselen sıcak noktalar (uzay-zaman küpü)"
+      "emergingHotSpot": "Yükselen sıcak noktalar (uzay-zaman küpü)",
+      "compositeScore": "Bileşik puan (uygunluk endeksi)"
     },
     "rasterTool": {
       "hillshade": "Tepe gölgeleme",
@@ -4290,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Bir katman seçin...",
       "selectField": "Bir alan seçin...",
+      "selectOption": "Bir seçenek seçin...",
       "selectLayerFirst": "Önce bir katman seçin",
       "layersSelected_one": "{{count}} katman seçildi",
       "layersSelected_other": "{{count}} katman seçildi"
+    },
+    "fieldWeights": {
+      "columnField": "Alan",
+      "columnNormalization": "Normalleştir",
+      "columnWeight": "Ağırlık",
+      "columnDirection": "Yön",
+      "addField": "Alan ekle",
+      "removeAria": "{{field}} alanını kaldır",
+      "empty": "Henüz alan yok. Bir puan oluşturmak için en az iki alan ekleyin.",
+      "shares": "Ağırlıklar: {{shares}}",
+      "noWeight": "En az bir alana sıfırdan büyük bir ağırlık verin.",
+      "normalization": {
+        "minMax": "Min-maks",
+        "zScore": "Z puanı",
+        "rank": "Sıra",
+        "quantile": "Kantil"
+      },
+      "direction": {
+        "higher": "Yüksek olan daha iyi",
+        "lower": "Düşük olan daha iyi"
+      }
     },
     "whitebox": {
       "run": "Çalıştır",
@@ -5576,6 +5610,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Bileşik puan (uygunluk endeksi)",
+          "description": "Birden çok sayısal alanı normalleştirip ağırlıklandırarak 0 ile 100 arasında tek bir endekste birleştirin ve katmanı bu endekse göre biçimlendirin.",
+          "params": {
+            "layer": {
+              "label": "Katman"
+            },
+            "fields": {
+              "label": "Alanlar ve ağırlıklar",
+              "description": "İki veya daha fazla sayısal alan. Her biri bir normalleştirme, göreli bir ağırlık ve aralığının yüksek puan alan ucunu alır."
+            },
+            "aggregation": {
+              "label": "Toplulaştırma",
+              "description": "Geometrik ortalamada zayıf bir alan puanı aşağı çeker: güçlü bir alan bunu tümüyle telafi edemez.",
+              "options": {
+                "weighted-mean": "Ağırlıklı aritmetik ortalama",
+                "geometric-mean": "Ağırlıklı geometrik ortalama"
+              }
+            },
+            "nullHandling": {
+              "label": "Değeri eksik öğeler",
+              "description": "Güvenli bir varsayılan yok: dışarıda bırakmak ile yeniden normalleştirmek farklı haritalar üretir, bu yüzden bu endeksin hangisini ifade ettiğini seçin.",
+              "options": {
+                "drop": "Öğeyi sonuçtan çıkar",
+                "renormalize": "Ağırlıkları sahip olduğu alanlar üzerinde yeniden normalleştir"
+              }
+            },
+            "scoreField": {
+              "label": "Puan alanının adı",
+              "description": "Puanın yazılacağı sayısal sütunun adı."
+            },
+            "scoreRange": {
+              "label": "Puan aralığı",
+              "options": {
+                "0-100": "0 ile 100 arası",
+                "0-1": "0 ile 1 arası"
+              }
+            },
+            "keepComponents": {
+              "label": "Normalleştirilmiş bileşenleri sakla",
+              "description": "Her alanın normalleştirilmiş değerini ayrı bir sütun olarak yazar; böylece puan olduğu gibi kabul edilmek yerine denetlenebilir."
+            }
+          }
         }
       },
       "raster": {
@@ -6746,6 +6824,60 @@
       "noFields": "Katmanda yapılandırılacak öznitelik alanı yok.",
       "minMaxInvalid": "Min, Maks değerinden küçük veya ona eşit olmalıdır."
     },
+    "popup": {
+      "heading": "Açılır pencere",
+      "showOnClick": "Tıklamada açılır pencereyi göster (Tanımla)",
+      "showOnHover": "Üzerine gelindiğinde ipucunu göster",
+      "hoverHint": "İpucu, başlığı ve “İpucunda göster” olarak işaretlediğiniz alanları gösterir.",
+      "titleField": "Başlık alanı",
+      "titleFieldDefault": "Katman adı",
+      "titleExpression": "Başlık ifadesi",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Gövde ifadesi",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Bir gövde ifadesi, alan satırlarının yerine kendi metnini koyar.",
+      "bodyReplacesRows": "Bir gövde ifadesi tanımlı olduğu sürece alan satırlarının ve kimlik satırının yerini alır.",
+      "invalidExpression": "Geçersiz ifade",
+      "openBuilder": "İfade oluşturucuyu aç",
+      "showFeatureId": "Öğe kimliği satırını göster",
+      "fields": "Alanlar",
+      "allFields": "Hiçbir alan seçilmedi, bu yüzden görünür tüm alanlar verinin kendi sırasında gösterilir.",
+      "addField": "Alan ekle…",
+      "noFieldsLeft": "Tüm alanlar zaten listede",
+      "chooseFields": "Alanları seç",
+      "resetFields": "Tüm alanları göster",
+      "removeField": "Alanı kaldır",
+      "moveUp": "Alanı yukarı taşı",
+      "moveDown": "Alanı aşağı taşı",
+      "dragToReorder": "Yeniden sıralamak için sürükleyin",
+      "dragNamedToReorder": "Yeniden sıralamak için {{name}} alanını sürükleyin",
+      "label": "Etiket",
+      "kind": "Değer türü",
+      "kinds": {
+        "auto": "Otomatik",
+        "text": "Metin",
+        "number": "Sayı",
+        "date": "Tarih",
+        "link": "Bağlantı",
+        "image": "Görsel"
+      },
+      "decimals": "Ondalık basamak",
+      "thousands": "Binlik ayırıcı kullan",
+      "dateFormat": "Tarih biçimi",
+      "dateFormats": {
+        "date": "Tarih",
+        "datetime": "Tarih ve saat",
+        "time": "Saat",
+        "iso": "ISO 8601",
+        "year": "Yıl"
+      },
+      "linkLabel": "Bağlantı metni",
+      "linkLabelPlaceholder": "URL'nin kendisi",
+      "prefix": "Ön ek",
+      "suffix": "Son ek",
+      "inHover": "İpucunda göster",
+      "imageNotInHover": "Görsel alanları tıklama açılır penceresinde kalır; bir ipucunda resme yer yoktur."
+    },
     "editorTracking": {
       "heading": "Düzenleme Takibi",
       "description": "Her nesneyi kimin oluşturduğunu ve en son kimin değiştirdiğini kaydedin. Nesneler çizildiğinde, düzenlendiğinde, hesaplandığında veya toplandığında aşağıdaki alanlar otomatik doldurulur.",
@@ -6761,6 +6893,51 @@
       "duplicateName": "Her takip alanının farklı bir adı olmalıdır.",
       "columnTaken": "“{{name}}” zaten bir öznitelik alanı. Takip, değerlerinin üzerine yazar."
     }
+  },
+  "quickFilters": {
+    "heading": "Hızlı filtreler",
+    "empty": "Henüz filtre yok. Bu katmanı alanlarından herhangi biriyle daraltmak için aşağıdan bir filtre ekleyin.",
+    "addFilter": "Filtre ekle…",
+    "allFieldsUsed": "Her alanın zaten bir filtresi var",
+    "removeAll": "Tümünü kaldır",
+    "clearAll": "Filtreleri temizle",
+    "clearOne": "Bu filtreyi temizle",
+    "clearOneNamed": "{{field}} alanındaki filtreyi temizle",
+    "remove": "Filtreyi kaldır",
+    "removeNamed": "{{field}} alanındaki filtreyi kaldır",
+    "controlType": "Filtre türü",
+    "enabledTitle": "Bu filtreyi uygula",
+    "kind": {
+      "categorical": "Değerler",
+      "range": "Aralık",
+      "date": "Tarihler",
+      "text": "Metin"
+    },
+    "operator": {
+      "contains": "İçerir",
+      "startsWith": "Şununla başlar",
+      "equals": "Tam olarak eşittir"
+    },
+    "searchValues": "Değerlerde ara",
+    "noValues": "Bu alanda seçilebilecek değer yok.",
+    "noMatchingValues": "Aramanızla eşleşen değer yok.",
+    "selectAll": "Tümünü seç",
+    "selectNone": "Hiçbirini seçme",
+    "allValues": "Tüm değerler",
+    "selectedCount_one": "{{count}} değer seçildi",
+    "selectedCount_other": "{{count}} değer seçildi",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maksimum",
+    "rangeSeparator": "ile",
+    "dateFrom": "Başlangıç",
+    "dateTo": "Bitiş",
+    "textOperator": "Eşleşme",
+    "textValue": "Eşleştirilecek metin",
+    "textPlaceholder": "Filtrelemek için yazın",
+    "noFields": "Bu katmanda filtrelenecek öznitelik yok.",
+    "noTileFeatures": "Henüz hiçbir öğe yüklenmedi. Haritayı verilere kaydırın veya yakınlaştırın, sonra bu bölümü yeniden açın.",
+    "viewportSampleHint": "Değerler şu anda yüklü olan karolardan gelir, bu yüzden haritayı kaydırıp yakınlaştırdıkça liste büyür.",
+    "layerFilteredHint": "Bir hızlı filtre bu katmanın öğelerinin bir kısmını gizliyor."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{position}}. öğeyi yazamadı.",
@@ -6869,6 +7046,8 @@
     "searchPlacesClear": "Aramayı temizle",
     "searchPlacesGoToCoordinate": "{{coordinate}} konumuna git",
     "searchPlacesGoToH3Cell": "H3 hücresi {{cell}} konumuna git (çözünürlük {{resolution}})",
+    "searchPlacesGroup": "Yerler",
+    "searchFeaturesPartial": "(kısmi)",
     "background": "Arka plan",
     "backgroundCannotReorder": "Arka plan yeniden sıralanamaz",
     "hideBackground": "Arka planı gizle",

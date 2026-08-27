@@ -2162,6 +2162,13 @@
       "noProjectSelected": "لم يُحدد أي مشروع",
       "globeByDefault": "تفعيل الكرة الأرضية ثلاثية الأبعاد افتراضيًا",
       "globeByDefaultHint": "تُستخدم لمساحة العمل بلا عنوان عندما لا يُحدَّد مشروع بدء تشغيل أو رابط مشروع.",
+      "defaultView": "عرض الخريطة الافتراضي",
+      "defaultViewHint": "حدّد المركز ومستوى التكبير لمساحة العمل غير المعنونة.",
+      "longitude": "خط طول المركز",
+      "latitude": "دائرة عرض المركز",
+      "zoom": "مستوى التكبير",
+      "useCurrentView": "استخدام العرض الحالي",
+      "viewUnavailable": "عرض الخريطة الحالي غير متاح.",
       "selectError": "تعذر قراءة المشروع المحدد.",
       "restoring": "جارٍ فتح مشروع بدء التشغيل…",
       "loadWarning": "مشروع بدء التشغيل غير متاح. فتح GeoLibre مساحة العمل الافتراضية بدلاً منه."
@@ -2312,6 +2319,10 @@
       "osEnvNote": "يقرأ تطبيق سطح المكتب أيضًا مفاتيح API المطابقة من متغيرات بيئة النظام لديك. تُستخدم هذه المفاتيح تلقائيًا ولا تُحفظ أبدًا في ملف المشروع — اترك الحقل فارغًا لمواصلة استخدام قيمة البيئة.",
       "osEnvField": "يُقرأ من متغير بيئة النظام {{name}}.",
       "osEnvPlaceholder": "معيّن في بيئة النظام لديك",
+      "refreshModels": "تحديث قائمة النماذج",
+      "modelsFailedToLoad": "تعذّر تحميل النماذج: {{message}}",
+      "ollamaNetworkFailure": "تعذّر الوصول إلى خادم Ollama. تحقّق من أنه يعمل على هذا العنوان وأن OLLAMA_ORIGINS يسمح بأصل هذا التطبيق، إضافة إلى أي قواعد جدار ناري أو وكيل.",
+      "ollamaTimedOut": "انتهت مهلة الطلب المُرسَل إلى خادم Ollama. قد يكون المضيف بطيئًا أو يتعذر الوصول إليه أو محجوبًا بجدار ناري أو وكيل.",
       "newProfile": "ملف تعريف جديد",
       "cancel": "إلغاء",
       "addProfile": "إضافة ملف تعريف",
@@ -2723,7 +2734,8 @@
       "getisOrd": "النقاط الساخنة (Getis-Ord Gi*)",
       "averageNearestNeighbor": "متوسط أقرب جار",
       "kernelDensity": "كثافة النواة (خريطة حرارية)",
-      "emergingHotSpot": "النقاط الساخنة الناشئة (مكعب مكاني-زمني)"
+      "emergingHotSpot": "النقاط الساخنة الناشئة (مكعب مكاني-زمني)",
+      "compositeScore": "الدرجة المركّبة (مؤشر الملاءمة)"
     },
     "rasterTool": {
       "hillshade": "التظليل التضاريسي",
@@ -4561,6 +4573,7 @@
     "parameterField": {
       "selectLayer": "حدد طبقة...",
       "selectField": "حدد حقلًا...",
+      "selectOption": "اختر خيارًا...",
       "selectLayerFirst": "حدد طبقة أولًا",
       "layersSelected_one": "تم تحديد {{count}} طبقة",
       "layersSelected_zero": "تم تحديد {{count}} طبقة",
@@ -4568,6 +4581,27 @@
       "layersSelected_few": "تم تحديد {{count}} طبقات",
       "layersSelected_many": "تم تحديد {{count}} طبقة",
       "layersSelected_other": "تم تحديد {{count}} طبقة"
+    },
+    "fieldWeights": {
+      "columnField": "الحقل",
+      "columnNormalization": "التسوية",
+      "columnWeight": "الوزن",
+      "columnDirection": "الاتجاه",
+      "addField": "إضافة حقل",
+      "removeAria": "إزالة {{field}}",
+      "empty": "لا توجد حقول بعد. أضف حقلين على الأقل لبناء درجة.",
+      "shares": "الأوزان: {{shares}}",
+      "noWeight": "امنح حقلًا واحدًا على الأقل وزنًا أكبر من صفر.",
+      "normalization": {
+        "minMax": "الأدنى-الأقصى",
+        "zScore": "درجة Z",
+        "rank": "الرتبة",
+        "quantile": "كمّيات"
+      },
+      "direction": {
+        "higher": "الأعلى أفضل",
+        "lower": "الأدنى أفضل"
+      }
     },
     "whitebox": {
       "run": "تشغيل",
@@ -5855,6 +5889,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "الدرجة المركّبة (مؤشر الملاءمة)",
+          "description": "سوِّ عدة حقول رقمية ورجّحها وادمجها في مؤشر واحد من 0 إلى 100، ثم صمّم الطبقة وفقًا له.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "fields": {
+              "label": "الحقول والأوزان",
+              "description": "حقلان رقميان أو أكثر. يحصل كل حقل على طريقة تسوية ووزن نسبي وطرف المدى الذي يُعدّ جيدًا."
+            },
+            "aggregation": {
+              "label": "التجميع",
+              "description": "المتوسط الهندسي يسمح لحقل ضعيف بخفض الدرجة: لا يستطيع حقل قوي أن يعوّضه بالكامل.",
+              "options": {
+                "weighted-mean": "المتوسط الحسابي المرجّح",
+                "geometric-mean": "المتوسط الهندسي المرجّح"
+              }
+            },
+            "nullHandling": {
+              "label": "المعالم التي تنقصها قيمة",
+              "description": "لا يوجد خيار افتراضي آمن: الاستبعاد وإعادة التسوية ينتجان خرائط مختلفة، لذا اختر ما يعنيه هذا المؤشر.",
+              "options": {
+                "drop": "استبعاد المَعلَم من النتيجة",
+                "renormalize": "إعادة توزيع الأوزان على الحقول المتوفرة له"
+              }
+            },
+            "scoreField": {
+              "label": "اسم حقل الدرجة",
+              "description": "اسم العمود الرقمي الذي تُكتب فيه الدرجة."
+            },
+            "scoreRange": {
+              "label": "مدى الدرجة",
+              "options": {
+                "0-100": "من 0 إلى 100",
+                "0-1": "من 0 إلى 1"
+              }
+            },
+            "keepComponents": {
+              "label": "الاحتفاظ بالمكوّنات المسوّاة",
+              "description": "يكتب القيمة المسوّاة لكل حقل في عمود خاص به، بحيث يمكن تدقيق الدرجة بدلًا من أخذها على عِلّاتها."
+            }
+          }
         }
       },
       "raster": {
@@ -7053,6 +7131,60 @@
       "noFields": "لا تحتوي الطبقة على حقول سمات للتكوين.",
       "minMaxInvalid": "يجب أن يكون الحد الأدنى أقل من أو يساوي الحد الأقصى."
     },
+    "popup": {
+      "heading": "النافذة المنبثقة",
+      "showOnClick": "عرض النافذة المنبثقة عند النقر (التعرّف)",
+      "showOnHover": "عرض التلميح عند التمرير",
+      "hoverHint": "يعرض التلميح العنوان والحقول التي تحدّدها بوصفها «في تلميح التمرير».",
+      "titleField": "حقل العنوان",
+      "titleFieldDefault": "اسم الطبقة",
+      "titleExpression": "تعبير العنوان",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "تعبير المتن",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "يستبدل تعبير المتن صفوف الحقول بنصه الخاص.",
+      "bodyReplacesRows": "ما دام تعبير المتن مضبوطًا فإنه يحل محل صفوف الحقول وصف المعرّف.",
+      "invalidExpression": "تعبير غير صالح",
+      "openBuilder": "فتح منشئ التعبيرات",
+      "showFeatureId": "عرض صف معرّف المَعلَم",
+      "fields": "الحقول",
+      "allFields": "لم يُختَر أي حقل، لذا تظهر جميع الحقول المرئية بالترتيب الوارد في البيانات نفسها.",
+      "addField": "إضافة حقل…",
+      "noFieldsLeft": "كل الحقول مدرجة بالفعل",
+      "chooseFields": "اختيار الحقول",
+      "resetFields": "عرض كل الحقول",
+      "removeField": "إزالة الحقل",
+      "moveUp": "نقل الحقل لأعلى",
+      "moveDown": "نقل الحقل لأسفل",
+      "dragToReorder": "اسحب لإعادة الترتيب",
+      "dragNamedToReorder": "اسحب {{name}} لإعادة الترتيب",
+      "label": "التسمية",
+      "kind": "نوع القيمة",
+      "kinds": {
+        "auto": "تلقائي",
+        "text": "نص",
+        "number": "رقم",
+        "date": "تاريخ",
+        "link": "رابط",
+        "image": "صورة"
+      },
+      "decimals": "المنازل العشرية",
+      "thousands": "تجميع الآلاف",
+      "dateFormat": "تنسيق التاريخ",
+      "dateFormats": {
+        "date": "التاريخ",
+        "datetime": "التاريخ والوقت",
+        "time": "الوقت",
+        "iso": "ISO 8601",
+        "year": "السنة"
+      },
+      "linkLabel": "نص الرابط",
+      "linkLabelPlaceholder": "عنوان URL نفسه",
+      "prefix": "بادئة",
+      "suffix": "لاحقة",
+      "inHover": "في تلميح التمرير",
+      "imageNotInHover": "تبقى حقول الصور في النافذة المنبثقة عند النقر؛ فالتلميح لا يتّسع لصورة."
+    },
     "editorTracking": {
       "heading": "تتبع التحرير",
       "description": "سجّل من أنشأ كل معلم ومن غيّره آخر مرة. تُملأ الحقول أدناه تلقائيًا عند رسم المعالم أو تحريرها أو حسابها أو جمعها.",
@@ -7068,6 +7200,55 @@
       "duplicateName": "يجب أن يكون لكل حقل تتبّع اسم مختلف.",
       "columnTaken": "”{{name}}“ حقل سمات موجود بالفعل. سيؤدي التتبّع إلى الكتابة فوق قيمه."
     }
+  },
+  "quickFilters": {
+    "heading": "التصفية السريعة",
+    "empty": "لا توجد عوامل تصفية بعد. أضف واحدًا أدناه لتضييق هذه الطبقة بأي من حقولها.",
+    "addFilter": "إضافة عامل تصفية…",
+    "allFieldsUsed": "لكل حقل عامل تصفية بالفعل",
+    "removeAll": "إزالة الكل",
+    "clearAll": "مسح عوامل التصفية",
+    "clearOne": "مسح عامل التصفية هذا",
+    "clearOneNamed": "مسح عامل التصفية على {{field}}",
+    "remove": "إزالة عامل التصفية",
+    "removeNamed": "إزالة عامل التصفية على {{field}}",
+    "controlType": "نوع عامل التصفية",
+    "enabledTitle": "تطبيق عامل التصفية هذا",
+    "kind": {
+      "categorical": "القيم",
+      "range": "النطاق",
+      "date": "التواريخ",
+      "text": "النص"
+    },
+    "operator": {
+      "contains": "يحتوي",
+      "startsWith": "يبدأ بـ",
+      "equals": "يساوي تمامًا"
+    },
+    "searchValues": "البحث في القيم",
+    "noValues": "لا توجد قيم يمكن الاختيار منها في هذا الحقل.",
+    "noMatchingValues": "لا توجد قيم تطابق بحثك.",
+    "selectAll": "تحديد الكل",
+    "selectNone": "إلغاء تحديد الكل",
+    "allValues": "كل القيم",
+    "selectedCount_one": "تم تحديد {{count}} قيمة",
+    "selectedCount_zero": "تم تحديد {{count}} من القيم",
+    "selectedCount_two": "تم تحديد {{count}} من القيم",
+    "selectedCount_few": "تم تحديد {{count}} قيم",
+    "selectedCount_many": "تم تحديد {{count}} قيمةً",
+    "selectedCount_other": "تم تحديد {{count}} قيمة",
+    "rangeMin": "الحد الأدنى",
+    "rangeMax": "الحد الأقصى",
+    "rangeSeparator": "إلى",
+    "dateFrom": "من",
+    "dateTo": "إلى",
+    "textOperator": "المطابقة",
+    "textValue": "النص المطلوب مطابقته",
+    "textPlaceholder": "اكتب للتصفية",
+    "noFields": "لا تحتوي هذه الطبقة على سمات يمكن التصفية بها.",
+    "noTileFeatures": "لم تُحمَّل أي معالم بعد. حرّك الخريطة أو قرّبها إلى البيانات، ثم أعد فتح هذا القسم.",
+    "viewportSampleHint": "تأتي القيم من البلاطات المحمّلة حاليًا، لذا تنمو القائمة كلما حرّكت الخريطة وقرّبتها.",
+    "layerFilteredHint": "تُخفي تصفية سريعة بعض معالم هذه الطبقة."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "تعذّر على مُصدّر KML كتابة المعلم {{position}} لأن إحداثياته غير صالحة.",
@@ -7176,6 +7357,8 @@
     "searchPlacesClear": "مسح البحث",
     "searchPlacesGoToCoordinate": "الانتقال إلى {{coordinate}}",
     "searchPlacesGoToH3Cell": "الانتقال إلى خلية H3 ‏{{cell}} (الدقة {{resolution}})",
+    "searchPlacesGroup": "الأماكن",
+    "searchFeaturesPartial": "(جزئي)",
     "background": "الخلفية",
     "backgroundCannotReorder": "لا يمكن إعادة ترتيب الخلفية",
     "hideBackground": "إخفاء الخلفية",

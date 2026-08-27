@@ -1943,6 +1943,13 @@
       "noProjectSelected": "선택된 프로젝트 없음",
       "globeByDefault": "기본적으로 3D 지구본 사용",
       "globeByDefaultHint": "시작 프로젝트나 프로젝트 링크가 지정되지 않은 경우 제목 없는 작업 공간에 사용됩니다.",
+      "defaultView": "기본 지도 보기",
+      "defaultViewHint": "제목 없는 작업 공간의 중심과 확대/축소 수준을 설정합니다.",
+      "longitude": "중심 경도",
+      "latitude": "중심 위도",
+      "zoom": "확대/축소 레벨",
+      "useCurrentView": "현재 보기 사용",
+      "viewUnavailable": "현재 지도 보기를 사용할 수 없습니다.",
       "selectError": "선택한 프로젝트를 읽을 수 없습니다.",
       "restoring": "시작 프로젝트를 여는 중…",
       "loadWarning": "시작 프로젝트를 사용할 수 없습니다. GeoLibre가 대신 기본 작업 공간을 열었습니다."
@@ -2088,6 +2095,10 @@
       "osEnvNote": "데스크톱 앱은 시스템 환경 변수에서 일치하는 API 키도 읽습니다. 이러한 키는 자동으로 사용되며 프로젝트 파일에 저장되지 않습니다. 환경 값을 계속 사용하려면 필드를 비워 두세요.",
       "osEnvField": "시스템 환경 변수 {{name}}에서 읽습니다.",
       "osEnvPlaceholder": "시스템 환경에서 설정됨",
+      "refreshModels": "모델 목록 새로 고침",
+      "modelsFailedToLoad": "모델을 불러오지 못했습니다: {{message}}",
+      "ollamaNetworkFailure": "Ollama 서버에 연결할 수 없습니다. 이 주소에서 실행 중인지, OLLAMA_ORIGINS가 이 앱의 출처를 허용하는지, 그리고 방화벽이나 프록시 규칙도 함께 확인하세요.",
+      "ollamaTimedOut": "Ollama 서버 요청 시간이 초과되었습니다. 호스트가 느리거나, 접근할 수 없거나, 방화벽 또는 프록시로 차단되었을 수 있습니다.",
       "newProfile": "새 프로필",
       "cancel": "취소",
       "addProfile": "프로필 추가",
@@ -2494,7 +2505,8 @@
       "getisOrd": "Getis-Ord Gi* 핫스팟",
       "averageNearestNeighbor": "평균 최근접 이웃",
       "kernelDensity": "커널 밀도 (히트맵)",
-      "emergingHotSpot": "신흥 핫스팟(시공간 큐브)"
+      "emergingHotSpot": "신흥 핫스팟(시공간 큐브)",
+      "compositeScore": "종합 점수(적합도 지수)"
     },
     "rasterTool": {
       "hillshade": "음영 기복",
@@ -4222,8 +4234,30 @@
     "parameterField": {
       "selectLayer": "레이어 선택...",
       "selectField": "필드 선택...",
+      "selectOption": "옵션을 선택하세요...",
       "selectLayerFirst": "먼저 레이어를 선택하세요",
       "layersSelected_other": "{{count}}개 레이어 선택됨"
+    },
+    "fieldWeights": {
+      "columnField": "필드",
+      "columnNormalization": "정규화",
+      "columnWeight": "가중치",
+      "columnDirection": "방향",
+      "addField": "필드 추가",
+      "removeAria": "{{field}} 제거",
+      "empty": "아직 필드가 없습니다. 점수를 만들려면 최소 두 개를 추가하세요.",
+      "shares": "가중치: {{shares}}",
+      "noWeight": "적어도 한 필드에는 0보다 큰 가중치를 지정하세요.",
+      "normalization": {
+        "minMax": "최소-최대",
+        "zScore": "Z 점수",
+        "rank": "순위",
+        "quantile": "분위수"
+      },
+      "direction": {
+        "higher": "높을수록 좋음",
+        "lower": "낮을수록 좋음"
+      }
     },
     "whitebox": {
       "run": "실행",
@@ -5506,6 +5540,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "종합 점수(적합도 지수)",
+          "description": "여러 숫자 필드를 정규화하고 가중치를 적용해 0에서 100까지의 단일 지수로 결합한 다음, 그 지수로 레이어의 스타일을 지정합니다.",
+          "params": {
+            "layer": {
+              "label": "레이어"
+            },
+            "fields": {
+              "label": "필드 및 가중치",
+              "description": "두 개 이상의 숫자 필드. 각 필드마다 정규화 방식, 상대 가중치, 그리고 값 범위 중 높은 점수를 받는 쪽을 지정합니다."
+            },
+            "aggregation": {
+              "label": "집계",
+              "description": "기하 평균에서는 약한 필드가 점수를 끌어내립니다. 강한 필드가 있어도 이를 완전히 상쇄하지는 못합니다.",
+              "options": {
+                "weighted-mean": "가중 산술 평균",
+                "geometric-mean": "가중 기하 평균"
+              }
+            },
+            "nullHandling": {
+              "label": "값이 없는 피처",
+              "description": "안전한 기본값은 없습니다. 제외와 재정규화는 서로 다른 지도를 만들므로, 이 지수가 무엇을 뜻하는지 선택하세요.",
+              "options": {
+                "drop": "해당 피처를 결과에서 제외",
+                "renormalize": "가지고 있는 필드에 대해 가중치를 재정규화"
+              }
+            },
+            "scoreField": {
+              "label": "점수 필드 이름",
+              "description": "점수를 기록할 숫자 열의 이름입니다."
+            },
+            "scoreRange": {
+              "label": "점수 범위",
+              "options": {
+                "0-100": "0에서 100",
+                "0-1": "0에서 1"
+              }
+            },
+            "keepComponents": {
+              "label": "정규화된 구성 요소 유지",
+              "description": "각 필드의 정규화된 값을 별도의 열로 기록해, 점수를 그대로 믿는 대신 검증할 수 있게 합니다."
+            }
+          }
         }
       },
       "raster": {
@@ -6669,6 +6747,60 @@
       "noFields": "레이어에 구성할 속성 필드가 없습니다.",
       "minMaxInvalid": "최소값은 최대값보다 작거나 같아야 합니다."
     },
+    "popup": {
+      "heading": "팝업",
+      "showOnClick": "클릭 시 팝업 표시(식별)",
+      "showOnHover": "마우스를 올리면 툴팁 표시",
+      "hoverHint": "툴팁에는 제목과 “툴팁에 표시”로 선택한 필드가 나타납니다.",
+      "titleField": "제목 필드",
+      "titleFieldDefault": "레이어 이름",
+      "titleExpression": "제목 표현식",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "본문 표현식",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "본문 표현식은 필드 행을 자체 텍스트로 대체합니다.",
+      "bodyReplacesRows": "본문 표현식이 설정되어 있는 동안에는 필드 행과 ID 행을 대체합니다.",
+      "invalidExpression": "잘못된 표현식",
+      "openBuilder": "표현식 빌더 열기",
+      "showFeatureId": "피처 ID 행 표시",
+      "fields": "필드",
+      "allFields": "선택한 필드가 없으므로 표시 가능한 모든 필드를 데이터 자체의 순서대로 보여 줍니다.",
+      "addField": "필드 추가…",
+      "noFieldsLeft": "모든 필드가 이미 목록에 있습니다",
+      "chooseFields": "필드 선택",
+      "resetFields": "모든 필드 표시",
+      "removeField": "필드 제거",
+      "moveUp": "필드를 위로 이동",
+      "moveDown": "필드를 아래로 이동",
+      "dragToReorder": "드래그하여 순서 변경",
+      "dragNamedToReorder": "{{name}}을(를) 드래그하여 순서 변경",
+      "label": "라벨",
+      "kind": "값 유형",
+      "kinds": {
+        "auto": "자동",
+        "text": "텍스트",
+        "number": "숫자",
+        "date": "날짜",
+        "link": "링크",
+        "image": "이미지"
+      },
+      "decimals": "소수 자릿수",
+      "thousands": "천 단위 구분",
+      "dateFormat": "날짜 형식",
+      "dateFormats": {
+        "date": "날짜",
+        "datetime": "날짜 및 시간",
+        "time": "시간",
+        "iso": "ISO 8601",
+        "year": "연도"
+      },
+      "linkLabel": "링크 텍스트",
+      "linkLabelPlaceholder": "URL 자체",
+      "prefix": "접두사",
+      "suffix": "접미사",
+      "inHover": "툴팁에 표시",
+      "imageNotInHover": "이미지 필드는 클릭 팝업에만 남습니다. 툴팁에는 그림을 넣을 공간이 없습니다."
+    },
     "editorTracking": {
       "heading": "편집 추적",
       "description": "각 피처를 누가 만들었고 누가 마지막으로 변경했는지 기록합니다. 피처를 그리거나 편집, 계산, 수집할 때 아래 필드가 자동으로 채워집니다.",
@@ -6684,6 +6816,50 @@
       "duplicateName": "추적 필드마다 다른 이름이 필요합니다.",
       "columnTaken": "“{{name}}”은(는) 이미 속성 필드입니다. 추적이 해당 값을 덮어씁니다."
     }
+  },
+  "quickFilters": {
+    "heading": "빠른 필터",
+    "empty": "아직 필터가 없습니다. 아래에서 하나를 추가하면 이 레이어를 어떤 필드로든 좁힐 수 있습니다.",
+    "addFilter": "필터 추가…",
+    "allFieldsUsed": "모든 필드에 이미 필터가 있습니다",
+    "removeAll": "모두 제거",
+    "clearAll": "필터 지우기",
+    "clearOne": "이 필터 지우기",
+    "clearOneNamed": "{{field}}의 필터 지우기",
+    "remove": "필터 제거",
+    "removeNamed": "{{field}}의 필터 제거",
+    "controlType": "필터 유형",
+    "enabledTitle": "이 필터 적용",
+    "kind": {
+      "categorical": "값",
+      "range": "범위",
+      "date": "날짜",
+      "text": "텍스트"
+    },
+    "operator": {
+      "contains": "포함함",
+      "startsWith": "다음으로 시작",
+      "equals": "정확히 일치"
+    },
+    "searchValues": "값 검색",
+    "noValues": "이 필드에는 선택할 값이 없습니다.",
+    "noMatchingValues": "검색과 일치하는 값이 없습니다.",
+    "selectAll": "모두 선택",
+    "selectNone": "선택 해제",
+    "allValues": "모든 값",
+    "selectedCount_other": "{{count}}개 선택됨",
+    "rangeMin": "최솟값",
+    "rangeMax": "최댓값",
+    "rangeSeparator": "~",
+    "dateFrom": "시작",
+    "dateTo": "종료",
+    "textOperator": "일치 방식",
+    "textValue": "일치시킬 텍스트",
+    "textPlaceholder": "입력하여 필터링",
+    "noFields": "이 레이어에는 필터링할 속성이 없습니다.",
+    "noTileFeatures": "아직 불러온 피처가 없습니다. 데이터가 있는 곳으로 이동하거나 확대한 뒤 이 섹션을 다시 여세요.",
+    "viewportSampleHint": "값은 현재 불러온 타일에서 가져오므로, 지도를 이동하고 확대할수록 목록이 늘어납니다.",
+    "layerFilteredHint": "빠른 필터가 이 레이어의 일부 피처를 숨기고 있습니다."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "좌표가 올바르지 않아 KML 내보내기에서 {{position}}번째 피처를 기록하지 못했습니다.",
@@ -6792,6 +6968,8 @@
     "searchPlacesClear": "검색 지우기",
     "searchPlacesGoToCoordinate": "{{coordinate}}(으)로 이동",
     "searchPlacesGoToH3Cell": "H3 셀 {{cell}}(으)로 이동 (해상도 {{resolution}})",
+    "searchPlacesGroup": "장소",
+    "searchFeaturesPartial": "(일부)",
     "background": "배경",
     "backgroundCannotReorder": "배경은 순서를 변경할 수 없습니다",
     "hideBackground": "배경 숨기기",

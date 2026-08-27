@@ -1987,6 +1987,13 @@
       "noProjectSelected": "Kein Projekt ausgewählt",
       "globeByDefault": "3D-Globus standardmäßig aktivieren",
       "globeByDefaultHint": "Wird für den unbenannten Arbeitsbereich verwendet, wenn kein Startprojekt und kein Projektlink angegeben ist.",
+      "defaultView": "Standard-Kartenansicht",
+      "defaultViewHint": "Legen Sie Zentrum und Zoom für den unbenannten Arbeitsbereich fest.",
+      "longitude": "Längengrad des Zentrums",
+      "latitude": "Breitengrad des Zentrums",
+      "zoom": "Zoomstufe",
+      "useCurrentView": "Aktuelle Ansicht übernehmen",
+      "viewUnavailable": "Die aktuelle Kartenansicht ist nicht verfügbar.",
       "selectError": "Das ausgewählte Projekt konnte nicht gelesen werden.",
       "restoring": "Ihr Startprojekt wird geöffnet…",
       "loadWarning": "Das Startprojekt ist nicht verfügbar. GeoLibre hat stattdessen den Standardarbeitsbereich geöffnet."
@@ -2133,6 +2140,10 @@
       "osEnvNote": "Die Desktop-App liest passende API-Schlüssel auch aus den Umgebungsvariablen Ihres Systems. Diese werden automatisch verwendet und nie in der Projektdatei gespeichert — lassen Sie ein Feld leer, um weiterhin den Wert aus der Umgebung zu verwenden.",
       "osEnvField": "Wird aus der Systemumgebungsvariable {{name}} gelesen.",
       "osEnvPlaceholder": "In Ihrer Systemumgebung gesetzt",
+      "refreshModels": "Modellliste aktualisieren",
+      "modelsFailedToLoad": "Modelle konnten nicht geladen werden: {{message}}",
+      "ollamaNetworkFailure": "Der Ollama-Server ist nicht erreichbar. Prüfen Sie, ob er unter dieser Adresse läuft und ob OLLAMA_ORIGINS den Ursprung dieser App erlaubt, sowie etwaige Firewall- oder Proxy-Regeln.",
+      "ollamaTimedOut": "Zeitüberschreitung bei der Anfrage an den Ollama-Server. Der Host ist möglicherweise langsam, nicht erreichbar oder durch eine Firewall oder einen Proxy blockiert.",
       "newProfile": "Neues Profil",
       "cancel": "Abbrechen",
       "addProfile": "Profil hinzufügen",
@@ -2540,7 +2551,8 @@
       "getisOrd": "Getis-Ord Gi*-Hotspots",
       "averageNearestNeighbor": "Durchschnittlicher nächster Nachbar",
       "kernelDensity": "Kerndichte (Heatmap)",
-      "emergingHotSpot": "Aufkommende Hotspots (Raum-Zeit-Würfel)"
+      "emergingHotSpot": "Aufkommende Hotspots (Raum-Zeit-Würfel)",
+      "compositeScore": "Kombinierter Score (Eignungsindex)"
     },
     "rasterTool": {
       "hillshade": "Schummerung",
@@ -4290,9 +4302,31 @@
     "parameterField": {
       "selectLayer": "Ebene auswählen …",
       "selectField": "Feld auswählen …",
+      "selectOption": "Option auswählen...",
       "selectLayerFirst": "Zuerst eine Ebene auswählen",
       "layersSelected_one": "{{count}} Ebene ausgewählt",
       "layersSelected_other": "{{count}} Ebenen ausgewählt"
+    },
+    "fieldWeights": {
+      "columnField": "Feld",
+      "columnNormalization": "Normalisieren",
+      "columnWeight": "Gewicht",
+      "columnDirection": "Richtung",
+      "addField": "Feld hinzufügen",
+      "removeAria": "{{field}} entfernen",
+      "empty": "Noch keine Felder. Fügen Sie mindestens zwei hinzu, um einen Score zu bilden.",
+      "shares": "Gewichte: {{shares}}",
+      "noWeight": "Geben Sie mindestens einem Feld ein Gewicht über null.",
+      "normalization": {
+        "minMax": "Min-Max",
+        "zScore": "Z-Wert",
+        "rank": "Rang",
+        "quantile": "Quantil"
+      },
+      "direction": {
+        "higher": "Höher ist besser",
+        "lower": "Niedriger ist besser"
+      }
     },
     "whitebox": {
       "run": "Ausführen",
@@ -5576,6 +5610,50 @@
               }
             }
           }
+        },
+        "composite-score": {
+          "name": "Kombinierter Score (Eignungsindex)",
+          "description": "Mehrere numerische Felder normalisieren, gewichten und zu einem einzigen Index von 0 bis 100 zusammenfassen und die Ebene danach gestalten.",
+          "params": {
+            "layer": {
+              "label": "Ebene"
+            },
+            "fields": {
+              "label": "Felder und Gewichte",
+              "description": "Zwei oder mehr numerische Felder. Jedes erhält eine Normalisierung, ein relatives Gewicht und das Ende seines Wertebereichs, das gut abschneidet."
+            },
+            "aggregation": {
+              "label": "Aggregation",
+              "description": "Beim geometrischen Mittel zieht ein schwaches Feld den Score nach unten: Ein starkes Feld kann das nicht vollständig ausgleichen.",
+              "options": {
+                "weighted-mean": "Gewichtetes arithmetisches Mittel",
+                "geometric-mean": "Gewichtetes geometrisches Mittel"
+              }
+            },
+            "nullHandling": {
+              "label": "Objekte ohne Wert",
+              "description": "Es gibt keine sichere Voreinstellung: Verwerfen und Neunormieren ergeben unterschiedliche Karten, wählen Sie also, was dieser Index bedeuten soll.",
+              "options": {
+                "drop": "Objekt aus dem Ergebnis entfernen",
+                "renormalize": "Gewichte über die vorhandenen Felder neu normieren"
+              }
+            },
+            "scoreField": {
+              "label": "Name des Score-Felds",
+              "description": "Name der numerischen Spalte, in die der Score geschrieben wird."
+            },
+            "scoreRange": {
+              "label": "Wertebereich des Scores",
+              "options": {
+                "0-100": "0 bis 100",
+                "0-1": "0 bis 1"
+              }
+            },
+            "keepComponents": {
+              "label": "Normalisierte Komponenten behalten",
+              "description": "Den normalisierten Wert jedes Felds als eigene Spalte schreiben, damit der Score nachvollziehbar ist und nicht blind übernommen werden muss."
+            }
+          }
         }
       },
       "raster": {
@@ -6746,6 +6824,60 @@
       "noFields": "Die Ebene hat keine Attributfelder zum Konfigurieren.",
       "minMaxInvalid": "Min muss kleiner oder gleich Max sein."
     },
+    "popup": {
+      "heading": "Popup",
+      "showOnClick": "Popup bei Klick anzeigen (Identifizieren)",
+      "showOnHover": "Kurzinfo beim Überfahren anzeigen",
+      "hoverHint": "Die Kurzinfo zeigt den Titel und die Felder, die Sie als „In der Kurzinfo“ markieren.",
+      "titleField": "Titelfeld",
+      "titleFieldDefault": "Ebenenname",
+      "titleExpression": "Ausdruck für den Titel",
+      "titleExpressionPlaceholder": "[\"get\", \"name\"]",
+      "bodyExpression": "Ausdruck für den Inhalt",
+      "bodyExpressionPlaceholder": "[\"concat\", [\"get\", \"name\"], \" has \", [\"to-string\", [\"get\", \"pop_max\"]], \" residents\"]",
+      "bodyExpressionHint": "Ein Inhaltsausdruck ersetzt die Feldzeilen durch seinen eigenen Text.",
+      "bodyReplacesRows": "Solange ein Inhaltsausdruck gesetzt ist, ersetzt er die Feldzeilen und die ID-Zeile.",
+      "invalidExpression": "Ungültiger Ausdruck",
+      "openBuilder": "Ausdruckseditor öffnen",
+      "showFeatureId": "Zeile mit der Objekt-ID anzeigen",
+      "fields": "Felder",
+      "allFields": "Keine Felder ausgewählt, daher werden alle sichtbaren Felder in der Reihenfolge der Daten angezeigt.",
+      "addField": "Feld hinzufügen…",
+      "noFieldsLeft": "Alle Felder sind bereits aufgeführt",
+      "chooseFields": "Felder auswählen",
+      "resetFields": "Alle Felder anzeigen",
+      "removeField": "Feld entfernen",
+      "moveUp": "Feld nach oben verschieben",
+      "moveDown": "Feld nach unten verschieben",
+      "dragToReorder": "Ziehen zum Neuanordnen",
+      "dragNamedToReorder": "{{name}} zum Neuanordnen ziehen",
+      "label": "Beschriftung",
+      "kind": "Werttyp",
+      "kinds": {
+        "auto": "Automatisch",
+        "text": "Text",
+        "number": "Zahl",
+        "date": "Datum",
+        "link": "Link",
+        "image": "Bild"
+      },
+      "decimals": "Dezimalstellen",
+      "thousands": "Tausender gruppieren",
+      "dateFormat": "Datumsformat",
+      "dateFormats": {
+        "date": "Datum",
+        "datetime": "Datum und Uhrzeit",
+        "time": "Uhrzeit",
+        "iso": "ISO 8601",
+        "year": "Jahr"
+      },
+      "linkLabel": "Linktext",
+      "linkLabelPlaceholder": "Die URL selbst",
+      "prefix": "Präfix",
+      "suffix": "Suffix",
+      "inHover": "In der Kurzinfo",
+      "imageNotInHover": "Bildfelder bleiben im Klick-Popup; in einer Kurzinfo ist kein Platz für ein Bild."
+    },
     "editorTracking": {
       "heading": "Bearbeitungsverfolgung",
       "description": "Erfassen Sie, wer jedes Objekt erstellt und wer es zuletzt geändert hat. Die Felder unten werden automatisch gefüllt, wenn Objekte gezeichnet, bearbeitet, berechnet oder erfasst werden.",
@@ -6761,6 +6893,51 @@
       "duplicateName": "Jedes Verfolgungsfeld benötigt einen eigenen Namen.",
       "columnTaken": "„{{name}}“ ist bereits eine Attributspalte. Die Verfolgung würde deren Werte überschreiben."
     }
+  },
+  "quickFilters": {
+    "heading": "Schnellfilter",
+    "empty": "Noch keine Filter. Fügen Sie unten einen hinzu, um diese Ebene nach einem beliebigen Feld einzuschränken.",
+    "addFilter": "Filter hinzufügen…",
+    "allFieldsUsed": "Jedes Feld hat bereits einen Filter",
+    "removeAll": "Alle entfernen",
+    "clearAll": "Filter leeren",
+    "clearOne": "Diesen Filter leeren",
+    "clearOneNamed": "Filter für {{field}} leeren",
+    "remove": "Filter entfernen",
+    "removeNamed": "Filter für {{field}} entfernen",
+    "controlType": "Filtertyp",
+    "enabledTitle": "Diesen Filter anwenden",
+    "kind": {
+      "categorical": "Werte",
+      "range": "Bereich",
+      "date": "Daten",
+      "text": "Text"
+    },
+    "operator": {
+      "contains": "Enthält",
+      "startsWith": "Beginnt mit",
+      "equals": "Ist genau"
+    },
+    "searchValues": "Werte suchen",
+    "noValues": "Dieses Feld hat keine Werte zur Auswahl.",
+    "noMatchingValues": "Keine Werte entsprechen Ihrer Suche.",
+    "selectAll": "Alle auswählen",
+    "selectNone": "Keine auswählen",
+    "allValues": "Alle Werte",
+    "selectedCount_one": "{{count}} ausgewählt",
+    "selectedCount_other": "{{count}} ausgewählt",
+    "rangeMin": "Minimum",
+    "rangeMax": "Maximum",
+    "rangeSeparator": "bis",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "textOperator": "Vergleich",
+    "textValue": "Zu suchender Text",
+    "textPlaceholder": "Zum Filtern tippen",
+    "noFields": "Diese Ebene hat keine Attribute zum Filtern.",
+    "noTileFeatures": "Es sind noch keine Objekte geladen. Verschieben Sie die Karte oder zoomen Sie zu den Daten und öffnen Sie diesen Abschnitt erneut.",
+    "viewportSampleHint": "Die Werte stammen aus den aktuell geladenen Kacheln, die Liste wächst also beim Verschieben und Zoomen.",
+    "layerFilteredHint": "Ein Schnellfilter blendet einen Teil der Objekte dieser Ebene aus."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Der KML-Export konnte Feature {{position}} nicht schreiben, da es ungültige Koordinaten hat.",
@@ -6869,6 +7046,8 @@
     "searchPlacesClear": "Suche löschen",
     "searchPlacesGoToCoordinate": "Zu {{coordinate}} springen",
     "searchPlacesGoToH3Cell": "Zur H3-Zelle {{cell}} springen (Res. {{resolution}})",
+    "searchPlacesGroup": "Orte",
+    "searchFeaturesPartial": "(teilweise)",
     "background": "Hintergrund",
     "backgroundCannotReorder": "Der Hintergrund kann nicht neu angeordnet werden",
     "hideBackground": "Hintergrund ausblenden",
