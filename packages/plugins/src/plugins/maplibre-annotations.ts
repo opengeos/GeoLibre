@@ -1974,8 +1974,18 @@ function rediscoverAnnotationLayer(): void {
 
 function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
   const store = useAppStore.getState();
-  const layer = annotationLayer ?? findAnnotationLayer(store.layers);
-  if (!layer || !layer.geojson || !Array.isArray(layer.geojson.features)) return;
+  // Without an explicit layer, backfill every annotation layer: markers render
+  // across all of them, so legacy features in a non-selected layer would
+  // otherwise never get an `annotationId` and would group under "undefined".
+  const layers = annotationLayer ? [annotationLayer] : store.layers.filter(isAnnotationLayer);
+  for (const layer of layers) backfillLayerAnnotationIds(store, layer);
+}
+
+function backfillLayerAnnotationIds(
+  store: ReturnType<typeof useAppStore.getState>,
+  layer: GeoLibreLayer,
+): void {
+  if (!layer.geojson || !Array.isArray(layer.geojson.features)) return;
 
   const rawFeatures = layer.geojson.features as Feature[];
   let changed = false;
@@ -2009,9 +2019,12 @@ function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
 function appendAnnotationFeatures(features: Feature[]): void {
   if (!features.length) return;
   const store = useAppStore.getState();
-  const existing = store.layers.find(
-    (layer) => layer.id === store.selectedLayerId && isAnnotationLayer(layer),
-  );
+  // Prefer the selected layer when it is an annotation layer, but fall back to
+  // the tracked/first one: `store.addLayer` moves `selectedLayerId` onto every
+  // newly added layer (including the image overlay an extent-placed image
+  // creates), and without the fallback each annotation after that would spawn
+  // its own "Annotations N" layer.
+  const existing = findAnnotationLayer(store.layers);
 
   if (existing) {
     annotationLayerId = existing.id;
@@ -2693,9 +2706,14 @@ export function moveElementToLayer(
     (feature) =>
       (feature.properties as Record<string, unknown> | null)?.annotationId !== annotationId,
   );
-  store.updateLayer(source.id, {
-    geojson: { ...source.geojson, features: remaining },
-  });
+  if (remaining.length === 0) {
+    store.removeLayer(source.id);
+    if (annotationLayerId === source.id) annotationLayerId = target.id;
+  } else {
+    store.updateLayer(source.id, {
+      geojson: { ...source.geojson, features: remaining },
+    });
+  }
 }
 
 export function reorderElements(annotationId: string, direction: "up" | "down"): void {

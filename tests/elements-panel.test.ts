@@ -345,8 +345,12 @@ describe("Elements Panel & Map Elements", () => {
 
     moveElementToLayer(annotationId, "source", "target");
 
-    const [source, target] = useAppStore.getState().layers;
-    assert.equal(source.geojson!.features.length, 0);
+    // The emptied source layer is removed rather than left behind as an
+    // orphaned, element-less annotation layer.
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 1);
+    const [target] = layers;
+    assert.equal(target.id, "target");
     assert.equal(target.geojson!.features.length, 1);
     assert.equal(target.geojson!.features[0].properties!.annotationId, annotationId);
   });
