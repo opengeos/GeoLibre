@@ -393,12 +393,10 @@ export function FieldCollectionDialog({
   // the layer rather than being retargeted — including one preserved across a
   // dismissal, which was made for the layer that just disappeared.
   //
-  // Left alone while the dialog is open, where losing the target is what shows
-  // the setup step. `picking`/`drawing` are excluded along with `open`: the
-  // dialog is hidden during a placement but the Layers panel is not, and
-  // retargeting mid-pick would swap the schema and geometry out from under a
-  // capture already in flight. That case aborts the placement instead (below),
-  // and the fallback applies on the next close.
+  // Only while the tool is put away, though. With the dialog open, or hidden
+  // behind a placement, retargeting would swap the schema and geometry out from
+  // under a capture the user is still working on; that case ends the capture on
+  // the setup step instead (the effect further down).
   useEffect(() => {
     if (open || picking || drawing || !layerId) return;
     if (collectionLayers.some((l) => l.id === layerId)) return;
@@ -475,21 +473,28 @@ export function FieldCollectionDialog({
   // through the pill is a normal move now, so the suppress flag keeps the
   // reopen from wiping a placed point and a half-filled form.
   //
-  // The invalidation still runs, so this preserves the *capture*, not the async
-  // work behind it — a GPS fix or photo read still in flight is dropped rather
-  // than landing on a dialog that is no longer showing (`activeRef` gates the
-  // GPS callbacks for the same reason). With nothing captured there is nothing
-  // worth keeping, and the reset clears the leftover notice and session count.
+  // Only the placement-scoped work is superseded, not the whole capture
+  // context. A GPS fix must not resolve into a dropped marker and a camera fly
+  // while the dialog is away (`activeRef` gates those callbacks for the same
+  // reason), but a photo still being read belongs to the capture being kept, so
+  // it is allowed to land on it — dropping it would lose the photo silently.
+  // Nothing can leak into a *later* capture either way: the next open resets
+  // unless the capture was preserved.
   //
   // Dismissing before any collection layer exists is the one case that ends the
   // session instead: the pill's whole job is to name the capture target, so a
-  // session with nothing to capture into would be unreachable.
+  // session with nothing to capture into would be unreachable. That abandons
+  // the capture, so there the whole context goes.
   const handleDialogOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
-        invalidateCapture();
-        if (collectionLayers.length === 0) setSessionActive(false);
-        else if (pending || vertices.length > 0 || photo) suppressResetRef.current = true;
+        if (collectionLayers.length === 0) {
+          invalidateCapture();
+          setSessionActive(false);
+        } else {
+          gpsSeqRef.current += 1;
+          if (pending || vertices.length > 0 || photo) suppressResetRef.current = true;
+        }
       }
       onOpenChange(next);
     },
@@ -610,22 +615,34 @@ export function FieldCollectionDialog({
     onOpenChange(true);
   }, [getMap, onOpenChange, setVerticesSynced]);
 
-  // A placement whose target layer is deleted mid-flight has nowhere to land,
-  // and `activeGeometry` would quietly fall back to the setup step's geometry —
-  // changing the vertex threshold, the preview, and what `finishDrawing` builds
-  // underneath a draw already in progress. Abort the placement, drop back to
-  // the setup step, and say why rather than letting it finish into nothing.
+  // The target layer deleted out from under a live capture — the dialog open,
+  // or hidden behind a placement. Either way the capture has nowhere to land,
+  // and mid-placement `activeGeometry` would quietly fall back to the setup
+  // step's geometry, changing the vertex threshold, the preview, and what
+  // `finishDrawing` builds underneath a draw already in progress. End the
+  // capture, drop to the setup step, and say why. Clearing `layerId` matters
+  // for the dialog-open case on its own: the form moves to the setup step as
+  // soon as `activeLayer` goes null, but the target Select would be left
+  // pointing at an id with no matching option.
+  //
+  // The dialog-closed case is the fallback effect above instead, which keeps
+  // the session pointed at a layer that still exists.
   useEffect(() => {
-    if (!picking && !drawing) return;
+    if (!open && !picking && !drawing) return;
     if (!layerId || collectionLayers.some((l) => l.id === layerId)) return;
+    const placing = picking || drawing;
     resetCapture("");
     targetChosenRef.current = false;
-    // After resetCapture, which clears the notice; kept across the reopen by
-    // the suppress flag.
+    // After resetCapture, which clears the notice.
     setNotice(t("fieldCollection.layerGone"));
-    suppressResetRef.current = true;
-    onOpenChange(true);
-  }, [picking, drawing, layerId, collectionLayers, resetCapture, onOpenChange, t]);
+    if (placing) {
+      // Kept across the reopen by the suppress flag. With the dialog already
+      // open there is no reopen to survive, and setting the flag would leave it
+      // armed for an unrelated later open.
+      suppressResetRef.current = true;
+      onOpenChange(true);
+    }
+  }, [open, picking, drawing, layerId, collectionLayers, resetCapture, onOpenChange, t]);
 
   useEffect(() => {
     if (!drawing) return;
