@@ -455,6 +455,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 function setActiveTool(tool: AnnotationTool | null): void {
   if (movingAnnotationId) {
     movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = tool ? "crosshair" : "";
   }
   if (activeTool === tool) return;
   resetDrawState();
@@ -1365,6 +1366,10 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
     openElementDialog(event, "placed_image", (data) => {
       const imageUrl = data.imageUrl || "";
       if (data.placementMode === "extent") {
+        const storeBeforeOverlay = useAppStore.getState();
+        const selectedAnnotationLayerId = storeBeforeOverlay.layers.find(
+          (layer) => layer.id === storeBeforeOverlay.selectedLayerId && isAnnotationLayer(layer),
+        )?.id;
         // Corner-pinned placement: use the store's addImageOverlayLayer API.
         // Compute a rectangular extent around the click point, then let the
         // image overlay layer handle rendering. Also create a tracking feature
@@ -1402,6 +1407,11 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
             visible: true,
           },
         };
+        // Adding the linked overlay selects that non-annotation layer. Restore
+        // the user's annotation target before routing the tracking feature.
+        if (selectedAnnotationLayerId) {
+          useAppStore.getState().selectLayer(selectedAnnotationLayerId);
+        }
         appendAnnotationFeatures([trackingFeature]);
       } else {
         appendAnnotationFeatures([placedImageFeature(event.lngLat, imageUrl, data.title)]);
@@ -2146,23 +2156,55 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
     const layerRow = document.createElement("div");
     layerRow.style.cssText = "display:flex; gap:6px; align-items:center;";
-    const layerSelect = document.createElement("select");
+    const layerPicker = document.createElement("div");
+    layerPicker.style.cssText = "position:relative; flex:1; min-width:0;";
+    const layerSelect = document.createElement("button");
+    layerSelect.type = "button";
     layerSelect.setAttribute("aria-label", labels.layerName);
+    layerSelect.setAttribute("aria-haspopup", "listbox");
+    layerSelect.setAttribute("aria-expanded", "false");
     layerSelect.style.cssText =
-      "flex:1; min-width:0; padding:5px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit;";
+      "width:100%; min-width:0; padding:5px 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; cursor:pointer; text-align:left;";
+    const selectedLayerName = document.createElement("span");
+    selectedLayerName.style.cssText =
+      "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+    selectedLayerName.textContent = layer?.name ?? labels.layerName;
+    const layerChevron = document.createElement("span");
+    layerChevron.textContent = "⌄";
+    layerChevron.setAttribute("aria-hidden", "true");
+    layerSelect.append(selectedLayerName, layerChevron);
+    const layerMenu = document.createElement("div");
+    layerMenu.hidden = true;
+    layerMenu.setAttribute("role", "listbox");
+    layerMenu.style.cssText =
+      "position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:100; padding:4px; display:flex; flex-direction:column; gap:2px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; box-shadow:0 6px 18px rgba(0,0,0,.2);";
     for (const candidate of store.layers.filter(isAnnotationLayer)) {
-      const option = document.createElement("option");
-      option.value = candidate.id;
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(candidate.id === layer?.id));
       option.textContent = candidate.name;
-      option.selected = candidate.id === layer?.id;
-      layerSelect.appendChild(option);
+      option.style.cssText =
+        "width:100%; padding:6px 8px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; text-align:left;";
+      option.onclick = () => {
+        annotationLayerId = candidate.id;
+        store.selectLayer(candidate.id);
+        update();
+      };
+      layerMenu.appendChild(option);
     }
-    layerSelect.onchange = () => {
-      annotationLayerId = layerSelect.value;
-      store.selectLayer(layerSelect.value);
-      update();
+    layerSelect.onclick = () => {
+      layerMenu.hidden = !layerMenu.hidden;
+      layerSelect.setAttribute("aria-expanded", String(!layerMenu.hidden));
     };
-    layerRow.appendChild(layerSelect);
+    layerPicker.addEventListener("focusout", (event) => {
+      if (!layerPicker.contains((event as FocusEvent).relatedTarget as Node | null)) {
+        layerMenu.hidden = true;
+        layerSelect.setAttribute("aria-expanded", "false");
+      }
+    });
+    layerPicker.append(layerSelect, layerMenu);
+    layerRow.appendChild(layerPicker);
     const addLayer = document.createElement("button");
     addLayer.type = "button";
     addLayer.textContent = "+";
@@ -2206,19 +2248,22 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       if (editingId === el.id) {
         titleContainer.style.cssText = "flex:1; min-width:0; display:grid; gap:5px;";
+        const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
         const input = document.createElement("input");
         input.type = "text";
-        input.value = el.type === "pin" && el.title === "Element" ? "" : el.title;
+        input.value =
+          typeof firstProps.title === "string"
+            ? firstProps.title
+            : el.type === "pin"
+              ? ""
+              : el.title;
         input.placeholder = "Title";
         const description = document.createElement("textarea");
         description.value = el.description ?? "";
         description.placeholder = "Description";
         description.rows = 2;
-        const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
         const supportsColor = el.type !== "placed_image";
-        const supportsWidth = ["arrow", "arrowhead", "highlight", "freehand", "line"].includes(
-          el.type,
-        );
+        const supportsWidth = ["highlight", "freehand", "line"].includes(el.type);
         const color = document.createElement("input");
         color.type = "color";
         color.value = String(
@@ -2298,7 +2343,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       row.appendChild(titleContainer);
 
       const ctrl = document.createElement("div");
-      ctrl.style.cssText = "display: flex; align-items: center; gap: 2px;";
+      ctrl.style.cssText =
+        "display:flex; align-items:center; justify-content:flex-end; gap:2px; flex:0 1 auto; min-width:0; max-width:100%;";
       const actionButtonStyle =
         "border:none; background:none; cursor:pointer; width:26px; height:26px; flex:0 0 26px; display:inline-flex; align-items:center; justify-content:center; color:var(--geolibre-fg-muted,#9ca3af); padding:0; line-height:1;";
 
@@ -2364,23 +2410,46 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         (candidate) => isAnnotationLayer(candidate) && candidate.id !== layer?.id,
       );
       if (otherLayers.length > 0) {
-        const transfer = document.createElement("select");
+        const transferPicker = document.createElement("div");
+        transferPicker.style.cssText = "position:relative; width:32px; flex:0 0 32px;";
+        const transfer = document.createElement("button");
+        transfer.type = "button";
+        transfer.textContent = "↪";
         transfer.title = labels.moveToLayer;
         transfer.setAttribute("aria-label", labels.moveToLayer);
-        const placeholder = document.createElement("option");
-        placeholder.textContent = "↪";
-        placeholder.value = "";
-        transfer.appendChild(placeholder);
+        transfer.setAttribute("aria-haspopup", "menu");
+        transfer.setAttribute("aria-expanded", "false");
+        transfer.style.cssText =
+          "width:32px; height:26px; flex:0 0 32px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:4px; background:var(--geolibre-bg,#fff); color:inherit; cursor:pointer;";
+        const transferMenu = document.createElement("div");
+        transferMenu.hidden = true;
+        transferMenu.setAttribute("role", "menu");
+        transferMenu.style.cssText =
+          "position:absolute; top:calc(100% + 4px); right:0; z-index:100; min-width:150px; padding:4px; display:flex; flex-direction:column; gap:2px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; box-shadow:0 6px 18px rgba(0,0,0,.2);";
         for (const target of otherLayers) {
-          const option = document.createElement("option");
-          option.value = target.id;
+          const option = document.createElement("button");
+          option.type = "button";
+          option.setAttribute("role", "menuitem");
           option.textContent = target.name;
-          transfer.appendChild(option);
+          option.style.cssText =
+            "width:100%; padding:6px 8px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; text-align:left; white-space:nowrap;";
+          option.onclick = () => {
+            if (layer) moveElementToLayer(el.id, layer.id, target.id);
+          };
+          transferMenu.appendChild(option);
         }
-        transfer.onchange = () => {
-          if (layer && transfer.value) moveElementToLayer(el.id, layer.id, transfer.value);
+        transfer.onclick = () => {
+          transferMenu.hidden = !transferMenu.hidden;
+          transfer.setAttribute("aria-expanded", String(!transferMenu.hidden));
         };
-        ctrl.appendChild(transfer);
+        transferPicker.addEventListener("focusout", (event) => {
+          if (!transferPicker.contains((event as FocusEvent).relatedTarget as Node | null)) {
+            transferMenu.hidden = true;
+            transfer.setAttribute("aria-expanded", "false");
+          }
+        });
+        transferPicker.append(transfer, transferMenu);
+        ctrl.appendChild(transferPicker);
       }
 
       const del = document.createElement("button");
