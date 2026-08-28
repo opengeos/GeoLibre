@@ -1641,6 +1641,12 @@
   "map": {
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",
+    "identifyAll": {
+      "title": "Identified features ({{count}})",
+      "featureCount_one": "{{count}} feature",
+      "featureCount_other": "{{count}} features",
+      "featureFallback": "Feature {{index}}"
+    },
     "directionsMode": {
       "title": "Directions mode active",
       "hint": "Click the map to add waypoints. Drag a waypoint to move it, or click it to remove it. Routes update automatically.",

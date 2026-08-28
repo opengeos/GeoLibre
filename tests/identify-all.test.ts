@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { globalIdentifyHitKey } from "../packages/map/src/identify-all";
+import {
+  createGlobalIdentifyHitDeduper,
+  globalIdentifyHitKey,
+} from "../packages/map/src/identify-all";
 
 const pointFeature = {
   source: "cities-source",
@@ -67,5 +70,40 @@ describe("globalIdentifyHitKey", () => {
     });
 
     assert.notEqual(original, neighbor);
+  });
+
+  it("keeps id-less features with equal attributes and different coordinates", () => {
+    const accept = createGlobalIdentifyHitDeduper();
+    const first = {
+      source: "regions-source",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [0, 0],
+          ],
+        ],
+      },
+      properties: { category: "unlabeled" },
+    };
+    const second = {
+      ...first,
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [2, 2],
+            [3, 2],
+            [2, 2],
+          ],
+        ],
+      },
+    };
+
+    assert.equal(accept("regions", null, first), true);
+    assert.equal(accept("regions", null, first), false);
+    assert.equal(accept("regions", null, second), true);
   });
 });

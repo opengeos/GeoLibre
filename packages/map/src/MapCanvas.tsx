@@ -49,7 +49,7 @@ import {
   type FeatureSelectionShape,
 } from "./feature-selection";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
-import { globalIdentifyHitKey } from "./identify-all";
+import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -119,7 +119,22 @@ export interface MapCanvasProps {
    * sends nothing anywhere.
    */
   canUseRemoteElevation?: () => boolean;
+  /** Localized labels for the grouped, all-layer Identify popup. */
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
 }
+
+/** Text formatters used by the grouped, all-layer Identify popup. */
+export interface MapCanvasIdentifyAllLabels {
+  title: (count: number) => string;
+  featureCount: (count: number) => string;
+  featureFallback: (index: number) => string;
+}
+
+const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
+  title: (count) => `Identified features (${count})`,
+  featureCount: (count) => `${count} ${count === 1 ? "feature" : "features"}`,
+  featureFallback: (index) => `Feature ${index}`,
+};
 
 export interface MapDiagnosticEvent {
   message: string;
@@ -380,6 +395,7 @@ function createGlobalIdentifyPopupElement(
   hits: GlobalIdentifyHit[],
   zoom: number,
   onActivate: (hit: GlobalIdentifyHit) => void,
+  labels: MapCanvasIdentifyAllLabels,
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
@@ -387,7 +403,7 @@ function createGlobalIdentifyPopupElement(
 
   const title = document.createElement("div");
   title.className = "mb-2 pe-6 font-semibold text-foreground";
-  title.textContent = `Identified features (${hits.length})`;
+  title.textContent = labels.title(hits.length);
   root.appendChild(title);
 
   const groups = new Map<string, GlobalIdentifyHit[]>();
@@ -411,7 +427,7 @@ function createGlobalIdentifyPopupElement(
     layerName.textContent = layer.name;
     const count = document.createElement("span");
     count.className = "shrink-0 font-normal text-muted-foreground";
-    count.textContent = `${groupHits.length} ${groupHits.length === 1 ? "feature" : "features"}`;
+    count.textContent = labels.featureCount(groupHits.length);
     layerButton.append(layerName, count);
     layerButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -435,7 +451,7 @@ function createGlobalIdentifyPopupElement(
       featureButton.type = "button";
       featureButton.className =
         "mb-1 w-full break-words text-start font-medium text-foreground hover:underline";
-      featureButton.textContent = configuredTitle ?? `Feature ${index + 1}`;
+      featureButton.textContent = configuredTitle ?? labels.featureFallback(index + 1);
       featureButton.addEventListener("click", (event) => {
         event.stopPropagation();
         onActivate(hit);
@@ -1368,6 +1384,7 @@ export const MapCanvas = memo(function MapCanvas({
   onMapDiagnosticEvent,
   onControllerReady,
   canUseRemoteElevation,
+  identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1387,6 +1404,8 @@ export const MapCanvas = memo(function MapCanvas({
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
+  const layerGroupsRef = useRef(layerGroups);
+  layerGroupsRef.current = layerGroups;
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
@@ -2042,7 +2061,7 @@ export const MapCanvas = memo(function MapCanvas({
         const owners = new Map<string, GeoLibreLayer>();
         for (const candidate of layers) {
           if (
-            !effectiveLayerRenderState(candidate, layerGroups).visible ||
+            !effectiveLayerRenderState(candidate, layerGroupsRef.current).visible ||
             !resolveLayerCapabilities(candidate).query ||
             !isPopupClickEnabled(candidate.popup)
           ) {
@@ -2054,7 +2073,7 @@ export const MapCanvas = memo(function MapCanvas({
         }
 
         const hits: GlobalIdentifyHit[] = [];
-        const seen = new Set<string>();
+        const acceptHit = createGlobalIdentifyHitDeduper();
         const queryLayerIds = [...owners.keys()];
         const rendered =
           queryLayerIds.length === 0
@@ -2068,9 +2087,7 @@ export const MapCanvas = memo(function MapCanvas({
             feature,
             featureId: findFeatureId(owner, feature),
           };
-          const key = globalIdentifyHitKey(hit.layer.id, hit.featureId, hit.feature);
-          if (seen.has(key)) continue;
-          seen.add(key);
+          if (!acceptHit(hit.layer.id, hit.featureId, hit.feature)) continue;
           hits.push(hit);
         }
 
@@ -2093,7 +2110,9 @@ export const MapCanvas = memo(function MapCanvas({
           maxWidth: "560px",
         })
           .setLngLat(event.lngLat)
-          .setDOMContent(createGlobalIdentifyPopupElement(hits, map.getZoom(), activate))
+          .setDOMContent(
+            createGlobalIdentifyPopupElement(hits, map.getZoom(), activate, identifyAllLabels),
+          )
           .addTo(map);
       };
 
@@ -2314,7 +2333,7 @@ export const MapCanvas = memo(function MapCanvas({
       // alone rather than resetting it out from under the drawing.
       if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
-  }, [identifyLayerId, layerGroups, layers, selectFeature, selectLayer]);
+  }, [identifyAllLabels, identifyLayerId, layers, selectFeature, selectLayer]);
 
   // Geotagged photos: clicking a photo point opens a resizable popup with the
   // photo, without needing the Identify tool. The popup is photo-specific, and

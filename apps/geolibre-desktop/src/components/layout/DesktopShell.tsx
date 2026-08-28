@@ -60,6 +60,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -564,6 +565,14 @@ export function DesktopShell({
   onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
+  const identifyAllLabels = useMemo(
+    () => ({
+      title: (count: number) => t("map.identifyAll.title", { count }),
+      featureCount: (count: number) => t("map.identifyAll.featureCount", { count }),
+      featureFallback: (index: number) => t("map.identifyAll.featureFallback", { index }),
+    }),
+    [t],
+  );
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
   // Push the translated bookmark labels into the framework-agnostic plugins
@@ -2464,6 +2473,7 @@ export function DesktopShell({
               <MapCanvas
                 canUseRemoteElevation={hasElevationConsent}
                 controllerRef={mapControllerRef}
+                identifyAllLabels={identifyAllLabels}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}
               />
