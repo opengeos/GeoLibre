@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
 import {
   NETCDF_IMAGE_SOURCE_KIND,
+  IDENTIFY_ALL_LAYERS_ID,
   DEFAULT_BASEMAP,
   effectiveLayerRenderState,
   getPlanetaryBasemapById,
@@ -3073,6 +3074,26 @@ export function LayerPanel({
             ) : (
               <EyeOff className="h-4 w-4 text-muted-foreground" />
             )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("layers.identifyVisibleLayersHint")}
+            aria-label={t("layers.identifyVisibleLayers")}
+            aria-pressed={identifyLayerId === IDENTIFY_ALL_LAYERS_ID}
+            onClick={() =>
+              setIdentifyLayer(
+                identifyLayerId === IDENTIFY_ALL_LAYERS_ID ? null : IDENTIFY_ALL_LAYERS_ID,
+              )
+            }
+          >
+            <MousePointerClick
+              className={cn(
+                "h-4 w-4",
+                identifyLayerId === IDENTIFY_ALL_LAYERS_ID && "text-primary",
+              )}
+            />
           </Button>
           <Button
             variant="ghost"

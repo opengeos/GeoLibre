@@ -121,19 +121,48 @@ export interface MapCanvasProps {
   canUseRemoteElevation?: () => boolean;
   /** Localized labels for the grouped, all-layer Identify popup. */
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  /** Reads app-owned raster layers for the grouped, all-layer Identify popup. */
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
 }
 
 /** Text formatters used by the grouped, all-layer Identify popup. */
 export interface MapCanvasIdentifyAllLabels {
   title: (count: number) => string;
-  featureCount: (count: number) => string;
+  resultCount: (count: number) => string;
   featureFallback: (index: number) => string;
+  pixel: string;
+  expandAll: string;
+  collapseAll: string;
+  loadingTitle: string;
+  loading: string;
+  errorLabel: string;
+  error: string;
 }
 
+/** One raster result supplied by the application to all-layer Identify. */
+export interface MapCanvasRasterIdentifyResult {
+  properties: Record<string, unknown>;
+  title?: string;
+}
+
+/** Application bridge for raster sources owned outside `@geolibre/map`. */
+export type MapCanvasRasterIdentify = (
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  options: { signal: AbortSignal },
+) => Promise<MapCanvasRasterIdentifyResult | null>;
+
 const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
-  title: (count) => `Identified features (${count})`,
-  featureCount: (count) => `${count} ${count === 1 ? "feature" : "features"}`,
+  title: (count) => `Identified results (${count})`,
+  resultCount: (count) => `${count} ${count === 1 ? "result" : "results"}`,
   featureFallback: (index) => `Feature ${index}`,
+  pixel: "Pixel",
+  expandAll: "Expand all",
+  collapseAll: "Collapse all",
+  loadingTitle: "Identify visible layers",
+  loading: "Loading...",
+  errorLabel: "Error",
+  error: "Could not identify this layer.",
 };
 
 export interface MapDiagnosticEvent {
@@ -379,8 +408,10 @@ function createIdentifyPopupRows(
 
 interface GlobalIdentifyHit {
   layer: GeoLibreLayer;
-  feature: maplibregl.MapGeoJSONFeature;
+  properties: Record<string, unknown>;
+  feature?: maplibregl.MapGeoJSONFeature;
   featureId: string | null;
+  title?: string;
 }
 
 /**
@@ -402,9 +433,31 @@ function createGlobalIdentifyPopupElement(
     "geolibre-identify-popup-root geolibre-identify-popup-root--grouped flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
 
   const title = document.createElement("div");
-  title.className = "mb-2 pe-6 font-semibold text-foreground";
+  title.className = "font-semibold text-foreground";
   title.textContent = labels.title(hits.length);
-  root.appendChild(title);
+  const header = document.createElement("div");
+  header.className = "mb-2 flex items-center justify-between gap-3 pe-10";
+  const actions = document.createElement("div");
+  actions.className = "flex shrink-0 items-center gap-1";
+  const detailsElements: HTMLDetailsElement[] = [];
+  const createToggleAllButton = (text: string, open: boolean) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      "rounded border px-1.5 py-0.5 font-normal text-muted-foreground hover:bg-muted hover:text-foreground";
+    button.textContent = text;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      for (const details of detailsElements) details.open = open;
+    });
+    return button;
+  };
+  actions.append(
+    createToggleAllButton(labels.expandAll, true),
+    createToggleAllButton(labels.collapseAll, false),
+  );
+  header.append(title, actions);
+  root.appendChild(header);
 
   const groups = new Map<string, GlobalIdentifyHit[]>();
   for (const hit of hits) {
@@ -415,19 +468,20 @@ function createGlobalIdentifyPopupElement(
 
   for (const groupHits of groups.values()) {
     const { layer } = groupHits[0];
-    const section = document.createElement("section");
-    section.className = "border-t py-2 first:border-t-0 first:pt-0";
+    const section = document.createElement("details");
+    section.className = "group border-t py-2 first:border-t-0 first:pt-0";
+    section.open = true;
+    detailsElements.push(section);
 
-    const layerButton = document.createElement("button");
-    layerButton.type = "button";
+    const layerButton = document.createElement("summary");
     layerButton.className =
-      "mb-1 flex w-full items-center justify-between gap-3 rounded px-1 py-1 text-start font-semibold text-foreground hover:bg-muted";
+      "mb-1 flex w-full cursor-pointer list-none items-center justify-between gap-3 rounded px-1 py-1 text-start font-semibold text-foreground hover:bg-muted [&::-webkit-details-marker]:hidden";
     const layerName = document.createElement("span");
     layerName.className = "min-w-0 break-words";
     layerName.textContent = layer.name;
     const count = document.createElement("span");
     count.className = "shrink-0 font-normal text-muted-foreground";
-    count.textContent = labels.featureCount(groupHits.length);
+    count.textContent = labels.resultCount(groupHits.length);
     layerButton.append(layerName, count);
     layerButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -438,20 +492,18 @@ function createGlobalIdentifyPopupElement(
     for (const [index, hit] of groupHits.entries()) {
       const featureContainer = document.createElement("div");
       featureContainer.className = "mb-2 rounded border bg-background/60 p-2 last:mb-0";
-      const configuredTitle = resolveConfiguredPopupTitle(
-        hit.feature.properties ?? {},
-        layer.popup,
-        {
-          feature: hit.feature,
-          zoom,
-          fieldVisibility: layer.fieldVisibility,
-        },
-      );
+      const configuredTitle = hit.feature
+        ? resolveConfiguredPopupTitle(hit.properties, layer.popup, {
+            feature: hit.feature,
+            zoom,
+            fieldVisibility: layer.fieldVisibility,
+          })
+        : null;
       const featureButton = document.createElement("button");
       featureButton.type = "button";
       featureButton.className =
         "mb-1 w-full break-words text-start font-medium text-foreground hover:underline";
-      featureButton.textContent = configuredTitle ?? labels.featureFallback(index + 1);
+      featureButton.textContent = configuredTitle ?? hit.title ?? labels.featureFallback(index + 1);
       featureButton.addEventListener("click", (event) => {
         event.stopPropagation();
         onActivate(hit);
@@ -459,7 +511,7 @@ function createGlobalIdentifyPopupElement(
       featureContainer.appendChild(featureButton);
       featureContainer.appendChild(
         createIdentifyPopupRows(
-          hit.feature.properties ?? {},
+          hit.properties,
           hit.featureId ?? undefined,
           {
             popup: layer.popup,
@@ -1385,6 +1437,7 @@ export const MapCanvas = memo(function MapCanvas({
   onControllerReady,
   canUseRemoteElevation,
   identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
+  identifyRasterLayerAt,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -2055,18 +2108,22 @@ export const MapCanvas = memo(function MapCanvas({
 
     if (identifyAllLayers) {
       map.getCanvas().style.cursor = "crosshair";
+      let globalIdentifyAbortController: AbortController | null = null;
       const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
         if (featureSelectionActive.current) return;
 
+        globalIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        globalIdentifyAbortController = abortController;
+
         const owners = new Map<string, GeoLibreLayer>();
-        for (const candidate of layers) {
-          if (
-            !effectiveLayerRenderState(candidate, layerGroupsRef.current).visible ||
-            !resolveLayerCapabilities(candidate).query ||
-            !isPopupClickEnabled(candidate.popup)
-          ) {
-            continue;
-          }
+        const eligibleLayers = layers.filter(
+          (candidate) =>
+            effectiveLayerRenderState(candidate, layerGroupsRef.current).visible &&
+            resolveLayerCapabilities(candidate).query &&
+            isPopupClickEnabled(candidate.popup),
+        );
+        for (const candidate of eligibleLayers) {
           for (const styleLayerId of identifyStyleLayerIds(candidate)) {
             if (map.getLayer(styleLayerId)) owners.set(styleLayerId, candidate);
           }
@@ -2084,40 +2141,159 @@ export const MapCanvas = memo(function MapCanvas({
           if (!owner) continue;
           const hit: GlobalIdentifyHit = {
             layer: owner,
+            properties: feature.properties ?? {},
             feature,
             featureId: findFeatureId(owner, feature),
           };
-          if (!acceptHit(hit.layer.id, hit.featureId, hit.feature)) continue;
+          if (!acceptHit(hit.layer.id, hit.featureId, feature)) continue;
           hits.push(hit);
-        }
-
-        identifyPopup.current?.remove();
-        identifyPopup.current = null;
-        if (hits.length === 0) {
-          selectFeature(null);
-          return;
         }
 
         const activate = (hit: GlobalIdentifyHit) => {
           selectLayer(hit.layer.id);
           selectFeature(hit.featureId);
         };
-        activate(hits[0]);
-        identifyPopup.current = new maplibregl.Popup({
-          className: "geolibre-identify-popup",
-          closeButton: true,
-          closeOnClick: false,
-          maxWidth: "560px",
-        })
-          .setLngLat(event.lngLat)
-          .setDOMContent(
-            createGlobalIdentifyPopupElement(hits, map.getZoom(), activate, identifyAllLabels),
-          )
-          .addTo(map);
+        const showPopup = (content: HTMLElement) => {
+          identifyPopup.current?.remove();
+          identifyPopup.current = new maplibregl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: "560px",
+          })
+            .setLngLat(event.lngLat)
+            .setDOMContent(content)
+            .addTo(map);
+        };
+        const finish = (allHits: GlobalIdentifyHit[]) => {
+          if (abortController.signal.aborted) return;
+          const order = new Map(layers.map((candidate, index) => [candidate.id, index]));
+          allHits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
+          if (allHits.length === 0) {
+            identifyPopup.current?.remove();
+            identifyPopup.current = null;
+            selectFeature(null);
+            return;
+          }
+          activate(allHits[0]);
+          showPopup(
+            createGlobalIdentifyPopupElement(allHits, map.getZoom(), activate, identifyAllLabels),
+          );
+        };
+
+        const asyncLayers = eligibleLayers.filter(
+          (candidate) =>
+            isWmsLayer(candidate) ||
+            isPixelIdentifyLayer(candidate) ||
+            candidate.type === "cog" ||
+            candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
+        );
+        if (asyncLayers.length === 0) {
+          finish(hits);
+          return;
+        }
+
+        selectFeature(null);
+        showPopup(
+          createIdentifyMessagePopupElement(
+            identifyAllLabels.loadingTitle,
+            identifyAllLabels.loading,
+          ),
+        );
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => abortController.abort();
+        loadingPopup?.once("close", onLoadingClose);
+
+        void Promise.all(
+          asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
+            try {
+              if (isWmsLayer(candidate)) {
+                const result = await fetchWmsIdentifyProperties(
+                  candidate,
+                  map,
+                  event,
+                  abortController.signal,
+                );
+                if (
+                  !result ||
+                  (result.featureId == null && Object.keys(result.properties).length === 0)
+                ) {
+                  return null;
+                }
+                return {
+                  layer: candidate,
+                  properties: result.properties,
+                  featureId: result.featureId == null ? null : String(result.featureId),
+                };
+              }
+
+              if (candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
+                const result = await identifyRasterLayerAt?.(
+                  candidate,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: result.properties,
+                      featureId: null,
+                      title: result.title ?? identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              if (isPixelIdentifyLayer(candidate)) {
+                const result = await timeSliderBridge()?.identifyPixelAt?.(
+                  candidate.id,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: pixelIdentifyProperties(result),
+                      featureId: null,
+                      title: identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              const result = await identifyRasterLayerAt?.(
+                candidate,
+                [event.lngLat.lng, event.lngLat.lat],
+                { signal: abortController.signal },
+              );
+              return result
+                ? {
+                    layer: candidate,
+                    properties: result.properties,
+                    featureId: null,
+                    title: result.title ?? identifyAllLabels.pixel,
+                  }
+                : null;
+            } catch (error: unknown) {
+              if (abortController.signal.aborted || isAbortError(error)) return null;
+              return {
+                layer: candidate,
+                properties: {
+                  [identifyAllLabels.errorLabel]:
+                    error instanceof Error ? error.message : identifyAllLabels.error,
+                },
+                featureId: null,
+              };
+            }
+          }),
+        ).then((asyncHits) => {
+          if (abortController.signal.aborted) return;
+          loadingPopup?.off("close", onLoadingClose);
+          finish([...hits, ...asyncHits.filter((hit): hit is GlobalIdentifyHit => hit !== null)]);
+        });
       };
 
       map.on("click", handleIdentifyAllClick);
       return () => {
+        globalIdentifyAbortController?.abort();
         map.off("click", handleIdentifyAllClick);
         identifyPopup.current?.remove();
         identifyPopup.current = null;
@@ -2333,7 +2509,14 @@ export const MapCanvas = memo(function MapCanvas({
       // alone rather than resetting it out from under the drawing.
       if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
-  }, [identifyAllLabels, identifyLayerId, layers, selectFeature, selectLayer]);
+  }, [
+    identifyAllLabels,
+    identifyLayerId,
+    identifyRasterLayerAt,
+    layers,
+    selectFeature,
+    selectLayer,
+  ]);
 
   // Geotagged photos: clicking a photo point opens a resizable popup with the
   // photo, without needing the Identify tool. The popup is photo-specific, and

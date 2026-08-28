@@ -2242,6 +2242,13 @@ body,
   color: hsl(var(--accent-foreground));
 }
 
+/* The grouped popup scrolls at its outer edge. Move the close target inward so
+   it never crowds or overlaps that scrollbar. */
+.geolibre-identify-popup:has(.geolibre-identify-popup-root--grouped)
+  .maplibregl-popup-close-button {
+  inset-inline-end: 1.25rem;
+}
+
 .geolibre-identify-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
 .geolibre-identify-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
 .geolibre-identify-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {

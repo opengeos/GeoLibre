@@ -2,6 +2,8 @@ export {
   MapCanvas,
   type MapCanvasIdentifyAllLabels,
   type MapCanvasProps,
+  type MapCanvasRasterIdentify,
+  type MapCanvasRasterIdentifyResult,
   type MapDiagnosticEvent,
 } from "./MapCanvas";
 export {

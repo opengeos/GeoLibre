@@ -126,6 +126,7 @@ import { wikipediaLang } from "../../lib/knowledge";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
+import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
 import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
 import { useCogSpectralIdentify } from "../../hooks/useCogSpectralIdentify";
 import {
@@ -565,11 +566,19 @@ export function DesktopShell({
   onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
+  const identifyRasterLayerAt = useGlobalRasterIdentify();
   const identifyAllLabels = useMemo(
     () => ({
       title: (count: number) => t("map.identifyAll.title", { count }),
-      featureCount: (count: number) => t("map.identifyAll.featureCount", { count }),
+      resultCount: (count: number) => t("map.identifyAll.resultCount", { count }),
       featureFallback: (index: number) => t("map.identifyAll.featureFallback", { index }),
+      pixel: t("map.identifyAll.pixel"),
+      expandAll: t("map.identifyAll.expandAll"),
+      collapseAll: t("map.identifyAll.collapseAll"),
+      loadingTitle: t("map.identifyAll.loadingTitle"),
+      loading: t("map.identifyAll.loading"),
+      errorLabel: t("map.identifyAll.errorLabel"),
+      error: t("map.identifyAll.error"),
     }),
     [t],
   );
@@ -2474,6 +2483,7 @@ export function DesktopShell({
                 canUseRemoteElevation={hasElevationConsent}
                 controllerRef={mapControllerRef}
                 identifyAllLabels={identifyAllLabels}
+                identifyRasterLayerAt={identifyRasterLayerAt}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}
               />
