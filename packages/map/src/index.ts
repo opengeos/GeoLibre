@@ -24,6 +24,7 @@ export {
 export {
   MapController,
   createMapController,
+  defaultBlankBackgroundColor,
   type BuiltInMapControl,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   TERRAIN_SETTINGS_EVENT,

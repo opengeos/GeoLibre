@@ -65,7 +65,11 @@ import {
   type TimePropertyCandidate,
   type TimePropertyRecord,
 } from "@geolibre/plugins";
-import { startFeatureSelection, type MapController } from "@geolibre/map";
+import {
+  defaultBlankBackgroundColor,
+  startFeatureSelection,
+  type MapController,
+} from "@geolibre/map";
 import {
   applyMapboxStyleImport,
   applyQmlImport,
@@ -754,6 +758,13 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [backgroundAppearanceOpen, setBackgroundAppearanceOpen] = useState(false);
+  const [, refreshThemeDefault] = useState(0);
+  useEffect(() => {
+    if (!backgroundAppearanceOpen || blankBackgroundColor !== null) return;
+    const observer = new MutationObserver(() => refreshThemeDefault((version) => version + 1));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [backgroundAppearanceOpen, blankBackgroundColor]);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
   const [metadataCopied, setMetadataCopied] = useState(false);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
@@ -1083,11 +1094,7 @@ export function LayerPanel({
     : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
   const blankBackgroundActive = basemapStyleUrl === BLANK_BASEMAP;
-  const effectiveBlankBackgroundColor =
-    blankBackgroundColor ??
-    (typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-      ? "#262626"
-      : "#ffffff");
+  const effectiveBlankBackgroundColor = blankBackgroundColor ?? defaultBlankBackgroundColor();
   const allLayersVisible =
     basemapVisible &&
     layers.every((layer) => layer.visible) &&
