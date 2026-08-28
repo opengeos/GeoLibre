@@ -37,6 +37,7 @@ export function buildProjectSnapshot(
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
+    blankBackgroundColor: state.blankBackgroundColor,
     layers: overrides.layers ?? state.layers,
     selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,

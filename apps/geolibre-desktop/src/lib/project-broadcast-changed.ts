@@ -33,6 +33,7 @@ export function projectChanged(a: AppState, b: AppState): boolean {
     a.basemapStyleUrl !== b.basemapStyleUrl ||
     a.basemapVisible !== b.basemapVisible ||
     a.basemapOpacity !== b.basemapOpacity ||
+    a.blankBackgroundColor !== b.blankBackgroundColor ||
     a.layers !== b.layers ||
     a.layerGroups !== b.layerGroups ||
     a.preferences !== b.preferences ||

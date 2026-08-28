@@ -2156,6 +2156,8 @@ export interface GeoLibreProject {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  /** Custom colour for the Blank background. Null uses the current theme default. */
+  blankBackgroundColor?: string | null;
   layers: GeoLibreLayer[];
   /**
    * Layer selected in the Layers panel when the project was saved. Omitted by

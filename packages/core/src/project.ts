@@ -101,6 +101,7 @@ export function createEmptyProject(
     basemapStyleUrl: options.basemapStyleUrl ?? DEFAULT_BASEMAP,
     basemapVisible: true,
     basemapOpacity: 1,
+    blankBackgroundColor: null,
     layers: [],
     layerGroups: [],
     styles: {},
@@ -268,6 +269,11 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
+  const blankBackgroundColor =
+    typeof data.blankBackgroundColor === "string" &&
+    /^#[0-9a-f]{6}$/i.test(data.blankBackgroundColor)
+      ? data.blankBackgroundColor
+      : null;
   // Secondary panes already go through normalizeMapViewState; the primary
   // camera must too so a hand-edited project cannot store an out-of-range
   // view that MapLibre would silently clamp, leaving saved state wrong.
@@ -286,6 +292,7 @@ export function parseProject(json: string): GeoLibreProject {
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
+    blankBackgroundColor,
     layers,
     ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
@@ -1521,6 +1528,7 @@ export function projectFromStore(state: {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  blankBackgroundColor?: string | null;
   layers: GeoLibreLayer[];
   selectedLayerId?: string | null;
   layerGroups?: LayerGroup[];
@@ -1589,6 +1597,7 @@ export function projectFromStore(state: {
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
+    ...(state.blankBackgroundColor ? { blankBackgroundColor: state.blankBackgroundColor } : {}),
     layers: state.layers.map(prepareLayerForSave),
     ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
@@ -1710,6 +1719,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  blankBackgroundColor: string | null;
   layers: GeoLibreLayer[];
   layerGroups: LayerGroup[];
   preferences: ProjectPreferences;
@@ -1752,6 +1762,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapStyleUrl = project.basemapStyleUrl;
   const basemapVisible = project.basemapVisible ?? true;
   const basemapOpacity = project.basemapOpacity ?? 1;
+  const blankBackgroundColor = project.blankBackgroundColor ?? null;
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
   const mapView = normalizeMapViewState(project.mapView);
@@ -1807,6 +1818,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
+    blankBackgroundColor,
     layers: normalizedLayers,
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),

@@ -1267,6 +1267,7 @@ export const MapCanvas = memo(function MapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
   const mapPreferences = useAppStore((s) => s.preferences.map);
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
@@ -1430,6 +1431,7 @@ export const MapCanvas = memo(function MapCanvas({
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
       mc.setBasemapOpacity(state.basemapOpacity);
+      mc.setBlankBackgroundColor(state.blankBackgroundColor);
       mc.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         resolveHighlightIds(state),
@@ -1503,6 +1505,7 @@ export const MapCanvas = memo(function MapCanvas({
       const state = useAppStore.getState();
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
+      controller.current?.setBlankBackgroundColor(state.blankBackgroundColor);
       controller.current?.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         resolveHighlightIds(state),
@@ -1528,6 +1531,14 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.setBlankBackgroundColor(blankBackgroundColor);
+    if (blankBackgroundColor !== null || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => controller.current?.setBlankBackgroundColor(null));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [blankBackgroundColor]);
 
   useEffect(() => {
     controller.current?.applyMapPreferences(mapPreferences);

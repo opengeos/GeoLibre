@@ -50,6 +50,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
 
   // Camera primitives, split out so the apply effects depend on values rather
   // than object identity (a new `mapView` object with equal values is a no-op).
@@ -123,6 +124,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       const live = useAppStore.getState();
       mc.setBasemapVisible(live.basemapVisible);
       mc.setBasemapOpacity(live.basemapOpacity);
+      mc.setBlankBackgroundColor(live.blankBackgroundColor);
     });
 
     let resizeFrame: number | null = null;
@@ -156,6 +158,10 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     if (prevBasemap.current !== basemapStyleUrl) {
       prevBasemap.current = basemapStyleUrl;
+      controller.current?.getMap()?.once("style.load", () => {
+        const live = useAppStore.getState();
+        controller.current?.setBlankBackgroundColor(live.blankBackgroundColor);
+      });
       controller.current?.setStyle(basemapStyleUrl);
     }
   }, [basemapStyleUrl]);
@@ -165,6 +171,14 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.setBlankBackgroundColor(blankBackgroundColor);
+    if (blankBackgroundColor !== null || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => controller.current?.setBlankBackgroundColor(null));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [blankBackgroundColor]);
 
   // Map preferences (projection, zoom/pitch limits, bounds) are shared with the
   // primary map; re-apply them when they change so a pane doesn't keep the

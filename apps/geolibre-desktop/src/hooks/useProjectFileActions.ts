@@ -760,6 +760,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       basemapStyleUrl: state.basemapStyleUrl,
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,
+      blankBackgroundColor: state.blankBackgroundColor,
       layers: layersOverride ?? state.layers,
       selectedLayerId: state.selectedLayerId,
       layerGroups: state.layerGroups,

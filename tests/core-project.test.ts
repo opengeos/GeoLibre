@@ -21,6 +21,21 @@ import {
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
+  it("round-trips a custom blank background color and defaults legacy projects", () => {
+    const base = createEmptyProject("Blank background");
+    const customized = parseProject(serializeProject({ ...base, blankBackgroundColor: "#1f2937" }));
+    assert.equal(customized.blankBackgroundColor, "#1f2937");
+
+    const legacy = { ...base };
+    delete legacy.blankBackgroundColor;
+    assert.equal(parseProject(serializeProject(legacy)).blankBackgroundColor, null);
+    assert.equal(
+      parseProject(serializeProject({ ...base, blankBackgroundColor: "not-a-color" }))
+        .blankBackgroundColor,
+      null,
+    );
+  });
+
   it("preserves a valid selected layer and drops a dangling selection", () => {
     const base = createEmptyProject("Selection");
     const layer = geojsonLayer({ id: "chosen" });

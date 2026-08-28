@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
 import {
   NETCDF_IMAGE_SOURCE_KIND,
+  BLANK_BASEMAP,
   DEFAULT_BASEMAP,
   effectiveLayerRenderState,
   getPlanetaryBasemapById,
@@ -109,6 +110,7 @@ import { KIND_I18N_KEY } from "../layout/add-data/constants";
 import { openAddData } from "../layout/add-data/open-add-data";
 import {
   Button,
+  ColorField,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -672,8 +674,10 @@ export function LayerPanel({
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
+  const setBlankBackgroundColor = useAppStore((s) => s.setBlankBackgroundColor);
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
   const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
@@ -749,6 +753,7 @@ export function LayerPanel({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
+  const [backgroundAppearanceOpen, setBackgroundAppearanceOpen] = useState(false);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
   const [metadataCopied, setMetadataCopied] = useState(false);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
@@ -1077,6 +1082,12 @@ export function LayerPanel({
       : 0
     : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
+  const blankBackgroundActive = basemapStyleUrl === BLANK_BASEMAP;
+  const effectiveBlankBackgroundColor =
+    blankBackgroundColor ??
+    (typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+      ? "#262626"
+      : "#ffffff");
   const allLayersVisible =
     basemapVisible &&
     layers.every((layer) => layer.visible) &&
@@ -4442,7 +4453,7 @@ export function LayerPanel({
                 ? "border-primary bg-primary/5"
                 : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
             }`}
-            title={t("layers.doubleClickToChangeBasemap")}
+            title={t("layers.doubleClickToChangeBackground")}
             onClick={() => selectLayer(BACKGROUND_SELECTION_ID)}
             onDoubleClick={() => setBasemapPickerOpen(true)}
             onKeyDown={(e) => {
@@ -4485,12 +4496,40 @@ export function LayerPanel({
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="flex-1 truncate text-sm font-medium">{t("layers.background")}</span>
               <span className="text-[10px] uppercase text-muted-foreground">
-                {t("layers.typeBasemap")}
+                {t("layers.typeBackground")}
               </span>
+              {blankBackgroundActive ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={t("layers.backgroundAppearance")}
+                  aria-label={t("layers.backgroundAppearance")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBackgroundAppearanceOpen(true);
+                  }}
+                >
+                  <Palette className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("layers.changeBackground")}
+                aria-label={t("layers.changeBackground")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBasemapPickerOpen(true);
+                }}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
             </div>
             <LayerOpacitySlider
               label={t("layers.opacity")}
-              ariaLabel={t("layers.basemapOpacity")}
+              ariaLabel={t("layers.backgroundOpacity")}
               value={basemapOpacity}
               onChange={setBasemapOpacity}
             />
@@ -4500,6 +4539,32 @@ export function LayerPanel({
       <Separator />
       <LayerPanelPlaceSearch mapControllerRef={mapControllerRef} />
       <BasemapPickerDialog open={basemapPickerOpen} onOpenChange={setBasemapPickerOpen} />
+      <Dialog open={backgroundAppearanceOpen} onOpenChange={setBackgroundAppearanceOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("layers.blankBackground")}</DialogTitle>
+            <DialogDescription>{t("layers.blankBackgroundDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="blank-background-color">{t("layers.color")}</Label>
+              <ColorField
+                id="blank-background-color"
+                value={effectiveBlankBackgroundColor}
+                onChange={setBlankBackgroundColor}
+                allowTransparent={false}
+                eyedropperLabel={t("common.pickColorFromScreen")}
+              />
+            </div>
+            <LayerOpacitySlider
+              label={t("layers.opacity")}
+              ariaLabel={t("layers.backgroundOpacity")}
+              value={basemapOpacity}
+              onChange={setBasemapOpacity}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={!!bindTimeSliderLayerId}
         onOpenChange={(open: boolean) => {

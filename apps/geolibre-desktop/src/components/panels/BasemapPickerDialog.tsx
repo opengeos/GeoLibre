@@ -236,8 +236,8 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
           <DialogTitle>{t("basemapPicker.title")}</DialogTitle>
           <DialogDescription>
             {protomapsPresets.length > 0
-              ? t("newProject.basemapDescription")
-              : t("newProject.basemapDescriptionNoProtomaps")}
+              ? t("basemapPicker.description")
+              : t("basemapPicker.descriptionNoProtomaps")}
           </DialogDescription>
         </DialogHeader>
 
