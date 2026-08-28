@@ -15,6 +15,7 @@ import {
   createDefaultMapView,
   createEmptyProject,
   DEFAULT_PROJECT_NAME,
+  normalizeBlankBackgroundColor,
 } from "./project";
 import { initialLayerStyle } from "./layer-defaults";
 import {
@@ -1329,7 +1330,8 @@ export const useAppStore = create<AppState>()(
         })),
       setBasemapVisible: (visible) => set({ basemapVisible: visible, isDirty: true }),
       setBasemapOpacity: (opacity) => set({ basemapOpacity: opacity, isDirty: true }),
-      setBlankBackgroundColor: (color) => set({ blankBackgroundColor: color, isDirty: true }),
+      setBlankBackgroundColor: (color) =>
+        set({ blankBackgroundColor: normalizeBlankBackgroundColor(color), isDirty: true }),
       setPreferences: (preferences) => set({ preferences, isDirty: true }),
       setLegend: (legend) => set({ legend, isDirty: true }),
 

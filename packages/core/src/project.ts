@@ -81,7 +81,7 @@ export interface CreateProjectOptions {
   ellipsoidId?: string;
 }
 
-function normalizeBlankBackgroundColor(value: unknown): string | null {
+export function normalizeBlankBackgroundColor(value: unknown): string | null {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
 }
 

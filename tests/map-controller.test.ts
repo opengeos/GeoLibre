@@ -3,12 +3,14 @@ import { afterEach, describe, it } from "node:test";
 import * as maplibregl from "maplibre-gl";
 import {
   DEFAULT_LAYER_STYLE,
+  BLANK_BASEMAP,
   setActiveEllipsoidId,
   type GeoLibreLayer,
   type LayerStyle,
 } from "@geolibre/core";
 import {
   createMapController,
+  defaultBlankBackgroundColor,
   geolocateControlFactory,
   MapController,
 } from "../packages/map/src/map-controller";
@@ -22,6 +24,7 @@ interface MapControllerInternals {
   styleReady: boolean;
   layerIds: string[];
   syncedLayers: GeoLibreLayer[];
+  basemapStyleUrl: string;
 }
 
 interface FakeMap {
@@ -773,6 +776,34 @@ describe("MapController.syncLayers vector-tile time filtering", () => {
 });
 
 describe("MapController basemap controls", () => {
+  it("uses the light theme default when no DOM is available", () => {
+    assert.equal(defaultBlankBackgroundColor(), "#ffffff");
+  });
+
+  it("applies custom colors only to the Blank background", () => {
+    const blankLayerId = "geolibre-blank-background";
+    const { map, fake } = makeFakeMap([blankLayerId]);
+    const controller = controllerWith(map);
+    const internal = internals(controller);
+
+    internal.basemapStyleUrl = BLANK_BASEMAP;
+    controller.setBlankBackgroundColor("#123abc");
+    assert.ok(
+      fake.calls.some(
+        (call) =>
+          call.method === "setPaintProperty" &&
+          call.args[0] === blankLayerId &&
+          call.args[1] === "background-color" &&
+          call.args[2] === "#123abc",
+      ),
+    );
+
+    fake.calls.length = 0;
+    internal.basemapStyleUrl = "geolibre://basemap/moon";
+    controller.setBlankBackgroundColor("#ff0000");
+    assert.equal(fake.calls.length, 0);
+  });
+
   it("hides and shows basemap style layers", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);

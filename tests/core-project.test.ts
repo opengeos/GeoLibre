@@ -913,6 +913,13 @@ describe("multi-map grid persistence", () => {
 });
 
 describe("app store", () => {
+  it("normalizes Blank background colors written through the store", () => {
+    useAppStore.getState().setBlankBackgroundColor("#123abc");
+    assert.equal(useAppStore.getState().blankBackgroundColor, "#123abc");
+    useAppStore.getState().setBlankBackgroundColor("invalid");
+    assert.equal(useAppStore.getState().blankBackgroundColor, null);
+  });
+
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Test Project" });
     useAppStore.getState().clearRecentProjects();
