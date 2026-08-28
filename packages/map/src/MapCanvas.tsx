@@ -436,7 +436,8 @@ function createGlobalIdentifyPopupElement(
   title.className = "font-semibold text-foreground";
   title.textContent = labels.title(hits.length);
   const header = document.createElement("div");
-  header.className = "mb-2 flex items-center justify-between gap-3 pe-10";
+  header.className =
+    "sticky top-0 z-10 mb-2 flex items-center justify-between gap-3 bg-popover pe-10";
   const actions = document.createElement("div");
   actions.className = "flex shrink-0 items-center gap-1";
   const detailsElements: HTMLDetailsElement[] = [];
@@ -2172,7 +2173,7 @@ export const MapCanvas = memo(function MapCanvas({
           if (allHits.length === 0) {
             identifyPopup.current?.remove();
             identifyPopup.current = null;
-            selectFeature(null);
+            selectLayer(null);
             return;
           }
           activate(allHits[0]);
