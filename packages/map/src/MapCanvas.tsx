@@ -430,14 +430,13 @@ function createGlobalIdentifyPopupElement(
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
-    "geolibre-identify-popup-root geolibre-identify-popup-root--grouped flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
+    "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
 
   const title = document.createElement("div");
   title.className = "font-semibold text-foreground";
   title.textContent = labels.title(hits.length);
   const header = document.createElement("div");
-  header.className =
-    "sticky top-0 z-10 mb-2 flex items-center justify-between gap-3 bg-popover pe-10";
+  header.className = "mb-2 flex shrink-0 items-center justify-between gap-3 pe-10";
   const actions = document.createElement("div");
   actions.className = "flex shrink-0 items-center gap-1";
   const detailsElements: HTMLDetailsElement[] = [];
@@ -459,6 +458,14 @@ function createGlobalIdentifyPopupElement(
   );
   header.append(title, actions);
   root.appendChild(header);
+
+  // Only the results scroll. Scrolling `root` instead would run the scrollbar
+  // up the full popup height, and a sticky header painted over MapLibre's own
+  // close button — which lives outside this element and takes no stacking
+  // order from it.
+  const body = document.createElement("div");
+  body.className = "geolibre-identify-popup-groups";
+  root.appendChild(body);
 
   const groups = new Map<string, GlobalIdentifyHit[]>();
   for (const hit of hits) {
@@ -525,7 +532,7 @@ function createGlobalIdentifyPopupElement(
       );
       section.appendChild(featureContainer);
     }
-    root.appendChild(section);
+    body.appendChild(section);
   }
 
   return root;
@@ -2154,6 +2161,23 @@ export const MapCanvas = memo(function MapCanvas({
           hits.push(hit);
         }
 
+        // DuckDB query layers draw through deck.gl, so they own no MapLibre
+        // style layer and never surface in queryRenderedFeatures. The plugin
+        // bridge picks them the same way the single-layer path does.
+        for (const candidate of eligibleLayers) {
+          if (!isDuckDBQueryLayer(candidate)) continue;
+          const result = duckDBBridge()?.identifyLayerAtPoint?.(candidate.id, {
+            x: event.point.x,
+            y: event.point.y,
+          });
+          if (!result) continue;
+          hits.push({
+            layer: candidate,
+            properties: result.properties,
+            featureId: result.featureId,
+          });
+        }
+
         const activate = (hit: GlobalIdentifyHit) => {
           selectLayer(hit.layer.id);
           selectFeature(hit.featureId);
@@ -2232,6 +2256,10 @@ export const MapCanvas = memo(function MapCanvas({
                 };
               }
 
+              // Ordered before the pixel-identify branch on purpose: the
+              // NetCDF dialog marks these layers `pixelIdentify` too, and that
+              // branch reads through the Time Slider bridge, which knows
+              // nothing about a retained NetCDF grid.
               if (candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
                 const result = await identifyRasterLayerAt?.(
                   candidate,

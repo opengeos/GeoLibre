@@ -2161,7 +2161,12 @@ body,
   overflow: hidden;
 }
 
-.geolibre-identify-popup-root--grouped {
+/* The grouped popup keeps its header and its Expand/Collapse controls in view
+   and scrolls only the results, so the scrollbar starts below the header rather
+   than running the full height of the popup. */
+.geolibre-identify-popup-groups {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -2240,13 +2245,6 @@ body,
 .geolibre-identify-popup .maplibregl-popup-close-button:hover {
   background: hsl(var(--accent));
   color: hsl(var(--accent-foreground));
-}
-
-/* The grouped popup scrolls at its outer edge. Move the close target inward so
-   it never crowds or overlaps that scrollbar. */
-.geolibre-identify-popup:has(.geolibre-identify-popup-root--grouped)
-  .maplibregl-popup-close-button {
-  inset-inline-end: 1.25rem;
 }
 
 .geolibre-identify-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,

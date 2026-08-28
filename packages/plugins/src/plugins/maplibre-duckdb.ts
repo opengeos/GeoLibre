@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
   type GeoLibreLayer,
   type LayerStyle,
@@ -435,7 +436,10 @@ function createDuckDBControl(DuckDBControlClass: DuckDBControlConstructor): Duck
       shouldSyncControl = true;
     }
 
-    if (state.identifyLayerId !== previous.identifyLayerId) {
+    // Under the all-layers sentinel pickability depends on whether any DuckDB
+    // layer exists, so a layer added or removed while Identify is already on
+    // has to re-sync it too.
+    if (state.identifyLayerId !== previous.identifyLayerId || state.layers !== previous.layers) {
       syncDuckDBPickableFromStore(state.layers, state.identifyLayerId);
     }
 
@@ -582,14 +586,33 @@ function clearDuckDBRenderedLayers(): void {
   getMutableDuckDBControl()?.renderer?.clear?.();
 }
 
+/**
+ * Whether a click should be answered by the DuckDB bridge rather than by the
+ * control's own handlers.
+ *
+ * True while Identify targets one DuckDB layer, and while all-layer Identify is
+ * on and any DuckDB layer exists: MapCanvas hit-tests every eligible DuckDB
+ * layer through `identifyLayerAtPoint` in that mode, which needs a pickable
+ * overlay just as the single-layer path does.
+ *
+ * @param layers Store layers.
+ * @param identifyLayerId Identify target, or the all-layers sentinel.
+ * @returns True when the bridge owns the click.
+ */
+function duckDBIdentifyModeActiveFor(
+  layers: GeoLibreLayer[],
+  identifyLayerId: string | null,
+): boolean {
+  if (identifyLayerId === IDENTIFY_ALL_LAYERS_ID) return layers.some(isDuckDBQueryLayer);
+  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
+  return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
+}
+
 function syncDuckDBPickableFromStore(
   layers = useAppStore.getState().layers,
   identifyLayerId = useAppStore.getState().identifyLayerId,
 ): void {
-  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
-  getMutableDuckDBControl()?.setPickable?.(
-    Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer)),
-  );
+  getMutableDuckDBControl()?.setPickable?.(duckDBIdentifyModeActiveFor(layers, identifyLayerId));
 }
 
 function patchDuckDBControlSelection(control: DuckDBControl): void {
@@ -619,8 +642,7 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
 
 function isDuckDBIdentifyModeActive(): boolean {
   const { identifyLayerId, layers } = useAppStore.getState();
-  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
-  return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
+  return duckDBIdentifyModeActiveFor(layers, identifyLayerId);
 }
 
 // Mirror the store-driven selection into the control's own attribute pane so
