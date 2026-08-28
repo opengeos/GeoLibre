@@ -237,15 +237,21 @@ export function FieldCollectionDialog({
   // layer is deleted from the Layers panel, fall back to another collection
   // layer so the pill keeps naming a real destination. Left alone while the
   // dialog is open, where losing the target is what shows the setup step.
+  // `picking`/`drawing` are excluded along with `open`: the dialog is hidden
+  // during a placement, but the Layers panel is not, and retargeting mid-pick
+  // would swap the schema and geometry out from under a capture already in
+  // flight — it would then be saved into a layer the user never aimed at. Once
+  // the placement finishes, the capture drops to the setup step instead (its
+  // layer really is gone), and the fallback applies on the next close.
   useEffect(() => {
-    if (open || !layerId) return;
+    if (open || picking || drawing || !layerId) return;
     if (collectionLayers.some((l) => l.id === layerId)) return;
     const fallback = collectionLayers[0]?.id ?? "";
     // Landing on "" here is the project running out of collection layers, not
     // the user asking for the setup step, so don't record it as a choice.
     if (!fallback) targetChosenRef.current = false;
     setLayerId(fallback);
-  }, [open, layerId, collectionLayers]);
+  }, [open, picking, drawing, layerId, collectionLayers]);
 
   // Allow creating again after returning to the "new layer" setup step.
   useEffect(() => {
