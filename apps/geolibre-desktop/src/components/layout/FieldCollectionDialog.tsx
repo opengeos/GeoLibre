@@ -198,8 +198,9 @@ export function FieldCollectionDialog({
   const savedCountRef = useRef(0);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
-  // Set just before we reopen the dialog after a map capture, so the open-reset
-  // effect below doesn't wipe the freshly captured geometry/form.
+  // "The next open must keep what is already captured." Set just before the
+  // dialog reopens itself after a map capture, and on a dismissal that leaves a
+  // capture in hand, so the open-reset effect doesn't wipe the geometry/form.
   const suppressResetRef = useRef(false);
   // True while the tool is in use; gates async GPS callbacks so a fix that
   // arrives after the dialog is dismissed doesn't mutate the map/state.
@@ -235,26 +236,6 @@ export function FieldCollectionDialog({
   useEffect(() => {
     if (open) setSessionActive(true);
   }, [open]);
-
-  // Keep the session's target honest while the dialog is closed: if the target
-  // layer is deleted from the Layers panel, fall back to another collection
-  // layer so the pill keeps naming a real destination. Left alone while the
-  // dialog is open, where losing the target is what shows the setup step.
-  // `picking`/`drawing` are excluded along with `open`: the dialog is hidden
-  // during a placement, but the Layers panel is not, and retargeting mid-pick
-  // would swap the schema and geometry out from under a capture already in
-  // flight — it would then be saved into a layer the user never aimed at. Once
-  // the placement finishes, the capture drops to the setup step instead (its
-  // layer really is gone), and the fallback applies on the next close.
-  useEffect(() => {
-    if (open || picking || drawing || !layerId) return;
-    if (collectionLayers.some((l) => l.id === layerId)) return;
-    const fallback = collectionLayers[0]?.id ?? "";
-    // Landing on "" here is the project running out of collection layers, not
-    // the user asking for the setup step, so don't record it as a choice.
-    if (!fallback) targetChosenRef.current = false;
-    setLayerId(fallback);
-  }, [open, picking, drawing, layerId, collectionLayers]);
 
   // Allow creating again after returning to the "new layer" setup step.
   useEffect(() => {
@@ -406,10 +387,35 @@ export function FieldCollectionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectGeneration]);
 
-  // Tear down any preview when the dialog fully closes (not while drawing with
-  // it intentionally hidden) and on unmount.
+  // Keep the session's target honest while the dialog is closed: if the target
+  // layer is deleted from the Layers panel, fall back to another collection
+  // layer so the pill keeps naming a real destination. The capture goes with
+  // the layer rather than being retargeted — including one preserved across a
+  // dismissal, which was made for the layer that just disappeared.
+  //
+  // Left alone while the dialog is open, where losing the target is what shows
+  // the setup step. `picking`/`drawing` are excluded along with `open`: the
+  // dialog is hidden during a placement but the Layers panel is not, and
+  // retargeting mid-pick would swap the schema and geometry out from under a
+  // capture already in flight. That case aborts the placement instead (below),
+  // and the fallback applies on the next close.
   useEffect(() => {
-    if (!open && !picking && !drawing) clearPreview();
+    if (open || picking || drawing || !layerId) return;
+    if (collectionLayers.some((l) => l.id === layerId)) return;
+    const fallback = collectionLayers[0]?.id ?? "";
+    // Landing on "" here is the project running out of collection layers, not
+    // the user asking for the setup step, so don't record it as a choice.
+    if (!fallback) targetChosenRef.current = false;
+    suppressResetRef.current = false;
+    resetCapture(fallback);
+  }, [open, picking, drawing, layerId, collectionLayers, resetCapture]);
+
+  // Tear down any preview when the dialog fully closes (not while drawing with
+  // it intentionally hidden) and on unmount. A capture being kept across a
+  // dismissal keeps its marker too: the reason to dismiss is to look at the
+  // map, which is not the moment to hide where the pending point is.
+  useEffect(() => {
+    if (!open && !picking && !drawing && !suppressResetRef.current) clearPreview();
   }, [open, picking, drawing, clearPreview]);
   useEffect(() => () => clearPreview(), [clearPreview]);
 
@@ -464,8 +470,17 @@ export function FieldCollectionDialog({
   }, [invalidateCapture, onOpenChange]);
 
   // Radix routes the X, Escape, and an overlay click through here. Dismissing
-  // the dialog keeps the session running, but it must still invalidate any
-  // in-flight GPS fix, or a slow callback could land on a dismissed dialog.
+  // the dialog keeps the session running, and a capture already in hand
+  // survives with it: dismissing to check something on the map and coming back
+  // through the pill is a normal move now, so the suppress flag keeps the
+  // reopen from wiping a placed point and a half-filled form.
+  //
+  // The invalidation still runs, so this preserves the *capture*, not the async
+  // work behind it — a GPS fix or photo read still in flight is dropped rather
+  // than landing on a dialog that is no longer showing (`activeRef` gates the
+  // GPS callbacks for the same reason). With nothing captured there is nothing
+  // worth keeping, and the reset clears the leftover notice and session count.
+  //
   // Dismissing before any collection layer exists is the one case that ends the
   // session instead: the pill's whole job is to name the capture target, so a
   // session with nothing to capture into would be unreachable.
@@ -474,10 +489,11 @@ export function FieldCollectionDialog({
       if (!next) {
         invalidateCapture();
         if (collectionLayers.length === 0) setSessionActive(false);
+        else if (pending || vertices.length > 0 || photo) suppressResetRef.current = true;
       }
       onOpenChange(next);
     },
-    [collectionLayers.length, invalidateCapture, onOpenChange],
+    [collectionLayers.length, invalidateCapture, onOpenChange, pending, photo, vertices.length],
   );
 
   const handlePickOnMap = useCallback(() => {
