@@ -1,9 +1,17 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 // A value (not type-only) namespace import: main added runtime use of
 // `maplibregl.LngLat`/`maplibregl.Marker` here, and v6 has no default export.
 import * as maplibregl from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "../types";
 import { ANNOTATIONS_PLUGIN_ID } from "../plugin-ids";
 
 /**
@@ -129,7 +137,10 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
     appApi = null;
   },
   getMapControlPosition: () => annotationsPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
+  setMapControlPosition: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition
+  ) => {
     if (!toolbarControl) {
       annotationsPosition = position;
       return;
@@ -297,8 +308,11 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
-    container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
-    this.relabelers = [() => container.setAttribute("aria-label", labels.toolbar)];
+    container.className =
+      "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
+    this.relabelers = [
+      () => container.setAttribute("aria-label", labels.toolbar),
+    ];
 
     const collapseButton = document.createElement("button");
     collapseButton.type = "button";
@@ -310,7 +324,9 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       this.syncCollapsedState();
       this.relabel();
     });
-    this.applyLabel(collapseButton, () => (this.collapsed ? labels.expand : labels.collapse));
+    this.applyLabel(collapseButton, () =>
+      this.collapsed ? labels.expand : labels.collapse
+    );
     container.appendChild(collapseButton);
 
     const toolsContainer = document.createElement("div");
@@ -360,27 +376,30 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       this.relabel();
     });
     renderWidth();
-    this.applyLabel(width, () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`);
+    this.applyLabel(
+      width,
+      () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`
+    );
     toolsContainer.appendChild(width);
 
     const newLayer = this.makeActionButton(
       () => labels.newLayer,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
-      () => createAnnotationLayer(),
+      () => createAnnotationLayer()
     );
     toolsContainer.appendChild(newLayer);
 
     const deleteLast = this.makeActionButton(
       () => labels.deleteLast,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>',
-      () => deleteLastAnnotation(),
+      () => deleteLastAnnotation()
     );
     toolsContainer.appendChild(deleteLast);
 
     const clearAll = this.makeActionButton(
       () => labels.clearAll,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
-      () => clearAllAnnotations(),
+      () => clearAllAnnotations()
     );
     toolsContainer.appendChild(clearAll);
 
@@ -418,7 +437,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
   private makeActionButton(
     getLabel: () => string,
     icon: string,
-    onClick: () => void,
+    onClick: () => void
   ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
@@ -453,6 +472,9 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 // ---------------------------------------------------------------------------
 
 function setActiveTool(tool: AnnotationTool | null): void {
+  if (movingAnnotationId) {
+    movingAnnotationId = null;
+  }
   if (activeTool === tool) return;
   resetDrawState();
   // Drop any in-progress preview (e.g. an arrow whose start point was placed)
@@ -465,7 +487,8 @@ function setActiveTool(tool: AnnotationTool | null): void {
   if (!map) return;
   // Drag-based tools (rectangle/ellipse/freehand) own the pointer, so suspend
   // map panning while one is active and restore it otherwise.
-  const dragTool = tool === "rectangle" || tool === "ellipse" || tool === "freehand";
+  const dragTool =
+    tool === "rectangle" || tool === "ellipse" || tool === "freehand";
   if (dragTool) {
     map.dragPan.disable();
   } else {
@@ -493,7 +516,7 @@ function closeElementPopup(): void {
 
 function computePopupPosition(
   map: maplibregl.Map,
-  lngLat: maplibregl.LngLat,
+  lngLat: maplibregl.LngLat
 ): { left: number; top: number } {
   const point = map.project(lngLat);
   const canvasRect = map.getCanvasContainer().getBoundingClientRect();
@@ -503,7 +526,8 @@ function computePopupPosition(
   let top = point.y + 12;
 
   if (left < 10) left = 10;
-  if (left + boxWidth > canvasRect.width - 10) left = canvasRect.width - boxWidth - 10;
+  if (left + boxWidth > canvasRect.width - 10)
+    left = canvasRect.width - boxWidth - 10;
   if (top + 180 > canvasRect.height - 10) top = Math.max(10, point.y - 190);
 
   return { left, top };
@@ -517,7 +541,11 @@ function repositionElementPopup(): void {
   activePopupContainer.style.top = `${top}px`;
 }
 
-function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, feature: Feature): void {
+function showElementPopup(
+  map: maplibregl.Map,
+  lngLat: maplibregl.LngLat,
+  feature: Feature
+): void {
   closeElementPopup();
 
   const props = (feature.properties as Record<string, unknown>) ?? {};
@@ -585,7 +613,8 @@ function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, featur
 
     const img = document.createElement("img");
     img.src = imageUrl;
-    img.style.cssText = "width: 100%; max-height: 140px; object-fit: contain; display: block;";
+    img.style.cssText =
+      "width: 100%; max-height: 140px; object-fit: contain; display: block;";
 
     img.onerror = () => {
       wrapper.innerHTML = `
@@ -646,7 +675,8 @@ function syncPinMarkers(): void {
     const id = String(props.annotationId || f.id);
     const visible = props.visible !== false;
     const geom = f.geometry as { type: string; coordinates: [number, number] };
-    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates))
+      continue;
     const coords = geom.coordinates;
 
     currentIds.add(id);
@@ -691,7 +721,10 @@ function syncPinMarkers(): void {
         showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
       };
 
-      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
+      const marker = new maplibregl.Marker({
+        element: container,
+        anchor: "bottom",
+      })
         .setLngLat(coords as [number, number])
         .addTo(map);
 
@@ -753,7 +786,8 @@ function syncStickyNoteMarkers(): void {
     const id = String(props.annotationId || f.id);
     const visible = props.visible !== false;
     const geom = f.geometry as { type: string; coordinates: [number, number] };
-    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates))
+      continue;
     const coords = geom.coordinates;
 
     currentIds.add(id);
@@ -820,7 +854,10 @@ function syncStickyNoteMarkers(): void {
         showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
       };
 
-      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
+      const marker = new maplibregl.Marker({
+        element: container,
+        anchor: "bottom",
+      })
         .setLngLat(coords as [number, number])
         .addTo(map);
 
@@ -884,10 +921,19 @@ function isLightColor(hex: string): boolean {
 
 function isValidColor(color: string): boolean {
   if (!color) return false;
-  if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) return true;
-  if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(color))
+  if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color))
     return true;
-  if (/^hsla?\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(color))
+  if (
+    /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(
+      color
+    )
+  )
+    return true;
+  if (
+    /^hsla?\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(
+      color
+    )
+  )
     return true;
   return /^[a-zA-Z]{3,20}$/.test(color);
 }
@@ -913,7 +959,8 @@ function syncPlacedImageMarkers(): void {
     const id = String(props.annotationId || f.id);
     const visible = props.visible !== false;
     const geom = f.geometry as { type: string; coordinates: [number, number] };
-    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates))
+      continue;
     const coords = geom.coordinates;
 
     currentIds.add(id);
@@ -936,7 +983,8 @@ function syncPlacedImageMarkers(): void {
         "display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--geolibre-bg, #ffffff); color: var(--geolibre-fg, #1f2937); border-radius: 16px; border: 1px solid var(--geolibre-border, #d1d5db); box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 500; user-select: none;";
 
       const iconSpan = document.createElement("span");
-      iconSpan.style.cssText = "display: inline-flex; align-items: center; color: #3b82f6;";
+      iconSpan.style.cssText =
+        "display: inline-flex; align-items: center; color: #3b82f6;";
       iconSpan.innerHTML = TOOL_ICONS.placed_image;
       container.appendChild(iconSpan);
 
@@ -1048,7 +1096,8 @@ function handleKeyDown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   if (movingAnnotationId) {
     movingAnnotationId = null;
-    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    if (boundMap)
+      boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
     return;
   }
   if (activeTextInput) {
@@ -1095,7 +1144,7 @@ interface ElementDialogData {
 function openElementDialog(
   event: maplibregl.MapMouseEvent,
   type: "pin" | "sticky_note" | "placed_image",
-  onSubmit: (data: ElementDialogData) => void,
+  onSubmit: (data: ElementDialogData) => void
 ): void {
   const map = boundMap;
   if (!map) return;
@@ -1117,8 +1166,10 @@ function openElementDialog(
   const boxHeight = type === "placed_image" ? 220 : 250;
   let left = event.point.x + 10;
   let top = event.point.y + 10;
-  if (left + boxWidth > canvasRect.width) left = Math.max(10, event.point.x - boxWidth - 10);
-  if (top + boxHeight > canvasRect.height) top = Math.max(10, event.point.y - boxHeight - 10);
+  if (left + boxWidth > canvasRect.width)
+    left = Math.max(10, event.point.x - boxWidth - 10);
+  if (top + boxHeight > canvasRect.height)
+    top = Math.max(10, event.point.y - boxHeight - 10);
 
   container.style.cssText = `
     position: absolute;
@@ -1169,7 +1220,11 @@ function openElementDialog(
   const titleInput = document.createElement("input");
   titleInput.type = "text";
   titleInput.value =
-    type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image";
+    type === "pin"
+      ? "Pin 1"
+      : type === "sticky_note"
+      ? "Sticky Note"
+      : "Placed Image";
   titleInput.style.cssText =
     "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; margin-bottom: 8px;";
   container.appendChild(titleInput);
@@ -1231,12 +1286,14 @@ function openElementDialog(
     const contentLabel = document.createElement("label");
     contentLabel.style.cssText =
       "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
-    contentLabel.textContent = type === "pin" ? labels.pinDescPrompt : labels.stickyNotePrompt;
+    contentLabel.textContent =
+      type === "pin" ? labels.pinDescPrompt : labels.stickyNotePrompt;
     container.appendChild(contentLabel);
 
     descInput = document.createElement("textarea");
     descInput.rows = 3;
-    descInput.placeholder = type === "pin" ? "Optional description..." : "Type note details...";
+    descInput.placeholder =
+      type === "pin" ? "Optional description..." : "Type note details...";
     descInput.style.cssText =
       "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; resize: vertical; margin-bottom: 8px;";
     container.appendChild(descInput);
@@ -1264,7 +1321,8 @@ function openElementDialog(
   container.appendChild(colorRow);
 
   const footer = document.createElement("div");
-  footer.style.cssText = "display: flex; align-items: center; justify-content: flex-end; gap: 6px;";
+  footer.style.cssText =
+    "display: flex; align-items: center; justify-content: flex-end; gap: 6px;";
 
   const cancelBtn = document.createElement("button");
   cancelBtn.type = "button";
@@ -1288,7 +1346,8 @@ function openElementDialog(
     const title =
       type === "pin"
         ? enteredTitle
-        : enteredTitle || (type === "sticky_note" ? "Sticky Note" : "Placed Image");
+        : enteredTitle ||
+          (type === "sticky_note" ? "Sticky Note" : "Placed Image");
     const description = descInput ? descInput.value.trim() : "";
 
     if (type === "placed_image" && !description) {
@@ -1329,7 +1388,8 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
   if (movingAnnotationId) {
     moveElementTo(movingAnnotationId, event.lngLat);
     movingAnnotationId = null;
-    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    if (boundMap)
+      boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
     return;
   }
   if (activeTool === "text") {
@@ -1347,7 +1407,12 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
   if (activeTool === "sticky_note") {
     openElementDialog(event, "sticky_note", (data) => {
       appendAnnotationFeatures([
-        stickyNoteFeature(event.lngLat, data.description || "Note", data.title, data.color),
+        stickyNoteFeature(
+          event.lngLat,
+          data.description || "Note",
+          data.title,
+          data.color
+        ),
       ]);
     });
     return;
@@ -1375,7 +1440,7 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
           .addImageOverlayLayer(
             data.title,
             { url: imageUrl, coordinates: corners },
-            { bounds: [lng - d, lat - d, lng + d, lat + d] },
+            { bounds: [lng - d, lat - d, lng + d, lat + d] }
           );
         // Tracking feature so the Elements panel can manage this overlay.
         const trackingFeature: Feature = {
@@ -1395,7 +1460,9 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
         };
         appendAnnotationFeatures([trackingFeature]);
       } else {
-        appendAnnotationFeatures([placedImageFeature(event.lngLat, imageUrl, data.title)]);
+        appendAnnotationFeatures([
+          placedImageFeature(event.lngLat, imageUrl, data.title),
+        ]);
       }
     });
     return;
@@ -1421,7 +1488,11 @@ function handleArrowClick(event: maplibregl.MapMouseEvent): void {
 
 function handleMouseDown(event: maplibregl.MapMouseEvent): void {
   if (!pluginActive) return;
-  if (activeTool !== "rectangle" && activeTool !== "ellipse" && activeTool !== "freehand") {
+  if (
+    activeTool !== "rectangle" &&
+    activeTool !== "ellipse" &&
+    activeTool !== "freehand"
+  ) {
     return;
   }
   // Only a primary (left) press starts a shape; mousedown fires for every
@@ -1475,7 +1546,10 @@ function handleMouseMove(event: maplibregl.MapMouseEvent): void {
 const FREEHAND_MIN_PIXELS = 4;
 
 /** True when the cursor has moved at least the sampling threshold from the last point. */
-function movedEnoughForFreehand(map: maplibregl.Map, lngLat: maplibregl.LngLat): boolean {
+function movedEnoughForFreehand(
+  map: maplibregl.Map,
+  lngLat: maplibregl.LngLat
+): boolean {
   const last = freehandPath[freehandPath.length - 1];
   if (!last) return true;
   const a = map.project(lngLat);
@@ -1612,7 +1686,7 @@ export function pinFeature(
   lngLat: maplibregl.LngLat,
   title: string,
   description: string = "",
-  color: string = strokeColor,
+  color: string = strokeColor
 ): Feature {
   return {
     type: "Feature",
@@ -1637,7 +1711,7 @@ export function stickyNoteFeature(
   lngLat: maplibregl.LngLat,
   text: string,
   title: string = "Sticky Note",
-  color: string = strokeColor,
+  color: string = strokeColor
 ): Feature {
   return {
     type: "Feature",
@@ -1661,7 +1735,7 @@ export function stickyNoteFeature(
 export function placedImageFeature(
   lngLat: maplibregl.LngLat,
   imageUrl: string,
-  title: string = "Placed Image",
+  title: string = "Placed Image"
 ): Feature {
   return {
     type: "Feature",
@@ -1734,7 +1808,7 @@ function textFeature(lngLat: maplibregl.LngLat, text: string): Feature {
 function arrowFeatures(
   map: maplibregl.Map,
   start: maplibregl.LngLat,
-  end: maplibregl.LngLat,
+  end: maplibregl.LngLat
 ): Feature[] {
   const startPx = map.project(start);
   const endPx = map.project(end);
@@ -1753,13 +1827,18 @@ function arrowFeatures(
   // Shrink the head for a short shaft so its base never sits behind the start
   // point (which would draw an inverted arrowhead the shaft punches through).
   const headLength = Math.min(ARROWHEAD_LENGTH_PX, length * 0.6);
-  const headHalfWidth = ARROWHEAD_HALF_WIDTH_PX * (headLength / ARROWHEAD_LENGTH_PX);
+  const headHalfWidth =
+    ARROWHEAD_HALF_WIDTH_PX * (headLength / ARROWHEAD_LENGTH_PX);
   const baseX = endPx.x - ux * headLength;
   const baseY = endPx.y - uy * headLength;
 
   const tip = toPos(end);
-  const left = toPos(map.unproject([baseX + px * headHalfWidth, baseY + py * headHalfWidth]));
-  const right = toPos(map.unproject([baseX - px * headHalfWidth, baseY - py * headHalfWidth]));
+  const left = toPos(
+    map.unproject([baseX + px * headHalfWidth, baseY + py * headHalfWidth])
+  );
+  const right = toPos(
+    map.unproject([baseX - px * headHalfWidth, baseY - py * headHalfWidth])
+  );
   const head: Feature = {
     type: "Feature",
     geometry: {
@@ -1782,7 +1861,7 @@ function arrowFeatures(
 function buildArrow(
   map: maplibregl.Map,
   start: maplibregl.LngLat,
-  end: maplibregl.LngLat,
+  end: maplibregl.LngLat
 ): Feature[] {
   const features = arrowFeatures(map, start, end);
   if (!features.length) return features;
@@ -1876,7 +1955,9 @@ function polygonPreview(ring: Position[]): FeatureCollection {
 }
 
 function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
-  const existing = map.getSource(PREVIEW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  const existing = map.getSource(PREVIEW_SOURCE_ID) as
+    | maplibregl.GeoJSONSource
+    | undefined;
   if (existing) {
     // The preview paint is data-driven (below), so the regenerated features —
     // which carry the current color/width — update the appearance on their own;
@@ -1914,8 +1995,10 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
 }
 
 function clearPreview(map: maplibregl.Map): void {
-  if (map.getLayer(PREVIEW_LINE_LAYER_ID)) map.removeLayer(PREVIEW_LINE_LAYER_ID);
-  if (map.getLayer(PREVIEW_FILL_LAYER_ID)) map.removeLayer(PREVIEW_FILL_LAYER_ID);
+  if (map.getLayer(PREVIEW_LINE_LAYER_ID))
+    map.removeLayer(PREVIEW_LINE_LAYER_ID);
+  if (map.getLayer(PREVIEW_FILL_LAYER_ID))
+    map.removeLayer(PREVIEW_FILL_LAYER_ID);
   if (map.getSource(PREVIEW_SOURCE_ID)) map.removeSource(PREVIEW_SOURCE_ID);
 }
 
@@ -1927,7 +2010,9 @@ function isAnnotationLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.sourceKind === ANNOTATIONS_SOURCE_KIND;
 }
 
-function findAnnotationLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
+function findAnnotationLayer(
+  layers: GeoLibreLayer[]
+): GeoLibreLayer | undefined {
   const selectedId = useAppStore.getState().selectedLayerId;
   const selected = layers.find((layer) => layer.id === selectedId);
   if (selected && isAnnotationLayer(selected)) {
@@ -1956,7 +2041,8 @@ function rediscoverAnnotationLayer(): void {
 function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
   const store = useAppStore.getState();
   const layer = annotationLayer ?? findAnnotationLayer(store.layers);
-  if (!layer || !layer.geojson || !Array.isArray(layer.geojson.features)) return;
+  if (!layer || !layer.geojson || !Array.isArray(layer.geojson.features))
+    return;
 
   const rawFeatures = layer.geojson.features as Feature[];
   let changed = false;
@@ -1991,7 +2077,7 @@ function appendAnnotationFeatures(features: Feature[]): void {
   if (!features.length) return;
   const store = useAppStore.getState();
   const existing = store.layers.find(
-    (layer) => layer.id === store.selectedLayerId && isAnnotationLayer(layer),
+    (layer) => layer.id === store.selectedLayerId && isAnnotationLayer(layer)
   );
 
   if (existing) {
@@ -2016,7 +2102,9 @@ function appendAnnotationFeatures(features: Feature[]): void {
 function createAnnotationLayer(features: Feature[] = []): string {
   const store = useAppStore.getState();
   const id = crypto.randomUUID();
-  const names = new Set(store.layers.filter(isAnnotationLayer).map((layer) => layer.name));
+  const names = new Set(
+    store.layers.filter(isAnnotationLayer).map((layer) => layer.name)
+  );
   let ordinal = 1;
   let name = labels.layerName;
   while (names.has(name)) {
@@ -2054,11 +2142,14 @@ function deleteLastAnnotation(): void {
   if (!layer || !features || features.length === 0) return;
 
   const last = features[features.length - 1];
-  const groupId = (last.properties as Record<string, unknown> | null)?.annotationId;
+  const groupId = (last.properties as Record<string, unknown> | null)
+    ?.annotationId;
   let remaining: Feature[];
   if (typeof groupId === "string") {
     remaining = features.filter(
-      (feature) => (feature.properties as Record<string, unknown> | null)?.annotationId !== groupId,
+      (feature) =>
+        (feature.properties as Record<string, unknown> | null)?.annotationId !==
+        groupId
     );
   } else {
     remaining = features.slice(0, -1);
@@ -2118,7 +2209,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       if (!map.has(id)) {
         const type = String(props.__annotation || props.shape || "element");
         const title = String(props.title || props.text || "Element");
-        const description = props.description ? String(props.description) : undefined;
+        const description = props.description
+          ? String(props.description)
+          : undefined;
         const visible = props.visible !== false;
         map.set(id, { id, type, title, description, visible, features: [f] });
       } else {
@@ -2168,7 +2261,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
     if (elements.length === 0) {
       const empty = document.createElement("div");
-      empty.style.cssText = "color: #9ca3af; text-align: center; padding: 24px 0;";
+      empty.style.cssText =
+        "color: #9ca3af; text-align: center; padding: 24px 0;";
       empty.textContent = "No map elements yet.";
       container.appendChild(empty);
       return;
@@ -2194,20 +2288,27 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         "flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
 
       if (editingId === el.id) {
-        titleContainer.style.cssText = "flex:1; min-width:0; display:grid; gap:5px;";
+        titleContainer.style.cssText =
+          "flex:1; min-width:0; display:grid; gap:5px;";
         const input = document.createElement("input");
         input.type = "text";
-        input.value = el.type === "pin" && el.title === "Element" ? "" : el.title;
+        input.value =
+          el.type === "pin" && el.title === "Element" ? "" : el.title;
         input.placeholder = "Title";
         const description = document.createElement("textarea");
         description.value = el.description ?? "";
         description.placeholder = "Description";
         description.rows = 2;
-        const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
+        const firstProps =
+          (el.features[0]?.properties as Record<string, unknown>) ?? {};
         const supportsColor = el.type !== "placed_image";
-        const supportsWidth = ["arrow", "arrowhead", "highlight", "freehand", "line"].includes(
-          el.type,
-        );
+        const supportsWidth = [
+          "arrow",
+          "arrowhead",
+          "highlight",
+          "freehand",
+          "line",
+        ].includes(el.type);
         const color = document.createElement("input");
         color.type = "color";
         color.value = String(
@@ -2215,7 +2316,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             firstProps["text-color"] ||
             firstProps.stroke ||
             firstProps.fill ||
-            DEFAULT_COLOR,
+            DEFAULT_COLOR
         );
         color.title = labels.color;
         const width = document.createElement("input");
@@ -2233,12 +2334,15 @@ export function renderElementsPanel(container: HTMLElement): () => void {
           const patch: Record<string, unknown> = {
             title: val,
             description: description.value.trim(),
-            stroke: color.value,
-            fill: color.value,
-            pinColor: color.value,
-            "text-color": color.value,
-            "stroke-width": Number(width.value) || DEFAULT_WIDTH,
           };
+          if (supportsColor) {
+            patch.stroke = color.value;
+            patch.fill = color.value;
+            patch.pinColor = color.value;
+            patch["text-color"] = color.value;
+          }
+          if (supportsWidth)
+            patch["stroke-width"] = Number(width.value) || DEFAULT_WIDTH;
           if (el.type === "text") patch.text = val;
           updateElementProps(el.id, patch);
           editingId = null;
@@ -2263,6 +2367,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         const save = document.createElement("button");
         save.type = "button";
         save.textContent = labels.saveElement;
+        save.style.cssText =
+          "border: none; background: none; cursor: pointer; color: #2563eb; padding: 2px;";
         save.onclick = commit;
         titleContainer.appendChild(save);
         setTimeout(() => input.focus(), 10);
@@ -2289,6 +2395,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       edit.textContent = "✎";
       edit.title = labels.edit;
       edit.setAttribute("aria-label", labels.edit);
+      edit.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
       edit.onclick = (e) => {
         e.stopPropagation();
         editingId = editingId === el.id ? null : el.id;
@@ -2300,6 +2408,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       move.textContent = "⌖";
       move.title = labels.move;
       move.setAttribute("aria-label", labels.move);
+      move.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
       move.onclick = (e) => {
         e.stopPropagation();
         movingAnnotationId = el.id;
@@ -2345,7 +2455,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       ctrl.appendChild(vis);
 
       const otherLayers = store.layers.filter(
-        (candidate) => isAnnotationLayer(candidate) && candidate.id !== layer?.id,
+        (candidate) =>
+          isAnnotationLayer(candidate) && candidate.id !== layer?.id
       );
       if (otherLayers.length > 0) {
         const transfer = document.createElement("select");
@@ -2362,7 +2473,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
           transfer.appendChild(option);
         }
         transfer.onchange = () => {
-          if (layer && transfer.value) moveElementToLayer(el.id, layer.id, transfer.value);
+          if (layer && transfer.value)
+            moveElementToLayer(el.id, layer.id, transfer.value);
         };
         ctrl.appendChild(transfer);
       }
@@ -2387,11 +2499,19 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
   update();
   const unsub = useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers || state.selectedLayerId !== previous.selectedLayerId) {
+    if (
+      state.layers !== previous.layers ||
+      state.selectedLayerId !== previous.selectedLayerId
+    ) {
       update();
     }
   });
-  return () => unsub();
+  return () => {
+    unsub();
+    movingAnnotationId = null;
+    if (boundMap)
+      boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+  };
 }
 
 function getGlyphIcon(type: string): string {
@@ -2448,12 +2568,15 @@ function zoomToElementFeatures(features: Feature[]): void {
         [minX, minY],
         [maxX, maxY],
       ],
-      { padding: 40 },
+      { padding: 40 }
     );
   }
 }
 
-export function updateElementProps(annotationId: string, newProps: Record<string, unknown>): void {
+export function updateElementProps(
+  annotationId: string,
+  newProps: Record<string, unknown>
+): void {
   const store = useAppStore.getState();
   const layer = findAnnotationLayer(store.layers);
   if (!layer || !layer.geojson) return;
@@ -2471,9 +2594,11 @@ export function updateElementProps(annotationId: string, newProps: Record<string
   // Cascade visibility toggle to the linked overlay layer (extent-placed images).
   if ("visible" in newProps) {
     const feature = layer.geojson.features.find(
-      (f) => (f.properties as Record<string, unknown>)?.annotationId === annotationId,
+      (f) =>
+        (f.properties as Record<string, unknown>)?.annotationId === annotationId
     );
-    const overlayId = (feature?.properties as Record<string, unknown>)?.overlayLayerId;
+    const overlayId = (feature?.properties as Record<string, unknown>)
+      ?.overlayLayerId;
     if (typeof overlayId === "string") {
       store.setLayerVisibility(overlayId, newProps.visible !== false);
     }
@@ -2481,20 +2606,25 @@ export function updateElementProps(annotationId: string, newProps: Record<string
 }
 
 /** Translate every geometry belonging to an annotation so its centre lands at the clicked point. */
-export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): void {
+export function moveElementTo(
+  annotationId: string,
+  lngLat: maplibregl.LngLat
+): void {
   const store = useAppStore.getState();
   const layer = store.layers.find(
     (candidate) =>
       isAnnotationLayer(candidate) &&
       candidate.geojson?.features.some(
         (feature) =>
-          (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
-      ),
+          (feature.properties as Record<string, unknown> | null)
+            ?.annotationId === annotationId
+      )
   );
   if (!layer?.geojson) return;
   const targets = layer.geojson.features.filter(
     (feature) =>
-      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+      (feature.properties as Record<string, unknown> | null)?.annotationId ===
+      annotationId
   );
   const positions: Position[] = [];
   const collect = (value: unknown): void => {
@@ -2506,19 +2636,27 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
     value.forEach(collect);
   };
   targets.forEach((feature) => {
-    if (feature.geometry.type !== "GeometryCollection") collect(feature.geometry.coordinates);
+    if (feature.geometry.type !== "GeometryCollection")
+      collect(feature.geometry.coordinates);
   });
   if (!positions.length) return;
   const centre: Position = [
-    (Math.min(...positions.map((p) => p[0])) + Math.max(...positions.map((p) => p[0]))) / 2,
-    (Math.min(...positions.map((p) => p[1])) + Math.max(...positions.map((p) => p[1]))) / 2,
+    (Math.min(...positions.map((p) => p[0])) +
+      Math.max(...positions.map((p) => p[0]))) /
+      2,
+    (Math.min(...positions.map((p) => p[1])) +
+      Math.max(...positions.map((p) => p[1]))) /
+      2,
   ];
   const dx = lngLat.lng - centre[0];
   const dy = lngLat.lat - centre[1];
   const overlayIds = new Set(
     targets
-      .map((feature) => (feature.properties as Record<string, unknown> | null)?.overlayLayerId)
-      .filter((id): id is string => typeof id === "string"),
+      .map(
+        (feature) =>
+          (feature.properties as Record<string, unknown> | null)?.overlayLayerId
+      )
+      .filter((id): id is string => typeof id === "string")
   );
   const translate = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
@@ -2531,8 +2669,8 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
     geojson: {
       ...layer.geojson,
       features: layer.geojson.features.map((feature) =>
-        (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId &&
-        feature.geometry.type !== "GeometryCollection"
+        (feature.properties as Record<string, unknown> | null)?.annotationId ===
+          annotationId && feature.geometry.type !== "GeometryCollection"
           ? {
               ...feature,
               geometry: {
@@ -2540,21 +2678,31 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
                 coordinates: translate(feature.geometry.coordinates),
               },
             }
-          : feature,
+          : feature
       ) as Feature[],
     },
   });
   for (const overlayId of overlayIds) {
-    const overlay = useAppStore.getState().layers.find((candidate) => candidate.id === overlayId);
-    if (overlay?.source.type !== "image" || !Array.isArray(overlay.source.coordinates)) continue;
+    const overlay = useAppStore
+      .getState()
+      .layers.find((candidate) => candidate.id === overlayId);
+    if (
+      overlay?.source.type !== "image" ||
+      !Array.isArray(overlay.source.coordinates)
+    )
+      continue;
     store.updateLayer(overlay.id, {
       source: {
         ...overlay.source,
-        coordinates: overlay.source.coordinates.map(([lng, lat]) => [lng + dx, lat + dy]),
+        coordinates: overlay.source.coordinates.map(([lng, lat]) => [
+          lng + dx,
+          lat + dy,
+        ]),
       },
       metadata: {
         ...overlay.metadata,
-        ...(Array.isArray(overlay.metadata.bounds) && overlay.metadata.bounds.length === 4
+        ...(Array.isArray(overlay.metadata.bounds) &&
+        overlay.metadata.bounds.length === 4
           ? {
               bounds: [
                 Number(overlay.metadata.bounds[0]) + dx,
@@ -2573,32 +2721,42 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
 export function moveElementToLayer(
   annotationId: string,
   sourceLayerId: string,
-  targetLayerId: string,
+  targetLayerId: string
 ): void {
   const store = useAppStore.getState();
   const source = store.layers.find(
-    (layer) => layer.id === sourceLayerId && isAnnotationLayer(layer),
+    (layer) => layer.id === sourceLayerId && isAnnotationLayer(layer)
   );
   const target = store.layers.find(
-    (layer) => layer.id === targetLayerId && isAnnotationLayer(layer),
+    (layer) => layer.id === targetLayerId && isAnnotationLayer(layer)
   );
   if (!source?.geojson || !target?.geojson || source.id === target.id) return;
   const moved = source.geojson.features.filter(
     (feature) =>
-      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+      (feature.properties as Record<string, unknown> | null)?.annotationId ===
+      annotationId
   );
   if (!moved.length) return;
   store.updateLayer(target.id, {
-    geojson: { ...target.geojson, features: [...target.geojson.features, ...moved] },
+    geojson: {
+      ...target.geojson,
+      features: [...target.geojson.features, ...moved],
+    },
   });
   const remaining = source.geojson.features.filter(
     (feature) =>
-      (feature.properties as Record<string, unknown> | null)?.annotationId !== annotationId,
+      (feature.properties as Record<string, unknown> | null)?.annotationId !==
+      annotationId
   );
-  store.updateLayer(source.id, { geojson: { ...source.geojson, features: remaining } });
+  store.updateLayer(source.id, {
+    geojson: { ...source.geojson, features: remaining },
+  });
 }
 
-export function reorderElements(annotationId: string, direction: "up" | "down"): void {
+export function reorderElements(
+  annotationId: string,
+  direction: "up" | "down"
+): void {
   const store = useAppStore.getState();
   const layer = findAnnotationLayer(store.layers);
   if (!layer || !layer.geojson) return;
@@ -2606,7 +2764,9 @@ export function reorderElements(annotationId: string, direction: "up" | "down"):
   const features = layer.geojson.features;
   const ids: string[] = [];
   for (const f of features) {
-    const id = String((f.properties as Record<string, unknown>)?.annotationId || "");
+    const id = String(
+      (f.properties as Record<string, unknown>)?.annotationId || ""
+    );
     if (id && !ids.includes(id)) ids.push(id);
   }
 
@@ -2621,7 +2781,9 @@ export function reorderElements(annotationId: string, direction: "up" | "down"):
 
   const grouped = new Map<string, Feature[]>();
   for (const f of features) {
-    const id = String((f.properties as Record<string, unknown>)?.annotationId || "");
+    const id = String(
+      (f.properties as Record<string, unknown>)?.annotationId || ""
+    );
     if (!grouped.has(id)) grouped.set(id, []);
     grouped.get(id)!.push(f);
   }
@@ -2644,15 +2806,18 @@ export function deleteElementById(annotationId: string): void {
 
   // Cascade deletion to a linked overlay layer (extent-placed images).
   const target = layer.geojson.features.find(
-    (f) => (f.properties as Record<string, unknown>)?.annotationId === annotationId,
+    (f) =>
+      (f.properties as Record<string, unknown>)?.annotationId === annotationId
   );
-  const overlayId = (target?.properties as Record<string, unknown>)?.overlayLayerId;
+  const overlayId = (target?.properties as Record<string, unknown>)
+    ?.overlayLayerId;
   if (typeof overlayId === "string") {
     store.removeLayer(overlayId);
   }
 
   const remaining = layer.geojson.features.filter(
-    (f) => (f.properties as Record<string, unknown>)?.annotationId !== annotationId,
+    (f) =>
+      (f.properties as Record<string, unknown>)?.annotationId !== annotationId
   );
   if (remaining.length === 0) {
     store.removeLayer(layer.id);
