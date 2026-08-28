@@ -638,7 +638,7 @@ function syncPinMarkers(): void {
   if (!map) return;
   const store = useAppStore.getState();
   const features = store.layers
-    .filter(isAnnotationLayer)
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
     .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
@@ -748,7 +748,7 @@ function syncStickyNoteMarkers(): void {
   if (!map) return;
   const store = useAppStore.getState();
   const features = store.layers
-    .filter(isAnnotationLayer)
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
     .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
@@ -911,7 +911,7 @@ function syncPlacedImageMarkers(): void {
   if (!map) return;
   const store = useAppStore.getState();
   const features = store.layers
-    .filter(isAnnotationLayer)
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
     .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
@@ -2286,8 +2286,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         }
         const commit = () => {
           const val = input.value.trim();
+          const nextTitle = el.type === "pin" ? val : val || el.title;
           const patch: Record<string, unknown> = {
-            title: val,
+            title: nextTitle,
             description: description.value.trim(),
           };
           if (supportsColor) {
@@ -2297,7 +2298,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             patch["text-color"] = color.value;
           }
           if (supportsWidth) patch["stroke-width"] = Number(width.value) || DEFAULT_WIDTH;
-          if (el.type === "text") patch.text = val;
+          if (el.type === "text") patch.text = nextTitle;
           updateElementProps(el.id, patch);
           editingId = null;
           update();
