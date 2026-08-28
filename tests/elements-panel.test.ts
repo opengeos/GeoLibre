@@ -10,6 +10,8 @@ import {
   updateElementProps,
   deleteElementById,
   reorderElements,
+  moveElementTo,
+  moveElementToLayer,
 } from "../packages/plugins/src/plugins/maplibre-annotations";
 import {
   registerRightPanel,
@@ -242,5 +244,81 @@ describe("Elements Panel & Map Elements", () => {
     features = useAppStore.getState().layers[0].geojson?.features;
     assert.equal(features?.[0].properties?.annotationId, "elem-1");
     assert.equal(features?.[1].properties?.annotationId, "elem-2");
+  });
+
+  it("moves grouped annotation geometry together", () => {
+    const store = useAppStore.getState();
+    store.addLayer({
+      id: "annotation-layer-1",
+      name: "Annotations",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: DEFAULT_LAYER_STYLE,
+      metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [0, 0],
+                [2, 2],
+              ],
+            },
+            properties: { annotationId: "arrow-1", __annotation: "arrow" },
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [2, 2] },
+            properties: { annotationId: "arrow-1", __annotation: "arrowhead" },
+          },
+        ],
+      },
+    });
+
+    moveElementTo("arrow-1", new LngLat(11, 21));
+    const features = useAppStore.getState().layers[0].geojson!.features;
+    assert.deepEqual(features[0].geometry, {
+      type: "LineString",
+      coordinates: [
+        [10, 20],
+        [12, 22],
+      ],
+    });
+    assert.deepEqual(features[1].geometry, { type: "Point", coordinates: [12, 22] });
+  });
+
+  it("moves an annotation group between layers", () => {
+    const store = useAppStore.getState();
+    for (const [id, features] of [
+      ["source", [pinFeature(new LngLat(1, 2), "Pin")]],
+      ["target", []],
+    ] as const) {
+      store.addLayer({
+        id,
+        name: id,
+        type: "geojson",
+        source: { type: "geojson" },
+        visible: true,
+        opacity: 1,
+        style: DEFAULT_LAYER_STYLE,
+        metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+        geojson: { type: "FeatureCollection", features: [...features] },
+      });
+    }
+    const annotationId = String(
+      useAppStore.getState().layers[0].geojson!.features[0].properties!.annotationId,
+    );
+
+    moveElementToLayer(annotationId, "source", "target");
+
+    const [source, target] = useAppStore.getState().layers;
+    assert.equal(source.geojson!.features.length, 0);
+    assert.equal(target.geojson!.features.length, 1);
+    assert.equal(target.geojson!.features[0].properties!.annotationId, annotationId);
   });
 });

@@ -3789,6 +3789,10 @@
       "placed_image": "Đã đặt hình ảnh"
     },
     "clearAll": "Xóa tất cả chú thích",
+    "newLayer": "Lớp chú thích mới",
+    "edit": "Chỉnh sửa phần tử",
+    "move": "Di chuyển phần tử, rồi nhấp vào vị trí mới",
+    "moveToLayer": "Di chuyển đến lớp",
     "textPlaceholder": "Gõ nhãn, Enter để đặt",
     "pinTitlePrompt": "Tiêu đề",
     "pinDescPrompt": "Sự miêu tả",

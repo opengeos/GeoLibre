@@ -67,6 +67,7 @@ let activeTool: AnnotationTool | null = null;
 let strokeColor = DEFAULT_COLOR;
 let strokeWidth = DEFAULT_WIDTH;
 let annotationLayerId: string | null = null;
+let movingAnnotationId: string | null = null;
 let unregisterRightPanelDisposer: (() => void) | null = null;
 
 // Transient draw state.
@@ -210,6 +211,10 @@ export interface AnnotationLabels {
   widthOptions: { thin: string; medium: string; thick: string };
   deleteLast: string;
   clearAll: string;
+  newLayer: string;
+  edit: string;
+  move: string;
+  moveToLayer: string;
   textPlaceholder: string;
   pinTitlePrompt: string;
   pinDescPrompt: string;
@@ -242,6 +247,10 @@ let labels: AnnotationLabels = {
   widthOptions: { thin: "Thin", medium: "Medium", thick: "Thick" },
   deleteLast: "Delete last annotation",
   clearAll: "Clear all annotations",
+  newLayer: "New annotation layer",
+  edit: "Edit element",
+  move: "Move element (then click its new position)",
+  moveToLayer: "Move to layer",
   textPlaceholder: "Type label, Enter to place",
   pinTitlePrompt: "Pin title:",
   pinDescPrompt: "Pin description (optional):",
@@ -353,6 +362,13 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     renderWidth();
     this.applyLabel(width, () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`);
     toolsContainer.appendChild(width);
+
+    const newLayer = this.makeActionButton(
+      () => labels.newLayer,
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
+      () => createAnnotationLayer(),
+    );
+    toolsContainer.appendChild(newLayer);
 
     const deleteLast = this.makeActionButton(
       () => labels.deleteLast,
@@ -617,8 +633,9 @@ function syncPinMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter(isAnnotationLayer)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -664,7 +681,9 @@ function syncPinMarkers(): void {
       titleEl.className = "pin-title";
       titleEl.style.cssText =
         "background: var(--geolibre-bg, #fff); color: var(--geolibre-fg, #1f2937); font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-top: -6px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid var(--geolibre-border, #d1d5db);";
-      titleEl.textContent = String(props.title || "Pin");
+      const pinTitle = String(props.title || "").trim();
+      titleEl.textContent = pinTitle;
+      titleEl.hidden = !pinTitle;
       container.appendChild(titleEl);
 
       container.onclick = (e) => {
@@ -686,8 +705,10 @@ function syncPinMarkers(): void {
         pinSvg.innerHTML = `<svg viewBox="0 0 24 36" width="28" height="42" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z"/><circle cx="12" cy="11" r="4.5" fill="#ffffff" opacity="0.9"/></svg>`;
       }
       const titleEl = container.querySelector(".pin-title");
-      if (titleEl) {
-        titleEl.textContent = String(props.title || "Pin");
+      if (titleEl instanceof HTMLElement) {
+        const pinTitle = String(props.title || "").trim();
+        titleEl.textContent = pinTitle;
+        titleEl.hidden = !pinTitle;
       }
       container.onclick = (e) => {
         e.stopPropagation();
@@ -719,8 +740,9 @@ function syncStickyNoteMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter(isAnnotationLayer)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -878,8 +900,9 @@ function syncPlacedImageMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter(isAnnotationLayer)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -1023,6 +1046,11 @@ function unbindMap(): void {
 
 function handleKeyDown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
+  if (movingAnnotationId) {
+    movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    return;
+  }
   if (activeTextInput) {
     cancelTextInput();
     return;
@@ -1256,9 +1284,11 @@ function openElementDialog(
     "padding: 5px 10px; border-radius: 6px; border: none; background: var(--geolibre-primary, #3b82f6); color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;";
   saveBtn.onclick = (e) => {
     e.stopPropagation();
+    const enteredTitle = titleInput.value.trim();
     const title =
-      titleInput.value.trim() ||
-      (type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image");
+      type === "pin"
+        ? enteredTitle
+        : enteredTitle || (type === "sticky_note" ? "Sticky Note" : "Placed Image");
     const description = descInput ? descInput.value.trim() : "";
 
     if (type === "placed_image" && !description) {
@@ -1296,6 +1326,12 @@ function openElementDialog(
 
 function handleClick(event: maplibregl.MapMouseEvent): void {
   if (!pluginActive) return;
+  if (movingAnnotationId) {
+    moveElementTo(movingAnnotationId, event.lngLat);
+    movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    return;
+  }
   if (activeTool === "text") {
     openTextInput(event);
     return;
@@ -1892,6 +1928,12 @@ function isAnnotationLayer(layer: GeoLibreLayer): boolean {
 }
 
 function findAnnotationLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
+  const selectedId = useAppStore.getState().selectedLayerId;
+  const selected = layers.find((layer) => layer.id === selectedId);
+  if (selected && isAnnotationLayer(selected)) {
+    annotationLayerId = selected.id;
+    return selected;
+  }
   if (annotationLayerId) {
     const tracked = layers.find((layer) => layer.id === annotationLayerId);
     // Verify the tracked layer is still an annotation layer: after a project
@@ -1948,7 +1990,9 @@ function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
 function appendAnnotationFeatures(features: Feature[]): void {
   if (!features.length) return;
   const store = useAppStore.getState();
-  const existing = findAnnotationLayer(store.layers);
+  const existing = store.layers.find(
+    (layer) => layer.id === store.selectedLayerId && isAnnotationLayer(layer),
+  );
 
   if (existing) {
     annotationLayerId = existing.id;
@@ -1965,10 +2009,17 @@ function appendAnnotationFeatures(features: Feature[]): void {
   // render the first annotation without its per-feature colors). Text labels
   // carry their own `text-color`, shapes/arrows their own stroke/fill, so no
   // layer-level color needs setting here.
+  createAnnotationLayer(features);
+}
+
+/** Create and select an annotation layer, including an intentionally empty one. */
+function createAnnotationLayer(features: Feature[] = []): string {
+  const store = useAppStore.getState();
   const id = crypto.randomUUID();
+  const ordinal = store.layers.filter(isAnnotationLayer).length + 1;
   const layer: GeoLibreLayer = {
     id,
-    name: labels.layerName,
+    name: ordinal === 1 ? labels.layerName : `${labels.layerName} ${ordinal}`,
     type: "geojson",
     source: { type: "geojson" },
     visible: true,
@@ -1981,10 +2032,12 @@ function appendAnnotationFeatures(features: Feature[]): void {
     },
     metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
     geojson: { type: "FeatureCollection", features },
-    sourcePath: ANNOTATIONS_SOURCE_PATH,
+    sourcePath: `${ANNOTATIONS_SOURCE_PATH}/${id}`,
   };
   store.addLayer(layer);
+  store.selectLayer(id);
   annotationLayerId = id;
+  return id;
 }
 
 /** Remove the most recently added annotation (and its arrowhead, if any). */
@@ -2076,6 +2129,37 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     header.textContent = `${labels.elementsPanelTitle} (${elements.length})`;
     container.appendChild(header);
 
+    const layerRow = document.createElement("div");
+    layerRow.style.cssText = "display:flex; gap:6px; align-items:center;";
+    const layerSelect = document.createElement("select");
+    layerSelect.setAttribute("aria-label", labels.layerName);
+    layerSelect.style.cssText =
+      "flex:1; min-width:0; padding:5px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit;";
+    for (const candidate of store.layers.filter(isAnnotationLayer)) {
+      const option = document.createElement("option");
+      option.value = candidate.id;
+      option.textContent = candidate.name;
+      option.selected = candidate.id === layer?.id;
+      layerSelect.appendChild(option);
+    }
+    layerSelect.onchange = () => {
+      annotationLayerId = layerSelect.value;
+      store.selectLayer(layerSelect.value);
+      update();
+    };
+    layerRow.appendChild(layerSelect);
+    const addLayer = document.createElement("button");
+    addLayer.type = "button";
+    addLayer.textContent = "+";
+    addLayer.title = labels.newLayer;
+    addLayer.setAttribute("aria-label", labels.newLayer);
+    addLayer.onclick = () => {
+      createAnnotationLayer();
+      update();
+    };
+    layerRow.appendChild(addLayer);
+    container.appendChild(layerRow);
+
     if (elements.length === 0) {
       const empty = document.createElement("div");
       empty.style.cssText = "color: #9ca3af; text-align: center; padding: 24px 0;";
@@ -2104,24 +2188,52 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         "flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
 
       if (editingId === el.id) {
+        titleContainer.style.cssText = "flex:1; min-width:0; display:grid; gap:5px;";
         const input = document.createElement("input");
         input.type = "text";
-        input.value = el.title;
-        input.style.cssText =
-          "width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px; border: 1px solid #3b82f6; border-radius: 3px;";
+        input.value = el.type === "pin" && el.title === "Element" ? "" : el.title;
+        input.placeholder = "Title";
+        const description = document.createElement("textarea");
+        description.value = el.description ?? "";
+        description.placeholder = "Description";
+        description.rows = 2;
+        const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
+        const color = document.createElement("input");
+        color.type = "color";
+        color.value = String(
+          firstProps.pinColor ||
+            firstProps["text-color"] ||
+            firstProps.stroke ||
+            firstProps.fill ||
+            DEFAULT_COLOR,
+        );
+        color.title = labels.color;
+        const width = document.createElement("input");
+        width.type = "number";
+        width.min = "1";
+        width.max = "20";
+        width.value = String(firstProps["stroke-width"] || DEFAULT_WIDTH);
+        width.title = labels.width;
+        for (const field of [input, description, width]) {
+          field.style.cssText =
+            "width:100%; box-sizing:border-box; font-size:12px; padding:4px; border:1px solid #3b82f6; border-radius:3px;";
+        }
         const commit = () => {
           const val = input.value.trim();
-          if (val && val !== el.title) {
-            const patch: Record<string, unknown> = { title: val };
-            if (el.type === "text") {
-              patch.text = val;
-            }
-            updateElementProps(el.id, patch);
-          }
+          const patch: Record<string, unknown> = {
+            title: val,
+            description: description.value.trim(),
+            stroke: color.value,
+            fill: color.value,
+            pinColor: color.value,
+            "text-color": color.value,
+            "stroke-width": Number(width.value) || DEFAULT_WIDTH,
+          };
+          if (el.type === "text") patch.text = val;
+          updateElementProps(el.id, patch);
           editingId = null;
           update();
         };
-        input.addEventListener("blur", commit);
         input.addEventListener("keydown", (e) => {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") {
@@ -2129,7 +2241,12 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             update();
           }
         });
-        titleContainer.appendChild(input);
+        titleContainer.append(input, description, color, width);
+        const save = document.createElement("button");
+        save.type = "button";
+        save.textContent = labels.saveElement;
+        save.onclick = commit;
+        titleContainer.appendChild(save);
         setTimeout(() => input.focus(), 10);
       } else {
         const t = document.createElement("span");
@@ -2149,6 +2266,28 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       const ctrl = document.createElement("div");
       ctrl.style.cssText = "display: flex; align-items: center; gap: 2px;";
+
+      const edit = document.createElement("button");
+      edit.textContent = "✎";
+      edit.title = labels.edit;
+      edit.setAttribute("aria-label", labels.edit);
+      edit.onclick = (e) => {
+        e.stopPropagation();
+        editingId = editingId === el.id ? null : el.id;
+        update();
+      };
+      ctrl.appendChild(edit);
+
+      const move = document.createElement("button");
+      move.textContent = "⌖";
+      move.title = labels.move;
+      move.setAttribute("aria-label", labels.move);
+      move.onclick = (e) => {
+        e.stopPropagation();
+        movingAnnotationId = el.id;
+        boundMap?.getCanvas().style.setProperty("cursor", "crosshair");
+      };
+      ctrl.appendChild(move);
 
       const up = document.createElement("button");
       up.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
@@ -2186,6 +2325,29 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         updateElementProps(el.id, { visible: !el.visible });
       });
       ctrl.appendChild(vis);
+
+      const otherLayers = store.layers.filter(
+        (candidate) => isAnnotationLayer(candidate) && candidate.id !== layer?.id,
+      );
+      if (otherLayers.length > 0) {
+        const transfer = document.createElement("select");
+        transfer.title = labels.moveToLayer;
+        transfer.setAttribute("aria-label", labels.moveToLayer);
+        const placeholder = document.createElement("option");
+        placeholder.textContent = "↪";
+        placeholder.value = "";
+        transfer.appendChild(placeholder);
+        for (const target of otherLayers) {
+          const option = document.createElement("option");
+          option.value = target.id;
+          option.textContent = target.name;
+          transfer.appendChild(option);
+        }
+        transfer.onchange = () => {
+          if (layer && transfer.value) moveElementToLayer(el.id, layer.id, transfer.value);
+        };
+        ctrl.appendChild(transfer);
+      }
 
       const del = document.createElement("button");
       del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
@@ -2298,6 +2460,96 @@ export function updateElementProps(annotationId: string, newProps: Record<string
       store.setLayerVisibility(overlayId, newProps.visible !== false);
     }
   }
+}
+
+/** Translate every geometry belonging to an annotation so its centre lands at the clicked point. */
+export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find(
+    (candidate) =>
+      isAnnotationLayer(candidate) &&
+      candidate.geojson?.features.some(
+        (feature) =>
+          (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+      ),
+  );
+  if (!layer?.geojson) return;
+  const targets = layer.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+  );
+  const positions: Position[] = [];
+  const collect = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      positions.push(value as Position);
+      return;
+    }
+    value.forEach(collect);
+  };
+  targets.forEach((feature) => {
+    if (feature.geometry.type !== "GeometryCollection") collect(feature.geometry.coordinates);
+  });
+  if (!positions.length) return;
+  const centre: Position = [
+    (Math.min(...positions.map((p) => p[0])) + Math.max(...positions.map((p) => p[0]))) / 2,
+    (Math.min(...positions.map((p) => p[1])) + Math.max(...positions.map((p) => p[1]))) / 2,
+  ];
+  const dx = lngLat.lng - centre[0];
+  const dy = lngLat.lat - centre[1];
+  const translate = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      return [value[0] + dx, value[1] + dy, ...value.slice(2)];
+    }
+    return value.map(translate);
+  };
+  store.updateLayer(layer.id, {
+    geojson: {
+      ...layer.geojson,
+      features: layer.geojson.features.map((feature) =>
+        (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId &&
+        feature.geometry.type !== "GeometryCollection"
+          ? {
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: translate(feature.geometry.coordinates),
+              },
+            }
+          : feature,
+      ) as Feature[],
+    },
+  });
+}
+
+/** Move a grouped annotation between tagged annotation layers. */
+export function moveElementToLayer(
+  annotationId: string,
+  sourceLayerId: string,
+  targetLayerId: string,
+): void {
+  const store = useAppStore.getState();
+  const source = store.layers.find(
+    (layer) => layer.id === sourceLayerId && isAnnotationLayer(layer),
+  );
+  const target = store.layers.find(
+    (layer) => layer.id === targetLayerId && isAnnotationLayer(layer),
+  );
+  if (!source?.geojson || !target?.geojson || source.id === target.id) return;
+  const moved = source.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+  );
+  if (!moved.length) return;
+  store.updateLayer(target.id, {
+    geojson: { ...target.geojson, features: [...target.geojson.features, ...moved] },
+  });
+  const remaining = source.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId !== annotationId,
+  );
+  store.updateLayer(source.id, { geojson: { ...source.geojson, features: remaining } });
 }
 
 export function reorderElements(annotationId: string, direction: "up" | "down"): void {
