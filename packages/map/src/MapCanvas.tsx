@@ -1431,7 +1431,6 @@ export const MapCanvas = memo(function MapCanvas({
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
       mc.setBasemapOpacity(state.basemapOpacity);
-      mc.setBlankBackgroundColor(state.blankBackgroundColor);
       mc.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         resolveHighlightIds(state),
@@ -1505,7 +1504,6 @@ export const MapCanvas = memo(function MapCanvas({
       const state = useAppStore.getState();
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
-      controller.current?.setBlankBackgroundColor(state.blankBackgroundColor);
       controller.current?.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         resolveHighlightIds(state),

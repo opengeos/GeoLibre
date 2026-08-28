@@ -124,7 +124,6 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       const live = useAppStore.getState();
       mc.setBasemapVisible(live.basemapVisible);
       mc.setBasemapOpacity(live.basemapOpacity);
-      mc.setBlankBackgroundColor(live.blankBackgroundColor);
     });
 
     let resizeFrame: number | null = null;
@@ -158,10 +157,6 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     if (prevBasemap.current !== basemapStyleUrl) {
       prevBasemap.current = basemapStyleUrl;
-      controller.current?.getMap()?.once("style.load", () => {
-        const live = useAppStore.getState();
-        controller.current?.setBlankBackgroundColor(live.blankBackgroundColor);
-      });
       controller.current?.setStyle(basemapStyleUrl);
     }
   }, [basemapStyleUrl]);
