@@ -2055,7 +2055,12 @@ export const MapCanvas = memo(function MapCanvas({
 
         const hits: GlobalIdentifyHit[] = [];
         const seen = new Set<string>();
-        for (const feature of map.queryRenderedFeatures(event.point)) {
+        const queryLayerIds = [...owners.keys()];
+        const rendered =
+          queryLayerIds.length === 0
+            ? []
+            : map.queryRenderedFeatures(event.point, { layers: queryLayerIds });
+        for (const feature of rendered) {
           const owner = owners.get(feature.layer.id);
           if (!owner) continue;
           const hit: GlobalIdentifyHit = {
