@@ -3172,6 +3172,10 @@ export function LayerPanel({
                 layer.type === "cog" ||
                 hasNativeIdentifyLayers(layer));
             const identifyActive = identifyLayerId === layer.id;
+            // A gesture that takes over map clicks has to turn Identify off, or
+            // its toolbar button stays lit over a handler that no longer
+            // answers. All-layer Identify counts the same as this layer's own.
+            const identifyOwnsClicks = identifyActive || identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
             // COGs inspect raw pixel/band values rather than vector features, so
             // the icon's tooltip reflects that distinct action. Time Slider COG
             // and mosaic sources read the same way, at the current timeline
@@ -3828,11 +3832,7 @@ export function LayerPanel({
                               onSelect={() => {
                                 if (!layerEditable) return;
                                 selectLayer(layer.id);
-                                // The all-layer handler answers clicks the
-                                // edit session needs just as the per-layer one
-                                // does, so it stands down too.
-                                if (identifyActive || identifyLayerId === IDENTIFY_ALL_LAYERS_ID)
-                                  setIdentifyLayer(null);
+                                if (identifyOwnsClicks) setIdentifyLayer(null);
                                 onToggleGeometryEdit(layer.id);
                               }}
                             >
@@ -3976,7 +3976,7 @@ export function LayerPanel({
                                       // match nothing at all.
                                       disabled={!layerRendered}
                                       onSelect={() => {
-                                        if (identifyActive) setIdentifyLayer(null);
+                                        if (identifyOwnsClicks) setIdentifyLayer(null);
                                         startFeatureSelection({
                                           layerId: layer.id,
                                           shape,

@@ -280,7 +280,8 @@ export interface AppState {
   selectedFeatureIds: string[];
   /**
    * Store-layer id targeted by Identify, or {@link IDENTIFY_ALL_LAYERS_ID} for
-   * the map-level mode that queries every visible vector layer.
+   * the map-level mode that queries every visible queryable layer — vector,
+   * DuckDB query, WMS, COG, NetCDF image and time-slider raster alike.
    */
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
@@ -737,7 +738,7 @@ export interface AppState {
   setComments: (comments: ProjectComment[]) => void;
 }
 
-/** Reserved Identify target for querying every visible vector layer at once. */
+/** Reserved Identify target for querying every visible queryable layer at once. */
 export const IDENTIFY_ALL_LAYERS_ID = "__geolibre_identify_all_layers__";
 
 const MAX_RECENT_PROJECTS = 10;
