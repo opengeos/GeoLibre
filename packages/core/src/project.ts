@@ -81,6 +81,10 @@ export interface CreateProjectOptions {
   ellipsoidId?: string;
 }
 
+function normalizeBlankBackgroundColor(value: unknown): string | null {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+}
+
 export function createDefaultMapView(): MapViewState {
   return {
     center: [-100, 40],
@@ -269,11 +273,7 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
-  const blankBackgroundColor =
-    typeof data.blankBackgroundColor === "string" &&
-    /^#[0-9a-f]{6}$/i.test(data.blankBackgroundColor)
-      ? data.blankBackgroundColor
-      : null;
+  const blankBackgroundColor = normalizeBlankBackgroundColor(data.blankBackgroundColor);
   // Secondary panes already go through normalizeMapViewState; the primary
   // camera must too so a hand-edited project cannot store an out-of-range
   // view that MapLibre would silently clamp, leaving saved state wrong.
@@ -1762,7 +1762,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapStyleUrl = project.basemapStyleUrl;
   const basemapVisible = project.basemapVisible ?? true;
   const basemapOpacity = project.basemapOpacity ?? 1;
-  const blankBackgroundColor = project.blankBackgroundColor ?? null;
+  const blankBackgroundColor = normalizeBlankBackgroundColor(project.blankBackgroundColor);
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
   const mapView = normalizeMapViewState(project.mapView);

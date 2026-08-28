@@ -613,6 +613,7 @@ export class MapController {
       if (this.terrainEnablePending) this.autoEnableTerrain();
       this.applyBasemapVisibility();
       this.applyBasemapOpacity();
+      this.setBlankBackgroundColor(this.blankBackgroundColor);
       this.addLayerControl();
     };
     this.map.on("style.load", handleStyleReady);
