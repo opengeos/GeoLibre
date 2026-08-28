@@ -16,6 +16,7 @@ export class DrawBBox {
   private active = false;
   private startPoint: [number, number] | null = null;
   private resolvePromise: ((bbox: BBox) => void) | null = null;
+  private rejectPromise: ((reason: Error) => void) | null = null;
 
   private boundMouseDown: (e: MapMouseEvent) => void;
   private boundMouseMove: (e: MapMouseEvent) => void;
@@ -62,8 +63,10 @@ export class DrawBBox {
   }
 
   activate(): Promise<BBox> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      if (this.active) this.deactivate();
       this.resolvePromise = resolve;
+      this.rejectPromise = reject;
       this.active = true;
       this.startPoint = null;
 
@@ -83,6 +86,15 @@ export class DrawBBox {
     this.map.off("mousedown", this.boundMouseDown);
     this.map.off("mousemove", this.boundMouseMove);
     this.map.off("mouseup", this.boundMouseUp);
+
+    const reject = this.rejectPromise;
+    this.resolvePromise = null;
+    this.rejectPromise = null;
+    if (reject) {
+      const error = new Error("Bounding-box drawing cancelled.");
+      error.name = "AbortError";
+      reject(error);
+    }
   }
 
   clear(): void {
@@ -149,12 +161,11 @@ export class DrawBBox {
     };
 
     this.updateRectangle(this.startPoint, endPoint);
+    const resolve = this.resolvePromise;
+    this.resolvePromise = null;
+    this.rejectPromise = null;
     this.deactivate();
-
-    if (this.resolvePromise) {
-      this.resolvePromise(bbox);
-      this.resolvePromise = null;
-    }
+    resolve?.(bbox);
   }
 
   private updateRectangle(start: [number, number], end: [number, number]): void {

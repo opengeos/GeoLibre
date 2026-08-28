@@ -1,4 +1,4 @@
-import type { EventInfo, StacItem, ItemProperties } from "./types";
+import type { EventInfo, StacItem, ItemProperties, VantorTranslate } from "./types";
 import { formatDate } from "./utils";
 import { StacClient } from "./stac-client";
 import type { CogRenderEngine } from "./cog-layer";
@@ -13,7 +13,8 @@ export type PanelEventType =
   | "download"
   | "cancel-download"
   | "select-all"
-  | "deselect-all";
+  | "deselect-all"
+  | "selection-change";
 
 export interface PanelEventDetail {
   type: PanelEventType;
@@ -66,6 +67,9 @@ export class PanelUI extends EventTarget {
   private panelWidth?: number;
   private maxHeight?: number | string;
   private theme: "auto" | "light" | "dark";
+  private translate?: VantorTranslate;
+  private localeUpdaters: Array<() => void> = [];
+  private loading = false;
 
   constructor(
     container: HTMLElement,
@@ -74,6 +78,7 @@ export class PanelUI extends EventTarget {
     maxHeight?: number | string,
     theme: "auto" | "light" | "dark" = "auto",
     renderEngine: CogRenderEngine = "maplibre-gl-raster",
+    translate?: VantorTranslate,
   ) {
     super();
     this.root = container;
@@ -81,8 +86,11 @@ export class PanelUI extends EventTarget {
     this.panelWidth = panelWidth;
     this.maxHeight = maxHeight;
     this.theme = theme;
+    this.translate = translate;
     this.buildUI();
-    this.renderEngineSelect.value = renderEngine;
+    this.renderEngineSelect
+      .querySelector<HTMLOptionElement>(`option[value="${renderEngine}"]`)
+      ?.setAttribute("selected", "");
   }
 
   private buildUI(): void {
@@ -103,7 +111,7 @@ export class PanelUI extends EventTarget {
     this.toggleBtn = this.el("button", "vantor-panel__toggle");
     this.toggleBtn.type = "button";
     this.toggleBtn.innerHTML = "&#10005;";
-    this.toggleBtn.title = "Collapse panel";
+    this.localizeAttribute(this.toggleBtn, "title", "vantor.collapsePanel", "Collapse panel");
     this.toggleBtn.addEventListener("click", () => {
       this.collapsed = true;
       this.panelDiv.classList.add("vantor-panel--collapsed");
@@ -113,11 +121,11 @@ export class PanelUI extends EventTarget {
     // Open button — only visible when collapsed
     const openBtn = this.el("button", "vantor-panel__open-btn");
     openBtn.type = "button";
-    openBtn.setAttribute("aria-label", "Open Vantor STAC Explorer");
+    this.localizeAttribute(openBtn, "aria-label", "vantor.openPanel", "Open Vantor STAC Explorer");
     const openIcon = this.el("span", "maplibregl-ctrl-icon vantor-panel__open-icon");
     openIcon.setAttribute("aria-hidden", "true");
     openBtn.appendChild(openIcon);
-    openBtn.title = "Open Vantor STAC Explorer";
+    this.localizeAttribute(openBtn, "title", "vantor.openPanel", "Open Vantor STAC Explorer");
     openBtn.addEventListener("click", () => {
       this.collapsed = false;
       this.panelDiv.classList.remove("vantor-panel--collapsed");
@@ -130,7 +138,7 @@ export class PanelUI extends EventTarget {
     // Header
     const header = this.el("div", "vantor-panel__header");
     const h3 = document.createElement("h3");
-    h3.textContent = "Vantor STAC Explorer";
+    this.localizeText(h3, "vantor.title", "Vantor STAC Explorer");
     header.appendChild(h3);
     this.contentDiv.appendChild(header);
 
@@ -148,7 +156,7 @@ export class PanelUI extends EventTarget {
 
     // Status
     this.statusDiv = this.el("div", "vantor-panel__status");
-    this.statusDiv.textContent = "Ready";
+    this.statusDiv.textContent = this.t("vantor.ready", "Ready");
     this.contentDiv.appendChild(this.statusDiv);
 
     this.panelDiv.appendChild(this.contentDiv);
@@ -214,24 +222,29 @@ export class PanelUI extends EventTarget {
     const section = this.el("div", "vantor-panel__search");
 
     const title = this.el("div", "vantor-panel__section-title");
-    title.textContent = "Search";
+    this.localizeText(title, "vantor.searchSection", "Search");
     section.appendChild(title);
 
     // Event selector
     const eventField = this.el("div", "vantor-panel__field");
     const eventLabel = document.createElement("label");
-    eventLabel.textContent = "Event";
+    eventLabel.setAttribute("for", "vantor-event-select");
+    this.localizeText(eventLabel, "vantor.event", "Event");
     eventField.appendChild(eventLabel);
 
     const eventRow = this.el("div", "vantor-panel__select-row");
     this.eventSelect = document.createElement("select");
-    this.eventSelect.innerHTML = '<option value="">Loading events...</option>';
+    this.eventSelect.id = "vantor-event-select";
+    const loadingOption = document.createElement("option");
+    loadingOption.value = "";
+    this.localizeText(loadingOption, "vantor.loadingEvents", "Loading events...");
+    this.eventSelect.appendChild(loadingOption);
     eventRow.appendChild(this.eventSelect);
 
     const refreshBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--refresh");
     refreshBtn.type = "button";
     refreshBtn.innerHTML = "&#8635;";
-    refreshBtn.title = "Refresh catalog";
+    this.localizeAttribute(refreshBtn, "title", "vantor.refreshCatalog", "Refresh catalog");
     refreshBtn.addEventListener("click", () => this.emit("refresh"));
     eventRow.appendChild(refreshBtn);
 
@@ -241,18 +254,20 @@ export class PanelUI extends EventTarget {
     // Phase filter
     const phaseField = this.el("div", "vantor-panel__field");
     const phaseLabel = document.createElement("label");
-    phaseLabel.textContent = "Phase";
+    phaseLabel.setAttribute("for", "vantor-phase-select");
+    this.localizeText(phaseLabel, "vantor.phase", "Phase");
     phaseField.appendChild(phaseLabel);
 
     this.phaseSelect = document.createElement("select");
-    for (const [value, text] of [
-      ["all", "All"],
-      ["pre", "Pre-event"],
-      ["post", "Post-event"],
+    this.phaseSelect.id = "vantor-phase-select";
+    for (const [value, key, text] of [
+      ["all", "vantor.phaseAll", "All"],
+      ["pre", "vantor.phasePre", "Pre-event"],
+      ["post", "vantor.phasePost", "Post-event"],
     ] as const) {
       const opt = document.createElement("option");
       opt.value = value;
-      opt.textContent = text;
+      this.localizeText(opt, key, text);
       this.phaseSelect.appendChild(opt);
     }
     phaseField.appendChild(this.phaseSelect);
@@ -261,18 +276,20 @@ export class PanelUI extends EventTarget {
     // Rendering engine
     const engineField = this.el("div", "vantor-panel__field");
     const engineLabel = document.createElement("label");
-    engineLabel.textContent = "Rendering engine";
+    engineLabel.setAttribute("for", "vantor-render-engine-select");
+    this.localizeText(engineLabel, "vantor.renderingEngine", "Rendering engine");
     engineField.appendChild(engineLabel);
 
     this.renderEngineSelect = document.createElement("select");
-    for (const [value, text] of [
-      ["maplibre-gl-raster", "GPU (faster)"],
-      ["cog-tiler-wasm", "WASM (globe compatible)"],
-      ["titiler", "TiTiler (server)"],
+    this.renderEngineSelect.id = "vantor-render-engine-select";
+    for (const [value, key, text] of [
+      ["maplibre-gl-raster", "vantor.engineGpu", "GPU (faster)"],
+      ["cog-tiler-wasm", "vantor.engineWasm", "WASM (globe compatible)"],
+      ["titiler", "vantor.engineTitiler", "TiTiler (server)"],
     ] as const) {
       const opt = document.createElement("option");
       opt.value = value;
-      opt.textContent = text;
+      this.localizeText(opt, key, text);
       this.renderEngineSelect.appendChild(opt);
     }
     engineField.appendChild(this.renderEngineSelect);
@@ -286,7 +303,7 @@ export class PanelUI extends EventTarget {
     const checkLabel = this.el("label", "vantor-panel__checkbox-label");
     checkLabel.appendChild(this.useExtentCheckbox);
     const checkSpan = document.createElement("span");
-    checkSpan.textContent = "Use Map Extent";
+    this.localizeText(checkSpan, "vantor.useMapExtent", "Use Map Extent");
     checkLabel.appendChild(checkSpan);
     spatialField.appendChild(checkLabel);
     section.appendChild(spatialField);
@@ -296,7 +313,7 @@ export class PanelUI extends EventTarget {
 
     this.drawBBoxBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--small");
     this.drawBBoxBtn.type = "button";
-    this.drawBBoxBtn.textContent = "Draw BBox";
+    this.localizeText(this.drawBBoxBtn, "vantor.drawBbox", "Draw BBox");
     this.drawBBoxBtn.addEventListener("click", () => {
       this.drawBBoxBtn.classList.toggle("vantor-panel__btn--active");
       this.emit("draw-bbox");
@@ -305,7 +322,7 @@ export class PanelUI extends EventTarget {
 
     this.clearBBoxBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--small");
     this.clearBBoxBtn.type = "button";
-    this.clearBBoxBtn.textContent = "Clear";
+    this.localizeText(this.clearBBoxBtn, "vantor.clear", "Clear");
     this.clearBBoxBtn.disabled = true;
     this.clearBBoxBtn.addEventListener("click", () => {
       this.emit("clear-bbox");
@@ -320,7 +337,9 @@ export class PanelUI extends EventTarget {
     // Search button
     this.searchBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--primary");
     this.searchBtn.type = "button";
-    this.searchBtn.textContent = "Search";
+    const updateSearchButton = () => this.updateSearchButtonLabel();
+    this.localeUpdaters.push(updateSearchButton);
+    updateSearchButton();
     this.searchBtn.addEventListener("click", () => this.emit("search"));
     section.appendChild(this.searchBtn);
 
@@ -331,20 +350,28 @@ export class PanelUI extends EventTarget {
     const section = this.el("div", "vantor-panel__results");
 
     const title = this.el("div", "vantor-panel__section-title");
-    title.textContent = "Results";
+    this.localizeText(title, "vantor.results", "Results");
     section.appendChild(title);
 
     // Header row
     const headerRow = this.el("div", "vantor-panel__results-header");
     this.countLabel = document.createElement("span");
     this.countLabel.className = "vantor-panel__count";
-    this.countLabel.textContent = "0 item(s) found";
+    const updateCount = () => {
+      this.countLabel.textContent = this.t(
+        "vantor.itemsFound",
+        `${this.items.length} item(s) found`,
+        { count: this.items.length },
+      );
+    };
+    this.localeUpdaters.push(updateCount);
+    updateCount();
     headerRow.appendChild(this.countLabel);
 
     const selectControls = this.el("div", "vantor-panel__select-controls");
     const selectAllBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--small");
     selectAllBtn.type = "button";
-    selectAllBtn.textContent = "Select All";
+    this.localizeText(selectAllBtn, "vantor.selectAll", "Select All");
     selectAllBtn.addEventListener("click", () => {
       this.setAllChecked(true);
       this.emit("select-all");
@@ -353,7 +380,7 @@ export class PanelUI extends EventTarget {
 
     const deselectAllBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--small");
     deselectAllBtn.type = "button";
-    deselectAllBtn.textContent = "Deselect All";
+    this.localizeText(deselectAllBtn, "vantor.deselectAll", "Deselect All");
     deselectAllBtn.addEventListener("click", () => {
       this.setAllChecked(false);
       this.emit("deselect-all");
@@ -370,10 +397,18 @@ export class PanelUI extends EventTarget {
 
     this.thead = document.createElement("thead");
     const headerTr = document.createElement("tr");
-    const columns = ["", "ID", "Date", "Phase", "Sensor", "Cloud%", "GSD"];
-    columns.forEach((col, idx) => {
+    const columns = [
+      ["", ""],
+      ["vantor.columnId", "ID"],
+      ["vantor.columnDate", "Date"],
+      ["vantor.columnPhase", "Phase"],
+      ["vantor.columnSensor", "Sensor"],
+      ["vantor.columnCloud", "Cloud%"],
+      ["vantor.columnGsd", "GSD"],
+    ] as const;
+    columns.forEach(([key, text], idx) => {
       const th = document.createElement("th");
-      th.textContent = col;
+      if (key) this.localizeText(th, key, text);
       if (idx > 0) {
         th.addEventListener("click", () => this.sortByColumn(idx));
       }
@@ -396,13 +431,13 @@ export class PanelUI extends EventTarget {
 
     this.visualizeBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--success");
     this.visualizeBtn.type = "button";
-    this.visualizeBtn.textContent = "Visualize";
+    this.localizeText(this.visualizeBtn, "vantor.visualize", "Visualize");
     this.visualizeBtn.addEventListener("click", () => this.emit("visualize"));
     section.appendChild(this.visualizeBtn);
 
     this.downloadBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--warning");
     this.downloadBtn.type = "button";
-    this.downloadBtn.textContent = "Download";
+    this.localizeText(this.downloadBtn, "vantor.downloadAction", "Download");
     this.downloadBtn.addEventListener("click", () => this.emit("download"));
     section.appendChild(this.downloadBtn);
 
@@ -420,7 +455,7 @@ export class PanelUI extends EventTarget {
 
     this.cancelBtn = this.el("button", "vantor-panel__btn vantor-panel__btn--small");
     this.cancelBtn.type = "button";
-    this.cancelBtn.textContent = "Cancel";
+    this.localizeText(this.cancelBtn, "vantor.cancel", "Cancel");
     this.cancelBtn.addEventListener("click", () => this.emit("cancel-download"));
     this.progressContainer.appendChild(this.cancelBtn);
 
@@ -434,7 +469,7 @@ export class PanelUI extends EventTarget {
     if (events.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "No events found";
+      this.localizeText(opt, "vantor.noEvents", "No events found");
       this.eventSelect.appendChild(opt);
     } else {
       for (const event of events) {
@@ -449,7 +484,9 @@ export class PanelUI extends EventTarget {
   setItems(items: StacItem[]): void {
     this.items = items;
     this.sortState = null;
-    this.countLabel.textContent = `${items.length} item(s) found`;
+    this.countLabel.textContent = this.t("vantor.itemsFound", `${items.length} item(s) found`, {
+      count: items.length,
+    });
     this.renderTable(items);
   }
 
@@ -476,6 +513,16 @@ export class PanelUI extends EventTarget {
 
   setDrawBBoxActive(active: boolean): void {
     this.drawBBoxBtn.classList.toggle("vantor-panel__btn--active", active);
+  }
+
+  expand(): void {
+    this.collapsed = false;
+    this.panelDiv.classList.remove("vantor-panel--collapsed");
+  }
+
+  setTranslator(translate?: VantorTranslate): void {
+    this.translate = translate;
+    for (const update of this.localeUpdaters) update();
   }
 
   getCheckedItems(): StacItem[] {
@@ -543,8 +590,9 @@ export class PanelUI extends EventTarget {
   }
 
   setLoading(loading: boolean): void {
+    this.loading = loading;
     this.searchBtn.disabled = loading;
-    this.searchBtn.textContent = loading ? "Searching..." : "Search";
+    this.updateSearchButtonLabel();
   }
 
   setStatus(message: string, type: StatusType = "info"): void {
@@ -600,7 +648,10 @@ export class PanelUI extends EventTarget {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.dataset.itemId = item.id;
-      checkbox.addEventListener("click", (e) => e.stopPropagation());
+      checkbox.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.emit("selection-change", item.id);
+      });
       tdCheck.appendChild(checkbox);
       tr.appendChild(tdCheck);
 
@@ -670,6 +721,7 @@ export class PanelUI extends EventTarget {
     const key = propKeys[colIdx];
     const dir = this.sortState.direction === "asc" ? 1 : -1;
 
+    const checkedIds = new Set(this.getCheckedItems().map((item) => item.id));
     const sorted = [...this.items].sort((a, b) => {
       const propsA = stacClient.getItemProperties(a);
       const propsB = stacClient.getItemProperties(b);
@@ -683,6 +735,7 @@ export class PanelUI extends EventTarget {
     });
 
     this.renderTable(sorted);
+    for (const itemId of checkedIds) this.setRowChecked(itemId, true);
   }
 
   private setAllChecked(checked: boolean): void {
@@ -704,6 +757,40 @@ export class PanelUI extends EventTarget {
         },
       }),
     );
+  }
+
+  private t(key: string, defaultValue: string, params?: Record<string, string | number>): string {
+    return this.translate?.(key, defaultValue, params) ?? defaultValue;
+  }
+
+  private localizeText(
+    element: HTMLElement,
+    key: string,
+    defaultValue: string,
+    params?: () => Record<string, string | number>,
+  ): void {
+    const update = () => {
+      element.textContent = this.t(key, defaultValue, params?.());
+    };
+    this.localeUpdaters.push(update);
+    update();
+  }
+
+  private localizeAttribute(
+    element: HTMLElement,
+    attribute: string,
+    key: string,
+    defaultValue: string,
+  ): void {
+    const update = () => element.setAttribute(attribute, this.t(key, defaultValue));
+    this.localeUpdaters.push(update);
+    update();
+  }
+
+  private updateSearchButtonLabel(): void {
+    this.searchBtn.textContent = this.loading
+      ? this.t("vantor.searching", "Searching...")
+      : this.t("vantor.search", "Search");
   }
 
   private el<K extends keyof HTMLElementTagNameMap>(

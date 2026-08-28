@@ -1,5 +1,5 @@
 import type { IControl, Map, ControlPosition } from "maplibre-gl";
-import type { VantorControlOptions, StacItem, BBox } from "./types";
+import type { VantorControlOptions, StacItem, BBox, VantorTranslate } from "./types";
 import { StacClient } from "./stac-client";
 import { PanelUI } from "./panel";
 import type { PanelEventDetail } from "./panel";
@@ -22,6 +22,8 @@ export class VantorControl implements IControl {
   private cogLayer: CogLayer | null = null;
   private downloader: Downloader;
   private options: VantorControlOptions;
+  private disposed = false;
+  private mapLoadHandler: (() => void) | null = null;
 
   private items: StacItem[] = [];
   private drawnBBox: BBox | null = null;
@@ -31,10 +33,11 @@ export class VantorControl implements IControl {
   constructor(options: VantorControlOptions = {}) {
     this.options = options;
     this.stacClient = new StacClient(options.catalogUrl || DEFAULT_CATALOG_URL);
-    this.downloader = new Downloader();
+    this.downloader = new Downloader(options.translate);
   }
 
   onAdd(map: Map): HTMLElement {
+    this.disposed = false;
     this.map = map;
 
     this.container = document.createElement("div");
@@ -47,6 +50,7 @@ export class VantorControl implements IControl {
       this.options.maxHeight,
       this.options.theme,
       this.options.renderEngine,
+      this.options.translate,
     );
     this.bindEvents();
     this.loadCatalog();
@@ -58,6 +62,8 @@ export class VantorControl implements IControl {
     );
 
     const initLayers = () => {
+      this.mapLoadHandler = null;
+      if (this.disposed || this.map !== map) return;
       this.footprintLayer = new FootprintLayer(map);
       this.highlightLayer = new HighlightLayer(map);
       this.drawBBox = new DrawBBox(map);
@@ -71,13 +77,20 @@ export class VantorControl implements IControl {
     if (map.isStyleLoaded()) {
       initLayers();
     } else {
-      map.once("load", initLayers);
+      this.mapLoadHandler = initLayers;
+      map.once("load", this.mapLoadHandler);
     }
 
     return this.container;
   }
 
   onRemove(): void {
+    this.disposed = true;
+    this.downloader.cancel();
+    if (this.map && this.mapLoadHandler) {
+      this.map.off("load", this.mapLoadHandler);
+      this.mapLoadHandler = null;
+    }
     this.footprintLayer?.remove();
     this.highlightLayer?.remove();
     this.drawBBox?.removeLayers();
@@ -99,6 +112,17 @@ export class VantorControl implements IControl {
 
   getCogLayer(): CogLayer | null {
     return this.cogLayer;
+  }
+
+  expand(): void {
+    this.options.collapsed = false;
+    this.panel?.expand();
+  }
+
+  setTranslator(translate?: VantorTranslate): void {
+    this.options.translate = translate;
+    this.downloader.setTranslator(translate);
+    this.panel?.setTranslator(translate);
   }
 
   /**
@@ -143,46 +167,66 @@ export class VantorControl implements IControl {
           break;
         case "select-all":
         case "deselect-all":
-          this.options.onSelectionChange?.(this.panel!.getCheckedItems());
+        case "selection-change":
+          this.options.onSelectionChange?.(this.panel?.getCheckedItems() ?? []);
           break;
       }
     }) as EventListener);
   }
 
   private async loadCatalog(): Promise<void> {
-    if (!this.panel) return;
+    const panel = this.panel;
+    if (!panel) return;
 
-    this.panel.setStatus("Fetching catalog...", "info");
-    this.panel.setLoading(true);
+    panel.setStatus(this.t("vantor.status.fetchingCatalog", "Fetching catalog..."), "info");
+    panel.setLoading(true);
 
     try {
       const events = await this.stacClient.fetchCatalog();
-      this.panel.setEvents(events);
-      this.panel.setStatus(
-        `Found ${events.length} event(s). Select an event and click Search.`,
+      if (this.panel !== panel || this.disposed) return;
+      panel.setEvents(events);
+      panel.setStatus(
+        this.t(
+          "vantor.status.eventsFound",
+          `Found ${events.length} event(s). Select an event and click Search.`,
+          { count: events.length },
+        ),
         "success",
       );
     } catch (err) {
-      this.panel.setStatus(`Failed to fetch catalog: ${(err as Error).message}`, "error");
+      if (this.panel !== panel || this.disposed) return;
+      panel.setStatus(
+        this.t(
+          "vantor.status.catalogFailed",
+          `Failed to fetch catalog: ${(err as Error).message}`,
+          { message: (err as Error).message },
+        ),
+        "error",
+      );
     } finally {
-      this.panel.setLoading(false);
+      if (this.panel === panel && !this.disposed) panel.setLoading(false);
     }
   }
 
   private async handleSearch(): Promise<void> {
-    if (!this.panel || !this.map) return;
+    const panel = this.panel;
+    if (!panel || !this.map) return;
 
-    const eventUrl = this.panel.getSelectedEventUrl();
+    const eventUrl = panel.getSelectedEventUrl();
     if (!eventUrl) {
-      this.panel.setStatus("Please select an event first.", "warning");
+      panel.setStatus(
+        this.t("vantor.status.selectEvent", "Please select an event first."),
+        "warning",
+      );
       return;
     }
 
-    this.panel.setLoading(true);
-    this.panel.setStatus("Fetching items...", "info");
+    panel.setLoading(true);
+    panel.setStatus(this.t("vantor.status.fetchingItems", "Fetching items..."), "info");
 
     try {
       let items = await this.stacClient.fetchItems(eventUrl);
+      if (this.panel !== panel || this.disposed) return;
 
       // Apply bbox filter
       const bbox = this.getSearchBBox();
@@ -191,27 +235,37 @@ export class VantorControl implements IControl {
       }
 
       // Apply phase filter
-      const phase = this.panel.getPhase();
+      const phase = panel.getPhase();
       if (phase !== "all") {
         items = this.stacClient.filterItemsByPhase(items, phase as "pre" | "post");
       }
 
       this.items = items;
-      this.panel.setItems(items);
+      panel.setItems(items);
       this.footprintLayer?.setItems(items);
       this.footprintLayer?.fitToBounds(items);
       this.highlightLayer?.clear();
 
-      this.panel.setStatus(
-        `Found ${items.length} item(s). Check items to visualize or download.`,
+      panel.setStatus(
+        this.t(
+          "vantor.status.itemsFound",
+          `Found ${items.length} item(s). Check items to visualize or download.`,
+          { count: items.length },
+        ),
         "success",
       );
 
       this.options.onItemsLoaded?.(items);
     } catch (err) {
-      this.panel.setStatus(`Failed to fetch items: ${(err as Error).message}`, "error");
+      if (this.panel !== panel || this.disposed) return;
+      panel.setStatus(
+        this.t("vantor.status.itemsFailed", `Failed to fetch items: ${(err as Error).message}`, {
+          message: (err as Error).message,
+        }),
+        "error",
+      );
     } finally {
-      this.panel.setLoading(false);
+      if (this.panel === panel && !this.disposed) panel.setLoading(false);
     }
   }
 
@@ -232,32 +286,46 @@ export class VantorControl implements IControl {
   }
 
   private async handleDrawBBox(): Promise<void> {
-    if (!this.drawBBox || !this.panel) return;
+    const panel = this.panel;
+    const drawBBox = this.drawBBox;
+    if (!drawBBox || !panel) return;
 
     if (this.isDrawing) {
-      this.drawBBox.deactivate();
+      drawBBox.deactivate();
       this.isDrawing = false;
-      this.panel.setDrawBBoxActive(false);
-      this.panel.setStatus("BBox drawing cancelled.", "info");
+      panel.setDrawBBoxActive(false);
+      panel.setStatus(this.t("vantor.status.drawingCancelled", "BBox drawing cancelled."), "info");
       return;
     }
 
     this.isDrawing = true;
-    this.panel.setDrawBBoxActive(true);
-    this.panel.setStatus("Draw a rectangle on the map...", "info");
+    panel.setDrawBBoxActive(true);
+    panel.setStatus(
+      this.t("vantor.status.drawRectangle", "Draw a rectangle on the map..."),
+      "info",
+    );
 
     try {
-      const bbox = await this.drawBBox.activate();
+      const bbox = await drawBBox.activate();
+      if (this.panel !== panel || this.disposed) return;
       this.drawnBBox = bbox;
-      this.panel.setBBoxInfo(
+      panel.setBBoxInfo(
         `${bbox.west.toFixed(4)}, ${bbox.south.toFixed(4)}, ${bbox.east.toFixed(4)}, ${bbox.north.toFixed(4)}`,
       );
-      this.panel.setStatus("Bounding box set. Click Search to filter.", "success");
+      panel.setStatus(
+        this.t("vantor.status.bboxSet", "Bounding box set. Click Search to filter."),
+        "success",
+      );
     } catch {
-      this.panel.setStatus("BBox drawing failed.", "error");
+      if (this.panel === panel && !this.disposed) {
+        panel.setStatus(
+          this.t("vantor.status.drawingCancelled", "BBox drawing cancelled."),
+          "info",
+        );
+      }
     } finally {
       this.isDrawing = false;
-      this.panel.setDrawBBoxActive(false);
+      if (this.panel === panel && !this.disposed) panel.setDrawBBoxActive(false);
     }
   }
 
@@ -265,7 +333,7 @@ export class VantorControl implements IControl {
     this.drawnBBox = null;
     this.drawBBox?.clear();
     this.panel?.setBBoxInfo("");
-    this.panel?.setStatus("Bounding box cleared.", "info");
+    this.panel?.setStatus(this.t("vantor.status.bboxCleared", "Bounding box cleared."), "info");
   }
 
   private handleTableRowClick(itemId: string): void {
@@ -306,64 +374,107 @@ export class VantorControl implements IControl {
   }
 
   private async handleVisualize(): Promise<void> {
-    if (!this.panel || !this.cogLayer) return;
+    const panel = this.panel;
+    const cogLayer = this.cogLayer;
+    if (!panel || !cogLayer) return;
 
-    const checked = this.panel.getCheckedItems();
+    const checked = panel.getCheckedItems();
     if (checked.length === 0) {
-      this.panel.setStatus("No items selected. Check items first.", "warning");
+      panel.setStatus(
+        this.t("vantor.status.noSelection", "No items selected. Check items first."),
+        "warning",
+      );
       return;
     }
 
-    this.cogLayer.setRenderEngine(this.panel.getRenderEngine());
+    cogLayer.setRenderEngine(panel.getRenderEngine());
 
-    this.panel.setStatus(`Adding ${checked.length} COG layer(s)...`, "info");
+    panel.setStatus(
+      this.t("vantor.status.addingLayers", `Adding ${checked.length} COG layer(s)...`, {
+        count: checked.length,
+      }),
+      "info",
+    );
 
     let added = 0;
     for (const item of checked) {
       try {
-        await this.cogLayer.addCogLayer(item);
+        await cogLayer.addCogLayer(item);
+        if (this.panel !== panel || this.disposed) return;
         added++;
       } catch (err) {
-        this.panel.setStatus(`Failed to add ${item.id}: ${(err as Error).message}`, "error");
+        if (this.panel !== panel || this.disposed) return;
+        panel.setStatus(
+          this.t("vantor.status.addFailed", `Failed to add ${item.id}: ${(err as Error).message}`, {
+            id: item.id,
+            message: (err as Error).message,
+          }),
+          "error",
+        );
       }
     }
 
     if (added > 0) {
-      this.panel.setStatus(`Added ${added} COG layer(s).`, "success");
+      panel.setStatus(
+        this.t("vantor.status.layersAdded", `Added ${added} COG layer(s).`, { count: added }),
+        "success",
+      );
     }
   }
 
   private async handleDownload(): Promise<void> {
-    if (!this.panel) return;
+    const panel = this.panel;
+    if (!panel) return;
 
-    const checked = this.panel.getCheckedItems();
+    const checked = panel.getCheckedItems();
     if (checked.length === 0) {
-      this.panel.setStatus("No items selected. Check items first.", "warning");
+      panel.setStatus(
+        this.t("vantor.status.noSelection", "No items selected. Check items first."),
+        "warning",
+      );
       return;
     }
 
-    this.panel.setDownloading(true);
-    this.panel.setProgress(0);
-    this.panel.setStatus(`Downloading ${checked.length} file(s)...`, "info");
+    panel.setDownloading(true);
+    panel.setProgress(0);
+    panel.setStatus(
+      this.t("vantor.status.startingDownloads", `Starting ${checked.length} download(s)...`, {
+        count: checked.length,
+      }),
+      "info",
+    );
 
     const result = await this.downloader.downloadItems(
       checked,
       (item) => this.stacClient.getCogUrl(item),
       (current, total, message) => {
-        this.panel?.setProgress((current / total) * 100);
-        this.panel?.setStatus(message, "info");
+        if (this.panel !== panel || this.disposed) return;
+        panel.setProgress((current / total) * 100);
+        panel.setStatus(message, "info");
       },
     );
 
-    this.panel.setDownloading(false);
+    if (this.panel !== panel || this.disposed) return;
+    panel.setDownloading(false);
 
-    if (result.completed > 0) {
-      this.panel.setStatus(
-        `Downloaded ${result.completed} file(s).${result.failed > 0 ? ` ${result.failed} failed.` : ""}`,
+    if (result.started > 0) {
+      panel.setStatus(
+        this.t(
+          "vantor.status.downloadsStarted",
+          `Started ${result.started} download(s).${result.failed > 0 ? ` ${result.failed} failed.` : ""}`,
+          { started: result.started, failed: result.failed },
+        ),
         result.failed > 0 ? "warning" : "success",
       );
     } else {
-      this.panel.setStatus("Download cancelled or failed.", "warning");
+      panel.setStatus(
+        this.t("vantor.status.downloadCancelled", "Download cancelled or failed."),
+        "warning",
+      );
     }
+  }
+
+  private t(key: string, defaultValue: string, params?: Record<string, string | number>): string {
+    return this.options.translate?.(key, defaultValue, params) ?? defaultValue;
   }
 }

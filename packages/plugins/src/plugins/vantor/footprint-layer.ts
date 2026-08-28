@@ -11,6 +11,8 @@ export class FootprintLayer {
   private map: Map;
   private clickHandler: ((e: MapMouseEvent) => void) | null = null;
   private onClickCallback: ((itemId: string) => void) | null = null;
+  private mouseEnterHandler: (() => void) | null = null;
+  private mouseLeaveHandler: (() => void) | null = null;
 
   constructor(map: Map) {
     this.map = map;
@@ -73,12 +75,14 @@ export class FootprintLayer {
       });
 
       // Change cursor on hover
-      this.map.on("mouseenter", FILL_LAYER_ID, () => {
+      this.mouseEnterHandler = () => {
         this.map.getCanvas().style.cursor = "pointer";
-      });
-      this.map.on("mouseleave", FILL_LAYER_ID, () => {
+      };
+      this.mouseLeaveHandler = () => {
         this.map.getCanvas().style.cursor = "";
-      });
+      };
+      this.map.on("mouseenter", FILL_LAYER_ID, this.mouseEnterHandler);
+      this.map.on("mouseleave", FILL_LAYER_ID, this.mouseLeaveHandler);
     }
   }
 
@@ -139,6 +143,14 @@ export class FootprintLayer {
     if (this.clickHandler) {
       this.map.off("click", FILL_LAYER_ID, this.clickHandler);
       this.clickHandler = null;
+    }
+    if (this.mouseEnterHandler) {
+      this.map.off("mouseenter", FILL_LAYER_ID, this.mouseEnterHandler);
+      this.mouseEnterHandler = null;
+    }
+    if (this.mouseLeaveHandler) {
+      this.map.off("mouseleave", FILL_LAYER_ID, this.mouseLeaveHandler);
+      this.mouseLeaveHandler = null;
     }
 
     for (const layerId of [POST_LINE_LAYER_ID, PRE_LINE_LAYER_ID, FILL_LAYER_ID]) {

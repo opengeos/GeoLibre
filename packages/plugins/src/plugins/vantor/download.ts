@@ -1,35 +1,63 @@
-import type { StacItem } from "./types";
+import type { StacItem, VantorTranslate } from "./types";
 
 export class Downloader {
   private cancelled = false;
+  private translate?: VantorTranslate;
+
+  constructor(translate?: VantorTranslate) {
+    this.translate = translate;
+  }
+
+  setTranslator(translate?: VantorTranslate): void {
+    this.translate = translate;
+  }
 
   async downloadItems(
     items: StacItem[],
     getCogUrl: (item: StacItem) => string | null,
     onProgress?: (current: number, total: number, message: string) => void,
-  ): Promise<{ completed: number; failed: number }> {
+  ): Promise<{ started: number; failed: number }> {
     this.cancelled = false;
     const total = items.length;
-    let completed = 0;
+    let started = 0;
     let failed = 0;
 
     for (let i = 0; i < items.length; i++) {
       if (this.cancelled) {
-        onProgress?.(i, total, `Download cancelled. ${completed} file(s) completed.`);
+        onProgress?.(
+          i,
+          total,
+          this.t(
+            "vantor.downloadProgress.cancelled",
+            `Download cancelled. ${started} download(s) started.`,
+            { count: started },
+          ),
+        );
         break;
       }
 
       const item = items[i];
       const cogUrl = getCogUrl(item);
-      if (!cogUrl) {
+      if (!cogUrl || !isHttpsUrl(cogUrl)) {
         failed++;
+        onProgress?.(
+          i + 1,
+          total,
+          this.t("vantor.downloadProgress.invalidUrl", `Skipped ${item.id}: invalid HTTPS URL.`, {
+            id: item.id,
+          }),
+        );
         continue;
       }
 
       const filename = `${item.id}.tif`;
 
       try {
-        onProgress?.(i, total, `Downloading ${filename}...`);
+        onProgress?.(
+          i,
+          total,
+          this.t("vantor.downloadProgress.starting", `Starting ${filename}...`, { filename }),
+        );
 
         // Use direct link to let the browser handle the download natively.
         // This avoids loading the entire file into memory via fetch+blob,
@@ -43,8 +71,16 @@ export class Downloader {
         a.click();
         document.body.removeChild(a);
 
-        completed++;
-        onProgress?.(i + 1, total, `Started ${filename} (${completed}/${total})`);
+        started++;
+        onProgress?.(
+          i + 1,
+          total,
+          this.t("vantor.downloadProgress.started", `Started ${filename} (${started}/${total})`, {
+            filename,
+            started,
+            total,
+          }),
+        );
 
         // Small delay between downloads to avoid browser throttling
         if (i < items.length - 1) {
@@ -52,14 +88,34 @@ export class Downloader {
         }
       } catch (e) {
         failed++;
-        onProgress?.(i + 1, total, `Failed to download ${filename}: ${(e as Error).message}`);
+        onProgress?.(
+          i + 1,
+          total,
+          this.t(
+            "vantor.downloadProgress.failed",
+            `Failed to start ${filename}: ${(e as Error).message}`,
+            { filename, message: (e as Error).message },
+          ),
+        );
       }
     }
 
-    return { completed, failed };
+    return { started, failed };
   }
 
   cancel(): void {
     this.cancelled = true;
+  }
+
+  private t(key: string, defaultValue: string, params?: Record<string, string | number>): string {
+    return this.translate?.(key, defaultValue, params) ?? defaultValue;
+  }
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
   }
 }

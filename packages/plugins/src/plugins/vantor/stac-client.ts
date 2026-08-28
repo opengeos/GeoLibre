@@ -116,15 +116,26 @@ export class StacClient {
   getCogUrl(item: StacItem): string | null {
     const assets = item.assets || {};
     const visual = assets.visual;
-    if (visual) return visual.href;
+    if (visual && this.isHttpsUrl(visual.href)) return visual.href;
 
     for (const asset of Object.values(assets)) {
       const assetType = asset.type || "";
-      if (assetType.includes("geotiff") || assetType.includes("tiff")) {
+      if (
+        (assetType.includes("geotiff") || assetType.includes("tiff")) &&
+        this.isHttpsUrl(asset.href)
+      ) {
         return asset.href;
       }
     }
     return null;
+  }
+
+  private isHttpsUrl(value: string): boolean {
+    try {
+      return new URL(value).protocol === "https:";
+    } catch {
+      return false;
+    }
   }
 
   getThumbnailUrl(item: StacItem): string | null {

@@ -81,6 +81,12 @@ export interface BBox {
   north: number;
 }
 
+export type VantorTranslate = (
+  key: string,
+  defaultValue: string,
+  params?: Record<string, string | number>,
+) => string;
+
 export type PhaseFilter = "all" | "pre" | "post";
 
 export interface ItemProperties {
@@ -110,6 +116,8 @@ export interface VantorControlOptions {
   theme?: "auto" | "light" | "dark";
   /** Initial COG rendering engine. Defaults to the faster GPU renderer. */
   renderEngine?: CogRenderEngine;
+  /** Translate panel text; the English default is used when omitted. */
+  translate?: VantorTranslate;
   /**
    * Supplies the maplibre-gl-raster module used for COG rendering. Defaults to a
    * dynamic `import('maplibre-gl-raster')`. A host such as GeoLibre can pass its

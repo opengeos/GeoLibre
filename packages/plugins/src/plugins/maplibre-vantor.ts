@@ -6,6 +6,7 @@ export const VANTOR_PLUGIN_ID = "maplibre-gl-vantor";
 let control: VantorControl | null = null;
 let position: GeoLibreMapControlPosition = "top-left";
 let themeObserver: MutationObserver | null = null;
+let unsubscribeLocale: (() => void) | null = null;
 
 /** Follow GeoLibre's explicit theme instead of the operating-system preference. */
 function hostTheme(): "light" | "dark" {
@@ -18,13 +19,15 @@ function createControl(app: GeoLibreAppAPI): VantorControl {
   const addCogLayer = app.addCogLayer;
   const getMaplibreGlRaster = app.getMaplibreGlRaster;
   return new VantorControl({
-    collapsed: false,
+    collapsed: true,
     panelWidth: 380,
     theme: hostTheme(),
     // Use the host renderer so imagery becomes a persistent, native layer in
     // GeoLibre's Layers panel and can use any renderer the host exposes.
     cogAdder: addCogLayer ? (name, url, options) => addCogLayer(name, url, options) : undefined,
     rasterLoader: getMaplibreGlRaster ? () => getMaplibreGlRaster() : undefined,
+    translate: (key, defaultValue, params) =>
+      app.translate?.(key, defaultValue, params) ?? defaultValue,
   });
 }
 
@@ -39,6 +42,18 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
       control = null;
       return false;
     }
+
+    const activeControl = control;
+    setTimeout(() => {
+      if (control === activeControl) activeControl.expand();
+    }, 0);
+
+    unsubscribeLocale ??=
+      app.onLocaleChange?.(() =>
+        control?.setTranslator(
+          (key, defaultValue, params) => app.translate?.(key, defaultValue, params) ?? defaultValue,
+        ),
+      ) ?? null;
 
     if (
       !themeObserver &&
@@ -55,6 +70,8 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     themeObserver?.disconnect();
     themeObserver = null;
+    unsubscribeLocale?.();
+    unsubscribeLocale = null;
     if (!control) return;
     app.removeMapControl(control);
     control = null;

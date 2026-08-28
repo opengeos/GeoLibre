@@ -46,7 +46,7 @@ import {
   uninstallPluginArchiveFromFile,
   upgradeExternalPlugin,
 } from "../../hooks/usePlugins";
-import type { InstalledWebPlugin } from "../../lib/external-plugins";
+import { pluginManifestUrlsForIds, type InstalledWebPlugin } from "../../lib/external-plugins";
 import {
   fetchPluginRegistry,
   isNewerVersion,
@@ -218,7 +218,13 @@ export function ManagePluginsDialog({
   const isUpgradeable = useCallback(
     (entry: PluginRegistryEntry) => {
       const loaded = loadedVersions.get(entry.id);
-      return isInstalled(entry) && loaded !== undefined && isNewerVersion(entry.version, loaded);
+      const ownsLoadedPlugin = pluginManifestUrlsForIds([entry.id]).includes(entry.manifestUrl);
+      return (
+        isInstalled(entry) &&
+        ownsLoadedPlugin &&
+        loaded !== undefined &&
+        isNewerVersion(entry.version, loaded)
+      );
     },
     [isInstalled, loadedVersions],
   );
