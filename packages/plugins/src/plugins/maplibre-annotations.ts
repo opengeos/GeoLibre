@@ -2100,7 +2100,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
   container.innerHTML = "";
   container.className = "geolibre-elements-panel";
   container.style.cssText =
-    "padding: 12px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--geolibre-fg, #1f2937); height: 100%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;";
+    "--geolibre-bg:hsl(var(--card)); --geolibre-bg-subtle:hsl(var(--accent)); --geolibre-fg:hsl(var(--foreground)); --geolibre-fg-muted:hsl(var(--muted-foreground)); --geolibre-border:hsl(var(--border)); padding: 12px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--geolibre-fg, #1f2937); height: 100%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;";
 
   let editingId: string | null = null;
 
@@ -2168,6 +2168,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     addLayer.textContent = "+";
     addLayer.title = labels.newLayer;
     addLayer.setAttribute("aria-label", labels.newLayer);
+    addLayer.style.cssText =
+      "width:30px; height:30px; flex:0 0 30px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg-subtle,#f3f4f6); color:inherit; font-size:20px; font-weight:500; line-height:1; cursor:pointer;";
     addLayer.onclick = () => {
       createAnnotationLayer();
       update();
@@ -2297,13 +2299,14 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       const ctrl = document.createElement("div");
       ctrl.style.cssText = "display: flex; align-items: center; gap: 2px;";
+      const actionButtonStyle =
+        "border:none; background:none; cursor:pointer; width:26px; height:26px; flex:0 0 26px; display:inline-flex; align-items:center; justify-content:center; color:var(--geolibre-fg-muted,#9ca3af); padding:0; line-height:1;";
 
       const edit = document.createElement("button");
       edit.textContent = "✎";
       edit.title = labels.edit;
       edit.setAttribute("aria-label", labels.edit);
-      edit.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      edit.style.cssText = `${actionButtonStyle} font-size:18px;`;
       edit.onclick = (e) => {
         e.stopPropagation();
         editingId = editingId === el.id ? null : el.id;
@@ -2315,8 +2318,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       move.textContent = "⌖";
       move.title = labels.move;
       move.setAttribute("aria-label", labels.move);
-      move.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      move.style.cssText = `${actionButtonStyle} font-size:19px;`;
       move.onclick = (e) => {
         e.stopPropagation();
         movingAnnotationId = el.id;
@@ -2325,10 +2327,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       ctrl.appendChild(move);
 
       const up = document.createElement("button");
-      up.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
+      up.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
       up.title = "Move Up";
-      up.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      up.style.cssText = actionButtonStyle;
       up.disabled = index === 0;
       up.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2337,10 +2338,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       ctrl.appendChild(up);
 
       const down = document.createElement("button");
-      down.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      down.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
       down.title = "Move Down";
-      down.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      down.style.cssText = actionButtonStyle;
       down.disabled = index === elements.length - 1;
       down.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2353,8 +2353,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
         : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
       vis.title = el.visible ? "Hide" : "Show";
-      vis.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #4b5563; padding: 2px;";
+      vis.style.cssText = actionButtonStyle;
       vis.addEventListener("click", (e) => {
         e.stopPropagation();
         updateElementProps(el.id, { visible: !el.visible });
@@ -2387,8 +2386,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       const del = document.createElement("button");
       del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
       del.title = "Delete";
-      del.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #ef4444; padding: 2px;";
+      del.style.cssText = `${actionButtonStyle} color:#ef4444;`;
       del.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteElementById(el.id);
