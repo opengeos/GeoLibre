@@ -73,6 +73,8 @@ interface FieldCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapController | null>;
+  /** Bumped by the shell whenever the map controller (re)initialises. */
+  mapReadyGeneration: number;
 }
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
@@ -153,6 +155,7 @@ export function FieldCollectionDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  mapReadyGeneration,
 }: FieldCollectionDialogProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
@@ -287,6 +290,17 @@ export function FieldCollectionDialog({
     if (map) removeDrawPreview(map);
   }, [clearMarker, getMap]);
 
+  // Portal host for the on-map controls. Resolved into state rather than read
+  // at render time, because the controller lives in a plain ref: a map that
+  // initialises after this component first renders would otherwise leave the
+  // controls unmounted until some unrelated re-render happened to recompute it.
+  // `mapReadyGeneration` is the shell's "the controller (re)initialised"
+  // signal, the same dependency `useMapPanelControl` takes.
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalHost(getMap()?.getContainer() ?? null);
+  }, [getMap, mapReadyGeneration]);
+
   // Supersede both the placement in progress and the capture it belongs to, so
   // no async work survives into a context it wasn't started in.
   const invalidateCapture = useCallback(() => {
@@ -377,6 +391,10 @@ export function FieldCollectionDialog({
   useEffect(() => {
     setSessionActive(open);
     targetChosenRef.current = false;
+    // A capture finishing in the same tick as the switch would otherwise have
+    // its suppress flag consumed by the open-reset effect below, leaving the
+    // old project's pending geometry in the new project's session.
+    suppressResetRef.current = false;
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
@@ -835,7 +853,6 @@ export function FieldCollectionDialog({
   // `fixed bottom-6` did. The container carries `.maplibregl-map { position:
   // relative }`, so `absolute bottom-6` is measured from the map's own edge and
   // follows it as the shell's panels open and close.
-  const mapContainer = getMap()?.getContainer() ?? null;
   const overlays = (
     <>
       {/* `w-max` on the pill: a `left-1/2` absolute box otherwise shrink-to-fits
@@ -882,7 +899,7 @@ export function FieldCollectionDialog({
 
   return (
     <>
-      {mapContainer ? createPortal(overlays, mapContainer) : null}
+      {portalHost ? createPortal(overlays, portalHost) : null}
 
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-md">
