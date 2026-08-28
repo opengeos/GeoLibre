@@ -1503,6 +1503,9 @@ export const MapCanvas = memo(function MapCanvas({
   }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
+  // The layer all-layer Identify last activated, so a click that hits nothing
+  // can retire that selection without touching one the user made themselves.
+  const globalIdentifyActivatedLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
   const hoverTooltip = useRef<maplibregl.Popup | null>(null);
@@ -2169,6 +2172,7 @@ export const MapCanvas = memo(function MapCanvas({
         const activate = (hit: GlobalIdentifyHit) => {
           selectLayer(hit.layer.id);
           selectFeature(hit.featureId);
+          globalIdentifyActivatedLayerId.current = hit.layer.id;
         };
         const showPopup = (content: HTMLElement) => {
           identifyPopup.current?.remove();
@@ -2189,7 +2193,18 @@ export const MapCanvas = memo(function MapCanvas({
           if (allHits.length === 0) {
             identifyPopup.current?.remove();
             identifyPopup.current = null;
-            selectLayer(null);
+            selectFeature(null);
+            // Retire the layer selection only when this mode is what set it.
+            // A layer the user picked in the Layers panel — to edit its style,
+            // say — is theirs to keep, and the single-layer Identify path
+            // never clears it either.
+            if (
+              globalIdentifyActivatedLayerId.current !== null &&
+              useAppStore.getState().selectedLayerId === globalIdentifyActivatedLayerId.current
+            ) {
+              selectLayer(null);
+            }
+            globalIdentifyActivatedLayerId.current = null;
             return;
           }
           activate(allHits[0]);
@@ -2318,6 +2333,7 @@ export const MapCanvas = memo(function MapCanvas({
         map.off("click", handleIdentifyAllClick);
         identifyPopup.current?.remove();
         identifyPopup.current = null;
+        globalIdentifyActivatedLayerId.current = null;
         if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
       };
     }

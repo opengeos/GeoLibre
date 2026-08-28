@@ -3,6 +3,8 @@ import {
   effectiveLayerRenderState,
   IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
+  isPopupClickEnabled,
+  resolveLayerCapabilities,
   type GeoLibreLayer,
   type LayerGroup,
   type LayerStyle,
@@ -438,13 +440,17 @@ function createDuckDBControl(DuckDBControlClass: DuckDBControlConstructor): Duck
       shouldSyncControl = true;
     }
 
-    // Under the all-layers sentinel pickability depends on whether a visible
-    // DuckDB layer exists, so a layer or group changed while Identify is
-    // already on has to re-sync it too.
+    // Under the all-layers sentinel pickability depends on which DuckDB layers
+    // are queryable, so a layer or group changed while that mode is on has to
+    // re-sync it too. Gated on the sentinel: outside it the answer turns only
+    // on the Identify target, and this fires on every layer edit and reorder.
+    const identifyAllActive =
+      state.identifyLayerId === IDENTIFY_ALL_LAYERS_ID ||
+      previous.identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
     if (
       state.identifyLayerId !== previous.identifyLayerId ||
-      state.layers !== previous.layers ||
-      state.layerGroups !== previous.layerGroups
+      (identifyAllActive &&
+        (state.layers !== previous.layers || state.layerGroups !== previous.layerGroups))
     ) {
       syncDuckDBPickableFromStore(state.layers, state.identifyLayerId, state.layerGroups);
     }
@@ -597,11 +603,12 @@ function clearDuckDBRenderedLayers(): void {
  * control's own handlers.
  *
  * True while Identify targets one DuckDB layer, and while all-layer Identify is
- * on and a *visible* DuckDB layer exists: MapCanvas hit-tests every eligible
- * DuckDB layer through `identifyLayerAtPoint` in that mode, which needs a
- * pickable overlay just as the single-layer path does. The visibility test
- * matches the `eligibleLayers` filter there, group state included, so a hidden
- * layer never arms the overlay.
+ * on and a DuckDB layer it would actually query exists: MapCanvas hit-tests
+ * every eligible DuckDB layer through `identifyLayerAtPoint` in that mode,
+ * which needs a pickable overlay just as the single-layer path does. The three
+ * tests mirror the `eligibleLayers` filter there — visibility with group state
+ * folded in, the query capability, and the layer's click-popup setting — so a
+ * layer that mode would skip never arms the overlay.
  *
  * @param layers Store layers.
  * @param identifyLayerId Identify target, or the all-layers sentinel.
@@ -616,7 +623,11 @@ function duckDBIdentifyModeActiveFor(
   if (identifyLayerId === IDENTIFY_ALL_LAYERS_ID) {
     const groupById = new Map(layerGroups.map((group) => [group.id, group]));
     return layers.some(
-      (layer) => isDuckDBQueryLayer(layer) && effectiveLayerRenderState(layer, groupById).visible,
+      (layer) =>
+        isDuckDBQueryLayer(layer) &&
+        effectiveLayerRenderState(layer, groupById).visible &&
+        resolveLayerCapabilities(layer).query &&
+        isPopupClickEnabled(layer.popup),
     );
   }
   const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
