@@ -14,6 +14,7 @@ import ReactDOM from "react-dom/client";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/700.css";
+import "@geolibre/plugins/maplibre-vantor/style.css";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "@maplibre/maplibre-gl-directions/dist/style.css";
 import "maplibre-gl-3d-tiles/style.css";

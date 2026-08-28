@@ -197,6 +197,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-arcgis-hub": "advanced",
   "maplibre-gl-source-coop": "advanced",
   "maplibre-gl-huggingface": "advanced",
+  "maplibre-gl-vantor": "advanced",
   "maplibre-gl-esri-wayback": "advanced",
   "maplibre-gl-geoagent": "advanced",
   "maplibre-samgeo": "advanced",

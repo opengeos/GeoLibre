@@ -56,6 +56,7 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four Unit
 | Integration | Where | What it does |
 | --- | --- | --- |
 | **Historical Imagery** | Plugins menu | Browse historical Esri World Imagery snapshots. |
+| **Vantor Open Data** | Plugins → Web Services | Search disaster-event satellite imagery, filter pre/post-event scenes by map extent, visualize Cloud-Optimized GeoTIFFs, and download selected scenes. |
 | **Street View** | Plugins menu | View Google Street View and Mapillary street-level imagery. Needs provider credentials (see [Getting Started](../getting-started.md#optional-imagery-credentials)). |
 
 ## Time series and comparison

@@ -11,6 +11,7 @@
     "./geo-editor-geometry": "./src/plugins/geo-editor-geometry.ts",
     "./local-netcdf": "./src/plugins/local-netcdf.ts",
     "./maplibre-graticule": "./src/plugins/maplibre-graticule.ts",
+    "./maplibre-vantor/style.css": "./src/plugins/vantor/styles.css",
     "./raster-symbology": "./src/plugins/raster-symbology.ts",
     "./right-panel-registry": "./src/right-panel-registry.ts",
     "./zarr-time-axis": "./src/plugins/zarr-time-axis.ts"

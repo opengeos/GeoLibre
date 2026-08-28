@@ -27,6 +27,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-nasa-earthdata",
   "maplibre-gl-enviroatlas",
   "maplibre-gl-national-map",
+  "maplibre-gl-vantor",
   "maplibre-gl-earthdata-gis",
   "maplibre-gl-openaerialmap",
   "maplibre-gl-arcgis-hub",

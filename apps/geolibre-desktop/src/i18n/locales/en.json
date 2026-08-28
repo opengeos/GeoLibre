@@ -2903,6 +2903,7 @@
       "maplibre-gl-geo-editor": "GeoEditor",
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
+      "maplibre-gl-vantor": "Vantor Open Data",
       "maplibre-gl-graticule": "Gridlines",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
