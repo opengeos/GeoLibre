@@ -289,58 +289,59 @@ export function FieldCollectionDialog({
     contextSeqRef.current += 1;
   }, []);
 
-  // Drop everything the current capture owns and point the form at `target`.
+  // Everything one capture owns: the placed geometry, the form, the photo, the
+  // map preview, and the async work behind them. The saved count goes too — it
+  // belongs to the layer being left, so without this the first save into a new
+  // target reads as the Nth. Split out from `resetCapture` so switching the
+  // target layer can drop a capture without also discarding a half-composed
+  // layer on the setup step.
+  const clearCapture = useCallback(() => {
+    invalidateCapture();
+    setPending(null);
+    setValues({});
+    setPhoto(null);
+    setPicking(false);
+    setDrawing(false);
+    setVertices([]);
+    verticesRef.current = [];
+    setLocating(false);
+    setLastGpsFix(null);
+    setErrors({});
+    setNotice(null);
+    savedCountRef.current = 0;
+    clearPreview();
+  }, [clearPreview, invalidateCapture]);
+
+  // Drop the capture and point the form at `target`, taking the setup step back
+  // to a blank new-layer form. A non-empty target becomes the session's own:
+  // the pill names it from here on, so a later layer reorder must not move the
+  // target out from under what the user is being shown.
   const resetCapture = useCallback(
     (target: string) => {
-      invalidateCapture();
+      clearCapture();
       setLayerId(target);
+      if (target) targetChosenRef.current = true;
       setLayerName("");
       setGeometry("point");
       setDrafts(target ? [] : [makeDraft()]);
-      setPending(null);
-      setValues({});
-      setPhoto(null);
-      setPicking(false);
-      setDrawing(false);
-      setVertices([]);
-      verticesRef.current = [];
-      setLocating(false);
-      setLastGpsFix(null);
-      setErrors({});
-      setNotice(null);
-      savedCountRef.current = 0;
-      clearPreview();
     },
-    [clearPreview, invalidateCapture, makeDraft],
+    [clearCapture, makeDraft],
   );
 
   // Switching the capture target mid-session drops the in-progress capture: a
   // point picked for Culverts must not be saved into Water Sources, and the
-  // sequence bump makes sure a GPS fix or photo read still in flight for the
-  // old target can't land on the new one either. Any drafts typed into the
-  // "new layer" setup step are kept, so toggling to a layer and back doesn't
-  // lose them.
+  // invalidation makes sure a GPS fix still in flight for the old target can't
+  // land on the new one either. Unlike `resetCapture` this keeps the setup
+  // step's fields, so toggling to a layer and back doesn't lose a layer being
+  // composed — the step just needs a row to type into.
   const handleTargetChange = useCallback(
     (nextId: string) => {
-      invalidateCapture();
+      clearCapture();
       targetChosenRef.current = true;
       setLayerId(nextId);
-      setPending(null);
-      setLastGpsFix(null);
-      setLocating(false);
-      setValues({});
-      setPhoto(null);
-      setVertices([]);
-      verticesRef.current = [];
-      clearPreview();
-      setErrors({});
-      setNotice(null);
-      // The count belongs to the layer being left, not to the one arrived at:
-      // without this the first save into the new target reads as the Nth.
-      savedCountRef.current = 0;
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
     },
-    [clearPreview, drafts.length, invalidateCapture, makeDraft],
+    [clearCapture, drafts.length, makeDraft],
   );
 
   // Reset the capture form when the dialog opens. The capture *target* is not
