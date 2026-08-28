@@ -7,7 +7,10 @@ import {
   gridPixelAt,
   NETCDF_IMAGE_SOURCE_KIND,
 } from "../lib/netcdf-image-symbology";
-import { rasterPixelIdentifyProperties } from "../lib/global-raster-identify";
+import {
+  rasterIdentifyProperties,
+  rasterPixelIdentifyProperties,
+} from "../lib/global-raster-identify";
 import { netcdfIdentifyRows } from "./useNetcdfIdentify";
 
 /**
@@ -31,7 +34,7 @@ export function useGlobalRasterIdentify(): MapCanvasRasterIdentify {
         if (!pixel) return null;
         return {
           title: t("map.identifyAll.pixel"),
-          properties: Object.fromEntries(netcdfIdentifyRows(state, pixel, t)),
+          properties: rasterIdentifyProperties(netcdfIdentifyRows(state, pixel, t)),
         };
       }
 

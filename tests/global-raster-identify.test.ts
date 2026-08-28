@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatRasterIdentifyValue,
+  rasterIdentifyProperties,
   rasterPixelIdentifyProperties,
 } from "../apps/geolibre-desktop/src/lib/global-raster-identify";
 
@@ -42,5 +43,43 @@ describe("rasterPixelIdentifyProperties", () => {
       Row: 12,
       Column: 34,
     });
+  });
+
+  it("keeps every band when display labels collide", () => {
+    const properties = rasterPixelIdentifyProperties(
+      {
+        lngLat: [-122.123456, 47.987654],
+        row: 12,
+        col: 34,
+        bands: [
+          { index: 1, value: 1, isNodata: false, name: "Reflectance" },
+          { index: 2, value: 2, isNodata: false, name: "Reflectance" },
+          { index: 3, value: 3, isNodata: false, name: "Row" },
+        ],
+      },
+      labels,
+    );
+
+    assert.deepEqual(properties, {
+      Reflectance: "1",
+      "Reflectance (2)": "2",
+      Row: "3",
+      Coordinates: "-122.12346, 47.98765",
+      "Row (2)": 12,
+      Column: 34,
+    });
+  });
+});
+
+describe("rasterIdentifyProperties", () => {
+  it("suffixes repeated labels instead of overwriting them", () => {
+    assert.deepEqual(
+      rasterIdentifyProperties([
+        ["Temperature", "1"],
+        ["Temperature", "2"],
+        ["Temperature", "3"],
+      ]),
+      { Temperature: "1", "Temperature (2)": "2", "Temperature (3)": "3" },
+    );
   });
 });

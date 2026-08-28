@@ -2118,9 +2118,13 @@ export const MapCanvas = memo(function MapCanvas({
         globalIdentifyAbortController = abortController;
 
         const owners = new Map<string, GeoLibreLayer>();
+        // effectiveLayerRenderState rebuilds an id -> group map on every call
+        // when handed the array form, so fold every candidate against one map
+        // built once per click instead of one per layer.
+        const groupById = new Map(layerGroupsRef.current.map((group) => [group.id, group]));
         const eligibleLayers = layers.filter(
           (candidate) =>
-            effectiveLayerRenderState(candidate, layerGroupsRef.current).visible &&
+            effectiveLayerRenderState(candidate, groupById).visible &&
             resolveLayerCapabilities(candidate).query &&
             isPopupClickEnabled(candidate.popup),
         );

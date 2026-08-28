@@ -3075,6 +3075,9 @@ export function LayerPanel({
               <EyeOff className="h-4 w-4 text-muted-foreground" />
             )}
           </Button>
+          {/* A geometry edit session owns map clicks, which is why the
+              per-layer Identify button is disabled while its layer is edited;
+              the all-layer handler has to stand down for the same reason. */}
           <Button
             variant="ghost"
             size="icon"
@@ -3082,6 +3085,7 @@ export function LayerPanel({
             title={t("layers.identifyVisibleLayersHint")}
             aria-label={t("layers.identifyVisibleLayers")}
             aria-pressed={identifyLayerId === IDENTIFY_ALL_LAYERS_ID}
+            disabled={geometryEditLayerId !== null}
             onClick={() =>
               setIdentifyLayer(
                 identifyLayerId === IDENTIFY_ALL_LAYERS_ID ? null : IDENTIFY_ALL_LAYERS_ID,
@@ -3824,7 +3828,11 @@ export function LayerPanel({
                               onSelect={() => {
                                 if (!layerEditable) return;
                                 selectLayer(layer.id);
-                                if (identifyActive) setIdentifyLayer(null);
+                                // The all-layer handler answers clicks the
+                                // edit session needs just as the per-layer one
+                                // does, so it stands down too.
+                                if (identifyActive || identifyLayerId === IDENTIFY_ALL_LAYERS_ID)
+                                  setIdentifyLayer(null);
                                 onToggleGeometryEdit(layer.id);
                               }}
                             >
