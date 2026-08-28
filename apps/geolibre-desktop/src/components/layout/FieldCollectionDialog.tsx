@@ -209,11 +209,19 @@ export function FieldCollectionDialog({
   // Mirrors `vertices` so the map double-click handler can finish synchronously.
   const verticesRef = useRef<Vertex[]>([]);
   // Capture generation. Bumped on each GPS request and on anything that
-  // supersedes the capture in progress — another capture, a target-layer
-  // switch, a project switch, dismissing the dialog — so slow async work (a GPS
-  // fix, a photo being read) is dropped instead of landing on a capture, layer,
-  // or project it was not started in.
+  // supersedes the capture in progress, including actions *within* one capture
+  // (repositioning a point, starting a drawing), so a slow GPS fix is dropped
+  // rather than overwriting a newer capture.
   const gpsSeqRef = useRef(0);
+  // Context generation: bumped only when the capture's *context* turns over —
+  // a different target layer, a different project, the dialog being dismissed.
+  // Async work that belongs to the capture rather than to one placement (the
+  // photo read) pins itself to this, so repositioning a point mid-read keeps
+  // the photo instead of silently discarding it.
+  const contextSeqRef = useRef(0);
+  // Distinguishes "this session has no target yet" from "the user deliberately
+  // chose the new-layer setup step"; the dialog shows both as `layerId === ""`.
+  const targetChosenRef = useRef(false);
 
   useEffect(() => {
     activeRef.current = open || picking || drawing;
@@ -232,7 +240,11 @@ export function FieldCollectionDialog({
   useEffect(() => {
     if (open || !layerId) return;
     if (collectionLayers.some((l) => l.id === layerId)) return;
-    setLayerId(collectionLayers[0]?.id ?? "");
+    const fallback = collectionLayers[0]?.id ?? "";
+    // Landing on "" here is the project running out of collection layers, not
+    // the user asking for the setup step, so don't record it as a choice.
+    if (!fallback) targetChosenRef.current = false;
+    setLayerId(fallback);
   }, [open, layerId, collectionLayers]);
 
   // Allow creating again after returning to the "new layer" setup step.
@@ -269,14 +281,17 @@ export function FieldCollectionDialog({
     if (map) removeDrawPreview(map);
   }, [clearMarker, getMap]);
 
+  // Supersede both the placement in progress and the capture it belongs to, so
+  // no async work survives into a context it wasn't started in.
+  const invalidateCapture = useCallback(() => {
+    gpsSeqRef.current += 1;
+    contextSeqRef.current += 1;
+  }, []);
+
   // Drop everything the current capture owns and point the form at `target`.
-  // Bumping the sequence invalidates the async work behind a capture (an
-  // in-flight GPS fix, a photo still being read), so a capture can never land
-  // in a context it wasn't started in — a different target layer, or a
-  // different project.
   const resetCapture = useCallback(
     (target: string) => {
-      gpsSeqRef.current += 1;
+      invalidateCapture();
       setLayerId(target);
       setLayerName("");
       setGeometry("point");
@@ -295,7 +310,7 @@ export function FieldCollectionDialog({
       savedCountRef.current = 0;
       clearPreview();
     },
-    [clearPreview, makeDraft],
+    [clearPreview, invalidateCapture, makeDraft],
   );
 
   // Switching the capture target mid-session drops the in-progress capture: a
@@ -306,7 +321,8 @@ export function FieldCollectionDialog({
   // lose them.
   const handleTargetChange = useCallback(
     (nextId: string) => {
-      gpsSeqRef.current += 1;
+      invalidateCapture();
+      targetChosenRef.current = true;
       setLayerId(nextId);
       setPending(null);
       setLastGpsFix(null);
@@ -320,7 +336,7 @@ export function FieldCollectionDialog({
       setNotice(null);
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
     },
-    [clearPreview, drafts.length, makeDraft],
+    [clearPreview, drafts.length, invalidateCapture, makeDraft],
   );
 
   // Reset the capture form when the dialog opens. The capture *target* is not
@@ -338,7 +354,7 @@ export function FieldCollectionDialog({
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
-        layerId,
+        targetChosenRef.current ? layerId : null,
       ),
     );
     // collectionLayers and layerId are snapshotted on open, by design.
@@ -354,10 +370,11 @@ export function FieldCollectionDialog({
   // re-resolve the target against the project that just loaded.
   useEffect(() => {
     setSessionActive(open);
+    targetChosenRef.current = false;
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
-        "",
+        null,
       ),
     );
     // Everything but projectGeneration is snapshotted; only a project switch
@@ -417,10 +434,10 @@ export function FieldCollectionDialog({
   // can't act on a dismissed dialog (the activeRef effect lags a render behind
   // the close).
   const handleDone = useCallback(() => {
-    gpsSeqRef.current += 1;
+    invalidateCapture();
     setSessionActive(false);
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [invalidateCapture, onOpenChange]);
 
   // Radix routes the X, Escape, and an overlay click through here. Dismissing
   // the dialog keeps the session running, but it must still invalidate any
@@ -431,12 +448,12 @@ export function FieldCollectionDialog({
   const handleDialogOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
-        gpsSeqRef.current += 1;
+        invalidateCapture();
         if (collectionLayers.length === 0) setSessionActive(false);
       }
       onOpenChange(next);
     },
-    [collectionLayers.length, onOpenChange],
+    [collectionLayers.length, invalidateCapture, onOpenChange],
   );
 
   const handlePickOnMap = useCallback(() => {
@@ -658,10 +675,12 @@ export function FieldCollectionDialog({
         return;
       }
       // Reading a large photo takes long enough for the capture underneath to
-      // change (a new target layer, a project switch, the tool being closed);
-      // the sequence pins this read to the capture that started it.
-      const seq = gpsSeqRef.current;
-      const stale = () => gpsSeqRef.current !== seq;
+      // change (a new target layer, a project switch, the tool being closed),
+      // so the read is pinned to its capture context. Deliberately not the GPS
+      // sequence: repositioning the point or adding a vertex stays inside the
+      // same capture and must not throw the photo away.
+      const seq = contextSeqRef.current;
+      const stale = () => contextSeqRef.current !== seq;
       const reader = new FileReader();
       reader.onerror = () => {
         if (!stale()) setNotice(t("fieldCollection.photoReadError"));
@@ -701,6 +720,7 @@ export function FieldCollectionDialog({
     const name = layerName.trim() || t("fieldCollection.layerNamePlaceholder");
     const id = addGeoJsonLayer(name, emptyFeatureCollection());
     updateLayer(id, { metadata: collectionMetadata(collectionSchema, geometry) });
+    targetChosenRef.current = true;
     setLayerId(id);
     setNotice(null);
   }, [drafts, layerName, geometry, addGeoJsonLayer, updateLayer, t]);

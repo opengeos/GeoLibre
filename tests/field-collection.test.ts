@@ -216,7 +216,7 @@ describe("resolveTargetLayer", () => {
   });
 
   it("falls back to the first collection layer when there is no target yet", () => {
-    assert.equal(resolveTargetLayer(["culverts", "water"], ""), "culverts");
+    assert.equal(resolveTargetLayer(["culverts", "water"], null), "culverts");
   });
 
   it("falls back to the first layer when the target was removed", () => {
@@ -224,8 +224,16 @@ describe("resolveTargetLayer", () => {
   });
 
   it("returns the new-layer setup step when the project has no collection layers", () => {
+    assert.equal(resolveTargetLayer([], null), "");
     assert.equal(resolveTargetLayer([], ""), "");
     assert.equal(resolveTargetLayer([], "gone"), "");
+  });
+
+  it("keeps a deliberately chosen new-layer setup step even when layers exist", () => {
+    // "" is the user having picked "New collection layer…"; null is a session
+    // that has not chosen a target at all. Only the latter takes the fallback.
+    assert.equal(resolveTargetLayer(["culverts", "water"], ""), "");
+    assert.equal(resolveTargetLayer(["culverts", "water"], null), "culverts");
   });
 });
 
