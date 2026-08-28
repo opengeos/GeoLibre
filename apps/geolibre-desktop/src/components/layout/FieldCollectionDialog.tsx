@@ -158,6 +158,7 @@ export function FieldCollectionDialog({
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
 
   const collectionLayers = useMemo(() => layers.filter((l) => isCollectionLayer(l)), [layers]);
 
@@ -171,6 +172,9 @@ export function FieldCollectionDialog({
 
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
+  // Ties the target-layer <Label> to its <Select>; they are siblings, so the
+  // association has to be explicit.
+  const targetLayerId = useId();
   const [layerName, setLayerName] = useState("");
   const [geometry, setGeometry] = useState<GeometryType>("point");
   const [drafts, setDrafts] = useState<DraftField[]>([]);
@@ -217,6 +221,30 @@ export function FieldCollectionDialog({
   useEffect(() => {
     if (open) setSessionActive(true);
   }, [open]);
+
+  // A session belongs to the project it was started in. Loading or creating a
+  // project bumps `projectGeneration`, and this dialog is never remounted (as
+  // PrintLayoutDialog is, via its key), so without this a session started in
+  // the previous project would resurface its pill over the new one — and point
+  // at whichever collection layer the new project happens to carry. Keep the
+  // session only if the dialog is open across the switch, and drop the target
+  // either way: it names a layer that is no longer in the store.
+  useEffect(() => {
+    setSessionActive(open);
+    setLayerId("");
+    // `open` is read as a snapshot; only a project switch should reset here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectGeneration]);
+
+  // Keep the session's target honest while the dialog is closed: if the target
+  // layer is deleted from the Layers panel, fall back to another collection
+  // layer so the pill keeps naming a real destination. Left alone while the
+  // dialog is open, where losing the target is what shows the setup step.
+  useEffect(() => {
+    if (open || !layerId) return;
+    if (collectionLayers.some((l) => l.id === layerId)) return;
+    setLayerId(collectionLayers[0]?.id ?? "");
+  }, [open, layerId, collectionLayers]);
 
   // Allow creating again after returning to the "new layer" setup step.
   useEffect(() => {
@@ -342,6 +370,23 @@ export function FieldCollectionDialog({
     setSessionActive(false);
     onOpenChange(false);
   }, [onOpenChange]);
+
+  // Radix routes the X, Escape, and an overlay click through here. Dismissing
+  // the dialog keeps the session running, but it must still invalidate any
+  // in-flight GPS fix, or a slow callback could land on a dismissed dialog.
+  // Dismissing before any collection layer exists is the one case that ends the
+  // session instead: the pill's whole job is to name the capture target, so a
+  // session with nothing to capture into would be unreachable.
+  const handleDialogOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next) {
+        gpsSeqRef.current += 1;
+        if (collectionLayers.length === 0) setSessionActive(false);
+      }
+      onOpenChange(next);
+    },
+    [collectionLayers.length, onOpenChange],
+  );
 
   const handlePickOnMap = useCallback(() => {
     if (!getMap()) return;
@@ -754,7 +799,7 @@ export function FieldCollectionDialog({
     <>
       {mapContainer ? createPortal(overlays, mapContainer) : null}
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("fieldCollection.title")}</DialogTitle>
@@ -775,8 +820,9 @@ export function FieldCollectionDialog({
               see, and switch, which layer the next observation lands in.
               Switching here keeps the dialog open. */}
           <div className="space-y-1.5">
-            <Label>{t("fieldCollection.targetLayer")}</Label>
+            <Label htmlFor={targetLayerId}>{t("fieldCollection.targetLayer")}</Label>
             <Select
+              id={targetLayerId}
               value={layerId}
               onChange={(e) => {
                 setLayerId(e.target.value);

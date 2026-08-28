@@ -166,7 +166,7 @@ kepler.gl, see the [Comparison](comparison.md).
 ## Field data collection
 
 - Field Collection tool for capturing point, line, and polygon observations with a per-layer custom form (text, number, date, and choice fields plus an optional photo), placed by device GPS or by tapping the map, written to a GeoJSON layer that flows into the attribute table, export, and offline use
-    - Runs as a session: **Controls → Field Collection...** starts or resumes one, a floating quick-open pill on the map names the layer the next observation lands in, and **Done** ends the session and retires the pill without touching any collection layer or captured feature. Closing the dialog with its X (or `Esc`) keeps the session running, and the target layer can be switched at the top of the dialog without losing your place
+    - Runs as a session: **Controls → Field Collection...** starts or resumes one, a floating quick-open pill on the map names the layer the next observation lands in, and **Done** ends the session and retires the pill without touching any collection layer or captured feature. Closing the dialog with its X, `Esc`, or a click outside keeps the session running, and the target layer can be switched at the top of the dialog without losing your place
 - Live GPS tracking with a moving position marker, a recorded track log, and digitizing new features directly from the GPS feed. See [GPS tracking](user-guide/map-controls.md#gps-tracking)
     - Reads either the device's own geolocation or an external **NMEA** GPS/GNSS receiver over Web Serial or Web Bluetooth, with a baud-rate picker and a live sentence and fix counter
 
