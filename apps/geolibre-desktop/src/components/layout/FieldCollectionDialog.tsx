@@ -335,6 +335,9 @@ export function FieldCollectionDialog({
       clearPreview();
       setErrors({});
       setNotice(null);
+      // The count belongs to the layer being left, not to the one arrived at:
+      // without this the first save into the new target reads as the Nth.
+      savedCountRef.current = 0;
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
     },
     [clearPreview, drafts.length, invalidateCapture, makeDraft],
@@ -467,11 +470,23 @@ export function FieldCollectionDialog({
     onOpenChange(false);
   }, [invalidateCapture, onOpenChange]);
 
+  // Anything a dismissal would be a shame to throw away: a placed geometry, an
+  // attached photo, or a new layer being composed on the setup step. The empty
+  // draft field the setup step starts with doesn't count — only one the user
+  // has actually named.
+  const hasWorkInProgress =
+    pending !== null ||
+    vertices.length > 0 ||
+    photo !== null ||
+    layerName.trim() !== "" ||
+    drafts.some((d) => d.label.trim() !== "");
+
   // Radix routes the X, Escape, and an overlay click through here. Dismissing
   // the dialog keeps the session running, and a capture already in hand
   // survives with it: dismissing to check something on the map and coming back
   // through the pill is a normal move now, so the suppress flag keeps the
-  // reopen from wiping a placed point and a half-filled form.
+  // reopen from wiping a placed point, a half-filled form, or a layer being
+  // composed on the setup step.
   //
   // Only the placement-scoped work is superseded, not the whole capture
   // context. A GPS fix must not resolve into a dropped marker and a camera fly
@@ -493,12 +508,12 @@ export function FieldCollectionDialog({
           setSessionActive(false);
         } else {
           gpsSeqRef.current += 1;
-          if (pending || vertices.length > 0 || photo) suppressResetRef.current = true;
+          if (hasWorkInProgress) suppressResetRef.current = true;
         }
       }
       onOpenChange(next);
     },
-    [collectionLayers.length, invalidateCapture, onOpenChange, pending, photo, vertices.length],
+    [collectionLayers.length, hasWorkInProgress, invalidateCapture, onOpenChange],
   );
 
   const handlePickOnMap = useCallback(() => {
