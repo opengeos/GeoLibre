@@ -1642,6 +1642,24 @@
   "map": {
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",
+    "identifyAll": {
+      "title": "Identified results ({{count}})",
+      "resultCount_one": "{{count}} result",
+      "resultCount_other": "{{count}} results",
+      "featureFallback": "Feature {{index}}",
+      "pixel": "Pixel",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "loadingTitle": "Identify visible layers",
+      "loading": "Loading...",
+      "errorLabel": "Error",
+      "error": "Could not identify this layer.",
+      "band": "Band {{index}}",
+      "nodata": "no data",
+      "coordinates": "lon, lat",
+      "row": "row",
+      "column": "column"
+    },
     "directionsMode": {
       "title": "Directions mode active",
       "hint": "Click the map to add waypoints. Drag a waypoint to move it, or click it to remove it. Routes update automatically.",
@@ -7032,6 +7050,8 @@
     "metadata": "Metadata",
     "removeLayer": "Remove layer",
     "identifyFeatures": "Identify features",
+    "identifyVisibleLayers": "Identify visible layers",
+    "identifyVisibleLayersHint": "Click the map to identify features and pixel values from all visible queryable layers.",
     "identifyDeactivate": "Deactivate identify",
     "identifyInspectPixels": "Inspect pixel values",
     "identifyStopInspectPixels": "Stop inspecting pixel values",

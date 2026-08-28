@@ -5,6 +5,7 @@ import type {
   RasterControlEventHandler,
   RasterLayerState,
   RasterSampleDataset,
+  PixelReading,
   RenderEngine,
 } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreCogRenderEngine, GeoLibreMapControlPosition } from "../types";
@@ -581,6 +582,23 @@ export function setRasterPixelInspect(layerId: string, enabled: boolean): void {
     }
     rasterInspectPriorSelection = null;
   }
+}
+
+/**
+ * Read one managed raster at a WGS84 coordinate without opening the control's
+ * own inspector popup.
+ *
+ * @param layerId Raster/COG layer id.
+ * @param lngLat WGS84 longitude and latitude.
+ * @param options Optional cancellation signal.
+ * @returns Pixel values, or null when the layer or coordinate has no data.
+ */
+export function readRasterPixel(
+  layerId: string,
+  lngLat: [number, number],
+  options?: { signal?: AbortSignal },
+): Promise<PixelReading | null> {
+  return rasterControl?.readRasterPixel(layerId, lngLat, options) ?? Promise.resolve(null);
 }
 
 /**

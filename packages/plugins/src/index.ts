@@ -246,6 +246,7 @@ export {
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
+  readRasterPixel,
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,

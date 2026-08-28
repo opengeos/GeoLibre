@@ -1,7 +1,12 @@
 import {
   DEFAULT_LAYER_STYLE,
+  effectiveLayerRenderState,
+  IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
+  isPopupClickEnabled,
+  resolveLayerCapabilities,
   type GeoLibreLayer,
+  type LayerGroup,
   type LayerStyle,
   useAppStore,
 } from "@geolibre/core";
@@ -435,8 +440,19 @@ function createDuckDBControl(DuckDBControlClass: DuckDBControlConstructor): Duck
       shouldSyncControl = true;
     }
 
-    if (state.identifyLayerId !== previous.identifyLayerId) {
-      syncDuckDBPickableFromStore(state.layers, state.identifyLayerId);
+    // Under the all-layers sentinel pickability depends on which DuckDB layers
+    // are queryable, so a layer or group changed while that mode is on has to
+    // re-sync it too. Gated on the sentinel: outside it the answer turns only
+    // on the Identify target, and this fires on every layer edit and reorder.
+    const identifyAllActive =
+      state.identifyLayerId === IDENTIFY_ALL_LAYERS_ID ||
+      previous.identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+    if (
+      state.identifyLayerId !== previous.identifyLayerId ||
+      (identifyAllActive &&
+        (state.layers !== previous.layers || state.layerGroups !== previous.layerGroups))
+    ) {
+      syncDuckDBPickableFromStore(state.layers, state.identifyLayerId, state.layerGroups);
     }
 
     if (shouldSyncControl) {
@@ -582,13 +598,49 @@ function clearDuckDBRenderedLayers(): void {
   getMutableDuckDBControl()?.renderer?.clear?.();
 }
 
+/**
+ * Whether a click should be answered by the DuckDB bridge rather than by the
+ * control's own handlers.
+ *
+ * True while Identify targets one DuckDB layer, and while all-layer Identify is
+ * on and a DuckDB layer it would actually query exists: MapCanvas hit-tests
+ * every eligible DuckDB layer through `identifyLayerAtPoint` in that mode,
+ * which needs a pickable overlay just as the single-layer path does. The three
+ * tests mirror the `eligibleLayers` filter there — visibility with group state
+ * folded in, the query capability, and the layer's click-popup setting — so a
+ * layer that mode would skip never arms the overlay.
+ *
+ * @param layers Store layers.
+ * @param identifyLayerId Identify target, or the all-layers sentinel.
+ * @param layerGroups Group definitions, folded into each layer's visibility.
+ * @returns True when the bridge owns the click.
+ */
+function duckDBIdentifyModeActiveFor(
+  layers: GeoLibreLayer[],
+  identifyLayerId: string | null,
+  layerGroups: LayerGroup[],
+): boolean {
+  if (identifyLayerId === IDENTIFY_ALL_LAYERS_ID) {
+    const groupById = new Map(layerGroups.map((group) => [group.id, group]));
+    return layers.some(
+      (layer) =>
+        isDuckDBQueryLayer(layer) &&
+        effectiveLayerRenderState(layer, groupById).visible &&
+        resolveLayerCapabilities(layer).query &&
+        isPopupClickEnabled(layer.popup),
+    );
+  }
+  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
+  return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
+}
+
 function syncDuckDBPickableFromStore(
   layers = useAppStore.getState().layers,
   identifyLayerId = useAppStore.getState().identifyLayerId,
+  layerGroups = useAppStore.getState().layerGroups,
 ): void {
-  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
   getMutableDuckDBControl()?.setPickable?.(
-    Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer)),
+    duckDBIdentifyModeActiveFor(layers, identifyLayerId, layerGroups),
   );
 }
 
@@ -618,9 +670,8 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
 }
 
 function isDuckDBIdentifyModeActive(): boolean {
-  const { identifyLayerId, layers } = useAppStore.getState();
-  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
-  return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
+  const { identifyLayerId, layerGroups, layers } = useAppStore.getState();
+  return duckDBIdentifyModeActiveFor(layers, identifyLayerId, layerGroups);
 }
 
 // Mirror the store-driven selection into the control's own attribute pane so

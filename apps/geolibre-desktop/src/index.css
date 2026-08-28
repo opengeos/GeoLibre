@@ -2161,6 +2161,17 @@ body,
   overflow: hidden;
 }
 
+/* The grouped popup keeps its header and its Expand/Collapse controls in view
+   and scrolls only the results, so the scrollbar starts below the header rather
+   than running the full height of the popup. */
+.geolibre-identify-popup-groups {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
 .geolibre-identify-popup-rows {
   flex: 1 1 auto;
   min-height: 0;
