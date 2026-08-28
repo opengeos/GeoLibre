@@ -22,7 +22,7 @@ function createControl(app: GeoLibreAppAPI): VantorControl {
     panelWidth: 380,
     theme: hostTheme(),
     // Use the host renderer so imagery becomes a persistent, native layer in
-    // GeoLibre's Layers panel. Vantor requests the native WASM COG tiler.
+    // GeoLibre's Layers panel and can use any renderer the host exposes.
     cogAdder: addCogLayer ? (name, url, options) => addCogLayer(name, url, options) : undefined,
     rasterLoader: getMaplibreGlRaster ? () => getMaplibreGlRaster() : undefined,
   });

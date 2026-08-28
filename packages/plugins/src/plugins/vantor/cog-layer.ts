@@ -5,6 +5,8 @@ import type { StacItem } from "./types";
 /** The maplibre-gl-raster module surface this layer needs. */
 type RasterModule = typeof import("maplibre-gl-raster");
 
+export type CogRenderEngine = "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler";
+
 /**
  * Renders a COG through a host (e.g. GeoLibre's `app.addCogLayer`) instead of
  * the bundled deck.gl pipeline, returning the host layer id. When supplied, the
@@ -17,7 +19,7 @@ export type CogAdder = (
   options?: {
     nodata?: number;
     opacity?: number;
-    engine?: "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler" | "auto";
+    engine?: CogRenderEngine | "auto";
   },
 ) => Promise<string>;
 
@@ -94,11 +96,27 @@ export class CogLayer {
   private eventHandlers: Map<CogLayerEvent, Set<CogLayerEventHandler>> = new Map();
   private rasterLoader: RasterLoader;
   private cogAdder?: CogAdder;
+  private renderEngine: CogRenderEngine;
 
-  constructor(map: MaplibreMap, rasterLoader?: RasterLoader, cogAdder?: CogAdder) {
+  constructor(
+    map: MaplibreMap,
+    rasterLoader?: RasterLoader,
+    cogAdder?: CogAdder,
+    renderEngine: CogRenderEngine = "maplibre-gl-raster",
+  ) {
     this.map = map;
     this.rasterLoader = rasterLoader ?? (() => import("maplibre-gl-raster"));
     this.cogAdder = cogAdder;
+    this.renderEngine = renderEngine;
+  }
+
+  setRenderEngine(engine: CogRenderEngine): void {
+    this.renderEngine = engine;
+    this.manager?.setEngine(engine);
+  }
+
+  getRenderEngine(): CogRenderEngine {
+    return this.renderEngine;
   }
 
   on(event: CogLayerEvent, handler: CogLayerEventHandler): void {
@@ -154,13 +172,12 @@ export class CogLayer {
 
     // Host path (e.g. GeoLibre): the COG becomes a native host-managed layer
     // that shows in the host's Layers panel; the host owns projection/removal.
-    // Use the native WASM COG tiler requested by the GeoLibre integration.
-    // Exact zero-valued fill pixels become transparent; source COGs without a
-    // mask may still require clipping to their STAC footprint.
+    // Forward the user's renderer choice to the host. This setting is
+    // control-wide in GeoLibre, so changing it may re-render existing COGs.
     if (this.cogAdder) {
       await this.cogAdder(name, cogUrl, {
         nodata: 0,
-        engine: "cog-tiler-wasm",
+        engine: this.renderEngine,
       });
       this.activeLayers.push({ itemId: item.id, cogUrl, name, visible: true, opacity: 1 });
       this.emit("layeradd", { layerId: item.id, url: cogUrl, name });
@@ -169,6 +186,7 @@ export class CogLayer {
 
     // Standalone path: render through the bundled maplibre-gl-raster pipeline.
     const manager = await this.ensureManager();
+    manager.setEngine(this.renderEngine);
     // Resolves once the GeoTIFF header has loaded; rejects on load failure.
     await manager.addRaster(cogUrl, {
       id: item.id,
@@ -178,8 +196,9 @@ export class CogLayer {
     });
 
     this.activeLayers.push({ itemId: item.id, cogUrl, name, visible: true, opacity: 1 });
-    // COGs render via deck.gl tiles, which require mercator (not globe).
-    ensureMercatorProjection(this.map);
+    // Only the deck.gl GPU engine requires mercator; the native WASM/TiTiler
+    // engines support MapLibre's globe projection.
+    if (this.renderEngine === "maplibre-gl-raster") ensureMercatorProjection(this.map);
     this.emit("layeradd", { layerId: item.id, url: cogUrl, name });
   }
 

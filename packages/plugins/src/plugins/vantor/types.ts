@@ -1,5 +1,5 @@
 import type { Polygon, MultiPolygon } from "geojson";
-import type { CogAdder, RasterLoader } from "./cog-layer";
+import type { CogAdder, CogRenderEngine, RasterLoader } from "./cog-layer";
 
 export interface StacLink {
   rel: string;
@@ -108,6 +108,8 @@ export interface VantorControlOptions {
    * a host app that has its own dark-mode toggle).
    */
   theme?: "auto" | "light" | "dark";
+  /** Initial COG rendering engine. Defaults to the faster GPU renderer. */
+  renderEngine?: CogRenderEngine;
   /**
    * Supplies the maplibre-gl-raster module used for COG rendering. Defaults to a
    * dynamic `import('maplibre-gl-raster')`. A host such as GeoLibre can pass its

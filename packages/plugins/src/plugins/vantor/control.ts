@@ -46,10 +46,16 @@ export class VantorControl implements IControl {
       this.options.panelWidth,
       this.options.maxHeight,
       this.options.theme,
+      this.options.renderEngine,
     );
     this.bindEvents();
     this.loadCatalog();
-    this.cogLayer = new CogLayer(map, this.options.rasterLoader, this.options.cogAdder);
+    this.cogLayer = new CogLayer(
+      map,
+      this.options.rasterLoader,
+      this.options.cogAdder,
+      this.options.renderEngine,
+    );
 
     const initLayers = () => {
       this.footprintLayer = new FootprintLayer(map);
@@ -307,6 +313,8 @@ export class VantorControl implements IControl {
       this.panel.setStatus("No items selected. Check items first.", "warning");
       return;
     }
+
+    this.cogLayer.setRenderEngine(this.panel.getRenderEngine());
 
     this.panel.setStatus(`Adding ${checked.length} COG layer(s)...`, "info");
 

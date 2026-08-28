@@ -1,6 +1,7 @@
 import type { EventInfo, StacItem, ItemProperties } from "./types";
 import { formatDate } from "./utils";
 import { StacClient } from "./stac-client";
+import type { CogRenderEngine } from "./cog-layer";
 
 export type PanelEventType =
   | "search"
@@ -43,6 +44,7 @@ export class PanelUI extends EventTarget {
   private toggleBtn!: HTMLButtonElement;
   private eventSelect!: HTMLSelectElement;
   private phaseSelect!: HTMLSelectElement;
+  private renderEngineSelect!: HTMLSelectElement;
   private useExtentCheckbox!: HTMLInputElement;
   private drawBBoxBtn!: HTMLButtonElement;
   private clearBBoxBtn!: HTMLButtonElement;
@@ -71,6 +73,7 @@ export class PanelUI extends EventTarget {
     panelWidth?: number,
     maxHeight?: number | string,
     theme: "auto" | "light" | "dark" = "auto",
+    renderEngine: CogRenderEngine = "maplibre-gl-raster",
   ) {
     super();
     this.root = container;
@@ -79,6 +82,7 @@ export class PanelUI extends EventTarget {
     this.maxHeight = maxHeight;
     this.theme = theme;
     this.buildUI();
+    this.renderEngineSelect.value = renderEngine;
   }
 
   private buildUI(): void {
@@ -253,6 +257,26 @@ export class PanelUI extends EventTarget {
     }
     phaseField.appendChild(this.phaseSelect);
     section.appendChild(phaseField);
+
+    // Rendering engine
+    const engineField = this.el("div", "vantor-panel__field");
+    const engineLabel = document.createElement("label");
+    engineLabel.textContent = "Rendering engine";
+    engineField.appendChild(engineLabel);
+
+    this.renderEngineSelect = document.createElement("select");
+    for (const [value, text] of [
+      ["maplibre-gl-raster", "GPU (faster)"],
+      ["cog-tiler-wasm", "WASM (globe compatible)"],
+      ["titiler", "TiTiler (server)"],
+    ] as const) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = text;
+      this.renderEngineSelect.appendChild(opt);
+    }
+    engineField.appendChild(this.renderEngineSelect);
+    section.appendChild(engineField);
 
     // Spatial filter
     const spatialField = this.el("div", "vantor-panel__field");
@@ -435,6 +459,10 @@ export class PanelUI extends EventTarget {
 
   getPhase(): string {
     return this.phaseSelect.value;
+  }
+
+  getRenderEngine(): CogRenderEngine {
+    return this.renderEngineSelect.value as CogRenderEngine;
   }
 
   isUseMapExtent(): boolean {

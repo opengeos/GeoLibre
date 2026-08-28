@@ -26,14 +26,14 @@ describe("Vantor Open Data built-in plugin", () => {
     assert.equal(maplibreVantorPlugin.getMapControlPosition?.(), "top-left");
   });
 
-  it("requests the WASM renderer for Vantor COGs", async () => {
+  it("uses the GPU renderer by default and allows selecting WASM", async () => {
     let receivedOptions: Parameters<NonNullable<ConstructorParameters<typeof CogLayer>[2]>>[2];
     const layer = new CogLayer({} as never, undefined, async (_name, _url, options) => {
       receivedOptions = options;
       return "vantor-layer";
     });
 
-    await layer.addCogLayer({
+    const item = {
       type: "Feature",
       stac_version: "1.0.0",
       id: "test-vantor-scene",
@@ -47,11 +47,22 @@ describe("Vantor Open Data built-in plugin", () => {
         },
       },
       links: [],
-    });
+    } as const;
+
+    await layer.addCogLayer(item);
 
     assert.deepEqual(receivedOptions!, {
       nodata: 0,
-      engine: "cog-tiler-wasm",
+      engine: "maplibre-gl-raster",
     });
+
+    const wasmLayer = new CogLayer({} as never, undefined, async (_name, _url, options) => {
+      receivedOptions = options;
+      return "vantor-wasm-layer";
+    });
+    wasmLayer.setRenderEngine("cog-tiler-wasm");
+    assert.equal(wasmLayer.getRenderEngine(), "cog-tiler-wasm");
+    await wasmLayer.addCogLayer(item);
+    assert.deepEqual(receivedOptions!, { nodata: 0, engine: "cog-tiler-wasm" });
   });
 });
