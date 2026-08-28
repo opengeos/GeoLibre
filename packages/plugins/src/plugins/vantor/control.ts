@@ -59,6 +59,7 @@ export class VantorControl implements IControl {
       this.options.rasterLoader,
       this.options.cogAdder,
       this.options.renderEngine,
+      this.options.cogRenderEngineSetter,
     );
 
     const initLayers = () => {
@@ -387,7 +388,7 @@ export class VantorControl implements IControl {
       return;
     }
 
-    cogLayer.setRenderEngine(panel.getRenderEngine());
+    await cogLayer.setRenderEngine(panel.getRenderEngine());
 
     panel.setStatus(
       this.t("vantor.status.addingLayers", `Adding ${checked.length} COG layer(s)...`, {

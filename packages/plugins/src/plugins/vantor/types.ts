@@ -1,5 +1,5 @@
 import type { Polygon, MultiPolygon } from "geojson";
-import type { CogAdder, CogRenderEngine, RasterLoader } from "./cog-layer";
+import type { CogAdder, CogRenderEngine, CogRenderEngineSetter, RasterLoader } from "./cog-layer";
 
 export interface StacLink {
   rel: string;
@@ -132,6 +132,8 @@ export interface VantorControlOptions {
    * over {@link rasterLoader}. Omit for standalone use.
    */
   cogAdder?: CogAdder;
+  /** Switches the host's control-wide renderer for existing COG layers. */
+  cogRenderEngineSetter?: CogRenderEngineSetter;
   onItemsLoaded?: (items: StacItem[]) => void;
   onSelectionChange?: (selectedItems: StacItem[]) => void;
 }

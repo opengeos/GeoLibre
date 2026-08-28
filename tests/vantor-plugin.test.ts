@@ -89,10 +89,26 @@ describe("Vantor Open Data built-in plugin", () => {
       receivedOptions = options;
       return "vantor-wasm-layer";
     });
-    wasmLayer.setRenderEngine("cog-tiler-wasm");
+    await wasmLayer.setRenderEngine("cog-tiler-wasm");
     assert.equal(wasmLayer.getRenderEngine(), "cog-tiler-wasm");
     await wasmLayer.addCogLayer(scene);
     assert.deepEqual(receivedOptions!, { nodata: 0, engine: "cog-tiler-wasm" });
+  });
+
+  it("propagates renderer changes after adding a host-managed COG", async () => {
+    const switched: string[] = [];
+    const layer = new CogLayer(
+      {} as never,
+      undefined,
+      async () => "vantor-host-layer",
+      "maplibre-gl-raster",
+      async (engine) => switched.push(engine),
+    );
+
+    await layer.addCogLayer(item("host-scene"));
+    assert.deepEqual(switched, []);
+    await layer.setRenderEngine("cog-tiler-wasm");
+    assert.deepEqual(switched, ["cog-tiler-wasm"]);
   });
 
   it("rejects unsafe asset URLs before visualization or download", async () => {

@@ -82,10 +82,8 @@ export class Downloader {
           }),
         );
 
-        // Small delay between downloads to avoid browser throttling
-        if (i < items.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
+        // Keep every click in the original user-activation task. Delaying later
+        // clicks causes browsers to block them as automatic downloads.
       } catch (e) {
         failed++;
         onProgress?.(

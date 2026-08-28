@@ -405,6 +405,12 @@ export interface GeoLibreAppAPI {
    */
   addCogLayer?: (name: string, url: string, options?: GeoLibreCogLayerOptions) => Promise<string>;
   /**
+   * Change the host's control-wide COG renderer and re-render existing COG
+   * layers. Typed optional for forward compatibility with hosts that expose
+   * {@link addCogLayer} but not runtime engine switching.
+   */
+  setCogRenderEngine?: (engine: GeoLibreCogRenderEngine) => Promise<void>;
+  /**
    * Add a Zarr layer rendered by the **host's own** `@carbonplan/zarr-layer`
    * instance, returning a promise for the new layer's id. The Zarr counterpart
    * of {@link addCogLayer}: it reads the store directly (Zarr v2/v3 over HTTP),

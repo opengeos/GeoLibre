@@ -410,6 +410,16 @@ export async function addRasterToMap(
   return id;
 }
 
+/** Switch the shared COG renderer, including rasters already on the map. */
+export async function setRasterRenderEngine(
+  app: GeoLibreAppAPI,
+  engine: RasterRenderEngine,
+): Promise<void> {
+  const control = await ensureRasterControl(app);
+  if (!control) throw new Error("The raster control could not be initialized.");
+  if (control.getEngine() !== engine) control.setEngine(engine);
+}
+
 /**
  * Mount and warm the raster control without opening its panel.
  *

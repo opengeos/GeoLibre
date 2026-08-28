@@ -229,7 +229,7 @@
 .vantor-panel__toggle {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   width: 28px;
   height: 28px;
   border: none;
@@ -519,7 +519,7 @@
 .vantor-panel__table th {
   background: var(--vantor-bg-alt);
   padding: 6px 4px;
-  text-align: left;
+  text-align: start;
   font-weight: 600;
   font-size: 11px;
   border-bottom: 2px solid var(--vantor-border);

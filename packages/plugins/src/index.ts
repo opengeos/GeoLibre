@@ -240,6 +240,7 @@ export {
 export { isRecoverableNonTiledRasterError } from "./plugins/non-tiled-raster-error";
 export {
   addRasterToMap,
+  setRasterRenderEngine,
   prepareRasterControl,
   applyRasterLayerOrder,
   closeRasterLayerPanel,

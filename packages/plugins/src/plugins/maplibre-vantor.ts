@@ -26,6 +26,7 @@ function createControl(app: GeoLibreAppAPI): VantorControl {
     // GeoLibre's Layers panel and can use any renderer the host exposes.
     cogAdder: addCogLayer ? (name, url, options) => addCogLayer(name, url, options) : undefined,
     rasterLoader: getMaplibreGlRaster ? () => getMaplibreGlRaster() : undefined,
+    cogRenderEngineSetter: app.setCogRenderEngine,
     translate: (key, defaultValue, params) =>
       app.translate?.(key, defaultValue, params) ?? defaultValue,
   });

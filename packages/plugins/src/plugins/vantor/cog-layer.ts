@@ -23,6 +23,8 @@ export type CogAdder = (
   },
 ) => Promise<string>;
 
+export type CogRenderEngineSetter = (engine: CogRenderEngine) => void | Promise<void>;
+
 /**
  * deck.gl's tiled raster rendering (used for COGs) does not support MapLibre's
  * globe projection, so force mercator when a COG is displayed. Mirrors
@@ -96,6 +98,7 @@ export class CogLayer {
   private eventHandlers: Map<CogLayerEvent, Set<CogLayerEventHandler>> = new Map();
   private rasterLoader: RasterLoader;
   private cogAdder?: CogAdder;
+  private cogRenderEngineSetter?: CogRenderEngineSetter;
   private renderEngine: CogRenderEngine;
 
   constructor(
@@ -103,16 +106,21 @@ export class CogLayer {
     rasterLoader?: RasterLoader,
     cogAdder?: CogAdder,
     renderEngine: CogRenderEngine = "maplibre-gl-raster",
+    cogRenderEngineSetter?: CogRenderEngineSetter,
   ) {
     this.map = map;
     this.rasterLoader = rasterLoader ?? (() => import("maplibre-gl-raster"));
     this.cogAdder = cogAdder;
     this.renderEngine = renderEngine;
+    this.cogRenderEngineSetter = cogRenderEngineSetter;
   }
 
-  setRenderEngine(engine: CogRenderEngine): void {
+  async setRenderEngine(engine: CogRenderEngine): Promise<void> {
     this.renderEngine = engine;
     this.manager?.setEngine(engine);
+    if (this.cogAdder && this.activeLayers.length > 0) {
+      await this.cogRenderEngineSetter?.(engine);
+    }
   }
 
   getRenderEngine(): CogRenderEngine {
