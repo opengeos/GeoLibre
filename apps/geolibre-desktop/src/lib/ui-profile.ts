@@ -547,6 +547,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   },
   // Controls — built-in map controls
   {
+    id: "controls.identifyAllLayers",
+    menuId: "controls",
+    labelKey: "toolbar.item.identifyAllLayers",
+    tier: "basic",
+  },
+  {
     id: "controls.mapControl.navigation",
     menuId: "controls",
     labelKey: "toolbar.mapControl.navigation",

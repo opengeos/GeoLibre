@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { IDENTIFY_ALL_LAYERS_ID, useAppStore } from "@geolibre/core";
 import {
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
@@ -130,6 +130,8 @@ export function ControlsMenu({
   // default: without 3D terrain the lookup goes to a public elevation service,
   // so it stays an explicit opt-in rather than something hovering triggers.
   const pointerElevationActive = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const identifyAllLayersActive = useAppStore((s) => s.identifyLayerId === IDENTIFY_ALL_LAYERS_ID);
+  const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   // The globe cannot spin while the map bounds are locked, so enabling spin
   // while they are locked opens a dialog that unlocks the bounds first (#723).
   const [spinGlobeNoticeOpen, setSpinGlobeNoticeOpen] = useState(false);
@@ -157,6 +159,7 @@ export function ControlsMenu({
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
     MAP_CONTROL_ITEMS.some((control) => show(`controls.mapControl.${control.id}`)) ||
+    show("controls.identifyAllLayers") ||
     show("controls.atmosphereEffects") ||
     show("controls.clouds") ||
     show("controls.spinGlobe") ||
@@ -198,6 +201,17 @@ export function ControlsMenu({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {show("controls.identifyAllLayers") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.identifyAllLayersHint")}
+              onClick={() =>
+                setIdentifyLayer(identifyAllLayersActive ? null : IDENTIFY_ALL_LAYERS_ID)
+              }
+            >
+              {t("toolbar.item.identifyAllLayers")}
+              {identifyAllLayersActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
           {MAP_CONTROL_ITEMS.filter(
             (control) =>
               !LOGO_CONTROL_IDS.has(control.id) && show(`controls.mapControl.${control.id}`),

@@ -48,6 +48,7 @@ export {
   canRedoProjectRestore,
   canUndoProjectRestore,
   DEFAULT_COLLABORATION_STATE,
+  IDENTIFY_ALL_LAYERS_ID,
   projectPathLabel,
   registerProjectRestoreHistory,
   subscribeProjectRestoreHistory,

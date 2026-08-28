@@ -2161,6 +2161,12 @@ body,
   overflow: hidden;
 }
 
+.geolibre-identify-popup-root--grouped {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
 .geolibre-identify-popup-rows {
   flex: 1 1 auto;
   min-height: 0;

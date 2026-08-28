@@ -2729,6 +2729,8 @@
       "subGroupVectorToRaster": "Vector to Raster",
       "subGroupAnalysis": "Analysis",
       "mapControls": "Map controls",
+      "identifyAllLayers": "Identify visible layers",
+      "identifyAllLayersHint": "Click the map to identify features from all visible vector layers.",
       "fieldCollection": "Field Collection...",
       "gpsTracking": "GPS Tracking...",
       "recordTour": "Record Map Tour...",

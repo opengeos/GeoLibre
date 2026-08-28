@@ -4,6 +4,7 @@ import {
   createPointerElevationResolver,
   effectiveLayerRenderState,
   getActiveEllipsoid,
+  IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
   isInlineImageValue,
   isPopupClickEnabled,
@@ -13,6 +14,7 @@ import {
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   resolveConfiguredPopupTitle,
+  resolveLayerCapabilities,
   resolvePopupBody,
   resolvePopupRows,
   resolvePopupTitle,
@@ -262,7 +264,6 @@ function createIdentifyPopupElement(
   options: IdentifyPopupOptions = {},
 ): HTMLElement {
   const { popup, fieldVisibility, feature, zoom } = options;
-  const locale = documentLocale();
 
   const root = document.createElement("div");
   root.className =
@@ -279,9 +280,23 @@ function createIdentifyPopupElement(
   });
   root.appendChild(title);
 
+  root.appendChild(createIdentifyPopupRows(properties, featureId, options));
+
+  return root;
+}
+
+/** Build the attribute rows shared by per-layer and all-layer Identify popups. */
+function createIdentifyPopupRows(
+  properties: Record<string, unknown>,
+  featureId?: string | number,
+  options: IdentifyPopupOptions = {},
+  scrollable = true,
+): HTMLElement {
+  const { popup, fieldVisibility, feature, zoom } = options;
+  const locale = documentLocale();
+
   const rows = document.createElement("div");
-  rows.className = "geolibre-identify-popup-rows pe-2";
-  root.appendChild(rows);
+  rows.className = scrollable ? "geolibre-identify-popup-rows pe-2" : "pe-2";
 
   // An author-supplied body expression replaces the whole body outright — the
   // field table AND the synthetic id row. The point of it is a sentence
@@ -295,7 +310,7 @@ function createIdentifyPopupElement(
     paragraph.className = "whitespace-pre-wrap break-words text-foreground";
     paragraph.textContent = body;
     rows.appendChild(paragraph);
-    return root;
+    return rows;
   }
 
   const appendRow = (row: PopupRow) => {
@@ -343,7 +358,122 @@ function createIdentifyPopupElement(
     for (const row of resolved) appendRow(row);
   }
 
+  return rows;
+}
+
+interface GlobalIdentifyHit {
+  layer: GeoLibreLayer;
+  feature: maplibregl.MapGeoJSONFeature;
+  featureId: string | null;
+}
+
+/**
+ * Build the all-layer Identify result, grouped by owning GeoLibre layer.
+ *
+ * @param hits Rendered feature hits in topmost-first map order.
+ * @param zoom Current map zoom for expression-backed popup formatting.
+ * @param onActivate Selects the owning layer and feature in the application.
+ * @returns Popup DOM containing every grouped hit and its visible attributes.
+ */
+function createGlobalIdentifyPopupElement(
+  hits: GlobalIdentifyHit[],
+  zoom: number,
+  onActivate: (hit: GlobalIdentifyHit) => void,
+): HTMLElement {
+  const root = document.createElement("div");
+  root.className =
+    "geolibre-identify-popup-root geolibre-identify-popup-root--grouped flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
+
+  const title = document.createElement("div");
+  title.className = "mb-2 pe-6 font-semibold text-foreground";
+  title.textContent = `Identified features (${hits.length})`;
+  root.appendChild(title);
+
+  const groups = new Map<string, GlobalIdentifyHit[]>();
+  for (const hit of hits) {
+    const group = groups.get(hit.layer.id);
+    if (group) group.push(hit);
+    else groups.set(hit.layer.id, [hit]);
+  }
+
+  for (const groupHits of groups.values()) {
+    const { layer } = groupHits[0];
+    const section = document.createElement("section");
+    section.className = "border-t py-2 first:border-t-0 first:pt-0";
+
+    const layerButton = document.createElement("button");
+    layerButton.type = "button";
+    layerButton.className =
+      "mb-1 flex w-full items-center justify-between gap-3 rounded px-1 py-1 text-start font-semibold text-foreground hover:bg-muted";
+    const layerName = document.createElement("span");
+    layerName.className = "min-w-0 break-words";
+    layerName.textContent = layer.name;
+    const count = document.createElement("span");
+    count.className = "shrink-0 font-normal text-muted-foreground";
+    count.textContent = `${groupHits.length} ${groupHits.length === 1 ? "feature" : "features"}`;
+    layerButton.append(layerName, count);
+    layerButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onActivate(groupHits[0]);
+    });
+    section.appendChild(layerButton);
+
+    for (const [index, hit] of groupHits.entries()) {
+      const featureContainer = document.createElement("div");
+      featureContainer.className = "mb-2 rounded border bg-background/60 p-2 last:mb-0";
+      const featureTitle = resolvePopupTitle(
+        layer.name,
+        hit.feature.properties ?? {},
+        layer.popup,
+        {
+          feature: hit.feature,
+          zoom,
+          fieldVisibility: layer.fieldVisibility,
+        },
+      );
+      const featureButton = document.createElement("button");
+      featureButton.type = "button";
+      featureButton.className =
+        "mb-1 w-full break-words text-start font-medium text-foreground hover:underline";
+      featureButton.textContent =
+        featureTitle === layer.name ? `Feature ${index + 1}` : featureTitle;
+      featureButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onActivate(hit);
+      });
+      featureContainer.appendChild(featureButton);
+      featureContainer.appendChild(
+        createIdentifyPopupRows(
+          hit.feature.properties ?? {},
+          hit.featureId ?? undefined,
+          {
+            popup: layer.popup,
+            fieldVisibility: layer.fieldVisibility,
+            feature: hit.feature,
+            zoom,
+          },
+          false,
+        ),
+      );
+      section.appendChild(featureContainer);
+    }
+    root.appendChild(section);
+  }
+
   return root;
+}
+
+/** Stable key used to collapse one feature rendered by multiple style layers. */
+function globalIdentifyHitKey(hit: GlobalIdentifyHit): string {
+  if (hit.featureId !== null) {
+    return `${hit.layer.id}\u0000${hit.feature.source}\u0000${hit.feature.sourceLayer ?? ""}\u0000id:${hit.featureId}`;
+  }
+  return `${hit.layer.id}\u0000feature:${JSON.stringify([
+    hit.feature.source,
+    hit.feature.sourceLayer,
+    hit.feature.geometry,
+    hit.feature.properties ?? {},
+  ])}`;
 }
 
 /**
@@ -1277,6 +1407,7 @@ export const MapCanvas = memo(function MapCanvas({
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
+  const selectLayer = useAppStore((s) => s.selectLayer);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
   const setPointerElevation = useAppStore((s) => s.setPointerElevation);
@@ -1899,8 +2030,11 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const map = controller.current?.getMap();
-    const layer = layers.find((item) => item.id === identifyLayerId);
-    if (!map || !layer) {
+    const identifyAllLayers = identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+    const layer = identifyAllLayers
+      ? undefined
+      : layers.find((item) => item.id === identifyLayerId);
+    if (!map || (!layer && !identifyAllLayers)) {
       identifyPopup.current?.remove();
       identifyPopup.current = null;
       // Same guard as the cleanup below: picking a gesture turns Identify off,
@@ -1913,6 +2047,75 @@ export const MapCanvas = memo(function MapCanvas({
     // gesture stays live and its handlers keep swallowing map clicks, so the
     // Identify button would light up while Identify itself did nothing.
     cancelFeatureSelection.current?.();
+
+    if (identifyAllLayers) {
+      map.getCanvas().style.cursor = "crosshair";
+      const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
+        if (featureSelectionActive.current) return;
+
+        const owners = new Map<string, GeoLibreLayer>();
+        for (const candidate of layers) {
+          if (
+            !effectiveLayerRenderState(candidate, layerGroups).visible ||
+            !resolveLayerCapabilities(candidate).query ||
+            !isPopupClickEnabled(candidate.popup)
+          ) {
+            continue;
+          }
+          for (const styleLayerId of identifyStyleLayerIds(candidate)) {
+            if (map.getLayer(styleLayerId)) owners.set(styleLayerId, candidate);
+          }
+        }
+
+        const hits: GlobalIdentifyHit[] = [];
+        const seen = new Set<string>();
+        for (const feature of map.queryRenderedFeatures(event.point)) {
+          const owner = owners.get(feature.layer.id);
+          if (!owner) continue;
+          const hit: GlobalIdentifyHit = {
+            layer: owner,
+            feature,
+            featureId: findFeatureId(owner, feature),
+          };
+          const key = globalIdentifyHitKey(hit);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hits.push(hit);
+        }
+
+        identifyPopup.current?.remove();
+        identifyPopup.current = null;
+        if (hits.length === 0) {
+          selectFeature(null);
+          return;
+        }
+
+        const activate = (hit: GlobalIdentifyHit) => {
+          selectLayer(hit.layer.id);
+          selectFeature(hit.featureId);
+        };
+        activate(hits[0]);
+        identifyPopup.current = new maplibregl.Popup({
+          className: "geolibre-identify-popup",
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: "560px",
+        })
+          .setLngLat(event.lngLat)
+          .setDOMContent(createGlobalIdentifyPopupElement(hits, map.getZoom(), activate))
+          .addTo(map);
+      };
+
+      map.on("click", handleIdentifyAllClick);
+      return () => {
+        map.off("click", handleIdentifyAllClick);
+        identifyPopup.current?.remove();
+        identifyPopup.current = null;
+        if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      };
+    }
+
+    if (!layer) return;
 
     // An author can turn the click popup off for a layer they only want
     // hovered (or only styled). Identify then does nothing for it rather than
@@ -2120,7 +2323,7 @@ export const MapCanvas = memo(function MapCanvas({
       // alone rather than resetting it out from under the drawing.
       if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
-  }, [identifyLayerId, layers, selectFeature]);
+  }, [identifyLayerId, layerGroups, layers, selectFeature, selectLayer]);
 
   // Geotagged photos: clicking a photo point opens a resizable popup with the
   // photo, without needing the Identify tool. The popup is photo-specific, and

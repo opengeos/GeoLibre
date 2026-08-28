@@ -278,6 +278,10 @@ export interface AppState {
    * `null` when the set is empty). A single click leaves exactly one id here.
    */
   selectedFeatureIds: string[];
+  /**
+   * Store-layer id targeted by Identify, or {@link IDENTIFY_ALL_LAYERS_ID} for
+   * the map-level mode that queries every visible vector layer.
+   */
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
   /**
@@ -732,6 +736,9 @@ export interface AppState {
   deleteComment: (commentId: string) => void;
   setComments: (comments: ProjectComment[]) => void;
 }
+
+/** Reserved Identify target for querying every visible vector layer at once. */
+export const IDENTIFY_ALL_LAYERS_ID = "__geolibre_identify_all_layers__";
 
 const MAX_RECENT_PROJECTS = 10;
 
