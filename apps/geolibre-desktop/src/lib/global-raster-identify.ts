@@ -1,3 +1,4 @@
+import { formatPixelValue } from "@geolibre/core";
 import type { PixelReading } from "maplibre-gl-raster";
 
 export interface RasterIdentifyLabels {
@@ -6,12 +7,6 @@ export interface RasterIdentifyLabels {
   coordinates: string;
   row: string;
   column: string;
-}
-
-/** Format a decoded raster sample without exposing binary floating-point noise. */
-export function formatRasterIdentifyValue(value: number): string {
-  if (!Number.isFinite(value) || Number.isInteger(value)) return String(value);
-  return String(Number(value.toPrecision(6)));
 }
 
 /**
@@ -53,7 +48,7 @@ export function rasterPixelIdentifyProperties(
 ): Record<string, unknown> {
   const rows: Array<[string, unknown]> = reading.bands.map((band) => {
     const label = band.name ?? labels.band(band.index);
-    const value = formatRasterIdentifyValue(band.value);
+    const value = formatPixelValue(band.value);
     return [label, band.isNodata ? `${value} (${labels.nodata})` : value];
   });
   rows.push([

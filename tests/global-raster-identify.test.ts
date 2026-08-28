@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  formatRasterIdentifyValue,
   rasterIdentifyProperties,
   rasterPixelIdentifyProperties,
 } from "../apps/geolibre-desktop/src/lib/global-raster-identify";
+import { formatPixelValue } from "../packages/core/src/pixel-format";
 
 const labels = {
   band: (index: number) => `Band ${index}`,
@@ -14,10 +14,10 @@ const labels = {
   column: "Column",
 };
 
-describe("formatRasterIdentifyValue", () => {
+describe("formatPixelValue", () => {
   it("keeps integers and rounds floating-point noise", () => {
-    assert.equal(formatRasterIdentifyValue(42), "42");
-    assert.equal(formatRasterIdentifyValue(1.23456789), "1.23457");
+    assert.equal(formatPixelValue(42), "42");
+    assert.equal(formatPixelValue(1.23456789), "1.23457");
   });
 });
 

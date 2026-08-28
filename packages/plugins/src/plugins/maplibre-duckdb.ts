@@ -1,8 +1,10 @@
 import {
   DEFAULT_LAYER_STYLE,
+  effectiveLayerRenderState,
   IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
   type GeoLibreLayer,
+  type LayerGroup,
   type LayerStyle,
   useAppStore,
 } from "@geolibre/core";
@@ -436,11 +438,15 @@ function createDuckDBControl(DuckDBControlClass: DuckDBControlConstructor): Duck
       shouldSyncControl = true;
     }
 
-    // Under the all-layers sentinel pickability depends on whether any DuckDB
-    // layer exists, so a layer added or removed while Identify is already on
-    // has to re-sync it too.
-    if (state.identifyLayerId !== previous.identifyLayerId || state.layers !== previous.layers) {
-      syncDuckDBPickableFromStore(state.layers, state.identifyLayerId);
+    // Under the all-layers sentinel pickability depends on whether a visible
+    // DuckDB layer exists, so a layer or group changed while Identify is
+    // already on has to re-sync it too.
+    if (
+      state.identifyLayerId !== previous.identifyLayerId ||
+      state.layers !== previous.layers ||
+      state.layerGroups !== previous.layerGroups
+    ) {
+      syncDuckDBPickableFromStore(state.layers, state.identifyLayerId, state.layerGroups);
     }
 
     if (shouldSyncControl) {
@@ -591,19 +597,28 @@ function clearDuckDBRenderedLayers(): void {
  * control's own handlers.
  *
  * True while Identify targets one DuckDB layer, and while all-layer Identify is
- * on and any DuckDB layer exists: MapCanvas hit-tests every eligible DuckDB
- * layer through `identifyLayerAtPoint` in that mode, which needs a pickable
- * overlay just as the single-layer path does.
+ * on and a *visible* DuckDB layer exists: MapCanvas hit-tests every eligible
+ * DuckDB layer through `identifyLayerAtPoint` in that mode, which needs a
+ * pickable overlay just as the single-layer path does. The visibility test
+ * matches the `eligibleLayers` filter there, group state included, so a hidden
+ * layer never arms the overlay.
  *
  * @param layers Store layers.
  * @param identifyLayerId Identify target, or the all-layers sentinel.
+ * @param layerGroups Group definitions, folded into each layer's visibility.
  * @returns True when the bridge owns the click.
  */
 function duckDBIdentifyModeActiveFor(
   layers: GeoLibreLayer[],
   identifyLayerId: string | null,
+  layerGroups: LayerGroup[],
 ): boolean {
-  if (identifyLayerId === IDENTIFY_ALL_LAYERS_ID) return layers.some(isDuckDBQueryLayer);
+  if (identifyLayerId === IDENTIFY_ALL_LAYERS_ID) {
+    const groupById = new Map(layerGroups.map((group) => [group.id, group]));
+    return layers.some(
+      (layer) => isDuckDBQueryLayer(layer) && effectiveLayerRenderState(layer, groupById).visible,
+    );
+  }
   const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
   return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
 }
@@ -611,8 +626,11 @@ function duckDBIdentifyModeActiveFor(
 function syncDuckDBPickableFromStore(
   layers = useAppStore.getState().layers,
   identifyLayerId = useAppStore.getState().identifyLayerId,
+  layerGroups = useAppStore.getState().layerGroups,
 ): void {
-  getMutableDuckDBControl()?.setPickable?.(duckDBIdentifyModeActiveFor(layers, identifyLayerId));
+  getMutableDuckDBControl()?.setPickable?.(
+    duckDBIdentifyModeActiveFor(layers, identifyLayerId, layerGroups),
+  );
 }
 
 function patchDuckDBControlSelection(control: DuckDBControl): void {
@@ -641,8 +659,8 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
 }
 
 function isDuckDBIdentifyModeActive(): boolean {
-  const { identifyLayerId, layers } = useAppStore.getState();
-  return duckDBIdentifyModeActiveFor(layers, identifyLayerId);
+  const { identifyLayerId, layerGroups, layers } = useAppStore.getState();
+  return duckDBIdentifyModeActiveFor(layers, identifyLayerId, layerGroups);
 }
 
 // Mirror the store-driven selection into the control's own attribute pane so
