@@ -1,11 +1,11 @@
-import type { Map, MapMouseEvent, GeoJSONSource } from 'maplibre-gl';
-import type { StacItem } from './types';
-import { INTERNAL_LAYER_METADATA, itemsToFeatureCollection } from './utils';
+import type { Map, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
+import type { StacItem } from "./types";
+import { INTERNAL_LAYER_METADATA, itemsToFeatureCollection } from "./utils";
 
-const SOURCE_ID = 'vantor-footprints-source';
-const FILL_LAYER_ID = 'vantor-footprints-fill';
-const PRE_LINE_LAYER_ID = 'vantor-footprints-pre-line';
-const POST_LINE_LAYER_ID = 'vantor-footprints-post-line';
+const SOURCE_ID = "vantor-footprints-source";
+const FILL_LAYER_ID = "vantor-footprints-fill";
+const PRE_LINE_LAYER_ID = "vantor-footprints-pre-line";
+const POST_LINE_LAYER_ID = "vantor-footprints-post-line";
 
 export class FootprintLayer {
   private map: Map;
@@ -23,61 +23,61 @@ export class FootprintLayer {
       (this.map.getSource(SOURCE_ID) as GeoJSONSource).setData(fc);
     } else {
       this.map.addSource(SOURCE_ID, {
-        type: 'geojson',
+        type: "geojson",
         data: fc,
-        promoteId: 'id',
+        promoteId: "id",
       });
 
       this.map.addLayer({
         id: FILL_LAYER_ID,
-        type: 'fill',
+        type: "fill",
         source: SOURCE_ID,
         metadata: INTERNAL_LAYER_METADATA,
         paint: {
-          'fill-color': [
-            'case',
-            ['==', ['get', 'phase'], 'pre'],
-            '#2196F3',
-            ['==', ['get', 'phase'], 'post'],
-            '#F44336',
-            '#9E9E9E',
+          "fill-color": [
+            "case",
+            ["==", ["get", "phase"], "pre"],
+            "#2196F3",
+            ["==", ["get", "phase"], "post"],
+            "#F44336",
+            "#9E9E9E",
           ],
-          'fill-opacity': 0.1,
+          "fill-opacity": 0.1,
         },
       });
 
       this.map.addLayer({
         id: PRE_LINE_LAYER_ID,
-        type: 'line',
+        type: "line",
         source: SOURCE_ID,
         metadata: INTERNAL_LAYER_METADATA,
-        filter: ['==', ['get', 'phase'], 'pre'],
+        filter: ["==", ["get", "phase"], "pre"],
         paint: {
-          'line-color': '#2196F3',
-          'line-width': 2,
-          'line-opacity': 0.8,
+          "line-color": "#2196F3",
+          "line-width": 2,
+          "line-opacity": 0.8,
         },
       });
 
       this.map.addLayer({
         id: POST_LINE_LAYER_ID,
-        type: 'line',
+        type: "line",
         source: SOURCE_ID,
         metadata: INTERNAL_LAYER_METADATA,
-        filter: ['==', ['get', 'phase'], 'post'],
+        filter: ["==", ["get", "phase"], "post"],
         paint: {
-          'line-color': '#F44336',
-          'line-width': 2,
-          'line-opacity': 0.8,
+          "line-color": "#F44336",
+          "line-width": 2,
+          "line-opacity": 0.8,
         },
       });
 
       // Change cursor on hover
-      this.map.on('mouseenter', FILL_LAYER_ID, () => {
-        this.map.getCanvas().style.cursor = 'pointer';
+      this.map.on("mouseenter", FILL_LAYER_ID, () => {
+        this.map.getCanvas().style.cursor = "pointer";
       });
-      this.map.on('mouseleave', FILL_LAYER_ID, () => {
-        this.map.getCanvas().style.cursor = '';
+      this.map.on("mouseleave", FILL_LAYER_ID, () => {
+        this.map.getCanvas().style.cursor = "";
       });
     }
   }
@@ -86,7 +86,7 @@ export class FootprintLayer {
     this.onClickCallback = callback;
 
     if (this.clickHandler) {
-      this.map.off('click', FILL_LAYER_ID, this.clickHandler);
+      this.map.off("click", FILL_LAYER_ID, this.clickHandler);
     }
 
     this.clickHandler = (e: MapMouseEvent) => {
@@ -101,7 +101,7 @@ export class FootprintLayer {
       }
     };
 
-    this.map.on('click', FILL_LAYER_ID, this.clickHandler);
+    this.map.on("click", FILL_LAYER_ID, this.clickHandler);
   }
 
   fitToBounds(items: StacItem[]): void {
@@ -137,7 +137,7 @@ export class FootprintLayer {
 
   remove(): void {
     if (this.clickHandler) {
-      this.map.off('click', FILL_LAYER_ID, this.clickHandler);
+      this.map.off("click", FILL_LAYER_ID, this.clickHandler);
       this.clickHandler = null;
     }
 

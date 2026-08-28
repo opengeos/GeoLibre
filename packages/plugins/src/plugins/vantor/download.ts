@@ -1,4 +1,4 @@
-import type { StacItem } from './types';
+import type { StacItem } from "./types";
 
 export class Downloader {
   private cancelled = false;
@@ -34,11 +34,11 @@ export class Downloader {
         // Use direct link to let the browser handle the download natively.
         // This avoids loading the entire file into memory via fetch+blob,
         // which fails for large COG files (hundreds of MB).
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = cogUrl;
         a.download = filename;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -52,11 +52,7 @@ export class Downloader {
         }
       } catch (e) {
         failed++;
-        onProgress?.(
-          i + 1,
-          total,
-          `Failed to download ${filename}: ${(e as Error).message}`,
-        );
+        onProgress?.(i + 1, total, `Failed to download ${filename}: ${(e as Error).message}`);
       }
     }
 

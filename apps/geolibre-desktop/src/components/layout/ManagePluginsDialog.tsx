@@ -387,8 +387,7 @@ export function ManagePluginsDialog({
   // id collision. Keep entries that were previously installed by URL visible
   // so users can remove that old installation after a plugin moves built-in.
   const entries = useMemo(
-    () =>
-      registryEntries.filter((entry) => isInstalled(entry) || !loadedVersions.has(entry.id)),
+    () => registryEntries.filter((entry) => isInstalled(entry) || !loadedVersions.has(entry.id)),
     [isInstalled, loadedVersions, registryEntries],
   );
   const installedCount = useMemo(() => entries.filter(isInstalled).length, [entries, isInstalled]);

@@ -84,7 +84,7 @@
   background: var(--vantor-bg);
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   color: var(--vantor-text);
   display: flex;
@@ -139,7 +139,7 @@
 
 /* Subtle corner grip lines */
 .vantor-panel__resize-handle::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 3px;
   width: 8px;
@@ -319,7 +319,7 @@
    host like GeoLibre. Match its `!important` and beat it on specificity (the
    extra `.maplibregl-ctrl-vantor` class) so the theme's text color wins. */
 .maplibregl-ctrl-vantor .vantor-panel select,
-.maplibregl-ctrl-vantor .vantor-panel input[type='text'] {
+.maplibregl-ctrl-vantor .vantor-panel input[type="text"] {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--vantor-border);
@@ -336,7 +336,7 @@
 }
 
 .vantor-panel select:focus,
-.vantor-panel input[type='text']:focus {
+.vantor-panel input[type="text"]:focus {
   outline: none;
   border-color: var(--vantor-primary);
   box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
@@ -351,7 +351,7 @@
   font-size: 12px;
 }
 
-.vantor-panel__checkbox-label input[type='checkbox'] {
+.vantor-panel__checkbox-label input[type="checkbox"] {
   margin: 0;
   cursor: pointer;
 }
@@ -533,12 +533,12 @@
 }
 
 .vantor-panel__table th.vantor-sort-asc::after {
-  content: ' \25B2';
+  content: " \25B2";
   font-size: 9px;
 }
 
 .vantor-panel__table th.vantor-sort-desc::after {
-  content: ' \25BC';
+  content: " \25BC";
   font-size: 9px;
 }
 
@@ -580,7 +580,7 @@
   padding: 4px 2px;
 }
 
-.vantor-panel__table input[type='checkbox'] {
+.vantor-panel__table input[type="checkbox"] {
   margin: 0;
   cursor: pointer;
 }

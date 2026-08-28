@@ -1,13 +1,13 @@
-import type { Map, MapMouseEvent, GeoJSONSource } from 'maplibre-gl';
-import type { BBox } from './types';
-import { INTERNAL_LAYER_METADATA } from './utils';
+import type { Map, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
+import type { BBox } from "./types";
+import { INTERNAL_LAYER_METADATA } from "./utils";
 
-const SOURCE_ID = 'vantor-draw-bbox-source';
-const FILL_LAYER_ID = 'vantor-draw-bbox-fill';
-const LINE_LAYER_ID = 'vantor-draw-bbox-line';
+const SOURCE_ID = "vantor-draw-bbox-source";
+const FILL_LAYER_ID = "vantor-draw-bbox-fill";
+const LINE_LAYER_ID = "vantor-draw-bbox-line";
 
 const EMPTY_FC: GeoJSON.FeatureCollection = {
-  type: 'FeatureCollection',
+  type: "FeatureCollection",
   features: [],
 };
 
@@ -33,30 +33,30 @@ export class DrawBBox {
     if (this.map.getSource(SOURCE_ID)) return;
 
     this.map.addSource(SOURCE_ID, {
-      type: 'geojson',
+      type: "geojson",
       data: EMPTY_FC,
     });
 
     this.map.addLayer({
       id: FILL_LAYER_ID,
-      type: 'fill',
+      type: "fill",
       source: SOURCE_ID,
       metadata: INTERNAL_LAYER_METADATA,
       paint: {
-        'fill-color': '#1976D2',
-        'fill-opacity': 0.1,
+        "fill-color": "#1976D2",
+        "fill-opacity": 0.1,
       },
     });
 
     this.map.addLayer({
       id: LINE_LAYER_ID,
-      type: 'line',
+      type: "line",
       source: SOURCE_ID,
       metadata: INTERNAL_LAYER_METADATA,
       paint: {
-        'line-color': '#1976D2',
-        'line-width': 2,
-        'line-dasharray': [3, 3],
+        "line-color": "#1976D2",
+        "line-width": 2,
+        "line-dasharray": [3, 3],
       },
     });
   }
@@ -67,22 +67,22 @@ export class DrawBBox {
       this.active = true;
       this.startPoint = null;
 
-      this.map.getCanvas().style.cursor = 'crosshair';
+      this.map.getCanvas().style.cursor = "crosshair";
       this.map.dragPan.disable();
 
-      this.map.on('mousedown', this.boundMouseDown);
+      this.map.on("mousedown", this.boundMouseDown);
     });
   }
 
   deactivate(): void {
     this.active = false;
     this.startPoint = null;
-    this.map.getCanvas().style.cursor = '';
+    this.map.getCanvas().style.cursor = "";
     this.map.dragPan.enable();
 
-    this.map.off('mousedown', this.boundMouseDown);
-    this.map.off('mousemove', this.boundMouseMove);
-    this.map.off('mouseup', this.boundMouseUp);
+    this.map.off("mousedown", this.boundMouseDown);
+    this.map.off("mousemove", this.boundMouseMove);
+    this.map.off("mouseup", this.boundMouseUp);
   }
 
   clear(): void {
@@ -97,12 +97,12 @@ export class DrawBBox {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
       source.setData({
-        type: 'FeatureCollection',
+        type: "FeatureCollection",
         features: [
           {
-            type: 'Feature',
+            type: "Feature",
             geometry: {
-              type: 'Polygon',
+              type: "Polygon",
               coordinates: [
                 [
                   [bbox.west, bbox.south],
@@ -126,8 +126,8 @@ export class DrawBBox {
 
     this.startPoint = [e.lngLat.lng, e.lngLat.lat];
 
-    this.map.on('mousemove', this.boundMouseMove);
-    this.map.on('mouseup', this.boundMouseUp);
+    this.map.on("mousemove", this.boundMouseMove);
+    this.map.on("mouseup", this.boundMouseUp);
   }
 
   private onMouseMove(e: MapMouseEvent): void {
@@ -167,12 +167,12 @@ export class DrawBBox {
     const north = Math.max(start[1], end[1]);
 
     source.setData({
-      type: 'FeatureCollection',
+      type: "FeatureCollection",
       features: [
         {
-          type: 'Feature',
+          type: "Feature",
           geometry: {
-            type: 'Polygon',
+            type: "Polygon",
             coordinates: [
               [
                 [west, south],

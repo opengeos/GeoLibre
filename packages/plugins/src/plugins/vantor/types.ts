@@ -1,5 +1,5 @@
-import type { Polygon, MultiPolygon } from 'geojson';
-import type { CogAdder, RasterLoader } from './cog-layer';
+import type { Polygon, MultiPolygon } from "geojson";
+import type { CogAdder, RasterLoader } from "./cog-layer";
 
 export interface StacLink {
   rel: string;
@@ -9,7 +9,7 @@ export interface StacLink {
 }
 
 export interface StacCatalog {
-  type: 'Catalog';
+  type: "Catalog";
   id: string;
   stac_version: string;
   description: string;
@@ -18,7 +18,7 @@ export interface StacCatalog {
 }
 
 export interface StacCollection {
-  type: 'Collection';
+  type: "Collection";
   id: string;
   stac_version: string;
   title?: string;
@@ -41,22 +41,22 @@ export interface StacAsset {
 export interface StacItemProperties {
   title?: string;
   datetime?: string;
-  phase?: 'pre' | 'post' | string;
+  phase?: "pre" | "post" | string;
   vehicle_name?: string;
   constellation?: string;
-  'eo:cloud_cover'?: number;
+  "eo:cloud_cover"?: number;
   pan_gsd?: number;
   multispectral_gsd?: number;
-  'view:off_nadir'?: number;
-  'view:azimuth'?: number;
-  'view:sun_azimuth'?: number;
-  'view:sun_elevation'?: number;
+  "view:off_nadir"?: number;
+  "view:azimuth"?: number;
+  "view:sun_azimuth"?: number;
+  "view:sun_elevation"?: number;
   published?: string;
   [key: string]: unknown;
 }
 
 export interface StacItem {
-  type: 'Feature';
+  type: "Feature";
   id: string;
   stac_version?: string;
   geometry: Polygon | MultiPolygon | null;
@@ -81,7 +81,7 @@ export interface BBox {
   north: number;
 }
 
-export type PhaseFilter = 'all' | 'pre' | 'post';
+export type PhaseFilter = "all" | "pre" | "post";
 
 export interface ItemProperties {
   id: string;
@@ -96,7 +96,7 @@ export interface ItemProperties {
 
 export interface VantorControlOptions {
   catalogUrl?: string;
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   collapsed?: boolean;
   panelWidth?: number;
   maxHeight?: number | string;
@@ -107,7 +107,7 @@ export interface VantorControlOptions {
    * Use {@link VantorControl.setTheme} to switch at runtime (e.g. to sync with
    * a host app that has its own dark-mode toggle).
    */
-  theme?: 'auto' | 'light' | 'dark';
+  theme?: "auto" | "light" | "dark";
   /**
    * Supplies the maplibre-gl-raster module used for COG rendering. Defaults to a
    * dynamic `import('maplibre-gl-raster')`. A host such as GeoLibre can pass its

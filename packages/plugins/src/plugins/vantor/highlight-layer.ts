@@ -1,13 +1,13 @@
-import type { Map, GeoJSONSource } from 'maplibre-gl';
-import type { StacItem } from './types';
-import { INTERNAL_LAYER_METADATA } from './utils';
+import type { Map, GeoJSONSource } from "maplibre-gl";
+import type { StacItem } from "./types";
+import { INTERNAL_LAYER_METADATA } from "./utils";
 
-const SOURCE_ID = 'vantor-highlight-source';
-const FILL_LAYER_ID = 'vantor-highlight-fill';
-const LINE_LAYER_ID = 'vantor-highlight-line';
+const SOURCE_ID = "vantor-highlight-source";
+const FILL_LAYER_ID = "vantor-highlight-fill";
+const LINE_LAYER_ID = "vantor-highlight-line";
 
 const EMPTY_FC: GeoJSON.FeatureCollection = {
-  type: 'FeatureCollection',
+  type: "FeatureCollection",
   features: [],
 };
 
@@ -21,29 +21,29 @@ export class HighlightLayer {
 
   private init(): void {
     this.map.addSource(SOURCE_ID, {
-      type: 'geojson',
+      type: "geojson",
       data: EMPTY_FC,
     });
 
     this.map.addLayer({
       id: FILL_LAYER_ID,
-      type: 'fill',
+      type: "fill",
       source: SOURCE_ID,
       metadata: INTERNAL_LAYER_METADATA,
       paint: {
-        'fill-color': '#FFEB3B',
-        'fill-opacity': 0.3,
+        "fill-color": "#FFEB3B",
+        "fill-opacity": 0.3,
       },
     });
 
     this.map.addLayer({
       id: LINE_LAYER_ID,
-      type: 'line',
+      type: "line",
       source: SOURCE_ID,
       metadata: INTERNAL_LAYER_METADATA,
       paint: {
-        'line-color': '#FFC107',
-        'line-width': 3,
+        "line-color": "#FFC107",
+        "line-width": 3,
       },
     });
   }
@@ -53,10 +53,10 @@ export class HighlightLayer {
     if (!source || !item.geometry) return;
 
     source.setData({
-      type: 'FeatureCollection',
+      type: "FeatureCollection",
       features: [
         {
-          type: 'Feature',
+          type: "Feature",
           geometry: item.geometry,
           properties: { id: item.id },
         },

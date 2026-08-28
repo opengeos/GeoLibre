@@ -1,9 +1,9 @@
-import type { Map as MaplibreMap } from 'maplibre-gl';
-import type { LayerManager } from 'maplibre-gl-raster';
-import type { StacItem } from './types';
+import type { Map as MaplibreMap } from "maplibre-gl";
+import type { LayerManager } from "maplibre-gl-raster";
+import type { StacItem } from "./types";
 
 /** The maplibre-gl-raster module surface this layer needs. */
-type RasterModule = typeof import('maplibre-gl-raster');
+type RasterModule = typeof import("maplibre-gl-raster");
 
 /**
  * Renders a COG through a host (e.g. GeoLibre's `app.addCogLayer`) instead of
@@ -17,7 +17,7 @@ export type CogAdder = (
   options?: {
     nodata?: number;
     opacity?: number;
-    engine?: 'maplibre-gl-raster' | 'cog-tiler-wasm' | 'titiler' | 'auto';
+    engine?: "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler" | "auto";
   },
 ) => Promise<string>;
 
@@ -35,15 +35,15 @@ function ensureMercatorProjection(map: MaplibreMap): void {
   };
   const setMercator = () => {
     try {
-      if (m.getProjection?.()?.type === 'mercator') return;
-      m.setProjection?.({ type: 'mercator' });
+      if (m.getProjection?.()?.type === "mercator") return;
+      m.setProjection?.({ type: "mercator" });
     } catch {
       // MapLibre can reject projection changes while the style is settling;
       // the idle guard retries.
     }
   };
   setMercator();
-  m.once?.('idle', setMercator);
+  m.once?.("idle", setMercator);
 }
 
 /**
@@ -54,7 +54,7 @@ function ensureMercatorProjection(map: MaplibreMap): void {
  */
 export type RasterLoader = () => Promise<RasterModule>;
 
-export type CogLayerEvent = 'layeradd' | 'layerremove';
+export type CogLayerEvent = "layeradd" | "layerremove";
 
 export interface CogLayerEventDetail {
   layerId: string;
@@ -97,7 +97,7 @@ export class CogLayer {
 
   constructor(map: MaplibreMap, rasterLoader?: RasterLoader, cogAdder?: CogAdder) {
     this.map = map;
-    this.rasterLoader = rasterLoader ?? (() => import('maplibre-gl-raster'));
+    this.rasterLoader = rasterLoader ?? (() => import("maplibre-gl-raster"));
     this.cogAdder = cogAdder;
   }
 
@@ -131,8 +131,8 @@ export class CogLayer {
         } catch (e) {
           this.managerPromise = null;
           throw new Error(
-            'Failed to initialize COG renderer. Ensure maplibre-gl-raster (and its ' +
-              '@deck.gl/* and @luma.gl/* peers) are installed. ' +
+            "Failed to initialize COG renderer. Ensure maplibre-gl-raster (and its " +
+              "@deck.gl/* and @luma.gl/* peers) are installed. " +
               String(e),
           );
         }
@@ -160,10 +160,10 @@ export class CogLayer {
     if (this.cogAdder) {
       await this.cogAdder(name, cogUrl, {
         nodata: 0,
-        engine: 'cog-tiler-wasm',
+        engine: "cog-tiler-wasm",
       });
       this.activeLayers.push({ itemId: item.id, cogUrl, name, visible: true, opacity: 1 });
-      this.emit('layeradd', { layerId: item.id, url: cogUrl, name });
+      this.emit("layeradd", { layerId: item.id, url: cogUrl, name });
       return;
     }
 
@@ -180,7 +180,7 @@ export class CogLayer {
     this.activeLayers.push({ itemId: item.id, cogUrl, name, visible: true, opacity: 1 });
     // COGs render via deck.gl tiles, which require mercator (not globe).
     ensureMercatorProjection(this.map);
-    this.emit('layeradd', { layerId: item.id, url: cogUrl, name });
+    this.emit("layeradd", { layerId: item.id, url: cogUrl, name });
   }
 
   async removeCogLayer(itemId: string): Promise<void> {
@@ -189,7 +189,7 @@ export class CogLayer {
     this.manager?.removeRaster(itemId);
 
     if (existed) {
-      this.emit('layerremove', { layerId: itemId });
+      this.emit("layerremove", { layerId: itemId });
     }
   }
 
@@ -200,7 +200,7 @@ export class CogLayer {
       this.manager?.removeRaster(id);
     }
     for (const id of ids) {
-      this.emit('layerremove', { layerId: id });
+      this.emit("layerremove", { layerId: id });
     }
   }
 
@@ -228,8 +228,8 @@ export class CogLayer {
     const assets = item.assets || {};
     if (assets.visual) return assets.visual.href;
     for (const asset of Object.values(assets)) {
-      const t = (asset.type || '').toLowerCase();
-      if (t.includes('geotiff') || t.includes('tiff')) return asset.href;
+      const t = (asset.type || "").toLowerCase();
+      if (t.includes("geotiff") || t.includes("tiff")) return asset.href;
     }
     return null;
   }
@@ -245,7 +245,7 @@ export class CogLayer {
     this.managerPromise = null;
     this.activeLayers = [];
     for (const id of ids) {
-      this.emit('layerremove', { layerId: id });
+      this.emit("layerremove", { layerId: id });
     }
   }
 }

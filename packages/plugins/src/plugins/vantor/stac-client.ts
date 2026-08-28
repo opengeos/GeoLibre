@@ -6,11 +6,10 @@ import type {
   BBox,
   PhaseFilter,
   ItemProperties,
-} from './types';
-import { resolveHref } from './utils';
+} from "./types";
+import { resolveHref } from "./utils";
 
-const DEFAULT_CATALOG_URL =
-  'https://vantor-opendata.s3.amazonaws.com/events/catalog.json';
+const DEFAULT_CATALOG_URL = "https://vantor-opendata.s3.amazonaws.com/events/catalog.json";
 
 export class StacClient {
   private catalogUrl: string;
@@ -32,9 +31,9 @@ export class StacClient {
     const events: EventInfo[] = [];
 
     for (const link of catalog.links) {
-      if (link.rel === 'child') {
+      if (link.rel === "child") {
         const href = resolveHref(this.catalogUrl, link.href);
-        const fallbackName = href.split('/').slice(-2, -1)[0] || href;
+        const fallbackName = href.split("/").slice(-2, -1)[0] || href;
         const title = link.title || fallbackName;
         events.push({
           id: link.title || fallbackName,
@@ -53,7 +52,7 @@ export class StacClient {
 
   async fetchItems(collectionUrl: string): Promise<StacItem[]> {
     const collection = await this.fetchJson<StacCollection>(collectionUrl);
-    const itemLinks = collection.links.filter((l) => l.rel === 'item');
+    const itemLinks = collection.links.filter((l) => l.rel === "item");
 
     const items: StacItem[] = [];
     const seenIds = new Set<string>();
@@ -90,9 +89,7 @@ export class StacClient {
       }
     };
 
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, urls.length) }, () => worker()),
-    );
+    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, () => worker()));
 
     return results;
   }
@@ -108,10 +105,10 @@ export class StacClient {
   }
 
   filterItemsByPhase(items: StacItem[], phase: PhaseFilter): StacItem[] {
-    if (phase === 'all') return items;
+    if (phase === "all") return items;
 
     return items.filter((item) => {
-      const itemPhase = (item.properties.phase || '').toLowerCase().replace('-event', '');
+      const itemPhase = (item.properties.phase || "").toLowerCase().replace("-event", "");
       return itemPhase === phase;
     });
   }
@@ -122,8 +119,8 @@ export class StacClient {
     if (visual) return visual.href;
 
     for (const asset of Object.values(assets)) {
-      const assetType = asset.type || '';
-      if (assetType.includes('geotiff') || assetType.includes('tiff')) {
+      const assetType = asset.type || "";
+      if (assetType.includes("geotiff") || assetType.includes("tiff")) {
         return asset.href;
       }
     }
@@ -138,15 +135,14 @@ export class StacClient {
   getItemProperties(item: StacItem): ItemProperties {
     const props = item.properties || {};
     return {
-      id: item.id || 'Unknown',
-      datetime: (props.datetime as string) || '',
-      phase: (props.phase as string) || '',
-      sensor:
-        (props.vehicle_name as string) || (props.constellation as string) || '',
-      cloud_cover: props['eo:cloud_cover'] ?? '',
-      pan_gsd: props.pan_gsd ?? '',
-      ms_gsd: props.multispectral_gsd ?? '',
-      off_nadir: props['view:off_nadir'] ?? '',
+      id: item.id || "Unknown",
+      datetime: (props.datetime as string) || "",
+      phase: (props.phase as string) || "",
+      sensor: (props.vehicle_name as string) || (props.constellation as string) || "",
+      cloud_cover: props["eo:cloud_cover"] ?? "",
+      pan_gsd: props.pan_gsd ?? "",
+      ms_gsd: props.multispectral_gsd ?? "",
+      off_nadir: props["view:off_nadir"] ?? "",
     };
   }
 }
