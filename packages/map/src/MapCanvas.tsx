@@ -49,6 +49,7 @@ import {
   type FeatureSelectionShape,
 } from "./feature-selection";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
+import { globalIdentifyHitKey } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -421,8 +422,7 @@ function createGlobalIdentifyPopupElement(
     for (const [index, hit] of groupHits.entries()) {
       const featureContainer = document.createElement("div");
       featureContainer.className = "mb-2 rounded border bg-background/60 p-2 last:mb-0";
-      const featureTitle = resolvePopupTitle(
-        layer.name,
+      const configuredTitle = resolveConfiguredPopupTitle(
         hit.feature.properties ?? {},
         layer.popup,
         {
@@ -435,8 +435,7 @@ function createGlobalIdentifyPopupElement(
       featureButton.type = "button";
       featureButton.className =
         "mb-1 w-full break-words text-start font-medium text-foreground hover:underline";
-      featureButton.textContent =
-        featureTitle === layer.name ? `Feature ${index + 1}` : featureTitle;
+      featureButton.textContent = configuredTitle ?? `Feature ${index + 1}`;
       featureButton.addEventListener("click", (event) => {
         event.stopPropagation();
         onActivate(hit);
@@ -461,19 +460,6 @@ function createGlobalIdentifyPopupElement(
   }
 
   return root;
-}
-
-/** Stable key used to collapse one feature rendered by multiple style layers. */
-function globalIdentifyHitKey(hit: GlobalIdentifyHit): string {
-  if (hit.featureId !== null) {
-    return `${hit.layer.id}\u0000${hit.feature.source}\u0000${hit.feature.sourceLayer ?? ""}\u0000id:${hit.featureId}`;
-  }
-  return `${hit.layer.id}\u0000feature:${JSON.stringify([
-    hit.feature.source,
-    hit.feature.sourceLayer,
-    hit.feature.geometry,
-    hit.feature.properties ?? {},
-  ])}`;
 }
 
 /**
@@ -2077,7 +2063,7 @@ export const MapCanvas = memo(function MapCanvas({
             feature,
             featureId: findFeatureId(owner, feature),
           };
-          const key = globalIdentifyHitKey(hit);
+          const key = globalIdentifyHitKey(hit.layer.id, hit.featureId, hit.feature);
           if (seen.has(key)) continue;
           seen.add(key);
           hits.push(hit);
