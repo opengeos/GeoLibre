@@ -8,6 +8,15 @@ import type { StacItem } from "./types";
  */
 export const INTERNAL_LAYER_METADATA = { "geolibre:internal": true } as const;
 
+/** Whether a catalog-supplied asset URL is safe for remote COG access. */
+export function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function resolveHref(baseUrl: string, href: string): string {
   if (href.startsWith("http://") || href.startsWith("https://")) {
     return href;

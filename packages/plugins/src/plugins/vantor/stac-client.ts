@@ -7,7 +7,7 @@ import type {
   PhaseFilter,
   ItemProperties,
 } from "./types";
-import { resolveHref } from "./utils";
+import { isHttpsUrl, resolveHref } from "./utils";
 
 const DEFAULT_CATALOG_URL = "https://vantor-opendata.s3.amazonaws.com/events/catalog.json";
 
@@ -116,26 +116,15 @@ export class StacClient {
   getCogUrl(item: StacItem): string | null {
     const assets = item.assets || {};
     const visual = assets.visual;
-    if (visual && this.isHttpsUrl(visual.href)) return visual.href;
+    if (visual && isHttpsUrl(visual.href)) return visual.href;
 
     for (const asset of Object.values(assets)) {
       const assetType = asset.type || "";
-      if (
-        (assetType.includes("geotiff") || assetType.includes("tiff")) &&
-        this.isHttpsUrl(asset.href)
-      ) {
+      if ((assetType.includes("geotiff") || assetType.includes("tiff")) && isHttpsUrl(asset.href)) {
         return asset.href;
       }
     }
     return null;
-  }
-
-  private isHttpsUrl(value: string): boolean {
-    try {
-      return new URL(value).protocol === "https:";
-    } catch {
-      return false;
-    }
   }
 
   getThumbnailUrl(item: StacItem): string | null {

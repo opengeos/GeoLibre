@@ -120,6 +120,14 @@ describe("Vantor Open Data built-in plugin", () => {
     const result = await new Downloader().downloadItems([unsafe], () => "javascript:alert(1)");
     assert.deepEqual(result, { started: 0, failed: 1 });
     assert.equal(document.querySelectorAll("a").length, 0);
+
+    let hostAdds = 0;
+    const layer = new CogLayer({} as never, undefined, async () => {
+      hostAdds++;
+      return "unsafe-layer";
+    });
+    await assert.rejects(layer.addCogLayer(unsafe), /No COG URL found/);
+    assert.equal(hostAdds, 0);
   });
 
   it("settles an active bounding-box draw when deactivated", async () => {

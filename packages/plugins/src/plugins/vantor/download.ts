@@ -1,4 +1,5 @@
 import type { StacItem, VantorTranslate } from "./types";
+import { isHttpsUrl } from "./utils";
 
 export class Downloader {
   private cancelled = false;
@@ -107,13 +108,5 @@ export class Downloader {
 
   private t(key: string, defaultValue: string, params?: Record<string, string | number>): string {
     return this.translate?.(key, defaultValue, params) ?? defaultValue;
-  }
-}
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
   }
 }

@@ -1,6 +1,7 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import type { LayerManager } from "maplibre-gl-raster";
 import type { StacItem } from "./types";
+import { isHttpsUrl } from "./utils";
 
 /** The maplibre-gl-raster module surface this layer needs. */
 type RasterModule = typeof import("maplibre-gl-raster");
@@ -253,10 +254,12 @@ export class CogLayer {
 
   private findCogUrl(item: StacItem): string | null {
     const assets = item.assets || {};
-    if (assets.visual) return assets.visual.href;
+    if (assets.visual && isHttpsUrl(assets.visual.href)) return assets.visual.href;
     for (const asset of Object.values(assets)) {
       const t = (asset.type || "").toLowerCase();
-      if (t.includes("geotiff") || t.includes("tiff")) return asset.href;
+      if ((t.includes("geotiff") || t.includes("tiff")) && isHttpsUrl(asset.href)) {
+        return asset.href;
+      }
     }
     return null;
   }
