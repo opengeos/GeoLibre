@@ -208,8 +208,11 @@ export function FieldCollectionDialog({
   const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
   // Mirrors `vertices` so the map double-click handler can finish synchronously.
   const verticesRef = useRef<Vertex[]>([]);
-  // Bumped on each GPS request and on any other capture, so a slow GPS fix that
-  // resolves after a newer capture is ignored instead of overwriting it.
+  // Capture generation. Bumped on each GPS request and on anything that
+  // supersedes the capture in progress — another capture, a target-layer
+  // switch, a project switch, dismissing the dialog — so slow async work (a GPS
+  // fix, a photo being read) is dropped instead of landing on a capture, layer,
+  // or project it was not started in.
   const gpsSeqRef = useRef(0);
 
   useEffect(() => {
@@ -221,20 +224,6 @@ export function FieldCollectionDialog({
   useEffect(() => {
     if (open) setSessionActive(true);
   }, [open]);
-
-  // A session belongs to the project it was started in. Loading or creating a
-  // project bumps `projectGeneration`, and this dialog is never remounted (as
-  // PrintLayoutDialog is, via its key), so without this a session started in
-  // the previous project would resurface its pill over the new one — and point
-  // at whichever collection layer the new project happens to carry. Keep the
-  // session only if the dialog is open across the switch, and drop the target
-  // either way: it names a layer that is no longer in the store.
-  useEffect(() => {
-    setSessionActive(open);
-    setLayerId("");
-    // `open` is read as a snapshot; only a project switch should reset here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectGeneration]);
 
   // Keep the session's target honest while the dialog is closed: if the target
   // layer is deleted from the Layers panel, fall back to another collection
@@ -280,6 +269,60 @@ export function FieldCollectionDialog({
     if (map) removeDrawPreview(map);
   }, [clearMarker, getMap]);
 
+  // Drop everything the current capture owns and point the form at `target`.
+  // Bumping the sequence invalidates the async work behind a capture (an
+  // in-flight GPS fix, a photo still being read), so a capture can never land
+  // in a context it wasn't started in — a different target layer, or a
+  // different project.
+  const resetCapture = useCallback(
+    (target: string) => {
+      gpsSeqRef.current += 1;
+      setLayerId(target);
+      setLayerName("");
+      setGeometry("point");
+      setDrafts(target ? [] : [makeDraft()]);
+      setPending(null);
+      setValues({});
+      setPhoto(null);
+      setPicking(false);
+      setDrawing(false);
+      setVertices([]);
+      verticesRef.current = [];
+      setLocating(false);
+      setLastGpsFix(null);
+      setErrors({});
+      setNotice(null);
+      savedCountRef.current = 0;
+      clearPreview();
+    },
+    [clearPreview, makeDraft],
+  );
+
+  // Switching the capture target mid-session drops the in-progress capture: a
+  // point picked for Culverts must not be saved into Water Sources, and the
+  // sequence bump makes sure a GPS fix or photo read still in flight for the
+  // old target can't land on the new one either. Any drafts typed into the
+  // "new layer" setup step are kept, so toggling to a layer and back doesn't
+  // lose them.
+  const handleTargetChange = useCallback(
+    (nextId: string) => {
+      gpsSeqRef.current += 1;
+      setLayerId(nextId);
+      setPending(null);
+      setLastGpsFix(null);
+      setLocating(false);
+      setValues({});
+      setPhoto(null);
+      setVertices([]);
+      verticesRef.current = [];
+      clearPreview();
+      setErrors({});
+      setNotice(null);
+      if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
+    },
+    [clearPreview, drafts.length, makeDraft],
+  );
+
   // Reset the capture form when the dialog opens. The capture *target* is not
   // form state: it belongs to the session, so a target chosen earlier survives
   // closing and reopening the dialog (the whole point of switching layers from
@@ -292,27 +335,35 @@ export function FieldCollectionDialog({
       suppressResetRef.current = false;
       return;
     }
-    const target = resolveTargetLayer(
-      collectionLayers.map((l) => l.id),
-      layerId,
+    resetCapture(
+      resolveTargetLayer(
+        collectionLayers.map((l) => l.id),
+        layerId,
+      ),
     );
-    setLayerId(target);
-    setLayerName("");
-    setGeometry("point");
-    setDrafts(target ? [] : [makeDraft()]);
-    setPending(null);
-    setValues({});
-    setPhoto(null);
-    setVertices([]);
-    verticesRef.current = [];
-    setLocating(false);
-    setLastGpsFix(null);
-    setErrors({});
-    setNotice(null);
-    savedCountRef.current = 0;
     // collectionLayers and layerId are snapshotted on open, by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // A session belongs to the project it was started in. Loading or creating a
+  // project bumps `projectGeneration`, and this dialog is never remounted (as
+  // PrintLayoutDialog is, via its key), so without this a session started in
+  // the previous project would resurface its pill over the new one, and a
+  // half-finished capture from the old project would still be sitting in the
+  // form. Keep the session only if the dialog is open across the switch, and
+  // re-resolve the target against the project that just loaded.
+  useEffect(() => {
+    setSessionActive(open);
+    resetCapture(
+      resolveTargetLayer(
+        collectionLayers.map((l) => l.id),
+        "",
+      ),
+    );
+    // Everything but projectGeneration is snapshotted; only a project switch
+    // should reset here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectGeneration]);
 
   // Tear down any preview when the dialog fully closes (not while drawing with
   // it intentionally hidden) and on unmount.
@@ -606,9 +657,17 @@ export function FieldCollectionDialog({
         tooLarge();
         return;
       }
+      // Reading a large photo takes long enough for the capture underneath to
+      // change (a new target layer, a project switch, the tool being closed);
+      // the sequence pins this read to the capture that started it.
+      const seq = gpsSeqRef.current;
+      const stale = () => gpsSeqRef.current !== seq;
       const reader = new FileReader();
-      reader.onerror = () => setNotice(t("fieldCollection.photoReadError"));
+      reader.onerror = () => {
+        if (!stale()) setNotice(t("fieldCollection.photoReadError"));
+      };
       reader.onload = () => {
+        if (stale()) return;
         const dataUrl = typeof reader.result === "string" ? reader.result : "";
         if (!dataUrl) {
           setNotice(t("fieldCollection.photoReadError"));
@@ -824,21 +883,7 @@ export function FieldCollectionDialog({
             <Select
               id={targetLayerId}
               value={layerId}
-              onChange={(e) => {
-                setLayerId(e.target.value);
-                setPending(null);
-                setLastGpsFix(null);
-                setValues({});
-                setPhoto(null);
-                setVertices([]);
-                verticesRef.current = [];
-                clearPreview();
-                setErrors({});
-                setNotice(null);
-                if (!e.target.value && drafts.length === 0) {
-                  setDrafts([makeDraft()]);
-                }
-              }}
+              onChange={(e) => handleTargetChange(e.target.value)}
             >
               {collectionLayers.map((l: GeoLibreLayer) => (
                 <option key={l.id} value={l.id}>
