@@ -165,7 +165,16 @@ describe("Elements Panel & Map Elements", () => {
       id: "image-overlay-1",
       name: "Extent Image 1 Overlay",
       type: "image",
-      source: { type: "image", url: "https://example.com/img.png", coordinates: [] },
+      source: {
+        type: "image",
+        url: "https://example.com/img.png",
+        coordinates: [
+          [-123, 38],
+          [-121, 38],
+          [-121, 36],
+          [-123, 36],
+        ],
+      },
       visible: true,
       opacity: 1,
       style: DEFAULT_LAYER_STYLE,
@@ -192,7 +201,23 @@ describe("Elements Panel & Map Elements", () => {
       true,
     );
 
-    // 4. Test deletion cascading.
+    // 4. Test geometry movement cascading to the visible image corners.
+    moveElementTo("extent-img-1", new LngLat(0, 0));
+    assert.deepEqual(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.source,
+      {
+        type: "image",
+        url: "https://example.com/img.png",
+        coordinates: [
+          [-1, 1],
+          [1, 1],
+          [1, -1],
+          [-1, -1],
+        ],
+      },
+    );
+
+    // 5. Test deletion cascading.
     deleteElementById("extent-img-1");
     // Verify both the overlay layer and tracking feature are removed.
     assert.equal(

@@ -2198,6 +2198,10 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         description.placeholder = "Description";
         description.rows = 2;
         const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
+        const supportsColor = el.type !== "placed_image";
+        const supportsWidth = ["arrow", "arrowhead", "highlight", "freehand", "line"].includes(
+          el.type,
+        );
         const color = document.createElement("input");
         color.type = "color";
         color.value = String(
@@ -2241,7 +2245,15 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             update();
           }
         });
-        titleContainer.append(input, description, color, width);
+        titleContainer.append(input, description);
+        if (supportsColor) titleContainer.appendChild(color);
+        if (supportsWidth) titleContainer.appendChild(width);
+        titleContainer.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            editingId = null;
+            update();
+          }
+        });
         const save = document.createElement("button");
         save.type = "button";
         save.textContent = labels.saveElement;
@@ -2369,7 +2381,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
   update();
   const unsub = useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers) {
+    if (state.layers !== previous.layers || state.selectedLayerId !== previous.selectedLayerId) {
       update();
     }
   });
@@ -2497,6 +2509,11 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
   ];
   const dx = lngLat.lng - centre[0];
   const dy = lngLat.lat - centre[1];
+  const overlayIds = new Set(
+    targets
+      .map((feature) => (feature.properties as Record<string, unknown> | null)?.overlayLayerId)
+      .filter((id): id is string => typeof id === "string"),
+  );
   const translate = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
     if (typeof value[0] === "number" && typeof value[1] === "number") {
@@ -2521,6 +2538,16 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
       ) as Feature[],
     },
   });
+  for (const overlayId of overlayIds) {
+    const overlay = useAppStore.getState().layers.find((candidate) => candidate.id === overlayId);
+    if (overlay?.source.type !== "image" || !Array.isArray(overlay.source.coordinates)) continue;
+    store.updateLayer(overlay.id, {
+      source: {
+        ...overlay.source,
+        coordinates: overlay.source.coordinates.map(([lng, lat]) => [lng + dx, lat + dy]),
+      },
+    });
+  }
 }
 
 /** Move a grouped annotation between tagged annotation layers. */
