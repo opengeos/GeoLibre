@@ -1043,6 +1043,7 @@
     "captureDescription": "Chụp một vị trí bằng GPS hoặc trên bản đồ, sau đó điền vào biểu mẫu để lưu vị trí đó.",
     "captureReviewDescription": "Xem lại vị trí đã chụp, hoàn thành biểu mẫu và lưu nó vào lớp.",
     "reopen": "Bộ sưu tập trường mở",
+    "reopenLayer": "Bộ sưu tập trường mở ({{layer}})",
     "targetLayer": "Lớp bộ sưu tập",
     "newLayer": "Lớp bộ sưu tập mới…",
     "layerName": "Tên lớp",

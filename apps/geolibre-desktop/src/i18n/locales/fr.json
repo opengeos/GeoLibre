@@ -1051,6 +1051,7 @@
     "captureDescription": "Capturez un emplacement par GPS ou sur la carte, puis remplissez le formulaire pour l'enregistrer.",
     "captureReviewDescription": "Vérifiez l'emplacement capturé, complétez le formulaire et enregistrez-le dans la couche.",
     "reopen": "Ouvrir la collecte de terrain",
+    "reopenLayer": "Ouvrir la collecte de terrain ({{layer}})",
     "targetLayer": "Couche de collecte",
     "newLayer": "Nouvelle couche de collecte…",
     "layerName": "Nom de la couche",

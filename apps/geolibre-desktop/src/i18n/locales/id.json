@@ -1022,6 +1022,7 @@
     "captureDescription": "Tangkap lokasi melalui GPS atau pada peta, lalu isi formulir untuk menyimpannya.",
     "captureReviewDescription": "Tinjau lokasi yang ditangkap, lengkapi formulir, dan simpan ke layer.",
     "reopen": "Buka Pengumpulan Lapangan",
+    "reopenLayer": "Buka Pengumpulan Lapangan ({{layer}})",
     "targetLayer": "Layer pengumpulan",
     "newLayer": "Layer pengumpulan baru…",
     "layerName": "Nama layer",

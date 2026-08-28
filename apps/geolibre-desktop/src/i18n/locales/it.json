@@ -1051,6 +1051,7 @@
     "captureDescription": "Acquisisci una posizione tramite GPS o sulla mappa, quindi compila il modulo per salvarla.",
     "captureReviewDescription": "Rivedi la posizione acquisita, completa il modulo e salvala nel livello.",
     "reopen": "Apri Raccolta dati sul campo",
+    "reopenLayer": "Apri Raccolta dati sul campo ({{layer}})",
     "targetLayer": "Livello di raccolta",
     "newLayer": "Nuovo livello di raccolta…",
     "layerName": "Nome del livello",

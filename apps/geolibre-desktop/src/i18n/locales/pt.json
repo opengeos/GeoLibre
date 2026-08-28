@@ -1051,6 +1051,7 @@
     "captureDescription": "Capture uma localização por GPS ou no mapa e, em seguida, preencha o formulário para salvá-la.",
     "captureReviewDescription": "Revise a localização capturada, preencha o formulário e salve-a na camada.",
     "reopen": "Abrir coleta de campo",
+    "reopenLayer": "Abrir coleta de campo ({{layer}})",
     "targetLayer": "Camada de coleta",
     "newLayer": "Nova camada de coleta…",
     "layerName": "Nome da camada",

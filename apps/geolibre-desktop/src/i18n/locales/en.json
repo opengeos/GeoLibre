@@ -1051,6 +1051,7 @@
     "captureDescription": "Capture a location by GPS or on the map, then fill in the form to save it.",
     "captureReviewDescription": "Review the captured location, complete the form, and save it to the layer.",
     "reopen": "Open Field Collection",
+    "reopenLayer": "Open Field Collection ({{layer}})",
     "targetLayer": "Collection layer",
     "newLayer": "New collection layer…",
     "layerName": "Layer name",

@@ -1051,6 +1051,7 @@
     "captureDescription": "Capture una ubicación por GPS o en el mapa y luego complete el formulario para guardarla.",
     "captureReviewDescription": "Revise la ubicación capturada, complete el formulario y guárdela en la capa.",
     "reopen": "Abrir recolección de campo",
+    "reopenLayer": "Abrir recolección de campo ({{layer}})",
     "targetLayer": "Capa de recolección",
     "newLayer": "Nueva capa de recolección…",
     "layerName": "Nombre de la capa",

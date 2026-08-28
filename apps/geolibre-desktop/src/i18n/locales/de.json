@@ -1051,6 +1051,7 @@
     "captureDescription": "Erfassen Sie einen Standort per GPS oder auf der Karte, und füllen Sie dann das Formular aus, um ihn zu speichern.",
     "captureReviewDescription": "Überprüfen Sie den erfassten Standort, vervollständigen Sie das Formular und speichern Sie ihn in der Ebene.",
     "reopen": "Felddatenerfassung öffnen",
+    "reopenLayer": "Felddatenerfassung öffnen ({{layer}})",
     "targetLayer": "Erfassungsebene",
     "newLayer": "Neue Erfassungsebene…",
     "layerName": "Ebenenname",

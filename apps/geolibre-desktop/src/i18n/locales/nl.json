@@ -1051,6 +1051,7 @@
     "captureDescription": "Leg een locatie vast via GPS of op de kaart en vul vervolgens het formulier in om op te slaan.",
     "captureReviewDescription": "Controleer de vastgelegde locatie, vul het formulier in en sla deze op in de laag.",
     "reopen": "Veldregistratie openen",
+    "reopenLayer": "Veldregistratie openen ({{layer}})",
     "targetLayer": "Registratielaag",
     "newLayer": "Nieuwe registratielaag…",
     "layerName": "Laagnaam",

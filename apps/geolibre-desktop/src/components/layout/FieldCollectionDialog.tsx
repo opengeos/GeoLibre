@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import * as maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
@@ -59,6 +60,7 @@ import {
   minVertices,
   parseOptions,
   PHOTO_PROPERTY,
+  resolveTargetLayer,
   validateForm,
   type Vertex,
 } from "../../lib/field-collection";
@@ -159,6 +161,14 @@ export function FieldCollectionDialog({
 
   const collectionLayers = useMemo(() => layers.filter((l) => isCollectionLayer(l)), [layers]);
 
+  // Field Collection runs as a *session* that is deliberately separate from
+  // whether the dialog is open, and from whether collection layers exist: a
+  // project can hold many collection layers long after the field work is done.
+  // Opening the tool starts (or resumes) the session, dismissing the dialog (X,
+  // Esc, overlay) leaves it running so the quick-open pill stays available, and
+  // only Done ends it. Ending a session never touches the layers or features.
+  const [sessionActive, setSessionActive] = useState(false);
+
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
   const [layerName, setLayerName] = useState("");
@@ -202,6 +212,12 @@ export function FieldCollectionDialog({
     activeRef.current = open || picking || drawing;
   }, [open, picking, drawing]);
 
+  // Opening the dialog from anywhere (Controls menu, command palette, the pill)
+  // starts or resumes the session.
+  useEffect(() => {
+    if (open) setSessionActive(true);
+  }, [open]);
+
   // Allow creating again after returning to the "new layer" setup step.
   useEffect(() => {
     if (!layerId) creatingRef.current = false;
@@ -236,8 +252,11 @@ export function FieldCollectionDialog({
     if (map) removeDrawPreview(map);
   }, [clearMarker, getMap]);
 
-  // Reset everything when the dialog opens; default to the first existing
-  // collection layer if there is one, otherwise the "new layer" setup step.
+  // Reset the capture form when the dialog opens. The capture *target* is not
+  // form state: it belongs to the session, so a target chosen earlier survives
+  // closing and reopening the dialog (the whole point of switching layers from
+  // the pill). Fall back to the first collection layer, or to the "new layer"
+  // setup step when the project has none.
   useEffect(() => {
     if (!open) return;
     // Reopened after a map capture — keep the captured state, skip the reset.
@@ -245,11 +264,14 @@ export function FieldCollectionDialog({
       suppressResetRef.current = false;
       return;
     }
-    const first = collectionLayers[0]?.id ?? "";
-    setLayerId(first);
+    const target = resolveTargetLayer(
+      collectionLayers.map((l) => l.id),
+      layerId,
+    );
+    setLayerId(target);
     setLayerName("");
     setGeometry("point");
-    setDrafts(first ? [] : [makeDraft()]);
+    setDrafts(target ? [] : [makeDraft()]);
     setPending(null);
     setValues({});
     setPhoto(null);
@@ -260,7 +282,7 @@ export function FieldCollectionDialog({
     setErrors({});
     setNotice(null);
     savedCountRef.current = 0;
-    // collectionLayers is derived from layers; intentionally snapshot on open.
+    // collectionLayers and layerId are snapshotted on open, by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -310,10 +332,14 @@ export function FieldCollectionDialog({
     [showMarker, recenter],
   );
 
-  // Closing cancels any in-flight GPS fix so its async callback can't act on a
-  // dismissed dialog (the activeRef effect lags a render behind the close).
-  const handleClose = useCallback(() => {
+  // Done ends the session: the dialog closes and the quick-open pill goes away,
+  // while the collection layers and everything captured into them stay
+  // untouched. It also cancels any in-flight GPS fix so its async callback
+  // can't act on a dismissed dialog (the activeRef effect lags a render behind
+  // the close).
+  const handleDone = useCallback(() => {
     gpsSeqRef.current += 1;
+    setSessionActive(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -666,22 +692,43 @@ export function FieldCollectionDialog({
 
   const inSetup = !activeLayer;
 
-  // Quick-access control on the map: once a collection layer exists, surface a
-  // floating button so users can reopen the tool without the Controls menu
-  // during a collection session. Hidden while capturing (dialog reopens itself).
-  const showQuickOpen = !open && !picking && !drawing && collectionLayers.length > 0;
+  // Quick-access control on the map: while a session is running and a
+  // collection layer exists, surface a floating pill so users can reopen the
+  // tool without the Controls menu. Hidden while capturing (the dialog reopens
+  // itself), and hidden once Done ends the session — the layers stay put.
+  const showQuickOpen =
+    sessionActive && !open && !picking && !drawing && collectionLayers.length > 0;
 
-  return (
+  // The on-map controls render into the MapLibre container rather than the
+  // viewport, so they sit inside the map instead of over the app's bottom
+  // chrome (status bar, comments bar) — which is what a viewport-anchored
+  // `fixed bottom-6` did. The container carries `.maplibregl-map { position:
+  // relative }`, so `absolute bottom-6` is measured from the map's own edge and
+  // follows it as the shell's panels open and close.
+  const mapContainer = getMap()?.getContainer() ?? null;
+  const overlays = (
     <>
+      {/* `w-max` on the pill: a `left-1/2` absolute box otherwise shrink-to-fits
+          into the half-width left over after the offset, clipping the layer
+          name long before it needs to be. */}
       {showQuickOpen && (
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          aria-label={t("fieldCollection.reopen")}
-          className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
+          aria-label={
+            activeLayer
+              ? t("fieldCollection.reopenLayer", { layer: activeLayer.name })
+              : t("fieldCollection.reopen")
+          }
+          className="absolute bottom-6 left-1/2 z-40 flex w-max max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
         >
-          <ClipboardList className="h-4 w-4 text-primary" />
-          {t("fieldCollection.title")}
+          <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
+          <span className="shrink-0">{t("fieldCollection.title")}</span>
+          {/* The capture target, so the pill says which layer the next
+              observation lands in rather than just naming the tool. */}
+          {activeLayer && (
+            <span className="truncate text-muted-foreground">{activeLayer.name}</span>
+          )}
         </button>
       )}
 
@@ -700,6 +747,12 @@ export function FieldCollectionDialog({
       )}
 
       {picking && <PickBanner onCancel={handleCancelPick} />}
+    </>
+  );
+
+  return (
+    <>
+      {mapContainer ? createPortal(overlays, mapContainer) : null}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
@@ -716,37 +769,42 @@ export function FieldCollectionDialog({
             </DialogDescription>
           </DialogHeader>
 
+          {/* The capture target sits above the scroll area, not inside it: with
+              a long form (or many collection layers) it would otherwise scroll
+              out of view, and on a phone that is exactly when a user needs to
+              see, and switch, which layer the next observation lands in.
+              Switching here keeps the dialog open. */}
+          <div className="space-y-1.5">
+            <Label>{t("fieldCollection.targetLayer")}</Label>
+            <Select
+              value={layerId}
+              onChange={(e) => {
+                setLayerId(e.target.value);
+                setPending(null);
+                setLastGpsFix(null);
+                setValues({});
+                setPhoto(null);
+                setVertices([]);
+                verticesRef.current = [];
+                clearPreview();
+                setErrors({});
+                setNotice(null);
+                if (!e.target.value && drafts.length === 0) {
+                  setDrafts([makeDraft()]);
+                }
+              }}
+            >
+              {collectionLayers.map((l: GeoLibreLayer) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+              <option value="">{t("fieldCollection.newLayer")}</option>
+            </Select>
+          </div>
+
           <ScrollArea className="max-h-[60vh] pe-3">
             <div className="space-y-4 py-1">
-              <div className="space-y-1.5">
-                <Label>{t("fieldCollection.targetLayer")}</Label>
-                <Select
-                  value={layerId}
-                  onChange={(e) => {
-                    setLayerId(e.target.value);
-                    setPending(null);
-                    setLastGpsFix(null);
-                    setValues({});
-                    setPhoto(null);
-                    setVertices([]);
-                    verticesRef.current = [];
-                    clearPreview();
-                    setErrors({});
-                    setNotice(null);
-                    if (!e.target.value && drafts.length === 0) {
-                      setDrafts([makeDraft()]);
-                    }
-                  }}
-                >
-                  {collectionLayers.map((l: GeoLibreLayer) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                  <option value="">{t("fieldCollection.newLayer")}</option>
-                </Select>
-              </div>
-
               {inSetup ? (
                 <SetupStep
                   layerName={layerName}
@@ -791,9 +849,12 @@ export function FieldCollectionDialog({
             </div>
           </ScrollArea>
 
+          {/* Done, not Close: the dialog's own X (and Esc) just hides the
+              dialog and leaves the session running, so this button is the one
+              that ends the session and retires the on-map pill. */}
           <div className="flex justify-end">
-            <Button variant="outline" onClick={handleClose}>
-              {t("common.close")}
+            <Button variant="outline" onClick={handleDone}>
+              {t("common.done")}
             </Button>
           </div>
         </DialogContent>
@@ -829,7 +890,7 @@ function DrawToolbar({
   const { t } = useTranslation();
   const ready = count >= minCount;
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+    <div className="absolute bottom-6 left-1/2 z-50 flex w-max max-w-[95%] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
       <div className="flex items-center gap-2 text-sm">
         <Pencil className="h-4 w-4 text-primary" />
         <span className="font-medium">{t(`fieldCollection.geom.${geometry}`)}</span>
@@ -877,7 +938,7 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
   // banner is ever mounted at once (#720 review).
   const hintId = useId();
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+    <div className="absolute bottom-6 left-1/2 z-50 flex w-max max-w-[95%] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
       {/* Only the non-interactive status text is the live region, with the
           Cancel button as a sibling, so screen readers don't re-read the button
           on region mutations (ARIA APG). The button also takes focus on mount

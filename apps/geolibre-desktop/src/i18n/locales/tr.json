@@ -1051,6 +1051,7 @@
     "captureDescription": "GPS ile veya haritada bir konum yakalayın, ardından kaydetmek için formu doldurun.",
     "captureReviewDescription": "Yakalanan konumu gözden geçirin, formu tamamlayın ve katmana kaydedin.",
     "reopen": "Sahada Veri Toplamayı Aç",
+    "reopenLayer": "Sahada Veri Toplamayı Aç ({{layer}})",
     "targetLayer": "Toplama katmanı",
     "newLayer": "Yeni toplama katmanı…",
     "layerName": "Katman adı",
