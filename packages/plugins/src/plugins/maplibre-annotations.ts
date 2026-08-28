@@ -2016,10 +2016,16 @@ function appendAnnotationFeatures(features: Feature[]): void {
 function createAnnotationLayer(features: Feature[] = []): string {
   const store = useAppStore.getState();
   const id = crypto.randomUUID();
-  const ordinal = store.layers.filter(isAnnotationLayer).length + 1;
+  const names = new Set(store.layers.filter(isAnnotationLayer).map((layer) => layer.name));
+  let ordinal = 1;
+  let name = labels.layerName;
+  while (names.has(name)) {
+    ordinal += 1;
+    name = `${labels.layerName} ${ordinal}`;
+  }
   const layer: GeoLibreLayer = {
     id,
-    name: ordinal === 1 ? labels.layerName : `${labels.layerName} ${ordinal}`,
+    name,
     type: "geojson",
     source: { type: "geojson" },
     visible: true,
@@ -2545,6 +2551,19 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
       source: {
         ...overlay.source,
         coordinates: overlay.source.coordinates.map(([lng, lat]) => [lng + dx, lat + dy]),
+      },
+      metadata: {
+        ...overlay.metadata,
+        ...(Array.isArray(overlay.metadata.bounds) && overlay.metadata.bounds.length === 4
+          ? {
+              bounds: [
+                Number(overlay.metadata.bounds[0]) + dx,
+                Number(overlay.metadata.bounds[1]) + dy,
+                Number(overlay.metadata.bounds[2]) + dx,
+                Number(overlay.metadata.bounds[3]) + dy,
+              ],
+            }
+          : {}),
       },
     });
   }

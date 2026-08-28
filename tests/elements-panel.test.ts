@@ -178,7 +178,7 @@ describe("Elements Panel & Map Elements", () => {
       visible: true,
       opacity: 1,
       style: DEFAULT_LAYER_STYLE,
-      metadata: {},
+      metadata: { bounds: [-123, 36, -121, 38] },
     });
 
     // Verify initial state.
@@ -215,6 +215,10 @@ describe("Elements Panel & Map Elements", () => {
           [-1, -1],
         ],
       },
+    );
+    assert.deepEqual(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.metadata.bounds,
+      [-1, -1, 1, 1],
     );
 
     // 5. Test deletion cascading.
