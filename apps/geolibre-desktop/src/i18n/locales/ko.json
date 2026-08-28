@@ -207,7 +207,6 @@
   },
   "newProject": {
     "basemapDescription": "OpenFreeMap 또는 Protomaps 베이스맵, 빈 배경, MapLibre 스타일 URL 중에서 선택하세요.",
-    "basemapDescriptionNoProtomaps": "OpenFreeMap 베이스맵, 빈 배경, MapLibre 스타일 URL 중에서 선택하세요.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "기타",

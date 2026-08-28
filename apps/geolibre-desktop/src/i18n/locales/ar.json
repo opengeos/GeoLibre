@@ -217,7 +217,6 @@
   },
   "newProject": {
     "basemapDescription": "اختر خريطة أساس من OpenFreeMap أو Protomaps، أو خلفية فارغة، أو عنوان URL لنمط MapLibre.",
-    "basemapDescriptionNoProtomaps": "اختر خريطة أساس من OpenFreeMap، أو خلفية فارغة، أو عنوان URL لنمط MapLibre.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "أخرى",

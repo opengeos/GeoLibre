@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "Wählen Sie eine OpenFreeMap- oder Protomaps-Basiskarte, einen leeren Hintergrund oder eine MapLibre-Style-URL.",
-    "basemapDescriptionNoProtomaps": "Wählen Sie eine OpenFreeMap-Basiskarte, einen leeren Hintergrund oder eine MapLibre-Style-URL.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Andere",

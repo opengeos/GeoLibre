@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "Bir OpenFreeMap veya Protomaps temel haritası, boş bir arka plan ya da bir MapLibre stil URL'si seçin.",
-    "basemapDescriptionNoProtomaps": "Bir OpenFreeMap temel haritası, boş bir arka plan ya da bir MapLibre stil URL'si seçin.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Diğer",

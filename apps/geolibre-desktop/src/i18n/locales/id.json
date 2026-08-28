@@ -207,7 +207,6 @@
   },
   "newProject": {
     "basemapDescription": "Pilih peta dasar OpenFreeMap atau Protomaps, latar belakang kosong, atau URL gaya MapLibre.",
-    "basemapDescriptionNoProtomaps": "Pilih peta dasar OpenFreeMap, latar belakang kosong, atau URL gaya MapLibre.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Lainnya",

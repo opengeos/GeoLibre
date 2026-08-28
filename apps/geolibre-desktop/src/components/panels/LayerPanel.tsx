@@ -87,6 +87,7 @@ import {
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
   activateTimeSliderForBinding,
   bindTemporalLayer,
@@ -254,6 +255,7 @@ import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { LayerSwatchIcon } from "./LayerSwatchIcon";
 
 interface LayerPanelProps {
+  themeMode: ThemeMode;
   mapControllerRef: RefObject<MapController | null>;
   collaborationApi?: CollaborationApi;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -619,6 +621,7 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
 }
 
 export function LayerPanel({
+  themeMode,
   mapControllerRef,
   collaborationApi,
   onResizeStart,
@@ -758,13 +761,6 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [backgroundAppearanceOpen, setBackgroundAppearanceOpen] = useState(false);
-  const [, refreshThemeDefault] = useState(0);
-  useEffect(() => {
-    if (!backgroundAppearanceOpen || blankBackgroundColor !== null) return;
-    const observer = new MutationObserver(() => refreshThemeDefault((version) => version + 1));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, [backgroundAppearanceOpen, blankBackgroundColor]);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
   const [metadataCopied, setMetadataCopied] = useState(false);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
@@ -1094,7 +1090,8 @@ export function LayerPanel({
     : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
   const blankBackgroundActive = basemapStyleUrl === BLANK_BASEMAP;
-  const effectiveBlankBackgroundColor = blankBackgroundColor ?? defaultBlankBackgroundColor();
+  const effectiveBlankBackgroundColor =
+    blankBackgroundColor ?? defaultBlankBackgroundColor(themeMode === "dark");
   const allLayersVisible =
     basemapVisible &&
     layers.every((layer) => layer.visible) &&

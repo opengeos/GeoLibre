@@ -213,7 +213,6 @@
   },
   "newProject": {
     "basemapDescription": "Выберите базовую карту OpenFreeMap или Protomaps, пустой фон или URL стиля MapLibre.",
-    "basemapDescriptionNoProtomaps": "Выберите базовую карту OpenFreeMap, пустой фон или URL стиля MapLibre.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Другое",

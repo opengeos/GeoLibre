@@ -96,10 +96,10 @@ const BLANK_BACKGROUND_COLOR = "#ffffff";
 const DARK_BLANK_BACKGROUND_COLOR = "#262626";
 
 /** Theme-aware default used when a Blank background has no saved custom color. */
-export function defaultBlankBackgroundColor(): string {
-  return typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-    ? DARK_BLANK_BACKGROUND_COLOR
-    : BLANK_BACKGROUND_COLOR;
+export function defaultBlankBackgroundColor(
+  dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+): string {
+  return dark ? DARK_BLANK_BACKGROUND_COLOR : BLANK_BACKGROUND_COLOR;
 }
 const LAYER_CONTROL_EXCLUDED_LAYERS = [
   BLANK_BACKGROUND_LAYER_ID,

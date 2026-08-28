@@ -778,6 +778,7 @@ describe("MapController.syncLayers vector-tile time filtering", () => {
 describe("MapController basemap controls", () => {
   it("uses the light theme default when no DOM is available", () => {
     assert.equal(defaultBlankBackgroundColor(), "#ffffff");
+    assert.equal(defaultBlankBackgroundColor(true), "#262626");
   });
 
   it("applies custom colors only to the Blank background", () => {

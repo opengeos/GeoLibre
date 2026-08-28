@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "აირჩიეთ OpenFreeMap-ის ან Protomaps-ის ბაზური რუკა, ცარიელი ფონი, ან MapLibre სტილის URL.",
-    "basemapDescriptionNoProtomaps": "აირჩიეთ OpenFreeMap-ის ბაზური რუკა, ცარიელი ფონი, ან MapLibre სტილის URL.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "სხვა",

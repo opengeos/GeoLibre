@@ -215,7 +215,6 @@
     "basemapLabel": "Sơ đồ cơ sở",
     "create": "Tạo nên",
     "basemapDescription": "Chọn sơ đồ cơ sở OpenFreeMap hoặc Protomaps, nền trống hoặc URL kiểu MapLibre.",
-    "basemapDescriptionNoProtomaps": "Chọn lớp nền OpenFreeMap, nền trống hoặc URL kiểu MapLibre.",
     "sectionOpenFreeMap": "Bản đồ mở miễn phí",
     "sectionProtomaps": "Bản đồ nguyên mẫu",
     "sectionOther": "Khác",

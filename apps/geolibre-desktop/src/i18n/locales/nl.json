@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "Kies een OpenFreeMap- of Protomaps-basiskaart, een lege achtergrond, of een MapLibre-stijl-URL.",
-    "basemapDescriptionNoProtomaps": "Kies een OpenFreeMap-basiskaart, een lege achtergrond, of een MapLibre-stijl-URL.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Overig",

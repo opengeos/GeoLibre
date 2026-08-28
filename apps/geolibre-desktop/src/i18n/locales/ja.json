@@ -207,7 +207,6 @@
   },
   "newProject": {
     "basemapDescription": "OpenFreeMapまたはProtomapsのベースマップ、白紙の背景、またはMapLibreスタイルURLから選択します。",
-    "basemapDescriptionNoProtomaps": "OpenFreeMapのベースマップ、白紙の背景、またはMapLibreスタイルURLから選択します。",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "その他",

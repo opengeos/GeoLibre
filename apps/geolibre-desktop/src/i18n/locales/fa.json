@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "یک نقشهٔ پایهٔ OpenFreeMap یا Protomaps، یک پس‌زمینهٔ خالی، یا یک نشانی شیوهٔ نمایش MapLibre را انتخاب کنید.",
-    "basemapDescriptionNoProtomaps": "یک نقشهٔ پایهٔ OpenFreeMap، یک پس‌زمینهٔ خالی، یا یک نشانی شیوهٔ نمایش MapLibre را انتخاب کنید.",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "سایر",

@@ -207,7 +207,6 @@
   },
   "newProject": {
     "basemapDescription": "选择 OpenFreeMap 或 Protomaps 底图、空白背景，或输入 MapLibre 样式 URL。",
-    "basemapDescriptionNoProtomaps": "选择 OpenFreeMap 底图、空白背景，或输入 MapLibre 样式 URL。",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "其他",

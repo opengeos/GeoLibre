@@ -209,7 +209,6 @@
   },
   "newProject": {
     "basemapDescription": "OpenFreeMap या Protomaps बेसमैप, एक खाली पृष्ठभूमि, या MapLibre स्टाइल URL चुनें।",
-    "basemapDescriptionNoProtomaps": "OpenFreeMap बेसमैप, एक खाली पृष्ठभूमि, या MapLibre स्टाइल URL चुनें।",
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "अन्य",
