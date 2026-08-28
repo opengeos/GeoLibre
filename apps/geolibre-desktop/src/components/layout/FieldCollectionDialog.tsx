@@ -594,6 +594,23 @@ export function FieldCollectionDialog({
     onOpenChange(true);
   }, [getMap, onOpenChange, setVerticesSynced]);
 
+  // A placement whose target layer is deleted mid-flight has nowhere to land,
+  // and `activeGeometry` would quietly fall back to the setup step's geometry —
+  // changing the vertex threshold, the preview, and what `finishDrawing` builds
+  // underneath a draw already in progress. Abort the placement, drop back to
+  // the setup step, and say why rather than letting it finish into nothing.
+  useEffect(() => {
+    if (!picking && !drawing) return;
+    if (!layerId || collectionLayers.some((l) => l.id === layerId)) return;
+    resetCapture("");
+    targetChosenRef.current = false;
+    // After resetCapture, which clears the notice; kept across the reopen by
+    // the suppress flag.
+    setNotice(t("fieldCollection.layerGone"));
+    suppressResetRef.current = true;
+    onOpenChange(true);
+  }, [picking, drawing, layerId, collectionLayers, resetCapture, onOpenChange, t]);
+
   useEffect(() => {
     if (!drawing) return;
     const map = getMap();
@@ -874,7 +891,7 @@ export function FieldCollectionDialog({
           {/* The capture target, so the pill says which layer the next
               observation lands in rather than just naming the tool. */}
           {activeLayer && (
-            <span className="truncate text-muted-foreground">{activeLayer.name}</span>
+            <span className="min-w-0 truncate text-muted-foreground">{activeLayer.name}</span>
           )}
         </button>
       )}
