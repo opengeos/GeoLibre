@@ -2257,10 +2257,10 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             : el.type === "pin"
               ? ""
               : el.title;
-        input.placeholder = "Title";
+        input.placeholder = labels.pinTitlePrompt;
         const description = document.createElement("textarea");
         description.value = el.description ?? "";
-        description.placeholder = "Description";
+        description.placeholder = labels.pinDescPrompt;
         description.rows = 2;
         const supportsColor = el.type !== "placed_image";
         const supportsWidth = ["highlight", "freehand", "line"].includes(el.type);
@@ -2598,10 +2598,16 @@ export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): 
     if (feature.geometry.type !== "GeometryCollection") collect(feature.geometry.coordinates);
   });
   if (!positions.length) return;
-  const centre: Position = [
-    (Math.min(...positions.map((p) => p[0])) + Math.max(...positions.map((p) => p[0]))) / 2,
-    (Math.min(...positions.map((p) => p[1])) + Math.max(...positions.map((p) => p[1]))) / 2,
-  ];
+  const bounds = positions.reduce(
+    ([minX, minY, maxX, maxY], [x, y]) => [
+      Math.min(minX, x),
+      Math.min(minY, y),
+      Math.max(maxX, x),
+      Math.max(maxY, y),
+    ],
+    [Infinity, Infinity, -Infinity, -Infinity],
+  );
+  const centre: Position = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
   const dx = lngLat.lng - centre[0];
   const dy = lngLat.lat - centre[1];
   const overlayIds = new Set(
