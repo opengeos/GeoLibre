@@ -422,18 +422,21 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         setTurns((prev) => [...prev, { id: errorId, role: "error", text: message }]);
       }
     } finally {
+      // A newer send may already be streaming (e.g. the user stopped and
+      // immediately sent again); this run must not reconcile its state.
+      const isCurrent = sendGenerationRef.current === myGeneration;
       // Drop empty assistant turns and any activity row whose tool never
       // reached a completion event, such as after a provider/network failure.
+      // The pending sweep is generation-scoped so a late rejection here cannot
+      // clear the rows a newer run is still driving.
       setTurns((prev) =>
         prev.filter(
           (turn) =>
             !(turn.id === assistantId && turn.role === "assistant" && !turn.text) &&
-            !(turn.role === "tool" && turn.pending),
+            !(isCurrent && turn.role === "tool" && turn.pending),
         ),
       );
-      // Only clear the running state if no newer send has superseded this one
-      // (e.g. the user stopped and immediately sent again).
-      if (sendGenerationRef.current === myGeneration) {
+      if (isCurrent) {
         runningRef.current = false;
         setRunning(false);
       }
@@ -742,13 +745,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               return (
                 <details
                   key={turn.id}
-                  open={turn.pending || undefined}
+                  // Auto-expand while running, and keep a failed call expanded
+                  // so its error stays visible; a successful call collapses to
+                  // keep the transcript compact. Once the prop settles to
+                  // undefined React stops touching the attribute, so a manual
+                  // toggle afterwards sticks.
+                  open={turn.pending || turn.failed || undefined}
                   className={cn(
                     "rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-xs",
                     turn.failed ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
-                  <summary className="flex cursor-pointer list-none items-center gap-1.5">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
                     {turn.pending ? (
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                     ) : (
