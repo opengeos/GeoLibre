@@ -35,8 +35,11 @@ LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 # The pseudo-id the swipe control uses for the basemap (maplibre-swipe.ts).
 BASEMAP_LAYER_ID = "__basemap__"
 
-# Layer types the app draws through a single MapLibre raster style layer, named
-# `layer-<id>-raster` (see the style layer id helpers in the core layer sync).
+# Layer types the app always draws through a single MapLibre raster style layer
+# named `layer-<id>-raster` (see the style layer id helpers in the core layer
+# sync). `mbtiles` and `pmtiles` reach the same shape only when they carry
+# raster tiles, and `video` uses its own suffix, so those are resolved per
+# layer in `_style_layer_ids` rather than listed here.
 RASTER_STYLE_LAYER_TYPES = frozenset({"raster", "wms", "wmts", "xyz"})
 
 # Cap a project file read from disk. A project inlines its GeoJSON, so the
@@ -454,18 +457,22 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     layer = find_layer(project, ref)
     layers_of(project).remove(layer)
     layer_id = str(layer["id"])
-    _drop_swipe_reference(project, layer_id)
+    _drop_swipe_reference(project, layer)
     return layer_id
 
 
-def _drop_swipe_reference(project: dict[str, Any], layer_id: str) -> None:
-    """Remove a layer id from the swipe control's two sides."""
+def _drop_swipe_reference(project: dict[str, Any], layer: dict[str, Any]) -> None:
+    """Remove a layer's ids from the swipe control's two sides.
+
+    Mirrors `_expand_swipe_side`: whatever that adds to a side, this takes back
+    out, so removing a layer cannot leave a derived style layer id behind.
+    """
     plugins = project.get("plugins")
     settings = plugins.get("settings") if isinstance(plugins, dict) else None
     swipe = settings.get(_project.SWIPE_PLUGIN_ID) if isinstance(settings, dict) else None
     if not isinstance(swipe, dict):
         return
-    dropped = {layer_id, _raster_style_layer_id(layer_id)}
+    dropped = {str(layer.get("id", "")), *_style_layer_ids(layer)}
     for side in ("leftLayers", "rightLayers"):
         ids = swipe.get(side)
         if isinstance(ids, list):
@@ -998,36 +1005,69 @@ def add_colorbar(
     return entry
 
 
-def _raster_style_layer_id(layer_id: str) -> str:
-    """The MapLibre style layer id a raster-backed layer is drawn as."""
-    return f"layer-{layer_id}-raster"
+def _style_layer_ids(layer: dict[str, Any]) -> list[str]:
+    """The MapLibre style layer ids a layer is drawn as, when they are derivable.
+
+    Only layers the app draws through a single style layer with a predictable
+    id qualify. `pmtiles` vector layers are deliberately absent: their ids are
+    `<sourceId>-<sourceLayer>-<kind>` (``pmtilesNativeLayerIds`` in
+    pmtiles-layer.ts), which the layer dict alone cannot spell out.
+
+    Args:
+        layer: A layer dict from the project's ``layers`` array.
+
+    Returns:
+        The style layer ids, or an empty list when none are derivable.
+    """
+    layer_id = str(layer.get("id", ""))
+    layer_type = layer.get("type")
+    metadata = layer.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    source = layer.get("source")
+    source = source if isinstance(source, dict) else {}
+    # syncMbtilesLayer/syncRasterTileLayer in layer-sync.ts read both.
+    is_raster = metadata.get("tileType") == "raster" or source.get("type") == "raster"
+
+    if layer_type == "pmtiles":
+        if not is_raster:
+            return []
+        # The archive's source id, which pmtiles_layer defaults to the layer id
+        # but callers may override, and without the `layer-` prefix the other
+        # raster paths carry.
+        return [f"{metadata.get('sourceId') or layer_id}-raster"]
+    if layer_type == "video":
+        return [f"layer-{layer_id}-video"]
+    if layer_type == "mbtiles":
+        return [f"layer-{layer_id}-raster"] if is_raster else []
+    if layer_type in RASTER_STYLE_LAYER_TYPES:
+        return [f"layer-{layer_id}-raster"]
+    return []
 
 
 def _expand_swipe_side(project: dict[str, Any], layer_ids: list[str]) -> list[str]:
-    """Add the style layer id of every raster-backed layer to one swipe side.
+    """Add the derived style layer ids of every listed layer to one swipe side.
 
     The swipe control drives what each half shows by toggling MapLibre style
-    layer ids. A raster-backed layer (`raster`, `wms`, `wmts`, `xyz`) is drawn
-    as ``layer-<id>-raster``, so a side holding only the project layer id
-    matches no style layer: the control treats the layer as assigned to neither
-    side, which it renders on both halves. Listing both ids keeps the project
-    layer id (what the panel checkboxes read) and adds the id the control acts
-    on.
+    layer ids. A layer drawn through a style layer of its own — a raster tile
+    source as ``layer-<id>-raster``, a video as ``layer-<id>-video`` — leaves a
+    side holding only the project layer id matching no style layer: the control
+    treats the layer as assigned to neither side, which it renders on both
+    halves. Listing both ids keeps the project layer id (what the panel
+    checkboxes read) and adds the ids the control acts on.
     """
-    types = {
-        layer.get("id"): layer.get("type")
-        for layer in project.get("layers", [])
-        if isinstance(layer, dict)
+    layers = {
+        layer.get("id"): layer for layer in project.get("layers", []) if isinstance(layer, dict)
     }
     expanded: list[str] = []
     for layer_id in layer_ids:
         if layer_id not in expanded:
             expanded.append(layer_id)
-        if types.get(layer_id) not in RASTER_STYLE_LAYER_TYPES:
+        layer = layers.get(layer_id)
+        if not isinstance(layer, dict):
             continue
-        style_id = _raster_style_layer_id(layer_id)
-        if style_id not in expanded:
-            expanded.append(style_id)
+        for style_id in _style_layer_ids(layer):
+            if style_id not in expanded:
+                expanded.append(style_id)
     return expanded
 
 

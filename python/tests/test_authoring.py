@@ -476,6 +476,101 @@ def test_remove_layer_drops_the_style_layer_id_too(proj):
     assert swipe["rightLayers"] == []
 
 
+def test_add_swipe_lists_the_style_layer_id_of_a_raster_pmtiles_layer(proj):
+    """A raster PMTiles archive is drawn as `<sourceId>-raster`, with no prefix."""
+    authoring.add_layer(
+        proj,
+        project.pmtiles_layer("Scan", "https://example.org/scan.pmtiles", tile_type="raster"),
+    )
+    scan = authoring.find_layer(proj, "Scan")
+    source_id = scan["metadata"]["sourceId"]
+
+    state = authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[scan["id"]])
+
+    assert state["rightLayers"] == [scan["id"], f"{source_id}-raster"]
+
+
+def test_add_swipe_leaves_a_vector_pmtiles_layer_alone(proj):
+    """Vector tile ids depend on source layer and kind, so none is derived here."""
+    authoring.add_layer(
+        proj,
+        project.pmtiles_layer(
+            "Roads", "https://example.org/roads.pmtiles", source_layers=["roads"]
+        ),
+    )
+    roads = authoring.find_layer(proj, "Roads")["id"]
+
+    state = authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[roads])
+
+    assert state["rightLayers"] == [roads]
+
+
+def test_add_swipe_lists_the_style_layer_id_of_a_video_layer(proj):
+    """A video draws through `layer-<id>-video`, its own suffix."""
+    authoring.add_layer(
+        proj,
+        project.video_layer(
+            "Storm",
+            ["https://example.org/storm.mp4"],
+            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
+        ),
+    )
+    storm = authoring.find_layer(proj, "Storm")["id"]
+
+    state = authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[storm])
+
+    assert state["rightLayers"] == [storm, f"layer-{storm}-video"]
+
+
+def test_add_swipe_lists_the_style_layer_id_of_a_raster_mbtiles_layer(proj):
+    """An mbtiles layer has no builder here; it reaches this API through a saved project."""
+    authoring.add_layer(
+        proj,
+        {
+            "id": "mb-1",
+            "name": "Relief",
+            "type": "mbtiles",
+            "source": {"type": "raster", "url": "mbtiles://relief"},
+            "metadata": {"tileType": "raster"},
+        },
+    )
+
+    state = authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=["mb-1"])
+
+    assert state["rightLayers"] == ["mb-1", "layer-mb-1-raster"]
+
+
+def test_remove_layer_drops_a_derived_style_layer_id_of_any_shape(proj):
+    """Removal mirrors expansion, so no derived id outlives its layer."""
+    authoring.add_layer(
+        proj,
+        project.pmtiles_layer("Scan", "https://example.org/scan.pmtiles", tile_type="raster"),
+    )
+    authoring.add_layer(
+        proj,
+        project.video_layer(
+            "Storm",
+            ["https://example.org/storm.mp4"],
+            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
+        ),
+    )
+    scan = authoring.find_layer(proj, "Scan")
+    storm = authoring.find_layer(proj, "Storm")["id"]
+    authoring.add_swipe(proj, left_layers=[scan["id"]], right_layers=[storm])
+    swipe = proj["plugins"]["settings"][project.SWIPE_PLUGIN_ID]
+    # Spell the sides out the way a project saved by the app carries them, so
+    # this covers removal on its own rather than only in step with add_swipe.
+    swipe["leftLayers"] = [scan["id"], f"{scan['metadata']['sourceId']}-raster"]
+    swipe["rightLayers"] = [storm, f"layer-{storm}-video"]
+
+    authoring.remove_layer(proj, "Scan")
+    authoring.remove_layer(proj, "Storm")
+
+    swipe = proj["plugins"]["settings"][project.SWIPE_PLUGIN_ID]
+    assert swipe["leftLayers"] == []
+    assert swipe["rightLayers"] == []
+
+
 def test_add_swipe_rejects_a_bad_orientation(proj):
     with pytest.raises(ValueError, match="orientation must be one of"):
         authoring.add_swipe(proj, left_layers=[], right_layers=[], orientation="diagonal")
