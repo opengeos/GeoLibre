@@ -2883,10 +2883,14 @@
       "addedRasterLayers_other": "래스터 레이어 {{count}}개를 레이어 패널에 추가했습니다.",
       "addedBoth": "{{vector}}와(과) {{raster}}을(를) 레이어 패널에 추가했습니다.",
       "bothVectorLayers_other": "벡터 레이어 {{count}}개",
-      "bothRasterLayers_other": "래스터 레이어 {{count}}개"
+      "bothRasterLayers_other": "래스터 레이어 {{count}}개",
+      "savePromptTitle": "현재 프로젝트를 저장할까요?",
+      "savePromptDescription": "현재 프로젝트에 저장하지 않은 변경 사항이 있습니다. 드롭한 프로젝트를 열기 전에 저장할까요?"
     },
     "error": {
       "couldNotOpenProject": "프로젝트를 열 수 없습니다.",
+      "multipleProjectDrop": "다른 파일 없이 GeoLibre 프로젝트 하나만 드롭하세요.",
+      "projectDropNotAllowed": "이 배포에서는 프로젝트를 전환할 수 없습니다.",
       "couldNotImportQgisProject": "QGIS 프로젝트를 가져올 수 없습니다.",
       "couldNotImportArcgisProject": "ArcGIS Pro 프로젝트를 가져올 수 없습니다.",
       "invalidProjectUrl": "유효한 HTTP 또는 HTTPS 프로젝트 URL을 입력하세요.",

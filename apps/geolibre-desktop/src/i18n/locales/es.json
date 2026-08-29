@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} capa vectorial",
       "bothVectorLayers_other": "{{count}} capas vectoriales",
       "bothRasterLayers_one": "{{count}} capa ráster",
-      "bothRasterLayers_other": "{{count}} capas ráster"
+      "bothRasterLayers_other": "{{count}} capas ráster",
+      "savePromptTitle": "¿Guardar el proyecto actual?",
+      "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Desea guardarlos antes de abrir el proyecto soltado?"
     },
     "error": {
       "couldNotOpenProject": "No se pudo abrir el proyecto.",
+      "multipleProjectDrop": "Suelte un solo proyecto de GeoLibre a la vez, sin otros archivos.",
+      "projectDropNotAllowed": "Esta implementación no permite cambiar de proyecto.",
       "couldNotImportQgisProject": "No se pudo importar el proyecto de QGIS.",
       "couldNotImportArcgisProject": "No se pudo importar el proyecto de ArcGIS Pro.",
       "invalidProjectUrl": "Introduzca una URL de proyecto HTTP o HTTPS válida.",

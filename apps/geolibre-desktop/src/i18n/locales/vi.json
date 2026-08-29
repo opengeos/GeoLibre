@@ -2883,7 +2883,9 @@
       "overlayTitle": "__PH0__ lớp raster",
       "overlaySubtext": "Dữ liệu của bạn sẽ được thêm ngay vào bảng điều khiển Lớp.",
       "addedLayer": "Đã thêm \"{{name}}\" vào bảng điều khiển Lớp.",
-      "addedVectorLayers_other": "Đã thêm các lớp vectơ {{count}} vào bảng điều khiển Lớp."
+      "addedVectorLayers_other": "Đã thêm các lớp vectơ {{count}} vào bảng điều khiển Lớp.",
+      "savePromptTitle": "Lưu dự án hiện tại?",
+      "savePromptDescription": "Dự án hiện tại có thay đổi chưa lưu. Lưu trước khi mở dự án được thả vào?"
     },
     "error": {
       "couldNotOpenOsmPbf": "Không thể mở tệp OSM PBF.",
@@ -2894,6 +2896,8 @@
       "scenegraphOutOfRange": "Kinh độ phải nằm trong khoảng từ -180 đến 180 và vĩ độ nằm trong khoảng từ -90 đến 90.",
       "scenegraphNoPointFeatures": "GeoJSON không có tính năng điểm nào để đặt mô hình.",
       "couldNotOpenProject": "Không thể mở dự án.",
+      "multipleProjectDrop": "Chỉ thả một dự án GeoLibre mỗi lần, không kèm tệp khác.",
+      "projectDropNotAllowed": "Bản triển khai này không cho phép chuyển đổi dự án.",
       "couldNotImportQgisProject": "Không thể nhập dự án QGIS.",
       "couldNotImportArcgisProject": "Không thể nhập dự án ArcGIS Pro.",
       "invalidProjectUrl": "Nhập URL dự án HTTP hoặc HTTPS hợp lệ.",

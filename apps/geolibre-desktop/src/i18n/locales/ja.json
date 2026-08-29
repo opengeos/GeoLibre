@@ -2883,10 +2883,14 @@
       "addedRasterLayers_other": "{{count}} 件のラスターレイヤーをレイヤーパネルに追加しました。",
       "addedBoth": "{{vector}} と {{raster}} をレイヤーパネルに追加しました。",
       "bothVectorLayers_other": "ベクターレイヤー {{count}} 件",
-      "bothRasterLayers_other": "ラスターレイヤー {{count}} 件"
+      "bothRasterLayers_other": "ラスターレイヤー {{count}} 件",
+      "savePromptTitle": "現在のプロジェクトを保存しますか？",
+      "savePromptDescription": "現在のプロジェクトには未保存の変更があります。ドロップしたプロジェクトを開く前に保存しますか？"
     },
     "error": {
       "couldNotOpenProject": "プロジェクトを開けませんでした。",
+      "multipleProjectDrop": "他のファイルを含めず、GeoLibre プロジェクトを一度に1つだけドロップしてください。",
+      "projectDropNotAllowed": "このデプロイではプロジェクトを切り替えられません。",
       "couldNotImportQgisProject": "QGIS プロジェクトをインポートできませんでした。",
       "couldNotImportArcgisProject": "ArcGIS Pro プロジェクトをインポートできませんでした。",
       "invalidProjectUrl": "有効な HTTP または HTTPS のプロジェクト URL を入力してください。",

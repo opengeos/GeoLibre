@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} couche vectorielle",
       "bothVectorLayers_other": "{{count}} couches vectorielles",
       "bothRasterLayers_one": "{{count}} couche raster",
-      "bothRasterLayers_other": "{{count}} couches raster"
+      "bothRasterLayers_other": "{{count}} couches raster",
+      "savePromptTitle": "Enregistrer le projet actuel ?",
+      "savePromptDescription": "Le projet actuel contient des modifications non enregistrées. Voulez-vous les enregistrer avant d’ouvrir le projet déposé ?"
     },
     "error": {
       "couldNotOpenProject": "Impossible d'ouvrir le projet.",
+      "multipleProjectDrop": "Déposez un seul projet GeoLibre à la fois, sans autres fichiers.",
+      "projectDropNotAllowed": "Ce déploiement n’autorise pas le changement de projet.",
       "couldNotImportQgisProject": "Impossible d'importer le projet QGIS.",
       "couldNotImportArcgisProject": "Impossible d'importer le projet ArcGIS Pro.",
       "invalidProjectUrl": "Entrez une URL de projet HTTP ou HTTPS valide.",

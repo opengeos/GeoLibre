@@ -2955,10 +2955,14 @@
       "bothVectorLayers_one": "{{count}} vector layer",
       "bothVectorLayers_other": "{{count}} vector layers",
       "bothRasterLayers_one": "{{count}} raster layer",
-      "bothRasterLayers_other": "{{count}} raster layers"
+      "bothRasterLayers_other": "{{count}} raster layers",
+      "savePromptTitle": "Save current project?",
+      "savePromptDescription": "The current project has unsaved changes. Save them before opening the dropped project?"
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",
+      "multipleProjectDrop": "Drop one GeoLibre project at a time, without other files.",
+      "projectDropNotAllowed": "This deployment does not allow switching projects.",
       "couldNotImportQgisProject": "Could not import QGIS project.",
       "couldNotImportArcgisProject": "Could not import ArcGIS Pro project.",
       "invalidProjectUrl": "Enter a valid HTTP or HTTPS project URL.",

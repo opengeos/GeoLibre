@@ -2883,10 +2883,14 @@
       "addedRasterLayers_other": "Menambahkan {{count}} layer raster ke panel Layer.",
       "addedBoth": "Menambahkan {{vector}} dan {{raster}} ke panel Layer.",
       "bothVectorLayers_other": "{{count}} layer vektor",
-      "bothRasterLayers_other": "{{count}} layer raster"
+      "bothRasterLayers_other": "{{count}} layer raster",
+      "savePromptTitle": "Simpan proyek saat ini?",
+      "savePromptDescription": "Proyek saat ini memiliki perubahan yang belum disimpan. Simpan sebelum membuka proyek yang dijatuhkan?"
     },
     "error": {
       "couldNotOpenProject": "Tidak dapat membuka proyek.",
+      "multipleProjectDrop": "Jatuhkan satu proyek GeoLibre saja dalam satu waktu, tanpa berkas lain.",
+      "projectDropNotAllowed": "Deployment ini tidak mengizinkan pergantian proyek.",
       "couldNotImportQgisProject": "Tidak dapat mengimpor proyek QGIS.",
       "couldNotImportArcgisProject": "Tidak dapat mengimpor proyek ArcGIS Pro.",
       "invalidProjectUrl": "Masukkan URL proyek HTTP atau HTTPS yang valid.",

@@ -3147,10 +3147,14 @@
       "bothRasterLayers_two": "{{count}} من الطبقات النقطية",
       "bothRasterLayers_few": "{{count}} طبقات نقطية",
       "bothRasterLayers_many": "{{count}} طبقةً نقطية",
-      "bothRasterLayers_other": "{{count}} طبقة نقطية"
+      "bothRasterLayers_other": "{{count}} طبقة نقطية",
+      "savePromptTitle": "هل تريد حفظ المشروع الحالي؟",
+      "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل فتح المشروع المُسقَط؟"
     },
     "error": {
       "couldNotOpenProject": "تعذر فتح المشروع.",
+      "multipleProjectDrop": "أسقط مشروع GeoLibre واحدًا في كل مرة، من دون ملفات أخرى.",
+      "projectDropNotAllowed": "لا يسمح هذا النشر بالتبديل بين المشاريع.",
       "couldNotImportQgisProject": "تعذّر استيراد مشروع QGIS.",
       "couldNotImportArcgisProject": "تعذّر استيراد مشروع ArcGIS Pro.",
       "invalidProjectUrl": "أدخل عنوان URL صالحًا للمشروع عبر HTTP أو HTTPS.",

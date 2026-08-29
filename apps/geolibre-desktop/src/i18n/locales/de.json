@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} Vektorebene",
       "bothVectorLayers_other": "{{count}} Vektorebenen",
       "bothRasterLayers_one": "{{count}} Rasterebene",
-      "bothRasterLayers_other": "{{count}} Rasterebenen"
+      "bothRasterLayers_other": "{{count}} Rasterebenen",
+      "savePromptTitle": "Aktuelles Projekt speichern?",
+      "savePromptDescription": "Das aktuelle Projekt enthält ungespeicherte Änderungen. Möchten Sie sie speichern, bevor das abgelegte Projekt geöffnet wird?"
     },
     "error": {
       "couldNotOpenProject": "Projekt konnte nicht geöffnet werden.",
+      "multipleProjectDrop": "Legen Sie jeweils nur ein GeoLibre-Projekt ohne weitere Dateien ab.",
+      "projectDropNotAllowed": "Diese Bereitstellung erlaubt keinen Projektwechsel.",
       "couldNotImportQgisProject": "QGIS-Projekt konnte nicht importiert werden.",
       "couldNotImportArcgisProject": "ArcGIS-Pro-Projekt konnte nicht importiert werden.",
       "invalidProjectUrl": "Geben Sie eine gültige HTTP- oder HTTPS-Projekt-URL ein.",

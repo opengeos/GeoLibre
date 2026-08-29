@@ -3042,10 +3042,14 @@
       "bothRasterLayers_one": "{{count}} растровый слой",
       "bothRasterLayers_few": "{{count}} растровых слоя",
       "bothRasterLayers_many": "{{count}} растровых слоёв",
-      "bothRasterLayers_other": "{{count}} растрового слоя"
+      "bothRasterLayers_other": "{{count}} растрового слоя",
+      "savePromptTitle": "Сохранить текущий проект?",
+      "savePromptDescription": "В текущем проекте есть несохранённые изменения. Сохранить их перед открытием перетащенного проекта?"
     },
     "error": {
       "couldNotOpenProject": "Не удалось открыть проект.",
+      "multipleProjectDrop": "Перетаскивайте только один проект GeoLibre за раз, без других файлов.",
+      "projectDropNotAllowed": "В этом развёртывании переключение проектов запрещено.",
       "couldNotImportQgisProject": "Не удалось импортировать проект QGIS.",
       "couldNotImportArcgisProject": "Не удалось импортировать проект ArcGIS Pro.",
       "invalidProjectUrl": "Введите корректный URL проекта (HTTP или HTTPS).",

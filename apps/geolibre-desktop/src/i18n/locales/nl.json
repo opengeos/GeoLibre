@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} vectorlaag",
       "bothVectorLayers_other": "{{count}} vectorlagen",
       "bothRasterLayers_one": "{{count}} rasterlaag",
-      "bothRasterLayers_other": "{{count}} rasterlagen"
+      "bothRasterLayers_other": "{{count}} rasterlagen",
+      "savePromptTitle": "Huidig project opslaan?",
+      "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Wilt u die opslaan voordat het neergezette project wordt geopend?"
     },
     "error": {
       "couldNotOpenProject": "Het project kon niet worden geopend.",
+      "multipleProjectDrop": "Zet één GeoLibre-project tegelijk neer, zonder andere bestanden.",
+      "projectDropNotAllowed": "Deze implementatie staat wisselen van project niet toe.",
       "couldNotImportQgisProject": "Kon het QGIS-project niet importeren.",
       "couldNotImportArcgisProject": "Kon het ArcGIS Pro-project niet importeren.",
       "invalidProjectUrl": "Voer een geldige HTTP- of HTTPS-project-URL in.",

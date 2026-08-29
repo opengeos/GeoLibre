@@ -2883,10 +2883,14 @@
       "addedRasterLayers_other": "เพิ่มเลเยอร์แรสเตอร์ {{count}} เลเยอร์ลงในแผงเลเยอร์แล้ว",
       "addedBoth": "เพิ่ม {{vector}} และ {{raster}} ลงในแผงเลเยอร์แล้ว",
       "bothVectorLayers_other": "เลเยอร์เวกเตอร์ {{count}} เลเยอร์",
-      "bothRasterLayers_other": "เลเยอร์แรสเตอร์ {{count}} เลเยอร์"
+      "bothRasterLayers_other": "เลเยอร์แรสเตอร์ {{count}} เลเยอร์",
+      "savePromptTitle": "บันทึกโปรเจกต์ปัจจุบันหรือไม่",
+      "savePromptDescription": "โปรเจกต์ปัจจุบันมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก ต้องการบันทึกก่อนเปิดโปรเจกต์ที่วางหรือไม่"
     },
     "error": {
       "couldNotOpenProject": "ไม่สามารถเปิดโปรเจกต์ได้",
+      "multipleProjectDrop": "วางโปรเจกต์ GeoLibre ครั้งละหนึ่งโปรเจกต์โดยไม่มีไฟล์อื่น",
+      "projectDropNotAllowed": "การปรับใช้นี้ไม่อนุญาตให้สลับโปรเจกต์",
       "couldNotImportQgisProject": "ไม่สามารถนำเข้าโปรเจกต์ QGIS ได้",
       "couldNotImportArcgisProject": "ไม่สามารถนำเข้าโปรเจกต์ ArcGIS Pro ได้",
       "invalidProjectUrl": "ป้อน URL ของโปรเจกต์แบบ HTTP หรือ HTTPS ที่ถูกต้อง",

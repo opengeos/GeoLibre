@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} ვექტორული შრე",
       "bothVectorLayers_other": "{{count}} ვექტორული შრე",
       "bothRasterLayers_one": "{{count}} რასტრული შრე",
-      "bothRasterLayers_other": "{{count}} რასტრული შრე"
+      "bothRasterLayers_other": "{{count}} რასტრული შრე",
+      "savePromptTitle": "შეინახოს მიმდინარე პროექტი?",
+      "savePromptDescription": "მიმდინარე პროექტს შეუნახავი ცვლილებები აქვს. შეინახოს ისინი ჩამოგდებული პროექტის გახსნამდე?"
     },
     "error": {
       "couldNotOpenProject": "პროექტის გახსნა ვერ მოხერხდა.",
+      "multipleProjectDrop": "ერთ ჯერზე ჩამოაგდეთ მხოლოდ ერთი GeoLibre პროექტი, სხვა ფაილების გარეშე.",
+      "projectDropNotAllowed": "ეს განთავსება პროექტებს შორის გადართვას არ უშვებს.",
       "couldNotImportQgisProject": "QGIS პროექტის იმპორტი ვერ მოხერხდა.",
       "couldNotImportArcgisProject": "ArcGIS Pro პროექტის იმპორტი ვერ მოხერხდა.",
       "invalidProjectUrl": "შეიყვანეთ სწორი HTTP ან HTTPS პროექტის URL.",

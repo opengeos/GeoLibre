@@ -1753,8 +1753,11 @@ export function DesktopShell({
             const paths = event.payload.paths;
             const projectPaths = paths.filter(isGeoLibreProjectFileName);
             if (projectPaths.length > 0) {
+              if (!deploymentCapabilities.has("project:edit")) {
+                throw new Error(t("toolbar.error.projectDropNotAllowed"));
+              }
               if (paths.length !== 1) {
-                throw new Error("Drop one GeoLibre project at a time, without other files.");
+                throw new Error(t("toolbar.error.multipleProjectDrop"));
               }
               const projectPath = projectPaths[0];
               if (!projectPath) return;
@@ -1891,7 +1894,9 @@ export function DesktopShell({
     addDroppedRasters,
     addDroppedPhotos,
     addGeoJsonLayer,
+    deploymentCapabilities,
     dropDisabled,
+    t,
   ]);
 
   const handleDragEnter = useCallback(
@@ -1949,8 +1954,11 @@ export function DesktopShell({
         const allFiles = Array.from(event.dataTransfer.files);
         const projectFilesInDrop = allFiles.filter((file) => isGeoLibreProjectFileName(file.name));
         if (projectFilesInDrop.length > 0) {
+          if (!deploymentCapabilities.has("project:edit")) {
+            throw new Error(t("toolbar.error.projectDropNotAllowed"));
+          }
           if (allFiles.length !== 1) {
-            throw new Error("Drop one GeoLibre project at a time, without other files.");
+            throw new Error(t("toolbar.error.multipleProjectDrop"));
           }
           const projectFile = projectFilesInDrop[0];
           if (!projectFile) return;
@@ -2059,7 +2067,9 @@ export function DesktopShell({
       addDroppedRasters,
       addDroppedPhotos,
       addGeoJsonLayer,
+      deploymentCapabilities,
       dropDisabled,
+      t,
     ],
   );
 

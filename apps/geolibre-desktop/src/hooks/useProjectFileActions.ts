@@ -273,6 +273,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [droppedProjectPrompt, setDroppedProjectPrompt] = useState<DroppedProjectPrompt | null>(
     null,
   );
+  const [droppedProjectSaving, setDroppedProjectSaving] = useState(false);
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
@@ -404,13 +405,21 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const resolveDroppedProjectPrompt = async (choice: "save" | "discard" | "cancel") => {
+    if (droppedProjectSaving) return;
     const candidate = droppedProjectPrompt;
     if (!candidate) return;
     if (choice === "cancel") {
       setDroppedProjectPrompt(null);
       return;
     }
-    if (choice === "save" && !(await saveProject())) return;
+    if (choice === "save") {
+      setDroppedProjectSaving(true);
+      try {
+        if (!(await saveProject())) return;
+      } finally {
+        setDroppedProjectSaving(false);
+      }
+    }
     setDroppedProjectPrompt(null);
     try {
       await loadDroppedProject(candidate);
@@ -1339,6 +1348,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     actionError,
     setActionError,
     droppedProjectPrompt,
+    droppedProjectSaving,
     resolveDroppedProjectPrompt,
     qgisImportWarnings,
     setQgisImportWarnings,

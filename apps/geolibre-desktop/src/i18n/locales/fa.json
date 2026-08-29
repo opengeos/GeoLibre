@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} لایهٔ برداری",
       "bothVectorLayers_other": "{{count}} لایهٔ برداری",
       "bothRasterLayers_one": "{{count}} لایهٔ رستری",
-      "bothRasterLayers_other": "{{count}} لایهٔ رستری"
+      "bothRasterLayers_other": "{{count}} لایهٔ رستری",
+      "savePromptTitle": "پروژهٔ فعلی ذخیره شود؟",
+      "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. آیا پیش از باز کردن پروژهٔ رهاشده آن‌ها را ذخیره می‌کنید؟"
     },
     "error": {
       "couldNotOpenProject": "باز کردن پروژه ممکن نشد.",
+      "multipleProjectDrop": "هر بار فقط یک پروژهٔ GeoLibre و بدون فایل‌های دیگر رها کنید.",
+      "projectDropNotAllowed": "این استقرار اجازهٔ جابه‌جایی بین پروژه‌ها را نمی‌دهد.",
       "couldNotImportQgisProject": "وارد کردن پروژهٔ QGIS ممکن نشد.",
       "couldNotImportArcgisProject": "وارد کردن پروژهٔ ArcGIS Pro ممکن نشد.",
       "invalidProjectUrl": "یک نشانی معتبر HTTP یا HTTPS برای پروژه وارد کنید.",

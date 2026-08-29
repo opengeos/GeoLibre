@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} वेक्टर लेयर",
       "bothVectorLayers_other": "{{count}} वेक्टर लेयर",
       "bothRasterLayers_one": "{{count}} रैस्टर लेयर",
-      "bothRasterLayers_other": "{{count}} रैस्टर लेयर"
+      "bothRasterLayers_other": "{{count}} रैस्टर लेयर",
+      "savePromptTitle": "वर्तमान प्रोजेक्ट सहेजें?",
+      "savePromptDescription": "वर्तमान प्रोजेक्ट में सहेजे नहीं गए बदलाव हैं। छोड़े गए प्रोजेक्ट को खोलने से पहले उन्हें सहेजें?"
     },
     "error": {
       "couldNotOpenProject": "प्रोजेक्ट नहीं खोला जा सका।",
+      "multipleProjectDrop": "एक बार में केवल एक GeoLibre प्रोजेक्ट छोड़ें, उसके साथ अन्य फ़ाइलें नहीं।",
+      "projectDropNotAllowed": "यह परिनियोजन प्रोजेक्ट बदलने की अनुमति नहीं देता।",
       "couldNotImportQgisProject": "QGIS प्रोजेक्ट आयात नहीं किया जा सका।",
       "couldNotImportArcgisProject": "ArcGIS Pro प्रोजेक्ट आयात नहीं किया जा सका।",
       "invalidProjectUrl": "एक मान्य HTTP या HTTPS प्रोजेक्ट URL दर्ज करें।",

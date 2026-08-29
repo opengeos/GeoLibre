@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} livello vettoriale",
       "bothVectorLayers_other": "{{count}} livelli vettoriali",
       "bothRasterLayers_one": "{{count}} livello raster",
-      "bothRasterLayers_other": "{{count}} livelli raster"
+      "bothRasterLayers_other": "{{count}} livelli raster",
+      "savePromptTitle": "Salvare il progetto corrente?",
+      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto rilasciato?"
     },
     "error": {
       "couldNotOpenProject": "Impossibile aprire il progetto.",
+      "multipleProjectDrop": "Rilascia un solo progetto GeoLibre alla volta, senza altri file.",
+      "projectDropNotAllowed": "Questa distribuzione non consente di cambiare progetto.",
       "couldNotImportQgisProject": "Impossibile importare il progetto QGIS.",
       "couldNotImportArcgisProject": "Impossibile importare il progetto ArcGIS Pro.",
       "invalidProjectUrl": "Inserisci un URL di progetto HTTP o HTTPS valido.",

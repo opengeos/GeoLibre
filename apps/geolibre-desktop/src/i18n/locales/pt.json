@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} camada vetorial",
       "bothVectorLayers_other": "{{count}} camadas vetoriais",
       "bothRasterLayers_one": "{{count}} camada raster",
-      "bothRasterLayers_other": "{{count}} camadas raster"
+      "bothRasterLayers_other": "{{count}} camadas raster",
+      "savePromptTitle": "Salvar o projeto atual?",
+      "savePromptDescription": "O projeto atual tem alterações não salvas. Deseja salvá-las antes de abrir o projeto solto?"
     },
     "error": {
       "couldNotOpenProject": "Não foi possível abrir o projeto.",
+      "multipleProjectDrop": "Solte um projeto GeoLibre de cada vez, sem outros arquivos.",
+      "projectDropNotAllowed": "Esta implantação não permite trocar de projeto.",
       "couldNotImportQgisProject": "Não foi possível importar o projeto do QGIS.",
       "couldNotImportArcgisProject": "Não foi possível importar o projeto do ArcGIS Pro.",
       "invalidProjectUrl": "Digite uma URL de projeto HTTP ou HTTPS válida.",

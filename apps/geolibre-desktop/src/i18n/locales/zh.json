@@ -2883,10 +2883,14 @@
       "addedRasterLayers_other": "已将 {{count}} 个栅格图层添加到图层面板。",
       "addedBoth": "已将 {{vector}} 和 {{raster}} 添加到图层面板。",
       "bothVectorLayers_other": "{{count}} 个矢量图层",
-      "bothRasterLayers_other": "{{count}} 个栅格图层"
+      "bothRasterLayers_other": "{{count}} 个栅格图层",
+      "savePromptTitle": "保存当前项目？",
+      "savePromptDescription": "当前项目有未保存的更改。是否在打开拖放的项目之前保存？"
     },
     "error": {
       "couldNotOpenProject": "无法打开项目。",
+      "multipleProjectDrop": "请一次只拖放一个 GeoLibre 项目，不要同时拖放其他文件。",
+      "projectDropNotAllowed": "此部署不允许切换项目。",
       "couldNotImportQgisProject": "无法导入 QGIS 项目。",
       "couldNotImportArcgisProject": "无法导入 ArcGIS Pro 项目。",
       "invalidProjectUrl": "请输入有效的 HTTP 或 HTTPS 项目 URL。",

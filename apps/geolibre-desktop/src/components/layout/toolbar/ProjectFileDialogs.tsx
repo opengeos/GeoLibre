@@ -64,23 +64,28 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("newProject.savePromptTitle")}</DialogTitle>
-            <DialogDescription>{t("newProject.savePromptDescription")}</DialogDescription>
+            <DialogTitle>{t("toolbar.fileDrop.savePromptTitle")}</DialogTitle>
+            <DialogDescription>{t("toolbar.fileDrop.savePromptDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
+              disabled={projectFiles.droppedProjectSaving}
               onClick={() => void projectFiles.resolveDroppedProjectPrompt("cancel")}
             >
               {t("common.cancel")}
             </Button>
             <Button
               variant="secondary"
+              disabled={projectFiles.droppedProjectSaving}
               onClick={() => void projectFiles.resolveDroppedProjectPrompt("discard")}
             >
               {t("newProject.doNotSave")}
             </Button>
-            <Button onClick={() => void projectFiles.resolveDroppedProjectPrompt("save")}>
+            <Button
+              disabled={projectFiles.droppedProjectSaving}
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("save")}
+            >
               {t("common.save")}
             </Button>
           </div>

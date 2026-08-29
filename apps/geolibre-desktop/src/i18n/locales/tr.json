@@ -2936,10 +2936,14 @@
       "bothVectorLayers_one": "{{count}} vektör katmanı",
       "bothVectorLayers_other": "{{count}} vektör katmanı",
       "bothRasterLayers_one": "{{count}} raster katmanı",
-      "bothRasterLayers_other": "{{count}} raster katmanı"
+      "bothRasterLayers_other": "{{count}} raster katmanı",
+      "savePromptTitle": "Geçerli proje kaydedilsin mi?",
+      "savePromptDescription": "Geçerli projede kaydedilmemiş değişiklikler var. Bırakılan projeyi açmadan önce kaydetmek ister misiniz?"
     },
     "error": {
       "couldNotOpenProject": "Proje açılamadı.",
+      "multipleProjectDrop": "Başka dosya olmadan tek seferde bir GeoLibre projesi bırakın.",
+      "projectDropNotAllowed": "Bu dağıtım projeler arasında geçişe izin vermiyor.",
       "couldNotImportQgisProject": "QGIS projesi içe aktarılamadı.",
       "couldNotImportArcgisProject": "ArcGIS Pro projesi içe aktarılamadı.",
       "invalidProjectUrl": "Geçerli bir HTTP veya HTTPS proje URL'si girin.",
