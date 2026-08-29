@@ -49,10 +49,17 @@ def _sample_dataset_is_reachable() -> bool:
         return False
 
 
-requires_sample_dataset = pytest.mark.skipif(
-    not _sample_dataset_is_reachable(),
-    reason=f"{SAMPLE_DATASET_HOST} is unreachable (offline)",
-)
+@pytest.fixture
+def sample_dataset_url() -> str:
+    """The remote sample's URL, or a skip when its host cannot be reached.
+
+    Probed here rather than in a module-level marker so that importing and
+    collecting this file opens no connection; only the one test that reads
+    the sample pays for the probe.
+    """
+    if not _sample_dataset_is_reachable():
+        pytest.skip(f"{SAMPLE_DATASET_HOST} is unreachable (offline)")
+    return SAMPLE_DATASET_URL
 
 
 @pytest.fixture(scope="module")
@@ -185,9 +192,8 @@ def test_lon_lat_columns_are_not_detected_by_the_sidecar(
     assert "No geometry column found" in (proc.stdout + proc.stderr)
 
 
-@requires_sample_dataset
 def test_detects_the_geometry_column_of_the_remote_sample(
-    spatial_extension: None, tmp_path: Path
+    spatial_extension: None, sample_dataset_url: str, tmp_path: Path
 ) -> None:
     """The SQL Workspace's sample dataset is read straight over HTTPS.
 
@@ -195,6 +201,6 @@ def test_detects_the_geometry_column_of_the_remote_sample(
     (DuckDB autoloads httpfs), names its geometry column `geom` — the fallback
     name list is not what finds it here, the file's own `geo` block is.
     """
-    result = _result(_convert(SAMPLE_DATASET_URL, tmp_path / "out.parquet"))
+    result = _result(_convert(sample_dataset_url, tmp_path / "out.parquet"))
     assert result["geometry_column"] == "geom"
     assert result["feature_count"] > 0
