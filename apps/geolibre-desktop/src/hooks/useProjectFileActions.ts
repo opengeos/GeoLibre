@@ -66,6 +66,7 @@ import {
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
+import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
 
 /** A pending "strip credentials before saving?" prompt. */
 export interface CredentialStripPrompt {
@@ -81,6 +82,8 @@ export interface DroppedProjectPrompt {
   text: string;
   /** Project generation that opened the prompt. */
   projectGeneration: number;
+  /** Serialized workspace state covered by the open/discard decision. */
+  projectFingerprint: string;
 }
 
 /**
@@ -397,12 +400,31 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const loadDroppedProject = async (candidate: DroppedProjectPrompt) => {
-    if (useAppStore.getState().projectGeneration !== candidate.projectGeneration) return false;
-    const project = await resolveProjectXyzLayers(candidate.project);
-    if (useAppStore.getState().projectGeneration !== candidate.projectGeneration) return false;
-    loadProject(project, candidate.path, { rememberRecent: isTauri() && candidate.path !== null });
-    if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
-    return true;
+    return resolveDroppedProjectIfCurrent({
+      project: candidate.project,
+      projectGeneration: candidate.projectGeneration,
+      projectFingerprint: candidate.projectFingerprint,
+      getWorkspaceState: () => ({
+        projectGeneration: useAppStore.getState().projectGeneration,
+        projectFingerprint: serializeProject(projectFromStore(useAppStore.getState())),
+      }),
+      resolveProject: resolveProjectXyzLayers,
+      loadProject: (project) => {
+        loadProject(project, candidate.path, {
+          rememberRecent: isTauri() && candidate.path !== null,
+        });
+        if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+      },
+      workspaceChanged: (state) => {
+        const updated = {
+          ...candidate,
+          projectGeneration: state.projectGeneration,
+          projectFingerprint: state.projectFingerprint,
+        };
+        droppedProjectPromptRef.current = updated;
+        setDroppedProjectPrompt(updated);
+      },
+    });
   };
 
   /** Parse and open a project supplied by either browser or native drag-and-drop. */
@@ -413,6 +435,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         path,
         text,
         projectGeneration: useAppStore.getState().projectGeneration,
+        projectFingerprint: serializeProject(projectFromStore(useAppStore.getState())),
       };
       if (useAppStore.getState().isDirty) {
         droppedProjectPromptRef.current = candidate;
@@ -449,6 +472,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     droppedProjectPromptRef.current = null;
     setDroppedProjectPrompt(null);
+    candidate.projectFingerprint = serializeProject(projectFromStore(useAppStore.getState()));
     try {
       await loadDroppedProject(candidate);
     } catch (error) {
