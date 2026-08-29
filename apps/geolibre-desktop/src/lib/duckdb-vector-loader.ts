@@ -489,7 +489,11 @@ async function readParquetSourceCrs(
   metadataJson: string | null,
   geometryColumn?: string,
 ): Promise<string | null> {
-  if (metadataJson) return readGeoParquetGeoMetadata(metadataJson, geometryColumn).sourceCrs;
+  const geo = readGeoParquetGeoMetadata(metadataJson, geometryColumn);
+  // Only a document that actually parsed is authoritative. A `geo` key that is
+  // not JSON makes the file "not a GeoParquet", so its native logical type is
+  // still worth reading; the Rust loader already treats it that way.
+  if (geo.metadata) return geo.sourceCrs;
   try {
     const rows = rowsFromResult(await connection.query(parquetLogicalTypesSql(fileName)));
     const native = nativeGeometryColumn(rows, geometryColumn);
