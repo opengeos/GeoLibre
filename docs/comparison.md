@@ -73,7 +73,7 @@ you pick the right tool for a given job, not to declare a winner.
 | **In Jupyter** | Full app as an anywidget, two-way sync | Via `qgis` bindings, not the UI | Notebooks drive `arcpy`, not the UI | ArcGIS API for Python | Via `pydeck-carto` | — | Yes (widget) |
 | **Works offline** | Yes — PWA install, offline area download, desktop build | Yes | Yes | Limited (Field Maps offline areas) | No — connected platform by design | Field App offline areas, syncing on reconnect (higher plans) | Client-side, but assets are hosted |
 | **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Your own cloud data warehouse — no CARTO-side storage (except cache) or sync; imports write to a warehouse you own | Vendor cloud, or a single-tenant instance in your own AWS account (Enterprise) | Your browser |
-| **Project file** | `.geolibre.json` (open, documented) | `.qgs` / `.qgz` (open) | `.aprx` (proprietary) | Web map JSON (hosted) | Map/Workflow JSON via CLI and MCP | Hosted map (no local file) | Exportable map config JSON |
+| **Project file** | `.geolibre` / `.geolibre.json` (open, documented) | `.qgs` / `.qgz` (open) | `.aprx` (proprietary) | Web map JSON (hosted) | Map/Workflow JSON via CLI and MCP | Hosted map (no local file) | Exportable map config JSON |
 
 ## Data and formats
 

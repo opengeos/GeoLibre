@@ -37,7 +37,7 @@ flowchart LR
 4. `MapCanvas` subscribes to `layers`, then `MapController.syncLayers` updates MapLibre sources and layers and keeps the layer control in sync.
 5. Style panel and layer panel updates change layer state, then map sync updates paint, visibility, opacity, ordering, and removal.
 6. Attribute table selections update the highlighted feature source and can zoom the map to the selected feature.
-7. Desktop save uses `projectFromStore` and writes `.geolibre.json` to disk.
+7. Desktop save uses `projectFromStore` and writes `.geolibre` to disk. The earlier `.geolibre.json` name remains readable.
 
 ## 3D globe view (CesiumJS)
 

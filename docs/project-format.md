@@ -1,6 +1,26 @@
 # GeoLibre Project Format
 
-Projects are saved as **`.geolibre.json`** files.
+Projects are saved as **`.geolibre`** files. GeoLibre continues to open the
+earlier **`.geolibre.json`** name, but the single extension lets desktop
+installers associate projects with GeoLibre without taking ownership of every
+JSON file on the system.
+
+## Desktop file opening
+
+Desktop installers register `.geolibre` as a GeoLibre Project document. Opening
+one from the file manager launches GeoLibre, or brings the existing GeoLibre
+window forward, and loads the project. The desktop executable also accepts both
+supported names on the command line:
+
+```text
+geolibre-desktop /path/to/watershed.geolibre
+geolibre-desktop /path/to/legacy.geolibre.json
+```
+
+Operating systems see only `.json` at the end of a `.geolibre.json` name. Those
+legacy files continue to open from inside GeoLibre and from the command line,
+but renaming one to `.geolibre` is required for file-manager association. The
+file contents do not change.
 
 ## Schema
 

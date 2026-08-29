@@ -117,10 +117,24 @@ describe("planStartup", () => {
       planStartup({
         explicitPayload: true,
         desktop: true,
+        openedProjectPath: "/tmp/opened.geolibre",
         settings: pinned,
         recentProjects: recent(PINNED),
       }),
       { kind: "payload" },
+    );
+  });
+
+  it("opens an OS-supplied desktop project before the configured startup project", () => {
+    assert.deepEqual(
+      planStartup({
+        explicitPayload: false,
+        desktop: true,
+        openedProjectPath: "/tmp/opened.geolibre",
+        settings: pinned,
+        recentProjects: recent(PINNED),
+      }),
+      { kind: "restore", path: "/tmp/opened.geolibre" },
     );
   });
 

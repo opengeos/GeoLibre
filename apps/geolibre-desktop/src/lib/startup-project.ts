@@ -84,14 +84,20 @@ export type StartupPlan =
  * @param desktop - Whether this is the Tauri build. Only it can reopen a local
  *   file; the browser and the Jupyter embed have no persistent path, but they do
  *   honor the empty-workspace projection.
+ * @param openedProjectPath - A project supplied by the operating system for
+ *   this launch. It takes precedence over desktop startup preferences.
  */
 export function planStartup(options: {
   explicitPayload: boolean;
   desktop: boolean;
+  openedProjectPath?: string | null;
   settings: StartupSettings;
   recentProjects: readonly RecentPath[];
 }): StartupPlan {
   if (options.explicitPayload) return { kind: "payload" };
+  if (options.desktop && options.openedProjectPath) {
+    return { kind: "restore", path: options.openedProjectPath };
+  }
   const path = options.desktop
     ? startupProjectPath(options.settings, options.recentProjects)
     : null;

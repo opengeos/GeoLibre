@@ -79,8 +79,10 @@ import {
 } from "./lib/desktop-settings-url";
 import { parseDeploymentCapabilities, useAppStore } from "@geolibre/core";
 import { readDeploymentEnvValue } from "./lib/deployment-env";
+import { initializeNativeProjectOpen } from "./lib/native-project-open";
 
 installDiagnosticsCapture();
+const nativeProjectOpenReady = initializeNativeProjectOpen();
 let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
 // In the desktop build, route geocoding (place search / reverse geocode)
 // through Tauri's native HTTP client so it bypasses WebView CORS: public
@@ -278,6 +280,9 @@ void Promise.all([
   // Sidecar-dependent panels can issue a request as soon as App mounts. On
   // Windows, wait until those requests have the native transport installed.
   nativeSidecarFetchReady,
+  // Capture a file-association or command-line project path before App decides
+  // whether to restore a configured startup project or the default workspace.
+  nativeProjectOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
   startupLanguageReady,

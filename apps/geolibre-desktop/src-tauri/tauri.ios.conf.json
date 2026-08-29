@@ -4,6 +4,7 @@
   "identifier": "org.geolibre.app",
   "bundle": {
     "resources": [],
+    "fileAssociations": [],
     "iOS": {
       "minimumSystemVersion": "15.0"
     }

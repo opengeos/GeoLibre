@@ -86,7 +86,7 @@ import { tiffBytesToPngBytes } from "./tiff-image";
 export { isTauri };
 
 function browserSafeFileName(path: string): string {
-  return path.split(/[/\\]/).pop() || "project.geolibre.json";
+  return path.split(/[/\\]/).pop() || "project.geolibre";
 }
 
 export type { FileDialogFilter } from "./file-dialog-filters";
@@ -2624,7 +2624,7 @@ async function saveProjectFileBrowser(
   content: string,
   defaultName?: string,
 ): Promise<string | null> {
-  const fileName = browserSafeFileName(defaultName ?? "project.geolibre.json");
+  const fileName = browserSafeFileName(defaultName ?? "project.geolibre");
   const pickerWindow = window as BrowserFilePickerWindow;
 
   if (pickerWindow.showSaveFilePicker) {
@@ -3192,7 +3192,7 @@ export async function saveProjectFile(
 
   const path = await save({
     filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
-    defaultPath: defaultName ?? "project.geolibre.json",
+    defaultPath: defaultName ?? "project.geolibre",
   });
   if (!path) return null;
   await writeTextFile(path, content);

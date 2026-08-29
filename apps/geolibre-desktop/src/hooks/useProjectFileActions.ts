@@ -465,6 +465,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  /** Open a project path delivered by the operating system or another app instance. */
+  const handleNativeProjectOpen = async (path: string): Promise<boolean> => {
+    try {
+      const result = await openRecentProjectFile(path);
+      return await handleDroppedProject(result.text, result.path);
+    } catch (error) {
+      console.error("Failed to open native project path", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
+      );
+      return false;
+    }
+  };
+
   const resolveDroppedProjectPrompt = async (choice: "save" | "discard" | "cancel") => {
     if (droppedProjectSaving) return;
     const candidate = droppedProjectPrompt;
@@ -1241,7 +1255,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // download under a fixed name, so Save As (and a first Save) would otherwise
     // reuse a default name — exactly the bug users hit. Prompt for the name so
     // they can choose it; later in-place Saves reuse the chosen name silently.
-    let saveName = `${defaultProjectName}.geolibre.json`;
+    let saveName = `${defaultProjectName}.geolibre`;
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {
@@ -1451,6 +1465,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     cancelSaveNamePrompt,
     handleOpenFromFile,
     handleDroppedProject,
+    handleNativeProjectOpen,
     handleImportQgisProject,
     handleImportArcgisProject,
     handleOpenFromUrl,

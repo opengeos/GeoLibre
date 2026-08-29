@@ -24,7 +24,7 @@ This page helps you start using GeoLibre. If you want to contribute to GeoLibre 
 
 ## Use GeoLibre
 
-Pick whichever fits how you work. The same app ships in every form, so projects and `.geolibre.json` files move between them.
+Pick whichever fits how you work. The same app ships in every form, so `.geolibre` projects, including legacy `.geolibre.json` files, move between them.
 
 ### On the web
 

@@ -110,6 +110,7 @@ import {
   OSM_PBF_SIZE_WARN_BYTES,
 } from "../../lib/osm-pbf-loader";
 import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
+import { listenForNativeProjectOpen } from "../../lib/native-project-open";
 import {
   createAppAPI,
   getPluginManager,
@@ -755,6 +756,22 @@ export function DesktopShell({
   const projectFiles = useProjectFileActions(mapControllerRef);
   const projectFilesRef = useRef(projectFiles);
   projectFilesRef.current = projectFiles;
+  useEffect(() => {
+    let disposed = false;
+    let stopListening: (() => void) | null = null;
+    void listenForNativeProjectOpen((path) => projectFilesRef.current.handleNativeProjectOpen(path))
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stopListening = unlisten;
+      })
+      .catch((error: unknown) => {
+        console.error("[GeoLibre] Could not listen for opened project files", error);
+      });
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, []);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style

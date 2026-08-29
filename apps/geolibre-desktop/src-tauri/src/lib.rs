@@ -64,7 +64,8 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(not(feature = "mas"))]
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::env;
 #[cfg(not(feature = "mas"))]
 use std::ffi::OsStr;
@@ -83,11 +84,12 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(not(feature = "mas"))]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 #[cfg(not(feature = "mas"))]
 use std::thread;
 use std::time::Duration;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 // OAuth popups are a desktop-only, multi-window concept; Android/iOS have no
@@ -140,6 +142,10 @@ const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
 /// tile; callers that download a whole dataset (Add Vector Layer) ask for more,
 /// but not without bound, so a bad value cannot wedge a request indefinitely.
 const MAX_FETCH_TIMEOUT_SECS: u64 = 600;
+const OPEN_PROJECT_FILES_EVENT: &str = "open-project-files";
+
+#[derive(Default)]
+struct PendingProjectPaths(Mutex<VecDeque<String>>);
 
 #[cfg(all(unix, not(feature = "mas")))]
 const SIGTERM: i32 = 15;
@@ -270,7 +276,26 @@ impl Drop for JupyterProcess {
 pub fn run() {
     configure_linux_webkit();
 
-    let builder = tauri::Builder::default()
+    let pending_project_paths = PendingProjectPaths(Mutex::new(VecDeque::from(
+        project_paths_from_args(env::args_os().skip(1), &current_working_directory()),
+    )));
+    let builder = tauri::Builder::default();
+
+    // Windows and Linux deliver a file-association launch by starting another
+    // process with the document path in argv. Keep one workspace and forward
+    // that path to it. Register this first, as required by the plugin.
+    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        let paths = project_paths_from_args(
+            args.into_iter().skip(1).map(std::ffi::OsString::from),
+            Path::new(&cwd),
+        );
+        enqueue_project_paths(app, paths);
+        focus_main_window(app);
+    }));
+
+    let builder = builder
+        .manage(pending_project_paths)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Must init after the fs plugin: it restores previously-granted fs
@@ -312,7 +337,7 @@ pub fn run() {
             startup: Mutex::new(()),
         });
 
-    builder
+    let app = builder
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
             native_duckdb::count_native_vector_file_features,
@@ -323,6 +348,7 @@ pub fn run() {
             load_external_plugin_bundles,
             read_admin_profile,
             read_env_vars,
+            take_pending_project_paths,
             allow_raster_asset,
             read_local_file,
             read_project_file,
@@ -343,8 +369,104 @@ pub fn run() {
             create_main_window(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running GeoLibre Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building GeoLibre Desktop");
+
+    app.run(|_app, _event| {
+        // macOS delivers associated files as native open events instead
+        // of argv. Queue them through the same path as a second desktop launch.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            let paths = project_paths_from_args(
+                urls.into_iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(std::ffi::OsString::from),
+                Path::new("/"),
+            );
+            enqueue_project_paths(_app, paths);
+            focus_main_window(_app);
+        }
+    });
+}
+
+fn current_working_directory() -> PathBuf {
+    env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn has_geolibre_project_extension(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_ascii_lowercase();
+    lower.ends_with(".geolibre") || lower.ends_with(".geolibre.json")
+}
+
+fn project_path_string(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    #[cfg(target_os = "windows")]
+    if let Some(unprefixed) = value.strip_prefix(r"\\?\") {
+        return unprefixed.to_string();
+    }
+    value.into_owned()
+}
+
+/// Resolve existing GeoLibre project files supplied by the operating system.
+///
+/// Other CLI flags are deliberately ignored. Resolving the path before it
+/// reaches the webview both handles a relative command-line path correctly and
+/// prevents a symlink with a project-looking name from bypassing the existing
+/// `read_project_file` extension check.
+fn project_paths_from_args<I>(args: I, cwd: &Path) -> Vec<String>
+where
+    I: IntoIterator<Item = std::ffi::OsString>,
+{
+    args.into_iter()
+        .filter_map(|argument| {
+            let candidate = PathBuf::from(argument);
+            if !has_geolibre_project_extension(&candidate) {
+                return None;
+            }
+            let absolute = if candidate.is_absolute() {
+                candidate
+            } else {
+                cwd.join(candidate)
+            };
+            let canonical = fs::canonicalize(absolute).ok()?;
+            if !canonical.is_file() || !has_geolibre_project_extension(&canonical) {
+                return None;
+            }
+            let path = project_path_string(&canonical);
+            is_allowed_project_path(&path).then_some(path)
+        })
+        .collect()
+}
+
+fn enqueue_project_paths(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+    app.state::<PendingProjectPaths>()
+        .0
+        .lock()
+        .expect("pending project path lock poisoned")
+        .extend(paths);
+    let _ = app.emit(OPEN_PROJECT_FILES_EVENT, ());
+}
+
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Drain project paths that arrived through argv or an OS file-open event.
+#[tauri::command]
+fn take_pending_project_paths(state: tauri::State<'_, PendingProjectPaths>) -> Vec<String> {
+    state
+        .0
+        .lock()
+        .expect("pending project path lock poisoned")
+        .drain(..)
+        .collect()
 }
 
 /// Whether `read_project_file` may read `path`: an absolute local path (POSIX
@@ -4186,8 +4308,9 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path, is_ssrf_guard_error, path_is_under, resolve_fetch_timeout_secs,
-        tcp_table_port, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
+        is_safe_absolute_path, is_ssrf_guard_error, path_is_under, project_path_string,
+        project_paths_from_args, resolve_fetch_timeout_secs, tcp_table_port,
+        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
     use super::{
@@ -4206,7 +4329,7 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     use std::env;
     #[cfg(not(feature = "mas"))]
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     #[cfg(not(feature = "mas"))]
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -4267,6 +4390,49 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn resolves_only_existing_project_arguments() {
+        let root = ScratchDir::new("project-arguments");
+        let short = root.path().join("short.geolibre");
+        let legacy = root.path().join("legacy.geolibre.json");
+        let ordinary_json = root.path().join("ordinary.json");
+        std::fs::write(&short, "{}").unwrap();
+        std::fs::write(&legacy, "{}").unwrap();
+        std::fs::write(&ordinary_json, "{}").unwrap();
+
+        let paths = project_paths_from_args(
+            [
+                OsString::from("--verbose"),
+                OsString::from("short.geolibre"),
+                legacy.clone().into_os_string(),
+                ordinary_json.into_os_string(),
+                OsString::from("missing.geolibre"),
+            ],
+            root.path(),
+        );
+
+        assert_eq!(
+            paths,
+            [
+                project_path_string(&short.canonicalize().unwrap()),
+                project_path_string(&legacy.canonicalize().unwrap()),
+            ]
+        );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn rejects_project_named_symlinks_to_other_file_types() {
+        let root = ScratchDir::new("project-argument-symlink");
+        let target = root.path().join("private.json");
+        let link = root.path().join("looks-safe.geolibre");
+        std::fs::write(&target, "{}").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(project_paths_from_args([link.into_os_string()], root.path()).is_empty());
     }
 
     #[cfg(all(target_os = "linux", not(feature = "mas")))]

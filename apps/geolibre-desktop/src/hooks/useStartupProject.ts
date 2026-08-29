@@ -10,6 +10,7 @@ import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
+import { initialNativeProjectPath } from "../lib/native-project-open";
 
 /**
  * How long the shell stays unmounted waiting for a startup restore. The read and
@@ -50,7 +51,7 @@ function hasExplicitLaunchPayload(): boolean {
  * render (`useDesktopSettingsStore` hydrates from localStorage at store-creation
  * time), so both calls see the same answer.
  */
-function currentStartupPlan(): StartupPlan {
+function currentStartupPlan(openedProjectPath: string | null = null): StartupPlan {
   // `useRecentProjectsPersistence` hydrates the store from localStorage in its
   // own mount effect. Fall back to reading storage directly when that has not
   // happened yet, so "last project" mode does not silently no-op if this hook is
@@ -59,6 +60,7 @@ function currentStartupPlan(): StartupPlan {
   return planStartup({
     explicitPayload: hasExplicitLaunchPayload(),
     desktop: isTauri(),
+    openedProjectPath,
     settings: useDesktopSettingsStore.getState().desktopSettings.startup,
     recentProjects: stored.length > 0 ? stored : loadRecentProjects(),
   });
@@ -98,6 +100,7 @@ export function useStartupProject(): {
       return null;
     }
   });
+  const [openedProjectPath] = useState(initialNativeProjectPath);
   // Keep the workspace unmounted while a configured startup project is being
   // read. Otherwise MapCanvas is created from the empty project's defaults
   // (notably globe projection), and the asynchronous project restore has to
@@ -119,14 +122,14 @@ export function useStartupProject(): {
       useAppStore.getState().loadProject(inlineProject, null, { rememberRecent: false });
       return false;
     }
-    const plan = currentStartupPlan();
+    const plan = currentStartupPlan(openedProjectPath);
     if (plan.kind === "default") applyDefaultWorkspace(plan);
     return plan.kind === "restore";
   });
 
   useEffect(() => {
     if (inlineProject) return;
-    const plan = currentStartupPlan();
+    const plan = currentStartupPlan(openedProjectPath);
     // Both other cases were settled by the initializer above.
     if (plan.kind !== "restore") return;
     const path = plan.path;
@@ -227,7 +230,7 @@ export function useStartupProject(): {
     // Startup restoration is intentionally one-shot. In particular, changing
     // language must not reopen this project over the user's current workspace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlineProject]);
+  }, [inlineProject, openedProjectPath]);
 
   return {
     warning: hasWarning ? t("settings.startup.loadWarning") : null,

@@ -33,6 +33,20 @@
     "active": true,
     "targets": "all",
     "resources": ["../../../backend/geolibre_server"],
+    "fileAssociations": [
+      {
+        "ext": ["geolibre"],
+        "name": "GeoLibre Project",
+        "description": "GeoLibre Project",
+        "mimeType": "application/vnd.geolibre.project+json",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "org.geolibre.project",
+          "conformsTo": ["public.json"]
+        }
+      }
+    ],
     "icon": [
       "icons/icon.png",
       "icons/32x32.png",

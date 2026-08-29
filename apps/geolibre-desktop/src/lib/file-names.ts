@@ -6,16 +6,17 @@ import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
 
 /**
  * Ensure a user-entered project file name carries a recognized extension,
- * defaulting to `.geolibre.json` when none is present so the downloaded file
- * opens cleanly again later. Falls back to the default project name when blank.
+ * defaulting to `.geolibre` when none is present so desktop installers can
+ * associate the file with GeoLibre without claiming every JSON document.
+ * Falls back to the default project name when blank.
  *
  * @param name - The raw file name the user typed.
  * @returns A sanitized file name ending in a project extension.
  */
 export function ensureProjectFileName(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre.json`;
-  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed) ? trimmed : `${trimmed}.geolibre.json`;
+  if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre`;
+  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed) ? trimmed : `${trimmed}.geolibre`;
 }
 
 /**

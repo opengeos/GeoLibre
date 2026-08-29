@@ -40,12 +40,12 @@ describe("ensureHtmlFileName", () => {
 
 describe("ensureProjectFileName", () => {
   it("defaults to the project name when blank", () => {
-    assert.match(ensureProjectFileName(""), /\.geolibre\.json$/);
-    assert.match(ensureProjectFileName("   "), /\.geolibre\.json$/);
+    assert.match(ensureProjectFileName(""), /\.geolibre$/);
+    assert.match(ensureProjectFileName("   "), /\.geolibre$/);
   });
 
-  it("appends .geolibre.json when no recognized extension is present", () => {
-    assert.equal(ensureProjectFileName("trip"), "trip.geolibre.json");
+  it("appends .geolibre when no recognized extension is present", () => {
+    assert.equal(ensureProjectFileName("trip"), "trip.geolibre");
   });
 
   it("keeps a recognized extension as-is", () => {
