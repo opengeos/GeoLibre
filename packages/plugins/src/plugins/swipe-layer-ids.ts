@@ -41,14 +41,14 @@ export interface SwipeProjectLayer {
 export interface SwipeSideResolution {
   /** The side's ids, with every resolvable project id followed by its style layer ids. */
   ids: string[];
-  /** Project ids that were expanded on this pass, so a later pass leaves them alone. */
-  expanded: string[];
   /**
-   * Project ids that name a store layer nothing is drawn for **yet** — an async
-   * source (PMTiles, vector tiles) that has not reached the style. Worth
-   * retrying once the style changes.
+   * The style layer ids contributed for each project id on this pass, to carry
+   * into the next one as `contributed`. Only ids not already recorded there, so
+   * the caller accumulates a per-project-id set of everything ever contributed.
    */
-  pending: string[];
+  contributed: Map<string, string[]>;
+  /** Whether {@link ids} differs from the side it was resolved from. */
+  changed: boolean;
 }
 
 /** `metadata.nativeLayerIds`, the ids a control created itself, when present. */
@@ -154,15 +154,23 @@ export function styleLayerIdsForProjectLayer(
 /**
  * Expand one swipe side's ids so the control can match them.
  *
- * Ids that are already style layer ids, ids a {@link SwipeLayerProvider}
+ * Ids that are already style layer ids and ids a `SwipeLayerProvider`
  * contributes (deck.gl COG/raster overlays, which the provider assigns by store
- * id itself), and ids expanded on an earlier pass are passed through untouched.
- * The rest are expanded in place, each project id kept ahead of the style ids it
- * resolved to.
+ * id itself) are passed through untouched. The rest are expanded in place, each
+ * project id kept ahead of the style ids it resolved to.
+ *
+ * Expansion is **incremental**: a project id keeps resolving on every pass, and
+ * only style layer ids not already in `contributed` are added. A store layer's
+ * style layers are added to the map one `map.addLayer` call at a time, each
+ * firing its own `styledata`, so a pass can catch a GeoJSON layer with only its
+ * fill layer up; the next pass then adds the line and circle layers. Recording
+ * what was contributed is what keeps that from fighting the panel: a checkbox
+ * the user clears is never re-checked, because that id has been contributed
+ * already.
  *
  * @param sideIds - The side's current ids.
  * @param options - The live style, the project's layers, the provider's ids, and
- *   the project ids already expanded on an earlier pass.
+ *   the style layer ids contributed for each project id on earlier passes.
  * @returns The expanded ids plus the bookkeeping for the next pass.
  */
 export function resolveSwipeSideIds(
@@ -171,17 +179,18 @@ export function resolveSwipeSideIds(
     styleLayers: readonly SwipeStyleLayer[];
     projectLayers: readonly SwipeProjectLayer[];
     providerLayerIds?: ReadonlySet<string>;
-    alreadyExpanded?: ReadonlySet<string>;
+    contributed?: ReadonlyMap<string, ReadonlySet<string>>;
   },
 ): SwipeSideResolution {
   const styleLayerIds = new Set(options.styleLayers.map((styleLayer) => styleLayer.id));
   const projectLayersById = new Map(
     options.projectLayers.map((projectLayer) => [projectLayer.id, projectLayer]),
   );
+  const present = new Set(sideIds);
   const ids: string[] = [];
   const seen = new Set<string>();
-  const expanded: string[] = [];
-  const pending: string[] = [];
+  const contributed = new Map<string, string[]>();
+  let changed = false;
 
   const push = (id: string): void => {
     if (seen.has(id)) return;
@@ -193,22 +202,26 @@ export function resolveSwipeSideIds(
     push(id);
     if (styleLayerIds.has(id)) continue;
     if (options.providerLayerIds?.has(id)) continue;
-    if (options.alreadyExpanded?.has(id)) continue;
 
     const projectLayer = projectLayersById.get(id);
     // An id that names nothing in the project — the control's grouped
-    // `__basemap__` entry, or a layer since removed — can never resolve, so it
-    // is left alone rather than retried forever.
+    // `__basemap__` entry, or a layer since removed — never resolves to
+    // anything, so it is left alone.
     if (!projectLayer) continue;
 
+    const already = options.contributed?.get(id);
     const matched = styleLayerIdsForProjectLayer(id, options.styleLayers, projectLayer);
-    if (matched.length === 0) {
-      pending.push(id);
-      continue;
+    const fresh = matched.filter((matchedId) => already?.has(matchedId) !== true);
+    if (fresh.length > 0) contributed.set(id, fresh);
+    // Keep what is new plus what the side already holds (moved up beside the
+    // project id it belongs to). An id contributed earlier and no longer on the
+    // side is one the user cleared, so it is not put back.
+    for (const matchedId of matched) {
+      if (already?.has(matchedId) === true && !present.has(matchedId)) continue;
+      if (!present.has(matchedId)) changed = true;
+      push(matchedId);
     }
-    expanded.push(id);
-    for (const matchedId of matched) push(matchedId);
   }
 
-  return { ids, expanded, pending };
+  return { ids, contributed, changed };
 }

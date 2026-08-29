@@ -112,13 +112,38 @@ describe("resolveSwipeSideIds", () => {
     const resolved = resolveSwipeSideIds(["red"], { styleLayers, projectLayers });
 
     assert.deepEqual(resolved.ids, ["red", "layer-red-fill", "layer-red-line", "layer-red-circle"]);
-    assert.deepEqual(resolved.expanded, ["red"]);
-    assert.deepEqual(resolved.pending, []);
+    assert.deepEqual(resolved.contributed.get("red"), [
+      "layer-red-fill",
+      "layer-red-line",
+      "layer-red-circle",
+    ]);
+    assert.equal(resolved.changed, true);
+  });
+
+  it("picks up the style layers a layer gains after the first pass", () => {
+    // A layer's style layers are added one `map.addLayer` at a time, each firing
+    // its own `styledata`, so a pass can catch the layer part-drawn.
+    const first = resolveSwipeSideIds(["red"], {
+      styleLayers: [...basemap, { id: "layer-red-fill", source: "source-red" }],
+      projectLayers,
+    });
+    assert.deepEqual(first.ids, ["red", "layer-red-fill"]);
+
+    const second = resolveSwipeSideIds(first.ids, {
+      styleLayers,
+      projectLayers,
+      contributed: new Map([["red", new Set(first.contributed.get("red"))]]),
+    });
+
+    assert.deepEqual(second.ids, ["red", "layer-red-fill", "layer-red-line", "layer-red-circle"]);
+    assert.deepEqual(second.contributed.get("red"), ["layer-red-line", "layer-red-circle"]);
+    assert.equal(second.changed, true);
   });
 
   it("leaves a side that already names style layer ids untouched", () => {
     // What #2155 writes for a raster layer: the project id plus the one style
-    // layer id it can derive. Expanding the project id must not duplicate it.
+    // layer id it can derive. Expanding the project id must not duplicate it,
+    // and nothing changed, so the control is not touched.
     const rasterStyleLayers: SwipeStyleLayer[] = [
       ...basemap,
       { id: "layer-osm-raster", source: "source-osm" },
@@ -129,27 +154,23 @@ describe("resolveSwipeSideIds", () => {
     });
 
     assert.deepEqual(resolved.ids, ["osm", "layer-osm-raster"]);
-    assert.deepEqual(resolved.pending, []);
+    assert.equal(resolved.changed, false);
   });
 
-  it("reports a project layer the style has not caught up with as pending", () => {
-    const resolved = resolveSwipeSideIds(["red"], {
-      styleLayers: basemap,
-      projectLayers,
-    });
+  it("contributes nothing for a project layer the style has not caught up with", () => {
+    const resolved = resolveSwipeSideIds(["red"], { styleLayers: basemap, projectLayers });
 
     assert.deepEqual(resolved.ids, ["red"]);
-    assert.deepEqual(resolved.expanded, []);
-    assert.deepEqual(resolved.pending, ["red"]);
+    assert.equal(resolved.contributed.size, 0);
+    assert.equal(resolved.changed, false);
   });
 
   it("passes through an id that names nothing in the project", () => {
-    // The control's grouped basemap entry, which it resolves itself. Retrying it
-    // would keep the resolution listener alive for the life of the session.
+    // The control's grouped basemap entry, which it resolves itself.
     const resolved = resolveSwipeSideIds(["__basemap__"], { styleLayers, projectLayers });
 
     assert.deepEqual(resolved.ids, ["__basemap__"]);
-    assert.deepEqual(resolved.pending, []);
+    assert.equal(resolved.changed, false);
   });
 
   it("passes through a provider layer id", () => {
@@ -162,19 +183,20 @@ describe("resolveSwipeSideIds", () => {
     });
 
     assert.deepEqual(resolved.ids, ["cog"]);
-    assert.deepEqual(resolved.expanded, []);
-    assert.deepEqual(resolved.pending, []);
+    assert.equal(resolved.contributed.size, 0);
   });
 
-  it("does not re-expand a project id the user has since unchecked", () => {
-    const resolved = resolveSwipeSideIds(["red", "layer-red-fill"], {
+  it("does not re-add a style layer id the user has since unchecked", () => {
+    const resolved = resolveSwipeSideIds(["red"], {
       styleLayers,
       projectLayers,
-      alreadyExpanded: new Set(["red"]),
+      contributed: new Map([
+        ["red", new Set(["layer-red-fill", "layer-red-line", "layer-red-circle"])],
+      ]),
     });
 
-    assert.deepEqual(resolved.ids, ["red", "layer-red-fill"]);
-    assert.deepEqual(resolved.expanded, []);
+    assert.deepEqual(resolved.ids, ["red"]);
+    assert.equal(resolved.changed, false);
   });
 
   it("keeps the two sides apart", () => {

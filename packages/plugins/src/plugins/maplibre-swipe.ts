@@ -208,13 +208,16 @@ function teardownCogSwipe(): void {
 // --- Project layer id resolution -------------------------------------------
 // A saved project names each swipe side by **store** layer id, which is all the
 // Python/MCP authoring side can write; the control matches **style** layer ids.
-// See swipe-layer-ids.ts and #2161. The expansion runs against the live style,
-// and re-runs while the style keeps changing, because a layer's style layers may
-// not exist yet when the project's plugin state is restored (an async PMTiles or
-// vector-tile source reaches the map later).
+// See swipe-layer-ids.ts and #2161. The expansion runs against the live style and
+// re-runs on every style change for as long as the control lives, because a
+// layer's style layers arrive one `addLayer` at a time and an async PMTiles or
+// vector-tile source reaches the map well after the project's plugin state is
+// restored. Passes are cheap: one is skipped outright unless the style's layer
+// order changed, and `contributedStyleLayerIds` keeps a resolved id from being
+// re-added to a side the user has since edited.
 
-/** Store layer ids already expanded, so a side the user edited is not re-expanded. */
-const expandedProjectLayerIds = new Set<string>();
+/** Style layer ids already contributed, per store layer id. */
+const contributedStyleLayerIds = new Map<string, Set<string>>();
 let unsubscribeIdResolution: (() => void) | null = null;
 /** The style layer order the last expansion pass ran against, to skip no-op passes. */
 let lastResolvedLayerOrder: string[] | null = null;
@@ -230,9 +233,7 @@ function startSwipeIdResolution(app: GeoLibreAppAPI): void {
   const map = app.getMap?.();
   if (!map) return;
 
-  const handler = (): void => {
-    if (!resolveSwipeProjectLayerIds(map)) stopSwipeIdResolution();
-  };
+  const handler = (): void => resolveSwipeProjectLayerIds(map);
   map.on("styledata", handler);
   unsubscribeIdResolution = () => map.off("styledata", handler);
   handler();
@@ -244,17 +245,18 @@ function sameLayerOrder(left: readonly string[], right: readonly string[]): bool
 
 /**
  * Expand any store layer ids on either swipe side into the style layer ids that
- * currently draw them.
+ * currently draw them, and remember what was contributed so a later pass adds
+ * only what is new.
  *
  * @param map - The main map, read for its live style.
- * @returns Whether another pass is worth running (some side id names a store
- *   layer the style has not caught up with yet).
  */
-function resolveSwipeProjectLayerIds(map: MapLibreMap): boolean {
-  if (!swipeControl) return false;
+function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
+  if (!swipeControl) return;
 
   const layerOrder = map.getLayersOrder();
-  if (lastResolvedLayerOrder && sameLayerOrder(lastResolvedLayerOrder, layerOrder)) return true;
+  if (lastResolvedLayerOrder && sameLayerOrder(lastResolvedLayerOrder, layerOrder)) return;
+  // Recorded before the setLeftLayers/setRightLayers below, whose own
+  // `setLayoutProperty` calls re-enter this handler through `styledata`.
   lastResolvedLayerOrder = [...layerOrder];
 
   const styleLayers: SwipeStyleLayer[] = layerOrder.map((id) => ({
@@ -269,25 +271,20 @@ function resolveSwipeProjectLayerIds(map: MapLibreMap): boolean {
     providerLayerIds: new Set(
       [...getSwipeCogRasters(), ...getSwipeMaplibreRasters()].map((raster) => raster.id),
     ),
-    alreadyExpanded: expandedProjectLayerIds,
+    contributed: contributedStyleLayerIds,
   };
 
   const state = swipeControl.getState();
-  // The store is filled before a project's plugin state is restored, so an empty
-  // store here means the restore ran first: every side id would look like an id
-  // naming nothing and be dropped for good. Wait for the layers instead.
-  if (options.projectLayers.length === 0) {
-    return state.leftLayers.length > 0 || state.rightLayers.length > 0;
-  }
-
   const left = resolveSwipeSideIds(state.leftLayers, options);
   const right = resolveSwipeSideIds(state.rightLayers, options);
 
-  for (const id of [...left.expanded, ...right.expanded]) expandedProjectLayerIds.add(id);
-  if (left.expanded.length > 0) swipeControl.setLeftLayers(left.ids);
-  if (right.expanded.length > 0) swipeControl.setRightLayers(right.ids);
-
-  return left.pending.length > 0 || right.pending.length > 0;
+  for (const [projectLayerId, styleLayerIds] of [...left.contributed, ...right.contributed]) {
+    const known = contributedStyleLayerIds.get(projectLayerId) ?? new Set<string>();
+    for (const styleLayerId of styleLayerIds) known.add(styleLayerId);
+    contributedStyleLayerIds.set(projectLayerId, known);
+  }
+  if (left.changed) swipeControl.setLeftLayers(left.ids);
+  if (right.changed) swipeControl.setRightLayers(right.ids);
 }
 
 export const maplibreSwipePlugin: GeoLibrePlugin = {
@@ -366,7 +363,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     savedSwipeState = nextState;
     // A different project (or a reset) brings its own sides, so nothing carries
     // over from the last one's expansion.
-    expandedProjectLayerIds.clear();
+    contributedStyleLayerIds.clear();
     if (!swipeControl) return true;
 
     app.removeMapControl(swipeControl);
