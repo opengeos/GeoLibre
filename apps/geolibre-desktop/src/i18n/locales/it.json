@@ -2938,7 +2938,7 @@
       "bothRasterLayers_one": "{{count}} livello raster",
       "bothRasterLayers_other": "{{count}} livelli raster",
       "savePromptTitle": "Salvare il progetto corrente?",
-      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto rilasciato?"
+      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto trascinato?"
     },
     "error": {
       "couldNotOpenProject": "Impossibile aprire il progetto.",

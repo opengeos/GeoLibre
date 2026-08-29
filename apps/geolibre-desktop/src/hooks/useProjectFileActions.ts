@@ -397,27 +397,29 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const loadDroppedProject = async (candidate: DroppedProjectPrompt) => {
+    if (useAppStore.getState().projectGeneration !== candidate.projectGeneration) return false;
     const project = await resolveProjectXyzLayers(candidate.project);
+    if (useAppStore.getState().projectGeneration !== candidate.projectGeneration) return false;
     loadProject(project, candidate.path, { rememberRecent: isTauri() && candidate.path !== null });
     if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+    return true;
   };
 
   /** Parse and open a project supplied by either browser or native drag-and-drop. */
   const handleDroppedProject = async (text: string, path: string | null): Promise<boolean> => {
-    const candidate = {
-      project: parseProject(text),
-      path,
-      text,
-      projectGeneration: useAppStore.getState().projectGeneration,
-    };
-    if (useAppStore.getState().isDirty) {
-      droppedProjectPromptRef.current = candidate;
-      setDroppedProjectPrompt(candidate);
-      return false;
-    }
     try {
-      await loadDroppedProject(candidate);
-      return true;
+      const candidate = {
+        project: parseProject(text),
+        path,
+        text,
+        projectGeneration: useAppStore.getState().projectGeneration,
+      };
+      if (useAppStore.getState().isDirty) {
+        droppedProjectPromptRef.current = candidate;
+        setDroppedProjectPrompt(candidate);
+        return false;
+      }
+      return await loadDroppedProject(candidate);
     } catch (error) {
       console.error("Failed to open dropped project", error);
       setActionError(

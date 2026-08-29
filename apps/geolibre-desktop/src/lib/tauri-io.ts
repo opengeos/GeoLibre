@@ -157,7 +157,7 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
 
 /** Project extension handled as a workspace switch by drag-and-drop. */
 export function isGeoLibreProjectFileName(path: string): boolean {
-  const name = path.toLowerCase();
+  const name = browserSafeFileName(path).toLowerCase();
   return name.endsWith(".geolibre") || name.endsWith(".geolibre.json");
 }
 
@@ -444,13 +444,8 @@ function pathWithoutExtension(path: string): string {
   return path.replace(/\.[^.\\/]+$/, "");
 }
 
-function isGeoLibreProjectFile(path: string): boolean {
-  const name = browserSafeFileName(path).toLowerCase();
-  return name.endsWith(".geolibre") || name.endsWith(".geolibre.json");
-}
-
 function isVectorFileName(path: string): boolean {
-  if (isGeoLibreProjectFile(path)) return false;
+  if (isGeoLibreProjectFileName(path)) return false;
   if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml")) return false;
   // Rasters are handled by the raster drop path, not the DuckDB vector loader.
   if (isRasterFileName(path)) return false;
