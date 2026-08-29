@@ -2,9 +2,12 @@
 
 ``tests/fixtures/geoparquet`` holds one small Parquet file per GeoParquet
 variant the app has to read, plus an ``expectations.json`` the browser suite
-(``tests/geoparquet-metadata.test.ts``) asserts against. The detection rules
-live in three places — TypeScript, Rust and this sidecar — and drift between
-them is silent, so the same fixtures are read here.
+(``tests/geoparquet-metadata.test.ts``) asserts against. The detection rules are
+implemented three times over — in TypeScript for the browser loader, in Rust for
+the desktop native-DuckDB loader (``native_duckdb.rs``, whose own cargo tests
+read these same fixtures), and here in the sidecar — and drift between them is
+silent, so the same fixtures are read here too. The sidecar deliberately does
+*not* synthesize points from lon/lat columns; that gap is pinned below.
 
 These run the sidecar's embedded conversion script in a subprocess with this
 environment's Python, the way the managed runtime executes it, and skip when
