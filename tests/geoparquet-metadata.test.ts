@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   detectGeometryColumn,
   SYNTHESIZED_GEOMETRY_COLUMN,
@@ -358,9 +356,9 @@ describe("parseLogicalTypeCrs", () => {
 
 describe("parseNativeGeometryLogicalType", () => {
   // The exact strings DuckDB 1.5.4's `parquet_schema()` prints in its
-  // `logical_type` column, verified against the committed fixtures:
+  // `logical_type` column. For a file written with GEOPARQUET_VERSION 'V2':
   //
-  //   native_2_0.parquet  geometry  BYTE_ARRAY  GeometryType(crs=<null>)  BLOB
+  //   geometry  BYTE_ARRAY  GeometryType(crs=<null>)  BLOB
   //
   // DuckDB has no per-geometry SRID, so its own writer always emits
   // `crs=<null>`; `<null>` therefore means "no CRS on the type", not "CRS84
@@ -467,16 +465,22 @@ describe("describeGeoParquet", () => {
   });
 });
 
-// --- Fixture-driven checks -------------------------------------------------
+// --- Variant-driven checks -------------------------------------------------
 //
-// The fixtures under tests/fixtures/geoparquet are real Parquet files written
-// by the DuckDB 1.5.4 CLI (see their regenerate.sh). This suite stays free of
-// any Parquet reader by asserting against the `geo` documents and DESCRIBE
-// output the generator extracted alongside them.
+// One case per GeoParquet variant the app has to read. Each carries the `geo`
+// document a writer would emit, the `DESCRIBE SELECT * FROM read_parquet(...)`
+// rows DuckDB 1.5.4 (spatial loaded) reports for it, and the `parquet_schema()`
+// logical types — so the parser is exercised over real-world shapes with no
+// Parquet reader and no committed binary fixtures. The Parquet files these were
+// taken from are written in-test by the sidecar suite
+// (`backend/geolibre_server/tests/test_geoparquet_detection.py`) and the desktop
+// cargo tests (`native_duckdb.rs`).
 
-interface FixtureExpectation {
-  file: string;
-  geoMetadata: string | null;
+interface GeoParquetCase {
+  /** What a writer produces, and why it is worth pinning. */
+  name: string;
+  /** The file's `geo` key, or null when it has none. */
+  geo: string | null;
   versionLabel: string;
   version: string | null;
   primaryColumn: string | null;
@@ -491,21 +495,244 @@ interface FixtureExpectation {
   geometryColumn?: string;
   coordinateColumns?: { x: string; y: string };
   nativeLogicalType?: { kind: string; crs: string | null; edges: string };
+  /** What `parquet_schema()` prints for each element that carries one. */
   logicalTypes: Record<string, string>;
   schema: { column_name: string; column_type: string }[];
 }
 
-const fixtureDir = new URL("./fixtures/geoparquet/", import.meta.url);
-const expectations = JSON.parse(
-  readFileSync(fileURLToPath(new URL("expectations.json", fixtureDir)), "utf-8"),
-) as { files: FixtureExpectation[] };
+const cases: GeoParquetCase[] = [
+  {
+    name: "DuckDB's default GeoParquet output: 1.0.0, WKB, no covering",
+    geo: `{
+      "version": "1.0.0",
+      "primary_column": "geometry",
+      "columns": {
+        "geometry": {
+          "encoding": "WKB",
+          "geometry_types": ["Point"],
+          "bbox": [-71.2, 42.2, -70.82000000000001, 42.48235294117647]
+        }
+      }
+    }`,
+    versionLabel: "GeoParquet 1.0.0",
+    version: "1.0.0",
+    primaryColumn: "geometry",
+    encoding: "WKB",
+    geometryTypes: ["Point"],
+    crs: { kind: "default", epsg: null },
+    sourceCrs: null,
+    bbox: [-71.2, 42.2, -70.82000000000001, 42.48235294117647],
+    covering: null,
+    edges: null,
+    detectionRoute: "primary-column",
+    geometryColumn: "geometry",
+    logicalTypes: {},
+    schema: [
+      { column_name: "geometry", column_type: "GEOMETRY('ogc:crs84')" },
+      { column_name: "id", column_type: "BIGINT" },
+      { column_name: "name", column_type: "VARCHAR" },
+    ],
+  },
+  {
+    name: "1.1.0 with a declared covering bbox struct, EPSG:26986",
+    geo: `{
+      "version": "1.1.0",
+      "primary_column": "geometry",
+      "columns": {
+        "geometry": {
+          "encoding": "WKB",
+          "geometry_types": ["Polygon"],
+          "crs": {
+            "type": "ProjectedCRS",
+            "name": "NAD83 / Massachusetts Mainland",
+            "id": { "authority": "EPSG", "code": 26986 }
+          },
+          "edges": "planar",
+          "orientation": "counterclockwise",
+          "bbox": [219985.0, 889985.0, 221775.0, 890175.0],
+          "covering": {
+            "bbox": {
+              "xmin": ["bbox", "xmin"],
+              "ymin": ["bbox", "ymin"],
+              "xmax": ["bbox", "xmax"],
+              "ymax": ["bbox", "ymax"]
+            }
+          }
+        }
+      }
+    }`,
+    versionLabel: "GeoParquet 1.1.0",
+    version: "1.1.0",
+    primaryColumn: "geometry",
+    encoding: "WKB",
+    geometryTypes: ["Polygon"],
+    crs: { kind: "authority", epsg: 26986 },
+    sourceCrs: "EPSG:26986",
+    bbox: [219985.0, 889985.0, 221775.0, 890175.0],
+    covering: { root: "bbox", xmin: "xmin", ymin: "ymin", xmax: "xmax", ymax: "ymax" },
+    edges: "planar",
+    detectionRoute: "primary-column",
+    geometryColumn: "geometry",
+    logicalTypes: { loc_id: "StringType()" },
+    schema: [
+      { column_name: "geometry", column_type: "GEOMETRY('epsg:26986')" },
+      {
+        column_name: "bbox",
+        column_type: "STRUCT(xmin DOUBLE, ymin DOUBLE, xmax DOUBLE, ymax DOUBLE)",
+      },
+      { column_name: "id", column_type: "BIGINT" },
+      { column_name: "loc_id", column_type: "VARCHAR" },
+    ],
+  },
+  {
+    name: "DuckDB GEOPARQUET_VERSION 'V2': a 2.0.0 geo block AND the Parquet GEOMETRY logical type",
+    geo: `{
+      "version": "2.0.0",
+      "primary_column": "geometry",
+      "columns": {
+        "geometry": {
+          "encoding": "WKB",
+          "geometry_types": ["Point"],
+          "bbox": [-71.2, 42.2, -70.82000000000001, 42.48235294117647]
+        }
+      }
+    }`,
+    versionLabel: "GeoParquet 2.0.0 + native GEOMETRY logical type",
+    version: "2.0.0",
+    primaryColumn: "geometry",
+    encoding: "WKB",
+    geometryTypes: ["Point"],
+    crs: { kind: "default", epsg: null },
+    sourceCrs: null,
+    bbox: [-71.2, 42.2, -70.82000000000001, 42.48235294117647],
+    covering: null,
+    edges: null,
+    detectionRoute: "primary-column",
+    geometryColumn: "geometry",
+    nativeLogicalType: { kind: "geometry", crs: null, edges: "planar" },
+    // What DuckDB 1.5.4's parquet_schema() prints for a 2.0 file: the CRS
+    // member is spelled `<null>`, not an empty string or a missing member.
+    logicalTypes: { geometry: "GeometryType(crs=<null>)" },
+    schema: [
+      { column_name: "geometry", column_type: "GEOMETRY" },
+      { column_name: "id", column_type: "BIGINT" },
+    ],
+  },
+  {
+    name: 'an explicit "crs": null — an undefined CRS, not the CRS84 default',
+    geo: `{
+      "version": "1.1.0",
+      "primary_column": "geometry",
+      "columns": {
+        "geometry": {
+          "encoding": "WKB",
+          "geometry_types": ["Point"],
+          "crs": null,
+          "bbox": [0.0, 0.0, 2400.0, 500.0]
+        }
+      }
+    }`,
+    versionLabel: "GeoParquet 1.1.0",
+    version: "1.1.0",
+    primaryColumn: "geometry",
+    encoding: "WKB",
+    geometryTypes: ["Point"],
+    crs: { kind: "undefined", epsg: null },
+    sourceCrs: null,
+    bbox: [0.0, 0.0, 2400.0, 500.0],
+    covering: null,
+    edges: null,
+    detectionRoute: "primary-column",
+    geometryColumn: "geometry",
+    logicalTypes: {},
+    schema: [
+      { column_name: "geometry", column_type: "GEOMETRY" },
+      { column_name: "id", column_type: "BIGINT" },
+    ],
+  },
+  {
+    name: "a 6-element 3D geo.bbox: [xmin, ymin, zmin, xmax, ymax, zmax]",
+    geo: `{
+      "version": "1.0.0",
+      "primary_column": "geometry",
+      "columns": {
+        "geometry": {
+          "encoding": "WKB",
+          "geometry_types": ["Point Z"],
+          "bbox": [-71.2, 42.2, 0.0, -70.82, 42.48235294117647, 49.0]
+        }
+      }
+    }`,
+    versionLabel: "GeoParquet 1.0.0",
+    version: "1.0.0",
+    primaryColumn: "geometry",
+    encoding: "WKB",
+    geometryTypes: ["Point Z"],
+    crs: { kind: "default", epsg: null },
+    sourceCrs: null,
+    // The 3D bbox collapses to its 2D members: a reader that takes the first
+    // four would get [xmin, ymin, zmin, xmax] and draw nothing.
+    bbox: [-71.2, 42.2, -70.82, 42.48235294117647],
+    covering: null,
+    edges: null,
+    detectionRoute: "primary-column",
+    geometryColumn: "geometry",
+    logicalTypes: {},
+    schema: [
+      { column_name: "geometry", column_type: "GEOMETRY('ogc:crs84')" },
+      { column_name: "id", column_type: "BIGINT" },
+    ],
+  },
+  {
+    name: "plain Parquet: a WKB blob named `geom`, with no geo key at all",
+    geo: null,
+    versionLabel: "none (guessed WKB column, CRS assumed OGC:CRS84)",
+    version: null,
+    primaryColumn: null,
+    encoding: null,
+    geometryTypes: [],
+    crs: { kind: "default", epsg: null },
+    sourceCrs: null,
+    bbox: null,
+    covering: null,
+    edges: null,
+    detectionRoute: "wkb-column-name",
+    geometryColumn: "geom",
+    logicalTypes: {},
+    schema: [
+      { column_name: "geom", column_type: "BLOB" },
+      { column_name: "id", column_type: "BIGINT" },
+    ],
+  },
+  {
+    name: "no geometry at all: a lon/lat pair of doubles, assumed OGC:CRS84",
+    geo: null,
+    versionLabel: "none (points synthesized from coordinate columns)",
+    version: null,
+    primaryColumn: null,
+    encoding: null,
+    geometryTypes: [],
+    crs: { kind: "default", epsg: null },
+    sourceCrs: null,
+    bbox: null,
+    covering: null,
+    edges: null,
+    detectionRoute: "coordinate-columns",
+    coordinateColumns: { x: "lon", y: "lat" },
+    logicalTypes: {},
+    schema: [
+      { column_name: "lon", column_type: "DOUBLE" },
+      { column_name: "lat", column_type: "DOUBLE" },
+      { column_name: "id", column_type: "BIGINT" },
+      { column_name: "name", column_type: "VARCHAR" },
+    ],
+  },
+];
 
-describe("GeoParquet fixtures", () => {
-  for (const expected of expectations.files) {
-    describe(expected.file, () => {
-      const geoJson = expected.geoMetadata
-        ? readFileSync(fileURLToPath(new URL(expected.geoMetadata, fixtureDir)), "utf-8")
-        : null;
+describe("GeoParquet variants", () => {
+  for (const expected of cases) {
+    describe(expected.name, () => {
+      const geoJson = expected.geo;
       const hasNativeGeometryType = Object.values(expected.logicalTypes).some(
         (type) => parseNativeGeometryLogicalType(type) !== null,
       );
