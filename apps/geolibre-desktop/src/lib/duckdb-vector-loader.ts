@@ -17,10 +17,10 @@ import {
 import {
   GEOPARQUET_METADATA_COLUMN,
   geoParquetMetadataSql,
-  geoParquetSourceCrs,
   geoParquetTransformCrs,
   nativeGeometryColumn,
   parquetLogicalTypesSql,
+  readGeoParquetGeoMetadata,
 } from "./geoparquet-crs";
 import { parseGeoParquetMetadata } from "./geoparquet-metadata";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
@@ -489,7 +489,7 @@ async function readParquetSourceCrs(
   metadataJson: string | null,
   geometryColumn?: string,
 ): Promise<string | null> {
-  if (metadataJson) return geoParquetSourceCrs(metadataJson, geometryColumn);
+  if (metadataJson) return readGeoParquetGeoMetadata(metadataJson, geometryColumn).sourceCrs;
   try {
     const rows = rowsFromResult(await connection.query(parquetLogicalTypesSql(fileName)));
     const native = nativeGeometryColumn(rows, geometryColumn);

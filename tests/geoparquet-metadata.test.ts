@@ -16,13 +16,17 @@ import {
 import {
   describeGeoParquet,
   geoParquetColumn,
-  geoParquetCrsEpsg,
   geoParquetCrsIdentifier,
   parseGeoParquetMetadata,
   parseLogicalTypeCrs,
   parseNativeGeometryLogicalType,
   type GeoParquetCrs,
 } from "../apps/geolibre-desktop/src/lib/geoparquet-metadata";
+
+/** The EPSG code a parsed CRS can honestly claim, or null. */
+function crsEpsg(crs: GeoParquetCrs): number | null {
+  return crs.kind === "authority" ? crs.epsg : null;
+}
 
 /** A `geo` document with one column carrying the given members. */
 function geoDocument(column: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -217,7 +221,7 @@ describe("crs", () => {
     assert.deepEqual(crsOf({}), { kind: "default" });
     assert.deepEqual(crsOf({ crs: undefined }), { kind: "default" });
     assert.deepEqual(crsOf({ crs: null }), { kind: "undefined" });
-    assert.equal(geoParquetCrsEpsg(crsOf({ crs: null })), null);
+    assert.equal(crsEpsg(crsOf({ crs: null })), null);
     assert.equal(geoParquetCrsIdentifier(crsOf({ crs: null })), null);
   });
 
@@ -229,33 +233,21 @@ describe("crs", () => {
       epsg: 2100,
       name: undefined,
     });
-    assert.equal(
-      geoParquetCrsEpsg(crsOf({ crs: { id: { authority: "epsg", code: "2100" } } })),
-      2100,
-    );
+    assert.equal(crsEpsg(crsOf({ crs: { id: { authority: "epsg", code: "2100" } } })), 2100);
   });
 
   it("keeps a non-EPSG authority without claiming an EPSG code", () => {
     const crs = crsOf({ crs: { id: { authority: "ESRI", code: 102100 } } });
-    assert.equal(geoParquetCrsEpsg(crs), null);
+    assert.equal(crsEpsg(crs), null);
     assert.equal(geoParquetCrsIdentifier(crs), "ESRI:102100");
   });
 
   it("maps the OGC geographic identifiers onto their EPSG codes", () => {
     // PROJ resolves the EPSG spellings far more reliably than OGC's own.
-    assert.equal(
-      geoParquetCrsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS84" } } })),
-      4326,
-    );
-    assert.equal(geoParquetCrsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "84" } } })), 4326);
-    assert.equal(
-      geoParquetCrsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS83" } } })),
-      4269,
-    );
-    assert.equal(
-      geoParquetCrsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS27" } } })),
-      4267,
-    );
+    assert.equal(crsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS84" } } })), 4326);
+    assert.equal(crsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "84" } } })), 4326);
+    assert.equal(crsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS83" } } })), 4269);
+    assert.equal(crsEpsg(crsOf({ crs: { id: { authority: "OGC", code: "CRS27" } } })), 4267);
   });
 
   it("keeps id-less PROJJSON as the document itself, whatever its type", () => {
@@ -274,7 +266,7 @@ describe("crs", () => {
         name: document.name,
       });
       assert.equal(geoParquetCrsIdentifier(crs), JSON.stringify(document));
-      assert.equal(geoParquetCrsEpsg(crs), null);
+      assert.equal(crsEpsg(crs), null);
     }
   });
 
@@ -326,8 +318,8 @@ describe("parseLogicalTypeCrs", () => {
   });
 
   it("reads an EPSG code", () => {
-    assert.equal(geoParquetCrsEpsg(parseLogicalTypeCrs("EPSG:2154")), 2154);
-    assert.equal(geoParquetCrsEpsg(parseLogicalTypeCrs("epsg:2154")), 2154);
+    assert.equal(crsEpsg(parseLogicalTypeCrs("EPSG:2154")), 2154);
+    assert.equal(crsEpsg(parseLogicalTypeCrs("epsg:2154")), 2154);
   });
 
   it("reads an embedded PROJJSON document", () => {
@@ -337,11 +329,11 @@ describe("parseLogicalTypeCrs", () => {
         id: { authority: "EPSG", code: 2154 },
       }),
     );
-    assert.equal(geoParquetCrsEpsg(crs), 2154);
+    assert.equal(crsEpsg(crs), 2154);
   });
 
   it("unwraps a JSON-quoted string and applies the same rules", () => {
-    assert.equal(geoParquetCrsEpsg(parseLogicalTypeCrs('"EPSG:2154"')), 2154);
+    assert.equal(crsEpsg(parseLogicalTypeCrs('"EPSG:2154"')), 2154);
     assert.deepEqual(parseLogicalTypeCrs('"OGC:CRS84"'), { kind: "default" });
   });
 
@@ -426,7 +418,7 @@ describe("parquetLogicalTypesSql and nativeGeometryColumn", () => {
       },
     ];
     assert.equal(nativeGeometryColumn(rows)?.column, "geom_a");
-    assert.equal(geoParquetCrsEpsg(nativeGeometryColumn(rows)!.parsedCrs), 2154);
+    assert.equal(crsEpsg(nativeGeometryColumn(rows)!.parsedCrs), 2154);
     const geography = nativeGeometryColumn(rows, "geom_b");
     assert.equal(geography?.kind, "geography");
     assert.equal(geography?.edges, "spherical");
@@ -533,7 +525,7 @@ describe("GeoParquet fixtures", () => {
       it("resolves its CRS as expected", () => {
         const geo = readGeoParquetGeoMetadata(geoJson);
         assert.equal(geo.crs.kind, expected.crs.kind);
-        assert.equal(geoParquetCrsEpsg(geo.crs), expected.crs.epsg);
+        assert.equal(crsEpsg(geo.crs), expected.crs.epsg);
         assert.equal(geo.sourceCrs, expected.sourceCrs);
       });
 

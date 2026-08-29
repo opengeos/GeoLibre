@@ -140,7 +140,10 @@ export interface GeoParquetGeoMetadata {
  * tell it apart.
  *
  * @param metadataJson The `geo` document as text, or null/blank when absent.
- * @param geometryColumn The column actually being read, when known.
+ * @param geometryColumn The column actually being read, when known. A
+ *   GeoParquet may carry several geometry columns in different CRSs, and the
+ *   loader reads whichever one it detected rather than necessarily the primary
+ *   one, so that column's CRS is the one to transform from.
  */
 export function readGeoParquetGeoMetadata(
   metadataJson: string | null | undefined,
@@ -174,27 +177,4 @@ export function geoParquetTransformCrs(crs: GeoParquetCrs): string | null {
   // yields null in the first place.
   if (!identifier || isGeographicCrs(identifier)) return null;
   return identifier;
-}
-
-/**
- * The CRS to reproject a GeoParquet file from, parsed from its `geo` metadata
- * document, or null when it needs no reprojection.
- *
- * A thin wrapper over {@link readGeoParquetGeoMetadata} for callers that only
- * drive `ST_Transform`; use that function instead when the UI has to tell an
- * absent CRS (the CRS84 default) apart from an explicitly undefined one.
- *
- * @param metadataJson The `geo` metadata document as text, or null/blank when
- *   the file has none.
- * @param geometryColumn The column actually being read, when known. A
- *   GeoParquet may carry several geometry columns in different CRSs, and the
- *   loader reads whichever one it detected rather than necessarily the primary
- *   one, so that column's CRS is the one to transform from.
- * @returns A CRS string `ST_Transform` accepts, or null to skip reprojection.
- */
-export function geoParquetSourceCrs(
-  metadataJson: string | null | undefined,
-  geometryColumn?: string,
-): string | null {
-  return readGeoParquetGeoMetadata(metadataJson, geometryColumn).sourceCrs;
 }

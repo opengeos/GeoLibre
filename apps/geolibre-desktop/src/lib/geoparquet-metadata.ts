@@ -468,8 +468,3 @@ export function geoParquetCrsIdentifier(crs: GeoParquetCrs): string | null {
       return null;
   }
 }
-
-/** The EPSG code a CRS can honestly claim, or null. */
-export function geoParquetCrsEpsg(crs: GeoParquetCrs): number | null {
-  return crs.kind === "authority" ? crs.epsg : null;
-}
