@@ -276,6 +276,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     null,
   );
   const [droppedProjectSaving, setDroppedProjectSaving] = useState(false);
+  const droppedProjectPromptRef = useRef<DroppedProjectPrompt | null>(null);
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
@@ -350,6 +351,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       settleSaveNamePrompt(saveNamePrompt, null);
     }
     if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
+      droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
@@ -409,11 +411,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       projectGeneration: useAppStore.getState().projectGeneration,
     };
     if (useAppStore.getState().isDirty) {
+      droppedProjectPromptRef.current = candidate;
       setDroppedProjectPrompt(candidate);
       return false;
     }
-    await loadDroppedProject(candidate);
-    return true;
+    try {
+      await loadDroppedProject(candidate);
+      return true;
+    } catch (error) {
+      console.error("Failed to open dropped project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
+      );
+      return false;
+    }
   };
 
   const resolveDroppedProjectPrompt = async (choice: "save" | "discard" | "cancel") => {
@@ -421,6 +432,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const candidate = droppedProjectPrompt;
     if (!candidate) return;
     if (choice === "cancel") {
+      droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
       return;
     }
@@ -431,7 +443,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       } finally {
         setDroppedProjectSaving(false);
       }
+      if (droppedProjectPromptRef.current !== candidate) return;
     }
+    droppedProjectPromptRef.current = null;
     setDroppedProjectPrompt(null);
     try {
       await loadDroppedProject(candidate);

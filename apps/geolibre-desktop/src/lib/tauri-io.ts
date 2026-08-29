@@ -157,7 +157,8 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
 
 /** Project extension handled as a workspace switch by drag-and-drop. */
 export function isGeoLibreProjectFileName(path: string): boolean {
-  return path.toLowerCase().endsWith(".geolibre.json");
+  const name = path.toLowerCase();
+  return name.endsWith(".geolibre") || name.endsWith(".geolibre.json");
 }
 
 interface SaveTextFileOptions {
