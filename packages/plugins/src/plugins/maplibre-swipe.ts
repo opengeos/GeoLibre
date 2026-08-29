@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   SwipeControl,
@@ -7,6 +8,7 @@ import {
   type SwipeState,
 } from "maplibre-gl-swipe";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   getCogRasterMainVisibility,
@@ -203,6 +205,91 @@ function teardownCogSwipe(): void {
   cogMainForced.clear();
 }
 
+// --- Project layer id resolution -------------------------------------------
+// A saved project names each swipe side by **store** layer id, which is all the
+// Python/MCP authoring side can write; the control matches **style** layer ids.
+// See swipe-layer-ids.ts and #2161. The expansion runs against the live style,
+// and re-runs while the style keeps changing, because a layer's style layers may
+// not exist yet when the project's plugin state is restored (an async PMTiles or
+// vector-tile source reaches the map later).
+
+/** Store layer ids already expanded, so a side the user edited is not re-expanded. */
+const expandedProjectLayerIds = new Set<string>();
+let unsubscribeIdResolution: (() => void) | null = null;
+/** The style layer order the last expansion pass ran against, to skip no-op passes. */
+let lastResolvedLayerOrder: string[] | null = null;
+
+function stopSwipeIdResolution(): void {
+  unsubscribeIdResolution?.();
+  unsubscribeIdResolution = null;
+  lastResolvedLayerOrder = null;
+}
+
+function startSwipeIdResolution(app: GeoLibreAppAPI): void {
+  stopSwipeIdResolution();
+  const map = app.getMap?.();
+  if (!map) return;
+
+  const handler = (): void => {
+    if (!resolveSwipeProjectLayerIds(map)) stopSwipeIdResolution();
+  };
+  map.on("styledata", handler);
+  unsubscribeIdResolution = () => map.off("styledata", handler);
+  handler();
+}
+
+function sameLayerOrder(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+/**
+ * Expand any store layer ids on either swipe side into the style layer ids that
+ * currently draw them.
+ *
+ * @param map - The main map, read for its live style.
+ * @returns Whether another pass is worth running (some side id names a store
+ *   layer the style has not caught up with yet).
+ */
+function resolveSwipeProjectLayerIds(map: MapLibreMap): boolean {
+  if (!swipeControl) return false;
+
+  const layerOrder = map.getLayersOrder();
+  if (lastResolvedLayerOrder && sameLayerOrder(lastResolvedLayerOrder, layerOrder)) return true;
+  lastResolvedLayerOrder = [...layerOrder];
+
+  const styleLayers: SwipeStyleLayer[] = layerOrder.map((id) => ({
+    id,
+    source: map.getLayer(id)?.source,
+  }));
+  const options = {
+    styleLayers,
+    projectLayers: useAppStore.getState().layers,
+    // Rasters the COG provider assigns by store id itself, so their ids are
+    // already the right ones for the control.
+    providerLayerIds: new Set(
+      [...getSwipeCogRasters(), ...getSwipeMaplibreRasters()].map((raster) => raster.id),
+    ),
+    alreadyExpanded: expandedProjectLayerIds,
+  };
+
+  const state = swipeControl.getState();
+  // The store is filled before a project's plugin state is restored, so an empty
+  // store here means the restore ran first: every side id would look like an id
+  // naming nothing and be dropped for good. Wait for the layers instead.
+  if (options.projectLayers.length === 0) {
+    return state.leftLayers.length > 0 || state.rightLayers.length > 0;
+  }
+
+  const left = resolveSwipeSideIds(state.leftLayers, options);
+  const right = resolveSwipeSideIds(state.rightLayers, options);
+
+  for (const id of [...left.expanded, ...right.expanded]) expandedProjectLayerIds.add(id);
+  if (left.expanded.length > 0) swipeControl.setLeftLayers(left.ids);
+  if (right.expanded.length > 0) swipeControl.setRightLayers(right.ids);
+
+  return left.pending.length > 0 || right.pending.length > 0;
+}
+
 export const maplibreSwipePlugin: GeoLibrePlugin = {
   id: SWIPE_PLUGIN_ID,
   name: "Layer Swipe",
@@ -216,6 +303,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       return false;
     }
     expandSwipeControl(savedSwipeState ?? undefined);
+    startSwipeIdResolution(app);
 
     // Keep the swipe panel's COG raster rows and comparison-map mirror in sync
     // as rasters are added, removed, or restyled while the swipe is active.
@@ -234,11 +322,15 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
       app.addMapControl(swipeControl, swipeControlPosition);
       expandSwipeControl(previousState);
+      // The new style has its own layer set, so any side id still unresolved
+      // gets another chance against it.
+      startSwipeIdResolution(app);
     });
   },
   deactivate: (app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    stopSwipeIdResolution();
     unsubscribeCogRasterChanges?.();
     unsubscribeCogRasterChanges = null;
     // Restore any main-map raster this provider hid; removeMapControl's
@@ -259,6 +351,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     app.removeMapControl(swipeControl);
     const added = app.addMapControl(swipeControl, swipeControlPosition);
     if (!added) {
+      stopSwipeIdResolution();
       swipeControl = null;
       return false;
     }
@@ -271,16 +364,21 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     if (areSwipeStatesEqual(currentState, nextState)) return false;
 
     savedSwipeState = nextState;
+    // A different project (or a reset) brings its own sides, so nothing carries
+    // over from the last one's expansion.
+    expandedProjectLayerIds.clear();
     if (!swipeControl) return true;
 
     app.removeMapControl(swipeControl);
     swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
     const added = app.addMapControl(swipeControl, swipeControlPosition);
     if (!added) {
+      stopSwipeIdResolution();
       swipeControl = null;
       return false;
     }
     expandSwipeControl(savedSwipeState ?? undefined);
+    startSwipeIdResolution(app);
   },
 };
 

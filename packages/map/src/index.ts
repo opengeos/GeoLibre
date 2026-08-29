@@ -51,6 +51,7 @@ export {
 export {
   detectGeometryProfile,
   getLayerBounds,
+  nativeLayerIdPrefix,
   sourceId,
   fillLayerId,
   lineLayerId,

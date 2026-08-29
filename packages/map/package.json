@@ -30,7 +30,8 @@
     ".": "./src/index.ts",
     "./headless": "./src/headless.ts",
     "./derived-geometry": "./src/derived-geometry.ts",
-    "./pmtiles-layer": "./src/pmtiles-layer.ts"
+    "./pmtiles-layer": "./src/pmtiles-layer.ts",
+    "./style-layer-ids": "./src/style-layer-ids.ts"
   },
   "publishConfig": {
     "main": "./dist/headless.mjs",
@@ -51,12 +52,16 @@
       "./pmtiles-layer": {
         "types": "./dist/pmtiles-layer.d.mts",
         "import": "./dist/pmtiles-layer.mjs"
+      },
+      "./style-layer-ids": {
+        "types": "./dist/style-layer-ids.d.mts",
+        "import": "./dist/style-layer-ids.mjs"
       }
     },
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-layer-ids.ts --format esm --dts"
   },
   "dependencies": {
     "@geolibre/core": "*",
