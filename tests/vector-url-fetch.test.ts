@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   dedupeVectorUrlFetch,
+  fetchBrowserShapefileZip,
   isBlockedUrlError,
+  isZippedShapefileUrl,
   resetVectorUrlFetchDedupe,
   vectorDownloadFileName,
 } from "../apps/geolibre-desktop/src/lib/vector-url-fetch";
@@ -137,6 +139,59 @@ describe("vectorDownloadFileName", () => {
 
   it("falls back on an unparseable URL", () => {
     assert.equal(vectorDownloadFileName("not a url"), "data");
+  });
+});
+
+describe("remote zipped Shapefiles", () => {
+  const ZIP_URL = "https://example.com/data/roads.ZIP?download=1#archive";
+
+  it("recognizes a .zip pathname but not a query-string suffix", () => {
+    assert.equal(isZippedShapefileUrl(ZIP_URL), true);
+    assert.equal(isZippedShapefileUrl("https://example.com/download?file=roads.zip"), false);
+    assert.equal(isZippedShapefileUrl("https://example.com/roads.kmz"), false);
+    assert.equal(isZippedShapefileUrl("not a url"), false);
+  });
+
+  it("materializes a remote archive as a named File", async () => {
+    const fetchImpl: typeof fetch = async (input, init) => {
+      assert.equal(input, ZIP_URL);
+      assert.ok(init?.signal);
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "application/zip" },
+      });
+    };
+
+    const file = await fetchBrowserShapefileZip(ZIP_URL, AbortSignal.timeout(1_000), fetchImpl);
+
+    assert.ok(file);
+    assert.equal(file.name, "roads.ZIP");
+    assert.equal(file.size, 3);
+  });
+
+  it("leaves non-ZIP URLs on their direct remote path", async () => {
+    let fetched = false;
+    const result = await fetchBrowserShapefileZip(
+      "https://example.com/roads.parquet",
+      undefined,
+      async () => {
+        fetched = true;
+        return new Response();
+      },
+    );
+    assert.equal(result, null);
+    assert.equal(fetched, false);
+  });
+
+  it("surfaces the real HTTP failure before DuckDB sees the URL", async () => {
+    await assert.rejects(
+      fetchBrowserShapefileZip(
+        ZIP_URL,
+        undefined,
+        async () => new Response(null, { status: 403, statusText: "Forbidden" }),
+      ),
+      /Could not download zipped Shapefile: HTTP 403 Forbidden/,
+    );
   });
 });
 

@@ -95,6 +95,46 @@ export function vectorDownloadFileName(url: string, fallback = "data"): string {
   return /\.[A-Za-z0-9]+$/.test(decoded) ? decoded : fallback;
 }
 
+/**
+ * Whether a remote vector URL names a zipped Shapefile archive.
+ *
+ * Query strings and fragments are ignored so signed/download URLs keep their
+ * format, while a `.zip` that appears only in a query value does not turn an
+ * unrelated endpoint into a Shapefile.
+ */
+export function isZippedShapefileUrl(value: string): boolean {
+  try {
+    return /\.zip$/i.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Downloads a remote zipped Shapefile into a browser {@link File}.
+ *
+ * DuckDB-WASM cannot open GDAL's `/vsizip//vsicurl/` path in the browser. A
+ * local `File`, however, follows maplibre-gl-vector's working archive path: it
+ * unzips the archive in JavaScript and registers the Shapefile components with
+ * DuckDB individually. Non-ZIP URLs return null so GeoParquet and other remote
+ * formats retain their streaming/range-read path.
+ */
+export async function fetchBrowserShapefileZip(
+  url: string,
+  signal?: AbortSignal,
+  fetchImpl: typeof fetch = fetch,
+): Promise<File | null> {
+  if (!isZippedShapefileUrl(url)) return null;
+
+  const response = await fetchImpl(url, { signal });
+  if (!response.ok) {
+    throw new Error(
+      `Could not download zipped Shapefile: HTTP ${response.status} ${response.statusText}`,
+    );
+  }
+  return new File([await response.blob()], vectorDownloadFileName(url));
+}
+
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);

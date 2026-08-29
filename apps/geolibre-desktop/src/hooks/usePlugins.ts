@@ -129,6 +129,7 @@ import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
 import {
   dedupeVectorUrlFetch,
+  fetchBrowserShapefileZip,
   isBlockedUrlError,
   vectorDownloadFileName,
 } from "../lib/vector-url-fetch";
@@ -1093,6 +1094,21 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
               // same guarded proxy used by the web build.
             }
           }
+        }
+        // DuckDB-WASM cannot read `/vsizip//vsicurl/` in a browser. Download
+        // remote Shapefile archives first so maplibre-gl-vector receives the
+        // same File shape as a working local drop and can unzip/register its
+        // components itself. Leave every non-ZIP URL alone so formats such as
+        // GeoParquet retain their direct range-read path.
+        try {
+          const archive = await fetchBrowserShapefileZip(url, budget());
+          if (archive) return archive;
+        } catch (error) {
+          // GitHub's /raw route rejects browser CORS, so its existing guarded
+          // proxy gets one chance below. For every other origin, preserve the
+          // browser's real download/CORS failure instead of falling through to
+          // DuckDB's misleading "does not exist in the file system" error.
+          if (!githubRawVectorProxyUrl(url)) throw error;
         }
         const proxyUrl = githubRawVectorProxyUrl(url);
         if (!proxyUrl) return null;
