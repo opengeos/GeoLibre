@@ -23,6 +23,8 @@ To collect supported dataset links from a catalog or other webpage and open seve
 
 Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. The source CRS is read from the file itself — the layer metadata for the GDAL-read formats, a Shapefile's `.prj` sidecar, or a GeoParquet's `geo` metadata — so a national grid such as EPSG:2100 (GGRS87 / Greek Grid) lands in the right place with nothing to configure.
 
+GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying a declared `covering` bbox column), 2.0 files using the native Parquet `GEOMETRY`/`GEOGRAPHY` types, and plain Parquet whose geometry is only a WKB blob under a conventional name such as `geom`. The `geo` metadata block decides which column holds the geometry and what CRS it is in, so a file with several geometry columns loads the one it declares as primary; a file declaring `"crs": null` is stating that its coordinates are in no known reference system, and is drawn as it stands with no transform applied. A Parquet table with no geometry at all but a pair of `lon`/`lat` (or `longitude`/`latitude`, `lng`, `x`/`y`) floating-point columns loads as points, assumed to be WGS84.
+
 !!! warning "Large vector files"
     There is no fixed size limit. Files **under 100 MB** are read by the
     in-memory JavaScript readers, which are fastest for everyday data. At
