@@ -1402,16 +1402,47 @@ mod tests {
         .expect("write ranked base64 WKB candidate fixture");
     }
 
-    /// One of the shared GeoParquet fixtures the TypeScript and sidecar suites
-    /// read too (`tests/fixtures/geoparquet`), as an absolute path.
-    fn shared_fixture_path(name: &str) -> String {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../tests/fixtures/geoparquet")
-            .join(name)
-            .canonicalize()
-            .expect("shared GeoParquet fixture")
-            .to_string_lossy()
-            .to_string()
+    /// A table with no geometry column at all: a lon/lat pair of doubles, the
+    /// shape a CSV export or a sensor dump arrives in.
+    fn create_lon_lat_columns_parquet(path: &str) {
+        let conn = Connection::open_in_memory().expect("open DuckDB");
+        conn.execute_batch(&format!(
+            "
+            COPY (
+              SELECT (-71.2 + 0.4 * (i % 20) / 20.0)::DOUBLE AS lon,
+                     (42.2 + 0.3 * (i % 17) / 17.0)::DOUBLE AS lat,
+                     i AS id,
+                     'station_' || i AS name
+              FROM range(200) t(i)
+            ) TO {} (FORMAT PARQUET);
+            ",
+            quote_sql_string(path)
+        ))
+        .expect("write lon/lat columns fixture");
+    }
+
+    /// A local site grid in no known CRS: metres from an arbitrary origin, with
+    /// the `geo` block saying `"crs": null`. Per the spec that means the CRS is
+    /// undefined, NOT the OGC:CRS84 default. Written as a WKB blob so DuckDB
+    /// emits no `geo` key of its own and `KV_METADATA` is the only one.
+    fn create_null_crs_parquet(path: &str) {
+        let conn = Connection::open_in_memory().expect("open DuckDB");
+        install_spatial_extension_for_tests(&conn).expect("load spatial");
+        let geo = r#"{"version":"1.1.0","primary_column":"geometry","columns":{
+            "geometry":{"encoding":"WKB","geometry_types":["Point"],"crs":null,
+            "bbox":[0.0,0.0,2400.0,500.0]}}}"#;
+        conn.execute_batch(&format!(
+            "
+            COPY (
+              SELECT ST_AsWKB(ST_Point(100.0 * (i % 25), 100.0 * (i // 25))) AS geometry,
+                     i AS id
+              FROM range(150) t(i)
+            ) TO {} (FORMAT PARQUET, KV_METADATA {{geo: {}}});
+            ",
+            quote_sql_string(path),
+            quote_sql_string(geo)
+        ))
+        .expect("write null CRS fixture");
     }
 
     /// Two geometry columns, both declared in the `geo` block, with the
@@ -1940,8 +1971,10 @@ mod tests {
 
     #[test]
     fn native_loader_synthesizes_points_from_lon_lat_columns() {
-        let path = shared_fixture_path("lonlat_columns.parquet");
-        let options = native_options(path, None, None).expect("native options");
+        let path = temp_geoparquet_path();
+        create_lon_lat_columns_parquet(&path);
+
+        let options = native_options(path.clone(), None, None).expect("native options");
         let collection = load_native_vector_file_blocking(options).expect("load vector file");
         let features = collection["features"].as_array().expect("features array");
         assert_eq!(features.len(), 200);
@@ -1952,12 +1985,16 @@ mod tests {
         // consumed by the synthesized geometry.
         assert_eq!(features[0]["properties"]["lon"], -71.2);
         assert_eq!(features[0]["properties"]["name"], "station_0");
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn native_loader_skips_reprojection_for_an_explicit_null_crs() {
-        let path = shared_fixture_path("crs_null.parquet");
-        let options = native_options(path, None, None).expect("native options");
+        let path = temp_geoparquet_path();
+        create_null_crs_parquet(&path);
+
+        let options = native_options(path.clone(), None, None).expect("native options");
         let collection = load_native_vector_file_blocking(options).expect("load vector file");
         let features = collection["features"].as_array().expect("features array");
         assert_eq!(features.len(), 150);
@@ -1966,5 +2003,7 @@ mod tests {
         assert_eq!(features[0]["geometry"]["coordinates"][0], 0.0);
         assert_eq!(features[0]["geometry"]["coordinates"][1], 0.0);
         assert_eq!(features[1]["geometry"]["coordinates"][0], 100.0);
+
+        let _ = std::fs::remove_file(path);
     }
 }
