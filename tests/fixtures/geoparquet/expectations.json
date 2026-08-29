@@ -1,0 +1,188 @@
+{
+  "_comment": [
+    "Expected parse results for the fixtures in this directory, shared by the",
+    "TypeScript suite (tests/geoparquet-metadata.test.ts) and the Python sidecar",
+    "suite (backend/geolibre_server/tests/test_geoparquet_fixtures.py).",
+    "Regenerate the files with ./regenerate.sh, then update this file by hand.",
+    "`schema` records what `DESCRIBE SELECT * FROM read_parquet(...)` returns in",
+    "DuckDB 1.5.4 with the spatial extension loaded, so the pure TypeScript",
+    "detection tests need no Parquet reader.",
+    "`logicalTypes` records what parquet_schema() prints for each element that",
+    "carries one."
+  ],
+  "files": [
+    {
+      "file": "wkb_1_0.parquet",
+      "description": "DuckDB's default GeoParquet output: 1.0.0, WKB, no covering.",
+      "geoMetadata": "geo-metadata/wkb_1_0.json",
+      "versionLabel": "GeoParquet 1.0.0",
+      "version": "1.0.0",
+      "primaryColumn": "geometry",
+      "encoding": "WKB",
+      "geometryTypes": ["Point"],
+      "crs": { "kind": "default", "epsg": null },
+      "sourceCrs": null,
+      "bbox": [-71.2, 42.2, -70.82000000000001, 42.48235294117647],
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "primary-column",
+      "geometryColumn": "geometry",
+      "logicalTypes": {},
+      "schema": [
+        { "column_name": "geometry", "column_type": "GEOMETRY('ogc:crs84')" },
+        { "column_name": "id", "column_type": "BIGINT" },
+        { "column_name": "name", "column_type": "VARCHAR" }
+      ]
+    },
+    {
+      "file": "wkb_1_1_covering.parquet",
+      "description": "1.1.0 with a declared covering bbox struct, Hilbert-sorted, EPSG:26986.",
+      "geoMetadata": "geo-metadata/wkb_1_1_covering.json",
+      "versionLabel": "GeoParquet 1.1.0",
+      "version": "1.1.0",
+      "primaryColumn": "geometry",
+      "encoding": "WKB",
+      "geometryTypes": ["Polygon"],
+      "crs": { "kind": "authority", "epsg": 26986 },
+      "sourceCrs": "EPSG:26986",
+      "bbox": [219985.0, 889985.0, 221775.0, 890175.0],
+      "covering": {
+        "root": "bbox",
+        "xmin": "xmin",
+        "ymin": "ymin",
+        "xmax": "xmax",
+        "ymax": "ymax"
+      },
+      "edges": "planar",
+      "detectionRoute": "primary-column",
+      "geometryColumn": "geometry",
+      "logicalTypes": { "loc_id": "StringType()" },
+      "schema": [
+        { "column_name": "geometry", "column_type": "GEOMETRY('epsg:26986')" },
+        {
+          "column_name": "bbox",
+          "column_type": "STRUCT(xmin DOUBLE, ymin DOUBLE, xmax DOUBLE, ymax DOUBLE)"
+        },
+        { "column_name": "id", "column_type": "BIGINT" },
+        { "column_name": "loc_id", "column_type": "VARCHAR" }
+      ]
+    },
+    {
+      "file": "native_2_0.parquet",
+      "description": "DuckDB GEOPARQUET_VERSION 'V2': a 2.0.0 geo block AND the Parquet GEOMETRY logical type.",
+      "geoMetadata": "geo-metadata/native_2_0.json",
+      "versionLabel": "GeoParquet 2.0.0 + native GEOMETRY logical type",
+      "version": "2.0.0",
+      "primaryColumn": "geometry",
+      "encoding": "WKB",
+      "geometryTypes": ["Point"],
+      "crs": { "kind": "default", "epsg": null },
+      "sourceCrs": null,
+      "bbox": [-71.2, 42.2, -70.82000000000001, 42.48235294117647],
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "primary-column",
+      "geometryColumn": "geometry",
+      "nativeLogicalType": {
+        "kind": "geometry",
+        "crs": null,
+        "edges": "planar"
+      },
+      "logicalTypes": { "geometry": "GeometryType(crs=<null>)" },
+      "schema": [
+        { "column_name": "geometry", "column_type": "GEOMETRY" },
+        { "column_name": "id", "column_type": "BIGINT" }
+      ]
+    },
+    {
+      "file": "crs_null.parquet",
+      "description": "An explicit \"crs\": null — an undefined CRS, not the CRS84 default.",
+      "geoMetadata": "geo-metadata/crs_null.json",
+      "versionLabel": "GeoParquet 1.1.0",
+      "version": "1.1.0",
+      "primaryColumn": "geometry",
+      "encoding": "WKB",
+      "geometryTypes": ["Point"],
+      "crs": { "kind": "undefined", "epsg": null },
+      "sourceCrs": null,
+      "bbox": [0.0, 0.0, 2400.0, 500.0],
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "primary-column",
+      "geometryColumn": "geometry",
+      "logicalTypes": {},
+      "schema": [
+        { "column_name": "geometry", "column_type": "GEOMETRY" },
+        { "column_name": "id", "column_type": "BIGINT" }
+      ]
+    },
+    {
+      "file": "bbox_3d.parquet",
+      "description": "A 6-element 3D geo.bbox: [xmin, ymin, zmin, xmax, ymax, zmax].",
+      "geoMetadata": "geo-metadata/bbox_3d.json",
+      "versionLabel": "GeoParquet 1.0.0",
+      "version": "1.0.0",
+      "primaryColumn": "geometry",
+      "encoding": "WKB",
+      "geometryTypes": ["Point Z"],
+      "crs": { "kind": "default", "epsg": null },
+      "sourceCrs": null,
+      "bbox": [-71.2, 42.2, -70.82, 42.48],
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "primary-column",
+      "geometryColumn": "geometry",
+      "logicalTypes": {},
+      "schema": [
+        { "column_name": "geometry", "column_type": "GEOMETRY('ogc:crs84')" },
+        { "column_name": "id", "column_type": "BIGINT" }
+      ]
+    },
+    {
+      "file": "no_geo_metadata_wkb.parquet",
+      "description": "Plain Parquet: a WKB blob named `geom`, with the geo key stripped.",
+      "geoMetadata": null,
+      "versionLabel": "none (guessed WKB column, CRS assumed OGC:CRS84)",
+      "version": null,
+      "primaryColumn": null,
+      "encoding": null,
+      "geometryTypes": [],
+      "crs": { "kind": "default", "epsg": null },
+      "sourceCrs": null,
+      "bbox": null,
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "wkb-column-name",
+      "geometryColumn": "geom",
+      "logicalTypes": {},
+      "schema": [
+        { "column_name": "geom", "column_type": "BLOB" },
+        { "column_name": "id", "column_type": "BIGINT" }
+      ]
+    },
+    {
+      "file": "lonlat_columns.parquet",
+      "description": "No geometry at all: a lon/lat pair of doubles, assumed OGC:CRS84.",
+      "geoMetadata": null,
+      "versionLabel": "none (points synthesized from coordinate columns)",
+      "version": null,
+      "primaryColumn": null,
+      "encoding": null,
+      "geometryTypes": [],
+      "crs": { "kind": "default", "epsg": null },
+      "sourceCrs": null,
+      "bbox": null,
+      "covering": null,
+      "edges": null,
+      "detectionRoute": "coordinate-columns",
+      "coordinateColumns": { "x": "lon", "y": "lat" },
+      "logicalTypes": {},
+      "schema": [
+        { "column_name": "lon", "column_type": "DOUBLE" },
+        { "column_name": "lat", "column_type": "DOUBLE" },
+        { "column_name": "id", "column_type": "BIGINT" },
+        { "column_name": "name", "column_type": "VARCHAR" }
+      ]
+    }
+  ]
+}
