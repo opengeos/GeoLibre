@@ -395,7 +395,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           const detail = event.error ? (label ? `${label}\n\n${event.error}` : event.error) : label;
           setTurns((prev) => {
             const existing = prev.findIndex(
-              (turn) => turn.role === "tool" && turn.toolCallId === event.id,
+              (turn) => turn.role === "tool" && turn.pending && turn.toolCallId === event.id,
             );
             if (existing < 0) return prev;
             return prev.map((turn, index) =>
@@ -422,10 +422,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         setTurns((prev) => [...prev, { id: errorId, role: "error", text: message }]);
       }
     } finally {
-      // Drop the assistant turn if it never produced text (e.g. tool-only run).
+      // Drop empty assistant turns and any activity row whose tool never
+      // reached a completion event, such as after a provider/network failure.
       setTurns((prev) =>
         prev.filter(
-          (turn) => !(turn.id === assistantId && turn.role === "assistant" && !turn.text),
+          (turn) =>
+            !(turn.id === assistantId && turn.role === "assistant" && !turn.text) &&
+            !(turn.role === "tool" && turn.pending),
         ),
       );
       // Only clear the running state if no newer send has superseded this one
