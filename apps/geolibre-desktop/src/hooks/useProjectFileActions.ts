@@ -83,7 +83,9 @@ export interface DroppedProjectPrompt {
   /** Project generation that opened the prompt. */
   projectGeneration: number;
   /** Serialized workspace state covered by the open/discard decision. */
-  projectFingerprint: string;
+  projectFingerprint: string | null;
+  /** Monotonic token ensuring the newest accepted drop wins. */
+  operationId: number;
 }
 
 /**
@@ -280,6 +282,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   );
   const [droppedProjectSaving, setDroppedProjectSaving] = useState(false);
   const droppedProjectPromptRef = useRef<DroppedProjectPrompt | null>(null);
+  const droppedProjectOperationRef = useRef(0);
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
@@ -404,9 +407,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       project: candidate.project,
       projectGeneration: candidate.projectGeneration,
       projectFingerprint: candidate.projectFingerprint,
+      isLatestOperation: () => droppedProjectOperationRef.current === candidate.operationId,
       getWorkspaceState: () => ({
         projectGeneration: useAppStore.getState().projectGeneration,
-        projectFingerprint: serializeProject(projectFromStore(useAppStore.getState())),
+        isDirty: useAppStore.getState().isDirty,
+        projectFingerprint: useAppStore.getState().isDirty
+          ? serializeProject(projectFromStore(useAppStore.getState()))
+          : null,
       }),
       resolveProject: resolveProjectXyzLayers,
       loadProject: (project) => {
@@ -415,9 +422,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         });
         if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
       },
-      workspaceChanged: (state) => {
+      workspaceChanged: (state, project) => {
         const updated = {
           ...candidate,
+          project,
           projectGeneration: state.projectGeneration,
           projectFingerprint: state.projectFingerprint,
         };
@@ -435,7 +443,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         path,
         text,
         projectGeneration: useAppStore.getState().projectGeneration,
-        projectFingerprint: serializeProject(projectFromStore(useAppStore.getState())),
+        projectFingerprint: useAppStore.getState().isDirty
+          ? serializeProject(projectFromStore(useAppStore.getState()))
+          : null,
+        operationId: ++droppedProjectOperationRef.current,
       };
       if (useAppStore.getState().isDirty) {
         droppedProjectPromptRef.current = candidate;
@@ -463,8 +474,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     if (choice === "save") {
       setDroppedProjectSaving(true);
+      setDroppedProjectPrompt(null);
       try {
-        if (!(await saveProject())) return;
+        if (!(await saveProject())) {
+          if (droppedProjectPromptRef.current === candidate) setDroppedProjectPrompt(candidate);
+          return;
+        }
       } finally {
         setDroppedProjectSaving(false);
       }
@@ -472,7 +487,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     droppedProjectPromptRef.current = null;
     setDroppedProjectPrompt(null);
-    candidate.projectFingerprint = serializeProject(projectFromStore(useAppStore.getState()));
+    candidate.projectFingerprint = useAppStore.getState().isDirty
+      ? serializeProject(projectFromStore(useAppStore.getState()))
+      : null;
     try {
       await loadDroppedProject(candidate);
     } catch (error) {
