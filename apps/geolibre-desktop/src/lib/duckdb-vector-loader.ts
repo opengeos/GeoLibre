@@ -18,7 +18,11 @@ import {
   GEOPARQUET_METADATA_COLUMN,
   geoParquetMetadataSql,
   geoParquetSourceCrs,
+  geoParquetTransformCrs,
+  nativeGeometryColumn,
+  parquetLogicalTypesSql,
 } from "./geoparquet-crs";
+import { parseGeoParquetMetadata } from "./geoparquet-metadata";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
@@ -444,28 +448,56 @@ function crsSql(fileName: string, includeWkt: boolean): string {
 }
 
 /**
- * The CRS a GeoParquet file declares in its `geo` file metadata, or null when it
- * carries none, declares WGS84, or the metadata cannot be read.
+ * The raw `geo` metadata document of a Parquet file, or null when it carries
+ * none or the read fails.
  *
  * A failure is swallowed the way the `ST_Read_Meta` path below swallows one: the
  * overwhelmingly common case is a plain Parquet with no `geo` key at all, and a
  * file whose coordinates are already lon/lat must still load.
+ */
+async function readGeoParquetMetadataJson(
+  connection: duckdb.AsyncDuckDBConnection,
+  fileName: string,
+): Promise<string | null> {
+  try {
+    const row = rowsFromResult(await connection.query(geoParquetMetadataSql(fileName)))[0];
+    const metadata = row?.[GEOPARQUET_METADATA_COLUMN];
+    return typeof metadata === "string" ? metadata : null;
+  } catch (err) {
+    console.warn("[GeoLibre] Could not read GeoParquet metadata; reprojection skipped.", err);
+    return null;
+  }
+}
+
+/**
+ * The CRS a Parquet file declares, or null when it declares none, declares
+ * WGS84, or the metadata cannot be read.
+ *
+ * The `geo` block is authoritative when there is one. A Parquet 2.0 file may
+ * carry no `geo` block at all and record its CRS only on the geometry column's
+ * GEOMETRY/GEOGRAPHY logical type, so that is read as a fallback — without it
+ * such a file in a projected CRS loads in raw metres and draws nothing, the same
+ * failure issue #2086 reported for 1.0 files.
  *
  * `geometryColumn` is the column the loader detected, so a file carrying several
  * geometry columns in different CRSs resolves the one actually being read rather
  * than whichever the document calls primary.
  */
-async function readGeoParquetCrs(
+async function readParquetSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   fileName: string,
+  metadataJson: string | null,
   geometryColumn?: string,
 ): Promise<string | null> {
+  if (metadataJson) return geoParquetSourceCrs(metadataJson, geometryColumn);
   try {
-    const row = rowsFromResult(await connection.query(geoParquetMetadataSql(fileName)))[0];
-    const metadata = row?.[GEOPARQUET_METADATA_COLUMN];
-    return geoParquetSourceCrs(typeof metadata === "string" ? metadata : null, geometryColumn);
+    const rows = rowsFromResult(await connection.query(parquetLogicalTypesSql(fileName)));
+    const native = nativeGeometryColumn(rows, geometryColumn);
+    return native ? geoParquetTransformCrs(native.parsedCrs) : null;
   } catch (err) {
-    console.warn("[GeoLibre] Could not read GeoParquet CRS metadata; reprojection skipped.", err);
+    // `parquet_schema` is available in every DuckDB build the app ships, but a
+    // file it cannot parse must still load through the CRS84 assumption.
+    console.warn("[GeoLibre] Could not read the Parquet logical types.", err);
     return null;
   }
 }
@@ -484,14 +516,15 @@ async function readSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   file: DuckDbVectorFile,
   prjCrs: string | null,
-  geometryColumn?: string,
+  geometryColumn: string | undefined,
+  geoMetadataJson: string | null,
 ): Promise<string | null> {
   // GeoParquet is read with `read_parquet`, not GDAL, so `ST_Read_Meta` reports
   // nothing about it. Its CRS is read from the file's own `geo` metadata
   // instead, without which a file in a projected CRS loads in raw metres and
   // draws nothing (issue #2086).
   if (isParquetExtension(file.extension)) {
-    return await readGeoParquetCrs(connection, file.name, geometryColumn);
+    return await readParquetSourceCrs(connection, file.name, geoMetadataJson, geometryColumn);
   }
 
   let row: Record<string, unknown> | undefined;
@@ -696,10 +729,23 @@ export async function loadDuckDbVectorFile(
 
     const sql = sourceSql(file.name, file.extension, options.layer);
     const description = rowsFromResult(await connection.query(`DESCRIBE ${sql}`));
+    // A GeoParquet's own `geo` block names the geometry column, which beats
+    // guessing from column names when a file carries several binary columns.
+    // The document is read once here and reused for the CRS below.
+    const isParquet = isParquetExtension(file.extension);
+    const geoMetadataJson = isParquet
+      ? await readGeoParquetMetadataJson(connection, file.name)
+      : null;
     const detected = await validateDetectedGeometry(
       connection,
       sql,
-      detectGeometryColumn(description),
+      detectGeometryColumn(description, {
+        primaryColumn: parseGeoParquetMetadata(geoMetadataJson)?.primaryColumn ?? undefined,
+        // A Parquet table of lon/lat columns with no geometry at all is a very
+        // common publishing shape; every other format either carries geometry
+        // or has its own importer (CSV picks the columns explicitly).
+        allowCoordinateColumns: isParquet,
+      }),
     );
 
     if (!detected) {
@@ -712,7 +758,7 @@ export async function loadDuckDbVectorFile(
     // surface-WKB fallback below can reuse it.
     const sourceCrs =
       options.overrideSourceCrs?.trim() ||
-      (await readSourceCrs(connection, file, prjCrs, detected.column));
+      (await readSourceCrs(connection, file, prjCrs, detected.column, geoMetadataJson));
 
     // Tracks whether the large-dataset guard already confirmed, so the
     // surface-WKB fallback does not prompt a second time (or skip it entirely
