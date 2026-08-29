@@ -443,6 +443,39 @@ def test_add_swipe_clamps_the_slider_position(proj):
     assert project.SWIPE_PLUGIN_ID in proj["plugins"]["settings"]
 
 
+def test_add_swipe_lists_the_style_layer_id_of_a_raster_layer(proj):
+    """A WMS side carries the id the control acts on, not just the layer id."""
+    authoring.add_layer(proj, project.wms_layer("Aerial", "https://example.org/wms", "aerial"))
+    authoring.add_layer(proj, project.wms_layer("Historic", "https://example.org/wms", "historic"))
+    aerial = authoring.find_layer(proj, "Aerial")["id"]
+    historic = authoring.find_layer(proj, "Historic")["id"]
+
+    state = authoring.add_swipe(proj, left_layers=[historic], right_layers=[aerial])
+
+    assert state["leftLayers"] == [historic, f"layer-{historic}-raster"]
+    assert state["rightLayers"] == [aerial, f"layer-{aerial}-raster"]
+
+
+def test_add_swipe_leaves_non_raster_sides_alone(proj):
+    """A GeoJSON layer draws through several style layers, so it is untouched."""
+    cities = authoring.find_layer(proj, "Cities")["id"]
+    state = authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[cities])
+    assert state["leftLayers"] == ["__basemap__"]
+    assert state["rightLayers"] == [cities]
+
+
+def test_remove_layer_drops_the_style_layer_id_too(proj):
+    """Removing a WMS layer leaves no dangling style id behind on a side."""
+    authoring.add_layer(proj, project.wms_layer("Aerial", "https://example.org/wms", "aerial"))
+    aerial = authoring.find_layer(proj, "Aerial")["id"]
+    authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[aerial])
+
+    authoring.remove_layer(proj, "Aerial")
+
+    swipe = proj["plugins"]["settings"][project.SWIPE_PLUGIN_ID]
+    assert swipe["rightLayers"] == []
+
+
 def test_add_swipe_rejects_a_bad_orientation(proj):
     with pytest.raises(ValueError, match="orientation must be one of"):
         authoring.add_swipe(proj, left_layers=[], right_layers=[], orientation="diagonal")

@@ -35,6 +35,10 @@ LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 # The pseudo-id the swipe control uses for the basemap (maplibre-swipe.ts).
 BASEMAP_LAYER_ID = "__basemap__"
 
+# Layer types the app draws through a single MapLibre raster style layer, named
+# `layer-<id>-raster` (see the style layer id helpers in the core layer sync).
+RASTER_STYLE_LAYER_TYPES = frozenset({"raster", "wms", "wmts", "xyz"})
+
 # Cap a project file read from disk. A project inlines its GeoJSON, so the
 # ceiling has to clear _MAX_GEOJSON_BYTES for a single layer with room for a few
 # more; past that the caller is better served by a tiled source than by loading
@@ -461,10 +465,11 @@ def _drop_swipe_reference(project: dict[str, Any], layer_id: str) -> None:
     swipe = settings.get(_project.SWIPE_PLUGIN_ID) if isinstance(settings, dict) else None
     if not isinstance(swipe, dict):
         return
+    dropped = {layer_id, _raster_style_layer_id(layer_id)}
     for side in ("leftLayers", "rightLayers"):
         ids = swipe.get(side)
         if isinstance(ids, list):
-            swipe[side] = [value for value in ids if value != layer_id]
+            swipe[side] = [value for value in ids if value not in dropped]
 
 
 def update_layer(
@@ -993,6 +998,39 @@ def add_colorbar(
     return entry
 
 
+def _raster_style_layer_id(layer_id: str) -> str:
+    """The MapLibre style layer id a raster-backed layer is drawn as."""
+    return f"layer-{layer_id}-raster"
+
+
+def _expand_swipe_side(project: dict[str, Any], layer_ids: list[str]) -> list[str]:
+    """Add the style layer id of every raster-backed layer to one swipe side.
+
+    The swipe control drives what each half shows by toggling MapLibre style
+    layer ids. A raster-backed layer (`raster`, `wms`, `wmts`, `xyz`) is drawn
+    as ``layer-<id>-raster``, so a side holding only the project layer id
+    matches no style layer: the control treats the layer as assigned to neither
+    side, which it renders on both halves. Listing both ids keeps the project
+    layer id (what the panel checkboxes read) and adds the id the control acts
+    on.
+    """
+    types = {
+        layer.get("id"): layer.get("type")
+        for layer in project.get("layers", [])
+        if isinstance(layer, dict)
+    }
+    expanded: list[str] = []
+    for layer_id in layer_ids:
+        if layer_id not in expanded:
+            expanded.append(layer_id)
+        if types.get(layer_id) not in RASTER_STYLE_LAYER_TYPES:
+            continue
+        style_id = _raster_style_layer_id(layer_id)
+        if style_id not in expanded:
+            expanded.append(style_id)
+    return expanded
+
+
 def add_swipe(
     project: dict[str, Any],
     *,
@@ -1027,8 +1065,8 @@ def add_swipe(
             f"control_position must be one of {sorted(CONTROL_POSITIONS)}, got {control_position!r}"
         )
     state = _project.swipe_state(
-        left_layers=list(left_layers),
-        right_layers=list(right_layers),
+        left_layers=_expand_swipe_side(project, list(left_layers)),
+        right_layers=_expand_swipe_side(project, list(right_layers)),
         orientation=orientation,
         position=min(100.0, max(0.0, float(position))),
     )
