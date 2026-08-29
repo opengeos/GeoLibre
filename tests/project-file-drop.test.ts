@@ -34,7 +34,7 @@ test("does not replace edits made while dropped project layers resolve", async (
     project: dropped,
     projectGeneration: 4,
     projectFingerprint: "before-edit",
-    isLatestOperation: () => true,
+    isCurrentOperation: () => true,
     getWorkspaceState: () => workspace,
     resolveProject: () =>
       new Promise((resolve) => {
@@ -67,7 +67,7 @@ test("does not let an older overlapping drop replace the latest one", async () =
     project: dropped,
     projectGeneration: 2,
     projectFingerprint: null,
-    isLatestOperation: () => latest,
+    isCurrentOperation: () => latest,
     getWorkspaceState: () => workspace,
     resolveProject: () =>
       new Promise((resolve) => {

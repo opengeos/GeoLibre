@@ -407,7 +407,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       project: candidate.project,
       projectGeneration: candidate.projectGeneration,
       projectFingerprint: candidate.projectFingerprint,
-      isLatestOperation: () => droppedProjectOperationRef.current === candidate.operationId,
+      isCurrentOperation: () =>
+        droppedProjectOperationRef.current === candidate.operationId &&
+        useAppStore.getState().projectGeneration === candidate.projectGeneration,
       getWorkspaceState: () => ({
         projectGeneration: useAppStore.getState().projectGeneration,
         isDirty: useAppStore.getState().isDirty,
@@ -487,11 +489,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     droppedProjectPromptRef.current = null;
     setDroppedProjectPrompt(null);
-    candidate.projectFingerprint = useAppStore.getState().isDirty
-      ? serializeProject(projectFromStore(useAppStore.getState()))
-      : null;
+    const decidedCandidate = {
+      ...candidate,
+      projectFingerprint: useAppStore.getState().isDirty
+        ? serializeProject(projectFromStore(useAppStore.getState()))
+        : null,
+    };
     try {
-      await loadDroppedProject(candidate);
+      await loadDroppedProject(decidedCandidate);
     } catch (error) {
       console.error("Failed to open dropped project", error);
       setActionError(

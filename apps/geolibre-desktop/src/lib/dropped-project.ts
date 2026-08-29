@@ -10,7 +10,7 @@ interface ResolveDroppedProjectOptions {
   project: GeoLibreProject;
   projectGeneration: number;
   projectFingerprint: string | null;
-  isLatestOperation: () => boolean;
+  isCurrentOperation: () => boolean;
   getWorkspaceState: () => DroppedProjectWorkspaceState;
   resolveProject: (project: GeoLibreProject) => Promise<GeoLibreProject>;
   loadProject: (project: GeoLibreProject) => void;
@@ -22,17 +22,17 @@ export async function resolveDroppedProjectIfCurrent({
   project,
   projectGeneration,
   projectFingerprint,
-  isLatestOperation,
+  isCurrentOperation,
   getWorkspaceState,
   resolveProject,
   loadProject,
   workspaceChanged,
 }: ResolveDroppedProjectOptions): Promise<boolean> {
-  if (!isLatestOperation() || getWorkspaceState().projectGeneration !== projectGeneration)
-    return false;
+  if (!isCurrentOperation()) return false;
   const resolvedProject = await resolveProject(project);
+  if (!isCurrentOperation()) return false;
   const current = getWorkspaceState();
-  if (!isLatestOperation() || current.projectGeneration !== projectGeneration) return false;
+  if (current.projectGeneration !== projectGeneration) return false;
   const changed =
     projectFingerprint === null
       ? current.isDirty
