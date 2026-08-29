@@ -127,7 +127,7 @@
       "geometryTypes": ["Point Z"],
       "crs": { "kind": "default", "epsg": null },
       "sourceCrs": null,
-      "bbox": [-71.2, 42.2, -70.82, 42.48],
+      "bbox": [-71.2, 42.2, -70.82, 42.48235294117647],
       "covering": null,
       "edges": null,
       "detectionRoute": "primary-column",

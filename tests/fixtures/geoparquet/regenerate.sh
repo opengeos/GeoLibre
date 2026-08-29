@@ -167,7 +167,7 @@ patch(
                 "geometry_types": ["Point Z"],
                 # 3D per spec: [xmin, ymin, zmin, xmax, ymax, zmax]. A reader
                 # that takes the first four gets [xmin, ymin, zmin, xmax].
-                "bbox": [-71.2, 42.2, 0.0, -70.82, 42.48, 49.0],
+                "bbox": [-71.2, 42.2, 0.0, -70.82, 42.48235294117647, 49.0],
             }
         },
     },
