@@ -372,6 +372,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             ),
           );
         } else if (event.phase === "started") {
+          // A superseded run must not add rows: stop() has already swept its
+          // pending rows, and its own finally is generation-scoped, so a row
+          // spliced in now would stay stuck on "Running" with nothing to
+          // reconcile it.
+          if (sendGenerationRef.current !== myGeneration) continue;
           const label = describeTool(event.name, event.input);
           const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
