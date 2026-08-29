@@ -78,6 +78,7 @@ import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useProjectHistory } from "../../hooks/useProjectHistory";
 import {
   isRasterFileName,
+  isGeoLibreProjectFileName,
   isTauri,
   loadDroppedPhotoFiles,
   loadDroppedPhotoPaths,
@@ -90,6 +91,7 @@ import {
   isLoadedModel,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
+  readLocalFileText,
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
@@ -751,6 +753,8 @@ export function DesktopShell({
   // Browser panel, so their "open recent" calls coordinate their aborts (two
   // instances would race). Lifted here for the same reason as `collaboration`.
   const projectFiles = useProjectFileActions(mapControllerRef);
+  const projectFilesRef = useRef(projectFiles);
+  projectFilesRef.current = projectFiles;
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -1747,6 +1751,20 @@ export function DesktopShell({
 
           try {
             const paths = event.payload.paths;
+            const projectPaths = paths.filter(isGeoLibreProjectFileName);
+            if (projectPaths.length > 0) {
+              if (paths.length !== 1) {
+                throw new Error("Drop one GeoLibre project at a time, without other files.");
+              }
+              const projectPath = projectPaths[0];
+              if (!projectPath) return;
+              await projectFilesRef.current.handleDroppedProject(
+                await readLocalFileText(projectPath),
+                projectPath,
+              );
+              setDropMessage(null);
+              return;
+            }
             // OSM PBF files split into three layers, so they bypass the normal
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
@@ -1929,6 +1947,17 @@ export function DesktopShell({
 
       try {
         const allFiles = Array.from(event.dataTransfer.files);
+        const projectFilesInDrop = allFiles.filter((file) => isGeoLibreProjectFileName(file.name));
+        if (projectFilesInDrop.length > 0) {
+          if (allFiles.length !== 1) {
+            throw new Error("Drop one GeoLibre project at a time, without other files.");
+          }
+          const projectFile = projectFilesInDrop[0];
+          if (!projectFile) return;
+          await projectFilesRef.current.handleDroppedProject(await projectFile.text(), null);
+          setDropMessage(null);
+          return;
+        }
         // OSM PBF files produce three separate layers (points/lines/polygons),
         // so they bypass the single-FeatureCollection vector drop pipeline.
         // Handle them first, then run the rest through the normal pipeline —

@@ -57,6 +57,36 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   return (
     <>
       <Dialog
+        open={projectFiles.droppedProjectPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) void projectFiles.resolveDroppedProjectPrompt("cancel");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("newProject.savePromptTitle")}</DialogTitle>
+            <DialogDescription>{t("newProject.savePromptDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("cancel")}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("discard")}
+            >
+              {t("newProject.doNotSave")}
+            </Button>
+            <Button onClick={() => void projectFiles.resolveDroppedProjectPrompt("save")}>
+              {t("common.save")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.projectUrlDialogOpen}
         onOpenChange={projectFiles.handleProjectUrlDialogOpenChange}
       >

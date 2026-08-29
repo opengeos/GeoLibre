@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
+  parseProject,
   projectFromStore,
   redactProjectCredentials,
   excludeHiddenFieldsFromProject,
@@ -72,6 +73,12 @@ export interface CredentialStripPrompt {
   /** Project generation that opened the prompt. */
   projectGeneration: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
+}
+
+export interface DroppedProjectPrompt {
+  project: GeoLibreProject;
+  path: string | null;
+  text: string;
 }
 
 /**
@@ -263,6 +270,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const projectGeneration = useAppStore((s) => s.projectGeneration);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [droppedProjectPrompt, setDroppedProjectPrompt] = useState<DroppedProjectPrompt | null>(
+    null,
+  );
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
@@ -373,6 +383,42 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
         );
       }
+    }
+  };
+
+  const loadDroppedProject = async (candidate: DroppedProjectPrompt) => {
+    const project = await resolveProjectXyzLayers(candidate.project);
+    loadProject(project, candidate.path, { rememberRecent: isTauri() && candidate.path !== null });
+    if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+  };
+
+  /** Parse and open a project supplied by either browser or native drag-and-drop. */
+  const handleDroppedProject = async (text: string, path: string | null): Promise<boolean> => {
+    const candidate = { project: parseProject(text), path, text };
+    if (useAppStore.getState().isDirty) {
+      setDroppedProjectPrompt(candidate);
+      return false;
+    }
+    await loadDroppedProject(candidate);
+    return true;
+  };
+
+  const resolveDroppedProjectPrompt = async (choice: "save" | "discard" | "cancel") => {
+    const candidate = droppedProjectPrompt;
+    if (!candidate) return;
+    if (choice === "cancel") {
+      setDroppedProjectPrompt(null);
+      return;
+    }
+    if (choice === "save" && !(await saveProject())) return;
+    setDroppedProjectPrompt(null);
+    try {
+      await loadDroppedProject(candidate);
+    } catch (error) {
+      console.error("Failed to open dropped project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
+      );
     }
   };
 
@@ -1292,6 +1338,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   return {
     actionError,
     setActionError,
+    droppedProjectPrompt,
+    resolveDroppedProjectPrompt,
     qgisImportWarnings,
     setQgisImportWarnings,
     arcgisImportWarnings,
@@ -1318,6 +1366,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
     handleOpenFromFile,
+    handleDroppedProject,
     handleImportQgisProject,
     handleImportArcgisProject,
     handleOpenFromUrl,

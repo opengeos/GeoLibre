@@ -155,6 +155,11 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
   },
 ];
 
+/** Project extension handled as a workspace switch by drag-and-drop. */
+export function isGeoLibreProjectFileName(path: string): boolean {
+  return path.toLowerCase().endsWith(".geolibre.json");
+}
+
 interface SaveTextFileOptions {
   defaultName: string;
   filters: FileDialogFilter[];
@@ -608,7 +613,7 @@ export async function readLocalFileBytes(path: string): Promise<Uint8Array<Array
  * @param path - Absolute local path to read.
  * @returns The file's decoded UTF-8 text.
  */
-async function readLocalFileText(path: string): Promise<string> {
+export async function readLocalFileText(path: string): Promise<string> {
   try {
     return await readTextFile(path);
   } catch (error) {
