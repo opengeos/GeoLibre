@@ -12,8 +12,10 @@ import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools
 import { applyMatchedSelection } from "../apps/geolibre-desktop/src/lib/selection-actions";
 import {
   featuresIntersectingPolygon,
+  CAMERA_HANDLERS,
   keepsFeatureSelectionActive,
   selectionModeFromModifiers,
+  suspendedCameraHandlers,
 } from "../packages/map/src/feature-selection";
 
 const point = (
@@ -265,6 +267,23 @@ describe("map feature selection", () => {
     assert.equal(keepsFeatureSelectionActive("polygon"), false);
     assert.equal(keepsFeatureSelectionActive("freehand"), false);
     assert.equal(keepsFeatureSelectionActive("radius"), false);
+  });
+
+  it("suspends box zoom during click selection so Shift reaches the tool", () => {
+    // MapLibre's box-zoom handler claims every Shift+left-drag and suppresses
+    // the trailing `click` even when the pointer never moved. Leaving it
+    // enabled swallowed Shift+click and Shift+Alt+click outright, so "add" and
+    // "intersect" could never fire.
+    assert.deepEqual(suspendedCameraHandlers("single"), ["boxZoom"]);
+    // The camera still pans and zooms between clicks — the tool stays armed.
+    assert.ok(!suspendedCameraHandlers("single").includes("dragPan"));
+    assert.ok(!suspendedCameraHandlers("single").includes("scrollZoom"));
+  });
+
+  it("freezes the whole camera while a shape is being drawn", () => {
+    for (const shape of ["rectangle", "polygon", "freehand", "radius"] as const) {
+      assert.deepEqual(suspendedCameraHandlers(shape), CAMERA_HANDLERS);
+    }
   });
 
   it("maps QGIS-style modifiers to selection modes", () => {

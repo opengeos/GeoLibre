@@ -47,6 +47,7 @@ import {
   featuresIntersectingPolygon,
   keepsFeatureSelectionActive,
   selectionModeFromModifiers,
+  suspendedCameraHandlers,
   type FeatureSelectionRequest,
   type FeatureSelectionShape,
 } from "./feature-selection";
@@ -94,17 +95,6 @@ const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
  * tab; Select by expression and Select by location handle the bigger jobs.
  */
 const MAX_SELECTION_SCAN_FEATURES = 250_000;
-/** The camera interactions a drawing gesture suspends while it is running. */
-const CAMERA_HANDLERS = [
-  "dragPan",
-  "boxZoom",
-  "doubleClickZoom",
-  "scrollZoom",
-  "keyboard",
-  "dragRotate",
-  "touchZoomRotate",
-  "touchPitch",
-] as const;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -1809,18 +1799,14 @@ export const MapCanvas = memo(function MapCanvas({
       container.append(overlay);
       cleanups.push(() => overlay.remove());
 
-      // Freeze every camera interaction for the gesture, not only the ones that
-      // would fight the drag. Vertices are recorded in screen space and are
-      // unprojected once, at finish(); a scroll-wheel zoom or an arrow-key pan
-      // placed between two polygon clicks would leave the earlier vertices
-      // pointing at different ground than the user aimed at.
-      if (request.shape !== "single") {
-        for (const name of CAMERA_HANDLERS) {
-          const handler = map[name];
-          if (!handler.isEnabled()) continue;
-          handler.disable();
-          cleanups.push(() => handler.enable());
-        }
+      // A drawn shape freezes the camera outright; click selection keeps it
+      // live but still gives up box zoom, which would otherwise swallow every
+      // Shift+click. See suspendedCameraHandlers() for why.
+      for (const name of suspendedCameraHandlers(request.shape)) {
+        const handler = map[name];
+        if (!handler.isEnabled()) continue;
+        handler.disable();
+        cleanups.push(() => handler.enable());
       }
       canvas.style.cursor = "crosshair";
       cleanups.push(() => {

@@ -26,6 +26,41 @@ export function keepsFeatureSelectionActive(shape: FeatureSelectionShape): boole
   return shape === "single";
 }
 
+/** The MapLibre camera interactions a selection gesture can suspend. */
+export const CAMERA_HANDLERS = [
+  "dragPan",
+  "boxZoom",
+  "doubleClickZoom",
+  "scrollZoom",
+  "keyboard",
+  "dragRotate",
+  "touchZoomRotate",
+  "touchPitch",
+] as const;
+
+export type CameraHandlerName = (typeof CAMERA_HANDLERS)[number];
+
+/**
+ * The camera interactions a gesture suspends while it runs.
+ *
+ * A drawn shape freezes the camera outright: its vertices are recorded in
+ * screen space and unprojected once, at the end, so a scroll-wheel zoom or an
+ * arrow-key pan placed between two polygon clicks would leave the earlier
+ * vertices pointing at different ground than the user aimed at.
+ *
+ * Click selection stays armed across clicks, so it keeps the camera live for
+ * panning and zooming between picks — all but box zoom, which claims every
+ * Shift+left-drag and calls `DOM.suppressClick()` on release. That fires even
+ * for a Shift+click that never moved, swallowing the `click` this tool listens
+ * for and making the Shift ("add") and Shift+Alt ("intersect") modifiers
+ * silently do nothing.
+ */
+export function suspendedCameraHandlers(
+  shape: FeatureSelectionShape,
+): readonly CameraHandlerName[] {
+  return shape === "single" ? ["boxZoom"] : CAMERA_HANDLERS;
+}
+
 /** QGIS-style keyboard modifiers for a spatial selection gesture. */
 export function selectionModeFromModifiers(
   shiftKey: boolean,
