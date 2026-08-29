@@ -103,6 +103,10 @@ interface Turn {
   tool?: string;
   /** Whether a tool call errored. */
   failed?: boolean;
+  /** SDK id used to update a tool row when execution finishes. */
+  toolCallId?: string;
+  /** Tool calls are inserted while running and updated in place on completion. */
+  pending?: boolean;
 }
 
 interface AssistantPanelProps {
@@ -367,9 +371,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               turn.id === assistantId ? { ...turn, text: turn.text + event.text } : turn,
             ),
           );
-        } else {
+        } else if (event.phase === "started") {
           const label = describeTool(event.name, event.input);
-          const detail = event.error ? (label ? `${label} — ${event.error}` : event.error) : label;
           const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
             const index = prev.findIndex((turn) => turn.id === assistantId);
@@ -381,10 +384,25 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               id: toolId,
               role: "tool",
               tool: event.name,
-              text: detail,
-              failed: Boolean(event.error),
+              toolCallId: event.id,
+              text: label,
+              pending: true,
             });
             return next;
+          });
+        } else {
+          const label = describeTool(event.name, event.input);
+          const detail = event.error ? (label ? `${label}\n\n${event.error}` : event.error) : label;
+          setTurns((prev) => {
+            const existing = prev.findIndex(
+              (turn) => turn.role === "tool" && turn.toolCallId === event.id,
+            );
+            if (existing < 0) return prev;
+            return prev.map((turn, index) =>
+              index === existing
+                ? { ...turn, text: detail, pending: false, failed: Boolean(event.error) }
+                : turn,
+            );
           });
         }
       }
@@ -425,6 +443,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     // Decline any code awaiting approval so a stopped run doesn't leave the
     // confirmation prompt (and its blocked tool promises) hanging.
     declineAllPendingCode();
+    // A cancelled tool never emits a useful completion result. Remove its live
+    // activity row so the transcript cannot remain stuck on "Running".
+    setTurns((prev) => prev.filter((turn) => !(turn.role === "tool" && turn.pending)));
     runningRef.current = false;
     setRunning(false);
   };
@@ -716,19 +737,35 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           turns.map((turn) => {
             if (turn.role === "tool") {
               return (
-                <div
+                <details
                   key={turn.id}
+                  open={turn.pending || undefined}
                   className={cn(
-                    "flex items-start gap-1.5 font-mono text-xs",
+                    "rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-xs",
                     turn.failed ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
-                  <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span className="break-all">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5">
+                    {turn.pending ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                    ) : (
+                      <Wrench className="h-3 w-3 shrink-0" />
+                    )}
                     <span className="font-semibold">{turn.tool}</span>
-                    {turn.text ? ` · ${turn.text}` : ""}
-                  </span>
-                </div>
+                    <span className="ms-auto font-sans text-[11px]">
+                      {turn.pending
+                        ? t("assistant.toolRunning")
+                        : turn.failed
+                          ? t("assistant.toolFailed")
+                          : t("assistant.toolCompleted")}
+                    </span>
+                  </summary>
+                  {turn.text ? (
+                    <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all border-t pt-1.5 text-[11px]">
+                      {turn.text}
+                    </pre>
+                  ) : null}
+                </details>
               );
             }
             if (turn.role === "error") {

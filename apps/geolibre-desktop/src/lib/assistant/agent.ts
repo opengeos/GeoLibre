@@ -32,7 +32,14 @@ Guidelines:
 /** A streamed update surfaced to the chat UI. */
 export type AssistantStreamEvent =
   | { type: "text"; text: string }
-  | { type: "tool"; name: string; input: unknown; error?: string };
+  | {
+      type: "tool";
+      phase: "started" | "finished";
+      id: string;
+      name: string;
+      input: unknown;
+      error?: string;
+    };
 
 /**
  * A long-lived assistant session wrapping a Strands {@link Agent}. The agent is
@@ -157,10 +164,24 @@ export class AssistantSession {
         }
         continue;
       }
+      // Announce a tool before it runs so the panel can show live activity
+      // during long geoprocessing jobs instead of displaying only "Working".
+      if (event.type === "beforeToolCallEvent") {
+        yield {
+          type: "tool",
+          phase: "started",
+          id: event.toolUse.toolUseId,
+          name: event.toolUse.name,
+          input: event.toolUse.input,
+        };
+        continue;
+      }
       // A tool finished — surface it (with any error) in the transcript.
       if (event.type === "afterToolCallEvent") {
         yield {
           type: "tool",
+          phase: "finished",
+          id: event.toolUse.toolUseId,
           name: event.toolUse.name,
           input: event.toolUse.input,
           error: event.error?.message,
