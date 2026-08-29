@@ -79,7 +79,7 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 
 # File-manager launches on Windows and Linux start a second process. Forward
 # its project path to the existing window instead of opening a second workspace.
-[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
 
 # Runtime WebKitGTK version check (already an indirect dep via tauri/wry).

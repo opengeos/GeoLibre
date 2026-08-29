@@ -284,7 +284,7 @@ pub fn run() {
     // Windows and Linux deliver a file-association launch by starting another
     // process with the document path in argv. Keep one workspace and forward
     // that path to it. Register this first, as required by the plugin.
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
         let paths = project_paths_from_args(
             args.into_iter().skip(1).map(std::ffi::OsString::from),
