@@ -4,9 +4,7 @@
   "columns": {
     "geometry": {
       "encoding": "WKB",
-      "geometry_types": [
-        "Polygon"
-      ],
+      "geometry_types": ["Polygon"],
       "crs": {
         "type": "ProjectedCRS",
         "name": "NAD83 / Massachusetts Mainland",
@@ -17,30 +15,13 @@
       },
       "edges": "planar",
       "orientation": "counterclockwise",
-      "bbox": [
-        219985.0,
-        889985.0,
-        221775.0,
-        890175.0
-      ],
+      "bbox": [219985.0, 889985.0, 221775.0, 890175.0],
       "covering": {
         "bbox": {
-          "xmin": [
-            "bbox",
-            "xmin"
-          ],
-          "ymin": [
-            "bbox",
-            "ymin"
-          ],
-          "xmax": [
-            "bbox",
-            "xmax"
-          ],
-          "ymax": [
-            "bbox",
-            "ymax"
-          ]
+          "xmin": ["bbox", "xmin"],
+          "ymin": ["bbox", "ymin"],
+          "xmax": ["bbox", "xmax"],
+          "ymax": ["bbox", "ymax"]
         }
       }
     }
