@@ -363,6 +363,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       { id: assistantId, role: "assistant", text: "" },
     ]);
 
+    // A run goes stale when the user stops it (stop() marks the generation but
+    // deliberately leaves sendGenerationRef alone) or when a newer send
+    // supersedes it. Either way its buffered events must not touch the
+    // transcript: stop() has already swept this run's pending rows and the
+    // finally below is generation-scoped, so a row added now could outlive
+    // both and stay stuck on "Running".
+    const isStale = () =>
+      cancelledGenerationRef.current === myGeneration || sendGenerationRef.current !== myGeneration;
+
     try {
       for await (const event of session.stream(prompt)) {
         if (event.type === "text") {
@@ -372,11 +381,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             ),
           );
         } else if (event.phase === "started") {
-          // A superseded run must not add rows: stop() has already swept its
-          // pending rows, and its own finally is generation-scoped, so a row
-          // spliced in now would stay stuck on "Running" with nothing to
-          // reconcile it.
-          if (sendGenerationRef.current !== myGeneration) continue;
+          if (isStale()) continue;
           const label = describeTool(event.name, event.input);
           const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
@@ -396,18 +401,37 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             return next;
           });
         } else {
+          if (isStale()) continue;
           const label = describeTool(event.name, event.input);
           const detail = event.error ? (label ? `${label}\n\n${event.error}` : event.error) : label;
+          const fallbackId = (turnIdRef.current += 1);
           setTurns((prev) => {
             const existing = prev.findIndex(
               (turn) => turn.role === "tool" && turn.pending && turn.toolCallId === event.id,
             );
-            if (existing < 0) return prev;
-            return prev.map((turn, index) =>
-              index === existing
-                ? { ...turn, text: detail, pending: false, failed: Boolean(event.error) }
-                : turn,
-            );
+            if (existing >= 0) {
+              return prev.map((turn, index) =>
+                index === existing
+                  ? { ...turn, text: detail, pending: false, failed: Boolean(event.error) }
+                  : turn,
+              );
+            }
+            // No activity row to update — the SDK reported a result without a
+            // preceding "before" hook for this call. Surface it as an already
+            // resolved row rather than dropping the result (and any error) on
+            // the floor, which is what the pre-tool-progress panel did.
+            const anchor = prev.findIndex((turn) => turn.id === assistantId);
+            if (anchor < 0) return prev;
+            const next = [...prev];
+            next.splice(anchor, 0, {
+              id: fallbackId,
+              role: "tool",
+              tool: event.name,
+              toolCallId: event.id,
+              text: detail,
+              failed: Boolean(event.error),
+            });
+            return next;
           });
         }
       }
