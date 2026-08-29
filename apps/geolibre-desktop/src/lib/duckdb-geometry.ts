@@ -39,6 +39,9 @@ export const SYNTHESIZED_GEOMETRY_COLUMN = "__geolibre_synthesized_geometry";
 // often than it is a coordinate.
 const FLOAT_COLUMN_TYPE = /^(DOUBLE|FLOAT|REAL)$/i;
 
+// The DuckDB column types a WKB blob arrives as.
+const BINARY_COLUMN_TYPE = /^(BLOB|BINARY|VARBINARY)/i;
+
 export function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
@@ -219,10 +222,10 @@ export interface GeometryDetectionOptions {
    */
   primaryColumn?: string;
   /**
-   * Allow synthesizing points from a longitude/latitude column pair when no
-   * geometry column exists at all. Off by default so the paths that re-read
-   * GeoJSON (reprojection, export) cannot promote an ordinary `x`/`y` attribute
-   * pair into a geometry; the Parquet load path opts in.
+   * Allow synthesizing points from a longitude/latitude column pair when the
+   * file carries no geometry-capable column at all. Off by default so the paths
+   * that re-read GeoJSON (reprojection, export) cannot promote an ordinary
+   * `x`/`y` attribute pair into a geometry; the Parquet load path opts in.
    */
   allowCoordinateColumns?: boolean;
 }
@@ -235,7 +238,8 @@ export interface GeometryDetectionOptions {
  *    GEOMETRY/GEOGRAPHY logical types as this type already);
  * 3. a well-known WKB blob column name, then a base64 WKB string one, so plain
  *    Parquet files (and GeoParquet files DuckDB does not decode natively) load;
- * 4. with `allowCoordinateColumns`, a longitude/latitude pair of float columns,
+ * 4. with `allowCoordinateColumns`, and only in a file carrying no GEOMETRY and
+ *    no binary column at all, a longitude/latitude pair of float columns,
  *    synthesized into points.
  *
  * @param description Rows from `DESCRIBE <query>` (column_name / column_type).
@@ -268,8 +272,7 @@ export function detectGeometryColumn(
   // geometry, but WKB-style names are still user-authored attributes in some
   // loose Parquet files.
   const wkb = rankedWkbCandidates.find(
-    (row) =>
-      typeof row.column_type === "string" && /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type),
+    (row) => typeof row.column_type === "string" && BINARY_COLUMN_TYPE.test(row.column_type),
   )?.column_name;
   if (typeof wkb === "string") {
     return { column: wkb, isWkb: true };
@@ -291,7 +294,11 @@ export function detectGeometryColumn(
     };
   }
 
-  if (options.allowCoordinateColumns) {
+  // Only a schema holding nothing that could itself be geometry may fall back to
+  // a coordinate pair. A WKB blob under a name this module does not know is
+  // still geometry, and promoting an unrelated `x`/`y` pair beside it would draw
+  // a layer of bogus points instead of reporting that the column was not read.
+  if (options.allowCoordinateColumns && !hasGeometryCandidateColumn(description)) {
     const pair = detectCoordinateColumns(description);
     if (pair) {
       return {
@@ -321,7 +328,7 @@ function detectDeclaredColumn(
   const type = row.column_type;
   if (isGeometryColumnType(type)) return { column: primaryColumn, isWkb: false };
   if (typeof type !== "string") return null;
-  if (/^(BLOB|BINARY|VARBINARY)/i.test(type)) return { column: primaryColumn, isWkb: true };
+  if (BINARY_COLUMN_TYPE.test(type)) return { column: primaryColumn, isWkb: true };
   if (/^(VARCHAR|TEXT|STRING)/i.test(type)) {
     // Still value-probed: a declared column is strong evidence of intent, not
     // proof that its strings decode as base64 WKB.
@@ -334,6 +341,20 @@ function detectDeclaredColumn(
     };
   }
   return null;
+}
+
+/**
+ * True when the schema holds a column that could itself be the geometry: a
+ * native GEOMETRY type, or a binary column under *any* name. Such a file has a
+ * geometry the loader failed to recognise, not a table of plain coordinates, so
+ * it must not fall back to {@link detectCoordinateColumns}.
+ */
+function hasGeometryCandidateColumn(description: Record<string, unknown>[]): boolean {
+  return description.some(
+    (row) =>
+      isGeometryColumnType(row.column_type) ||
+      (typeof row.column_type === "string" && BINARY_COLUMN_TYPE.test(row.column_type)),
+  );
 }
 
 /**

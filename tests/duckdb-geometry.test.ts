@@ -233,6 +233,23 @@ describe("detectGeometryColumn with coordinate columns", () => {
     );
   });
 
+  it("refuses to synthesize beside an unrecognised binary column", () => {
+    // A WKB blob under a name this module does not know is still geometry, so a
+    // numeric `x`/`y` pair beside it is an attribute pair, not a point source:
+    // synthesizing here would draw a layer of bogus points over the real data.
+    assert.equal(
+      detectGeometryColumn(
+        [
+          describeRow("shape_bytes", "BLOB"),
+          describeRow("x", "DOUBLE"),
+          describeRow("y", "DOUBLE"),
+        ],
+        { allowCoordinateColumns: true },
+      ),
+      null,
+    );
+  });
+
   it("requires both halves, as different float columns", () => {
     const detect = (rows: ReturnType<typeof describeRow>[]) =>
       detectGeometryColumn(rows, { allowCoordinateColumns: true });
