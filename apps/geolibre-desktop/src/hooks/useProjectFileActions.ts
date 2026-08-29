@@ -79,6 +79,8 @@ export interface DroppedProjectPrompt {
   project: GeoLibreProject;
   path: string | null;
   text: string;
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
 }
 
 /**
@@ -347,8 +349,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (saveNamePrompt && saveNamePrompt.projectGeneration !== projectGeneration) {
       settleSaveNamePrompt(saveNamePrompt, null);
     }
+    if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
+      setDroppedProjectPrompt(null);
+      setDroppedProjectSaving(false);
+    }
   }, [
     credentialStripPrompt,
+    droppedProjectPrompt,
     embedVectorDataPrompt,
     projectGeneration,
     saveNamePrompt,
@@ -395,7 +402,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   /** Parse and open a project supplied by either browser or native drag-and-drop. */
   const handleDroppedProject = async (text: string, path: string | null): Promise<boolean> => {
-    const candidate = { project: parseProject(text), path, text };
+    const candidate = {
+      project: parseProject(text),
+      path,
+      text,
+      projectGeneration: useAppStore.getState().projectGeneration,
+    };
     if (useAppStore.getState().isDirty) {
       setDroppedProjectPrompt(candidate);
       return false;
