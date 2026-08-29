@@ -12,13 +12,18 @@ export interface FeatureSelectionRequest {
 
 export const FEATURE_SELECTION_EVENT = "geolibre:select-features-on-map";
 
-/** Start a one-shot map selection interaction. */
+/** Start a map selection interaction. Click selection stays active until cancelled. */
 export function startFeatureSelection(request: FeatureSelectionRequest): void {
   window.dispatchEvent(
     new CustomEvent<FeatureSelectionRequest>(FEATURE_SELECTION_EVENT, {
       detail: request,
     }),
   );
+}
+
+/** Whether a completed gesture should stay armed for another selection. */
+export function keepsFeatureSelectionActive(shape: FeatureSelectionShape): boolean {
+  return shape === "single";
 }
 
 /** QGIS-style keyboard modifiers for a spatial selection gesture. */

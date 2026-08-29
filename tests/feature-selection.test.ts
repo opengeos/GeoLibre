@@ -12,6 +12,7 @@ import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools
 import { applyMatchedSelection } from "../apps/geolibre-desktop/src/lib/selection-actions";
 import {
   featuresIntersectingPolygon,
+  keepsFeatureSelectionActive,
   selectionModeFromModifiers,
 } from "../packages/map/src/feature-selection";
 
@@ -258,6 +259,14 @@ describe("applyMatchedSelection", () => {
 });
 
 describe("map feature selection", () => {
+  it("keeps click selection armed while drawn shapes remain one-shot", () => {
+    assert.equal(keepsFeatureSelectionActive("single"), true);
+    assert.equal(keepsFeatureSelectionActive("rectangle"), false);
+    assert.equal(keepsFeatureSelectionActive("polygon"), false);
+    assert.equal(keepsFeatureSelectionActive("freehand"), false);
+    assert.equal(keepsFeatureSelectionActive("radius"), false);
+  });
+
   it("maps QGIS-style modifiers to selection modes", () => {
     assert.equal(selectionModeFromModifiers(false, false), "new");
     assert.equal(selectionModeFromModifiers(true, false), "add");

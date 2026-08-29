@@ -45,6 +45,7 @@ import {
 import {
   FEATURE_SELECTION_EVENT,
   featuresIntersectingPolygon,
+  keepsFeatureSelectionActive,
   selectionModeFromModifiers,
   type FeatureSelectionRequest,
   type FeatureSelectionShape,
@@ -1937,7 +1938,12 @@ export const MapCanvas = memo(function MapCanvas({
           matched,
           selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
         );
-        cancelFeatureSelection.current?.();
+        // Click selection is a continuous map tool: keep its handler and
+        // crosshair armed so the next click can add, remove, or intersect via
+        // modifiers. Drawn shapes remain one-shot because their completed
+        // geometry is the whole interaction. Escape and any newly-started map
+        // tool still run the shared teardown.
+        if (!keepsFeatureSelectionActive(request.shape)) cancelFeatureSelection.current?.();
       };
       const onMouseDown = (event: maplibregl.MapMouseEvent) => {
         if (request.shape === "polygon" || request.shape === "single") return;
