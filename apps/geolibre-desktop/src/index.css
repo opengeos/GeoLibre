@@ -3200,6 +3200,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .geolibre-docked-map-control {
   height: 100%;
   overflow: auto;
+  overflow-x: hidden;
 }
 
 .geolibre-docked-map-control > * {
@@ -3241,6 +3242,20 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-info {
+  overflow: hidden;
+}
+
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-title {
+  display: block;
+  max-width: 100%;
 }
 
 .geolibre-docked-map-control .plugin-control-toggle,
