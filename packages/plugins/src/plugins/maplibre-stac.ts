@@ -55,7 +55,9 @@ import {
 } from "./stac-icechunk";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
-const PANEL_ID = STAC_PLUGIN_ID;
+export const PLANET_OPEN_DATA_PLUGIN_ID = "geolibre-planet-open-data";
+export const PLANET_DISASTER_DATA_CATALOG_URL =
+  "https://data.source.coop/planet/disasterdata/catalog.json";
 // The footprints layer is a normal store layer, so it is saved into the project
 // while `footprintLayerId` only lives for the session. This marker is how a
 // later search — or a reopened project — recognizes the layer as ours instead
@@ -342,6 +344,7 @@ let footprintLayerId: string | null = null;
 let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
+let initialCatalogUrl = "";
 
 // The results pane and the controls above it each keep a floor so neither can
 // be dragged away entirely. splitterBounds() reserves the controls floor and
@@ -839,6 +842,7 @@ function buildPanel(container: HTMLElement): () => void {
   catalogSelect.append(firstOption);
   const urlField = field(labels.urlLabel, "url");
   urlField.input.placeholder = "https://example.org/stac/";
+  urlField.input.value = initialCatalogUrl;
   const connectButton = el("button", labels.connect);
   connectButton.type = "button";
   connectButton.style.cssText = style.primary;
@@ -1162,6 +1166,9 @@ function buildPanel(container: HTMLElement): () => void {
       );
       option.value = entry.url;
       catalogSelect.append(option);
+    }
+    if (initialCatalogUrl && filtered.some((entry) => entry.url === initialCatalogUrl)) {
+      catalogSelect.value = initialCatalogUrl;
     }
   };
 
@@ -1521,41 +1528,54 @@ function mountPanel(container: HTMLElement): void {
   disposePanel = buildPanel(container);
 }
 
-export const maplibreStacCatalogsPlugin: GeoLibrePlugin = {
-  id: STAC_PLUGIN_ID,
-  name: "STAC Catalogs",
-  version: "0.1.0",
-  activate(app) {
-    appRef = app;
-    unregisterPanel =
-      app.registerRightPanel?.({
-        id: PANEL_ID,
-        title: () => labels.getTitle?.() ?? labels.title,
-        dock: "replace-style",
-        defaultWidth: 380,
-        render(container) {
-          mountPanel(container);
-          return () => {
-            disposePanel?.();
-            disposePanel = null;
-            if (panelContainer === container) panelContainer = null;
-          };
-        },
-      }) ?? null;
-    app.openRightPanel?.(PANEL_ID);
-  },
-  deactivate(app) {
-    app.closeRightPanel?.(PANEL_ID);
-    unregisterPanel?.();
-    unregisterPanel = null;
-    removeFootprints();
-    const map = app.getMap?.();
-    if (map) {
-      removeDrawBox(map);
-      removeSelectionHighlight(map);
-    }
-    appRef = null;
-  },
-};
+function createStacPlugin(id: string, name: string, presetCatalogUrl = ""): GeoLibrePlugin {
+  return {
+    id,
+    name,
+    version: "0.1.0",
+    activate(app) {
+      initialCatalogUrl = presetCatalogUrl;
+      appRef = app;
+      unregisterPanel =
+        app.registerRightPanel?.({
+          id,
+          title: () => (presetCatalogUrl ? name : (labels.getTitle?.() ?? labels.title)),
+          dock: "replace-style",
+          defaultWidth: 380,
+          render(container) {
+            mountPanel(container);
+            return () => {
+              disposePanel?.();
+              disposePanel = null;
+              if (panelContainer === container) panelContainer = null;
+            };
+          },
+        }) ?? null;
+      app.openRightPanel?.(id);
+    },
+    deactivate(app) {
+      app.closeRightPanel?.(id);
+      unregisterPanel?.();
+      unregisterPanel = null;
+      removeFootprints();
+      const map = app.getMap?.();
+      if (map) {
+        removeDrawBox(map);
+        removeSelectionHighlight(map);
+      }
+      appRef = null;
+      initialCatalogUrl = "";
+    },
+  };
+}
+
+export const maplibreStacCatalogsPlugin = createStacPlugin(STAC_PLUGIN_ID, "STAC Catalogs");
+
+/** STAC Catalogs browser pinned to Planet's continuously updated disaster releases. */
+export const maplibrePlanetOpenDataPlugin = createStacPlugin(
+  PLANET_OPEN_DATA_PLUGIN_ID,
+  "Planet Open Data",
+  PLANET_DISASTER_DATA_CATALOG_URL,
+);
 
 export default maplibreStacCatalogsPlugin;

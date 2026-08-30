@@ -2835,6 +2835,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-stac-catalogs": "STAC 目录",
+      "geolibre-planet-open-data": "Planet 开放数据",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "图层滑动对比",

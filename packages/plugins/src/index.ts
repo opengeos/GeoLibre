@@ -487,7 +487,10 @@ export {
   type OpenAerialMapSearchOptions,
 } from "./plugins/openaerialmap-api";
 export {
+  maplibrePlanetOpenDataPlugin,
   maplibreStacCatalogsPlugin,
+  PLANET_DISASTER_DATA_CATALOG_URL,
+  PLANET_OPEN_DATA_PLUGIN_ID,
   setStacLabels,
   STAC_PLUGIN_ID,
   type StacLabels,

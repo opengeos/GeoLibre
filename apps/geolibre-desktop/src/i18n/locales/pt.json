@@ -2884,6 +2884,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-stac-catalogs": "Catálogos STAC",
+      "geolibre-planet-open-data": "Dados Abertos Planet",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "Comparação de camadas",
