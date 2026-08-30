@@ -14,7 +14,10 @@ export function mountMapControlInPanel(
   container: HTMLElement,
 ): (() => void) | null {
   const map = app.getMap?.();
-  if (!map) return null;
+  if (!map) {
+    console.warn("Could not mount docked map control: the map is not ready.");
+    return null;
+  }
 
   // Most MapLibre controls return their toolbar button from onAdd(), but the
   // Web Services controls append the actual floating panel as a sibling under
@@ -22,26 +25,7 @@ export function mountMapControlInPanel(
   // real UI instead of only the (hidden) toolbar toggle.
   const mapContainer = map.getContainer();
   const existingMapChildren = new Set(mapContainer.children);
-  // Floating controls install a document-level click/pointerdown listener in
-  // onAdd() solely to collapse themselves when the map is clicked. A native
-  // dock must not inherit that behavior: map clicks and host resize presses do
-  // not close dock content. Suppress only those synchronous registrations and
-  // immediately restore the platform method after the control mounts.
-  const nativeAddEventListener = document.addEventListener;
-  document.addEventListener = ((
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions,
-  ) => {
-    if (type === "click" || type === "pointerdown") return;
-    Reflect.apply(nativeAddEventListener, document, [type, listener, options]);
-  }) as typeof document.addEventListener;
-  let element: HTMLElement;
-  try {
-    element = control.onAdd(map as MapLibreMap);
-  } finally {
-    document.addEventListener = nativeAddEventListener;
-  }
+  const element = control.onAdd(map as MapLibreMap);
   const appendedElements = [...mapContainer.children].filter(
     (child): child is HTMLElement =>
       child instanceof HTMLElement && !existingMapChildren.has(child) && child !== element,
@@ -55,6 +39,7 @@ export function mountMapControlInPanel(
             : element.querySelector<HTMLElement>(".vantor-panel"),
         ].filter((candidate): candidate is HTMLElement => candidate !== null);
   if (contentElements.length === 0) {
+    console.warn("Could not mount docked map control: no panel content was created.");
     control.onRemove(map as MapLibreMap);
     return null;
   }

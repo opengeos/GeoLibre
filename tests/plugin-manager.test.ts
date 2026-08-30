@@ -904,6 +904,76 @@ describe("PluginManager panel auto-expand on restore", () => {
     );
   });
 
+  it("keeps restored native right panels collapsed", async () => {
+    const manager = new PluginManager();
+    let collapsed = false;
+    const mockApp = {
+      registerRightPanel: () => () => undefined,
+      openRightPanel: () => true,
+      collapseRightPanel: () => {
+        collapsed = true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "native-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "native-panel-content",
+            title: "Native panel",
+            render: () => undefined,
+          });
+          api.openRightPanel?.("native-panel-content");
+        },
+      }),
+    );
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["native-panel"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(collapsed, true, "a restored native right panel must remain collapsed");
+  });
+
+  it("deactivates an opted-in plugin when its native panel closes", async () => {
+    const manager = new PluginManager();
+    let registeredPanel: Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0] | null =
+      null;
+    const mockApp = {
+      registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
+        registeredPanel = panel;
+        return () => undefined;
+      },
+      deactivatePlugin: (id: string) => manager.deactivate(id, mockApp as GeoLibreAppAPI),
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "close-with-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "close-with-panel-content",
+            title: "Close with panel",
+            deactivatePluginOnClose: true,
+            render: () => undefined,
+          });
+        },
+      }),
+    );
+
+    manager.activate("close-with-panel", mockApp);
+    assert.ok(registeredPanel);
+    registeredPanel.onClose?.();
+    await flushTimers(1);
+    assert.equal(manager.isActive("close-with-panel"), false);
+  });
+
   it("leaves a plugin that persists its own collapsed state expanded", async () => {
     const manager = new PluginManager();
     const control = fakeControl();

@@ -157,6 +157,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   name: "NASA Earthdata",
   version: "0.1.4",
   activate: (app: GeoLibreAppAPI) => {
+    if (!app.getMap?.()) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }
@@ -168,6 +169,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
         title: "NASA Earthdata",
         dock: "replace-style",
         defaultWidth: 360,
+        deactivatePluginOnClose: true,
         render: (container) => {
           const unmount = mountMapControlInPanel(app, activeControl, container);
           if (!unmount) return;

@@ -316,10 +316,12 @@
 
 /* Select & Input styling. MapLibre ships `.maplibregl-ctrl select { color: #000
    !important }`, which would force black text on the dark-theme dropdowns in a
-   host like GeoLibre. Match its `!important` and beat it on specificity (the
-   extra `.maplibregl-ctrl-vantor` class) so the theme's text color wins. */
+   host like GeoLibre. Match its `!important` and cover both the original map
+   control wrapper and GeoLibre's native dock-panel wrapper. */
 .maplibregl-ctrl-vantor .vantor-panel select,
-.maplibregl-ctrl-vantor .vantor-panel input[type="text"] {
+.maplibregl-ctrl-vantor .vantor-panel input[type="text"],
+.geolibre-docked-map-control .vantor-panel select,
+.geolibre-docked-map-control .vantor-panel input[type="text"] {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--vantor-border);

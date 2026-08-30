@@ -39,6 +39,7 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
   name: "Vantor Open Data",
   version: "0.2.1",
   activate: (app: GeoLibreAppAPI) => {
+    if (!app.getMap?.()) return false;
     control ??= createControl(app);
     const activeControl = control;
     unregisterPanel =
@@ -47,6 +48,7 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
         title: "Vantor Open Data",
         dock: "replace-style",
         defaultWidth: 380,
+        deactivatePluginOnClose: true,
         render: (container) => {
           const unmount = mountMapControlInPanel(app, activeControl, container);
           if (!unmount) return;

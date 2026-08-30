@@ -116,6 +116,7 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   name: "FEMA NFHL",
   version: "0.1.2",
   activate: (app: GeoLibreAppAPI) => {
+    if (!app.getMap?.()) return false;
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
     }
@@ -127,6 +128,7 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
         title: "FEMA NFHL",
         dock: "replace-style",
         defaultWidth: 340,
+        deactivatePluginOnClose: true,
         render: (container) => {
           const unmount = mountMapControlInPanel(app, activeControl, container);
           if (!unmount) return;

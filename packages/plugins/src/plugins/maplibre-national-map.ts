@@ -130,6 +130,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   name: "USGS National Map",
   version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
+    if (!app.getMap?.()) return false;
     if (!nationalMapControl) {
       nationalMapControl = new NationalMapControl(getNationalMapControlOptions());
     }
@@ -141,6 +142,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
         title: "USGS National Map",
         dock: "replace-style",
         defaultWidth: 340,
+        deactivatePluginOnClose: true,
         render: (container) => {
           const unmount = mountMapControlInPanel(app, activeControl, container);
           if (!unmount) return;

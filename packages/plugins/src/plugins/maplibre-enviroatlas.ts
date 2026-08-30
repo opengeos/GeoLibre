@@ -148,6 +148,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   name: "US EPA EnviroAtlas",
   version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
+    if (!app.getMap?.()) return false;
     if (!enviroAtlasControl) {
       enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
     }
@@ -159,6 +160,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
         title: "US EPA EnviroAtlas",
         dock: "replace-style",
         defaultWidth: 360,
+        deactivatePluginOnClose: true,
         render: (container) => {
           const unmount = mountMapControlInPanel(app, activeControl, container);
           if (!unmount) return;

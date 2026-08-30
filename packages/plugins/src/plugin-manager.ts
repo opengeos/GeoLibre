@@ -473,6 +473,12 @@ export class PluginManager {
         setTimeout(() => collapsible.collapse?.(), 0);
       }, 0);
     };
+    const collapseRestoredRightPanel = (panelId: string): void => {
+      app.collapseRightPanel?.(panelId);
+      setTimeout(() => {
+        setTimeout(() => app.collapseRightPanel?.(panelId), 0);
+      }, 0);
+    };
     // A plugin that persists its own collapsed state is exempt: the saved
     // project already says whether its panel should be open, and collapsing it
     // here would both override that and (since collapse() mutates the control)
@@ -480,7 +486,10 @@ export class PluginManager {
     const scopeForRestore = (id: string): GeoLibreAppAPI =>
       this.plugins.get(id)?.restoresPanelCollapseState
         ? scopeAppToPlugin(app, id)
-        : scopeAppToPlugin(app, id, { onControlAdded: collapseRestoredPanel });
+        : scopeAppToPlugin(app, id, {
+            onControlAdded: collapseRestoredPanel,
+            onRightPanelOpened: collapseRestoredRightPanel,
+          });
 
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of
@@ -586,6 +595,8 @@ interface ScopeAppOptions {
    * collapsed (#952).
    */
   onControlAdded?: (control: IControl) => void;
+  /** Called when a plugin opens a native right panel during project restore. */
+  onRightPanelOpened?: (panelId: string) => void;
 }
 
 function scopeAppToPlugin(
@@ -593,11 +604,13 @@ function scopeAppToPlugin(
   pluginId: string,
   options: ScopeAppOptions = {},
 ): GeoLibreAppAPI {
-  const { onControlAdded } = options;
+  const { onControlAdded, onRightPanelOpened } = options;
   const register = app.registerToolbarMenu;
+  const registerRightPanel = app.registerRightPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
-  if (!register && !onControlAdded && !activatePlugin && !deactivatePlugin) return app;
+  if (!register && !onControlAdded && !onRightPanelOpened && !activatePlugin && !deactivatePlugin)
+    return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
 
@@ -612,12 +625,36 @@ function scopeAppToPlugin(
     scoped.registerToolbarMenu = (menu) => registerWithOwner(menu, pluginId);
   }
 
+  if (registerRightPanel && deactivatePlugin) {
+    scoped.registerRightPanel = (panel) =>
+      registerRightPanel(
+        panel.deactivatePluginOnClose
+          ? {
+              ...panel,
+              onClose: () => {
+                panel.onClose?.();
+                setTimeout(() => deactivatePlugin(pluginId), 0);
+              },
+            }
+          : panel,
+      );
+  }
+
   if (onControlAdded) {
     const addMapControl = app.addMapControl;
     scoped.addMapControl = (control, position) => {
       const added = addMapControl(control, position);
       if (added !== false) onControlAdded(control);
       return added;
+    };
+  }
+
+  if (onRightPanelOpened && app.openRightPanel) {
+    const openRightPanel = app.openRightPanel;
+    scoped.openRightPanel = (panelId) => {
+      const opened = openRightPanel(panelId);
+      if (opened) onRightPanelOpened(panelId);
+      return opened;
     };
   }
 

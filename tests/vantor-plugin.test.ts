@@ -65,8 +65,9 @@ describe("Vantor Open Data built-in plugin", () => {
     assert.equal(pluginTier(VANTOR_PLUGIN_ID), "advanced");
   });
 
-  it("defaults to the top-left map-control position", () => {
-    assert.equal(maplibreVantorPlugin.getMapControlPosition?.(), "top-left");
+  it("registers as a dockable panel rather than a positioned map control", () => {
+    assert.equal(maplibreVantorPlugin.getMapControlPosition, undefined);
+    assert.equal(maplibreVantorPlugin.setMapControlPosition, undefined);
   });
 
   it("uses the GPU renderer by default and allows selecting WASM", async () => {

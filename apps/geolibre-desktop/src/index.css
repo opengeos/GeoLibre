@@ -3216,8 +3216,13 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   width: 100% !important;
   max-width: none !important;
   max-height: none !important;
+  display: flex !important;
   border-radius: 0;
   box-shadow: none;
+}
+
+.geolibre-docked-map-control .vantor-panel__table-container {
+  max-height: none;
 }
 
 .geolibre-docked-map-control .plugin-control-toggle,
@@ -3229,6 +3234,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .geolibre-docked-map-control .national-map-toggle,
 .geolibre-docked-map-control .national-map-header,
 .geolibre-docked-map-control .national-map-close,
+.geolibre-docked-map-control .vantor-panel__header,
 .geolibre-docked-map-control .vantor-panel__toggle,
 .geolibre-docked-map-control .plugin-control-resize-handle,
 .geolibre-docked-map-control .enviroatlas-resizer,
