@@ -11,10 +11,22 @@ import {
   PROVIDER_FIELDS,
   type ProviderField,
 } from "../../lib/assistant/provider-fields";
-import { Button, Input, Label, Select, cn } from "@geolibre/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+  Select,
+  cn,
+} from "@geolibre/ui";
 import {
   Bot,
   Check,
+  ChevronDown,
   ExternalLink,
   Eye,
   EyeOff,
@@ -63,6 +75,43 @@ interface AiSectionContentProps {
   getProviderField: (field: ProviderField) => string;
   setProviderField: (field: ProviderField, value: string) => void;
   osFieldEnvName: (field: ProviderField) => string | null;
+}
+
+interface ProviderSelectProps {
+  value: AssistantProviderId;
+  onValueChange: (value: AssistantProviderId) => void;
+  label: string;
+}
+
+/** Provider picker rendered in-page so it does not depend on a native browser popup. */
+function ProviderSelect({ value, onValueChange, label }: ProviderSelectProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 w-full justify-between px-3 font-normal"
+          aria-label={label}
+        >
+          <span>{PROVIDER_LABELS[value]}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(nextValue) => onValueChange(nextValue as AssistantProviderId)}
+        >
+          {ASSISTANT_PROVIDER_IDS.map((id) => (
+            <DropdownMenuRadioItem key={id} value={id}>
+              {PROVIDER_LABELS[id]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 /** Shared Ollama discovery state for profile editors. */
@@ -315,22 +364,16 @@ export function AiSectionContent({
           {/* Provider selector */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
-            <Select
+            <ProviderSelect
               value={newProfileProvider}
-              onChange={(e) => {
-                const provider = e.target.value as AssistantProviderId;
+              label={t("settings.ai.providerLabel")}
+              onValueChange={(provider) => {
                 setNewProfileProvider(provider);
                 setNewProfileModel(defaultModelFor(provider));
                 setNewProfileFieldValues(initialFieldValues(provider));
                 ollamaDiscovery.reset();
               }}
-            >
-              {ASSISTANT_PROVIDER_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {PROVIDER_LABELS[id]}
-                </option>
-              ))}
-            </Select>
+            />
           </div>
 
           {/* Model selector (only for providers with preset models) */}
@@ -658,16 +701,11 @@ function ProfileEditor({
       {/* Provider selector */}
       <div className="space-y-1.5">
         <Label className="text-xs">{t("settings.ai.providerLabel")}</Label>
-        <Select
+        <ProviderSelect
           value={profile.provider}
-          onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
-        >
-          {ASSISTANT_PROVIDER_IDS.map((id) => (
-            <option key={id} value={id}>
-              {PROVIDER_LABELS[id]}
-            </option>
-          ))}
-        </Select>
+          label={t("settings.ai.providerLabel")}
+          onValueChange={updateProvider}
+        />
       </div>
 
       {/* Model selector */}
