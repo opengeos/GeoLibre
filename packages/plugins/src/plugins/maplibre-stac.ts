@@ -847,6 +847,7 @@ function buildPanel(container: HTMLElement): () => void {
   const urlField = field(labels.urlLabel, "url");
   urlField.input.placeholder = "https://example.org/stac/";
   urlField.input.value = initialCatalogUrl;
+  let presetSelectionPending = Boolean(initialCatalogUrl);
   const connectButton = el("button", labels.connect);
   connectButton.type = "button";
   connectButton.style.cssText = style.primary;
@@ -1171,8 +1172,13 @@ function buildPanel(container: HTMLElement): () => void {
       option.value = entry.url;
       catalogSelect.append(option);
     }
-    if (initialCatalogUrl && filtered.some((entry) => entry.url === initialCatalogUrl)) {
+    if (
+      presetSelectionPending &&
+      urlField.input.value === initialCatalogUrl &&
+      filtered.some((entry) => entry.url === initialCatalogUrl)
+    ) {
       catalogSelect.value = initialCatalogUrl;
+      presetSelectionPending = false;
     }
   };
 
@@ -1401,9 +1407,15 @@ function buildPanel(container: HTMLElement): () => void {
 
   catalogSearch.input.addEventListener("input", renderCatalogs);
   catalogSelect.addEventListener("change", () => {
-    if (catalogSelect.value) urlField.input.value = catalogSelect.value;
+    if (catalogSelect.value) {
+      presetSelectionPending = false;
+      urlField.input.value = catalogSelect.value;
+    }
   });
-  connectButton.addEventListener("click", async () => {
+  urlField.input.addEventListener("input", () => {
+    if (urlField.input.value !== initialCatalogUrl) presetSelectionPending = false;
+  });
+  const connectCatalog = async (): Promise<void> => {
     const url = urlField.input.value.trim();
     setDisabled(connectButton, true);
     setStatus(labels.connecting);
@@ -1439,7 +1451,9 @@ function buildPanel(container: HTMLElement): () => void {
     } finally {
       setDisabled(connectButton, false);
     }
-  });
+  };
+  connectButton.addEventListener("click", () => void connectCatalog());
+  if (initialCatalogUrl) void connectCatalog();
   searchButton.addEventListener("click", () => void runSearch(false));
   clearResultsButton.addEventListener("click", () => clearSearchResults());
   loadMore.addEventListener("click", () => void runSearch(true));
