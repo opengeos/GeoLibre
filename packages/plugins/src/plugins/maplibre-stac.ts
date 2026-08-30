@@ -341,6 +341,12 @@ export function setStacLabels(next: Partial<StacLabels>): void {
   if (panelContainer) mountPanel(panelContainer);
 }
 
+// Every createStacPlugin() instance shares the module-level state below, so at
+// most one may be active at a time. That is enforced by the `exclusiveGroup`
+// the factory sets on each plugin, which PluginManager honours in activate()
+// and restoreProjectState(). Activating two instances by calling activate() on
+// the plugin objects directly, bypassing the manager, would let them stomp each
+// other's catalog url, footprint layer, and panel handles.
 let appRef: GeoLibreAppAPI | null = null;
 // The result footprints are a first-class store layer, so they show up in the
 // Layers panel and can be hidden, restyled, or removed like any other layer.
@@ -1519,7 +1525,12 @@ function buildPanel(container: HTMLElement): () => void {
     (error) => {
       catalogSelect.innerHTML = "";
       catalogSelect.append(el("option", labels.indexUnavailable));
-      setStatus(error instanceof Error ? error.message : labels.indexLoadFailed, true);
+      // A preset catalog connects in parallel with this index fetch, so a late
+      // index failure must not overwrite a connection that already succeeded —
+      // the catalog is usable, only the browse-by-name dropdown is not.
+      if (!connection) {
+        setStatus(error instanceof Error ? error.message : labels.indexLoadFailed, true);
+      }
     },
   );
 
