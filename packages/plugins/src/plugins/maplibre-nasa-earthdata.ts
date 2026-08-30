@@ -171,7 +171,9 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
         defaultWidth: 360,
         deactivatePluginOnClose: true,
         render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container);
+          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+            app.closeRightPanel?.(PANEL_ID),
+          );
           if (!unmount) return;
           nasaEarthdataStoreSync.attach(activeControl);
           activeControl.expand();

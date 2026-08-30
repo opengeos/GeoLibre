@@ -144,7 +144,9 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
         defaultWidth: 340,
         deactivatePluginOnClose: true,
         render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container);
+          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+            app.closeRightPanel?.(PANEL_ID),
+          );
           if (!unmount) return;
           nationalMapStoreSync.attach(activeControl);
           activeControl.expand();

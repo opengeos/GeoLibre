@@ -130,7 +130,9 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
         defaultWidth: 340,
         deactivatePluginOnClose: true,
         render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container);
+          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+            app.closeRightPanel?.(PANEL_ID),
+          );
           if (!unmount) return;
           femaWmsStoreSync.attach(activeControl);
           activeControl.expand();

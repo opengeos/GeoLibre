@@ -50,7 +50,9 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
         defaultWidth: 380,
         deactivatePluginOnClose: true,
         render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container);
+          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+            app.closeRightPanel?.(PANEL_ID),
+          );
           if (!unmount) return;
           activeControl.expand();
           return unmount;

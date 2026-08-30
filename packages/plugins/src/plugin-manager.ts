@@ -475,9 +475,6 @@ export class PluginManager {
     };
     const collapseRestoredRightPanel = (panelId: string): void => {
       app.collapseRightPanel?.(panelId);
-      setTimeout(() => {
-        setTimeout(() => app.collapseRightPanel?.(panelId), 0);
-      }, 0);
     };
     // A plugin that persists its own collapsed state is exempt: the saved
     // project already says whether its panel should be open, and collapsing it
@@ -632,8 +629,11 @@ function scopeAppToPlugin(
           ? {
               ...panel,
               onClose: () => {
-                panel.onClose?.();
-                setTimeout(() => deactivatePlugin(pluginId), 0);
+                try {
+                  panel.onClose?.();
+                } finally {
+                  setTimeout(() => deactivatePlugin(pluginId), 0);
+                }
               },
             }
           : panel,

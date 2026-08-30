@@ -162,7 +162,9 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
         defaultWidth: 360,
         deactivatePluginOnClose: true,
         render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container);
+          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+            app.closeRightPanel?.(PANEL_ID),
+          );
           if (!unmount) return;
           enviroAtlasStoreSync.attach(activeControl);
           activeControl.expand();

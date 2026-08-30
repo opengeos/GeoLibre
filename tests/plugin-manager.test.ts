@@ -974,6 +974,41 @@ describe("PluginManager panel auto-expand on restore", () => {
     assert.equal(manager.isActive("close-with-panel"), false);
   });
 
+  it("deactivates an opted-in plugin when its panel close hook throws", async () => {
+    const manager = new PluginManager();
+    let registeredPanel: Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0] | null =
+      null;
+    const mockApp = {
+      registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
+        registeredPanel = panel;
+        return () => undefined;
+      },
+      deactivatePlugin: (id: string) => manager.deactivate(id, mockApp as GeoLibreAppAPI),
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "throwing-close-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "throwing-close-panel-content",
+            title: "Throwing close panel",
+            deactivatePluginOnClose: true,
+            render: () => undefined,
+            onClose: () => {
+              throw new Error("close failed");
+            },
+          });
+        },
+      }),
+    );
+
+    manager.activate("throwing-close-panel", mockApp);
+    assert.ok(registeredPanel);
+    assert.throws(() => registeredPanel.onClose?.(), /close failed/);
+    await flushTimers(1);
+    assert.equal(manager.isActive("throwing-close-panel"), false);
+  });
+
   it("leaves a plugin that persists its own collapsed state expanded", async () => {
     const manager = new PluginManager();
     const control = fakeControl();
