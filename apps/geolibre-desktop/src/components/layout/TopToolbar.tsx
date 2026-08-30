@@ -898,6 +898,8 @@ export function TopToolbar({
     setStacLabels({
       title: t("stacPlugin.title"),
       getTitle: () => i18n.t("stacPlugin.title"),
+      planetTitle: t("toolbar.plugin.geolibre-planet-open-data"),
+      getPlanetTitle: () => i18n.t("toolbar.plugin.geolibre-planet-open-data"),
       footprintLayerName: t("stacPlugin.footprintLayerName"),
       catalogSearch: t("stacPlugin.catalogSearch"),
       catalogSearchPlaceholder: t("stacPlugin.catalogSearchPlaceholder"),

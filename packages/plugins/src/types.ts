@@ -992,6 +992,8 @@ export interface GeoLibrePlugin {
   name: string;
   version: string;
   activeByDefault?: boolean;
+  /** Plugins in the same group cannot be active at the same time. */
+  exclusiveGroup?: string;
   /** At least one name is required for handleUrlParameters to be called. */
   urlParameterNames?: string[];
   /**

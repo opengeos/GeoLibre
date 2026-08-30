@@ -165,6 +165,17 @@ export class PluginManager {
     const pendingResult = this.activationResults.get(id);
     if (pendingResult) return pendingResult;
     if (this.active.has(id)) return true;
+    if (plugin.exclusiveGroup) {
+      for (const [otherId, otherPlugin] of this.plugins) {
+        if (
+          otherId !== id &&
+          this.active.has(otherId) &&
+          otherPlugin.exclusiveGroup === plugin.exclusiveGroup
+        ) {
+          this.deactivate(otherId, app);
+        }
+      }
+    }
     const scopedApp = scopeAppToPlugin(app, id);
     this.activating.add(id);
     let activated: ReturnType<GeoLibrePlugin["activate"]>;

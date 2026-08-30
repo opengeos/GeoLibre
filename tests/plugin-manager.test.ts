@@ -21,6 +21,44 @@ function testPlugin(patch: Partial<GeoLibrePlugin> = {}): GeoLibrePlugin {
   };
 }
 
+describe("PluginManager exclusive groups", () => {
+  it("deactivates the active sibling before activating another group member", () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+    manager.register(
+      testPlugin({
+        id: "stac-catalogs",
+        exclusiveGroup: "stac-browser",
+        activate: () => {
+          calls.push("activate:stac");
+        },
+        deactivate: () => {
+          calls.push("deactivate:stac");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "planet-open-data",
+        exclusiveGroup: "stac-browser",
+        activate: () => {
+          calls.push("activate:planet");
+        },
+        deactivate: () => {
+          calls.push("deactivate:planet");
+        },
+      }),
+    );
+
+    manager.activate("stac-catalogs", app);
+    manager.activate("planet-open-data", app);
+
+    assert.equal(manager.isActive("stac-catalogs"), false);
+    assert.equal(manager.isActive("planet-open-data"), true);
+    assert.deepEqual(calls, ["activate:stac", "deactivate:stac", "activate:planet"]);
+  });
+});
+
 describe("PluginManager URL parameters", () => {
   it("runs matching active plugin URL parameter handlers once per context", async () => {
     const calls: string[] = [];

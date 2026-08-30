@@ -141,6 +141,9 @@ export interface StacLabels {
   title: string;
   /** Title getter pushed by the host so the panel header re-localizes live. */
   getTitle?: () => string;
+  planetTitle: string;
+  /** Planet title getter pushed by the host so the preset panel re-localizes live. */
+  getPlanetTitle?: () => string;
   footprintLayerName: string;
   catalogSearch: string;
   catalogSearchPlaceholder: string;
@@ -239,6 +242,7 @@ const ZARR_PROBLEMS: Record<Exclude<ZarrTargetCheck, "array">, string> = {
 
 let labels: StacLabels = {
   title: "STAC Catalogs",
+  planetTitle: "Planet Open Data",
   footprintLayerName: "STAC search footprints",
   catalogSearch: "Find a public catalog from STAC Index",
   catalogSearchPlaceholder: "Search catalog names…",
@@ -1533,13 +1537,17 @@ function createStacPlugin(id: string, name: string, presetCatalogUrl = ""): GeoL
     id,
     name,
     version: "0.1.0",
+    exclusiveGroup: "stac-catalog-browser",
     activate(app) {
       initialCatalogUrl = presetCatalogUrl;
       appRef = app;
       unregisterPanel =
         app.registerRightPanel?.({
           id,
-          title: () => (presetCatalogUrl ? name : (labels.getTitle?.() ?? labels.title)),
+          title: () =>
+            presetCatalogUrl
+              ? (labels.getPlanetTitle?.() ?? labels.planetTitle)
+              : (labels.getTitle?.() ?? labels.title),
           dock: "replace-style",
           defaultWidth: 380,
           render(container) {
