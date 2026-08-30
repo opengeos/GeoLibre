@@ -3194,6 +3194,46 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   border-left-color: hsl(var(--popover));
 }
 
+/* Map-control-backed Web Services live in GeoLibre's dockable panel host. The
+   upstream packages position and size their panels as map overlays, so reset
+   that overlay geometry and let the host own the available width and height. */
+.geolibre-docked-map-control {
+  height: 100%;
+  overflow: auto;
+}
+
+.geolibre-docked-map-control > * {
+  width: 100%;
+  margin: 0;
+}
+
+.geolibre-docked-map-control .plugin-control-panel,
+.geolibre-docked-map-control .enviroatlas-panel,
+.geolibre-docked-map-control .national-map-panel,
+.geolibre-docked-map-control .vantor-panel {
+  position: static !important;
+  inset: auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.geolibre-docked-map-control .plugin-control-toggle,
+.geolibre-docked-map-control .plugin-control-close,
+.geolibre-docked-map-control .enviroatlas-toggle,
+.geolibre-docked-map-control .enviroatlas-close,
+.geolibre-docked-map-control .national-map-toggle,
+.geolibre-docked-map-control .national-map-close,
+.geolibre-docked-map-control .vantor-panel__toggle,
+.geolibre-docked-map-control .plugin-control-resize-handle,
+.geolibre-docked-map-control .enviroatlas-resizer,
+.geolibre-docked-map-control .national-map-resizer,
+.geolibre-docked-map-control .vantor-panel__resize-handle {
+  display: none !important;
+}
+
 /* The Web Services controls (FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas,
    USGS National Map) theme themselves from prefers-color-scheme (the OS
    setting), while GeoLibre themes from the .dark class on <html>. Each

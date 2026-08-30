@@ -1,10 +1,12 @@
 import { VantorControl } from "./vantor/control";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel } from "./dockable-map-control";
 
 export const VANTOR_PLUGIN_ID = "maplibre-gl-vantor";
 
 let control: VantorControl | null = null;
-let position: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "vantor-panel";
+let unregisterPanel: (() => void) | null = null;
 let themeObserver: MutationObserver | null = null;
 let unsubscribeLocale: (() => void) | null = null;
 
@@ -38,16 +40,21 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
   version: "0.2.1",
   activate: (app: GeoLibreAppAPI) => {
     control ??= createControl(app);
-    const added = app.addMapControl(control, position);
-    if (!added) {
-      control = null;
-      return false;
-    }
-
     const activeControl = control;
-    setTimeout(() => {
-      if (control === activeControl) activeControl.expand();
-    }, 0);
+    unregisterPanel =
+      app.registerRightPanel?.({
+        id: PANEL_ID,
+        title: "Vantor Open Data",
+        dock: "replace-style",
+        defaultWidth: 380,
+        render: (container) => {
+          const unmount = mountMapControlInPanel(app, activeControl, container);
+          if (!unmount) return;
+          activeControl.expand();
+          return unmount;
+        },
+      }) ?? null;
+    app.openRightPanel?.(PANEL_ID);
 
     unsubscribeLocale ??=
       app.onLocaleChange?.(() =>
@@ -74,18 +81,9 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
     unsubscribeLocale?.();
     unsubscribeLocale = null;
     if (!control) return;
-    app.removeMapControl(control);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     control = null;
-  },
-  getMapControlPosition: () => position,
-  setMapControlPosition: (app: GeoLibreAppAPI, nextPosition: GeoLibreMapControlPosition) => {
-    position = nextPosition;
-    if (!control) return;
-    app.removeMapControl(control);
-    const added = app.addMapControl(control, position);
-    if (!added) {
-      control = null;
-      return false;
-    }
   },
 };

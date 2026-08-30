@@ -7,7 +7,8 @@ import {
   type ServiceRef,
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel } from "./dockable-map-control";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -22,7 +23,7 @@ const SOURCE_KIND = "enviroatlas";
 // Matches the package's AddedLayer.bounds type, which is not exported.
 type LngLatBoundsArray = [number, number, number, number];
 
-let enviroAtlasPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "enviroatlas-panel";
 
 const ENVIROATLAS_OPTIONS = {
   collapsed: false,
@@ -36,6 +37,7 @@ const ENVIROATLAS_OPTIONS = {
 
 let enviroAtlasControl: EnviroAtlasControl | null = null;
 let controlEventHandler: EnviroAtlasControlEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 function isServiceRef(value: unknown): value is ServiceRef {
   if (!value || typeof value !== "object") return false;
@@ -150,38 +152,39 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
       enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
     }
 
-    const added = app.addMapControl(enviroAtlasControl, enviroAtlasPosition);
-    if (!added) {
-      enviroAtlasControl = null;
-      return false;
-    }
-    enviroAtlasStoreSync.attach(enviroAtlasControl);
-    setTimeout(() => enviroAtlasControl?.expand(), 0);
+    const activeControl = enviroAtlasControl;
+    unregisterPanel =
+      app.registerRightPanel?.({
+        id: PANEL_ID,
+        title: "US EPA EnviroAtlas",
+        dock: "replace-style",
+        defaultWidth: 360,
+        render: (container) => {
+          const unmount = mountMapControlInPanel(app, activeControl, container);
+          if (!unmount) return;
+          enviroAtlasStoreSync.attach(activeControl);
+          activeControl.expand();
+          return () => {
+            enviroAtlasStoreSync.detach();
+            unmount();
+          };
+        },
+      }) ?? null;
+    app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) return;
     enviroAtlasStoreSync.detach();
-    app.removeMapControl(enviroAtlasControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     enviroAtlasControl = null;
-  },
-  getMapControlPosition: () => enviroAtlasPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    enviroAtlasPosition = position;
-    if (!enviroAtlasControl) return;
-    app.removeMapControl(enviroAtlasControl);
-    const added = app.addMapControl(enviroAtlasControl, enviroAtlasPosition);
-    if (!added) {
-      enviroAtlasStoreSync.detach();
-      enviroAtlasControl = null;
-      return false;
-    }
-    setTimeout(() => enviroAtlasControl?.expand(), 0);
   },
 };
 
 function getEnviroAtlasControlOptions(): EnviroAtlasControlOptions {
   return {
     ...ENVIROATLAS_OPTIONS,
-    position: enviroAtlasPosition,
+    position: "top-left",
   };
 }

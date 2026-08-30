@@ -7,7 +7,8 @@ import {
   type NasaEarthdataEventHandler,
 } from "maplibre-gl-nasa-earthdata";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel } from "./dockable-map-control";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -21,7 +22,7 @@ const SOURCE_KIND = "nasa-earthdata";
 // Matches the control's native source/layer id scheme (`nasa-gibs-<key>`).
 const NATIVE_ID_PREFIX = "nasa-gibs-";
 
-let nasaEarthdataPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "nasa-earthdata-panel";
 
 const NASA_EARTHDATA_OPTIONS = {
   collapsed: false,
@@ -32,6 +33,7 @@ const NASA_EARTHDATA_OPTIONS = {
 
 let nasaEarthdataControl: NasaEarthdataControl | null = null;
 let controlEventHandler: NasaEarthdataEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 // GIBS catalog entries seen in layeradd events, keyed by GIBS layer id. The
 // control state alone does not carry the catalog data needed to rebuild
@@ -159,38 +161,39 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }
 
-    const added = app.addMapControl(nasaEarthdataControl, nasaEarthdataPosition);
-    if (!added) {
-      nasaEarthdataControl = null;
-      return false;
-    }
-    nasaEarthdataStoreSync.attach(nasaEarthdataControl);
-    setTimeout(() => nasaEarthdataControl?.expand(), 0);
+    const activeControl = nasaEarthdataControl;
+    unregisterPanel =
+      app.registerRightPanel?.({
+        id: PANEL_ID,
+        title: "NASA Earthdata",
+        dock: "replace-style",
+        defaultWidth: 360,
+        render: (container) => {
+          const unmount = mountMapControlInPanel(app, activeControl, container);
+          if (!unmount) return;
+          nasaEarthdataStoreSync.attach(activeControl);
+          activeControl.expand();
+          return () => {
+            nasaEarthdataStoreSync.detach();
+            unmount();
+          };
+        },
+      }) ?? null;
+    app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) return;
     nasaEarthdataStoreSync.detach();
-    app.removeMapControl(nasaEarthdataControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     nasaEarthdataControl = null;
-  },
-  getMapControlPosition: () => nasaEarthdataPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    nasaEarthdataPosition = position;
-    if (!nasaEarthdataControl) return;
-    app.removeMapControl(nasaEarthdataControl);
-    const added = app.addMapControl(nasaEarthdataControl, nasaEarthdataPosition);
-    if (!added) {
-      nasaEarthdataStoreSync.detach();
-      nasaEarthdataControl = null;
-      return false;
-    }
-    setTimeout(() => nasaEarthdataControl?.expand(), 0);
   },
 };
 
 function getNasaEarthdataControlOptions(): NasaEarthdataControlOptions {
   return {
     ...NASA_EARTHDATA_OPTIONS,
-    position: nasaEarthdataPosition,
+    position: "top-left",
   };
 }
