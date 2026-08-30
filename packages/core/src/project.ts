@@ -1738,10 +1738,14 @@ export function applyProjectToStore(project: GeoLibreProject): {
   comments: ProjectComment[];
   metadata: Record<string, unknown>;
 } {
+  // Legacy and externally-authored projects can carry a partial top-level
+  // style alongside newer fields on the layer itself. Preserve those layer
+  // fields while keeping the top-level copy authoritative where it explicitly
+  // supplies a value.
   const layers = project.layers.map((layer) => ({
     ...layer,
     style: project.styles[layer.id]
-      ? { ...DEFAULT_LAYER_STYLE, ...project.styles[layer.id] }
+      ? { ...DEFAULT_LAYER_STYLE, ...layer.style, ...project.styles[layer.id] }
       : { ...DEFAULT_LAYER_STYLE, ...layer.style },
   }));
   // Re-normalize here (even though `parseProject` already did) because

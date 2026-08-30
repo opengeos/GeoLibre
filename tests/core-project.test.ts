@@ -21,6 +21,33 @@ import {
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
+  it("preserves layer style fields missing from a legacy top-level style", () => {
+    const base = createEmptyProject("Partial legacy style");
+    const layer = geojsonLayer({
+      id: "cities",
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        markerEnabled: true,
+        markerShape: "triangle",
+        markerColor: "#ef4444",
+        markerSize: 24,
+      },
+    });
+    const applied = applyProjectToStore({
+      ...base,
+      layers: [layer],
+      styles: {
+        cities: { fillColor: "#22c55e" } as typeof DEFAULT_LAYER_STYLE,
+      },
+    });
+
+    assert.equal(applied.layers[0].style.fillColor, "#22c55e");
+    assert.equal(applied.layers[0].style.markerEnabled, true);
+    assert.equal(applied.layers[0].style.markerShape, "triangle");
+    assert.equal(applied.layers[0].style.markerColor, "#ef4444");
+    assert.equal(applied.layers[0].style.markerSize, 24);
+  });
+
   it("round-trips a custom blank background color and defaults legacy projects", () => {
     const base = createEmptyProject("Blank background");
     const customized = parseProject(serializeProject({ ...base, blankBackgroundColor: "#1f2937" }));
