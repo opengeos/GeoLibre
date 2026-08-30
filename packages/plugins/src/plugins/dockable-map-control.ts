@@ -22,7 +22,26 @@ export function mountMapControlInPanel(
   // real UI instead of only the (hidden) toolbar toggle.
   const mapContainer = map.getContainer();
   const existingMapChildren = new Set(mapContainer.children);
-  const element = control.onAdd(map as MapLibreMap);
+  // Floating controls install a document-level click/pointerdown listener in
+  // onAdd() solely to collapse themselves when the map is clicked. A native
+  // dock must not inherit that behavior: map clicks and host resize presses do
+  // not close dock content. Suppress only those synchronous registrations and
+  // immediately restore the platform method after the control mounts.
+  const nativeAddEventListener = document.addEventListener;
+  document.addEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ) => {
+    if (type === "click" || type === "pointerdown") return;
+    Reflect.apply(nativeAddEventListener, document, [type, listener, options]);
+  }) as typeof document.addEventListener;
+  let element: HTMLElement;
+  try {
+    element = control.onAdd(map as MapLibreMap);
+  } finally {
+    document.addEventListener = nativeAddEventListener;
+  }
   const appendedElements = [...mapContainer.children].filter(
     (child): child is HTMLElement =>
       child instanceof HTMLElement && !existingMapChildren.has(child) && child !== element,
