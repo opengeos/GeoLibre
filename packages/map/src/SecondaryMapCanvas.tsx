@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
+import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface SecondaryMapCanvasProps {
@@ -126,20 +127,15 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       mc.setBasemapOpacity(live.basemapOpacity);
     });
 
-    let resizeFrame: number | null = null;
-    const resizeMap = () => {
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
-      });
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
+    // Shared with the primary map so a compare/swipe pane gets the same
+    // flash-free behaviour during a continuous window drag.
+    const disposeResizeScheduler = createMapResizeScheduler({
+      getMap: () => mc.getMap(),
+      container: containerRef.current,
+    });
 
     return () => {
-      resizeObserver.disconnect();
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      disposeResizeScheduler();
       mc.destroy();
       controller.current = null;
     };

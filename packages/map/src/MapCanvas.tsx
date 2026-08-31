@@ -54,6 +54,7 @@ import {
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
+import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -66,10 +67,7 @@ import "./layer-control-overrides.css";
  * motionless cursor would sit there until the first drag.
  */
 const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
-const RESIZE_DEBOUNCE_MS = 100;
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const WEB_MERCATOR_EARTH_RADIUS = 6378137;
 const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
@@ -1619,107 +1617,13 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
 
-    let resizeFrame: number | null = null;
-    let resizeTimer: number | null = null;
-    let windowResizeTimer: number | null = null;
-    let windowResizeActive = false;
-    let observedDevicePixelRatio = window.devicePixelRatio;
-    let panelResizeActive = false;
-    let resizeAfterPanelResize = false;
-    const mapNeedsResize = () => {
-      const map = mc.getMap();
-      const container = containerRef.current;
-      if (!map || !container) return false;
-      const { width, height } = container.getBoundingClientRect();
-      const canvas = map.getCanvas();
-      return (
-        parseFloat(canvas.style.width) !== width ||
-        parseFloat(canvas.style.height) !== height ||
-        observedDevicePixelRatio !== window.devicePixelRatio
-      );
-    };
-    const commitResize = () => {
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        if (mapNeedsResize()) {
-          mc.getMap()?.resize();
-          observedDevicePixelRatio = window.devicePixelRatio;
-        }
-      });
-    };
-    const resizeMap = () => {
-      if (panelResizeActive) {
-        resizeAfterPanelResize = true;
-        return;
-      }
-      // App layout changes such as toggling a sidebar are discrete and should
-      // resize on the next frame. Only coalesce the rapid observer callbacks
-      // produced while the browser window itself is being dragged.
-      if (!windowResizeActive) {
-        commitResize();
-        return;
-      }
-      // Resizing a WebGL canvas reallocates and clears its framebuffer before
-      // MapLibre's next render. During a continuous window drag that used to
-      // reveal the transparent canvas for several frames. Keep the previous
-      // bitmap in place while dimensions are changing, then resize the backing
-      // store once the dimensions settle.
-      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        resizeTimer = null;
-        commitResize();
-      }, RESIZE_DEBOUNCE_MS);
-    };
-    const onWindowResize = () => {
-      windowResizeActive = true;
-      if (windowResizeTimer !== null) window.clearTimeout(windowResizeTimer);
-      windowResizeTimer = window.setTimeout(() => {
-        windowResizeTimer = null;
-        windowResizeActive = false;
-      }, RESIZE_DEBOUNCE_MS);
-      resizeMap();
-    };
-    const onPanelResizeStart = () => {
-      panelResizeActive = true;
-      resizeAfterPanelResize = false;
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-      if (resizeTimer !== null) {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = null;
-      }
-    };
-    const onPanelResizeEnd = () => {
-      panelResizeActive = false;
-      if (resizeAfterPanelResize) {
-        resizeAfterPanelResize = false;
-      }
-      commitResize();
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
-    window.addEventListener("resize", onWindowResize);
-    window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-    window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-    commitResize();
+    const disposeResizeScheduler = createMapResizeScheduler({
+      getMap: () => mc.getMap(),
+      container: containerRef.current,
+    });
 
     return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", onWindowResize);
-      window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-      window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
-      if (resizeTimer !== null) {
-        window.clearTimeout(resizeTimer);
-      }
-      if (windowResizeTimer !== null) {
-        window.clearTimeout(windowResizeTimer);
-      }
+      disposeResizeScheduler();
       pointerElevation.dispose();
       map.getContainer().removeEventListener("click", handleProjectionControlClick);
       mc.destroy();
