@@ -1623,11 +1623,19 @@ export const MapCanvas = memo(function MapCanvas({
     let resizeTimer: number | null = null;
     let panelResizeActive = false;
     let resizeAfterPanelResize = false;
+    const mapNeedsResize = () => {
+      const map = mc.getMap();
+      const container = containerRef.current;
+      if (!map || !container) return false;
+      const { width, height } = container.getBoundingClientRect();
+      const canvas = map.getCanvas();
+      return parseFloat(canvas.style.width) !== width || parseFloat(canvas.style.height) !== height;
+    };
     const commitResize = () => {
       if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
       resizeFrame = window.requestAnimationFrame(() => {
         resizeFrame = null;
-        mc.getMap()?.resize();
+        if (mapNeedsResize()) mc.getMap()?.resize();
       });
     };
     const resizeMap = () => {
@@ -1637,9 +1645,9 @@ export const MapCanvas = memo(function MapCanvas({
       }
       // Resizing a WebGL canvas reallocates and clears its framebuffer before
       // MapLibre's next render. During a continuous window drag that used to
-      // reveal the transparent canvas for several frames. While dimensions are
-      // changing, the browser naturally stretches the previous canvas bitmap
-      // to its CSS box; resize the backing store once the dimensions settle.
+      // reveal the transparent canvas for several frames. Keep the previous
+      // bitmap in place while dimensions are changing, then resize the backing
+      // store once the dimensions settle.
       if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         resizeTimer = null;
