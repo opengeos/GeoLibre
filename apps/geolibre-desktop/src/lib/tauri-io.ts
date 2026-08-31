@@ -56,7 +56,7 @@ import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { nativeFileDialogFilters, type FileDialogFilter } from "./file-dialog-filters";
 import { parseGpxLayer } from "./gpx";
-import { isMobile } from "./is-mobile";
+import { isDesktopRuntime } from "./is-mobile";
 import { isTauri } from "./is-tauri";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
 import {
@@ -3544,15 +3544,16 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
  */
 export async function pickImageFilesWithFallback(): Promise<File[]> {
   if (isTauri()) {
-    // Desktop uses a native command that grants each containing directory once
-    // instead of persisting one fs and asset-scope entry per selected photo.
-    // Mobile keeps the plugin picker because its selections can be content URIs.
-    const selected = isMobile()
-      ? await open({
+    // Desktop uses a native picker and one-shot reader, so selected photos do
+    // not enter either persisted scope. Mobile keeps the plugin picker because
+    // its selections can be content URIs.
+    const desktop = isDesktopRuntime();
+    const selected = desktop
+      ? await invoke<string[]>("pick_image_paths")
+      : await open({
           multiple: true,
           filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
-        })
-      : await invoke<string[]>("pick_image_paths");
+        });
     if (!selected) return [];
     const paths = (Array.isArray(selected) ? selected : [selected]).filter(isPhotoFileName);
     const files: File[] = [];
@@ -3560,7 +3561,10 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
       // Read each pick independently so one unreadable file does not abandon the
       // rest of the selection.
       try {
-        files.push(new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)));
+        const bytes = desktop
+          ? await invoke<ArrayBuffer>("read_selected_image", { path })
+          : await readFile(path);
+        files.push(new File([bytes], browserSafeFileName(path)));
       } catch (error) {
         console.warn(`Could not read the selected image "${path}".`, error);
       }

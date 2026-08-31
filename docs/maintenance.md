@@ -207,6 +207,16 @@ assignability against the real imported type, so a renamed or dropped engine
 identifier fails `npm run typecheck`. Nothing extra to do on a bump beyond letting
 the build run.
 
+### `tauri-plugin-persisted-scope` — private on-disk format
+
+`PersistedScopeState` (`apps/geolibre-desktop/src-tauri/src/lib.rs`) mirrors the
+plugin's private bincode `Scope` structure so GeoLibre can remove legacy
+per-photo grants before the plugin synchronously replays them at startup. On a
+`tauri-plugin-persisted-scope` bump, compare the upstream struct's field order
+and types against this mirror and run the Rust scope-cleanup tests. Bincode
+encodes fields positionally, so an upstream layout change is not compiler
+checked.
+
 ### `@tauri-apps/plugin-http` — two upstream *behaviors*, not APIs
 
 `createNativeSidecarFetch`

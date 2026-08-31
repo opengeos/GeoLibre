@@ -84,13 +84,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tauri_plugin_dialog::DialogExt;
 
 const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
-const PERSISTED_PHOTO_EXTENSIONS: [&str; 5] = [".jpg", ".jpeg", ".webp", ".heic", ".heif"];
+const PERSISTED_PHOTO_EXTENSIONS: [&str; 6] =
+    [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
 
 #[derive(Deserialize, Serialize)]
 struct PersistedScopeState {
     allowed_paths: Vec<String>,
     forbidden_patterns: Vec<String>,
 }
+
+#[derive(Default)]
+struct SelectedImagePaths(Mutex<HashSet<PathBuf>>);
 
 fn is_persisted_image_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
@@ -339,6 +343,7 @@ pub fn run() {
 
     let builder = builder
         .manage(pending_project_paths)
+        .manage(SelectedImagePaths::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Runs before persisted-scope's setup hook so legacy photo grants are
@@ -400,6 +405,7 @@ pub fn run() {
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
             pick_image_paths,
+            read_selected_image,
             read_admin_profile,
             read_env_vars,
             take_pending_project_paths,
@@ -670,12 +676,9 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|error| format!("Could not read local file: {error}"))
 }
 
-/// Pick images while granting only their containing directories to Tauri's
-/// filesystem scope. The stock dialog command grants every selected file to
-/// both persisted scopes, so a large photo import can make the next desktop
-/// launch spend minutes replaying thousands of entries before creating a
-/// window. Geotagged-photo imports consume the bytes immediately, making one
-/// non-recursive directory grant sufficient.
+/// Pick images without adding them to Tauri's filesystem or asset scopes. The
+/// returned paths enter a short-lived native allowlist and can only be consumed
+/// by `read_selected_image`.
 #[tauri::command]
 async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     const IMAGE_EXTENSIONS: [&str; 8] =
@@ -693,25 +696,44 @@ async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> 
     .map_err(|error| format!("Could not open the image picker: {error}"))?
     .unwrap_or_default();
 
-    let mut directories = HashSet::new();
     let mut paths = Vec::with_capacity(selected.len());
     for file in selected {
         let path = file
             .into_path()
             .map_err(|error| format!("Could not resolve a selected image path: {error}"))?;
-        if let Some(parent) = path.parent() {
-            directories.insert(parent.to_path_buf());
-        }
-        paths.push(path.to_string_lossy().into_owned());
+        paths.push(path);
     }
-    for directory in directories {
-        app.fs_scope()
-            .allow_directory(directory, false)
-            .map_err(|error| {
-                format!("Could not authorize the selected image directory: {error}")
-            })?;
+    app.state::<SelectedImagePaths>()
+        .0
+        .lock()
+        .map_err(|_| "Could not lock the selected-image allowlist".to_string())?
+        .extend(paths.iter().cloned());
+    Ok(paths
+        .into_iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect())
+}
+
+/// Read one image explicitly selected by `pick_image_paths`, then remove its
+/// path from the allowlist. This avoids both persistent grants and access to
+/// unselected sibling files.
+#[tauri::command]
+fn read_selected_image(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let path = PathBuf::from(path);
+    let selected = app.state::<SelectedImagePaths>();
+    let mut allowed = selected
+        .0
+        .lock()
+        .map_err(|_| "Could not lock the selected-image allowlist".to_string())?;
+    if !allowed.contains(&path) {
+        return Err("Refusing to read an image that was not selected".to_string());
     }
-    Ok(paths)
+    let bytes = fs::read(&path).map_err(|error| format!("Could not read selected image: {error}"))?;
+    allowed.remove(&path);
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
