@@ -3230,12 +3230,29 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
    their intrinsic minimum width, a long layer title expands the row after the
    host panel is resized and pushes the fixed-width Add button out of view. */
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-results,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .plugin-control-content,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-body,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-category,
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-category-layers,
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-row,
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-main,
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-info,
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-title {
   min-width: 0;
+}
+
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .plugin-control-content,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-body,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-results,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-category,
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-category-layers {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.geolibre-docked-map-control .maplibre-gl-nasa-earthdata .plugin-control-content {
+  overflow-x: hidden;
 }
 
 .geolibre-docked-map-control .maplibre-gl-nasa-earthdata .nasa-layer-row {
