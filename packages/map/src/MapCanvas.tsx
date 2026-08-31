@@ -1619,21 +1619,31 @@ export const MapCanvas = memo(function MapCanvas({
     });
 
     let resizeFrame: number | null = null;
+    let resizeTimer: number | null = null;
     let panelResizeActive = false;
     let resizeAfterPanelResize = false;
+    const commitResize = () => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        mc.getMap()?.resize();
+      });
+    };
     const resizeMap = () => {
       if (panelResizeActive) {
         resizeAfterPanelResize = true;
         return;
       }
-
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
-      });
+      // Resizing a WebGL canvas reallocates and clears its framebuffer before
+      // MapLibre's next render. During a continuous window drag that used to
+      // reveal the transparent canvas for several frames. Keep the previous
+      // frame CSS-scaled while dimensions are changing, then resize once after
+      // they settle.
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = null;
+        commitResize();
+      }, 100);
     };
     const onPanelResizeStart = () => {
       panelResizeActive = true;
@@ -1642,13 +1652,17 @@ export const MapCanvas = memo(function MapCanvas({
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = null;
       }
+      if (resizeTimer !== null) {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = null;
+      }
     };
     const onPanelResizeEnd = () => {
       panelResizeActive = false;
       if (resizeAfterPanelResize) {
         resizeAfterPanelResize = false;
       }
-      resizeMap();
+      commitResize();
     };
     const resizeObserver = new ResizeObserver(resizeMap);
     resizeObserver.observe(containerRef.current);
@@ -1662,6 +1676,9 @@ export const MapCanvas = memo(function MapCanvas({
       window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
+      }
+      if (resizeTimer !== null) {
+        window.clearTimeout(resizeTimer);
       }
       pointerElevation.dispose();
       map.getContainer().removeEventListener("click", handleProjectionControlClick);
