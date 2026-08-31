@@ -251,10 +251,7 @@ describe("project parsing", () => {
         map: { ...base.preferences.map, terrainEnabled: true },
       },
     };
-    assert.equal(
-      parseProject(serializeProject(enabled)).preferences.map.terrainEnabled,
-      true,
-    );
+    assert.equal(parseProject(serializeProject(enabled)).preferences.map.terrainEnabled, true);
 
     const legacy = structuredClone(base) as unknown as {
       preferences: { map: Record<string, unknown> };
