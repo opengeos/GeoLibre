@@ -86,6 +86,8 @@ use tauri_plugin_dialog::DialogExt;
 const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
 const PERSISTED_PHOTO_EXTENSIONS: [&str; 6] =
     [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+const IMAGE_PICKER_EXTENSIONS: [&str; 8] =
+    ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff"];
 
 #[derive(Deserialize, Serialize)]
 struct PersistedScopeState {
@@ -101,6 +103,16 @@ fn is_persisted_image_file(path: &str) -> bool {
     PERSISTED_PHOTO_EXTENSIONS
         .iter()
         .any(|extension| lower.ends_with(extension))
+}
+
+fn is_image_picker_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            IMAGE_PICKER_EXTENSIONS
+                .iter()
+                .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+        })
 }
 
 /// Remove legacy per-image grants before persisted-scope synchronously replays
@@ -681,15 +693,12 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
 /// by `read_selected_image`.
 #[tauri::command]
 async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    const IMAGE_EXTENSIONS: [&str; 8] =
-        ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff"];
-
     let dialog_app = app.clone();
     let selected = tauri::async_runtime::spawn_blocking(move || {
         dialog_app
             .dialog()
             .file()
-            .add_filter("Images", &IMAGE_EXTENSIONS)
+            .add_filter("Images", &IMAGE_PICKER_EXTENSIONS)
             .blocking_pick_files()
     })
     .await
@@ -701,7 +710,9 @@ async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> 
         let path = file
             .into_path()
             .map_err(|error| format!("Could not resolve a selected image path: {error}"))?;
-        paths.push(path);
+        if is_image_picker_path(&path) {
+            paths.push(path);
+        }
     }
     app.state::<SelectedImagePaths>()
         .0
@@ -733,16 +744,9 @@ fn read_selected_image(
             return Err("Refusing to read an image that was not selected".to_string());
         }
     }
-    match fs::read(&path) {
-        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
-        Err(error) => {
-            // Preserve retry behavior without holding the mutex during I/O.
-            if let Ok(mut allowed) = selected.0.lock() {
-                allowed.insert(path);
-            }
-            Err(format!("Could not read selected image: {error}"))
-        }
-    }
+    fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|error| format!("Could not read selected image: {error}"))
 }
 
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
@@ -4437,7 +4441,7 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_persisted_image_file,
+        is_image_picker_path, is_persisted_image_file,
         is_safe_absolute_path, is_ssrf_guard_error, path_is_under, project_path_string,
         project_paths_from_args, resolve_fetch_timeout_secs, tcp_table_port,
         MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
@@ -5298,6 +5302,19 @@ mod tests {
         assert!(!is_persisted_image_file(r"X:\survey\photos\**"));
         assert!(!is_persisted_image_file(r"X:\survey\map.geolibre"));
         assert!(!is_persisted_image_file(r"X:\survey\points.geojson"));
+    }
+
+    #[test]
+    fn native_image_picker_rejects_paths_outside_its_filter() {
+        assert!(is_image_picker_path(std::path::Path::new(
+            r"X:\survey\PHOTO.JPEG"
+        )));
+        assert!(is_image_picker_path(std::path::Path::new(
+            r"X:\survey\ortho.tiff"
+        )));
+        assert!(!is_image_picker_path(std::path::Path::new(
+            r"X:\survey\notes.txt"
+        )));
     }
 
     // The image-path guard is what keeps the reaper from killing a Jupyter the
