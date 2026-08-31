@@ -59,9 +59,9 @@ export function createMapResizeScheduler({
   // integers back as the canvas CSS size, so the comparison has to read the same
   // properties — `getBoundingClientRect()` returns sub-pixel floats that never
   // match on a fractionally sized container, which would make this guard a
-  // no-op. `devicePixelRatio` is checked too because moving the window to a
-  // display with a different scale factor changes the backing store without
-  // changing the CSS box, so no ResizeObserver callback fires.
+  // no-op. `devicePixelRatio` is checked too because it changes the backing
+  // store resolution without changing the CSS box, so the size comparison alone
+  // would report nothing to do.
   const mapNeedsResize = () => {
     const map = getMap();
     if (!map) return false;
@@ -80,6 +80,28 @@ export function createMapResizeScheduler({
       getMap()?.resize();
       observedDevicePixelRatio = window.devicePixelRatio;
     });
+  };
+  // A `devicePixelRatio` change on its own — the window moved to a display with
+  // a different scale factor while keeping its CSS size — fires neither a
+  // window `resize` event nor a ResizeObserver callback, so without this the
+  // canvas would stay under- or over-sampled until an unrelated resize happened
+  // to run. (MapLibre's `trackResize` never covered it either: it is a plain
+  // container ResizeObserver.) A resolution media query is the signal that does
+  // fire; it has to be re-armed at the new ratio after every change.
+  let devicePixelRatioQuery: MediaQueryList | null = null;
+  const onDevicePixelRatioChange = () => {
+    watchDevicePixelRatio();
+    commitResize();
+  };
+  const unwatchDevicePixelRatio = () => {
+    devicePixelRatioQuery?.removeEventListener("change", onDevicePixelRatioChange);
+    devicePixelRatioQuery = null;
+  };
+  const watchDevicePixelRatio = () => {
+    if (typeof window.matchMedia !== "function") return;
+    unwatchDevicePixelRatio();
+    devicePixelRatioQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    devicePixelRatioQuery.addEventListener("change", onDevicePixelRatioChange);
   };
   const resizeMap = () => {
     if (panelResizeActive) return;
@@ -137,6 +159,7 @@ export function createMapResizeScheduler({
   window.addEventListener("resize", onWindowResize);
   window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
   window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
+  watchDevicePixelRatio();
   commitResize();
 
   return () => {
@@ -144,6 +167,7 @@ export function createMapResizeScheduler({
     window.removeEventListener("resize", onWindowResize);
     window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
     window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
+    unwatchDevicePixelRatio();
     cancelFrame();
     cancelTimer();
     clearWindowResizeState();
