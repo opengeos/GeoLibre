@@ -482,7 +482,8 @@ export async function applyServiceEntry(
       if (!params.layers.trim()) {
         throw new Error("This service has no layers.");
       }
-      addLayer(buildWmsLayer(params), beforeLayerId);
+      const { routeWmsLayerThroughNativeProtocol } = await import("../../../lib/xyz-url");
+      addLayer(routeWmsLayerThroughNativeProtocol(buildWmsLayer(params)), beforeLayerId);
       return;
     }
     case "wmts": {

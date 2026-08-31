@@ -5,6 +5,7 @@ import { resolveUrlRedirect } from "./native-http";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
+const WMS_TILE_PROTOCOL = "geolibre-wms";
 
 let protocolRegistered = false;
 
@@ -73,22 +74,22 @@ export async function resolveXyzTileUrlTemplate(
 export function registerXyzTileProtocol(): void {
   if (protocolRegistered || !isTauri()) return;
 
-  addProtocol(XYZ_TILE_PROTOCOL, async (request) => {
-    const url = parseXyzTileRequest(request);
-    // This handler runs once per tile, so — unlike the one-shot native calls
-    // routed through native-http — it deliberately calls `invoke` directly and
-    // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
-    // edge returns 404s in bulk, and recording each would re-render the panel
-    // per tile and evict more relevant entries from the 500-record ring buffer.
-    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-      url,
-    });
-    const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return {
-      data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
-    };
-  });
+  addProtocol(XYZ_TILE_PROTOCOL, (request) => fetchNativeTile(parseXyzTileRequest(request)));
+  addProtocol(WMS_TILE_PROTOCOL, (request) => fetchNativeTile(parseWmsTileRequest(request)));
   protocolRegistered = true;
+}
+
+async function fetchNativeTile(url: string): Promise<{ data: ArrayBuffer }> {
+  // This handler runs once per tile, so — unlike the one-shot native calls
+  // routed through native-http — it deliberately calls `invoke` directly and
+  // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
+  // edge returns 404s in bulk, and recording each would re-render the panel
+  // per tile and evict more relevant entries from the 500-record ring buffer.
+  const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
+    url,
+  });
+  const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return { data: Uint8Array.from(array).buffer };
 }
 
 export async function resolveProjectXyzLayers(
@@ -112,6 +113,7 @@ async function resolveProjectXyzLayer(
   layer: GeoLibreLayer,
   signal?: AbortSignal,
 ): Promise<GeoLibreLayer> {
+  if (layer.type === "wms") return routeWmsLayerThroughNativeProtocol(layer);
   if (layer.type !== "xyz") return layer;
 
   const url = getSavedXyzUrl(layer);
@@ -141,6 +143,28 @@ async function resolveProjectXyzLayer(
       sourceKind: layer.metadata.sourceKind ?? "xyz-url",
     },
   };
+}
+
+/** Route a WMS layer through Tauri's CORS-exempt HTTP client on desktop. */
+export function routeWmsLayerThroughNativeProtocol(layer: GeoLibreLayer): GeoLibreLayer {
+  if (!isTauri() || layer.type !== "wms" || !Array.isArray(layer.source.tiles)) return layer;
+  return {
+    ...layer,
+    source: {
+      ...layer.source,
+      tiles: layer.source.tiles.map((tile) =>
+        typeof tile === "string" ? nativeWmsTileUrl(tile) : tile,
+      ),
+    },
+  };
+}
+
+export function nativeWmsTileUrl(url: string): string {
+  if (url.startsWith(`${WMS_TILE_PROTOCOL}://`)) return url;
+  // Leave MapLibre's WMS placeholder visible so it expands the bounding box
+  // before handing the concrete request URL to the custom protocol.
+  const encoded = encodeURIComponent(url).replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}");
+  return `${WMS_TILE_PROTOCOL}://tile?url=${encoded}`;
 }
 
 function getSavedXyzUrl(layer: GeoLibreLayer): string | null {
@@ -185,6 +209,14 @@ function parseXyzTileRequest(request: RequestParameters): string {
     .replace(/\{z\}/g, parts[0])
     .replace(/\{x\}/g, parts[1])
     .replace(/\{y\}/g, parts[2]);
+}
+
+function parseWmsTileRequest(request: RequestParameters): string {
+  const url = new URL(request.url).searchParams.get("url");
+  if (!url || !/^https?:\/\//i.test(url)) {
+    throw new Error("Invalid WMS tile URL.");
+  }
+  return url;
 }
 
 function isHttpUrl(url: string): boolean {

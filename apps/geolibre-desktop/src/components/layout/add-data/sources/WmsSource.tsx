@@ -16,6 +16,7 @@ import {
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
+import { routeWmsLayerThroughNativeProtocol } from "../../../../lib/xyz-url";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -214,16 +215,18 @@ export function WmsSource({
     // GetCapabilities URL), normalizes the version, and credits known keyless
     // services (e.g. GEBCO) in the map's attribution control.
     source.addAndClose(
-      buildWmsLayer({
-        name,
-        endpoint: wmsEndpoint,
-        layers: wmsLayers,
-        styles: wmsStyles,
-        format: wmsFormat,
-        transparent: wmsTransparent,
-        tileSize: wmsTileSize,
-        version: wmsVersion,
-      }),
+      routeWmsLayerThroughNativeProtocol(
+        buildWmsLayer({
+          name,
+          endpoint: wmsEndpoint,
+          layers: wmsLayers,
+          styles: wmsStyles,
+          format: wmsFormat,
+          transparent: wmsTransparent,
+          tileSize: wmsTileSize,
+          version: wmsVersion,
+        }),
+      ),
     );
   });
 

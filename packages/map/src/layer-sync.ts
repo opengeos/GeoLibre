@@ -2990,7 +2990,7 @@ function syncImageLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: st
 function getRenderableRasterTiles(layer: GeoLibreLayer): string[] {
   const tiles = (layer.source.tiles as string[]) ?? [];
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
-  return tiles.map(proxyWmsTileUrl);
+  return tiles.map((tile) => (/^https?:\/\//i.test(tile) ? proxyWmsTileUrl(tile) : tile));
 }
 
 function isViteDevServer(): boolean {
