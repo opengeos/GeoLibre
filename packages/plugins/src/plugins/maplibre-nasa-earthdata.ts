@@ -157,33 +157,37 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   name: "NASA Earthdata",
   version: "0.1.4",
   activate: (app: GeoLibreAppAPI) => {
-    if (!app.getMap?.()) return false;
+    if (!app.getMap?.() || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }
 
     const activeControl = nasaEarthdataControl;
-    unregisterPanel =
-      app.registerRightPanel?.({
-        id: PANEL_ID,
-        title: "NASA Earthdata",
-        dock: "replace-style",
-        defaultWidth: 360,
-        deactivatePluginOnClose: true,
-        render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
-            app.closeRightPanel?.(PANEL_ID),
-          );
-          if (!unmount) return;
-          nasaEarthdataStoreSync.attach(activeControl);
-          activeControl.expand();
-          return () => {
-            nasaEarthdataStoreSync.detach();
-            unmount();
-          };
-        },
-      }) ?? null;
-    app.openRightPanel?.(PANEL_ID);
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "NASA Earthdata",
+      dock: "replace-style",
+      defaultWidth: 360,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        nasaEarthdataStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          nasaEarthdataStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
+      nasaEarthdataControl = null;
+      return false;
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) return;

@@ -991,6 +991,8 @@ export interface GeoLibreRightPanelRegistration {
   onCollapse?: () => void;
   /** Called after the panel closes (releases the workspace). */
   onClose?: () => void;
+  /** Called only when explicitly closed, not when another panel displaces it. */
+  onExplicitClose?: () => void;
 }
 
 export interface GeoLibrePlugin {

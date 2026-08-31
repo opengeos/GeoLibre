@@ -628,9 +628,9 @@ function scopeAppToPlugin(
         panel.deactivatePluginOnClose
           ? {
               ...panel,
-              onClose: () => {
+              onExplicitClose: () => {
                 try {
-                  panel.onClose?.();
+                  panel.onExplicitClose?.();
                 } finally {
                   setTimeout(() => deactivatePlugin(pluginId), 0);
                 }

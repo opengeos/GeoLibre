@@ -148,33 +148,37 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   name: "US EPA EnviroAtlas",
   version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
-    if (!app.getMap?.()) return false;
+    if (!app.getMap?.() || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!enviroAtlasControl) {
       enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
     }
 
     const activeControl = enviroAtlasControl;
-    unregisterPanel =
-      app.registerRightPanel?.({
-        id: PANEL_ID,
-        title: "US EPA EnviroAtlas",
-        dock: "replace-style",
-        defaultWidth: 360,
-        deactivatePluginOnClose: true,
-        render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
-            app.closeRightPanel?.(PANEL_ID),
-          );
-          if (!unmount) return;
-          enviroAtlasStoreSync.attach(activeControl);
-          activeControl.expand();
-          return () => {
-            enviroAtlasStoreSync.detach();
-            unmount();
-          };
-        },
-      }) ?? null;
-    app.openRightPanel?.(PANEL_ID);
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "US EPA EnviroAtlas",
+      dock: "replace-style",
+      defaultWidth: 360,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        enviroAtlasStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          enviroAtlasStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
+      enviroAtlasControl = null;
+      return false;
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) return;

@@ -49,6 +49,7 @@ describe("right-panel registry", () => {
         onOpen: () => calls.push("open"),
         onCollapse: () => calls.push("collapse"),
         onClose: () => calls.push("close"),
+        onExplicitClose: () => calls.push("explicit-close"),
       }),
     );
 
@@ -67,7 +68,7 @@ describe("right-panel registry", () => {
     closeRightPanel("workbench");
     assert.equal(getActiveRightPanel(), null);
 
-    assert.deepEqual(calls, ["open", "collapse", "close"]);
+    assert.deepEqual(calls, ["open", "collapse", "close", "explicit-close"]);
   });
 
   it("returns false and warns when opening an unregistered id", () => {
@@ -104,6 +105,20 @@ describe("right-panel registry", () => {
     openRightPanel("b");
     assert.equal(getActiveRightPanel(), "b");
     assert.deepEqual(calls, ["a:close", "b:open"]);
+  });
+
+  it("does not fire onExplicitClose when another panel takes over", () => {
+    const calls: string[] = [];
+    registerRightPanel(
+      testPanel({ id: "a", title: "A", onExplicitClose: () => calls.push("a:explicit") }),
+    );
+    registerRightPanel(testPanel({ id: "b", title: "B" }));
+    openRightPanel("a");
+    openRightPanel("b");
+    assert.deepEqual(calls, []);
+
+    closeRightPanel("a");
+    assert.deepEqual(calls, ["a:explicit"]);
   });
 
   it("keeps displaced panels visible in their rails until explicitly closed", () => {

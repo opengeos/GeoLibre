@@ -116,33 +116,37 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   name: "FEMA NFHL",
   version: "0.1.2",
   activate: (app: GeoLibreAppAPI) => {
-    if (!app.getMap?.()) return false;
+    if (!app.getMap?.() || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
     }
 
     const activeControl = femaWmsControl;
-    unregisterPanel =
-      app.registerRightPanel?.({
-        id: PANEL_ID,
-        title: "FEMA NFHL",
-        dock: "replace-style",
-        defaultWidth: 340,
-        deactivatePluginOnClose: true,
-        render: (container) => {
-          const unmount = mountMapControlInPanel(app, activeControl, container, () =>
-            app.closeRightPanel?.(PANEL_ID),
-          );
-          if (!unmount) return;
-          femaWmsStoreSync.attach(activeControl);
-          activeControl.expand();
-          return () => {
-            femaWmsStoreSync.detach();
-            unmount();
-          };
-        },
-      }) ?? null;
-    app.openRightPanel?.(PANEL_ID);
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "FEMA NFHL",
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        femaWmsStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          femaWmsStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
+      femaWmsControl = null;
+      return false;
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!femaWmsControl) return;

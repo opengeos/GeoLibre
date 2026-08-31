@@ -971,6 +971,9 @@ describe("PluginManager panel auto-expand on restore", () => {
     assert.ok(registeredPanel);
     registeredPanel.onClose?.();
     await flushTimers(1);
+    assert.equal(manager.isActive("close-with-panel"), true);
+    registeredPanel.onExplicitClose?.();
+    await flushTimers(1);
     assert.equal(manager.isActive("close-with-panel"), false);
   });
 
@@ -994,7 +997,7 @@ describe("PluginManager panel auto-expand on restore", () => {
             title: "Throwing close panel",
             deactivatePluginOnClose: true,
             render: () => undefined,
-            onClose: () => {
+            onExplicitClose: () => {
               throw new Error("close failed");
             },
           });
@@ -1004,7 +1007,7 @@ describe("PluginManager panel auto-expand on restore", () => {
 
     manager.activate("throwing-close-panel", mockApp);
     assert.ok(registeredPanel);
-    assert.throws(() => registeredPanel.onClose?.(), /close failed/);
+    assert.throws(() => registeredPanel.onExplicitClose?.(), /close failed/);
     await flushTimers(1);
     assert.equal(manager.isActive("throwing-close-panel"), false);
   });

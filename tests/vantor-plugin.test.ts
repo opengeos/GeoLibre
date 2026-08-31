@@ -14,6 +14,7 @@ import { PanelUI } from "../packages/plugins/src/plugins/vantor/panel";
 import { StacClient } from "../packages/plugins/src/plugins/vantor/stac-client";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
 import { pluginTier } from "../apps/geolibre-desktop/src/lib/ui-profile";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 describe("Vantor Open Data built-in plugin", () => {
   const item = (id: string, href = "https://example.com/vantor.tif") =>
@@ -68,6 +69,20 @@ describe("Vantor Open Data built-in plugin", () => {
   it("registers as a dockable panel rather than a positioned map control", () => {
     assert.equal(maplibreVantorPlugin.getMapControlPosition, undefined);
     assert.equal(maplibreVantorPlugin.setMapControlPosition, undefined);
+  });
+
+  it("refuses activation when the native panel cannot open", () => {
+    let unregistered = false;
+    const app = {
+      getMap: () => ({}),
+      registerRightPanel: () => () => {
+        unregistered = true;
+      },
+      openRightPanel: () => false,
+    } as unknown as GeoLibreAppAPI;
+
+    assert.equal(maplibreVantorPlugin.activate(app), false);
+    assert.equal(unregistered, true);
   });
 
   it("uses the GPU renderer by default and allows selecting WASM", async () => {
