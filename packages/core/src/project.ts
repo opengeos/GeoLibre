@@ -1723,6 +1723,8 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
 }
 
 function portableWmsTileUrl(tile: unknown): unknown {
+  // Keep this protocol prefix in sync with WMS_TILE_PROTOCOL in the desktop
+  // app, which packages/core cannot import without reversing dependencies.
   if (typeof tile !== "string" || !tile.startsWith("geolibre-wms://")) return tile;
   try {
     const url = new URL(tile).searchParams.get("url");

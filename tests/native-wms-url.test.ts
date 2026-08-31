@@ -19,6 +19,10 @@ test("nativeWmsTileUrl does not wrap an already routed URL", () => {
   assert.equal(nativeWmsTileUrl(routed), routed);
 });
 
+test("nativeWmsTileUrl rejects non-HTTP tile URLs", () => {
+  assert.throws(() => nativeWmsTileUrl("file:///tmp/tile.png"), /Invalid WMS tile URL/);
+});
+
 test("routeWmsLayerThroughNativeProtocol only changes desktop WMS tiles", () => {
   const globals = globalThis as typeof globalThis & { window?: unknown };
   const previousWindow = globals.window;

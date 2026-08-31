@@ -205,7 +205,7 @@ function parseXyzTileRequest(request: RequestParameters): string {
 
 function parseWmsTileRequest(request: RequestParameters): string {
   const url = new URL(request.url).searchParams.get("url");
-  if (!url || !/^https?:\/\//i.test(url)) {
+  if (!url || !isHttpUrl(url)) {
     throw new Error("Invalid WMS tile URL.");
   }
   return url;
