@@ -1200,6 +1200,11 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
         DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
       ),
+      // Older projects omit this field and continue to open with terrain off.
+      terrainEnabled: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).terrainEnabled,
+        DEFAULT_PROJECT_PREFERENCES.map.terrainEnabled,
+      ),
       // Kept as a free string here; the app coerces an unknown notation to
       // decimal degrees when it renders, so a hand-edited project cannot break
       // the readout.

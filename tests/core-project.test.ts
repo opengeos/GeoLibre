@@ -241,6 +241,28 @@ describe("project parsing", () => {
     assert.equal(reloaded.preferences.map.projection, "mercator");
   });
 
+  it("round-trips terrain and defaults legacy projects to terrain off", () => {
+    const base = createEmptyProject("Terrain");
+    assert.equal(base.preferences.map.terrainEnabled, false);
+    const enabled = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        map: { ...base.preferences.map, terrainEnabled: true },
+      },
+    };
+    assert.equal(
+      parseProject(serializeProject(enabled)).preferences.map.terrainEnabled,
+      true,
+    );
+
+    const legacy = structuredClone(base) as unknown as {
+      preferences: { map: Record<string, unknown> };
+    };
+    delete legacy.preferences.map.terrainEnabled;
+    assert.equal(parseProject(JSON.stringify(legacy)).preferences.map.terrainEnabled, false);
+  });
+
   it("round-trips the scale unit preference and defaults unknown values to metric", () => {
     const base = createEmptyProject("Scale");
     assert.equal(base.preferences.map.scaleUnit, "metric");

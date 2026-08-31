@@ -1137,6 +1137,19 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
+  const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
+
+  // Terrain is project state, unlike the other optional map chrome. Restore it
+  // after both project loads and controller/style initialization so reopening a
+  // saved project brings back the control and its active terrain surface.
+  useEffect(() => {
+    const controller = mapControllerRef.current;
+    if (!controller) return;
+    controller.setBuiltInControlVisible("terrain", terrainEnabled);
+    setControlsVisible((current) =>
+      current.terrain === terrainEnabled ? current : { ...current, terrain: terrainEnabled },
+    );
+  }, [mapControllerRef, mapReadyGeneration, projectGeneration, terrainEnabled]);
   const [initialService, setInitialService] = useState(() =>
     viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
   );
@@ -1262,11 +1275,17 @@ export function TopToolbar({
   const handleOpenPlanetaryComputer = () => openPlanetaryComputerPanel(appApi);
 
   const toggleMapControl = (control: ToolbarMapControl) => {
-    setControlsVisible((current) => {
-      const visible = !current[control];
-      const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
-      return updated ? { ...current, [control]: visible } : current;
-    });
+    const visible = !controlsVisible[control];
+    const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
+    if (!updated) return;
+    setControlsVisible((current) => ({ ...current, [control]: visible }));
+    if (control === "terrain") {
+      const { preferences, setPreferences } = useAppStore.getState();
+      setPreferences({
+        ...preferences,
+        map: { ...preferences.map, terrainEnabled: visible },
+      });
+    }
   };
 
   // The Maptoolkit logo is Maptoolkit-basemap attribution, required by their

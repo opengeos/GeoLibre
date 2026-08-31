@@ -1555,6 +1555,8 @@ export interface MapPreferences {
    * from Controls -> Elevation.
    */
   showPointerElevation: boolean;
+  /** Whether the built-in 3D terrain control and terrain surface are enabled. */
+  terrainEnabled: boolean;
   /**
    * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
    * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and
@@ -1631,6 +1633,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     // Off by default: turning it on can send pointer coordinates to a public
     // elevation service, which should be an explicit choice.
     showPointerElevation: false,
+    terrainEnabled: false,
     coordinateFormat: "dd",
   },
   environmentVariables: [],
