@@ -69,6 +69,7 @@ const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const RESIZE_DEBOUNCE_MS = 100;
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const WEB_MERCATOR_EARTH_RADIUS = 6378137;
 const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
@@ -1636,14 +1637,14 @@ export const MapCanvas = memo(function MapCanvas({
       }
       // Resizing a WebGL canvas reallocates and clears its framebuffer before
       // MapLibre's next render. During a continuous window drag that used to
-      // reveal the transparent canvas for several frames. Keep the previous
-      // frame CSS-scaled while dimensions are changing, then resize once after
-      // they settle.
+      // reveal the transparent canvas for several frames. While dimensions are
+      // changing, the browser naturally stretches the previous canvas bitmap
+      // to its CSS box; resize the backing store once the dimensions settle.
       if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         resizeTimer = null;
         commitResize();
-      }, 100);
+      }, RESIZE_DEBOUNCE_MS);
     };
     const onPanelResizeStart = () => {
       panelResizeActive = true;
@@ -1668,7 +1669,7 @@ export const MapCanvas = memo(function MapCanvas({
     resizeObserver.observe(containerRef.current);
     window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
     window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-    resizeMap();
+    commitResize();
 
     return () => {
       resizeObserver.disconnect();
