@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { routeWmsLayerThroughNativeProtocol } from "../apps/geolibre-desktop/src/lib/xyz-url";
-import { nativeWmsTileUrl } from "../apps/geolibre-desktop/src/lib/native-wms-url";
+import { isHttpWmsUrl, nativeWmsTileUrl } from "../apps/geolibre-desktop/src/lib/native-wms-url";
 
 test("nativeWmsTileUrl preserves the MapLibre bbox placeholder", () => {
   const tile =
@@ -21,6 +21,15 @@ test("nativeWmsTileUrl does not wrap an already routed URL", () => {
 
 test("nativeWmsTileUrl rejects non-HTTP tile URLs", () => {
   assert.throws(() => nativeWmsTileUrl("file:///tmp/tile.png"), /Invalid WMS tile URL/);
+  assert.throws(() => nativeWmsTileUrl("https://"), /Invalid WMS tile URL/);
+});
+
+test("isHttpWmsUrl accepts only syntactically valid HTTP(S) URLs", () => {
+  assert.equal(isHttpWmsUrl("https://example.com/wms"), true);
+  assert.equal(isHttpWmsUrl("http://example.com/wms"), true);
+  assert.equal(isHttpWmsUrl("example.com/wms"), false);
+  assert.equal(isHttpWmsUrl("https://"), false);
+  assert.equal(isHttpWmsUrl("file:///tmp/tile.png"), false);
 });
 
 test("routeWmsLayerThroughNativeProtocol only changes desktop WMS tiles", () => {

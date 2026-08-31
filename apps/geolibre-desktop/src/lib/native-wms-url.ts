@@ -1,8 +1,17 @@
 export const WMS_TILE_PROTOCOL = "geolibre-wms";
 
+export function isHttpWmsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function nativeWmsTileUrl(url: string): string {
   if (url.startsWith(`${WMS_TILE_PROTOCOL}://`)) return url;
-  if (!/^https?:\/\//i.test(url)) {
+  if (!isHttpWmsUrl(url)) {
     throw new Error("Invalid WMS tile URL.");
   }
   // Leave MapLibre's WMS placeholder visible so it expands the bounding box

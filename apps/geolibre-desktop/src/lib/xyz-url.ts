@@ -2,7 +2,7 @@ import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 import { resolveUrlRedirect } from "./native-http";
-import { nativeWmsTileUrl, WMS_TILE_PROTOCOL } from "./native-wms-url";
+import { isHttpWmsUrl, nativeWmsTileUrl, WMS_TILE_PROTOCOL } from "./native-wms-url";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
@@ -205,7 +205,7 @@ function parseXyzTileRequest(request: RequestParameters): string {
 
 function parseWmsTileRequest(request: RequestParameters): string {
   const url = new URL(request.url).searchParams.get("url");
-  if (!url || !isHttpUrl(url)) {
+  if (!url || !isHttpWmsUrl(url)) {
     throw new Error("Invalid WMS tile URL.");
   }
   return url;
