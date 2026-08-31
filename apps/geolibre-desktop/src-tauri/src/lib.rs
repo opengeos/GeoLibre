@@ -63,9 +63,7 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(not(feature = "mas"))]
-use std::collections::HashSet;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::env;
 #[cfg(not(feature = "mas"))]
 use std::ffi::OsStr;
@@ -83,6 +81,53 @@ use std::process::{Child, Command, Stdio};
 #[cfg(not(feature = "mas"))]
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tauri_plugin_dialog::DialogExt;
+
+const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
+const PERSISTED_IMAGE_EXTENSIONS: [&str; 8] = [
+    ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".tif", ".tiff",
+];
+
+#[derive(Deserialize, Serialize)]
+struct PersistedScopeState {
+    allowed_paths: Vec<String>,
+    forbidden_patterns: Vec<String>,
+}
+
+fn is_persisted_image_file(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    PERSISTED_IMAGE_EXTENSIONS
+        .iter()
+        .any(|extension| lower.ends_with(extension))
+}
+
+/// Remove legacy per-image grants before persisted-scope synchronously replays
+/// them. Photo workflows consume or embed image bytes during the current
+/// session, so these grants are not needed after restart.
+fn prune_persisted_image_scopes(app: &tauri::AppHandle) {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    for file_name in PERSISTED_SCOPE_FILES {
+        let path = app_data_dir.join(file_name);
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(mut state) = bincode::deserialize::<PersistedScopeState>(&bytes) else {
+            continue;
+        };
+        let original_len = state.allowed_paths.len();
+        state
+            .allowed_paths
+            .retain(|allowed| !is_persisted_image_file(allowed));
+        if state.allowed_paths.len() == original_len {
+            continue;
+        }
+        if let Ok(compacted) = bincode::serialize(&state) {
+            let _ = fs::write(path, compacted);
+        }
+    }
+}
 #[cfg(not(feature = "mas"))]
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -298,6 +343,16 @@ pub fn run() {
         .manage(pending_project_paths)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Runs before persisted-scope's setup hook so legacy photo grants are
+        // removed before its synchronous restore can delay window creation.
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("photo-scope-cleanup")
+                .setup(|app, _api| {
+                    prune_persisted_image_scopes(app);
+                    Ok(())
+                })
+                .build(),
+        )
         // Must init after the fs plugin: it restores previously-granted fs
         // scope (e.g. Browser-panel pinned folders) so they survive a restart.
         //
@@ -346,6 +401,7 @@ pub fn run() {
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
+            pick_image_paths,
             read_admin_profile,
             read_env_vars,
             take_pending_project_paths,
@@ -614,6 +670,50 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
     fs::read(&path)
         .map(tauri::ipc::Response::new)
         .map_err(|error| format!("Could not read local file: {error}"))
+}
+
+/// Pick images while granting only their containing directories to Tauri's
+/// filesystem scope. The stock dialog command grants every selected file to
+/// both persisted scopes, so a large photo import can make the next desktop
+/// launch spend minutes replaying thousands of entries before creating a
+/// window. Geotagged-photo imports consume the bytes immediately, making one
+/// non-recursive directory grant sufficient.
+#[tauri::command]
+async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    const IMAGE_EXTENSIONS: [&str; 8] =
+        ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff"];
+
+    let dialog_app = app.clone();
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("Images", &IMAGE_EXTENSIONS)
+            .blocking_pick_files()
+    })
+    .await
+    .map_err(|error| format!("Could not open the image picker: {error}"))?
+    .unwrap_or_default();
+
+    let mut directories = HashSet::new();
+    let mut paths = Vec::with_capacity(selected.len());
+    for file in selected {
+        let path = file
+            .into_path()
+            .map_err(|error| format!("Could not resolve a selected image path: {error}"))?;
+        if let Some(parent) = path.parent() {
+            directories.insert(parent.to_path_buf());
+        }
+        paths.push(path.to_string_lossy().into_owned());
+    }
+    for directory in directories {
+        app.fs_scope()
+            .allow_directory(directory, false)
+            .map_err(|error| {
+                format!("Could not authorize the selected image directory: {error}")
+            })?;
+    }
+    Ok(paths)
 }
 
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
@@ -4308,6 +4408,7 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
+        is_persisted_image_file,
         is_safe_absolute_path, is_ssrf_guard_error, path_is_under, project_path_string,
         project_paths_from_args, resolve_fetch_timeout_secs, tcp_table_port,
         MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
@@ -5152,6 +5253,19 @@ mod tests {
             resolve_fetch_timeout_secs(Some(u64::MAX)),
             MAX_FETCH_TIMEOUT_SECS
         );
+    }
+
+    #[test]
+    fn recognizes_only_persisted_image_file_grants() {
+        assert!(is_persisted_image_file(
+            r"\\?\UNC\server\drone photos\IMG_0042.JPEG"
+        ));
+        assert!(is_persisted_image_file(r"X:\survey\ortho.tif"));
+        // Directory patterns must survive even when their names contain an
+        // image-looking segment, as must unrelated project and vector grants.
+        assert!(!is_persisted_image_file(r"X:\survey\photos\**"));
+        assert!(!is_persisted_image_file(r"X:\survey\map.geolibre"));
+        assert!(!is_persisted_image_file(r"X:\survey\points.geojson"));
     }
 
     // The image-path guard is what keeps the reaper from killing a Jupyter the

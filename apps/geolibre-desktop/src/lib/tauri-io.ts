@@ -56,6 +56,7 @@ import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { nativeFileDialogFilters, type FileDialogFilter } from "./file-dialog-filters";
 import { parseGpxLayer } from "./gpx";
+import { isMobile } from "./is-mobile";
 import { isTauri } from "./is-tauri";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
 import {
@@ -3543,10 +3544,15 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
  */
 export async function pickImageFilesWithFallback(): Promise<File[]> {
   if (isTauri()) {
-    const selected = await open({
-      multiple: true,
-      filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
-    });
+    // Desktop uses a native command that grants each containing directory once
+    // instead of persisting one fs and asset-scope entry per selected photo.
+    // Mobile keeps the plugin picker because its selections can be content URIs.
+    const selected = isMobile()
+      ? await open({
+          multiple: true,
+          filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
+        })
+      : await invoke<string[]>("pick_image_paths");
     if (!selected) return [];
     const paths = (Array.isArray(selected) ? selected : [selected]).filter(isPhotoFileName);
     const files: File[] = [];

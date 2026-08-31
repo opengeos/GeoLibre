@@ -1637,6 +1637,7 @@ dependencies = [
 name = "geolibre-desktop"
 version = "2.8.0"
 dependencies = [
+ "bincode",
  "chrono",
  "duckdb",
  "flate2",
