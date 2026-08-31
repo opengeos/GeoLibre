@@ -84,9 +84,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tauri_plugin_dialog::DialogExt;
 
 const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
-const PERSISTED_IMAGE_EXTENSIONS: [&str; 8] = [
-    ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".tif", ".tiff",
-];
+const PERSISTED_PHOTO_EXTENSIONS: [&str; 5] = [".jpg", ".jpeg", ".webp", ".heic", ".heif"];
 
 #[derive(Deserialize, Serialize)]
 struct PersistedScopeState {
@@ -96,7 +94,7 @@ struct PersistedScopeState {
 
 fn is_persisted_image_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
-    PERSISTED_IMAGE_EXTENSIONS
+    PERSISTED_PHOTO_EXTENSIONS
         .iter()
         .any(|extension| lower.ends_with(extension))
 }
@@ -5260,7 +5258,10 @@ mod tests {
         assert!(is_persisted_image_file(
             r"\\?\UNC\server\drone photos\IMG_0042.JPEG"
         ));
-        assert!(is_persisted_image_file(r"X:\survey\ortho.tif"));
+        // TIFF grants may belong to persistent GeoTIFF raster layers, so the
+        // startup migration must leave them intact even though the photo
+        // importer also accepts TIFF images.
+        assert!(!is_persisted_image_file(r"X:\survey\ortho.tif"));
         // Directory patterns must survive even when their names contain an
         // image-looking segment, as must unrelated project and vector grants.
         assert!(!is_persisted_image_file(r"X:\survey\photos\**"));
