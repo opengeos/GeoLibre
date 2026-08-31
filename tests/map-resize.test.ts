@@ -22,6 +22,11 @@ interface Harness {
   setContainerSize: (width: number, height: number) => void;
   /** Fire a window `resize` event, as a continuous window drag does. */
   windowResize: (width?: number, height?: number) => void;
+  /**
+   * Shrink the window and deliver *only* the ResizeObserver callback, as an
+   * engine that dispatches observer entries before the `resize` event would.
+   */
+  windowResizeObserverFirst: (width: number, height: number) => void;
   dispatch: (type: string) => void;
   /** Run every queued animation frame callback. */
   flushFrames: () => void;
@@ -59,6 +64,8 @@ function install(): Harness {
   let observerCallback: (() => void) | null = null;
   const fakeWindow = {
     devicePixelRatio: 1,
+    innerWidth: 1000,
+    innerHeight: 800,
     requestAnimationFrame(callback: () => void) {
       const id = nextId++;
       frames.set(id, callback);
@@ -111,6 +118,14 @@ function install(): Harness {
   Object.assign(globalThis, { window: fakeWindow, ResizeObserver: fakeResizeObserver });
   restoreGlobals = () => Object.assign(globalThis, previous);
 
+  // The browser lays the window out before either signal is delivered, so both
+  // the window and the map container carry their new size by then.
+  const shrinkWindow = (width: number, height: number) => {
+    fakeWindow.innerWidth = width + 200;
+    fakeWindow.innerHeight = height + 200;
+    container.clientWidth = width;
+    container.clientHeight = height;
+  };
   const dispatch = (type: string) => {
     for (const handler of [...(listeners.get(type) ?? [])]) handler();
   };
@@ -143,10 +158,13 @@ function install(): Harness {
     },
     windowResize(width, height) {
       if (width !== undefined && height !== undefined) {
-        container.clientWidth = width;
-        container.clientHeight = height;
+        shrinkWindow(width, height);
       }
       dispatch("resize");
+      observerCallback?.();
+    },
+    windowResizeObserverFirst(width, height) {
+      shrinkWindow(width, height);
       observerCallback?.();
     },
     dispatch,
@@ -206,6 +224,21 @@ describe("createMapResizeScheduler", () => {
     harness.setContainerSize(700, 600);
     harness.windowResize(690, 600);
     harness.flushFrames();
+    assert.equal(harness.resizeCalls(), 0);
+
+    harness.advance(RESIZE_DEBOUNCE_MS);
+    harness.flushFrames();
+    assert.equal(harness.resizeCalls(), 1);
+  });
+
+  it("debounces a window drag whose ResizeObserver callback beats the resize event", () => {
+    // The delivery order of ResizeObserver entries and the `resize` event is
+    // not guaranteed across engines, so the drag is detected from the window's
+    // own dimensions rather than from whichever callback ran first.
+    for (let width = 799; width > 789; width -= 1) {
+      harness.windowResizeObserverFirst(width, 600);
+      harness.flushFrames();
+    }
     assert.equal(harness.resizeCalls(), 0);
 
     harness.advance(RESIZE_DEBOUNCE_MS);

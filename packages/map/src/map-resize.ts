@@ -42,6 +42,8 @@ export function createMapResizeScheduler({
   let resizeTimer: number | null = null;
   let windowResizeTimer: number | null = null;
   let windowResizeActive = false;
+  let observedWindowWidth = window.innerWidth;
+  let observedWindowHeight = window.innerHeight;
   let observedDevicePixelRatio = window.devicePixelRatio;
   let panelResizeActive = false;
 
@@ -103,12 +105,33 @@ export function createMapResizeScheduler({
     devicePixelRatioQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
     devicePixelRatioQuery.addEventListener("change", onDevicePixelRatioChange);
   };
+  // Whether a callback belongs to a browser-window drag is decided by comparing
+  // the window's own dimensions, not by whether the `resize` event happened to
+  // be handled before the ResizeObserver callback for the same layout change:
+  // that ordering is not guaranteed across engines, and losing the race on the
+  // first frame of a drag would resize the backing store mid-drag. Both signals
+  // run after the window has already taken its new size, so either one detects
+  // the drag; the settle timer then keeps the following frames coalesced.
+  const windowResizeInProgress = () => {
+    if (observedWindowWidth === window.innerWidth && observedWindowHeight === window.innerHeight) {
+      return windowResizeActive;
+    }
+    observedWindowWidth = window.innerWidth;
+    observedWindowHeight = window.innerHeight;
+    windowResizeActive = true;
+    if (windowResizeTimer !== null) window.clearTimeout(windowResizeTimer);
+    windowResizeTimer = window.setTimeout(() => {
+      windowResizeTimer = null;
+      windowResizeActive = false;
+    }, RESIZE_DEBOUNCE_MS);
+    return true;
+  };
   const resizeMap = () => {
     if (panelResizeActive) return;
     // App layout changes such as toggling a sidebar are discrete and should
     // resize on the next frame. Only coalesce the rapid observer callbacks
     // produced while the browser window itself is being dragged.
-    if (!windowResizeActive) {
+    if (!windowResizeInProgress()) {
       commitResize();
       return;
     }
@@ -124,15 +147,6 @@ export function createMapResizeScheduler({
       resizeTimer = null;
       commitResize();
     }, RESIZE_DEBOUNCE_MS);
-  };
-  const onWindowResize = () => {
-    windowResizeActive = true;
-    if (windowResizeTimer !== null) window.clearTimeout(windowResizeTimer);
-    windowResizeTimer = window.setTimeout(() => {
-      windowResizeTimer = null;
-      windowResizeActive = false;
-    }, RESIZE_DEBOUNCE_MS);
-    resizeMap();
   };
   const clearWindowResizeState = () => {
     if (windowResizeTimer !== null) {
@@ -156,7 +170,7 @@ export function createMapResizeScheduler({
 
   const resizeObserver = new ResizeObserver(resizeMap);
   resizeObserver.observe(container);
-  window.addEventListener("resize", onWindowResize);
+  window.addEventListener("resize", resizeMap);
   window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
   window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
   watchDevicePixelRatio();
@@ -164,7 +178,7 @@ export function createMapResizeScheduler({
 
   return () => {
     resizeObserver.disconnect();
-    window.removeEventListener("resize", onWindowResize);
+    window.removeEventListener("resize", resizeMap);
     window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
     window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
     unwatchDevicePixelRatio();
