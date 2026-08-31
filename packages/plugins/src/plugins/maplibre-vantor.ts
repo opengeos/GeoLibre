@@ -1,6 +1,6 @@
 import { VantorControl } from "./vantor/control";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { mountMapControlInPanel } from "./dockable-map-control";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 
 export const VANTOR_PLUGIN_ID = "maplibre-gl-vantor";
 
@@ -89,6 +89,7 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
     unsubscribeLocale?.();
     unsubscribeLocale = null;
     if (!control) return;
+    unmountMapControlFromPanel(control);
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;

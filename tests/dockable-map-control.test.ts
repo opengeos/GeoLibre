@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
-import { mountMapControlInPanel } from "../packages/plugins/src/plugins/dockable-map-control";
+import {
+  mountMapControlInPanel,
+  unmountMapControlFromPanel,
+} from "../packages/plugins/src/plugins/dockable-map-control";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 const originalDocument = globalThis.document;
@@ -113,6 +116,34 @@ describe("mountMapControlInPanel", () => {
     const cleanup = mountMapControlInPanel(app, control as never, host);
     assert.ok(cleanup);
     map.emitRemove();
+    cleanup();
+
+    assert.equal(removeCalls, 1);
+    assert.equal(host.childElementCount, 0);
+  });
+
+  it("supports synchronous plugin teardown before the panel effect unmounts", () => {
+    const document = installDom();
+    const mapContainer = document.querySelector<HTMLElement>("#map")!;
+    const host = document.createElement("div");
+    let removeCalls = 0;
+    const control = {
+      onAdd: () => {
+        const toggle = document.createElement("button");
+        const panel = document.createElement("section");
+        mapContainer.appendChild(panel);
+        return toggle;
+      },
+      onRemove: () => {
+        removeCalls += 1;
+      },
+    };
+    const map = fakeMap(mapContainer);
+    const app = { getMap: () => map } as unknown as GeoLibreAppAPI;
+
+    const cleanup = mountMapControlInPanel(app, control as never, host);
+    assert.ok(cleanup);
+    unmountMapControlFromPanel(control as never);
     cleanup();
 
     assert.equal(removeCalls, 1);

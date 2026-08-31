@@ -975,7 +975,8 @@ export interface GeoLibreRightPanelRegistration {
   /**
    * Deactivate the owning plugin when the user closes this panel. Use for a
    * plugin whose panel is its entire UI, so panel and Plugins-menu state stay
-   * in sync. The host defers deactivation until after `onClose` returns.
+   * in sync. The host defers deactivation until after `onExplicitClose`
+   * returns; displacement by another panel does not deactivate the plugin.
    */
   deactivatePluginOnClose?: boolean;
   /**

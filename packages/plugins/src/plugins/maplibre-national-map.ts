@@ -6,7 +6,7 @@ import {
 } from "maplibre-gl-national-map";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { mountMapControlInPanel } from "./dockable-map-control";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -165,6 +165,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!nationalMapControl) return;
     nationalMapStoreSync.detach();
+    unmountMapControlFromPanel(nationalMapControl);
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;

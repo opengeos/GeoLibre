@@ -6,7 +6,7 @@ import {
 } from "maplibre-gl-fema-wms";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { mountMapControlInPanel } from "./dockable-map-control";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -151,6 +151,7 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!femaWmsControl) return;
     femaWmsStoreSync.detach();
+    unmountMapControlFromPanel(femaWmsControl);
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;

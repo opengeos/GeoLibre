@@ -1,6 +1,13 @@
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
+const mountedControlCleanup = new WeakMap<IControl, () => void>();
+
+/** Synchronously unmount a bridged control if its docked panel is mounted. */
+export function unmountMapControlFromPanel(control: IControl): void {
+  mountedControlCleanup.get(control)?.();
+}
+
 /**
  * Mount only a MapLibre control's content inside a host-owned dockable panel.
  *
@@ -53,6 +60,7 @@ export function mountMapControlInPanel(
   const cleanup = () => {
     if (removed) return;
     removed = true;
+    if (mountedControlCleanup.get(control) === cleanup) mountedControlCleanup.delete(control);
     map.off("remove", cleanup);
     control.onRemove(map as MapLibreMap);
     container.replaceChildren();
@@ -62,5 +70,6 @@ export function mountMapControlInPanel(
   // control list, so explicitly participate in map teardown as well as panel
   // teardown. The idempotent cleanup handles either ordering.
   map.on("remove", cleanup);
+  mountedControlCleanup.set(control, cleanup);
   return cleanup;
 }

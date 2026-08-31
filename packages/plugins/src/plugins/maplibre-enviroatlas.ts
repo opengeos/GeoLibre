@@ -8,7 +8,7 @@ import {
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { mountMapControlInPanel } from "./dockable-map-control";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -183,6 +183,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) return;
     enviroAtlasStoreSync.detach();
+    unmountMapControlFromPanel(enviroAtlasControl);
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;
