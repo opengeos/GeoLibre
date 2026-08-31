@@ -4,6 +4,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
+import { nativeWmsTileUrl } from "../lib/xyz-url";
 import {
   addRasterToMap,
   setRasterRenderEngine,
@@ -918,7 +919,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         name,
         {
           type: "wms",
-          tiles: [tileUrl],
+          tiles: [isTauriRuntime() ? nativeWmsTileUrl(tileUrl) : tileUrl],
           url,
           // Persist the WMS request parameters so the layer round-trips through
           // a saved project, mirroring the Add Data dialog's WMS source.

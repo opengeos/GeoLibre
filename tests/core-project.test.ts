@@ -21,6 +21,34 @@ import {
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
+  it("restores portable WMS URLs when saving a desktop-routed layer", () => {
+    const tile = "https://example.com/wms?BBOX={bbox-epsg-3857}";
+    const routed = `geolibre-wms://tile?url=${encodeURIComponent(tile).replaceAll(
+      "%7Bbbox-epsg-3857%7D",
+      "{bbox-epsg-3857}",
+    )}`;
+    const layer = {
+      ...geojsonLayer({ id: "wms" }),
+      type: "wms" as const,
+      source: { type: "raster" as const, tiles: [routed] },
+      geojson: undefined,
+    };
+
+    const saved = projectFromStore({
+      projectName: "Portable WMS",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(saved.layers[0].source.tiles?.[0], tile);
+    assert.equal(layer.source.tiles[0], routed);
+  });
+
   it("preserves layer style fields missing from a legacy top-level style", () => {
     const base = createEmptyProject("Partial legacy style");
     const layer = geojsonLayer({

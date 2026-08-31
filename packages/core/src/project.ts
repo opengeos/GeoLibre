@@ -1689,6 +1689,15 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  if (layer.type === "wms") {
+    const tiles = layer.source.tiles;
+    if (!Array.isArray(tiles)) return layer;
+    const portableTiles = tiles.map((tile) => portableWmsTileUrl(tile));
+    return portableTiles.some((tile, index) => tile !== tiles[index])
+      ? { ...layer, source: { ...layer.source, tiles: portableTiles } }
+      : layer;
+  }
+
   if (layer.type !== "xyz") return layer;
 
   const originalUrl =
@@ -1711,6 +1720,16 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     },
     metadata,
   };
+}
+
+function portableWmsTileUrl(tile: unknown): unknown {
+  if (typeof tile !== "string" || !tile.startsWith("geolibre-wms://")) return tile;
+  try {
+    const url = new URL(tile).searchParams.get("url");
+    return url && /^https?:\/\//i.test(url) ? url : tile;
+  } catch {
+    return tile;
+  }
 }
 
 export function applyProjectToStore(project: GeoLibreProject): {

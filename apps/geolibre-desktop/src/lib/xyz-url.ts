@@ -89,7 +89,7 @@ async function fetchNativeTile(url: string): Promise<{ data: ArrayBuffer }> {
     url,
   });
   const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  return { data: Uint8Array.from(array).buffer };
+  return { data: array.slice().buffer };
 }
 
 export async function resolveProjectXyzLayers(
