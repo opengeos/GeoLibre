@@ -1726,7 +1726,9 @@ function portableWmsTileUrl(tile: unknown): unknown {
   if (typeof tile !== "string" || !tile.startsWith("geolibre-wms://")) return tile;
   try {
     const url = new URL(tile).searchParams.get("url");
-    return url && /^https?:\/\//i.test(url) ? url : tile;
+    if (!url) return tile;
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : tile;
   } catch {
     return tile;
   }

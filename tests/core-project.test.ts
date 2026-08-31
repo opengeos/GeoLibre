@@ -49,6 +49,28 @@ describe("project parsing", () => {
     assert.equal(layer.source.tiles[0], routed);
   });
 
+  it("does not save an invalid URL extracted from a desktop WMS route", () => {
+    const routed = "geolibre-wms://tile?url=https%3A%2F%2F";
+    const layer = {
+      ...geojsonLayer({ id: "wms" }),
+      type: "wms" as const,
+      source: { type: "raster" as const, tiles: [routed] },
+      geojson: undefined,
+    };
+    const saved = projectFromStore({
+      projectName: "Invalid routed WMS",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(saved.layers[0].source.tiles?.[0], routed);
+  });
+
   it("preserves layer style fields missing from a legacy top-level style", () => {
     const base = createEmptyProject("Partial legacy style");
     const layer = geojsonLayer({

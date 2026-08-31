@@ -4,7 +4,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
-import { nativeWmsTileUrl } from "../lib/xyz-url";
+import { nativeWmsTileUrl } from "../lib/native-wms-url";
 import {
   addRasterToMap,
   setRasterRenderEngine,

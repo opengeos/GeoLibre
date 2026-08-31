@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
-import {
-  nativeWmsTileUrl,
-  routeWmsLayerThroughNativeProtocol,
-} from "../apps/geolibre-desktop/src/lib/xyz-url";
+import { routeWmsLayerThroughNativeProtocol } from "../apps/geolibre-desktop/src/lib/xyz-url";
+import { nativeWmsTileUrl } from "../apps/geolibre-desktop/src/lib/native-wms-url";
 
 test("nativeWmsTileUrl preserves the MapLibre bbox placeholder", () => {
   const tile =
