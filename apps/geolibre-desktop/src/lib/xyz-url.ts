@@ -74,8 +74,8 @@ export async function resolveXyzTileUrlTemplate(
 export function registerXyzTileProtocol(): void {
   if (protocolRegistered || !isTauri()) return;
 
-  addProtocol(XYZ_TILE_PROTOCOL, (request) => fetchNativeTile(parseXyzTileRequest(request)));
-  addProtocol(WMS_TILE_PROTOCOL, (request) => fetchNativeTile(parseWmsTileRequest(request)));
+  addProtocol(XYZ_TILE_PROTOCOL, async (request) => fetchNativeTile(parseXyzTileRequest(request)));
+  addProtocol(WMS_TILE_PROTOCOL, async (request) => fetchNativeTile(parseWmsTileRequest(request)));
   protocolRegistered = true;
 }
 
