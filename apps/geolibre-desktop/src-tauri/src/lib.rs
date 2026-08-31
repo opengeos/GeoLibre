@@ -724,16 +724,25 @@ fn read_selected_image(
 ) -> Result<tauri::ipc::Response, String> {
     let path = PathBuf::from(path);
     let selected = app.state::<SelectedImagePaths>();
-    let mut allowed = selected
-        .0
-        .lock()
-        .map_err(|_| "Could not lock the selected-image allowlist".to_string())?;
-    if !allowed.contains(&path) {
-        return Err("Refusing to read an image that was not selected".to_string());
+    {
+        let mut allowed = selected
+            .0
+            .lock()
+            .map_err(|_| "Could not lock the selected-image allowlist".to_string())?;
+        if !allowed.remove(&path) {
+            return Err("Refusing to read an image that was not selected".to_string());
+        }
     }
-    let bytes = fs::read(&path).map_err(|error| format!("Could not read selected image: {error}"))?;
-    allowed.remove(&path);
-    Ok(tauri::ipc::Response::new(bytes))
+    match fs::read(&path) {
+        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        Err(error) => {
+            // Preserve retry behavior without holding the mutex during I/O.
+            if let Ok(mut allowed) = selected.0.lock() {
+                allowed.insert(path);
+            }
+            Err(format!("Could not read selected image: {error}"))
+        }
+    }
 }
 
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
