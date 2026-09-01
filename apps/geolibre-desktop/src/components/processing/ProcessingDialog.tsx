@@ -1580,7 +1580,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
         const message =
           err instanceof GlobalDemError
-            ? t("toolbar.rasterTool.runError")
+            ? `${t("toolbar.rasterTool.runError")} ${err.message}`
             : err instanceof Error
               ? err.message
               : t("toolbar.rasterTool.runError");
