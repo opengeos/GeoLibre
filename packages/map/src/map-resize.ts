@@ -49,14 +49,21 @@ export function createMapResizeScheduler({
   let frameOverlay: HTMLCanvasElement | null = null;
   let frameSnapshot: HTMLCanvasElement | null = null;
   let cachedFrame: ImageBitmap | null = null;
+  let frameCaptureVersion = 0;
+  let disposed = false;
   let overlayMap: MapLibreMap | null = null;
   const snapshotMap = getMap() ?? null;
 
   const cacheRenderedFrame = () => {
     const canvas = getMap()?.getCanvas();
     if (!canvas || typeof createImageBitmap !== "function") return;
+    const captureVersion = ++frameCaptureVersion;
     void createImageBitmap(canvas)
       .then((bitmap) => {
+        if (disposed || captureVersion !== frameCaptureVersion) {
+          bitmap.close();
+          return;
+        }
         cachedFrame?.close();
         cachedFrame = bitmap;
       })
@@ -264,6 +271,8 @@ export function createMapResizeScheduler({
   commitResize();
 
   return () => {
+    disposed = true;
+    frameCaptureVersion += 1;
     resizeObserver.disconnect();
     window.removeEventListener("resize", resizeMap);
     window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
