@@ -10,7 +10,7 @@
 // packages/processing/package.json; a guard test asserts they match
 // (tests/object-detection.test.ts) so a dependency bump that forgets this
 // constant fails CI instead of breaking inference at runtime.
-export const ORT_VERSION = "1.27.0";
+export const ORT_VERSION = "1.29.0";
 
 // Injected by vite.config.ts; declared locally (module scope, so it does not
 // collide with the app's global declaration in vite-env.d.ts) because this
