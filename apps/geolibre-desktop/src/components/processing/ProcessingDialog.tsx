@@ -2125,7 +2125,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               </div>
               {/* The Mac App Store build has no sidecar to switch to, so the
                   local/server toggle is dropped (WASM is the only runtime). */}
-              {!IS_MAS_BUILD && (
+              {!IS_MAS_BUILD && selectedTool?.id !== DOWNLOAD_GLOBAL_DEM_TOOL_ID && (
                 <label
                   // whitespace-nowrap: the label is short enough to keep on one
                   // line, and letting it wrap turned "Run locally (WASM)" into a

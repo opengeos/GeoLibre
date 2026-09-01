@@ -16,7 +16,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe("keyless global DEM", () => {
+describe("global DEM from keyless terrain tiles", () => {
   it("registers a tool that does not request credentials", () => {
     assert.deepEqual(withGlobalDemTool([]), [DOWNLOAD_GLOBAL_DEM_TOOL]);
     assert.equal(withGlobalDemTool([DOWNLOAD_GLOBAL_DEM_TOOL]).length, 1);
