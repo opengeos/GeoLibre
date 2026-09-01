@@ -23,7 +23,7 @@ import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { whiteboxMenuSubcategorySlug } from "../../../lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
-import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/opentopography-dem";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
 

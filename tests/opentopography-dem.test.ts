@@ -9,7 +9,7 @@ import {
   globalDemTileRange,
   globalDemTileUrl,
   withGlobalDemTool,
-} from "../apps/geolibre-desktop/src/lib/opentopography-dem";
+} from "../apps/geolibre-desktop/src/lib/global-dem";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {

@@ -101,7 +101,7 @@ import {
   GlobalDemError,
   downloadGlobalDem,
   withGlobalDemTool,
-} from "../../lib/opentopography-dem";
+} from "../../lib/global-dem";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 import {
   whiteboxParameterLabel,

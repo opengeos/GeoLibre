@@ -1,5 +1,5 @@
 import { WHITEBOX_MENU_CATALOG } from "./whitebox-menu-catalog";
-import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./opentopography-dem";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem";
 
 /**
  * Query parameter that deep-links to a single Whitebox/Processing tool, e.g.

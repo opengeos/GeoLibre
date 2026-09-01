@@ -54,7 +54,12 @@ export interface GlobalDemRequest {
   signal?: AbortSignal;
 }
 
-export class GlobalDemError extends Error {}
+export class GlobalDemError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GlobalDemError";
+  }
+}
 
 interface TileRange {
   zoom: number;
