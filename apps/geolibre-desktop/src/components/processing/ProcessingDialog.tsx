@@ -2732,9 +2732,7 @@ function ParameterField({
         <Input
           id={`whitebox-${param.name}`}
           type={
-            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key"
-              ? "password"
-              : "text"
+            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key" ? "password" : "text"
           }
           autoComplete={
             toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key" ? "off" : undefined
