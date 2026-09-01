@@ -111,11 +111,12 @@ export function ProcessingMenu({
   const processingDeniedTitle = useCapabilityReason(processingCap);
   const sidecarDeniedTitle = useCapabilityReason(sidecarDeniedCap);
 
-  // Format Conversion, Raster tools, and AI Segmentation require the Python
-  // sidecar, which cannot run on Android/iOS — hide them on mobile so they don't
-  // present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python (Pyodide),
-  // geocode, statistics, and the assistant run client-side and stay. The user
-  // agent is stable for the session, so evaluate once.
+  // Format Conversion, sidecar-backed Raster leaves, and AI Segmentation require
+  // the Python sidecar, which cannot run on Android/iOS — hide those entries on
+  // mobile so they don't present and then fail. The Global DEM raster downloader,
+  // Vector (Turf), SQL (PGlite/DuckDB), Python (Pyodide), geocode, statistics, and
+  // the assistant run client-side and stay. The user agent is stable for the
+  // session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   // The Mac App Store build hides sidecar-only items with no client fallback

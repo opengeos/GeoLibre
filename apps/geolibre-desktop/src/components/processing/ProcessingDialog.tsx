@@ -1578,8 +1578,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         tracker.finish("error", message);
         setError(message);
       } finally {
-        if (globalDemAbortRef.current === controller) globalDemAbortRef.current = null;
-        setRunningLocal(false);
+        if (globalDemAbortRef.current === controller) {
+          globalDemAbortRef.current = null;
+          setRunningLocal(false);
+        }
       }
       return;
     }
