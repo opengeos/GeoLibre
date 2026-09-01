@@ -713,7 +713,7 @@ export function ProcessingMenu({
                   {t("toolbar.command.segmentEverything")}
                 </DropdownMenuItem>
               )}
-              <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />
+              {!mobile && <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}

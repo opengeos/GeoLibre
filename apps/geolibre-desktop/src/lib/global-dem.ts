@@ -150,7 +150,11 @@ export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<R
             throw new GlobalDemError(`Terrain tile download failed (HTTP ${response.status}).`);
           }
           const tile = await readRasterData(await response.arrayBuffer());
-          if (tile.width !== TILE_SIZE || tile.height !== TILE_SIZE || !tile.bands[0]) {
+          if (
+            tile.width !== TILE_SIZE ||
+            tile.height !== TILE_SIZE ||
+            tile.bands[0]?.length !== TILE_SIZE * TILE_SIZE
+          ) {
             throw new GlobalDemError("The terrain service returned an unexpected GeoTIFF tile.");
           }
           loaded += 1;
