@@ -1531,6 +1531,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     setRunningLocal(true);
 
     if (selectedTool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID) {
+      if (!String(values.bbox ?? "").trim()) {
+        setError(
+          t("processing.whitebox.missingRequiredParameter", {
+            label: whiteboxParameterLabel(t, i18n.language, selectedTool.id, {
+              name: "bbox",
+            }),
+          }),
+        );
+        setRunningLocal(false);
+        return;
+      }
       globalDemAbortRef.current?.abort();
       const controller = new AbortController();
       globalDemAbortRef.current = controller;
