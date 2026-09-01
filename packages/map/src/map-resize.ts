@@ -48,6 +48,7 @@ export function createMapResizeScheduler({
   let panelResizeActive = false;
   let frameOverlay: HTMLCanvasElement | null = null;
   let frameSnapshot: HTMLCanvasElement | null = null;
+  let frameSnapshotDevicePixelRatio = 1;
   let overlayBackgroundColor = "";
   let overlayMap: MapLibreMap | null = null;
   let renderCleanupArmed = false;
@@ -56,6 +57,7 @@ export function createMapResizeScheduler({
     frameOverlay?.remove();
     frameOverlay = null;
     frameSnapshot = null;
+    frameSnapshotDevicePixelRatio = 1;
     overlayBackgroundColor = "";
     if (overlayMap) {
       overlayMap.off("render", removeFrameOverlay);
@@ -78,6 +80,7 @@ export function createMapResizeScheduler({
       if (!snapshotContext) return;
       snapshotContext.drawImage(canvas, 0, 0);
       frameSnapshot = snapshot;
+      frameSnapshotDevicePixelRatio = window.devicePixelRatio;
     }
     const overlay = frameOverlay ?? document.createElement("canvas");
     overlay.width = Math.round(container.clientWidth * window.devicePixelRatio);
@@ -99,9 +102,12 @@ export function createMapResizeScheduler({
     }
     context.fillStyle = overlayBackgroundColor;
     context.fillRect(0, 0, overlay.width, overlay.height);
-    const x = (overlay.width - snapshot.width) / 2;
-    const y = (overlay.height - snapshot.height) / 2;
-    context.drawImage(snapshot, x, y);
+    const dprScale = window.devicePixelRatio / frameSnapshotDevicePixelRatio;
+    const snapshotWidth = snapshot.width * dprScale;
+    const snapshotHeight = snapshot.height * dprScale;
+    const x = (overlay.width - snapshotWidth) / 2;
+    const y = (overlay.height - snapshotHeight) / 2;
+    context.drawImage(snapshot, x, y, snapshotWidth, snapshotHeight);
     if (frameOverlay) return;
 
     overlay.className = "geolibre-map-resize-frame";
