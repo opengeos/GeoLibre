@@ -71,5 +71,9 @@ describe("keyless global DEM", () => {
       downloadGlobalDem({ bbox: "10,0,-10,1", bboxCrs: 4326 }),
       /valid WGS84 extent/,
     );
+    await assert.rejects(
+      downloadGlobalDem({ bbox: "10,,20,30", bboxCrs: 4326 }),
+      /valid WGS84 extent/,
+    );
   });
 });

@@ -106,9 +106,11 @@ export function globalDemTileUrl(zoom: number, x: number, y: number): string {
 /** Download, mosaic, and crop public keyless AWS Terrain Tiles into memory. */
 export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<RasterData> {
   if (request.bboxCrs !== 4326) throw new GlobalDemError("The DEM extent must use EPSG:4326.");
-  const bounds = request.bbox.split(",").map((value) => Number(value.trim()));
+  const boundParts = request.bbox.split(",").map((value) => value.trim());
+  const bounds = boundParts.map(Number);
   if (
     bounds.length !== 4 ||
+    boundParts.some((value) => value === "") ||
     bounds.some((value) => !Number.isFinite(value)) ||
     bounds[0] < -180 ||
     bounds[2] > 180 ||
@@ -149,10 +151,19 @@ export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<R
           loaded += 1;
           const tileX = x - range.minX;
           const tileY = y - range.minY;
+          const tileNodata = tile.nodata;
           for (let row = 0; row < TILE_SIZE; row += 1) {
             const source = row * TILE_SIZE;
             const target = (tileY * TILE_SIZE + row) * mosaicWidth + tileX * TILE_SIZE;
-            mosaic.set(tile.bands[0].subarray(source, source + TILE_SIZE), target);
+            const sourceRow = tile.bands[0].subarray(source, source + TILE_SIZE);
+            if (tileNodata == null || tileNodata === -32768) {
+              mosaic.set(sourceRow, target);
+            } else {
+              for (let column = 0; column < TILE_SIZE; column += 1) {
+                const value = sourceRow[column];
+                mosaic[target + column] = value === tileNodata ? -32768 : value;
+              }
+            }
           }
         })(),
       );
