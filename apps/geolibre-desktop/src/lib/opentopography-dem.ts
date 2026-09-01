@@ -1,26 +1,30 @@
-import type { WhiteboxTool } from "@geolibre/processing";
+import {
+  convertRasterDataToCog,
+  readRasterData,
+  type RasterData,
+  type WhiteboxTool,
+} from "@geolibre/processing";
 
 export const DOWNLOAD_GLOBAL_DEM_TOOL_ID = "download_global_dem";
 
-/** Built-in network tool shown alongside the GeoLibre-authored raster tools. */
+const TILE_SIZE = 512;
+const MAX_ZOOM = 12;
+const MAX_TILES = 64;
+const WEB_MERCATOR_LIMIT = 85.051129;
+const EARTH_RADIUS = 6378137;
+const ORIGIN_SHIFT = Math.PI * EARTH_RADIUS;
+const TERRAIN_TILE_URL = "https://s3.amazonaws.com/elevation-tiles-prod/geotiff/{z}/{x}/{y}.tif";
+
+/** Built-in keyless network tool shown alongside GeoLibre raster tools. */
 export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
   id: DOWNLOAD_GLOBAL_DEM_TOOL_ID,
   display_name: "Download Global DEM",
   summary:
-    "Download a clipped global elevation model from OpenTopography for the current map view or a bounding box drawn on the map. A free OpenTopography API key is required.",
+    "Download a DEM for the current map view or a bounding box drawn on the map. Elevation tiles are fetched from the public AWS Terrain Tiles dataset; no API key is required.",
   category: "Raster",
   taxonomy_category: "Raster",
   source: "geolibre",
   params: [
-    {
-      name: "dataset",
-      description:
-        "Global elevation dataset: COP30/COP90 (Copernicus), NASADEM, SRTMGL1 (SRTM 30 m), AW3D30 (ALOS 30 m), or SRTM15Plus (global topography and bathymetry). COP30 is recommended.",
-      kind: "enum",
-      required: true,
-      default: "COP30",
-      options: ["COP30", "NASADEM", "SRTMGL1", "COP90", "AW3D30", "SRTM15Plus"],
-    },
     {
       name: "bbox",
       description: "WGS84 extent as west,south,east,north.",
@@ -34,18 +38,10 @@ export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
       required: true,
       default: 4326,
     },
-    {
-      name: "api_key",
-      description:
-        "Free OpenTopography API key. It is used for this request only and is not saved in processing history or share links.",
-      kind: "string",
-      required: true,
-    },
   ],
   return_type: "raster",
 };
 
-/** Add the built-in downloader without duplicating a future runtime implementation. */
 export function withGlobalDemTool(tools: WhiteboxTool[]): WhiteboxTool[] {
   return tools.some((tool) => tool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID)
     ? tools
@@ -53,78 +49,154 @@ export function withGlobalDemTool(tools: WhiteboxTool[]): WhiteboxTool[] {
 }
 
 export interface GlobalDemRequest {
-  dataset: string;
   bbox: string;
   bboxCrs: number;
-  apiKey: string;
   signal?: AbortSignal;
 }
 
-/** Domain error whose internal detail must not be rendered without translation. */
 export class GlobalDemError extends Error {}
 
-const DATASETS = new Set(
-  DOWNLOAD_GLOBAL_DEM_TOOL.params?.find((param) => param.name === "dataset")?.options ?? [],
-);
+interface TileRange {
+  zoom: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  westPixel: number;
+  eastPixel: number;
+  northPixel: number;
+  southPixel: number;
+}
 
-/** Download a clipped GeoTIFF through OpenTopography's Global DEM API. */
-export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint8Array> {
-  if (!DATASETS.has(request.dataset))
-    throw new GlobalDemError("Select a supported global DEM dataset.");
-  if (request.bboxCrs !== 4326)
-    throw new GlobalDemError("The OpenTopography extent must use EPSG:4326.");
+function mercatorPixelX(longitude: number, zoom: number): number {
+  return ((longitude + 180) / 360) * 2 ** zoom * TILE_SIZE;
+}
+
+function mercatorPixelY(latitude: number, zoom: number): number {
+  const rad = (latitude * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** zoom * TILE_SIZE;
+}
+
+/** Select the highest available zoom whose decoded mosaic stays browser-safe. */
+export function globalDemTileRange(bounds: [number, number, number, number]): TileRange {
+  const [west, south, east, north] = bounds;
+  for (let zoom = MAX_ZOOM; zoom >= 0; zoom -= 1) {
+    const westPixel = mercatorPixelX(west, zoom);
+    const eastPixel = mercatorPixelX(east, zoom);
+    const northPixel = mercatorPixelY(north, zoom);
+    const southPixel = mercatorPixelY(south, zoom);
+    const minX = Math.floor(westPixel / TILE_SIZE);
+    const maxX = Math.ceil(eastPixel / TILE_SIZE) - 1;
+    const minY = Math.floor(northPixel / TILE_SIZE);
+    const maxY = Math.ceil(southPixel / TILE_SIZE) - 1;
+    const count = (maxX - minX + 1) * (maxY - minY + 1);
+    if (count <= MAX_TILES) {
+      return { zoom, minX, maxX, minY, maxY, westPixel, eastPixel, northPixel, southPixel };
+    }
+  }
+  throw new GlobalDemError("The selected extent is too large to download in the browser.");
+}
+
+export function globalDemTileUrl(zoom: number, x: number, y: number): string {
+  return TERRAIN_TILE_URL.replace("{z}", String(zoom))
+    .replace("{x}", String(x))
+    .replace("{y}", String(y));
+}
+
+/** Download, mosaic, and crop public keyless AWS Terrain Tiles into memory. */
+export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<RasterData> {
+  if (request.bboxCrs !== 4326) throw new GlobalDemError("The DEM extent must use EPSG:4326.");
   const bounds = request.bbox.split(",").map((value) => Number(value.trim()));
   if (
     bounds.length !== 4 ||
     bounds.some((value) => !Number.isFinite(value)) ||
     bounds[0] < -180 ||
     bounds[2] > 180 ||
-    bounds[1] < -90 ||
-    bounds[3] > 90 ||
+    bounds[1] < -WEB_MERCATOR_LIMIT ||
+    bounds[3] > WEB_MERCATOR_LIMIT ||
     bounds[0] >= bounds[2] ||
     bounds[1] >= bounds[3]
   ) {
-    throw new GlobalDemError("Enter a valid WGS84 extent as west,south,east,north.");
+    throw new GlobalDemError(
+      `Enter a valid WGS84 extent between ±${WEB_MERCATOR_LIMIT}° latitude.`,
+    );
   }
-  if (!request.apiKey.trim()) throw new GlobalDemError("Enter your OpenTopography API key.");
 
-  const [west, south, east, north] = bounds;
-  const query = new URLSearchParams({
-    demtype: request.dataset,
-    west: String(west),
-    south: String(south),
-    east: String(east),
-    north: String(north),
-    outputFormat: "GTiff",
-    API_Key: request.apiKey.trim(),
-  });
-  const response = await fetch(`https://portal.opentopography.org/API/globaldem?${query}`, {
-    signal: request.signal,
-  });
-  if (!response.ok) {
-    // OpenTopography commonly returns a short plain-text explanation. Do not
-    // include the request URL because it contains the API key, and redact both
-    // forms of the key in case the upstream service or a proxy echoes it.
-    const secret = request.apiKey.trim();
-    const encodedSecret = encodeURIComponent(secret);
-    let detail = (await response.text()).trim().replace(/\s+/g, " ");
-    for (const value of new Set([secret, encodedSecret])) {
-      detail = detail.replaceAll(value, "[redacted]");
+  const range = globalDemTileRange(bounds as [number, number, number, number]);
+  const tilesWide = range.maxX - range.minX + 1;
+  const tilesTall = range.maxY - range.minY + 1;
+  const mosaicWidth = tilesWide * TILE_SIZE;
+  const mosaicHeight = tilesTall * TILE_SIZE;
+  const mosaic = new Float32Array(mosaicWidth * mosaicHeight);
+  let loaded = 0;
+
+  const requests: Promise<void>[] = [];
+  for (let y = range.minY; y <= range.maxY; y += 1) {
+    for (let x = range.minX; x <= range.maxX; x += 1) {
+      requests.push(
+        (async () => {
+          const response = await fetch(globalDemTileUrl(range.zoom, x, y), {
+            signal: request.signal,
+          });
+          if (response.status === 404) return;
+          if (!response.ok) {
+            throw new GlobalDemError(`Terrain tile download failed (HTTP ${response.status}).`);
+          }
+          const tile = await readRasterData(await response.arrayBuffer());
+          if (tile.width !== TILE_SIZE || tile.height !== TILE_SIZE || !tile.bands[0]) {
+            throw new GlobalDemError("The terrain service returned an unexpected GeoTIFF tile.");
+          }
+          loaded += 1;
+          const tileX = x - range.minX;
+          const tileY = y - range.minY;
+          for (let row = 0; row < TILE_SIZE; row += 1) {
+            const source = row * TILE_SIZE;
+            const target = (tileY * TILE_SIZE + row) * mosaicWidth + tileX * TILE_SIZE;
+            mosaic.set(tile.bands[0].subarray(source, source + TILE_SIZE), target);
+          }
+        })(),
+      );
     }
-    detail = detail.slice(0, 300);
-    throw new GlobalDemError(
-      `OpenTopography download failed (HTTP ${response.status})${detail ? `: ${detail}` : "."}`,
-    );
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const littleEndian =
-    bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00;
-  const bigEndian =
-    bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a;
-  if (bytes.length < 4 || (!littleEndian && !bigEndian)) {
-    throw new GlobalDemError(
-      "OpenTopography returned an unexpected response instead of a GeoTIFF.",
-    );
+  await Promise.all(requests);
+  if (loaded === 0) throw new GlobalDemError("No elevation tiles are available for this extent.");
+
+  const mosaicPixelX = range.minX * TILE_SIZE;
+  const mosaicPixelY = range.minY * TILE_SIZE;
+  const left = Math.max(0, Math.floor(range.westPixel - mosaicPixelX));
+  const right = Math.min(mosaicWidth, Math.ceil(range.eastPixel - mosaicPixelX));
+  const top = Math.max(0, Math.floor(range.northPixel - mosaicPixelY));
+  const bottom = Math.min(mosaicHeight, Math.ceil(range.southPixel - mosaicPixelY));
+  const width = right - left;
+  const height = bottom - top;
+  if (width < 2 || height < 2) throw new GlobalDemError("The selected extent is too small.");
+
+  const values = new Float32Array(width * height);
+  for (let row = 0; row < height; row += 1) {
+    const source = (top + row) * mosaicWidth + left;
+    values.set(mosaic.subarray(source, source + width), row * width);
   }
-  return bytes;
+
+  const resolution = (2 * ORIGIN_SHIFT) / (2 ** range.zoom * TILE_SIZE);
+  const raster: RasterData = {
+    bands: [values],
+    width,
+    height,
+    originX: -ORIGIN_SHIFT + (mosaicPixelX + left) * resolution,
+    originY: ORIGIN_SHIFT - (mosaicPixelY + top) * resolution,
+    resX: resolution,
+    resY: resolution,
+    nodata: -32768,
+    geoKeys: {
+      GTModelTypeGeoKey: 1,
+      GTRasterTypeGeoKey: 1,
+      ProjectedCSTypeGeoKey: 3857,
+    },
+  };
+  return raster;
+}
+
+/** Download a bbox and encode the result directly as a numerically safe COG. */
+export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint8Array> {
+  return convertRasterDataToCog(await buildGlobalDemRaster(request));
 }

@@ -12,7 +12,6 @@ import {
   normalizeVectorOutputFormat,
   runWhiteboxTool,
   runWhiteboxToolWasm,
-  ensureWhiteboxRasterCog,
   outputBaseName,
   fileOutputTargetExtension,
   outputTextFormatHint,
@@ -840,8 +839,6 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const param of selectedTool.params ?? []) {
       const name = param.name;
       if (!name) continue;
-      // Never place a credential in a shareable URL.
-      if (selectedTool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID && name === "api_key") continue;
       const kind = parameterKind(param);
       if (kind.endsWith("_in") || kind.endsWith("_out")) continue;
       const value = asString(values[name]);
@@ -1537,23 +1534,22 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       globalDemAbortRef.current?.abort();
       const controller = new AbortController();
       globalDemAbortRef.current = controller;
-      const safeValues = { ...values, api_key: "" };
       const tracker = beginProcessingRun({
         kind: "whitebox",
         toolId: selectedTool.id,
         toolName: toolLabel(t, selectedTool),
-        engine: "OpenTopography",
-        parameters: safeValues,
+        engine: "AWS Terrain Tiles",
+        parameters: values,
       });
       try {
         const downloaded = await downloadGlobalDem({
-          dataset: String(values.dataset ?? ""),
           bbox: String(values.bbox ?? ""),
           bboxCrs: Number(values.bbox_crs),
-          apiKey: String(values.api_key ?? ""),
           signal: controller.signal,
         });
-        const bytes = await ensureWhiteboxRasterCog(downloaded);
+        // The downloader encodes its in-memory elevation samples directly as a
+        // COG, avoiding the generic GeoTIFF conversion path and an extra decode.
+        const bytes = downloaded;
         const now = new Date().toISOString();
         const id = `global-dem-${Date.now()}`;
         historyTrackersRef.current.set(id, tracker);
@@ -1568,7 +1564,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           tool_id: selectedTool.id,
           created_at: now,
           updated_at: now,
-          messages: [`Downloaded ${String(values.dataset)} from OpenTopography.`],
+          messages: ["Downloaded DEM from public AWS Terrain Tiles."],
           outputs: { output: bytes },
           result: null,
           error: null,
@@ -2769,12 +2765,7 @@ function ParameterField({
       ) : (
         <Input
           id={`whitebox-${param.name}`}
-          type={
-            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key" ? "password" : "text"
-          }
-          autoComplete={
-            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key" ? "off" : undefined
-          }
+          type="text"
           value={valueText}
           placeholder={isOutputParameter(param) ? t("processing.whitebox.auto") : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
