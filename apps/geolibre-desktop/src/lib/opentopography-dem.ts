@@ -41,11 +41,6 @@ export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
       kind: "string",
       required: true,
     },
-    {
-      name: "output",
-      description: "Downloaded DEM GeoTIFF.",
-      kind: "raster_out",
-    },
   ],
   return_type: "raster",
 };
