@@ -78,7 +78,11 @@ export function createMapResizeScheduler({
       snapshot.height = canvas.height;
       const snapshotContext = snapshot.getContext("2d");
       if (!snapshotContext) return;
-      snapshotContext.drawImage(canvas, 0, 0);
+      try {
+        snapshotContext.drawImage(canvas, 0, 0);
+      } catch {
+        return;
+      }
       frameSnapshot = snapshot;
       frameSnapshotDevicePixelRatio = window.devicePixelRatio;
     }
@@ -107,7 +111,12 @@ export function createMapResizeScheduler({
     const snapshotHeight = snapshot.height * dprScale;
     const x = (overlay.width - snapshotWidth) / 2;
     const y = (overlay.height - snapshotHeight) / 2;
-    context.drawImage(snapshot, x, y, snapshotWidth, snapshotHeight);
+    try {
+      context.drawImage(snapshot, x, y, snapshotWidth, snapshotHeight);
+    } catch {
+      removeFrameOverlay();
+      return;
+    }
     if (frameOverlay) return;
 
     overlay.className = "geolibre-map-resize-frame";
@@ -152,7 +161,7 @@ export function createMapResizeScheduler({
       observedDevicePixelRatio !== window.devicePixelRatio
     );
   };
-  const commitResize = () => {
+  const commitResize = (preserveFrame = true) => {
     cancelFrame();
     resizeFrame = window.requestAnimationFrame(() => {
       resizeFrame = null;
@@ -165,8 +174,8 @@ export function createMapResizeScheduler({
         removeFrameOverlay();
         return;
       }
-      preserveRenderedFrame();
-      if (frameOverlay && !renderCleanupArmed) {
+      if (preserveFrame) preserveRenderedFrame();
+      if (preserveFrame && frameOverlay && !renderCleanupArmed) {
         map.once("render", removeFrameOverlay);
         renderCleanupArmed = true;
       }
@@ -271,7 +280,7 @@ export function createMapResizeScheduler({
   window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
   window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
   watchDevicePixelRatio();
-  commitResize();
+  commitResize(false);
 
   return () => {
     resizeObserver.disconnect();
