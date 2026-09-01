@@ -36,6 +36,7 @@ interface Harness {
   resizeCalls: () => number;
   overlayCount: () => number;
   overlaySize: () => { width: number; height: number } | null;
+  drawnFrameWidth: () => number | null;
   render: () => void;
   listenerCount: () => number;
 }
@@ -65,6 +66,7 @@ function install(): Harness {
     },
   };
   let resizeCalls = 0;
+  let drawnFrameWidth: number | null = null;
   let renderListener: (() => void) | null = null;
   const map = {
     getCanvas: () => canvas,
@@ -145,7 +147,12 @@ function install(): Harness {
         height: 0,
         style: {},
         setAttribute() {},
-        getContext: () => ({ drawImage() {}, fillRect() {} }),
+        getContext: () => ({
+          drawImage(...args: unknown[]) {
+            if (args.length === 5) drawnFrameWidth = args[3] as number;
+          },
+          fillRect() {},
+        }),
         remove() {
           overlays.delete(overlay);
         },
@@ -224,6 +231,7 @@ function install(): Harness {
       const overlay = [...overlays][0] as { width: number; height: number } | undefined;
       return overlay ? { width: overlay.width, height: overlay.height } : null;
     },
+    drawnFrameWidth: () => drawnFrameWidth,
     render() {
       const listener = renderListener;
       renderListener = null;
@@ -359,6 +367,7 @@ describe("createMapResizeScheduler", () => {
     harness.setDevicePixelRatio(2);
     harness.flushFrames();
     assert.equal(harness.resizeCalls(), 1);
+    assert.equal(harness.drawnFrameWidth(), 1600);
   });
 
   it("detaches every listener on dispose", () => {

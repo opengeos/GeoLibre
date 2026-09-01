@@ -52,6 +52,8 @@ export function createMapResizeScheduler({
   let overlayBackgroundColor = "";
   let overlayMap: MapLibreMap | null = null;
   let renderCleanupArmed = false;
+  const backgroundIsTransparent = (color: string) =>
+    !color || color === "transparent" || color === "rgba(0, 0, 0, 0)";
 
   const removeFrameOverlay = () => {
     frameOverlay?.remove();
@@ -68,6 +70,7 @@ export function createMapResizeScheduler({
   const preserveRenderedFrame = () => {
     const map = getMap();
     if (!map) return;
+    if (frameOverlay && overlayMap !== map) removeFrameOverlay();
     const canvas = map.getCanvas();
     const canvasParent = canvas.parentElement;
     if (!canvasParent || canvas.width === 0 || canvas.height === 0) return;
@@ -84,7 +87,9 @@ export function createMapResizeScheduler({
         return;
       }
       frameSnapshot = snapshot;
-      frameSnapshotDevicePixelRatio = window.devicePixelRatio;
+      const canvasCssWidth = parseFloat(canvas.style.width) || canvas.clientWidth;
+      frameSnapshotDevicePixelRatio =
+        canvasCssWidth > 0 ? canvas.width / canvasCssWidth : window.devicePixelRatio;
     }
     const overlay = frameOverlay ?? document.createElement("canvas");
     overlay.width = Math.round(container.clientWidth * window.devicePixelRatio);
@@ -93,14 +98,11 @@ export function createMapResizeScheduler({
     if (!context) return;
     if (!overlayBackgroundColor) {
       let backgroundElement: HTMLElement | null = container;
-      while (
-        backgroundElement &&
-        (!overlayBackgroundColor || overlayBackgroundColor === "rgba(0, 0, 0, 0)")
-      ) {
+      while (backgroundElement && backgroundIsTransparent(overlayBackgroundColor)) {
         overlayBackgroundColor = window.getComputedStyle(backgroundElement).backgroundColor;
         backgroundElement = backgroundElement.parentElement;
       }
-      if (!overlayBackgroundColor || overlayBackgroundColor === "rgba(0, 0, 0, 0)") {
+      if (backgroundIsTransparent(overlayBackgroundColor)) {
         overlayBackgroundColor = "#fff";
       }
     }
