@@ -15,7 +15,8 @@ export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
   params: [
     {
       name: "dataset",
-      description: "Global elevation dataset. COP30 is the recommended 30 m Copernicus DSM.",
+      description:
+        "Global elevation dataset: COP30/COP90 (Copernicus), NASADEM, SRTMGL1 (SRTM 30 m), AW3D30 (ALOS 30 m), or SRTM15Plus (global topography and bathymetry). COP30 is recommended.",
       kind: "enum",
       required: true,
       default: "COP30",

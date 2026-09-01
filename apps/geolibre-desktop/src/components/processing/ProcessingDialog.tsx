@@ -1561,7 +1561,6 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           if (oldest === undefined) break;
           historyTrackersRef.current.delete(oldest);
         }
-        runParametersByJobRef.current.set(id, { output: "download_global_dem_output.tif" });
         setJob({
           id,
           status: "succeeded",
