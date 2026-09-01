@@ -12,6 +12,7 @@ import {
   normalizeVectorOutputFormat,
   runWhiteboxTool,
   runWhiteboxToolWasm,
+  ensureWhiteboxRasterCog,
   outputBaseName,
   fileOutputTargetExtension,
   outputTextFormatHint,
@@ -96,6 +97,11 @@ import {
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
 import { CrsPickerInput } from "./CrsPickerInput";
+import {
+  DOWNLOAD_GLOBAL_DEM_TOOL_ID,
+  downloadGlobalDem,
+  withGlobalDemTool,
+} from "../../lib/opentopography-dem";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 import {
   whiteboxParameterLabel,
@@ -829,6 +835,8 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const param of selectedTool.params ?? []) {
       const name = param.name;
       if (!name) continue;
+      // Never place a credential in a shareable URL.
+      if (selectedTool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID && name === "api_key") continue;
       const kind = parameterKind(param);
       if (kind.endsWith("_in") || kind.endsWith("_out")) continue;
       const value = asString(values[name]);
@@ -945,17 +953,19 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         );
         setRuntimeAvailable(available);
         setRuntimeMessage(message);
-        setTools(snapshotTools);
+        const availableTools = withGlobalDemTool(snapshotTools);
+        setTools(availableTools);
         setSelectedToolId((current) =>
-          snapshotTools.some((tool) => tool.id === current)
+          availableTools.some((tool) => tool.id === current)
             ? current
-            : (snapshotTools[0]?.id ?? ""),
+            : (availableTools[0]?.id ?? ""),
         );
       } catch (err) {
         setRuntimeAvailable(available);
         setRuntimeMessage(message);
-        setTools([]);
-        setSelectedToolId("");
+        const availableTools = withGlobalDemTool([]);
+        setTools(availableTools);
+        setSelectedToolId(availableTools[0]?.id ?? "");
         setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
       }
     };
@@ -998,7 +1008,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       if (catalogError) {
         console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogError);
       }
-      const nextTools = mergeWasmToolManifests(catalogTools, wasmTools);
+      const nextTools = withGlobalDemTool(mergeWasmToolManifests(catalogTools, wasmTools));
       setTools(nextTools);
       setSelectedToolId((current) =>
         nextTools.some((tool) => tool.id === current) ? current : (nextTools[0]?.id ?? ""),
@@ -1058,7 +1068,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         // Keep the live catalog when the optional parameter fallback is unavailable.
       }
       // Hide locked ("pro"-tier) tools: they cannot run, so omit them entirely.
-      const freeTools = nextTools.filter((tool) => !tool.locked);
+      const freeTools = withGlobalDemTool(nextTools.filter((tool) => !tool.locked));
       setTools(freeTools);
       setSelectedToolId((current) =>
         freeTools.some((tool) => tool.id === current) ? current : (freeTools[0]?.id ?? ""),
@@ -1509,6 +1519,49 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     // immediately (input fetching can take a moment, and the local WASM run then
     // blocks the main thread).
     setRunningLocal(true);
+
+    if (selectedTool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID) {
+      const safeValues = { ...values, api_key: "" };
+      const tracker = beginProcessingRun({
+        kind: "whitebox",
+        toolId: selectedTool.id,
+        toolName: toolLabel(t, selectedTool),
+        engine: "OpenTopography",
+        parameters: safeValues,
+      });
+      try {
+        const downloaded = await downloadGlobalDem({
+          dataset: String(values.dataset ?? ""),
+          bbox: String(values.bbox ?? ""),
+          bboxCrs: Number(values.bbox_crs),
+          apiKey: String(values.api_key ?? ""),
+        });
+        const bytes = await ensureWhiteboxRasterCog(downloaded);
+        const now = new Date().toISOString();
+        const id = `global-dem-${Date.now()}`;
+        historyTrackersRef.current.set(id, tracker);
+        runParametersByJobRef.current.set(id, { output: "download_global_dem_output.tif" });
+        setJob({
+          id,
+          status: "succeeded",
+          tool_id: selectedTool.id,
+          created_at: now,
+          updated_at: now,
+          messages: [`Downloaded ${String(values.dataset)} from OpenTopography.`],
+          outputs: { output: bytes },
+          result: null,
+          error: null,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not download the DEM.";
+        tracker.finish("error", message);
+        setError(message);
+      } finally {
+        setRunningLocal(false);
+      }
+      return;
+    }
+
     const parameters: Record<string, unknown> = {};
     const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
 
@@ -2678,7 +2731,14 @@ function ParameterField({
       ) : (
         <Input
           id={`whitebox-${param.name}`}
-          type="text"
+          type={
+            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key"
+              ? "password"
+              : "text"
+          }
+          autoComplete={
+            toolId === DOWNLOAD_GLOBAL_DEM_TOOL_ID && param.name === "api_key" ? "off" : undefined
+          }
           value={valueText}
           placeholder={isOutputParameter(param) ? t("processing.whitebox.auto") : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
