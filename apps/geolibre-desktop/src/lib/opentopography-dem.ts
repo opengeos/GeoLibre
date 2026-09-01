@@ -65,14 +65,19 @@ export interface GlobalDemRequest {
   signal?: AbortSignal;
 }
 
+/** Domain error whose internal detail must not be rendered without translation. */
+export class GlobalDemError extends Error {}
+
 const DATASETS = new Set(
   DOWNLOAD_GLOBAL_DEM_TOOL.params?.find((param) => param.name === "dataset")?.options ?? [],
 );
 
 /** Download a clipped GeoTIFF through OpenTopography's Global DEM API. */
 export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint8Array> {
-  if (!DATASETS.has(request.dataset)) throw new Error("Select a supported global DEM dataset.");
-  if (request.bboxCrs !== 4326) throw new Error("The OpenTopography extent must use EPSG:4326.");
+  if (!DATASETS.has(request.dataset))
+    throw new GlobalDemError("Select a supported global DEM dataset.");
+  if (request.bboxCrs !== 4326)
+    throw new GlobalDemError("The OpenTopography extent must use EPSG:4326.");
   const bounds = request.bbox.split(",").map((value) => Number(value.trim()));
   if (
     bounds.length !== 4 ||
@@ -84,9 +89,9 @@ export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint
     bounds[0] >= bounds[2] ||
     bounds[1] >= bounds[3]
   ) {
-    throw new Error("Enter a valid WGS84 extent as west,south,east,north.");
+    throw new GlobalDemError("Enter a valid WGS84 extent as west,south,east,north.");
   }
-  if (!request.apiKey.trim()) throw new Error("Enter your OpenTopography API key.");
+  if (!request.apiKey.trim()) throw new GlobalDemError("Enter your OpenTopography API key.");
 
   const [west, south, east, north] = bounds;
   const query = new URLSearchParams({
@@ -107,11 +112,12 @@ export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint
     // forms of the key in case the upstream service or a proxy echoes it.
     const secret = request.apiKey.trim();
     const encodedSecret = encodeURIComponent(secret);
-    let detail = (await response.text()).trim().replace(/\s+/g, " ").slice(0, 300);
+    let detail = (await response.text()).trim().replace(/\s+/g, " ");
     for (const value of new Set([secret, encodedSecret])) {
       detail = detail.replaceAll(value, "[redacted]");
     }
-    throw new Error(
+    detail = detail.slice(0, 300);
+    throw new GlobalDemError(
       `OpenTopography download failed (HTTP ${response.status})${detail ? `: ${detail}` : "."}`,
     );
   }
@@ -121,7 +127,9 @@ export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint
   const bigEndian =
     bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a;
   if (bytes.length < 4 || (!littleEndian && !bigEndian)) {
-    throw new Error("OpenTopography returned an unexpected response instead of a GeoTIFF.");
+    throw new GlobalDemError(
+      "OpenTopography returned an unexpected response instead of a GeoTIFF.",
+    );
   }
   return bytes;
 }

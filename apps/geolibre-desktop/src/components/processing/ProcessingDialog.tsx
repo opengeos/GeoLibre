@@ -99,6 +99,7 @@ import {
 import { CrsPickerInput } from "./CrsPickerInput";
 import {
   DOWNLOAD_GLOBAL_DEM_TOOL_ID,
+  GlobalDemError,
   downloadGlobalDem,
   withGlobalDemTool,
 } from "../../lib/opentopography-dem";
@@ -1574,7 +1575,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         });
       } catch (err) {
         if (controller.signal.aborted) return;
-        const message = err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
+        const message =
+          err instanceof GlobalDemError
+            ? t("toolbar.rasterTool.runError")
+            : err instanceof Error
+              ? err.message
+              : t("toolbar.rasterTool.runError");
         tracker.finish("error", message);
         setError(message);
       } finally {
