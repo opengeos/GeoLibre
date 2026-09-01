@@ -483,6 +483,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // True while a "Draw on map" rubber-band is in progress.
   const [drawing, setDrawing] = useState(false);
   const drawAbortRef = useRef<AbortController | null>(null);
+  // Cancels the network-bound global DEM request when the panel closes or a
+  // replacement run starts. The regular WASM/sidecar jobs manage their own
+  // lifecycle and do not use this controller.
+  const globalDemAbortRef = useRef<AbortController | null>(null);
   // Viewport-space corners of the in-progress draw box, drawn as an SVG overlay
   // (not a MapLibre layer) so the rubber-band sits above an interleaved deck.gl
   // raster, which occludes MapLibre layers.
@@ -1356,13 +1360,21 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   useEffect(() => {
     if (open) return;
     drawAbortRef.current?.abort();
+    globalDemAbortRef.current?.abort();
   }, [open]);
-  useEffect(() => () => drawAbortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      drawAbortRef.current?.abort();
+      globalDemAbortRef.current?.abort();
+    },
+    [],
+  );
   // Abort an in-flight draw when the selected tool changes: `values` is reset to
   // the new tool's defaults on that change, so a box that resolves after the
   // switch would otherwise fill the wrong tool's bbox field.
   useEffect(() => {
     drawAbortRef.current?.abort();
+    globalDemAbortRef.current?.abort();
   }, [selectedToolId]);
 
   const handleRunLocalChange = (nextRunLocal: boolean) => {
@@ -1521,6 +1533,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     setRunningLocal(true);
 
     if (selectedTool.id === DOWNLOAD_GLOBAL_DEM_TOOL_ID) {
+      globalDemAbortRef.current?.abort();
+      const controller = new AbortController();
+      globalDemAbortRef.current = controller;
       const safeValues = { ...values, api_key: "" };
       const tracker = beginProcessingRun({
         kind: "whitebox",
@@ -1535,11 +1550,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           bbox: String(values.bbox ?? ""),
           bboxCrs: Number(values.bbox_crs),
           apiKey: String(values.api_key ?? ""),
+          signal: controller.signal,
         });
         const bytes = await ensureWhiteboxRasterCog(downloaded);
         const now = new Date().toISOString();
         const id = `global-dem-${Date.now()}`;
         historyTrackersRef.current.set(id, tracker);
+        while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
+          const oldest = historyTrackersRef.current.keys().next().value;
+          if (oldest === undefined) break;
+          historyTrackersRef.current.delete(oldest);
+        }
         runParametersByJobRef.current.set(id, { output: "download_global_dem_output.tif" });
         setJob({
           id,
@@ -1553,10 +1574,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           error: null,
         });
       } catch (err) {
+        if (controller.signal.aborted) return;
         const message = err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
         tracker.finish("error", message);
         setError(message);
       } finally {
+        if (globalDemAbortRef.current === controller) globalDemAbortRef.current = null;
         setRunningLocal(false);
       }
       return;
@@ -2124,7 +2147,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   !selectedTool ||
                   selectedTool.locked ||
                   running ||
-                  (!runLocal && runtimeAvailable !== true)
+                  (selectedTool.id !== DOWNLOAD_GLOBAL_DEM_TOOL_ID &&
+                    !runLocal &&
+                    runtimeAvailable !== true)
                 }
               >
                 {running ? (

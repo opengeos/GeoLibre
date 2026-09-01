@@ -485,9 +485,9 @@ export function ProcessingMenu({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
-              {!mobile && show("processing.raster") && (
+              {show("processing.raster") && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={sidecarDenied} title={sidecarDeniedTitle}>
+                  <DropdownMenuSubTrigger disabled={processingDenied} title={processingDeniedTitle}>
                     {t("toolbar.item.raster")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
@@ -496,82 +496,134 @@ export function ProcessingMenu({
                         defaultValue: "Download Global DEM",
                       })}
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupTerrain")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
-                      {t("toolbar.rasterTool.hillshade")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
-                      {t("toolbar.rasterTool.slope")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
-                      {t("toolbar.rasterTool.aspect")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupReproject")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
-                      {t("toolbar.rasterTool.reproject")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
-                      {t("toolbar.rasterTool.resample")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupClip")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-extent")}>
-                      {t("toolbar.rasterTool.clipExtent")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
-                      {t("toolbar.rasterTool.clipMask")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupRasterToVector")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("polygonize")}>
-                      {t("toolbar.rasterTool.polygonize")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
-                      {t("toolbar.rasterTool.contour")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupVectorToRaster")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("interpolate")}>
-                      {t("toolbar.rasterTool.interpolate")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupAnalysis")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("zonal")}>
-                      {t("toolbar.rasterTool.zonal")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("raster-calc")}>
-                      {t("toolbar.rasterTool.rasterCalc")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("spectral-index")}>
-                      {t("toolbar.rasterTool.spectralIndex")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reclassify")}>
-                      {t("toolbar.rasterTool.reclassify")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("mosaic")}>
-                      {t("toolbar.rasterTool.mosaic")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
-                      {t("toolbar.rasterTool.focal")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={onOpenGeoreferencer}>
-                      {t("toolbar.item.georeferencing")}
-                    </DropdownMenuItem>
+                    {!mobile && <DropdownMenuSeparator />}
+                    {!mobile && (
+                      <>
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupTerrain")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("hillshade")}
+                        >
+                          {t("toolbar.rasterTool.hillshade")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("slope")}
+                        >
+                          {t("toolbar.rasterTool.slope")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("aspect")}
+                        >
+                          {t("toolbar.rasterTool.aspect")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupReproject")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("reproject")}
+                        >
+                          {t("toolbar.rasterTool.reproject")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("resample")}
+                        >
+                          {t("toolbar.rasterTool.resample")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupClip")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("clip-extent")}
+                        >
+                          {t("toolbar.rasterTool.clipExtent")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("clip-mask")}
+                        >
+                          {t("toolbar.rasterTool.clipMask")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupRasterToVector")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("polygonize")}
+                        >
+                          {t("toolbar.rasterTool.polygonize")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("contour")}
+                        >
+                          {t("toolbar.rasterTool.contour")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupVectorToRaster")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("interpolate")}
+                        >
+                          {t("toolbar.rasterTool.interpolate")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupAnalysis")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("zonal")}
+                        >
+                          {t("toolbar.rasterTool.zonal")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("raster-calc")}
+                        >
+                          {t("toolbar.rasterTool.rasterCalc")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("spectral-index")}
+                        >
+                          {t("toolbar.rasterTool.spectralIndex")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("reclassify")}
+                        >
+                          {t("toolbar.rasterTool.reclassify")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("mosaic")}
+                        >
+                          {t("toolbar.rasterTool.mosaic")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          onSelect={() => setRasterToolOpen("focal")}
+                        >
+                          {t("toolbar.rasterTool.focal")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled={sidecarDenied} onSelect={onOpenGeoreferencer}>
+                          {t("toolbar.item.georeferencing")}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
