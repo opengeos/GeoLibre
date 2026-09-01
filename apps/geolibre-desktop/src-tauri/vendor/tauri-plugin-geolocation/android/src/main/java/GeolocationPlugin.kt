@@ -142,7 +142,10 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
      * preserves the normal result on coarse-only or non-GNSS devices.
      */
     private fun resolveCurrentPosition(invoke: Invoke, location: Location) {
-        if (implementation.satellitesUsedFor(location) != null) {
+        if (
+            implementation.satellitesUsedFor(location) != null ||
+            !implementation.canWaitForSatellites(location)
+        ) {
             resolveOneShot(invoke, location)
             return
         }

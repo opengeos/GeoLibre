@@ -24,6 +24,10 @@ import com.google.android.gms.location.Priority
 
 
 public class Geolocation(private val context: Context) {
+    private companion object {
+        const val SATELLITE_STALENESS_NANOS = 3_000_000_000L
+    }
+
     private var fusedLocationClient: FusedLocationProviderClient? = null
     private var locationCallback: LocationCallback? = null
     private val locationManager =
@@ -80,7 +84,13 @@ public class Geolocation(private val context: Context) {
     fun satellitesUsedFor(location: Location): Int? {
         val updatedAt = satellitesUpdatedAtNanos ?: return null
         val ageNanos = kotlin.math.abs(location.elapsedRealtimeNanos - updatedAt)
-        return satellitesUsed?.takeIf { ageNanos <= 3_000_000_000L }
+        return satellitesUsed?.takeIf { ageNanos <= SATELLITE_STALENESS_NANOS }
+    }
+
+    /** True when a future GNSS callback could still match this location fix. */
+    fun canWaitForSatellites(location: Location): Boolean {
+        val locationAgeNanos = SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+        return locationAgeNanos in 0..SATELLITE_STALENESS_NANOS
     }
 
     /**
@@ -89,7 +99,10 @@ public class Geolocation(private val context: Context) {
      */
     fun onSatellitesUsedAvailable(callback: (Int) -> Unit): () -> Unit {
         val updatedAt = satellitesUpdatedAtNanos
-        if (updatedAt != null && SystemClock.elapsedRealtimeNanos() - updatedAt <= 3_000_000_000L) {
+        if (
+            updatedAt != null &&
+            SystemClock.elapsedRealtimeNanos() - updatedAt <= SATELLITE_STALENESS_NANOS
+        ) {
             satellitesUsed?.let {
                 callback(it)
                 return {}

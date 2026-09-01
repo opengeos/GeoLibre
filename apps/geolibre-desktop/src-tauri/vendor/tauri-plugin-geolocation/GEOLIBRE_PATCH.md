@@ -12,7 +12,7 @@ The GeoLibre-specific delta is intentionally limited to:
 - `android/src/main/java/GeolocationPlugin.kt`: include `satellites` in native
   coordinates, briefly race GNSS metadata against a timeout, and unregister
   one-shot GNSS monitoring after completion when no continuous watch is active;
-  suppress speed below Android's reported speed uncertainty and omit unavailable
+  suppress speed at or below Android's reported speed uncertainty and omit unavailable
   speed/bearing values instead of serializing Android's zero-value placeholders.
 - `src/models.rs`: preserve the optional value through Rust deserialization.
 
