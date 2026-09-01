@@ -1553,7 +1553,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           error: null,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Could not download the DEM.";
+        const message = err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
         tracker.finish("error", message);
         setError(message);
       } finally {

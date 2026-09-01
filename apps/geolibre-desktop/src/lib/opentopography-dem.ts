@@ -101,8 +101,14 @@ export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint
   });
   if (!response.ok) {
     // OpenTopography commonly returns a short plain-text explanation. Do not
-    // include the request URL because it contains the API key.
-    const detail = (await response.text()).trim().replace(/\s+/g, " ").slice(0, 300);
+    // include the request URL because it contains the API key, and redact both
+    // forms of the key in case the upstream service or a proxy echoes it.
+    const secret = request.apiKey.trim();
+    const encodedSecret = encodeURIComponent(secret);
+    let detail = (await response.text()).trim().replace(/\s+/g, " ").slice(0, 300);
+    for (const value of new Set([secret, encodedSecret])) {
+      detail = detail.replaceAll(value, "[redacted]");
+    }
     throw new Error(
       `OpenTopography download failed (HTTP ${response.status})${detail ? `: ${detail}` : "."}`,
     );

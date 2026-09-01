@@ -491,6 +491,12 @@ export function ProcessingMenu({
                     {t("toolbar.item.raster")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => openWhiteboxTool("download_global_dem")}>
+                      {t("processing.whitebox.menuTool.download_global_dem" as ParseKeys, {
+                        defaultValue: "Download Global DEM",
+                      })}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupTerrain")}
                     </DropdownMenuLabel>

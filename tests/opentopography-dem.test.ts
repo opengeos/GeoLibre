@@ -55,15 +55,19 @@ describe("OpenTopography global DEM", () => {
   });
 
   it("does not expose the API key in HTTP error messages", async () => {
-    globalThis.fetch = async () => new Response("invalid key", { status: 401 });
+    globalThis.fetch = async () =>
+      new Response("invalid key super-secret/encoded or super-secret%2Fencoded", { status: 401 });
     await assert.rejects(
       downloadGlobalDem({
         dataset: "COP30",
         bbox: "-84,35,-83,36",
         bboxCrs: 4326,
-        apiKey: "super-secret",
+        apiKey: "super-secret/encoded",
       }),
-      (error: Error) => !error.message.includes("super-secret") && error.message.includes("401"),
+      (error: Error) =>
+        !error.message.includes("super-secret/encoded") &&
+        !error.message.includes("super-secret%2Fencoded") &&
+        error.message.includes("401"),
     );
   });
 });
