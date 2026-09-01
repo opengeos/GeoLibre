@@ -217,6 +217,13 @@ and types against this mirror and run the Rust scope-cleanup tests. Bincode
 encodes fields positionally, so an upstream layout change is not compiler
 checked.
 
+The `bincode` dependency itself is pinned to the **1.x** line and Dependabot is
+configured (`.github/dependabot.yml`) to skip its major bumps: the plugin writes
+the file with bincode 1, so GeoLibre must decode and re-encode it with the same
+wire format. Only move when `tauri-plugin-persisted-scope` moves. (bincode 3.0.0
+is additionally a deliberately unbuildable release — its whole source is
+`compile_error!("https://xkcd.com/2347/")`.)
+
 ### `@tauri-apps/plugin-http` — two upstream *behaviors*, not APIs
 
 `createNativeSidecarFetch`
