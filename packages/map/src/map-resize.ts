@@ -115,9 +115,15 @@ export function createMapResizeScheduler({
     cancelFrame();
     resizeFrame = window.requestAnimationFrame(() => {
       resizeFrame = null;
-      if (!mapNeedsResize()) return;
+      if (!mapNeedsResize()) {
+        removeFrameOverlay();
+        return;
+      }
       const map = getMap();
-      if (!map) return;
+      if (!map) {
+        removeFrameOverlay();
+        return;
+      }
       preserveRenderedFrame();
       map.once("render", removeFrameOverlay);
       map.resize();

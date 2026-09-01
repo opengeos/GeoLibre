@@ -308,6 +308,16 @@ describe("createMapResizeScheduler", () => {
     assert.equal(harness.resizeCalls(), 1);
   });
 
+  it("removes the preserved frame when a panel resize ends without movement", () => {
+    harness.dispatch(PANEL_RESIZE_START_EVENT);
+    assert.equal(harness.overlayCount(), 1);
+
+    harness.dispatch(PANEL_RESIZE_END_EVENT);
+    harness.flushFrames();
+    assert.equal(harness.resizeCalls(), 0);
+    assert.equal(harness.overlayCount(), 0);
+  });
+
   it("keeps a settling window drag from leaking into a following panel drag", () => {
     harness.windowResize(700, 600);
     harness.dispatch(PANEL_RESIZE_START_EVENT);
