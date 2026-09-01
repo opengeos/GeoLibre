@@ -10,7 +10,6 @@ export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
     "Download a clipped global elevation model from OpenTopography for the current map view or a bounding box drawn on the map. A free OpenTopography API key is required.",
   category: "Raster",
   taxonomy_category: "Raster",
-  taxonomy_subcategory: "GeoLibre (Network)",
   source: "geolibre",
   params: [
     {
@@ -66,7 +65,9 @@ export interface GlobalDemRequest {
   signal?: AbortSignal;
 }
 
-const DATASETS = new Set(["COP30", "NASADEM", "SRTMGL1", "COP90", "AW3D30", "SRTM15Plus"]);
+const DATASETS = new Set(
+  DOWNLOAD_GLOBAL_DEM_TOOL.params?.find((param) => param.name === "dataset")?.options ?? [],
+);
 
 /** Download a clipped GeoTIFF through OpenTopography's Global DEM API. */
 export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint8Array> {
