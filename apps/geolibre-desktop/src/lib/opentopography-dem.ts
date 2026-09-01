@@ -127,7 +127,7 @@ export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<R
   const tilesTall = range.maxY - range.minY + 1;
   const mosaicWidth = tilesWide * TILE_SIZE;
   const mosaicHeight = tilesTall * TILE_SIZE;
-  const mosaic = new Float32Array(mosaicWidth * mosaicHeight);
+  const mosaic = new Float32Array(mosaicWidth * mosaicHeight).fill(-32768);
   let loaded = 0;
 
   const requests: Promise<void>[] = [];

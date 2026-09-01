@@ -268,7 +268,6 @@ export {
 } from "./sidecar-client";
 export {
   runWhiteboxToolWasm,
-  ensureWhiteboxRasterCog,
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
   listWasmToolManifests,

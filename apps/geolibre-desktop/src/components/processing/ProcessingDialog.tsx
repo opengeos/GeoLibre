@@ -1542,14 +1542,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         parameters: values,
       });
       try {
-        const downloaded = await downloadGlobalDem({
+        const bytes = await downloadGlobalDem({
           bbox: String(values.bbox ?? ""),
           bboxCrs: Number(values.bbox_crs),
           signal: controller.signal,
         });
-        // The downloader encodes its in-memory elevation samples directly as a
-        // COG, avoiding the generic GeoTIFF conversion path and an extra decode.
-        const bytes = downloaded;
+        if (controller.signal.aborted) return;
         const now = new Date().toISOString();
         const id = `global-dem-${Date.now()}`;
         historyTrackersRef.current.set(id, tracker);
@@ -1564,7 +1562,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           tool_id: selectedTool.id,
           created_at: now,
           updated_at: now,
-          messages: ["Downloaded DEM from public AWS Terrain Tiles."],
+          messages: [t("processing.whitebox.jobStatus.succeeded")],
           outputs: { output: bytes },
           result: null,
           error: null,

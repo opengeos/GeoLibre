@@ -23,6 +23,7 @@ import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { whiteboxMenuSubcategorySlug } from "../../../lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/opentopography-dem";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
 
@@ -492,7 +493,9 @@ export function ProcessingMenu({
                     {t("toolbar.item.raster")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    <DropdownMenuItem onSelect={() => openWhiteboxTool("download_global_dem")}>
+                    <DropdownMenuItem
+                      onSelect={() => openWhiteboxTool(DOWNLOAD_GLOBAL_DEM_TOOL_ID)}
+                    >
                       {t("processing.whitebox.menuTool.download_global_dem" as ParseKeys, {
                         defaultValue: "Download Global DEM",
                       })}
