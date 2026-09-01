@@ -491,6 +491,18 @@
 - [x] **KML folder structure survives import**: placemarks that sit inside a Folder become one layer per folder, the rest stay merged per file, and the import frames the combined extent
 - [x] Release downloads are mirrored to GitHub Pages and `web.geolibre.app` moved there, the Model Builder panel maximizes across the map canvas, the annotation toolbar collapses, hosted-site analytics became opt-in at build time (and never ship in the desktop, Jupyter, Docker, or fork builds — see [Privacy](privacy.md)), and the docs gained a [Video Tutorials](tutorials/videos.md) page and a user guide checked against the running app
 
+## v2.9: A first-class 3D globe (planned)
+
+The CesiumJS globe pane that landed in v2.0 is camera-synced and mirrors the layer stack, but it is a viewport: it needs an Ion token to appear, renders 6 of the 20 layer kinds, ignores the store basemap and most of the styling model, and cannot be clicked. This release makes it a pane people leave open. Tracked in [#2179](https://github.com/opengeos/GeoLibre/issues/2179); MapLibre stays the primary map throughout.
+
+- [ ] **The globe works without a Cesium Ion token** and shows the same basemap as the 2D panes — raster basemaps map one to one, vector styles fall back to a raster analogue of the same tone, and dark mode no longer leaves a bright globe in the corner ([#2180](https://github.com/opengeos/GeoLibre/issues/2180))
+- [ ] **More of the layer stack renders on the globe**: every GeoJSON-backed kind (FlatGeobuf, GeoParquet, DuckDB queries, ArcGIS FeatureServer), ArcGIS MapServer, capabilities-driven WMTS, image and KML GroundOverlay layers, raster PMTiles and local MBTiles through a blob-backed imagery provider, and COGs styled exactly as in 2D ([#2181](https://github.com/opengeos/GeoLibre/issues/2181), [#2182](https://github.com/opengeos/GeoLibre/issues/2182), [#2183](https://github.com/opengeos/GeoLibre/issues/2183), [#2184](https://github.com/opengeos/GeoLibre/issues/2184))
+- [ ] **Identify, selection, hover, cursor coordinates (with height), and the context menu** on the globe, feeding the same Identify panel and popup designer the 2D map uses ([#2185](https://github.com/opengeos/GeoLibre/issues/2185))
+- [ ] **The globe follows the scene state the map already holds**: terrain and vertical exaggeration, the sun-position simulation with a real day/night terminator and shadows, and the Time Slider clock ([#2186](https://github.com/opengeos/GeoLibre/issues/2186))
+- [ ] **Style fidelity**: graduated, categorized, rule-based, and expression styling, labels, dasharrays, and marker shapes resolved per feature by a shared evaluator in `@geolibre/core`, and Z-coordinate geometries extruded rather than draped ([#2187](https://github.com/opengeos/GeoLibre/issues/2187))
+- [ ] **A globe pane can be authored from Python and the MCP server**, captured by screenshots and the print layout, and carried into the standalone HTML export and embeds, with a decision on how the Jupyter wheel ships Cesium's runtime assets ([#2188](https://github.com/opengeos/GeoLibre/issues/2188))
+- [ ] A slimmer globe chunk built on `CesiumWidget` instead of `Viewer`, a keyless Playwright smoke test, and a Cesium entry in the [Maintenance](maintenance.md) upgrade checklist ([#2189](https://github.com/opengeos/GeoLibre/issues/2189))
+
 ## Plugin marketplace and registry (design)
 
 This captures the design for the `v1.0` "Plugin marketplace / registry" item. It
