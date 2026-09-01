@@ -2557,6 +2557,7 @@
       "compositeScore": "Pontuação composta (índice de aptidão)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Baixar DEM global",
       "hillshade": "Sombreamento de relevo",
       "slope": "Declividade",
       "aspect": "Orientação",

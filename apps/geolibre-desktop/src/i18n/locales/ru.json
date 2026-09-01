@@ -2649,6 +2649,7 @@
       "compositeScore": "Комплексная оценка (индекс пригодности)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Скачать глобальную ЦМР",
       "hillshade": "Отмывка рельефа",
       "slope": "Уклон",
       "aspect": "Экспозиция",

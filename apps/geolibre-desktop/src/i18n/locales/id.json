@@ -2511,6 +2511,7 @@
       "compositeScore": "Skor komposit (indeks kesesuaian)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Unduh DEM global",
       "hillshade": "Hillshade",
       "slope": "Kemiringan lereng",
       "aspect": "Aspek",

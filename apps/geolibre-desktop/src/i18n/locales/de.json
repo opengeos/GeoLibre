@@ -2557,6 +2557,7 @@
       "compositeScore": "Kombinierter Score (Eignungsindex)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Globales DEM herunterladen",
       "hillshade": "Schummerung",
       "slope": "Hangneigung",
       "aspect": "Exposition",

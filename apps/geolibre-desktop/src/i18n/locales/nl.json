@@ -2557,6 +2557,7 @@
       "compositeScore": "Samengestelde score (geschiktheidsindex)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Wereldwijd DEM downloaden",
       "hillshade": "Reliëfschaduw",
       "slope": "Helling",
       "aspect": "Expositie",

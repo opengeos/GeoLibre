@@ -1560,7 +1560,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         });
         if (controller.signal.aborted) return;
         const now = new Date().toISOString();
-        const id = `global-dem-${Date.now()}`;
+        const id = `global-dem-${crypto.randomUUID()}`;
         historyTrackersRef.current.set(id, tracker);
         while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
           const oldest = historyTrackersRef.current.keys().next().value;

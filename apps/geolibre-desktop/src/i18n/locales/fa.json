@@ -2557,6 +2557,7 @@
       "compositeScore": "امتیاز ترکیبی (شاخص تناسب)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "دانلود مدل رقومی ارتفاع جهانی",
       "hillshade": "سایه‌روشن زمین",
       "slope": "شیب",
       "aspect": "جهت شیب",

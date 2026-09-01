@@ -2511,6 +2511,7 @@
       "compositeScore": "Điểm tổng hợp (chỉ số thích hợp)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Tải DEM toàn cầu",
       "errorStartTool": "Không thể khởi động công cụ raster.",
       "zonal": "Thống kê theo vùng",
       "rasterCalc": "Máy tính raster",

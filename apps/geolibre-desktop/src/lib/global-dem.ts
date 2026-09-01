@@ -161,6 +161,10 @@ export async function buildGlobalDemRaster(request: GlobalDemRequest): Promise<R
             const source = row * TILE_SIZE;
             const target = (tileY * TILE_SIZE + row) * mosaicWidth + tileX * TILE_SIZE;
             const sourceRow = tile.bands[0].subarray(source, source + TILE_SIZE);
+            // The public source currently declares -32768 on every tile. If a
+            // future tile omits the tag, preserve its samples: inventing a
+            // different sentinel would be less correct than the documented
+            // source convention shared by our output.
             if (tileNodata == null || tileNodata === -32768) {
               mosaic.set(sourceRow, target);
             } else {

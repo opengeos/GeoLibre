@@ -2557,6 +2557,7 @@
       "compositeScore": "Score composite (indice d'aptitude)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Télécharger le MNT mondial",
       "hillshade": "Ombrage du relief",
       "slope": "Pente",
       "aspect": "Orientation",

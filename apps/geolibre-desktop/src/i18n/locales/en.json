@@ -2575,6 +2575,7 @@
       "compositeScore": "Composite score (suitability index)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Download Global DEM",
       "hillshade": "Hillshade",
       "slope": "Slope",
       "aspect": "Aspect",

@@ -2557,6 +2557,7 @@
       "compositeScore": "संयुक्त स्कोर (उपयुक्तता सूचकांक)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "वैश्विक DEM डाउनलोड करें",
       "hillshade": "हिलशेड",
       "slope": "ढाल",
       "aspect": "अभिमुखता",

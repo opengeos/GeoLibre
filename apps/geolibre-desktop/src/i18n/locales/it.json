@@ -2557,6 +2557,7 @@
       "compositeScore": "Punteggio composito (indice di idoneità)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Scarica DEM globale",
       "hillshade": "Ombreggiatura del rilievo",
       "slope": "Pendenza",
       "aspect": "Esposizione",

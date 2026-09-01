@@ -2511,6 +2511,7 @@
       "compositeScore": "総合スコア（適合度指数）"
     },
     "rasterTool": {
+      "downloadGlobalDem": "全球DEMをダウンロード",
       "hillshade": "陰影起伏",
       "slope": "傾斜",
       "aspect": "傾斜方位",

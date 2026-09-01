@@ -2557,6 +2557,7 @@
       "compositeScore": "კომპოზიციური ქულა (ვარგისიანობის ინდექსი)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "გლობალური DEM-ის ჩამოტვირთვა",
       "hillshade": "რელიეფის ჩრდილი",
       "slope": "დახრილობა",
       "aspect": "ექსპოზიცია",

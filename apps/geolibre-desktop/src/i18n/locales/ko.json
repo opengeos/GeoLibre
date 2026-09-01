@@ -2511,6 +2511,7 @@
       "compositeScore": "종합 점수(적합도 지수)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "전 세계 DEM 다운로드",
       "hillshade": "음영 기복",
       "slope": "경사",
       "aspect": "사면향",

@@ -2557,6 +2557,7 @@
       "compositeScore": "Puntuación compuesta (índice de aptitud)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Descargar DEM global",
       "hillshade": "Sombreado de relieve",
       "slope": "Pendiente",
       "aspect": "Orientación",

@@ -2511,6 +2511,7 @@
       "compositeScore": "综合评分（适宜性指数）"
     },
     "rasterTool": {
+      "downloadGlobalDem": "下载全球 DEM",
       "hillshade": "山体阴影",
       "slope": "坡度",
       "aspect": "坡向",

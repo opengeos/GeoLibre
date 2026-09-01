@@ -2511,6 +2511,7 @@
       "compositeScore": "คะแนนรวม (ดัชนีความเหมาะสม)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "ดาวน์โหลด DEM ทั่วโลก",
       "hillshade": "การแรเงาภูมิประเทศ",
       "slope": "ความชัน",
       "aspect": "ทิศด้านลาด",

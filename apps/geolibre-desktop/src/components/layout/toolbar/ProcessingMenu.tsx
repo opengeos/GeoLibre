@@ -496,9 +496,7 @@ export function ProcessingMenu({
                     <DropdownMenuItem
                       onSelect={() => openWhiteboxTool(DOWNLOAD_GLOBAL_DEM_TOOL_ID)}
                     >
-                      {t("processing.whitebox.menuTool.download_global_dem" as ParseKeys, {
-                        defaultValue: "Download Global DEM",
-                      })}
+                      {t("toolbar.rasterTool.downloadGlobalDem")}
                     </DropdownMenuItem>
                     {!mobile && <DropdownMenuSeparator />}
                     {!mobile && (
@@ -509,6 +507,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("hillshade")}
                         >
                           {t("toolbar.rasterTool.hillshade")}
@@ -516,6 +515,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("slope")}
                         >
                           {t("toolbar.rasterTool.slope")}
@@ -523,6 +523,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("aspect")}
                         >
                           {t("toolbar.rasterTool.aspect")}
@@ -534,6 +535,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("reproject")}
                         >
                           {t("toolbar.rasterTool.reproject")}
@@ -541,6 +543,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("resample")}
                         >
                           {t("toolbar.rasterTool.resample")}
@@ -552,6 +555,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("clip-extent")}
                         >
                           {t("toolbar.rasterTool.clipExtent")}
@@ -559,6 +563,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("clip-mask")}
                         >
                           {t("toolbar.rasterTool.clipMask")}
@@ -570,6 +575,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("polygonize")}
                         >
                           {t("toolbar.rasterTool.polygonize")}
@@ -577,6 +583,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("contour")}
                         >
                           {t("toolbar.rasterTool.contour")}
@@ -588,6 +595,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("interpolate")}
                         >
                           {t("toolbar.rasterTool.interpolate")}
@@ -599,6 +607,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("zonal")}
                         >
                           {t("toolbar.rasterTool.zonal")}
@@ -606,6 +615,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("raster-calc")}
                         >
                           {t("toolbar.rasterTool.rasterCalc")}
@@ -613,6 +623,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("spectral-index")}
                         >
                           {t("toolbar.rasterTool.spectralIndex")}
@@ -620,6 +631,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("reclassify")}
                         >
                           {t("toolbar.rasterTool.reclassify")}
@@ -627,6 +639,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("mosaic")}
                         >
                           {t("toolbar.rasterTool.mosaic")}
@@ -634,6 +647,7 @@ export function ProcessingMenu({
                         <DropdownMenuItem
                           disabled={sidecarDenied}
                           title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
                           onSelect={() => setRasterToolOpen("focal")}
                         >
                           {t("toolbar.rasterTool.focal")}
@@ -683,7 +697,6 @@ export function ProcessingMenu({
                   >
                     {t("toolbar.command.segmentation")}
                   </DropdownMenuItem>
-                  <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />
                 </>
               )}
               {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
@@ -700,6 +713,7 @@ export function ProcessingMenu({
                   {t("toolbar.command.segmentEverything")}
                 </DropdownMenuItem>
               )}
+              <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}

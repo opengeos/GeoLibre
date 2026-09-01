@@ -2557,6 +2557,7 @@
       "compositeScore": "Bileşik puan (uygunluk endeksi)"
     },
     "rasterTool": {
+      "downloadGlobalDem": "Küresel DEM'i indir",
       "hillshade": "Tepe gölgeleme",
       "slope": "Eğim",
       "aspect": "Bakı",
