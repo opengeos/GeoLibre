@@ -70,7 +70,6 @@ function install(): Harness {
     once: (_type: string, listener: () => void) => {
       renderListener = listener;
     },
-    on: () => {},
     off: (type: string, listener: () => void) => {
       if (type === "render" && renderListener === listener) renderListener = null;
     },
@@ -144,6 +143,7 @@ function install(): Harness {
         width: 0,
         height: 0,
         style: {},
+        setAttribute() {},
         getContext: () => ({ drawImage() {}, fillRect() {} }),
         remove() {
           overlays.delete(overlay);
@@ -259,7 +259,7 @@ describe("createMapResizeScheduler", () => {
       harness.flushFrames();
     }
     assert.equal(harness.resizeCalls(), 0, "the previous frame stays on screen during the drag");
-    assert.equal(harness.overlayCount(), 1, "a stretched frame covers the growing container");
+    assert.equal(harness.overlayCount(), 1, "a preserved frame covers the changing container");
 
     harness.advance(RESIZE_DEBOUNCE_MS);
     harness.flushFrames();
@@ -317,6 +317,21 @@ describe("createMapResizeScheduler", () => {
     harness.dispatch(PANEL_RESIZE_END_EVENT);
     harness.flushFrames();
     assert.equal(harness.resizeCalls(), 0);
+    assert.equal(harness.overlayCount(), 0);
+  });
+
+  it("keeps the panel overlay when a prior resize render arrives", () => {
+    harness.windowResize(700, 600);
+    harness.advance(RESIZE_DEBOUNCE_MS);
+    harness.flushFrames();
+    assert.equal(harness.overlayCount(), 1);
+
+    harness.dispatch(PANEL_RESIZE_START_EVENT);
+    harness.render();
+    assert.equal(harness.overlayCount(), 1);
+
+    harness.dispatch(PANEL_RESIZE_END_EVENT);
+    harness.flushFrames();
     assert.equal(harness.overlayCount(), 0);
   });
 

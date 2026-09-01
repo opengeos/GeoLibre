@@ -48,34 +48,14 @@ export function createMapResizeScheduler({
   let panelResizeActive = false;
   let frameOverlay: HTMLCanvasElement | null = null;
   let frameSnapshot: HTMLCanvasElement | null = null;
-  let cachedFrame: ImageBitmap | null = null;
-  let frameCaptureVersion = 0;
-  let disposed = false;
+  let overlayBackgroundColor = "";
   let overlayMap: MapLibreMap | null = null;
-  const snapshotMap = getMap() ?? null;
-
-  const cacheRenderedFrame = () => {
-    const canvas = getMap()?.getCanvas();
-    if (!canvas || typeof createImageBitmap !== "function") return;
-    const captureVersion = ++frameCaptureVersion;
-    void createImageBitmap(canvas)
-      .then((bitmap) => {
-        if (disposed || captureVersion !== frameCaptureVersion) {
-          bitmap.close();
-          return;
-        }
-        cachedFrame?.close();
-        cachedFrame = bitmap;
-      })
-      .catch(() => undefined);
-  };
-  snapshotMap?.on("idle", cacheRenderedFrame);
-  cacheRenderedFrame();
 
   const removeFrameOverlay = () => {
     frameOverlay?.remove();
     frameOverlay = null;
     frameSnapshot = null;
+    overlayBackgroundColor = "";
     if (overlayMap) {
       overlayMap.off("render", removeFrameOverlay);
       overlayMap = null;
@@ -94,7 +74,7 @@ export function createMapResizeScheduler({
       snapshot.height = canvas.height;
       const snapshotContext = snapshot.getContext("2d");
       if (!snapshotContext) return;
-      snapshotContext.drawImage(cachedFrame ?? canvas, 0, 0);
+      snapshotContext.drawImage(canvas, 0, 0);
       frameSnapshot = snapshot;
     }
     const overlay = frameOverlay ?? document.createElement("canvas");
@@ -102,13 +82,17 @@ export function createMapResizeScheduler({
     overlay.height = Math.round(container.clientHeight * window.devicePixelRatio);
     const context = overlay.getContext("2d");
     if (!context) return;
-    let backgroundElement: HTMLElement | null = container;
-    let backgroundColor = "";
-    while (backgroundElement && (!backgroundColor || backgroundColor === "rgba(0, 0, 0, 0)")) {
-      backgroundColor = window.getComputedStyle(backgroundElement).backgroundColor;
-      backgroundElement = backgroundElement.parentElement;
+    if (!overlayBackgroundColor) {
+      let backgroundElement: HTMLElement | null = container;
+      while (
+        backgroundElement &&
+        (!overlayBackgroundColor || overlayBackgroundColor === "rgba(0, 0, 0, 0)")
+      ) {
+        overlayBackgroundColor = window.getComputedStyle(backgroundElement).backgroundColor;
+        backgroundElement = backgroundElement.parentElement;
+      }
     }
-    context.fillStyle = backgroundColor || "#fff";
+    context.fillStyle = overlayBackgroundColor || "#fff";
     context.fillRect(0, 0, overlay.width, overlay.height);
     const x = (overlay.width - snapshot.width) / 2;
     const y = (overlay.height - snapshot.height) / 2;
@@ -116,6 +100,7 @@ export function createMapResizeScheduler({
     if (frameOverlay) return;
 
     overlay.className = "geolibre-map-resize-frame";
+    overlay.setAttribute("aria-hidden", "true");
     Object.assign(overlay.style, {
       position: "absolute",
       inset: "0",
@@ -170,7 +155,7 @@ export function createMapResizeScheduler({
         return;
       }
       preserveRenderedFrame();
-      map.once("render", removeFrameOverlay);
+      if (frameOverlay) map.once("render", removeFrameOverlay);
       map.resize();
       observedDevicePixelRatio = window.devicePixelRatio;
     });
@@ -255,6 +240,7 @@ export function createMapResizeScheduler({
     clearWindowResizeState();
     cancelFrame();
     cancelTimer();
+    removeFrameOverlay();
     preserveRenderedFrame();
   };
   const onPanelResizeEnd = () => {
@@ -271,8 +257,6 @@ export function createMapResizeScheduler({
   commitResize();
 
   return () => {
-    disposed = true;
-    frameCaptureVersion += 1;
     resizeObserver.disconnect();
     window.removeEventListener("resize", resizeMap);
     window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
@@ -282,8 +266,5 @@ export function createMapResizeScheduler({
     cancelTimer();
     clearWindowResizeState();
     removeFrameOverlay();
-    snapshotMap?.off("idle", cacheRenderedFrame);
-    cachedFrame?.close();
-    cachedFrame = null;
   };
 }
