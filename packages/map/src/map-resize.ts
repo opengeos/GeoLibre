@@ -47,38 +47,76 @@ export function createMapResizeScheduler({
   let observedDevicePixelRatio = window.devicePixelRatio;
   let panelResizeActive = false;
   let frameOverlay: HTMLCanvasElement | null = null;
+  let frameSnapshot: HTMLCanvasElement | null = null;
+  let cachedFrame: ImageBitmap | null = null;
   let overlayMap: MapLibreMap | null = null;
+  const snapshotMap = getMap() ?? null;
+
+  const cacheRenderedFrame = () => {
+    const canvas = getMap()?.getCanvas();
+    if (!canvas || typeof createImageBitmap !== "function") return;
+    void createImageBitmap(canvas)
+      .then((bitmap) => {
+        cachedFrame?.close();
+        cachedFrame = bitmap;
+      })
+      .catch(() => undefined);
+  };
+  snapshotMap?.on("idle", cacheRenderedFrame);
+  cacheRenderedFrame();
 
   const removeFrameOverlay = () => {
     frameOverlay?.remove();
     frameOverlay = null;
+    frameSnapshot = null;
     if (overlayMap) {
       overlayMap.off("render", removeFrameOverlay);
       overlayMap = null;
     }
   };
   const preserveRenderedFrame = () => {
-    if (frameOverlay) return;
     const map = getMap();
     if (!map) return;
     const canvas = map.getCanvas();
     const canvasParent = canvas.parentElement;
     if (!canvasParent || canvas.width === 0 || canvas.height === 0) return;
 
-    const overlay = document.createElement("canvas");
+    const snapshot = frameSnapshot ?? document.createElement("canvas");
+    if (!frameSnapshot) {
+      snapshot.width = canvas.width;
+      snapshot.height = canvas.height;
+      const snapshotContext = snapshot.getContext("2d");
+      if (!snapshotContext) return;
+      snapshotContext.drawImage(cachedFrame ?? canvas, 0, 0);
+      frameSnapshot = snapshot;
+    }
+    const overlay = frameOverlay ?? document.createElement("canvas");
+    overlay.width = Math.round(container.clientWidth * window.devicePixelRatio);
+    overlay.height = Math.round(container.clientHeight * window.devicePixelRatio);
+    const context = overlay.getContext("2d");
+    if (!context) return;
+    let backgroundElement: HTMLElement | null = container;
+    let backgroundColor = "";
+    while (backgroundElement && (!backgroundColor || backgroundColor === "rgba(0, 0, 0, 0)")) {
+      backgroundColor = window.getComputedStyle(backgroundElement).backgroundColor;
+      backgroundElement = backgroundElement.parentElement;
+    }
+    context.fillStyle = backgroundColor || "#fff";
+    context.fillRect(0, 0, overlay.width, overlay.height);
+    const x = (overlay.width - snapshot.width) / 2;
+    const y = (overlay.height - snapshot.height) / 2;
+    context.drawImage(snapshot, x, y);
+    if (frameOverlay) return;
+
     overlay.className = "geolibre-map-resize-frame";
-    overlay.width = canvas.width;
-    overlay.height = canvas.height;
     Object.assign(overlay.style, {
       position: "absolute",
       inset: "0",
       width: "100%",
       height: "100%",
+      zIndex: "5",
       pointerEvents: "none",
     });
-    const context = overlay.getContext("2d");
-    if (!context) return;
-    context.drawImage(canvas, 0, 0);
     canvas.insertAdjacentElement("afterend", overlay);
     frameOverlay = overlay;
     overlayMap = map;
@@ -235,5 +273,8 @@ export function createMapResizeScheduler({
     cancelTimer();
     clearWindowResizeState();
     removeFrameOverlay();
+    snapshotMap?.off("idle", cacheRenderedFrame);
+    cachedFrame?.close();
+    cachedFrame = null;
   };
 }

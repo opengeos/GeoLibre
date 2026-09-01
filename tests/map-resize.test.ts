@@ -70,8 +70,9 @@ function install(): Harness {
     once: (_type: string, listener: () => void) => {
       renderListener = listener;
     },
-    off: (_type: string, listener: () => void) => {
-      if (renderListener === listener) renderListener = null;
+    on: () => {},
+    off: (type: string, listener: () => void) => {
+      if (type === "render" && renderListener === listener) renderListener = null;
     },
     resize: () => {
       resizeCalls += 1;
@@ -119,6 +120,7 @@ function install(): Harness {
         },
       };
     },
+    getComputedStyle: () => ({ backgroundColor: "#fff" }),
   };
   const fakeResizeObserver = class {
     constructor(callback: () => void) {
@@ -142,7 +144,7 @@ function install(): Harness {
         width: 0,
         height: 0,
         style: {},
-        getContext: () => ({ drawImage() {} }),
+        getContext: () => ({ drawImage() {}, fillRect() {} }),
         remove() {
           overlays.delete(overlay);
         },
