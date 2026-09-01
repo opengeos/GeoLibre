@@ -46,6 +46,43 @@ export function createMapResizeScheduler({
   let observedWindowHeight = window.innerHeight;
   let observedDevicePixelRatio = window.devicePixelRatio;
   let panelResizeActive = false;
+  let frameOverlay: HTMLCanvasElement | null = null;
+  let overlayMap: MapLibreMap | null = null;
+
+  const removeFrameOverlay = () => {
+    frameOverlay?.remove();
+    frameOverlay = null;
+    if (overlayMap) {
+      overlayMap.off("render", removeFrameOverlay);
+      overlayMap = null;
+    }
+  };
+  const preserveRenderedFrame = () => {
+    if (frameOverlay) return;
+    const map = getMap();
+    if (!map) return;
+    const canvas = map.getCanvas();
+    const canvasParent = canvas.parentElement;
+    if (!canvasParent || canvas.width === 0 || canvas.height === 0) return;
+
+    const overlay = document.createElement("canvas");
+    overlay.className = "geolibre-map-resize-frame";
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    Object.assign(overlay.style, {
+      position: "absolute",
+      inset: "0",
+      width: "100%",
+      height: "100%",
+      pointerEvents: "none",
+    });
+    const context = overlay.getContext("2d");
+    if (!context) return;
+    context.drawImage(canvas, 0, 0);
+    canvas.insertAdjacentElement("afterend", overlay);
+    frameOverlay = overlay;
+    overlayMap = map;
+  };
 
   const cancelFrame = () => {
     if (resizeFrame === null) return;
@@ -79,7 +116,11 @@ export function createMapResizeScheduler({
     resizeFrame = window.requestAnimationFrame(() => {
       resizeFrame = null;
       if (!mapNeedsResize()) return;
-      getMap()?.resize();
+      const map = getMap();
+      if (!map) return;
+      preserveRenderedFrame();
+      map.once("render", removeFrameOverlay);
+      map.resize();
       observedDevicePixelRatio = window.devicePixelRatio;
     });
   };
@@ -143,6 +184,7 @@ export function createMapResizeScheduler({
     // discrete change has to be dropped, or it would resize mid-drag anyway.
     cancelFrame();
     cancelTimer();
+    preserveRenderedFrame();
     resizeTimer = window.setTimeout(() => {
       resizeTimer = null;
       commitResize();
@@ -162,6 +204,7 @@ export function createMapResizeScheduler({
     clearWindowResizeState();
     cancelFrame();
     cancelTimer();
+    preserveRenderedFrame();
   };
   const onPanelResizeEnd = () => {
     panelResizeActive = false;
@@ -185,5 +228,6 @@ export function createMapResizeScheduler({
     cancelFrame();
     cancelTimer();
     clearWindowResizeState();
+    removeFrameOverlay();
   };
 }
