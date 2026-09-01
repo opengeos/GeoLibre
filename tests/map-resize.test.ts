@@ -35,6 +35,7 @@ interface Harness {
   setDevicePixelRatio: (ratio: number) => void;
   resizeCalls: () => number;
   overlayCount: () => number;
+  overlaySize: () => { width: number; height: number } | null;
   render: () => void;
   listenerCount: () => number;
 }
@@ -219,6 +220,10 @@ function install(): Harness {
     },
     resizeCalls: () => resizeCalls,
     overlayCount: () => overlays.size,
+    overlaySize: () => {
+      const overlay = [...overlays][0] as { width: number; height: number } | undefined;
+      return overlay ? { width: overlay.width, height: overlay.height } : null;
+    },
     render() {
       const listener = renderListener;
       renderListener = null;
@@ -304,6 +309,7 @@ describe("createMapResizeScheduler", () => {
       harness.flushFrames();
     }
     assert.equal(harness.resizeCalls(), 0);
+    assert.deepEqual(harness.overlaySize(), { width: 762, height: 600 });
 
     harness.dispatch(PANEL_RESIZE_END_EVENT);
     harness.flushFrames();

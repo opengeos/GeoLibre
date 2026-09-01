@@ -50,6 +50,7 @@ export function createMapResizeScheduler({
   let frameSnapshot: HTMLCanvasElement | null = null;
   let overlayBackgroundColor = "";
   let overlayMap: MapLibreMap | null = null;
+  let renderCleanupArmed = false;
 
   const removeFrameOverlay = () => {
     frameOverlay?.remove();
@@ -60,6 +61,7 @@ export function createMapResizeScheduler({
       overlayMap.off("render", removeFrameOverlay);
       overlayMap = null;
     }
+    renderCleanupArmed = false;
   };
   const preserveRenderedFrame = () => {
     const map = getMap();
@@ -91,8 +93,11 @@ export function createMapResizeScheduler({
         overlayBackgroundColor = window.getComputedStyle(backgroundElement).backgroundColor;
         backgroundElement = backgroundElement.parentElement;
       }
+      if (!overlayBackgroundColor || overlayBackgroundColor === "rgba(0, 0, 0, 0)") {
+        overlayBackgroundColor = "#fff";
+      }
     }
-    context.fillStyle = overlayBackgroundColor || "#fff";
+    context.fillStyle = overlayBackgroundColor;
     context.fillRect(0, 0, overlay.width, overlay.height);
     const x = (overlay.width - snapshot.width) / 2;
     const y = (overlay.height - snapshot.height) / 2;
@@ -155,7 +160,10 @@ export function createMapResizeScheduler({
         return;
       }
       preserveRenderedFrame();
-      if (frameOverlay) map.once("render", removeFrameOverlay);
+      if (frameOverlay && !renderCleanupArmed) {
+        map.once("render", removeFrameOverlay);
+        renderCleanupArmed = true;
+      }
       map.resize();
       observedDevicePixelRatio = window.devicePixelRatio;
     });
@@ -204,7 +212,10 @@ export function createMapResizeScheduler({
     return true;
   };
   const resizeMap = () => {
-    if (panelResizeActive) return;
+    if (panelResizeActive) {
+      preserveRenderedFrame();
+      return;
+    }
     // App layout changes such as toggling a sidebar are discrete and should
     // resize on the next frame. Only coalesce the rapid observer callbacks
     // produced while the browser window itself is being dragged.
