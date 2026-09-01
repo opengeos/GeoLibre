@@ -430,6 +430,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6a120d2e16b3e1b4a24bd70f23b12d3e16b81f113364a26935f8db7245452d"
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1637,7 +1643,7 @@ dependencies = [
 name = "geolibre-desktop"
 version = "2.8.0"
 dependencies = [
- "bincode",
+ "bincode 3.0.0",
  "chrono",
  "duckdb",
  "flate2",
@@ -4775,7 +4781,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b560a5962bf975d38fb4ec98a0e64e52929992ec708acb812add9c1ab8d186d"
 dependencies = [
  "aho-corasick",
- "bincode",
+ "bincode 1.3.3",
  "log",
  "serde",
  "serde_json",
