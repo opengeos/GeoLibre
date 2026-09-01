@@ -145,7 +145,7 @@ export function ProcessingMenu({
     show("processing.vector") ||
     show("processing.network") ||
     show("processing.statistics") ||
-    (!mobile && show("processing.raster"));
+    show("processing.raster");
   const showGeolibreActions =
     show("processing.geocode") ||
     show("processing.batchTools") ||
@@ -505,18 +505,21 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("hillshade")}
                         >
                           {t("toolbar.rasterTool.hillshade")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("slope")}
                         >
                           {t("toolbar.rasterTool.slope")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("aspect")}
                         >
                           {t("toolbar.rasterTool.aspect")}
@@ -527,12 +530,14 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("reproject")}
                         >
                           {t("toolbar.rasterTool.reproject")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("resample")}
                         >
                           {t("toolbar.rasterTool.resample")}
@@ -543,12 +548,14 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("clip-extent")}
                         >
                           {t("toolbar.rasterTool.clipExtent")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("clip-mask")}
                         >
                           {t("toolbar.rasterTool.clipMask")}
@@ -559,12 +566,14 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("polygonize")}
                         >
                           {t("toolbar.rasterTool.polygonize")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("contour")}
                         >
                           {t("toolbar.rasterTool.contour")}
@@ -575,6 +584,7 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("interpolate")}
                         >
                           {t("toolbar.rasterTool.interpolate")}
@@ -585,42 +595,52 @@ export function ProcessingMenu({
                         </DropdownMenuLabel>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("zonal")}
                         >
                           {t("toolbar.rasterTool.zonal")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("raster-calc")}
                         >
                           {t("toolbar.rasterTool.rasterCalc")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("spectral-index")}
                         >
                           {t("toolbar.rasterTool.spectralIndex")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("reclassify")}
                         >
                           {t("toolbar.rasterTool.reclassify")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("mosaic")}
                         >
                           {t("toolbar.rasterTool.mosaic")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
                           onSelect={() => setRasterToolOpen("focal")}
                         >
                           {t("toolbar.rasterTool.focal")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem disabled={sidecarDenied} onSelect={onOpenGeoreferencer}>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          onSelect={onOpenGeoreferencer}
+                        >
                           {t("toolbar.item.georeferencing")}
                         </DropdownMenuItem>
                       </>
