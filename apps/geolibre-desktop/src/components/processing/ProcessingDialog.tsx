@@ -1575,6 +1575,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         });
       } catch (err) {
         if (controller.signal.aborted) return;
+        if (err instanceof GlobalDemError) {
+          console.warn("Global DEM download failed:", err.message);
+        }
         const message =
           err instanceof GlobalDemError
             ? t("toolbar.rasterTool.runError")

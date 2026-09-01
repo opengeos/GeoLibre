@@ -636,11 +636,7 @@ export function ProcessingMenu({
                           {t("toolbar.rasterTool.focal")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={sidecarDenied}
-                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
-                          onSelect={onOpenGeoreferencer}
-                        >
+                        <DropdownMenuItem onSelect={onOpenGeoreferencer}>
                           {t("toolbar.item.georeferencing")}
                         </DropdownMenuItem>
                       </>
