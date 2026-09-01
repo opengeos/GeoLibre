@@ -2278,7 +2278,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                 troubleshooting with a one-click switch to the WASM runner.
                 Otherwise fall back to a plain error line (e.g. a parameter or
                 tool-run error that has nothing to do with the sidecar). */}
-            {!IS_MAS_BUILD && !runLocal && runtimeAvailable === false ? (
+            {!IS_MAS_BUILD &&
+            selectedTool?.id !== DOWNLOAD_GLOBAL_DEM_TOOL_ID &&
+            !runLocal &&
+            runtimeAvailable === false ? (
               <SidecarHelpBanner
                 isDesktop={desktop}
                 error={error}
