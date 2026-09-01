@@ -892,6 +892,30 @@ describe("flight simulator engine", () => {
     });
   });
 
+  it("banks the camera in the same direction as the aircraft", () => {
+    withStubWindow(({ pump, hold, release }) => {
+      resetStore();
+      const map = stubMap();
+      openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
+      startFlying();
+      pump();
+
+      hold("ArrowRight");
+      for (let i = 0; i < 8; i += 1) pump();
+      release("ArrowRight");
+      const hud = getFlightHudSnapshot();
+      const flightJumps = map.state.jumps.filter((jump) => jump.eventData);
+      assert.ok(hud.rollDeg > 0, "Arrow Right should bank the aircraft right");
+      assert.ok(
+        (flightJumps.at(-1)?.options.roll as number) > 0,
+        "the camera should roll right with the aircraft",
+      );
+
+      stopFlying();
+      resetStore();
+    });
+  });
+
   it("starts every flight at the cruise throttle, not the previous flight's", () => {
     withStubWindow(({ pump, hold, release }) => {
       resetStore();

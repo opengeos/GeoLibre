@@ -541,7 +541,7 @@ class FlightSimulatorEngine {
       MAX_CAMERA_PITCH,
       Math.max(MIN_CAMERA_PITCH, LEVEL_CAMERA_PITCH + pitch),
     );
-    const cameraRoll = this.settings.bankCamera ? -roll : 0;
+    const cameraRoll = this.settings.bankCamera ? roll : 0;
     try {
       const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
         [lng, lat],
