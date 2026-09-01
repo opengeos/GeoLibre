@@ -40,13 +40,13 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.2.0",
-    "eslint": "^10.9.0",
+    "@types/node": "^26.4.0",
+    "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "linkedom": "^0.18.13",
     "tsx": "^4.23.12",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.68.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.9",

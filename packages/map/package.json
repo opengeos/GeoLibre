@@ -77,9 +77,9 @@
     "@turf/helpers": "^7.4.0",
     "@turf/mask": "^7.4.0",
     "cesium": "^1.144.0",
-    "fast-xml-parser": "^5.11.0",
+    "fast-xml-parser": "^5.11.1",
     "geotiff": "^3.0.5",
-    "maplibre-gl": "^6.5.0",
+    "maplibre-gl": "^6.6.0",
     "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.5.0",
     "react": "^19.2.8",
@@ -88,7 +88,7 @@
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   },
