@@ -147,7 +147,7 @@ export function ShareProjectDialog({
   const shareHost = shareHostLabel();
   const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
   const [title, setTitle] = useState("");
-  const [visibility, setVisibility] = useState<ShareVisibility>("unlisted");
+  const [visibility, setVisibility] = useState<ShareVisibility>("public");
   const [status, setStatus] = useState<"idle" | "uploading">("idle");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<ShareUploadErrorCode | null>(null);
@@ -169,7 +169,7 @@ export function ShareProjectDialog({
   useEffect(() => {
     if (open) {
       setTitle(isShareableTitle(currentTitle) ? currentTitle.trim() : "");
-      setVisibility("unlisted");
+      setVisibility("public");
       setStatus("idle");
       setError(null);
       setErrorCode(null);
