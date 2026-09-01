@@ -31,18 +31,6 @@ const SNAPSHOT_URL =
 // subcategory sort ranks against this constant, so renaming it is safe.
 const GEOLIBRE_SUBCATEGORY = "GeoLibre (WASM)";
 
-// App-native tools that share the Processing dialog but are not implemented by
-// the geolibre-wasm binary. Keep these in the generated menu alongside the
-// GeoLibre tools so regeneration cannot silently remove their menu entries.
-const APP_TOOLS = [
-  {
-    id: "download_global_dem",
-    name: "Download Global DEM",
-    category: "Raster",
-    source: "geolibre",
-  },
-];
-
 const OUT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts",
@@ -146,7 +134,7 @@ async function main() {
   );
 
   const wasmTools = await loadWasmTools();
-  const geolibre = [...wasmTools.filter((t) => t.source === "geolibre"), ...APP_TOOLS];
+  const geolibre = wasmTools.filter((t) => t.source === "geolibre");
   const geolibreIds = new Set(geolibre.map((t) => t.id));
   // Whitebox-sourced WASM tools the snapshot has never heard of. They belong in
   // the menu under their own category's regular subheading (not the

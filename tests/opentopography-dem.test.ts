@@ -16,6 +16,9 @@ describe("OpenTopography global DEM", () => {
   it("registers the built-in tool once", () => {
     assert.deepEqual(withGlobalDemTool([]), [DOWNLOAD_GLOBAL_DEM_TOOL]);
     assert.equal(withGlobalDemTool([DOWNLOAD_GLOBAL_DEM_TOOL]).length, 1);
+    const dataset = DOWNLOAD_GLOBAL_DEM_TOOL.params?.find((param) => param.name === "dataset");
+    assert.ok(dataset?.options?.includes("SRTMGL1"));
+    assert.ok(!dataset?.options?.includes("SRTM_GL1"));
   });
 
   it("requests a clipped GeoTIFF with the selected dataset and bbox", async () => {

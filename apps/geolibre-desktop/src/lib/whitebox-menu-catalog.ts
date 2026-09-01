@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 1067 tools across 9 categories. */
+/** 1066 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -433,7 +433,6 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "detect_image_anomalies", name: "Detect Image Anomalies" },
           { id: "diffusion_interpolation_with_barriers", name: "Diffusion Interpolation With Barriers" },
           { id: "dimensional_moving_statistics", name: "Dimensional Moving Statistics" },
-          { id: "download_global_dem", name: "Download Global DEM" },
           { id: "empirical_bayesian_kriging", name: "Empirical Bayesian Kriging" },
           { id: "euclidean_direction", name: "Euclidean Direction" },
           { id: "expand_shrink", name: "Expand / Shrink" },

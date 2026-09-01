@@ -19,7 +19,7 @@ export const DOWNLOAD_GLOBAL_DEM_TOOL: WhiteboxTool = {
       kind: "enum",
       required: true,
       default: "COP30",
-      options: ["COP30", "NASADEM", "SRTM_GL1", "COP90", "AW3D30", "SRTM15Plus"],
+      options: ["COP30", "NASADEM", "SRTMGL1", "COP90", "AW3D30", "SRTM15Plus"],
     },
     {
       name: "bbox",
@@ -65,7 +65,7 @@ export interface GlobalDemRequest {
   signal?: AbortSignal;
 }
 
-const DATASETS = new Set(["COP30", "NASADEM", "SRTM_GL1", "COP90", "AW3D30", "SRTM15Plus"]);
+const DATASETS = new Set(["COP30", "NASADEM", "SRTMGL1", "COP90", "AW3D30", "SRTM15Plus"]);
 
 /** Download a clipped GeoTIFF through OpenTopography's Global DEM API. */
 export async function downloadGlobalDem(request: GlobalDemRequest): Promise<Uint8Array> {
