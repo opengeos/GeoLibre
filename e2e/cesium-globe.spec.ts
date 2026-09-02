@@ -12,12 +12,12 @@ import { waitForMap } from "./helpers";
  * shipped on the globe (#2205, #2207) verified only by hand in a browser.
  *
  * This runs **keyless on purpose**. `playwright.config.ts` blanks
- * `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` for the build and refuses to reuse an
- * already-running server, so a developer whose shell holds a token still
- * exercises the path CI does. That does not reach a token in
- * `apps/geolibre-desktop/.env.local`, which `vite.config.ts` reads off disk —
- * so rather than assume, the test asserts the tokenless hint and fails with a
- * message naming that file.
+ * `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` for the build, which covers a token
+ * exported in the shell. Two cases it cannot cover: a token in
+ * `apps/geolibre-desktop/.env.local`, which `vite.config.ts` reads straight off
+ * disk, and a locally reused server, which Playwright starts without applying
+ * that override at all. So rather than assume the build is keyless, the test
+ * asserts the tokenless hint and fails with a message explaining both.
  *
  * Until #2205 the pane was hidden without a token and could not mount without a
  * secret; the toggle is now always offered and the globe draws the project
@@ -77,8 +77,9 @@ test.describe("Cesium 3D globe pane", () => {
     await expect(
       page.getByText("Add a Cesium Ion token in Settings for terrain and Ion imagery"),
       "the globe pane came up with an Ion token, so this run is not testing the keyless path. " +
-        "playwright.config.ts blanks CESIUM_TOKEN/VITE_CESIUM_TOKEN for the build, but a token in " +
-        "apps/geolibre-desktop/.env.local is read straight off disk by vite.config.ts and wins.",
+        "playwright.config.ts blanks CESIUM_TOKEN/VITE_CESIUM_TOKEN for the build, but that misses " +
+        "a token in apps/geolibre-desktop/.env.local (read off disk by vite.config.ts), and is not " +
+        "applied at all to a locally reused preview server — stop it and re-run to rebuild.",
     ).toBeVisible();
 
     // Dragging the globe writes back into the shared `mapView`, which moves the

@@ -69,11 +69,14 @@ export default defineConfig({
     // asserts the tokenless hint and fails with a message naming the file.
     env: { CESIUM_TOKEN: "", VITE_CESIUM_TOKEN: "" },
     url: BASE_URL,
-    // Never reuse a server that is already up. Playwright skips the whole
-    // command when it reuses one, so `env` above would not be applied and the
-    // run could silently test a previously built, tokened bundle — or simply a
-    // stale build. Correctness over the rebuild it costs on repeat local runs.
-    reuseExistingServer: false,
+    // Reuse locally (the repo's existing DX trade-off), never in CI. Note the
+    // interaction with `env` above: Playwright skips the whole command when it
+    // reuses a server, so the override is *not* applied to a reused one. That
+    // is why `cesium-globe.spec.ts` asserts the tokenless hint rather than
+    // trusting this — a reused tokened build fails there with an explanation
+    // instead of silently exercising the wrong path. In CI, where determinism
+    // actually matters, this is false and the override always applies.
+    reuseExistingServer: !process.env.CI,
     // The build (tsc -b + vite build) runs as part of this command, so allow
     // generous startup time on cold CI runners.
     timeout: 300_000,
