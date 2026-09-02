@@ -7687,7 +7687,7 @@
     "results": "परिणाम",
     "itemsFound": "{{count}} आइटम मिले",
     "selectAll": "सभी चुनें",
-    "deselectAll": "सभी अचयनित करें",
+    "deselectAll": "सभी का चयन हटाएँ",
     "columnId": "ID",
     "columnDate": "दिनांक",
     "columnPhase": "चरण",
