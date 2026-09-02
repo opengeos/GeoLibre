@@ -132,6 +132,21 @@ describe("menu presets and predicates", () => {
     assert.ok(sets.hiddenDataSources.includes("duckdb"));
   });
 
+  it("never hides the rendering-engine switch from a preset", () => {
+    // It is the only way back to the 2D map, and a preset *hides* items above
+    // its tier rather than disabling them — so a beginner opening a project
+    // saved with `primaryRenderer: "cesium"` must still see it (#2217).
+    for (const level of ["beginner", "intermediate", "advanced"] as const) {
+      const sets = presetHiddenSets(level, []);
+      assert.ok(
+        !sets.hiddenMenuItems.includes("view.renderingEngine"),
+        `${level} hid the rendering-engine switch`,
+      );
+      // It lives in the View menu, so that menu must survive the preset too.
+      assert.ok(!sets.hiddenMenus.includes("view"), `${level} hid the View menu`);
+    }
+  });
+
   it("never hides the Settings menu (excluded from TOP_LEVEL_MENUS)", () => {
     assert.ok(!TOP_LEVEL_MENUS.some((menu) => menu.id === "settings"));
   });

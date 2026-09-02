@@ -406,10 +406,17 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    // "basic", not "advanced": this is the only control that switches the
+    // primary map back to MapLibre, and a preset *hides* items above its tier
+    // rather than disabling them. A beginner opening a project saved with
+    // `primaryRenderer: "cesium"` would otherwise land on the globe with the
+    // MapLibre-only tools greyed out and no visible way back (#2217 review).
+    // ViewMenu additionally forces the submenu visible while the globe is
+    // active, which covers a custom profile that hid it by hand.
     id: "view.renderingEngine",
     menuId: "view",
     labelKey: "toolbar.item.renderingEngine",
-    tier: "advanced",
+    tier: "basic",
   },
   {
     id: "view.googleMaps",

@@ -140,12 +140,15 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
-  const showRenderingEngine = show("view.renderingEngine");
+  // Always offered while the globe owns the primary map, whatever the UI
+  // profile says: this submenu is the only way back to the 2D map, and hiding
+  // it there would strand a user on a renderer whose tools are all disabled.
+  const showRenderingEngine = show("view.renderingEngine") || primaryRenderer === "cesium";
   // Every item in this menu except Split View and Rendering engine drives the
   // MapLibre `MapController` — zoom, viewport history, orientation, Set View,
   // and the Google Maps/Earth hand-offs all read or animate that map. The globe
-  // has no controller, so they would silently do nothing; grey them out and say
-  // why in the Rendering engine submenu instead (#2217).
+  // has no controller, so they would silently do nothing; grey them out, and
+  // let the on-map notice say why (#2217).
   const noMapLibreMap = primaryRenderer === "cesium";
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
@@ -340,12 +343,6 @@ export function ViewMenu({
                   <span className="whitespace-nowrap">{t("toolbar.item.rendererCesium")}</span>
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
-              {/* The globe has no MapController, so the tools built on one are
-                  not mounted while it draws the workspace. Say that here, where
-                  the choice is made, rather than only on the map. */}
-              <DropdownMenuLabel className="whitespace-normal py-1 text-[10px] font-normal leading-snug text-muted-foreground">
-                {t("toolbar.item.renderingEngineHint")}
-              </DropdownMenuLabel>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
