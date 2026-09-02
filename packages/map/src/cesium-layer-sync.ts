@@ -78,7 +78,7 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
 function isSupported(layer: GeoLibreLayer): boolean {
   if (!isCesiumSupportedLayerType(layer)) return false;
   if (hasRenderableGeoJson(layer)) return true;
-  if (layer.type === "geojson") return false;
+  if (GEOJSON_BACKED_TYPES.has(layer.type)) return false;
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
   // Mirror createImagery's real capability: WMS builds from source.url, but
   // xyz/raster/wmts need a tile template — a url alone would render nothing.

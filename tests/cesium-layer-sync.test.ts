@@ -255,6 +255,20 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.geojsonLoads.length, 0);
   });
 
+  it("does not treat an empty GeoJSON-backed layer with incidental tiles as imagery", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      type: "flatgeobuf",
+      geojson: { type: "FeatureCollection", features: [] } as never,
+      source: { tiles: ["https://example.com/{z}/{x}/{y}.png"] },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 0);
+  });
+
   it("restyles a geojson layer's fill opacity in place without reloading", async () => {
     const sync = newSync(f);
     const fc = { type: "FeatureCollection", features: [{}] };
