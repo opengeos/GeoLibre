@@ -18,9 +18,14 @@ set -euo pipefail
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "DATE must be YYYY-MM-DD" >&2; exit 1; }
-# Reject syntactically valid but impossible dates (e.g. 2026-13-40). `date -d`
-# is GNU coreutils; these scripts run on Linux/CI (on macOS, use coreutils).
-date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
+# Reject syntactically valid but impossible dates (e.g. 2026-13-40, 2026-02-31).
+# `date -d` is GNU coreutils and BSD/macOS date spells the same thing `-j -f`,
+# so try GNU first and fall back. BSD date also *normalises* an out-of-range day
+# instead of rejecting it (2026-02-31 comes back as 2026-03-03), so compare the
+# round-trip against the input rather than trusting the exit status — that check
+# is strict on either implementation.
+normalized="$(date -u -d "$DATE" +%F 2>/dev/null || date -u -j -f "%Y-%m-%d" "$DATE" +%F 2>/dev/null || true)"
+[[ "$normalized" == "$DATE" ]] || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 cat <<XML
 <?xml version="1.0" encoding="UTF-8"?>

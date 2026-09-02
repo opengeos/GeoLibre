@@ -90,10 +90,21 @@ describe("desktop settings URL", () => {
       });
     }) as typeof fetch;
 
-    await assert.rejects(
-      fetchDesktopSettings("https://example.com/stalled.json", { fetchImpl, timeoutMs: 5 }),
-      (error: Error) => error.name === "TimeoutError",
-    );
+    // AbortSignal.timeout()'s timer is unref'd, so it cannot hold the event loop
+    // open by itself, and the stalled fetch above settles only when that abort
+    // fires. With nothing else pending the loop drains first, the promise never
+    // settles, and the runner reports "Promise resolution is still pending but
+    // the event loop has already resolved" — taking the rest of the suite with
+    // it. A ref'd timer keeps the loop alive until the abort actually lands.
+    const keepAlive = setTimeout(() => {}, 1000);
+    try {
+      await assert.rejects(
+        fetchDesktopSettings("https://example.com/stalled.json", { fetchImpl, timeoutMs: 5 }),
+        (error: Error) => error.name === "TimeoutError",
+      );
+    } finally {
+      clearTimeout(keepAlive);
+    }
     assert.equal(signal?.aborted, true);
   });
 

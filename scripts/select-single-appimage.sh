@@ -21,7 +21,12 @@ set -euo pipefail
 # there would swallow the rest of the file.
 artifacts="${1:?Pass the artifactPaths JSON array from tauri-action}"
 
-mapfile -t images < <(jq -r '.[] | select(endswith(".AppImage"))' <<<"$artifacts")
+# Read with a loop rather than `mapfile`: that builtin arrived in bash 4, and
+# macOS still ships bash 3.2 as /bin/bash, where it is simply missing.
+images=()
+while IFS= read -r image; do
+  images+=("$image")
+done < <(jq -r '.[] | select(endswith(".AppImage"))' <<<"$artifacts")
 if [[ ${#images[@]} -ne 1 ]]; then
   echo "Expected exactly one .AppImage in artifactPaths, found ${#images[@]}" >&2
   exit 1
