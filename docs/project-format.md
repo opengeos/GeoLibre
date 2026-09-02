@@ -41,6 +41,7 @@ file contents do not change.
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
 | `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
+| `primaryRenderer` | string  | Optional engine for the primary map area: `"maplibre"` (2D, the default) or `"cesium"` (3D globe); omitted when default |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state

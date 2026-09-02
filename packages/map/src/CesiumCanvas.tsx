@@ -47,8 +47,15 @@ const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
 const CESIUM_CSS_PATH = "/Widgets/CesiumWidget/CesiumWidget.css";
 
 export interface CesiumCanvasProps {
-  /** Id of the `secondaryMapViews` entry this pane renders (label/telemetry). */
-  viewId: string;
+  /**
+   * Id of the `secondaryMapViews` entry this pane renders (label/telemetry).
+   *
+   * Omit it to render the **primary** map area (issue #2217). A primary globe
+   * has no `secondaryMapViews` record behind it, so it reads and writes the
+   * shared `mapView` directly, is never subject to the `syncView` toggle, and
+   * shows every layer without per-pane visibility overrides.
+   */
+  viewId?: string;
   /**
    * Cesium Ion access token. It buys two things: world terrain (so tilted views
    * show relief) and Ion World Imagery as the fallback base layer for a basemap
@@ -78,10 +85,21 @@ function prepareCesiumEnvironment(): void {
 }
 
 /**
- * A 3D-globe map pane rendered with CesiumJS, mounted alongside the MapLibre
- * panes in the multi-map grid. Mirrors {@link SecondaryMapCanvas}'s conventions:
- * the viewer is created exactly once in a dependency-free effect, torn down on
- * unmount, and its camera is kept in step with the shared store camera.
+ * A 3D globe rendered with CesiumJS. Mirrors {@link SecondaryMapCanvas}'s
+ * conventions: the viewer is created exactly once in a dependency-free effect,
+ * torn down on unmount, and its camera is kept in step with the shared store
+ * camera.
+ *
+ * It serves two roles, told apart by whether `viewId` is given:
+ *
+ * - **A pane** in the multi-map grid, beside the MapLibre panes, backed by a
+ *   `secondaryMapViews` record with its own camera and layer-visibility
+ *   overrides.
+ * - **The primary map area** (issue #2217), when the project's
+ *   `primaryRenderer` is `"cesium"`. There is no pane record then: the globe
+ *   reads and writes the shared `mapView`, ignores the `syncView` toggle (which
+ *   exists to make panes follow the primary camera), and draws every layer with
+ *   no per-pane overrides.
  */
 export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,18 +137,30 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   const ionTokenRef = useRef(ionToken);
   ionTokenRef.current = ionToken;
 
+  // No pane id means this globe *is* the primary map area, not a pane beside it.
+  const isPrimary = viewId === undefined;
+  const isPrimaryRef = useRef(isPrimary);
+  isPrimaryRef.current = isPrimary;
+
   // Camera sync inputs, mirrored from SecondaryMapCanvas: the shared global
   // camera when sync is on, otherwise this pane's own saved camera.
-  const syncView = useAppStore((s) => s.mapLayout.syncView);
+  const paneSyncView = useAppStore((s) => s.mapLayout.syncView);
   const globalView = useAppStore((s) => s.mapView);
-  const entryView = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.view);
+  const entryView = useAppStore((s) =>
+    viewId === undefined ? undefined : s.secondaryMapViews.find((p) => p.id === viewId)?.view,
+  );
+  // The primary globe *is* the shared camera, so it always follows `mapView`;
+  // `syncView` only governs whether the secondary panes track it.
+  const syncView = isPrimary || paneSyncView;
 
   // Layer sync inputs, mirrored from SecondaryMapCanvas: the shared layers with
   // this pane's per-layer visibility overrides, then group effects folded in.
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
-  const layerVisibility = useAppStore(
-    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
+  const layerVisibility = useAppStore((s) =>
+    viewId === undefined
+      ? undefined
+      : s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
   );
   const paneLayers = useMemo<GeoLibreLayer[]>(() => {
     const withOverrides = !layerVisibility
@@ -311,9 +341,18 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         if (cancelled || viewer.isDestroyed()) return;
 
         // Seed the camera from the shared store camera before the first frame.
+        // The primary globe always seeds from `mapView`, which is what carries
+        // the camera across a renderer switch: MapLibre wrote the view the user
+        // was looking at, and the globe picks up exactly that.
         const state = useAppStore.getState();
-        const pane = state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
-        applyView(state.mapLayout.syncView ? state.mapView : (pane?.view ?? state.mapView));
+        const pane = isPrimaryRef.current
+          ? undefined
+          : state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
+        applyView(
+          isPrimaryRef.current || state.mapLayout.syncView
+            ? state.mapView
+            : (pane?.view ?? state.mapView),
+        );
 
         // Draw the project basemap, then the store layers above it, before the
         // first frame. Basemap first so it lands at the bottom of an empty
@@ -358,12 +397,22 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
           // `setMapView` has no same-camera guard in the store, and
           // `setSecondaryMapView`'s guard uses exact equality (which Cesium's
           // lossy readback never hits), so both are gated here with isSameView.
+          if (isPrimaryRef.current) {
+            // The primary globe owns `mapView` outright (there is no pane record
+            // to mirror into), so it writes regardless of the `syncView` toggle
+            // — that toggle governs the secondary panes, and the primary map is
+            // the camera they follow.
+            if (!isSameView(view, live.mapView)) live.setMapView(view, userDriven);
+            return;
+          }
           if (live.mapLayout.syncView && !isSameView(view, live.mapView)) {
             live.setMapView(view, userDriven);
           }
-          const paneView = live.secondaryMapViews.find((p) => p.id === viewIdRef.current)?.view;
+          const paneId = viewIdRef.current;
+          if (paneId === undefined) return;
+          const paneView = live.secondaryMapViews.find((p) => p.id === paneId)?.view;
           if (!paneView || !isSameView(view, paneView)) {
-            live.setSecondaryMapView(viewIdRef.current, view, userDriven);
+            live.setSecondaryMapView(paneId, view, userDriven);
           }
         });
 
@@ -449,7 +498,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   ]);
 
   return (
-    <div className="relative h-full w-full" data-testid="cesium-canvas" data-view-id={viewId}>
+    <div
+      className="relative h-full w-full"
+      data-testid="cesium-canvas"
+      data-view-id={viewId}
+      data-primary={isPrimary ? "true" : undefined}
+    >
       <div ref={containerRef} className="h-full w-full" />
       {error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-destructive">

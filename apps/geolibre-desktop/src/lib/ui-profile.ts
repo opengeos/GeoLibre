@@ -406,6 +406,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "view.renderingEngine",
+    menuId: "view",
+    labelKey: "toolbar.item.renderingEngine",
+    tier: "advanced",
+  },
+  {
     id: "view.googleMaps",
     menuId: "view",
     labelKey: "toolbar.item.viewInGoogleMaps",

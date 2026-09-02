@@ -1386,6 +1386,27 @@ export interface MapGridLayout {
 }
 
 /**
+ * Which engine draws a map pane.
+ *
+ * `"maplibre"` is the 2D MapLibre GL map that owns the app's plugin, styling,
+ * and deck.gl integrations. `"cesium"` is the 3D globe (see `CesiumCanvas`),
+ * which renders the same shared store state — camera, basemap, layers, group
+ * effects — through CesiumJS.
+ *
+ * Used both for secondary panes ({@link SecondaryMapView.viewKind}) and for the
+ * primary workspace ({@link GeoLibreProject.primaryRenderer}), so the two never
+ * drift apart.
+ */
+export type MapRendererKind = "maplibre" | "cesium";
+
+/**
+ * The engine that draws the primary map area when a project says nothing. The
+ * 2D map: it is the renderer every tool, plugin, and panel is wired to, so an
+ * existing project (and a new one) opens exactly as it always did.
+ */
+export const DEFAULT_PRIMARY_RENDERER: MapRendererKind = "maplibre";
+
+/**
  * A non-primary map pane: shares the primary map's basemap and layers, with its
  * own camera and per-layer visibility overrides.
  */
@@ -1400,7 +1421,7 @@ export interface SecondaryMapView {
    * map) when absent, so existing projects and panes are unchanged. `"cesium"`
    * renders a 3D globe (see {@link CesiumCanvas}) over the same shared layers.
    */
-  viewKind?: "maplibre" | "cesium";
+  viewKind?: MapRendererKind;
   /**
    * Per-layer visibility overrides keyed by layer id. A layer absent from this
    * map inherits the primary map's visibility (`layer.visible`); an entry forces
@@ -2254,6 +2275,17 @@ export interface GeoLibreProject {
   secondaryMapViews?: SecondaryMapView[];
   /** User-entered label for the primary pane; omitted when empty. */
   primaryMapLabel?: string;
+  /**
+   * Which engine draws the primary map area (issue #2217). Omitted for the
+   * default 2D map, so every project written before this existed — and every
+   * project that never leaves MapLibre — is byte-identical to before. A project
+   * saved as `"cesium"` reopens directly on the 3D globe.
+   *
+   * This is independent of {@link mapLayout}: a 1x1 workspace can be either
+   * renderer, and a multi-pane grid can still mix the two through each pane's
+   * {@link SecondaryMapView.viewKind}.
+   */
+  primaryRenderer?: MapRendererKind;
   /**
    * Project-scoped Style Manager entries (issue #1294), so a project can carry
    * its reusable styles to teammates. Omitted when empty; the app-level

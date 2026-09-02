@@ -43,6 +43,7 @@ import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_MAP_GRID_LAYOUT,
+  DEFAULT_PRIMARY_RENDERER,
   DEFAULT_PROJECT_PREFERENCES,
   MAX_MAP_GRID_DIM,
   DEFAULT_STORY_MAP,
@@ -72,6 +73,7 @@ import {
   type LayerStyle,
   type LegendConfig,
   type MapGridLayout,
+  type MapRendererKind,
   type MapViewState,
   type ProcessingModel,
   type ProcessingRerunRequest,
@@ -281,6 +283,14 @@ export interface AppState {
   secondaryMapViews: SecondaryMapView[];
   /** User-entered label for the primary pane (shown only in multi-map mode). */
   primaryMapLabel: string;
+  /**
+   * Which engine draws the primary map area (issue #2217): the 2D MapLibre map
+   * or the 3D Cesium globe. Both render the same store state, so switching
+   * keeps the camera, basemap, layers, groups, visibility, and opacity — it
+   * only changes what draws them. Independent of `mapLayout`: switching never
+   * adds or removes panes.
+   */
+  primaryRenderer: MapRendererKind;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   /**
@@ -442,6 +452,12 @@ export interface AppState {
   setSecondaryLayerVisibility: (id: string, layerId: string, visible: boolean) => void;
   /** Set the primary pane's custom label. */
   setPrimaryMapLabel: (label: string) => void;
+  /**
+   * Switch the primary map area between the 2D map and the 3D globe (no-op if
+   * unchanged). Touches nothing else in the store, so the shared camera, layer,
+   * and basemap state carries straight across the swap.
+   */
+  setPrimaryRenderer: (renderer: MapRendererKind) => void;
   /** Set one secondary pane's custom label (no-op if the id is unknown). */
   setSecondaryMapLabel: (id: string, label: string) => void;
   /**
@@ -1110,6 +1126,7 @@ export const useAppStore = create<AppState>()(
       mapLayout: { ...DEFAULT_MAP_GRID_LAYOUT },
       secondaryMapViews: [],
       primaryMapLabel: "",
+      primaryRenderer: DEFAULT_PRIMARY_RENDERER,
       copiedLayerStyle: null,
       selectedLayerId: null,
       selectedFeatureId: null,
@@ -1317,6 +1334,10 @@ export const useAppStore = create<AppState>()(
           return { secondaryMapViews, isDirty: true };
         }),
       setPrimaryMapLabel: (label) => set({ primaryMapLabel: label, isDirty: true }),
+      setPrimaryRenderer: (renderer) =>
+        set((s) =>
+          s.primaryRenderer === renderer ? s : { primaryRenderer: renderer, isDirty: true },
+        ),
       setSecondaryMapLabel: (id, label) =>
         set((s) => {
           let changed = false;

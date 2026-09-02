@@ -922,6 +922,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       mapLayout: state.mapLayout,
       secondaryMapViews: state.secondaryMapViews,
       primaryMapLabel: state.primaryMapLabel,
+      primaryRenderer: state.primaryRenderer,
       styleLibrary: state.projectStyleLibrary,
       comments: state.comments,
       metadata: state.metadata,

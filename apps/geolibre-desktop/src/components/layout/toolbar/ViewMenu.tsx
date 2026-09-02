@@ -17,6 +17,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   ArrowLeft,
   ArrowRight,
+  Box,
   Compass,
   Crosshair,
   Earth,
@@ -111,6 +112,8 @@ export function ViewMenu({
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const setPrimaryRenderer = useAppStore((s) => s.setPrimaryRenderer);
   // Camera snapshot taken when the menu opens. The dropdown blocks map
   // interaction while open, so a single read on open stays accurate for the
   // life of the menu and lets items grey out at their limit (#708, #710).
@@ -137,6 +140,13 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
+  const showRenderingEngine = show("view.renderingEngine");
+  // Every item in this menu except Split View and Rendering engine drives the
+  // MapLibre `MapController` — zoom, viewport history, orientation, Set View,
+  // and the Google Maps/Earth hand-offs all read or animate that map. The globe
+  // has no controller, so they would silently do nothing; grey them out and say
+  // why in the Rendering engine submenu instead (#2217).
+  const noMapLibreMap = primaryRenderer === "cesium";
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
   const showExternal = showGoogleMaps || showGoogleEarth;
@@ -145,7 +155,15 @@ export function ViewMenu({
   // A custom profile could hide every item; render nothing rather than a menu
   // whose dropdown is an empty shell. (TopToolbar's isMenuVisible guard normally
   // hides the menu first, but don't rely on that invariant here.)
-  if (!showZoom && !showNavigation && !showReset && !showSetView && !showSplitView && !showExternal)
+  if (
+    !showZoom &&
+    !showNavigation &&
+    !showReset &&
+    !showSetView &&
+    !showSplitView &&
+    !showRenderingEngine &&
+    !showExternal
+  )
     return null;
 
   return (
@@ -169,26 +187,32 @@ export function ViewMenu({
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
-          <DropdownMenuItem disabled={atMaxZoom} onSelect={onZoomIn}>
+          <DropdownMenuItem disabled={atMaxZoom || noMapLibreMap} onSelect={onZoomIn}>
             <ZoomIn className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomIn")}</span>
           </DropdownMenuItem>
         )}
         {show("view.zoomOut") && (
-          <DropdownMenuItem disabled={atMinZoom} onSelect={onZoomOut}>
+          <DropdownMenuItem disabled={atMinZoom || noMapLibreMap} onSelect={onZoomOut}>
             <ZoomOut className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomOut")}</span>
           </DropdownMenuItem>
         )}
         {showZoom && showNavigation && <DropdownMenuSeparator />}
         {show("view.previousView") && (
-          <DropdownMenuItem disabled={!history.canGoBack} onSelect={history.goBack}>
+          <DropdownMenuItem
+            disabled={!history.canGoBack || noMapLibreMap}
+            onSelect={history.goBack}
+          >
             <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.previousView")}</span>
           </DropdownMenuItem>
         )}
         {show("view.nextView") && (
-          <DropdownMenuItem disabled={!history.canGoForward} onSelect={history.goForward}>
+          <DropdownMenuItem
+            disabled={!history.canGoForward || noMapLibreMap}
+            onSelect={history.goForward}
+          >
             <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.nextView")}</span>
           </DropdownMenuItem>
@@ -197,7 +221,7 @@ export function ViewMenu({
         {showReset && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger
-              disabled={allResetDisabled}
+              disabled={allResetDisabled || noMapLibreMap}
               className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
@@ -234,7 +258,7 @@ export function ViewMenu({
         )}
         {(showZoom || showNavigation || showReset) && showSetView && <DropdownMenuSeparator />}
         {showSetView && (
-          <DropdownMenuItem onSelect={onSetView}>
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onSetView}>
             <Crosshair className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.setView")}</span>
           </DropdownMenuItem>
@@ -294,15 +318,52 @@ export function ViewMenu({
           </DropdownMenuSub>
         )}
         {(showZoom || showNavigation || showReset || showSetView || showSplitView) &&
+          showRenderingEngine && <DropdownMenuSeparator />}
+        {showRenderingEngine && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Box className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t("toolbar.item.renderingEngine")}</span>
+            </DropdownMenuSubTrigger>
+            {/* `style`, not `min-w-48` — see the Reset Orientation submenu above. */}
+            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
+              <DropdownMenuRadioGroup
+                value={primaryRenderer}
+                onValueChange={(value: string) =>
+                  setPrimaryRenderer(value === "cesium" ? "cesium" : "maplibre")
+                }
+              >
+                <DropdownMenuRadioItem value="maplibre">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererMapLibre")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="cesium">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererCesium")}</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              {/* The globe has no MapController, so the tools built on one are
+                  not mounted while it draws the workspace. Say that here, where
+                  the choice is made, rather than only on the map. */}
+              <DropdownMenuLabel className="whitespace-normal py-1 text-[10px] font-normal leading-snug text-muted-foreground">
+                {t("toolbar.item.renderingEngineHint")}
+              </DropdownMenuLabel>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView ||
+          showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
-          <DropdownMenuItem onSelect={onViewInGoogleMaps}>
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleMaps}>
             <MapIcon className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleMaps")}</span>
           </DropdownMenuItem>
         )}
         {showGoogleEarth && (
-          <DropdownMenuItem onSelect={onViewInGoogleEarth}>
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleEarth}>
             <Earth className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleEarth")}</span>
           </DropdownMenuItem>
