@@ -6,6 +6,7 @@ import {
   PROVIDER_LABELS,
   readRuntimeEnv,
   type AssistantProviderConfig,
+  type AssistantProviderId,
   type RuntimeEnv,
 } from "./provider";
 import { PROVIDER_FIELDS } from "./provider-fields";
@@ -102,6 +103,44 @@ export function migrateLegacyAiEnv(
   }
 
   return result;
+}
+
+/** An explicit provider/model pin from the legacy UI picker. */
+export type AssistantProviderSelection = { provider: AssistantProviderId; model?: string };
+
+/** Field separator for selection keys; never appears in a provider id or a credential. */
+const KEY_SEPARATOR = "\u0000";
+
+/**
+ * Build a stable, value-based identity for an assistant selection. Two
+ * selections sharing a key resolve to the same provider, model, and
+ * credentials, so a session already built from one can keep serving the other
+ * — conversation history included.
+ *
+ * Only the fields that feed {@link configForProfile} and `configForProvider`
+ * are included. A profile's `name` is deliberately left out: renaming a profile
+ * in Settings does not change how its agent is built, so it must not count as a
+ * different selection.
+ *
+ * @param selection A saved profile, a legacy provider/model pin, or null for
+ *   auto-resolution from the runtime env.
+ * @returns An opaque string to compare with `===`.
+ */
+export function assistantSelectionKey(
+  selection: AssistantProviderSelection | AssistantProfile | null,
+): string {
+  if (!selection) return "auto";
+  if ("fieldValues" in selection) {
+    // Sort the credential keys so an equivalent profile that happens to have
+    // been built in a different insertion order still compares equal.
+    const fields = Object.keys(selection.fieldValues)
+      .sort()
+      .map((key) => `${key}=${selection.fieldValues[key]}`);
+    return ["profile", selection.id, selection.provider, selection.modelId, ...fields].join(
+      KEY_SEPARATOR,
+    );
+  }
+  return ["provider", selection.provider, selection.model ?? ""].join(KEY_SEPARATOR);
 }
 
 /** Return the config for a profile, merging its field values into the runtime env. */

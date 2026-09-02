@@ -290,15 +290,21 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   // Track which provider keys are configured; rebuild the agent on change so a
-  // newly-added key takes effect without reopening the panel.
+  // newly-added key takes effect without reopening the panel. Credentials are
+  // read when the agent is built, so the reset has to be explicit here — the
+  // profile effect below deliberately does nothing when the profile itself is
+  // unchanged. Skipped mid-run: reset() cancels the in-flight agent, and that
+  // cancellation is not user-initiated, so send()'s catch would surface it as
+  // an error turn and drop the reply.
   useEffect(() => {
     const onEnvChange = () => {
       setHasKey(hasProviderKey());
       setProviders(availableProviders());
+      if (!runningRef.current) session.reset();
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
-  }, []);
+  }, [session]);
 
   // When the default profile changes (user set a new default in Settings),
   // reset the "user explicitly chose" flag so the new default takes effect.
@@ -317,12 +323,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
   //
-  // Deferred while a response is streaming: setSelection resets the session,
-  // which cancels the in-flight agent. That cancellation is not user-initiated,
-  // so send()'s catch would surface it as an error turn and drop the reply. The
-  // panel dropdown is disabled while running, but Settings can still change the
-  // default profile, so guard here. `running` is a dependency, so the latest
-  // activeProfile is applied as soon as the run finishes.
+  // Deferred while a response is streaming: applying a *changed* profile resets
+  // the session, which cancels the in-flight agent. That cancellation is not
+  // user-initiated, so send()'s catch would surface it as an error turn and drop
+  // the reply. The panel dropdown is disabled while running, but Settings can
+  // still change the default profile, so guard here. `running` is a dependency,
+  // so the latest activeProfile is applied as soon as the run finishes — and it
+  // flips back to false after every turn, which re-runs this effect on turns
+  // where nothing changed. setSelection compares the selection by value and
+  // no-ops on those, which is what keeps the conversation history alive.
   useEffect(() => {
     if (running) return;
     session.setSelection(activeProfile ?? null);

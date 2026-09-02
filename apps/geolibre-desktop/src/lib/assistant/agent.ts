@@ -6,7 +6,7 @@ import {
   resolveProviderConfig,
   type AssistantProviderId,
 } from "./provider";
-import { configForProfile } from "./profiles";
+import { assistantSelectionKey, configForProfile } from "./profiles";
 import type { AssistantProfile } from "./provider";
 import { createAssistantTools, describeLayers, type AssistantToolDeps } from "./tools";
 
@@ -53,6 +53,12 @@ export class AssistantSession {
   private profile: AssistantProfile | null = null;
   /** Last layer context sent, so it is only re-sent when it actually changes. */
   private lastContext: string | null = null;
+  /**
+   * Value identity of the currently applied selection, so re-applying an
+   * equivalent one is a no-op. Starts as the key for `null` (auto-resolve),
+   * matching the initial `selection`/`profile` state above.
+   */
+  private selectionKey: string = assistantSelectionKey(null);
 
   constructor(private readonly deps: AssistantToolDeps) {}
 
@@ -65,11 +71,21 @@ export class AssistantSession {
    * Pin the provider/model (from the legacy UI picker) or pass a full
    * {@link AssistantProfile} for profile-based credential resolution.
    * Pass null to auto-resolve from the configured keys. Rebuilds the agent
-   * on the next prompt.
+   * on the next prompt, but only when the selection actually changed.
+   *
+   * Re-applying an equivalent selection must stay a no-op: callers re-run this
+   * whenever their inputs are recomputed, and resetting there would discard the
+   * conversation history this session exists to keep across {@link stream}
+   * calls. Equivalence is by value, not object identity, so a profile object
+   * rebuilt with the same provider, model, and credentials still matches.
    */
   setSelection(
     selection: { provider: AssistantProviderId; model?: string } | AssistantProfile | null,
   ): void {
+    const key = assistantSelectionKey(selection);
+    if (key === this.selectionKey) return;
+    this.selectionKey = key;
+
     if (selection && "fieldValues" in selection) {
       // Profile-based: store the full profile, clear the legacy selection.
       this.profile = selection;
