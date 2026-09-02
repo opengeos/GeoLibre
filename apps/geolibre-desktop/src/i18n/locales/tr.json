@@ -2084,7 +2084,6 @@
       "tokenHostInvalid": "Bu dağıtımın proje paylaşım sunucusu adresi geçersiz, bu nedenle bu belirteç kullanılamaz.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion belirteci",
-      "cesiumTokenDescription": "3B küre (bölünmüş görünümlü bir bölme) Cesium Ion dünya görüntüleri ve arazisini kullanır; bunlar bir erişim belirteci gerektirir. <tokenLink>ion.cesium.com/tokens</tokenLink> adresinde ücretsiz bir hesap oluşturun, varsayılan erişim belirtecinizi kopyalayın ve aşağıya yapıştırın. Belirteç olmadan 3B küre anahtarı gizlenir.",
       "cesiumTokenStorageNote": "Bu cihazda yerel olarak saklanır (proje dosyasında değil, bu nedenle asla paylaşılmaz) ve yalnızca Cesium Ion'a gönderilir. Web derlemesinde diğer site verileriyle aynı tarayıcı deposunu paylaşır.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Ortam değişkenleri",

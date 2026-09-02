@@ -437,8 +437,9 @@ and every guard below blocks one of them.
 Each stripped credential resolves through `getRuntimeEnvironment()`, which
 overlays `window.__GEOLIBRE_RUNTIME_ENV__` from Settings → Environment variables.
 So a wheel user supplies their own token and the affected surfaces degrade as
-documented: Mapbox prompts in the basemap API-keys view, the 3D globe is not
-offered, Protomaps basemaps are hidden.
+documented: Mapbox prompts in the basemap API-keys view, the 3D globe loses
+terrain and Ion imagery (the pane itself still works), Protomaps basemaps are
+hidden.
 
 ### The scan
 

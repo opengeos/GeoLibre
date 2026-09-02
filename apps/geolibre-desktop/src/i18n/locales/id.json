@@ -2040,7 +2040,6 @@
       "tokenHostInvalid": "Alamat server pembagian proyek pada penerapan ini tidak valid, sehingga token ini tidak dapat digunakan.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token Cesium Ion",
-      "cesiumTokenDescription": "Bola dunia 3D (panel tampilan terpisah) menggunakan citra dan medan dunia Cesium Ion, yang memerlukan token akses. Buat akun gratis di <tokenLink>ion.cesium.com/tokens</tokenLink>, salin token akses default Anda, dan tempelkan di bawah. Tanpa token, tombol bola dunia 3D disembunyikan.",
       "cesiumTokenStorageNote": "Disimpan secara lokal di perangkat ini (bukan dalam file proyek, sehingga tidak pernah dibagikan) dan hanya dikirim ke Cesium Ion. Pada build web, token ini berbagi penyimpanan browser yang sama dengan data situs lainnya.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Variabel lingkungan",

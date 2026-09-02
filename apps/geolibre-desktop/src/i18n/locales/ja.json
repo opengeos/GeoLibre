@@ -2040,7 +2040,6 @@
       "tokenHostInvalid": "このデプロイのプロジェクト共有サーバーのアドレスが無効なため、このトークンは使用できません。",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ionトークン",
-      "cesiumTokenDescription": "3Dグローブ(分割表示ペイン)はCesium Ionの世界衛星画像と地形データを使用しており、アクセストークンが必要です。<tokenLink>ion.cesium.com/tokens</tokenLink> で無料アカウントを作成し、デフォルトのアクセストークンをコピーして下に貼り付けてください。トークンがない場合、3Dグローブの切り替えは表示されません。",
       "cesiumTokenStorageNote": "このデバイスにローカルで保存され(プロジェクトファイルには保存されないため、共有されることはありません)、Cesium Ionにのみ送信されます。Webビルドでは他のサイトデータと同じブラウザストレージを共有します。",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "環境変数",

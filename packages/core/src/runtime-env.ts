@@ -152,13 +152,16 @@ export function getMapboxAccessToken(env?: Record<string, string | undefined>): 
 /**
  * Resolves the Cesium Ion access token from the runtime environment.
  *
- * The 3D-globe view's world imagery and terrain need a Cesium Ion token. It is
+ * Cesium World Terrain and Ion World Imagery need a Cesium Ion token. It is
  * supplied via `VITE_CESIUM_TOKEN` (baked in at build time from the bare
  * `CESIUM_TOKEN` env var, which `vite.config.ts` copies into the prefixed name)
  * or set at runtime through Settings → Environment variables
  * (`window.__GEOLIBRE_RUNTIME_ENV__`, which bypasses Vite's envPrefix allowlist,
- * so a bare `CESIUM_TOKEN` entry works there too). When unset, the globe cannot
- * render and the 3D view is not offered.
+ * so a bare `CESIUM_TOKEN` entry works there too).
+ *
+ * The 3D-globe view itself does **not** need one: it draws the project basemap
+ * as its base imagery (see {@link basemapToCesiumImagery}), so an absent token
+ * costs terrain and the Ion imagery fallback, not the view.
  *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.

@@ -2040,7 +2040,6 @@
       "tokenHostInvalid": "此部署的项目共享服务器地址无效，因此无法使用此令牌。",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion 令牌",
-      "cesiumTokenDescription": "3D 地球（分屏视图窗格）使用 Cesium Ion 的世界影像和地形数据，需要访问令牌。请在 <tokenLink>ion.cesium.com/tokens</tokenLink> 创建免费账户，复制您的默认访问令牌，并粘贴到下方。若无令牌，3D 地球切换开关将被隐藏。",
       "cesiumTokenStorageNote": "仅存储在本设备上（不存储在项目文件中，因此永远不会被共享），并且仅发送到 Cesium Ion。在 Web 版本中，它与其他站点数据共用同一浏览器存储。",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "环境变量",

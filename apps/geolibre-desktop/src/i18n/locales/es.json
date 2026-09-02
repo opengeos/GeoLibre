@@ -2084,7 +2084,6 @@
       "tokenHostInvalid": "La dirección del servidor para compartir proyectos de esta implementación no es válida, por lo que este token no se puede usar.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token de Cesium Ion",
-      "cesiumTokenDescription": "El globo 3D (un panel de vista dividida) usa imágenes y terreno mundiales de Cesium Ion, que necesitan un token de acceso. Cree una cuenta gratuita en <tokenLink>ion.cesium.com/tokens</tokenLink>, copie su token de acceso predeterminado y péguelo a continuación. Sin un token, el interruptor del globo 3D permanece oculto.",
       "cesiumTokenStorageNote": "Se almacena localmente en este dispositivo (no en el archivo del proyecto, así que nunca se comparte) y solo se envía a Cesium Ion. En la compilación web, comparte el mismo almacenamiento del navegador que otros datos del sitio.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Variables de entorno",

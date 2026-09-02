@@ -2084,7 +2084,6 @@
       "tokenHostInvalid": "Die Adresse des Servers zum Teilen von Projekten in dieser Bereitstellung ist ungültig, daher kann dieses Token nicht verwendet werden.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium-Ion-Token",
-      "cesiumTokenDescription": "Der 3D-Globus (ein geteiltes Ansichtsfenster) verwendet Cesium-Ion-Weltbilder und -Gelände, wofür ein Zugriffstoken erforderlich ist. Erstellen Sie ein kostenloses Konto unter <tokenLink>ion.cesium.com/tokens</tokenLink>, kopieren Sie Ihr Standard-Zugriffstoken und fügen Sie es unten ein. Ohne Token ist der 3D-Globus-Umschalter ausgeblendet.",
       "cesiumTokenStorageNote": "Wird lokal auf diesem Gerät gespeichert (nicht in der Projektdatei, sodass es nie geteilt wird) und nur an Cesium Ion gesendet. Im Web-Build nutzt es denselben Browser-Speicher wie andere Website-Daten.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Umgebungsvariablen",

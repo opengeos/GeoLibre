@@ -2050,7 +2050,6 @@
       "errorNamePattern": "Tên biến môi trường phải bắt đầu bằng một chữ cái hoặc dấu gạch dưới và chỉ chứa các chữ cái, số và dấu gạch dưới.",
       "errorDuplicate": "Biến môi trường \"{{name}}\" bị trùng lặp.",
       "stripPromptTitle": "Xóa thông tin đăng nhập?",
-      "cesiumTokenDescription": "Quả địa cầu 3D (khung xem chia đôi) sử dụng hình ảnh và địa hình thế giới Caesium Ion, cần có mã thông báo truy cập. Tạo một tài khoản miễn phí tại <tokenLink>ion.cesium.com/tokens</tokenLink>, sao chép mã thông báo truy cập mặc định của bạn và dán vào bên dưới. Nếu không có mã thông báo, nút chuyển đổi hình ảnh địa cầu 3D sẽ bị ẩn.",
       "cesiumTokenStorageNote": "Được lưu trữ cục bộ trên thiết bị này (không có trong tệp dự án, vì vậy nó không bao giờ được chia sẻ) và chỉ được gửi tới Caesium Ion. Trên bản dựng web, nó chia sẻ cùng bộ lưu trữ trình duyệt với dữ liệu trang web khác.",
       "cesiumTokenPlaceholder": "Giá trị biến",
       "variablesTitle": "Biến môi trường",

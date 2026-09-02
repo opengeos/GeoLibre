@@ -2084,7 +2084,6 @@
       "tokenHostInvalid": "Het adres van de server voor het delen van projecten in deze implementatie is ongeldig, dus dit token kan niet worden gebruikt.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion-token",
-      "cesiumTokenDescription": "De 3D-globe (een gesplitst weergavepaneel) gebruikt wereldbeelden en terrein van Cesium Ion, waarvoor een toegangstoken nodig is. Maak een gratis account aan op <tokenLink>ion.cesium.com/tokens</tokenLink>, kopieer uw standaard toegangstoken en plak het hieronder. Zonder token is de schakelaar voor de 3D-globe verborgen.",
       "cesiumTokenStorageNote": "Lokaal opgeslagen op dit apparaat (niet in het projectbestand, dus nooit gedeeld) en alleen verzonden naar Cesium Ion. In de webversie wordt dezelfde browseropslag gebruikt als voor andere sitegegevens.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Omgevingsvariabelen",
