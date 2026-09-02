@@ -1187,12 +1187,20 @@ export default defineConfig({
       // CJS→ESM interop to its CommonJS transitive deps (e.g. mersenne-twister,
       // which has no ESM entry): without this, the dev server serves those raw
       // and the `import x from "mersenne-twister"` default import throws. It is
-      // reached only through the lazy `import("cesium")` in CesiumCanvas, so
-      // without pre-bundling Vite would also discover it on first open and do a
-      // full-page reload to re-optimize. Cesium locates its Workers/Assets via
-      // the CESIUM_BASE_URL global (never `import.meta.url`), so pre-bundling
-      // does not mangle any asset reference.
-      "cesium",
+      // reached only through the lazy `import("@cesium/engine")` in
+      // CesiumCanvas, so without pre-bundling Vite would also discover it on
+      // first open and do a full-page reload to re-optimize. Cesium locates its
+      // Workers/Assets via the CESIUM_BASE_URL global (never
+      // `import.meta.url`), so pre-bundling does not mangle any asset
+      // reference.
+      //
+      // This must name the same specifier the globe imports. It used to be the
+      // `cesium` wrapper; that package is still a dependency for its prebuilt
+      // Workers/Assets (see copy-cesium-assets.ts) but nothing imports it as a
+      // module any more, so pre-bundling it would optimize the wrong graph and
+      // leave `@cesium/engine` to be discovered on first open — the full-page
+      // reload this list exists to prevent.
+      "@cesium/engine",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
