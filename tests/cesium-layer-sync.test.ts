@@ -175,6 +175,42 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.dataSourcesAdded.length, 1);
   });
 
+  it("renders every non-tile layer carrying GeoJSON through the GeoJSON path", async () => {
+    const sync = newSync(f);
+    const types = ["flatgeobuf", "geoparquet", "duckdb-query", "arcgis"] as const;
+    const layers = types.map((type, index) =>
+      mkLayer({
+        id: `geojson-backed-${index}`,
+        type,
+        geojson: { type: "FeatureCollection", features: [{}] } as never,
+      }),
+    );
+
+    sync.sync(layers);
+    await f.flush();
+
+    assert.equal(f.calls.geojsonLoads.length, types.length);
+    assert.equal(f.calls.dataSourcesAdded.length, types.length);
+    for (const layer of layers) assert.equal(isCesiumSupportedLayerType(layer), true, layer.type);
+  });
+
+  it("keeps vector-tile layers 2D-only even if they carry incidental GeoJSON", async () => {
+    const sync = newSync(f);
+    const layers = ["vector-tiles", "pmtiles"].map((type, index) =>
+      mkLayer({
+        id: `vector-tiles-${index}`,
+        type: type as "vector-tiles" | "pmtiles",
+        geojson: { type: "FeatureCollection", features: [{}] } as never,
+      }),
+    );
+
+    sync.sync(layers);
+    await f.flush();
+
+    assert.equal(f.calls.geojsonLoads.length, 0);
+    for (const layer of layers) assert.equal(isCesiumSupportedLayerType(layer), false, layer.type);
+  });
+
   it("skips a geojson layer with no features", async () => {
     const sync = newSync(f);
     sync.sync([

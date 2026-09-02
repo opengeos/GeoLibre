@@ -3,7 +3,8 @@ import type { Cesium3DTileset, CesiumWidget, DataSource, ImageryLayer } from "@c
 
 // Reconciles the store's `GeoLibreLayer[]` onto a Cesium globe, mirroring what
 // MapController.syncLayers does for MapLibre. M3 covers the layer kinds where
-// Cesium is the natural renderer: GeoJSON (as a draped GeoJsonDataSource), XYZ /
+// Cesium is the natural renderer: GeoJSON-backed data (as a draped
+// GeoJsonDataSource), XYZ /
 // WMS / WMTS / raster tiles (as ImageryLayers), and 3D Tiles (as a
 // Cesium3DTileset). Other kinds are skipped on the globe (they still render in
 // the 2D panes); the exported `isCesiumSupportedLayerType` lets the UI flag them.
@@ -16,6 +17,7 @@ type CesiumNs = typeof import("@cesium/engine");
 
 /** Layer kinds this pass renders on the globe. */
 const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts"]);
+const VECTOR_TILE_TYPES = new Set(["vector-tiles", "pmtiles"]);
 
 type EntryKind = "imagery" | "geojson" | "3dtiles";
 
@@ -44,19 +46,29 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
   return str(layer.source.url) ?? str(layer.sourcePath);
 }
 
+function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
+  return !VECTOR_TILE_TYPES.has(layer.type) && Boolean(layer.geojson?.features?.length);
+}
+
 /**
  * Whether the globe can render this layer *kind* at all (regardless of whether
  * its data has loaded yet). Exported so the UI can flag "2D only" layers on a
  * globe pane. See the module header for the supported kinds.
  */
 export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
-  return layer.type === "geojson" || layer.type === "3d-tiles" || IMAGERY_TYPES.has(layer.type);
+  return (
+    hasRenderableGeoJson(layer) ||
+    layer.type === "geojson" ||
+    layer.type === "3d-tiles" ||
+    IMAGERY_TYPES.has(layer.type)
+  );
 }
 
 /** Whether this layer can render on the globe now (kind supported + data ready). */
 function isSupported(layer: GeoLibreLayer): boolean {
   if (!isCesiumSupportedLayerType(layer)) return false;
-  if (layer.type === "geojson") return Boolean(layer.geojson?.features?.length);
+  if (hasRenderableGeoJson(layer)) return true;
+  if (layer.type === "geojson") return false;
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
   // Mirror createImagery's real capability: WMS builds from source.url, but
   // xyz/raster/wmts need a tile template — a url alone would render nothing.
@@ -64,7 +76,7 @@ function isSupported(layer: GeoLibreLayer): boolean {
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
-  if (layer.type === "geojson") return "geojson";
+  if (hasRenderableGeoJson(layer)) return "geojson";
   if (layer.type === "3d-tiles") return "3dtiles";
   return "imagery";
 }
