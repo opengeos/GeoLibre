@@ -10,7 +10,12 @@ import {
 import type { ImageryLayer, Viewer } from "cesium";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
-import { applyMapViewToCamera, isSameView, readMapViewFromCamera } from "./cesium-camera";
+import {
+  applyMapViewToCamera,
+  groundHeightAt,
+  isSameView,
+  readMapViewFromCamera,
+} from "./cesium-camera";
 import { CesiumLayerSync } from "./cesium-layer-sync";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
@@ -83,6 +88,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // moveEnd with a (rounding-drifted) echo of that same view; comparing against
   // this lets the moveEnd handler tell a real user move from that echo.
   const lastAppliedRef = useRef<MapViewState | null>(null);
+  // Ground height (metres) the last applyView placed the camera against. Terrain
+  // streams in after the camera is positioned, so the first apply over a new
+  // area sees height 0; comparing against this tells a settled terrain load
+  // whether the camera now needs correcting.
+  const lastGroundHeightRef = useRef(0);
   // Set by real pointer/wheel/touch input on the globe canvas and consumed by
   // the moveEnd handler. Cesium's camera.moveEnd carries no user-driven flag
   // (unlike MapLibre's moveend.originalEvent), so this stands in for it: an
@@ -195,6 +205,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
     const viewer = viewerRef.current;
     if (!Cesium || !viewer || viewer.isDestroyed()) return;
     lastAppliedRef.current = view;
+    lastGroundHeightRef.current = groundHeightAt(Cesium, viewer, view.center[0], view.center[1]);
     applyMapViewToCamera(Cesium, viewer, view);
   }
 
@@ -308,6 +319,23 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         // imagery stack rather than having to be lowered past the data layers.
         applyBasemap();
         layerSyncRef.current?.sync(paneLayersRef.current);
+
+        // Terrain arrives after the camera is placed, and the ground height is
+        // what turns MapLibre's zoom into a camera distance. Until the tiles for
+        // the view land, `groundHeightAt` reports 0 and the camera is positioned
+        // against the ellipsoid — over Las Vegas that renders ~2× too close at
+        // zoom 15. Re-apply once the queue drains and the height has actually
+        // changed, so the globe settles onto the real surface. The guard makes
+        // this a no-op without terrain (height stays 0) and stops it recursing:
+        // the re-apply's own load settles at the same height.
+        viewer.scene.globe.tileLoadProgressEvent.addEventListener((queued: number) => {
+          const ns = cesiumRef.current;
+          const view = lastAppliedRef.current;
+          if (queued > 0 || !ns || !view || viewer.isDestroyed()) return;
+          const height = groundHeightAt(ns, viewer, view.center[0], view.center[1]);
+          if (Math.abs(height - lastGroundHeightRef.current) < 1) return;
+          applyView(view);
+        });
 
         // Mirror a user's globe navigation back into the shared camera. Echoes
         // of our own applyView are filtered by the isSameView guard.

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MapViewState } from "../packages/core/src/types";
 import {
+  applyMapViewToCamera,
   cesiumPitchToMapLibreDeg,
+  groundHeightAt,
   groundResolution,
   isSameView,
   mapLibrePitchToCesiumDeg,
@@ -142,5 +144,115 @@ describe("isSameView", () => {
       isSameView({ ...base, center: [179.9, 40] }, { ...base, center: [-179.9, 40] }),
       false,
     );
+  });
+});
+
+// --- terrain-aware camera placement -----------------------------------------
+// Zoom is encoded as the camera's distance from the ground, so on a terrain
+// globe the look-at target has to sit on the terrain. Aiming at the ellipsoid
+// under 640 m of Las Vegas put the camera 640 m closer to the surface than the
+// zoom asked for — a >2x scale mismatch against the 2D pane at zoom 15.
+
+/** A fake Cesium namespace + viewer recording what the camera was told to do. */
+function makeCameraFakes(terrainHeight: number | undefined) {
+  const calls = {
+    target: null as { lng: number; lat: number; height?: number } | null,
+    range: 0,
+  };
+
+  const viewer = {
+    scene: {
+      canvas: { clientWidth: 600, clientHeight: HEIGHT, width: 600, height: HEIGHT },
+      globe: {
+        // Cesium returns undefined until the tiles for the position have loaded.
+        getHeight: () => terrainHeight,
+      },
+    },
+    camera: {
+      frustum: { fovy: FOVY },
+      lookAt: (_target: unknown, hpr: { range: number }) => {
+        calls.range = hpr.range;
+      },
+      lookAtTransform: () => {},
+    },
+  };
+
+  const Cesium = {
+    Math: { toRadians: (d: number) => (d * Math.PI) / 180, toDegrees: (r: number) => r },
+    Cartesian3: {
+      fromDegrees: (lng: number, lat: number, height?: number) => {
+        calls.target = { lng, lat, height };
+        return { lng, lat, height };
+      },
+    },
+    Cartographic: { fromDegrees: (lng: number, lat: number) => ({ lng, lat }) },
+    HeadingPitchRange: class {
+      range: number;
+      constructor(_heading: number, _pitch: number, range: number) {
+        this.range = range;
+      }
+    },
+    Matrix4: { IDENTITY: {} },
+  };
+
+  return {
+    calls,
+    viewer: viewer as unknown as Parameters<typeof applyMapViewToCamera>[1],
+    Cesium: Cesium as unknown as Parameters<typeof applyMapViewToCamera>[0],
+  };
+}
+
+const LAS_VEGAS: MapViewState = {
+  center: [-115.2037, 36.1207],
+  zoom: 14.86,
+  bearing: 0,
+  pitch: 0,
+};
+
+describe("groundHeightAt", () => {
+  it("reports the loaded terrain height", () => {
+    const { Cesium, viewer } = makeCameraFakes(640);
+    assert.equal(groundHeightAt(Cesium, viewer, -115.2, 36.12), 640);
+  });
+
+  it("falls back to the ellipsoid before the terrain tiles load", () => {
+    // Globe.getHeight returns undefined for a position with no loaded tile.
+    const { Cesium, viewer } = makeCameraFakes(undefined);
+    assert.equal(groundHeightAt(Cesium, viewer, -115.2, 36.12), 0);
+  });
+
+  it("falls back to the ellipsoid when the scene has no globe", () => {
+    const { Cesium, viewer } = makeCameraFakes(0);
+    const noGlobe = { ...viewer, scene: { ...viewer.scene, globe: undefined } };
+    assert.equal(
+      groundHeightAt(Cesium, noGlobe as unknown as typeof viewer, -115.2, 36.12),
+      0,
+    );
+  });
+});
+
+describe("applyMapViewToCamera on terrain", () => {
+  it("aims at the terrain surface, not the ellipsoid beneath it", () => {
+    const { Cesium, viewer, calls } = makeCameraFakes(640);
+    applyMapViewToCamera(Cesium, viewer, LAS_VEGAS);
+    assert.equal(calls.target?.height, 640);
+  });
+
+  it("keeps the range the zoom asks for regardless of terrain height", () => {
+    // The range is the distance from the target; raising the target is what
+    // keeps the camera that far above the *ground* rather than the ellipsoid.
+    const flat = makeCameraFakes(0);
+    applyMapViewToCamera(flat.Cesium, flat.viewer, LAS_VEGAS);
+    const high = makeCameraFakes(640);
+    applyMapViewToCamera(high.Cesium, high.viewer, LAS_VEGAS);
+
+    assert.equal(high.calls.range, flat.calls.range);
+    assert.equal(high.calls.range, zoomToRange(LAS_VEGAS.zoom, LAS_VEGAS.center[1], HEIGHT, FOVY));
+  });
+
+  it("targets height 0 when terrain has not loaded yet", () => {
+    const { Cesium, viewer, calls } = makeCameraFakes(undefined);
+    applyMapViewToCamera(Cesium, viewer, LAS_VEGAS);
+    assert.equal(calls.target?.height, 0);
   });
 });

@@ -83,6 +83,55 @@ function canvasHeight(viewer: Viewer): number {
 }
 
 /**
+ * Height (metres) of the rendered ground at a position — the terrain surface
+ * when terrain is on and its tiles have loaded, otherwise 0 (the ellipsoid).
+ *
+ * This is what makes the scale match on a terrain globe. Zoom is encoded as the
+ * camera's distance from the ground, so measuring that distance to the
+ * *ellipsoid* while the ground is 600 m higher puts the camera 600 m closer to
+ * what the user actually sees than intended. The error is the ratio
+ * `range / (range - groundHeight)`: invisible when the camera is far out, and
+ * runaway as `range` approaches the terrain height — over Las Vegas (~640 m) it
+ * passes 2× at around zoom 15.
+ *
+ * `Globe.getHeight` reads already-loaded tiles and is synchronous, so this stays
+ * cheap enough for the camera path; it returns undefined until the tiles for the
+ * area arrive, which is why {@link CesiumCanvas} re-applies once terrain settles.
+ */
+export function groundHeightAt(
+  Cesium: typeof import("cesium"),
+  viewer: Viewer,
+  lngDeg: number,
+  latDeg: number,
+): number {
+  const globe = viewer.scene.globe;
+  if (!globe) return 0;
+  const height = globe.getHeight(Cesium.Cartographic.fromDegrees(lngDeg, latDeg));
+  return typeof height === "number" && Number.isFinite(height) ? height : 0;
+}
+
+/**
+ * The point on the globe under a screen position: the terrain surface when
+ * terrain is loaded, else the ellipsoid, else undefined when the ray misses the
+ * globe entirely (the horizon is in view). Mirrors {@link groundHeightAt} on the
+ * readback side so a view survives the apply → read round trip unchanged.
+ */
+function pickGlobe(
+  Cesium: typeof import("cesium"),
+  viewer: Viewer,
+  position: { x: number; y: number },
+) {
+  const { scene, camera } = viewer;
+  const ray = camera.getPickRay(position as Parameters<typeof camera.getPickRay>[0]);
+  const onTerrain = ray && scene.globe ? scene.globe.pick(ray, scene) : undefined;
+  if (onTerrain) return onTerrain;
+  return camera.pickEllipsoid(
+    position as Parameters<typeof camera.pickEllipsoid>[0],
+    scene.globe?.ellipsoid ?? Cesium.Ellipsoid.WGS84,
+  );
+}
+
+/**
  * Point a viewer's camera at the map center described by `view`, matching
  * MapLibre's scale, bearing, and pitch. Requires the Cesium namespace so this
  * module stays free of a runtime Cesium import.
@@ -96,7 +145,10 @@ export function applyMapViewToCamera(
   const range = Math.max(zoomToRange(view.zoom, lat, canvasHeight(viewer), cameraFovy(viewer)), 1);
   const heading = Cesium.Math.toRadians(normalizeBearing(view.bearing));
   const pitch = Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(view.pitch));
-  const target = Cesium.Cartesian3.fromDegrees(lng, lat);
+  // Aim at the ground, not the ellipsoid beneath it: `range` is the distance
+  // that encodes MapLibre's zoom, so on a terrain globe the target has to sit on
+  // the terrain or the pane renders far more zoomed in than its 2D twin.
+  const target = Cesium.Cartesian3.fromDegrees(lng, lat, groundHeightAt(Cesium, viewer, lng, lat));
   // lookAt orients the camera in the target's local frame; resetting the
   // transform to identity hands control back for free user navigation.
   viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(heading, pitch, range));
@@ -120,7 +172,10 @@ export function readMapViewFromCamera(
   const ellipsoid = scene.globe?.ellipsoid ?? Cesium.Ellipsoid.WGS84;
 
   const centerPx = new Cesium.Cartesian2(width / 2, height / 2);
-  const groundPoint = camera.pickEllipsoid(centerPx, ellipsoid);
+  // Pick the terrain, not the ellipsoid, so the range read back is the same
+  // ground distance applyMapViewToCamera set — otherwise a terrain globe reads
+  // back a zoom that disagrees with the one just applied and the panes drift.
+  const groundPoint = pickGlobe(Cesium, viewer, centerPx);
 
   let lng: number;
   let lat: number;
@@ -131,6 +186,8 @@ export function readMapViewFromCamera(
     lat = Cesium.Math.toDegrees(carto.latitude);
     range = Cesium.Cartesian3.distance(camera.positionWC, groundPoint);
   } else {
+    // Horizon in view. The camera is thousands of kilometres out here, so the
+    // ellipsoid height is close enough and terrain is not worth sampling.
     const carto = camera.positionCartographic;
     lng = Cesium.Math.toDegrees(carto.longitude);
     lat = Cesium.Math.toDegrees(carto.latitude);
