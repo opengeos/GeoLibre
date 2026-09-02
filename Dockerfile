@@ -25,6 +25,8 @@ WORKDIR /app
 # layer is cached. Adding a new package under apps/ or packages/ requires
 # adding its package.json here, or npm ci fails with a missing workspace.
 COPY package.json package-lock.json ./
+COPY patches patches
+COPY scripts/apply-dependency-patches.mjs scripts/apply-dependency-patches.mjs
 COPY apps/geolibre-desktop/package.json apps/geolibre-desktop/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/collab-core/package.json packages/collab-core/package.json

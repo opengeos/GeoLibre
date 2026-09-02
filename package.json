@@ -9,7 +9,7 @@
     "workers/*"
   ],
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "node scripts/apply-dependency-patches.mjs",
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
     "lite:build": "node scripts/lite-build.mjs",
@@ -46,7 +46,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "linkedom": "^0.18.13",
-    "patch-package": "^8.0.1",
     "tsx": "^4.23.12",
     "typescript-eslint": "^8.68.0"
   },
@@ -79,5 +78,8 @@
     "protobufjs",
     "sharp",
     "workerd"
-  ]
+  ],
+  "dependencies": {
+    "patch-package": "^8.0.1"
+  }
 }

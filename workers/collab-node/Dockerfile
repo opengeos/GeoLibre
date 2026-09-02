@@ -1,6 +1,8 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY patches patches
+COPY scripts/apply-dependency-patches.mjs scripts/apply-dependency-patches.mjs
 COPY packages/collab-core/package.json packages/collab-core/package.json
 COPY workers/collab-node/package.json workers/collab-node/package.json
 RUN npm ci --workspace geolibre-collab-node --workspace @geolibre/collab-core
