@@ -196,10 +196,10 @@ describe("CesiumLayerSync", () => {
 
   it("keeps vector-tile layers 2D-only even if they carry incidental GeoJSON", async () => {
     const sync = newSync(f);
-    const layers = ["vector-tiles", "pmtiles"].map((type, index) =>
+    const layers = ["vector-tiles", "pmtiles", "mbtiles"].map((type, index) =>
       mkLayer({
         id: `vector-tiles-${index}`,
-        type: type as "vector-tiles" | "pmtiles",
+        type: type as "vector-tiles" | "pmtiles" | "mbtiles",
         geojson: { type: "FeatureCollection", features: [{}] } as never,
       }),
     );
@@ -211,11 +211,38 @@ describe("CesiumLayerSync", () => {
     for (const layer of layers) assert.equal(isCesiumSupportedLayerType(layer), false, layer.type);
   });
 
+  it("keeps specialized non-GeoJSON layer kinds out of the plain GeoJSON path", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      type: "deckgl-viz",
+      geojson: { type: "FeatureCollection", features: [{}] } as never,
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    assert.equal(f.calls.geojsonLoads.length, 0);
+    assert.equal(isCesiumSupportedLayerType(layer), false);
+  });
+
   it("skips a geojson layer with no features", async () => {
     const sync = newSync(f);
     sync.sync([
       mkLayer({ type: "geojson", geojson: { type: "FeatureCollection", features: [] } as never }),
     ]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 0);
+  });
+
+  it("classifies empty GeoJSON-backed kinds as supported but not ready to render", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      type: "flatgeobuf",
+      geojson: { type: "FeatureCollection", features: [] } as never,
+    });
+
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+    sync.sync([layer]);
     await f.flush();
     assert.equal(f.calls.geojsonLoads.length, 0);
   });

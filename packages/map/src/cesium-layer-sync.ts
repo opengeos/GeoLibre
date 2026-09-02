@@ -17,7 +17,13 @@ type CesiumNs = typeof import("@cesium/engine");
 
 /** Layer kinds this pass renders on the globe. */
 const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts"]);
-const VECTOR_TILE_TYPES = new Set(["vector-tiles", "pmtiles"]);
+const GEOJSON_BACKED_TYPES = new Set([
+  "geojson",
+  "flatgeobuf",
+  "geoparquet",
+  "duckdb-query",
+  "arcgis",
+]);
 
 type EntryKind = "imagery" | "geojson" | "3dtiles";
 
@@ -47,7 +53,7 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
 }
 
 function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
-  return !VECTOR_TILE_TYPES.has(layer.type) && Boolean(layer.geojson?.features?.length);
+  return GEOJSON_BACKED_TYPES.has(layer.type) && Boolean(layer.geojson?.features?.length);
 }
 
 /**
@@ -57,8 +63,7 @@ function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
  */
 export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   return (
-    hasRenderableGeoJson(layer) ||
-    layer.type === "geojson" ||
+    GEOJSON_BACKED_TYPES.has(layer.type) ||
     layer.type === "3d-tiles" ||
     IMAGERY_TYPES.has(layer.type)
   );
