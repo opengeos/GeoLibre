@@ -81,12 +81,6 @@ test.describe("Cesium as the primary rendering engine", () => {
     // empty error region is what distinguishes "mounted" from "threw".
     await expect(globe.getByText(/CESIUM_BASE_URL|Cannot read|undefined|failed/i)).toHaveCount(0);
 
-    // The MapLibre-only tools are not mounted while the globe draws the
-    // workspace, so say so rather than leaving their absence unexplained.
-    await expect(
-      globe.getByText("3D globe renderer — tools that need the 2D map are unavailable"),
-    ).toBeVisible();
-
     // The project is untouched by the swap: the layer is still there, and the
     // camera the user left the 2D map on is the one the globe seeded from.
     await expect(layerRow(page, "cities")).toBeVisible();

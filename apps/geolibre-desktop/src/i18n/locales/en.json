@@ -1846,7 +1846,6 @@
     "cesiumTokenHint": "Add a Cesium Ion token in Settings for terrain and Ion imagery"
   },
   "renderer": {
-    "cesiumPrimaryNotice": "3D globe renderer — tools that need the 2D map are unavailable",
     "layerUnsupported": "Not rendered by the 3D globe"
   },
   "mapContextMenu": {

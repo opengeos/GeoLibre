@@ -12,7 +12,7 @@ import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
  *
  * It renders no `MapController`, so the MapLibre-only overlays (context menu,
  * legend, comments, story map, terrain, the ML panels) are not mounted beside
- * it. The notice below says so rather than leaving their absence unexplained.
+ * it, and the View menu greys out the items that drive one.
  */
 export function PrimaryCesiumCanvas() {
   const { t } = useTranslation();
@@ -25,24 +25,15 @@ export function PrimaryCesiumCanvas() {
           creation, so without a remount a swapped token would never take
           effect. Mirrors the globe panes in MapGrid. */}
       <CesiumCanvas key={ionToken} ionToken={ionToken} />
-      {/* Bottom-start would collide with Cesium's own credit display, and the
-          top edge carries the pane label in a multi-pane grid, so both notices
-          stack up from the bottom-end corner. */}
-      <div className="pointer-events-none absolute bottom-2 end-2 z-10 flex max-w-[70%] flex-col items-end gap-1">
-        <div
-          role="status"
-          className="rounded-md border border-input map-glass px-2 py-1 text-xs text-muted-foreground shadow-sm"
-        >
-          {t("renderer.cesiumPrimaryNotice")}
+      {/* The globe works without an Ion token — it draws the project basemap —
+          so say what a token would add rather than hiding the view. Bottom-end
+          keeps it clear of Cesium's own credit display (bottom-left) and of the
+          pane label along the top, matching the globe panes in MapGrid. */}
+      {ionToken ? null : (
+        <div className="pointer-events-none absolute bottom-2 end-2 z-10 max-w-[70%] truncate rounded-md border border-input map-glass px-2 py-1 text-xs text-muted-foreground shadow-sm">
+          {t("mapGrid.cesiumTokenHint")}
         </div>
-        {/* The globe works without an Ion token — it draws the project basemap
-            — so say what a token would add rather than hiding the view. */}
-        {ionToken ? null : (
-          <div className="truncate rounded-md border border-input map-glass px-2 py-1 text-xs text-muted-foreground shadow-sm">
-            {t("mapGrid.cesiumTokenHint")}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
