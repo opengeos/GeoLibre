@@ -148,6 +148,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const promptDraftRef = useRef("");
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
+  // A runtime credential change that arrived mid-run, deferred because reset()
+  // would cancel the in-flight agent. Flushed when the run finishes.
+  const envResetPendingRef = useRef(false);
   // Generation that was stopped (0 = none), so a stopped run's rejection isn't
   // shown as an error even after a newer send has started.
   const cancelledGenerationRef = useRef(0);
@@ -293,18 +296,35 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // newly-added key takes effect without reopening the panel. Credentials are
   // read when the agent is built, so the reset has to be explicit here — the
   // profile effect below deliberately does nothing when the profile itself is
-  // unchanged. Skipped mid-run: reset() cancels the in-flight agent, and that
-  // cancellation is not user-initiated, so send()'s catch would surface it as
-  // an error turn and drop the reply.
+  // unchanged, and would leave the agent on the superseded key.
+  //
+  // Deferred rather than dropped while a response is streaming: reset() cancels
+  // the in-flight agent, and that cancellation is not user-initiated, so send()'s
+  // catch would surface it as an error turn and drop the reply. The effect below
+  // flushes the deferred reset once the run finishes.
   useEffect(() => {
     const onEnvChange = () => {
       setHasKey(hasProviderKey());
       setProviders(availableProviders());
-      if (!runningRef.current) session.reset();
+      if (runningRef.current) {
+        envResetPendingRef.current = true;
+        return;
+      }
+      session.reset();
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
   }, [session]);
+
+  // Flush a credential change that arrived mid-run, now that the run is over.
+  // Nothing else would: the profile effect below no-ops when the profile itself
+  // is unchanged, so without this the agent would keep serving the superseded
+  // key until some later env change or profile switch happened to reset it.
+  useEffect(() => {
+    if (running || !envResetPendingRef.current) return;
+    envResetPendingRef.current = false;
+    session.reset();
+  }, [running, session]);
 
   // When the default profile changes (user set a new default in Settings),
   // reset the "user explicitly chose" flag so the new default takes effect.

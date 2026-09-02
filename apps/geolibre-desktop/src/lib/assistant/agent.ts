@@ -1,12 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import { Agent } from "@strands-agents/sdk";
+import { configForProvider, createModel, resolveProviderConfig } from "./provider";
 import {
-  configForProvider,
-  createModel,
-  resolveProviderConfig,
-  type AssistantProviderId,
-} from "./provider";
-import { assistantSelectionKey, configForProfile } from "./profiles";
+  assistantSelectionKey,
+  configForProfile,
+  type AssistantProviderSelection,
+} from "./profiles";
 import type { AssistantProfile } from "./provider";
 import { createAssistantTools, describeLayers, type AssistantToolDeps } from "./tools";
 
@@ -43,7 +42,7 @@ export type AssistantStreamEvent =
 export class AssistantSession {
   private agent: Agent | null = null;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
-  private selection: { provider: AssistantProviderId; model?: string } | null = null;
+  private selection: AssistantProviderSelection | null = null;
   /**
    * When set, the user chose a named profile from Settings → AI Providers.
    * The profile's own credential fieldValues are used directly rather than
@@ -79,9 +78,7 @@ export class AssistantSession {
    * calls. Equivalence is by value, not object identity, so a profile object
    * rebuilt with the same provider, model, and credentials still matches.
    */
-  setSelection(
-    selection: { provider: AssistantProviderId; model?: string } | AssistantProfile | null,
-  ): void {
+  setSelection(selection: AssistantProviderSelection | AssistantProfile | null): void {
     const key = assistantSelectionKey(selection);
     if (key === this.selectionKey) return;
     this.selectionKey = key;
@@ -92,7 +89,7 @@ export class AssistantSession {
       this.selection = null;
     } else {
       // Legacy provider+model pair, or null for auto-resolve.
-      this.selection = selection as { provider: AssistantProviderId; model?: string } | null;
+      this.selection = selection as AssistantProviderSelection | null;
       this.profile = null;
     }
     this.reset();
