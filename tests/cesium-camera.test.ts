@@ -224,10 +224,7 @@ describe("groundHeightAt", () => {
   it("falls back to the ellipsoid when the scene has no globe", () => {
     const { Cesium, viewer } = makeCameraFakes(0);
     const noGlobe = { ...viewer, scene: { ...viewer.scene, globe: undefined } };
-    assert.equal(
-      groundHeightAt(Cesium, noGlobe as unknown as typeof viewer, -115.2, 36.12),
-      0,
-    );
+    assert.equal(groundHeightAt(Cesium, noGlobe as unknown as typeof viewer, -115.2, 36.12), 0);
   });
 });
 
