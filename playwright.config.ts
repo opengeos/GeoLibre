@@ -56,16 +56,24 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run build && npm run preview -w geolibre-desktop -- --port ${PORT} --strictPort`,
-    // Build without a Cesium Ion token, whatever the developer's shell holds.
-    // `vite.config.ts` bakes `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` into the bundle,
-    // so a machine with one set would produce a *different* app than CI builds:
-    // the 3D globe would come up with Ion terrain and imagery, and
-    // `cesium-globe.spec.ts` could no longer tell the keyless path from the
-    // tokened one. Blanking both here makes that spec's keyless assertions mean
-    // the same thing everywhere.
+    // Build without a Cesium Ion token from the shell. `vite.config.ts` bakes
+    // `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` into the bundle, so a machine with one
+    // exported would produce a *different* app than CI builds: the 3D globe
+    // would come up with Ion terrain and imagery, and `cesium-globe.spec.ts`
+    // could no longer tell the keyless path from the tokened one.
+    //
+    // This covers the shell only. The bridge in `vite.config.ts` falls through
+    // to `loadEnv()` when the prefixed name is falsy, so a token in
+    // `apps/geolibre-desktop/.env.local` is still picked up despite these being
+    // blanked. That case is not silently tolerated — `cesium-globe.spec.ts`
+    // asserts the tokenless hint and fails with a message naming the file.
     env: { CESIUM_TOKEN: "", VITE_CESIUM_TOKEN: "" },
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a server that is already up. Playwright skips the whole
+    // command when it reuses one, so `env` above would not be applied and the
+    // run could silently test a previously built, tokened bundle — or simply a
+    // stale build. Correctness over the rebuild it costs on repeat local runs.
+    reuseExistingServer: false,
     // The build (tsc -b + vite build) runs as part of this command, so allow
     // generous startup time on cold CI runners.
     timeout: 300_000,

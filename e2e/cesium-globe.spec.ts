@@ -11,13 +11,18 @@ import { waitForMap } from "./helpers";
  * production build, or that the camera actually moves. Two behavioural changes
  * shipped on the globe (#2205, #2207) verified only by hand in a browser.
  *
- * This runs **keyless on purpose**, and deterministically so: the web server in
- * `playwright.config.ts` blanks `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` for the
- * build, so a developer whose shell holds a token still exercises the same path
- * CI does. Until #2205 the pane was hidden without a token and could not mount
- * without a secret; the toggle is now always offered and the globe draws the
- * project basemap. That makes this the guard on that behaviour: if the token
- * gating ever comes back, it fails at `globeToggle` rather than skipping.
+ * This runs **keyless on purpose**. `playwright.config.ts` blanks
+ * `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` for the build and refuses to reuse an
+ * already-running server, so a developer whose shell holds a token still
+ * exercises the path CI does. That does not reach a token in
+ * `apps/geolibre-desktop/.env.local`, which `vite.config.ts` reads off disk —
+ * so rather than assume, the test asserts the tokenless hint and fails with a
+ * message naming that file.
+ *
+ * Until #2205 the pane was hidden without a token and could not mount without a
+ * secret; the toggle is now always offered and the globe draws the project
+ * basemap. That makes this the guard on that behaviour: if the token gating
+ * ever comes back, it fails at `globeToggle` rather than skipping.
  *
  * It deliberately asserts nothing about tiles. Imagery comes from third-party
  * hosts, so a CI runner with no egress must still pass — the globe mounts and
@@ -39,6 +44,12 @@ async function splitIntoTwoPanes(page: Page): Promise<void> {
 
 test.describe("Cesium 3D globe pane", () => {
   test("mounts keyless and drives the shared camera", async ({ page }) => {
+    // The config's 60s per-test cap is a hard ceiling on the whole test, not on
+    // each step, so the generous per-assertion budgets below (a ~4.6 MB engine
+    // chunk plus its Workers on a cold, software-rendered runner) could never
+    // be reached inside it. Raise the test's own budget so they can.
+    test.setTimeout(180_000);
+
     await waitForMap(page);
     await splitIntoTwoPanes(page);
 
@@ -61,9 +72,13 @@ test.describe("Cesium 3D globe pane", () => {
 
     // The build is keyless (see the file header), so the pane must be offering
     // the hint about what an Ion token would add. This is the assertion that
-    // distinguishes the keyless path from the tokened one.
+    // distinguishes the keyless path from the tokened one — and the one that
+    // catches a build the config's env override could not reach.
     await expect(
       page.getByText("Add a Cesium Ion token in Settings for terrain and Ion imagery"),
+      "the globe pane came up with an Ion token, so this run is not testing the keyless path. " +
+        "playwright.config.ts blanks CESIUM_TOKEN/VITE_CESIUM_TOKEN for the build, but a token in " +
+        "apps/geolibre-desktop/.env.local is read straight off disk by vite.config.ts and wins.",
     ).toBeVisible();
 
     // Dragging the globe writes back into the shared `mapView`, which moves the
