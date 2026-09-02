@@ -277,8 +277,11 @@ After a bump, check all four — none of these fail the build:
 - **Asset copy.** `vite-plugins/copy-cesium-assets.ts` copies `Assets`,
   `ThirdParty`, `Widgets` and `Workers` out of `cesium/Build/Cesium` into
   `public/cesium/`, keyed on the installed version. The copy is gitignored, so a
-  stale one is refreshed automatically — but a directory renamed upstream is
-  silently dropped.
+  stale one is refreshed automatically. A directory *renamed or removed*
+  upstream fails loudly — `cpSync` throws `ENOENT` from `buildStart`, so the dev
+  server and the build both stop. The silent case is the opposite one: a runtime
+  directory *added* upstream is simply not in `RUNTIME_DIRS`, so it is never
+  copied and only surfaces as a 404 when the globe reaches for it.
 - **`CESIUM_BASE_URL`.** `CesiumCanvas.tsx` derives it from the app's
   `BASE_URL`, not a hardcoded `/cesium`, so a sub-path deploy (the `/demo/`
   build) still resolves. Cesium reads it at import time; if the Workers 404 the

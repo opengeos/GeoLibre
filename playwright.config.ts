@@ -56,6 +56,14 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run build && npm run preview -w geolibre-desktop -- --port ${PORT} --strictPort`,
+    // Build without a Cesium Ion token, whatever the developer's shell holds.
+    // `vite.config.ts` bakes `CESIUM_TOKEN`/`VITE_CESIUM_TOKEN` into the bundle,
+    // so a machine with one set would produce a *different* app than CI builds:
+    // the 3D globe would come up with Ion terrain and imagery, and
+    // `cesium-globe.spec.ts` could no longer tell the keyless path from the
+    // tokened one. Blanking both here makes that spec's keyless assertions mean
+    // the same thing everywhere.
+    env: { CESIUM_TOKEN: "", VITE_CESIUM_TOKEN: "" },
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     // The build (tsc -b + vite build) runs as part of this command, so allow
