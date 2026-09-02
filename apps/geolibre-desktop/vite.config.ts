@@ -1189,10 +1189,15 @@ export default defineConfig({
       // and the `import x from "mersenne-twister"` default import throws. It is
       // reached only through the lazy `import("@cesium/engine")` in
       // CesiumCanvas, so without pre-bundling Vite would also discover it on
-      // first open and do a full-page reload to re-optimize. Cesium locates its
-      // Workers/Assets via the CESIUM_BASE_URL global (never
-      // `import.meta.url`), so pre-bundling does not mangle any asset
-      // reference.
+      // first open and do a full-page reload to re-optimize.
+      //
+      // Pre-bundling is safe for the asset resolution because *this app* always
+      // defines the `CESIUM_BASE_URL` global before importing the engine
+      // (`prepareCesiumEnvironment()` in CesiumCanvas). The engine only derives
+      // a base from `import.meta.url` when that global is undefined
+      // (`buildModuleUrl.js`), and esbuild rewriting the module URL is exactly
+      // what would break that fallback — so dropping the global would make this
+      // entry unsafe, not just the paths wrong.
       //
       // This must name the same specifier the globe imports. It used to be the
       // `cesium` wrapper; that package is still a dependency for its prebuilt
