@@ -38,6 +38,9 @@
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
+  "dependencies": {
+    "patch-package": "^8.0.1"
+  },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
@@ -78,8 +81,5 @@
     "protobufjs",
     "sharp",
     "workerd"
-  ],
-  "dependencies": {
-    "patch-package": "^8.0.1"
-  }
+  ]
 }
