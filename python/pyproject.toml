@@ -51,6 +51,10 @@ packages = ["src/geolibre"]
 # The bundled app under static/ is produced by the build hook and git-ignored,
 # so it must be re-included explicitly here (VCS file discovery skips it).
 artifacts = ["src/geolibre/static/**"]
+# src/geolibre/package.json marks _frontend.js as ESM for Node, which only
+# matters when this repo's test suite imports it. Nothing in the installed
+# package runs Node, so keep it out of the distribution.
+exclude = ["src/geolibre/package.json"]
 
 # Install the Jupyter Server config drop-in to {sys.prefix}/etc/jupyter so the
 # bundled app-serving extension (geolibre._load_jupyter_server_extension)
@@ -60,6 +64,7 @@ artifacts = ["src/geolibre/static/**"]
 
 [tool.hatch.build.targets.sdist]
 artifacts = ["src/geolibre/static/**"]
+exclude = ["src/geolibre/package.json"]
 # hatch_build.py scans the bundled app for credentials before packaging, using
 # the pattern definitions shared with scripts/scan-credentials.mjs. Those live
 # outside this directory, so vendor a copy into the sdist: an sdist -> wheel
