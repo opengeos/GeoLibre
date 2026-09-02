@@ -1627,6 +1627,23 @@
     },
     "pixelTimeSeriesMode": {
       "start": "Chuỗi thời gian pixel"
+    },
+    "identifyAll": {
+      "title": "Kết quả nhận dạng ({{count}})",
+      "resultCount_other": "{{count}} kết quả",
+      "featureFallback": "Đối tượng {{index}}",
+      "pixel": "Pixel",
+      "expandAll": "Mở rộng tất cả",
+      "collapseAll": "Thu gọn tất cả",
+      "loadingTitle": "Nhận dạng các lớp đang hiển thị",
+      "loading": "Đang tải...",
+      "errorLabel": "Lỗi",
+      "error": "Không thể nhận dạng lớp này.",
+      "band": "Kênh {{index}}",
+      "nodata": "không có dữ liệu",
+      "coordinates": "lon, lat",
+      "row": "hàng",
+      "column": "cột"
     }
   },
   "terrainSettings": {
@@ -1780,7 +1797,8 @@
     "removePane": "Xóa ô số {{number}}?",
     "show3d": "Hiển thị bản đồ {{number}} dưới dạng quả địa cầu 3D",
     "show2d": "Hiển thị bản đồ {{number}} dưới dạng bản đồ 2D",
-    "only2d": "chỉ 2D"
+    "only2d": "chỉ 2D",
+    "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
   "mapContextMenu": {
     "zoomInHere": "Phóng to ở đây",
@@ -2040,6 +2058,7 @@
       "tokenHostInvalid": "Địa chỉ máy chủ chia sẻ dự án của quá trình triển khai này không hợp lệ nên không thể sử dụng mã thông báo này.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Mã thông báo ion Caesium",
+      "cesiumTokenDescription": "Quả địa cầu 3D (khung xem chia đôi) hoạt động mà không cần mã thông báo: nó hiển thị bản đồ nền của dự án. Mã thông báo truy cập bổ sung Cesium World Terrain và ảnh vệ tinh toàn cầu của Ion. Tạo một tài khoản miễn phí tại <tokenLink>ion.cesium.com/tokens</tokenLink>, sao chép mã thông báo truy cập mặc định của bạn và dán vào bên dưới.",
       "nameAria": "Tên biến",
       "namePlaceholder": "VITE_EXAMPLE_KEY",
       "valueAria": "Giá trị biến",
@@ -2874,7 +2893,8 @@
       "osm-basemap": "Sơ đồ cơ sở OpenStreetMap",
       "maplibre-gl-annotations": "Chú thích",
       "maplibre-gl-streetview": "Chế độ xem phố",
-      "maplibre-gl-time-slider": "Thanh trượt thời gian"
+      "maplibre-gl-time-slider": "Thanh trượt thời gian",
+      "maplibre-gl-vantor": "Dữ liệu mở Vantor"
     },
     "fileDrop": {
       "addedRasterLayers_other": "Đã thêm các lớp raster {{count}} vào bảng điều khiển Lớp.",
@@ -6896,6 +6916,8 @@
     "metadata": "Siêu dữ liệu",
     "removeLayer": "Xóa lớp",
     "identifyFeatures": "Xác định đặc điểm",
+    "identifyVisibleLayers": "Nhận dạng các lớp đang hiển thị",
+    "identifyVisibleLayersHint": "Nhấp vào bản đồ để nhận dạng đối tượng và giá trị pixel từ mọi lớp đang hiển thị có thể truy vấn.",
     "identifyDeactivate": "Dán kiểu",
     "identifyInspectPixels": "Kiểm tra giá trị pixel",
     "identifyStopInspectPixels": "Dừng kiểm tra giá trị pixel",
@@ -7555,5 +7577,69 @@
     "added": "Đã thêm {{count}} đối tượng{{layer}}.",
     "badResponse": "API SamGeo không trả về một FeatureCollection GeoJSON.",
     "unknownProjection": "Kết quả không ở hệ WGS84 và hình ảnh cũng không mang phép chiếu đọc được, nên không thể đặt lên bản đồ. Hãy dùng một tệp GeoTIFF đã tham chiếu địa lý."
+  },
+  "vantor": {
+    "title": "Trình khám phá STAC của Vantor",
+    "collapsePanel": "Thu gọn bảng điều khiển",
+    "openPanel": "Mở trình khám phá STAC của Vantor",
+    "ready": "Sẵn sàng",
+    "searchSection": "Tìm kiếm",
+    "event": "Sự kiện",
+    "loadingEvents": "Đang tải sự kiện…",
+    "refreshCatalog": "Làm mới danh mục",
+    "phase": "Giai đoạn",
+    "phaseAll": "Tất cả",
+    "phasePre": "Trước sự kiện",
+    "phasePost": "Sau sự kiện",
+    "renderingEngine": "Công cụ kết xuất",
+    "engineGpu": "GPU (nhanh hơn)",
+    "engineWasm": "WASM (tương thích quả địa cầu)",
+    "engineTitiler": "TiTiler (máy chủ)",
+    "useMapExtent": "Sử dụng phạm vi bản đồ",
+    "drawBbox": "Vẽ hộp giới hạn",
+    "clear": "Xóa",
+    "search": "Tìm kiếm",
+    "searching": "Đang tìm kiếm…",
+    "results": "Kết quả",
+    "itemsFound": "Tìm thấy {{count}} mục",
+    "selectAll": "Chọn tất cả",
+    "deselectAll": "Bỏ chọn tất cả",
+    "columnId": "ID",
+    "columnDate": "Ngày",
+    "columnPhase": "Giai đoạn",
+    "columnSensor": "Cảm biến",
+    "columnCloud": "Mây%",
+    "columnGsd": "GSD",
+    "visualize": "Hiển thị trực quan",
+    "downloadAction": "Tải xuống",
+    "cancel": "Hủy",
+    "noEvents": "Không tìm thấy sự kiện nào",
+    "downloadProgress": {
+      "cancelled": "Đã hủy tải xuống. Đã bắt đầu {{count}} lượt tải xuống.",
+      "invalidUrl": "Đã bỏ qua {{id}}: URL HTTPS không hợp lệ.",
+      "starting": "Đang bắt đầu {{filename}}…",
+      "started": "Đã bắt đầu {{filename}} ({{started}}/{{total}})",
+      "failed": "Không thể bắt đầu {{filename}}: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "Đang lấy danh mục…",
+      "eventsFound": "Tìm thấy {{count}} sự kiện. Chọn một sự kiện rồi nhấp “Tìm kiếm”.",
+      "catalogFailed": "Không thể lấy danh mục: {{message}}",
+      "selectEvent": "Vui lòng chọn một sự kiện trước.",
+      "fetchingItems": "Đang lấy các mục…",
+      "itemsFound": "Tìm thấy {{count}} mục. Đánh dấu các mục để hiển thị hoặc tải xuống.",
+      "itemsFailed": "Không thể lấy các mục: {{message}}",
+      "drawingCancelled": "Đã hủy việc vẽ hộp giới hạn.",
+      "drawRectangle": "Vẽ một hình chữ nhật trên bản đồ…",
+      "bboxSet": "Đã đặt hộp giới hạn. Nhấp “Tìm kiếm” để lọc.",
+      "bboxCleared": "Đã xóa hộp giới hạn.",
+      "noSelection": "Chưa chọn mục nào. Hãy đánh dấu các mục trước.",
+      "addingLayers": "Đang thêm {{count}} lớp COG…",
+      "addFailed": "Không thể thêm {{id}}: {{message}}",
+      "layersAdded": "Đã thêm {{count}} lớp COG.",
+      "startingDownloads": "Đang bắt đầu {{count}} lượt tải xuống…",
+      "downloadsStarted": "Đã bắt đầu {{started}} lượt tải xuống. {{failed}} lượt thất bại.",
+      "downloadCancelled": "Tải xuống đã bị hủy hoặc thất bại."
+    }
   }
 }
