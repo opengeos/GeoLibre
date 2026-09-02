@@ -2,12 +2,13 @@ import {
   applyGroupEffects,
   basemapToCesiumImagery,
   useAppStore,
+  type CesiumBasemapImagery,
   type GeoLibreLayer,
   type MapViewState,
 } from "@geolibre/core";
 import type { ImageryLayer, Viewer } from "cesium";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { applyBasemapImagery } from "./cesium-basemap";
+import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
 import { applyMapViewToCamera, isSameView, readMapViewFromCamera } from "./cesium-camera";
 import { CesiumLayerSync } from "./cesium-layer-sync";
 
@@ -137,19 +138,50 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // dependency-free effect re-run, mirroring paneLayersRef above.
   const basemapImageryRef = useRef(basemapImagery);
   basemapImageryRef.current = basemapImagery;
+  // The descriptor currently drawn. `ready` flips right after the mount effect's
+  // own draw, so the [ready, basemapImagery] effect below would otherwise redraw
+  // the same basemap immediately — rebuilding the providers, restarting the
+  // first tile requests, and flashing a hybrid basemap as its overlay is torn
+  // down and re-added.
+  const appliedImageryRef = useRef<CesiumBasemapImagery | null>(null);
+
+  // The basemap's visibility and opacity (the layer panel's Background row).
+  // Read through refs as well so the dependency-free mount effect can apply the
+  // current values without re-running.
+  const basemapVisible = useAppStore((s) => s.basemapVisible);
+  const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const basemapVisibleRef = useRef(basemapVisible);
+  basemapVisibleRef.current = basemapVisible;
+  const basemapOpacityRef = useRef(basemapOpacity);
+  basemapOpacityRef.current = basemapOpacity;
+
+  /** Push the store's basemap visibility/opacity onto the drawn layers. */
+  function applyBasemapLook(): void {
+    applyBasemapAppearance(
+      baseImageryLayersRef.current,
+      basemapVisibleRef.current,
+      basemapOpacityRef.current,
+    );
+  }
 
   // Replace the globe's base imagery with the current basemap.
   function applyBasemap(): void {
     const Cesium = cesiumRef.current;
     const viewer = viewerRef.current;
     if (!Cesium || !viewer || viewer.isDestroyed()) return;
+    const imagery = basemapImageryRef.current;
+    if (appliedImageryRef.current === imagery) return;
+    appliedImageryRef.current = imagery;
     baseImageryLayersRef.current = applyBasemapImagery(
       Cesium,
       viewer,
       baseImageryLayersRef.current,
-      basemapImageryRef.current,
+      imagery,
       ionTokenRef.current?.trim() || undefined,
     );
+    // Fresh layers start shown and fully opaque, so carry the store's
+    // visibility/opacity straight onto them.
+    applyBasemapLook();
   }
 
   // Push a store view into the camera and remember it as the expected echo.
@@ -314,8 +346,9 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
       layerSyncRef.current?.destroy();
       layerSyncRef.current = null;
       // The viewer's destroy() below tears the imagery down with it; just drop
-      // the handles so a remount starts from an empty stack.
+      // the handles so a remount starts from an empty stack and redraws.
       baseImageryLayersRef.current = [];
+      appliedImageryRef.current = null;
       const viewer = viewerRef.current;
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
       viewerRef.current = null;
@@ -325,13 +358,21 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   }, []);
 
   // Re-draw the base imagery when the project basemap changes. `ready` re-runs
-  // this once the viewer exists; the mount effect's initial draw already covers
-  // the value captured at ready time.
+  // this once the viewer exists; applyBasemap's own guard makes that first run a
+  // no-op, since the mount effect already drew this descriptor.
   useEffect(() => {
     if (!ready) return;
     applyBasemap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapImagery]);
+
+  // Hiding or fading the background is a live appearance change, so it re-styles
+  // the existing layers rather than rebuilding them.
+  useEffect(() => {
+    if (!ready) return;
+    applyBasemapLook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, basemapVisible, basemapOpacity]);
 
   // Reconcile the store layers (with this pane's overrides) onto the globe
   // whenever they change. `ready` re-runs this once the viewer exists; the

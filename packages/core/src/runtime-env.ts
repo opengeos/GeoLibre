@@ -160,8 +160,10 @@ export function getMapboxAccessToken(env?: Record<string, string | undefined>): 
  * so a bare `CESIUM_TOKEN` entry works there too).
  *
  * The 3D-globe view itself does **not** need one: it draws the project basemap
- * as its base imagery (see {@link basemapToCesiumImagery}), so an absent token
- * costs terrain and the Ion imagery fallback, not the view.
+ * as its base imagery whenever that basemap has a raster form (see
+ * {@link basemapToCesiumImagery}), and falls back to Ion World Imagery — or, with
+ * no token, to OpenStreetMap — for the ones that do not. So an absent token
+ * costs terrain and the quality of that fallback, not the view.
  *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.

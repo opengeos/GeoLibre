@@ -38,6 +38,30 @@ function templateProvider(
 }
 
 /**
+ * Apply the project's basemap visibility and opacity to the layers drawing it.
+ *
+ * These are separate store fields from the style URL — the layer panel's
+ * Background row hides the basemap and fades it with a slider — and the 2D map
+ * honours both (`MapController` sets the style layers' visibility and scales
+ * their paint opacity). A hybrid basemap's overlay fades with its imagery, which
+ * matches the 2D map treating the pair as one background.
+ *
+ * @param layers - The basemap layers from {@link applyBasemapImagery}.
+ * @param visible - The store's `basemapVisible`.
+ * @param opacity - The store's `basemapOpacity`, 0–1.
+ */
+export function applyBasemapAppearance(
+  layers: readonly ImageryLayer[],
+  visible: boolean,
+  opacity: number,
+): void {
+  for (const layer of layers) {
+    layer.show = visible;
+    layer.alpha = opacity;
+  }
+}
+
+/**
  * Draw `imagery` at the bottom of the globe's imagery stack, replacing whatever
  * basemap is there.
  *

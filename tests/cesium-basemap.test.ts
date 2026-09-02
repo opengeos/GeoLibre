@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CesiumBasemapImagery } from "../packages/core/src/cesium-imagery";
-import { applyBasemapImagery } from "../packages/map/src/cesium-basemap";
+import { applyBasemapAppearance, applyBasemapImagery } from "../packages/map/src/cesium-basemap";
 
 // Verifies that the project basemap lands at the bottom of the globe's imagery
 // stack (below the data layers CesiumLayerSync appends), that a basemap change
@@ -176,5 +176,38 @@ describe("applyBasemapImagery", () => {
     const { Cesium, viewer } = makeFakes();
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, undefined);
     assert.equal((added[0] as FakeLayer).source, "osm");
+  });
+});
+
+describe("applyBasemapAppearance", () => {
+  it("applies the project's basemap visibility and opacity", () => {
+    const { Cesium, viewer } = makeFakes();
+    const added = applyBasemapImagery(Cesium, viewer, [], XYZ, undefined);
+
+    applyBasemapAppearance(added, false, 0.4);
+
+    assert.equal((added[0] as { show?: boolean }).show, false);
+    assert.equal((added[0] as { alpha?: number }).alpha, 0.4);
+  });
+
+  it("fades a hybrid basemap's overlay with its imagery", () => {
+    // The 2D map treats the imagery and its labels overlay as one background,
+    // so both follow the single Background row in the layer panel.
+    const { Cesium, viewer } = makeFakes();
+    const added = applyBasemapImagery(
+      Cesium,
+      viewer,
+      [],
+      { ...XYZ, overlayTemplate: "https://tiles.example.com/labels/{z}/{x}/{y}.png" },
+      undefined,
+    );
+
+    applyBasemapAppearance(added, true, 0.25);
+
+    assert.equal(added.length, 2);
+    for (const layer of added) {
+      assert.equal((layer as { show?: boolean }).show, true);
+      assert.equal((layer as { alpha?: number }).alpha, 0.25);
+    }
   });
 });

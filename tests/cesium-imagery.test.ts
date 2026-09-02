@@ -102,6 +102,23 @@ describe("basemapToCesiumImagery", () => {
     assert.deepEqual(basemapToCesiumImagery("not a url"), { kind: "default" });
   });
 
+  it("defers for a malformed percent-escape in the flavor rather than throwing", () => {
+    // A URL keeps `%E0%A4` in its pathname, but decoding it throws URIError.
+    // This runs inside a render, so it has to degrade rather than blow up.
+    assert.deepEqual(
+      basemapToCesiumImagery("https://api.protomaps.com/styles/v5/%E0%A4/en.json?key=abc"),
+      { kind: "default" },
+    );
+  });
+
+  it("still resolves a percent-encoded flavor that decodes cleanly", () => {
+    const encoded = basemapToCesiumImagery("https://api.protomaps.com/styles/v5/%64ark/en.json");
+    assert.deepEqual(
+      encoded,
+      basemapToCesiumImagery("https://api.protomaps.com/styles/v5/dark/en.json"),
+    );
+  });
+
   it("falls back to the default basemap for a sentinel that no longer resolves", () => {
     // Mirrors resolveMapStyle: an unknown geolibre:// sentinel must never reach
     // the renderer as if it were a fetchable tile URL.

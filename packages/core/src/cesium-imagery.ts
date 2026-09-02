@@ -142,6 +142,20 @@ function toImagery(analogue: RasterAnalogue): CesiumBasemapImagery {
 }
 
 /**
+ * `decodeURIComponent` that reports failure instead of throwing. A URL keeps a
+ * malformed escape (`%E0%A4`) in its pathname quite happily, but decoding one
+ * throws `URIError` — and this runs inside a React render, so an unhandled throw
+ * would take the globe pane down instead of falling through to the default.
+ */
+function safeDecode(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The raster analogue for a vector GL style URL, or undefined when the style is
  * not one GeoLibre ships (a provider style, a user's own URL, a Mapbox style).
  * Matching on host + path rather than searching the URL for "dark"/"light"
@@ -164,7 +178,8 @@ function vectorStyleAnalogue(styleUrl: string): RasterAnalogue | undefined {
     // https://api.protomaps.com/styles/v5/<flavor>/<lang>.json?key=…
     const segments = parsed.pathname.split("/").filter(Boolean);
     const flavor = segments[0] === "styles" ? segments[2] : undefined;
-    return flavor ? PROTOMAPS_ANALOGUES[decodeURIComponent(flavor)] : undefined;
+    const decoded = flavor ? safeDecode(flavor) : undefined;
+    return decoded ? PROTOMAPS_ANALOGUES[decoded] : undefined;
   }
   return undefined;
 }
