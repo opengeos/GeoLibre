@@ -142,6 +142,30 @@ function toImagery(analogue: RasterAnalogue): CesiumBasemapImagery {
 }
 
 /**
+ * Whether two descriptors would draw the same thing.
+ *
+ * Descriptors are built fresh on every call, so two basemaps resolving to the
+ * same analogue — OpenFreeMap `liberty` and `bright` are both the streets
+ * tone — yield equal but distinct objects. A renderer that remembers the
+ * descriptor it drew (to skip redundant work) must compare by value: a
+ * reference check would miss that case and tear down and re-add an identical
+ * tile provider, costing a flash and a round of re-requested tiles for no
+ * visible change.
+ */
+export function sameCesiumImagery(a: CesiumBasemapImagery, b: CesiumBasemapImagery): boolean {
+  if (a.kind !== b.kind) return false;
+  // `none` and `default` carry no fields, so matching kinds is the whole test.
+  if (a.kind !== "xyz" || b.kind !== "xyz") return true;
+  return (
+    a.template === b.template &&
+    a.attribution === b.attribution &&
+    a.maximumLevel === b.maximumLevel &&
+    a.scheme === b.scheme &&
+    a.overlayTemplate === b.overlayTemplate
+  );
+}
+
+/**
  * `decodeURIComponent` that reports failure instead of throwing. A URL keeps a
  * malformed escape (`%E0%A4`) in its pathname quite happily, but decoding one
  * throws `URIError` — and this runs inside a React render, so an unhandled throw

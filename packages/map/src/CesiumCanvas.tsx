@@ -1,6 +1,7 @@
 import {
   applyGroupEffects,
   basemapToCesiumImagery,
+  sameCesiumImagery,
   useAppStore,
   type CesiumBasemapImagery,
   type GeoLibreLayer,
@@ -170,7 +171,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
     const viewer = viewerRef.current;
     if (!Cesium || !viewer || viewer.isDestroyed()) return;
     const imagery = basemapImageryRef.current;
-    if (appliedImageryRef.current === imagery) return;
+    // By value, not by reference: two basemaps can resolve to the same imagery
+    // (OpenFreeMap liberty and bright share the streets analogue) through
+    // separate descriptor objects, and rebuilding an identical provider costs a
+    // flash and a round of re-requested tiles for no visible change.
+    if (appliedImageryRef.current && sameCesiumImagery(appliedImageryRef.current, imagery)) return;
     appliedImageryRef.current = imagery;
     baseImageryLayersRef.current = applyBasemapImagery(
       Cesium,

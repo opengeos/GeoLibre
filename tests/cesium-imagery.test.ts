@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { basemapToCesiumImagery } from "../packages/core/src/cesium-imagery";
+import { basemapToCesiumImagery, sameCesiumImagery } from "../packages/core/src/cesium-imagery";
 import { PLANETARY_BASEMAPS } from "../packages/core/src/ellipsoids";
 import { REGIONAL_BASEMAPS } from "../packages/core/src/regional-basemaps";
 import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "../packages/core/src/types";
@@ -137,5 +137,53 @@ describe("basemapToCesiumImagery", () => {
     assert.match(imagery.template, /\{z\}.*\{x\}.*\{y\}/);
     assert.ok(imagery.attribution.length > 0);
     assert.ok((imagery.maximumLevel ?? 0) > 0);
+  });
+});
+
+describe("sameCesiumImagery", () => {
+  const OFM = "https://tiles.openfreemap.org/styles/";
+
+  it("matches two basemaps that resolve to the same analogue", () => {
+    // Liberty and Bright are distinct styles sharing the streets tone, so the
+    // descriptors are equal but not identical — the case a `===` guard misses.
+    const liberty = basemapToCesiumImagery(`${OFM}liberty`);
+    const bright = basemapToCesiumImagery(`${OFM}bright`);
+    assert.notEqual(liberty, bright, "expected distinct descriptor objects");
+    assert.equal(sameCesiumImagery(liberty, bright), true);
+  });
+
+  it("separates analogues of different tones", () => {
+    assert.equal(
+      sameCesiumImagery(
+        basemapToCesiumImagery(`${OFM}liberty`),
+        basemapToCesiumImagery(`${OFM}dark`),
+      ),
+      false,
+    );
+  });
+
+  it("compares the fieldless kinds by kind alone", () => {
+    assert.equal(sameCesiumImagery({ kind: "none" }, { kind: "none" }), true);
+    assert.equal(sameCesiumImagery({ kind: "default" }, { kind: "default" }), true);
+    assert.equal(sameCesiumImagery({ kind: "none" }, { kind: "default" }), false);
+    assert.equal(
+      sameCesiumImagery({ kind: "none" }, basemapToCesiumImagery(DEFAULT_BASEMAP)),
+      false,
+    );
+  });
+
+  it("notices a difference in any xyz field", () => {
+    const base = asXyz(basemapToCesiumImagery(DEFAULT_BASEMAP));
+    assert.equal(
+      sameCesiumImagery(base, { ...base, template: "https://x/{z}/{x}/{y}.png" }),
+      false,
+    );
+    assert.equal(sameCesiumImagery(base, { ...base, maximumLevel: 3 }), false);
+    assert.equal(sameCesiumImagery(base, { ...base, scheme: "tms" }), false);
+    assert.equal(sameCesiumImagery(base, { ...base, attribution: "other" }), false);
+    assert.equal(
+      sameCesiumImagery(base, { ...base, overlayTemplate: "https://o/{z}/{x}/{y}.png" }),
+      false,
+    );
   });
 });
