@@ -9,6 +9,7 @@
     "workers/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/apply-dependency-patches.mjs",
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
     "lite:build": "node scripts/lite-build.mjs",
@@ -36,6 +37,9 @@
     "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
+  },
+  "dependencies": {
+    "patch-package": "^8.0.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
