@@ -52,8 +52,12 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
   return str(layer.source.url) ?? str(layer.sourcePath);
 }
 
+function hasGeoJsonCollection(layer: GeoLibreLayer): boolean {
+  return GEOJSON_BACKED_TYPES.has(layer.type) && layer.geojson?.type === "FeatureCollection";
+}
+
 function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
-  return GEOJSON_BACKED_TYPES.has(layer.type) && Boolean(layer.geojson?.features?.length);
+  return hasGeoJsonCollection(layer) && Boolean(layer.geojson?.features?.length);
 }
 
 /**
@@ -63,7 +67,8 @@ function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
  */
 export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   return (
-    GEOJSON_BACKED_TYPES.has(layer.type) ||
+    hasGeoJsonCollection(layer) ||
+    layer.type === "geojson" ||
     layer.type === "3d-tiles" ||
     IMAGERY_TYPES.has(layer.type)
   );

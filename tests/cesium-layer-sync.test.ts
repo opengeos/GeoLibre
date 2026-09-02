@@ -225,6 +225,14 @@ describe("CesiumLayerSync", () => {
     assert.equal(isCesiumSupportedLayerType(layer), false);
   });
 
+  it("keeps ArcGIS vector tiles without a FeatureCollection marked 2D-only", () => {
+    const layer = mkLayer({
+      type: "arcgis",
+      source: { url: "https://example.com/VectorTileServer" },
+    });
+    assert.equal(isCesiumSupportedLayerType(layer), false);
+  });
+
   it("skips a geojson layer with no features", async () => {
     const sync = newSync(f);
     sync.sync([
