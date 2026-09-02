@@ -1,0 +1,31 @@
+diff --git a/node_modules/@cogeotiff/core/build/read/tiff.tag.factory.js b/node_modules/@cogeotiff/core/build/read/tiff.tag.factory.js
+index e9bb438..768886b 100644
+--- a/node_modules/@cogeotiff/core/build/read/tiff.tag.factory.js
++++ b/node_modules/@cogeotiff/core/build/read/tiff.tag.factory.js
+@@ -4,6 +4,17 @@ import { getUint, getUint64 } from '../util/bytes.js';
+ import { hasBytes } from './data.view.offset.js';
+ import { isLittleEndian } from './endian.js';
+ import { getTiffTagSize } from './tiff.value.reader.js';
++const ASCII_DECODE_CHUNK_SIZE = 32768;
++function readAscii(bytes, offset, length) {
++    // DataView offsets are relative to the view, while Uint8Array offsets are
++    // relative to the underlying buffer. Preserve sliced views correctly.
++    const input = new Uint8Array(bytes.buffer, bytes.byteOffset + offset, length);
++    let output = '';
++    for (let index = 0; index < input.length; index += ASCII_DECODE_CHUNK_SIZE) {
++        output += String.fromCharCode.apply(null, input.subarray(index, index + ASCII_DECODE_CHUNK_SIZE));
++    }
++    return output;
++}
+ function readTagValue(fieldType, bytes, offset, isLittleEndian) {
+     switch (fieldType) {
+         case TiffTagValueType.Ascii:
+@@ -76,7 +87,7 @@ function readValue(tiff, tagId, bytes, offset, type, count) {
+     }
+     switch (type) {
+         case TiffTagValueType.Ascii:
+-            return String.fromCharCode.apply(null, new Uint8Array(bytes.buffer, offset, dataLength - 1));
++            return readAscii(bytes, offset, dataLength - 1);
+     }
+     // TODO should we convert all tag values to typed arrays if possible?
+     if (tagId === TiffTag.TileOffsets ||
