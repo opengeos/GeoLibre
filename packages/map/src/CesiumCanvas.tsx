@@ -7,7 +7,7 @@ import {
   type GeoLibreLayer,
   type MapViewState,
 } from "@geolibre/core";
-import type { ImageryLayer, Viewer } from "cesium";
+import type { CesiumWidget, ImageryLayer } from "@cesium/engine";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
 import {
@@ -37,6 +37,14 @@ const APP_BASE_URL =
 const CESIUM_BASE_URL = `${APP_BASE_URL}cesium`;
 /** id for the one-time <link> to Cesium's widget stylesheet (served from base). */
 const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
+/**
+ * Just the `CesiumWidget` styles — the canvas sizing, the credit container, and
+ * the render-error panel. The full `Widgets/widgets.css` (32 KB) also carries
+ * the chrome for the base-layer picker, geocoder, timeline, animation dial and
+ * info box, none of which this pane creates. Both are staged by
+ * copy-cesium-assets, so narrowing the link costs nothing.
+ */
+const CESIUM_CSS_PATH = "/Widgets/CesiumWidget/CesiumWidget.css";
 
 export interface CesiumCanvasProps {
   /** Id of the `secondaryMapViews` entry this pane renders (label/telemetry). */
@@ -64,7 +72,7 @@ function prepareCesiumEnvironment(): void {
     const link = document.createElement("link");
     link.id = CESIUM_CSS_LINK_ID;
     link.rel = "stylesheet";
-    link.href = `${CESIUM_BASE_URL}/Widgets/widgets.css`;
+    link.href = `${CESIUM_BASE_URL}${CESIUM_CSS_PATH}`;
     document.head.appendChild(link);
   }
 }
@@ -77,8 +85,8 @@ function prepareCesiumEnvironment(): void {
  */
 export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<Viewer | null>(null);
-  const cesiumRef = useRef<typeof import("cesium") | null>(null);
+  const viewerRef = useRef<CesiumWidget | null>(null);
+  const cesiumRef = useRef<typeof import("@cesium/engine") | null>(null);
   const layerSyncRef = useRef<CesiumLayerSync | null>(null);
   // The imagery layers currently drawing the project basemap, at the bottom of
   // the stack. Tracked so a basemap change replaces exactly these and leaves
@@ -221,7 +229,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
 
     void (async () => {
       try {
-        const Cesium = await import("cesium");
+        const Cesium = await import("@cesium/engine");
         // The effect may have been cleaned up (StrictMode double-mount, fast
         // unmount) while the chunk loaded; bail before creating a viewer whose
         // container is gone.
@@ -230,22 +238,16 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         const token = ionTokenRef.current?.trim();
         if (token) Cesium.Ion.defaultAccessToken = token;
 
-        const viewer = new Cesium.Viewer(container, {
-          // A focused globe: no base-layer picker, geocoder, timeline, or
-          // animation widget — this pane is a viewport, not a full Cesium app.
-          baseLayerPicker: false,
-          geocoder: false,
-          homeButton: false,
-          sceneModePicker: false,
-          navigationHelpButton: false,
-          timeline: false,
-          animation: false,
-          fullscreenButton: false,
-          // No default click popup / selection outline: clicking a GeoJSON
-          // feature must not pop Cesium's unstyled InfoBox (it isn't wired to
-          // GeoLibre's identify UI and would overflow a small grid pane).
-          infoBox: false,
-          selectionIndicator: false,
+        // CesiumWidget, not Viewer: this pane is a viewport, not a full Cesium
+        // app. `Viewer` is a wrapper that builds the base-layer picker,
+        // geocoder, home button, scene-mode picker, help button, timeline,
+        // animation dial, fullscreen button, info box and selection indicator —
+        // all of which this pane then had to switch off one by one — on top of
+        // the widget. Constructing the widget directly skips building them, and
+        // it already exposes everything the pane uses: `scene`, `camera`,
+        // `canvas`, `imageryLayers`, `dataSources`, `terrainProvider` and
+        // `screenSpaceEventHandler`.
+        const viewer = new Cesium.CesiumWidget(container, {
           // No base imagery from Cesium: the project basemap supplies it, drawn
           // by applyBasemap() below and re-drawn whenever the basemap changes.
           // Letting Cesium add its own default here would both ignore the user's
@@ -261,14 +263,13 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         viewerRef.current = viewer;
         layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
 
-        // Drop Cesium's default double-click "track entity" gesture: it flies to
-        // and camera-locks a picked feature, which fights the store-driven camera
-        // sync and isn't wired to GeoLibre. Removing it also means every camera
-        // move now comes through the pointer/wheel/touch input the moveEnd
-        // handler watches, so a real move is never mistaken for an autonomous one.
-        viewer.screenSpaceEventHandler.removeInputAction(
-          Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
-        );
+        // Note for anyone reintroducing `Viewer`: it installs a double-click
+        // "track entity" gesture that flies to and camera-locks a picked
+        // feature, which fights the store-driven camera sync and isn't wired to
+        // GeoLibre — the pane used to remove that input action explicitly.
+        // CesiumWidget never installs it, so every camera move now reaches the
+        // moveEnd handler through the pointer/wheel/touch input flagged below,
+        // and a real move can't be mistaken for an autonomous one.
 
         // Flag genuine camera-moving input on the globe so the moveEnd handler
         // can tell a real move from an autonomous settle. Only motion events

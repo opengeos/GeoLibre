@@ -1,5 +1,5 @@
 import type { CesiumBasemapImagery } from "@geolibre/core";
-import type { ImageryLayer, ImageryProvider, Viewer } from "cesium";
+import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
 // `basemapToCesiumImagery` decides *what* to show (it reads the basemap
@@ -8,11 +8,11 @@ import type { ImageryLayer, ImageryProvider, Viewer } from "cesium";
 // the React/viewer lifecycle and makes the stacking rules testable against a
 // fake Cesium, the way cesium-layer-sync is.
 //
-// The engine is injected (the `Cesium` namespace + a `Viewer`) so this module
+// The engine is injected (the `Cesium` namespace + a `CesiumWidget`) so this module
 // carries only type-only Cesium imports and never pulls the engine into the
 // build graph itself.
 
-type CesiumNs = typeof import("cesium");
+type CesiumNs = typeof import("@cesium/engine");
 
 /** Keyless imagery for a basemap with no raster form when no Ion token is set. */
 const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
@@ -81,7 +81,7 @@ export function applyBasemapAppearance(
  */
 export function applyBasemapImagery(
   Cesium: CesiumNs,
-  viewer: Viewer,
+  viewer: CesiumWidget,
   previous: readonly ImageryLayer[],
   imagery: CesiumBasemapImagery,
   ionToken: string | undefined,

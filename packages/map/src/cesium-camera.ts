@@ -1,5 +1,5 @@
 import type { MapViewState } from "@geolibre/core";
-import type { Viewer } from "cesium";
+import type { CesiumWidget } from "@cesium/engine";
 
 // Camera conversion between MapLibre's `MapViewState` (Web-Mercator zoom + a
 // nadir-referenced pitch) and Cesium's camera (a metric range + a
@@ -71,13 +71,13 @@ export function normalizeBearing(deg: number): number {
 }
 
 /** The vertical field of view of a viewer's camera, with a safe fallback. */
-function cameraFovy(viewer: Viewer): number {
+function cameraFovy(viewer: CesiumWidget): number {
   const frustum = viewer.camera.frustum as { fovy?: number };
   return frustum.fovy && frustum.fovy > 0 ? frustum.fovy : DEFAULT_FOVY;
 }
 
 /** The viewer canvas height in CSS pixels, guarding against a 0 during layout. */
-function canvasHeight(viewer: Viewer): number {
+function canvasHeight(viewer: CesiumWidget): number {
   const canvas = viewer.scene.canvas;
   return canvas.clientHeight || canvas.height || 1;
 }
@@ -99,8 +99,8 @@ function canvasHeight(viewer: Viewer): number {
  * area arrive, which is why {@link CesiumCanvas} re-applies once terrain settles.
  */
 export function groundHeightAt(
-  Cesium: typeof import("cesium"),
-  viewer: Viewer,
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
   lngDeg: number,
   latDeg: number,
 ): number {
@@ -117,8 +117,8 @@ export function groundHeightAt(
  * readback side so a view survives the apply → read round trip unchanged.
  */
 function pickGlobe(
-  Cesium: typeof import("cesium"),
-  viewer: Viewer,
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
   position: { x: number; y: number },
 ) {
   const { scene, camera } = viewer;
@@ -137,8 +137,8 @@ function pickGlobe(
  * module stays free of a runtime Cesium import.
  */
 export function applyMapViewToCamera(
-  Cesium: typeof import("cesium"),
-  viewer: Viewer,
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
   view: MapViewState,
 ): void {
   const [lng, lat] = view.center;
@@ -162,8 +162,8 @@ export function applyMapViewToCamera(
  * it falls back to the camera's sub-point.
  */
 export function readMapViewFromCamera(
-  Cesium: typeof import("cesium"),
-  viewer: Viewer,
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
 ): MapViewState {
   const { scene, camera } = viewer;
   const canvas = scene.canvas;

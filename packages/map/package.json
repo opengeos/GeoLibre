@@ -64,6 +64,7 @@
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-layer-ids.ts --format esm --dts"
   },
   "dependencies": {
+    "@cesium/engine": "^26.2.0",
     "@geolibre/core": "*",
     "@maplibre/geojson-vt": "^6.1.1",
     "@maplibre/vt-pbf": "^4.3.2",

@@ -20,6 +20,7 @@
     "@auth0/auth0-react": "^2.24.1",
     "@carbonplan/zarr-layer": "^0.9.0",
     "@cereusdb/standard": "^0.2.0",
+    "@cesium/engine": "^26.2.0",
     "@clerk/react": "^6.14.8",
     "@deck.gl/aggregation-layers": "9.3.11",
     "@deck.gl/core": "^9.3.11",

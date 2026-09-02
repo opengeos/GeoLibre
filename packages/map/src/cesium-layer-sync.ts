@@ -1,5 +1,5 @@
 import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
-import type { Cesium3DTileset, DataSource, ImageryLayer, Viewer } from "cesium";
+import type { Cesium3DTileset, CesiumWidget, DataSource, ImageryLayer } from "@cesium/engine";
 
 // Reconciles the store's `GeoLibreLayer[]` onto a Cesium globe, mirroring what
 // MapController.syncLayers does for MapLibre. M3 covers the layer kinds where
@@ -8,11 +8,11 @@ import type { Cesium3DTileset, DataSource, ImageryLayer, Viewer } from "cesium";
 // Cesium3DTileset). Other kinds are skipped on the globe (they still render in
 // the 2D panes); the exported `isCesiumSupportedLayerType` lets the UI flag them.
 //
-// The engine is injected (the `Cesium` namespace + a `Viewer`) so this module
+// The engine is injected (the `Cesium` namespace + a `CesiumWidget`) so this module
 // carries only type-only Cesium imports and never pulls the engine into the
 // build graph itself.
 
-type CesiumNs = typeof import("cesium");
+type CesiumNs = typeof import("@cesium/engine");
 
 /** Layer kinds this pass renders on the globe. */
 const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts"]);
@@ -124,7 +124,7 @@ export class CesiumLayerSync {
 
   constructor(
     private readonly Cesium: CesiumNs,
-    private readonly viewer: Viewer,
+    private readonly viewer: CesiumWidget,
   ) {}
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */

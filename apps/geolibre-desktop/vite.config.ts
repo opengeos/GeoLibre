@@ -559,11 +559,13 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("maplibre-gl")) return "maplibre";
   // Cesium is large (~several MB) and only loads when the user opens the 3D
   // globe view; keep it in its own lazily-fetched chunk, off the boot graph.
-  // `@cesium/engine`/`@cesium/widgets` (which the `cesium` wrapper re-exports)
-  // are only reachable through the lazy `import("cesium")`, so Rollup already
-  // groups them into this chunk; matching them explicitly keeps that intent
-  // even if some future eager import would otherwise pull them onto the boot
-  // graph.
+  // The globe imports `@cesium/engine` directly rather than the `cesium`
+  // wrapper: the wrapper re-exports `@cesium/widgets` too, and that barrel
+  // defeats tree-shaking, so the widget chrome and Knockout shipped in this
+  // chunk even though the pane builds a bare `CesiumWidget`. The `cesium`
+  // package is still a dependency — copy-cesium-assets stages the runtime
+  // Workers/Assets from its prebuilt `Build/Cesium` — so both paths are matched
+  // here, which also keeps the intent if a future eager import appears.
   if (id.includes("/node_modules/cesium/") || id.includes("/node_modules/@cesium/"))
     return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
@@ -920,11 +922,13 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
-    // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
+    // CesiumJS (~4.6 MB) for the 3D-globe view. Lazily imported only when a pane
     // switches to the globe, so it is CacheFirst-cached on first use rather than
-    // bloating the app-shell precache. The `Cesium-*` (capital) glob catches the
-    // Rollup facade chunk for the dynamic `import("cesium")` boundary, which the
-    // lowercase glob misses on case-sensitive matchers.
+    // bloating the app-shell precache. The `Cesium-*` (capital) glob covered the
+    // Rollup facade chunk for the old `import("cesium")` boundary; importing
+    // `@cesium/engine` directly no longer emits it, but the glob is kept so a
+    // revert to the wrapper does not silently push a facade chunk into the
+    // precache.
     "**/cesium-*",
     "**/Cesium-*",
     // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local

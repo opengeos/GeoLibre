@@ -259,6 +259,43 @@ both behaviors against the sources above; the failure modes are a leaked token a
 a sidecar that is unreachable only for proxied users, neither of which shows up in
 CI or on an unproxied dev machine.
 
+### `cesium` / `@cesium/engine` — runtime assets fetched by URL
+
+The 3D globe pane loads its code from **`@cesium/engine`** but its runtime
+assets from the **`cesium`** wrapper. Both are dependencies and both must move
+together: `cesium@1.x` pins the matching `@cesium/engine`, and the prebuilt
+Workers/Assets staged from the wrapper have to match the engine running them.
+
+The code imports the engine directly because the `cesium` barrel re-exports
+`@cesium/widgets` as well, and that defeats tree-shaking — the base-layer
+picker, geocoder, info box and Knockout all shipped in the lazy chunk even
+though the pane builds a bare `CesiumWidget`. Reverting to `import("cesium")`
+adds ~340 KB back with no build error and no test failure.
+
+After a bump, check all four — none of these fail the build:
+
+- **Asset copy.** `vite-plugins/copy-cesium-assets.ts` copies `Assets`,
+  `ThirdParty`, `Widgets` and `Workers` out of `cesium/Build/Cesium` into
+  `public/cesium/`, keyed on the installed version. The copy is gitignored, so a
+  stale one is refreshed automatically — but a directory renamed upstream is
+  silently dropped.
+- **`CESIUM_BASE_URL`.** `CesiumCanvas.tsx` derives it from the app's
+  `BASE_URL`, not a hardcoded `/cesium`, so a sub-path deploy (the `/demo/`
+  build) still resolves. Cesium reads it at import time; if the Workers 404 the
+  render loop dies with no error boundary.
+- **The stylesheet.** The pane links `Widgets/CesiumWidget/CesiumWidget.css`,
+  not the 32 KB `Widgets/widgets.css` — it only needs the canvas sizing, credit
+  container and error panel. If upstream moves that file the globe still mounts
+  but its canvas stops filling the pane, which no assertion catches.
+- **PWA globs.** `**/cesium-*` / `**/Cesium-*` in `vite.config.ts` keep the
+  chunk out of the app-shell precache and CacheFirst-cache it instead. A chunk
+  renamed out of that pattern would be precached, adding megabytes to first load.
+
+`e2e/cesium-globe.spec.ts` mounts the real engine keyless and drags the globe,
+so it catches a broken `CESIUM_BASE_URL` or a dead chunk. It cannot catch the
+CSS regression or the bundle-size one — check those by eye and in the build
+output.
+
 ## Adding a blend mode
 
 **Do not add a blend mode without checking it in the browser.** MapLibre's blend
