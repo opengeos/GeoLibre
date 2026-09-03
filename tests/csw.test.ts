@@ -53,11 +53,18 @@ describe("CSW catalog helpers", () => {
     assert.equal(isCswFeatureCollection({ type: "FeatureCollection", features: [] }), true);
     assert.equal(isCswFeatureCollection({ type: "FeatureCollection" }), false);
     assert.equal(isCswFeatureCollection({ type: "Feature", geometry: null }), false);
+    assert.equal(isCswFeatureCollection({ type: "FeatureCollection", features: [null] }), false);
     assert.equal(isCswFeatureCollection(null), false);
   });
 
   it("recognizes ArcGIS and WFS resource URLs", () => {
     assert.equal(classifyCswResource("https://x.test/FeatureServer/0"), "arcgis");
     assert.equal(classifyCswResource("https://x.test/ows?service=WFS"), "wfs");
+  });
+
+  it("reads a bare service token from the scheme but not from the URL", () => {
+    assert.equal(classifyCswResource("https://x.test/ows", "OGC:WMS"), "wms");
+    assert.equal(classifyCswResource("https://x.test/docs/wms-user-guide.pdf"), "unknown");
+    assert.equal(classifyCswResource("https://x.test/geoserver/wms"), "wms");
   });
 });

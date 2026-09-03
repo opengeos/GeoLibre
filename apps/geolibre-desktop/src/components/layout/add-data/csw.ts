@@ -29,11 +29,19 @@ function childText(element: Element, localName: string): string {
 }
 
 export function classifyCswResource(url: string, scheme = ""): CswResourceKind {
-  const value = `${scheme} ${url}`.toLowerCase();
-  if (/\bwms\b|service=wms|\/wms(?:server)?(?:[/?]|$)/.test(value)) return "wms";
-  if (/\bwfs\b|service=wfs|\/wfs(?:[/?]|$)/.test(value)) return "wfs";
-  if (/arcgis|featureserver|mapserver|imageserver/.test(value)) return "arcgis";
-  if (/geojson|\.geojson(?:[?#]|$)|[?&](?:f|format)=geojson/.test(value)) return "geojson";
+  // The protocol/scheme attribute is a service token ("OGC:WMS"), so a bare
+  // word match belongs there. A URL is not: ".../wms-user-guide.pdf" is a
+  // document, so require the service parameter or a /wms path segment instead,
+  // or the button offered would fail on click.
+  const protocol = scheme.toLowerCase();
+  const value = url.toLowerCase();
+  if (/\bwms\b/.test(protocol) || /service=wms|\/wms(?:server)?(?:[/?]|$)/.test(value)) {
+    return "wms";
+  }
+  if (/\bwfs\b/.test(protocol) || /service=wfs|\/wfs(?:[/?]|$)/.test(value)) return "wfs";
+  const both = `${protocol} ${value}`;
+  if (/arcgis|featureserver|mapserver|imageserver/.test(both)) return "arcgis";
+  if (/geojson|\.geojson(?:[?#]|$)|[?&](?:f|format)=geojson/.test(both)) return "geojson";
   return "unknown";
 }
 
@@ -145,7 +153,15 @@ export async function searchCsw(endpoint: string, keyword: string, signal?: Abor
     // Fall back to a larger unfiltered page and filter locally so keyword search
     // remains useful rather than exposing the server's parser limitation.
     if (!term || signal?.aborted) throw error;
-    const records = await fetchRecords(createCswGetRecordsUrl(endpoint, "", 100));
+    let records: CswRecord[];
+    try {
+      records = await fetchRecords(createCswGetRecordsUrl(endpoint, "", 100));
+    } catch {
+      // The retry only exists to work around wildcard-CQL rejection. When it
+      // fails too the endpoint is unreachable or wrong, and the first error
+      // describes that far better than the retry's, so report the original.
+      throw error;
+    }
     const needle = term.toLocaleLowerCase();
     return records.filter((record) =>
       `${record.title} ${record.abstract} ${record.identifier}`
@@ -160,7 +176,10 @@ export async function searchCsw(endpoint: string, keyword: string, signal?: Abor
 export function isCswFeatureCollection(value: unknown): value is GeoJSON.FeatureCollection {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as { type?: unknown; features?: unknown };
-  return candidate.type === "FeatureCollection" && Array.isArray(candidate.features);
+  if (candidate.type !== "FeatureCollection" || !Array.isArray(candidate.features)) return false;
+  // A member that isn't an object (a `null` placeholder, a bare id) would reach
+  // the layer store and break rendering, so reject the whole document.
+  return candidate.features.every((feature) => typeof feature === "object" && feature !== null);
 }
 
 /** Downloads a GeoJSON resource advertised by a CSW record using the same
