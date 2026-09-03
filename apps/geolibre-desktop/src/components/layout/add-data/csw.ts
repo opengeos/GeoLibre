@@ -142,3 +142,21 @@ export async function searchCsw(endpoint: string, keyword: string, signal?: Abor
     );
   }
 }
+
+/** Downloads a GeoJSON resource advertised by a CSW record using the same
+ * CORS-safe desktop/dev transport as catalog requests. */
+export async function fetchCswGeoJson(url: string): Promise<GeoJSON.FeatureCollection> {
+  let text: string;
+  if (isTauri()) {
+    const bytes = await fetchUrlBytes(url, { context: "CSW GeoJSON resource" });
+    text = new TextDecoder().decode(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+  } else {
+    const requestUrl = import.meta.env.DEV
+      ? `${CSW_PROXY_PATH}?url=${encodeURIComponent(url)}`
+      : url;
+    const response = await fetch(requestUrl);
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    text = await response.text();
+  }
+  return JSON.parse(text) as GeoJSON.FeatureCollection;
+}

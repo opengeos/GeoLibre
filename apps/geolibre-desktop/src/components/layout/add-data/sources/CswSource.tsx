@@ -7,7 +7,7 @@ import { openAddData } from "../open-add-data";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldString, type ServiceLibraryEntry } from "../service-library";
 import { AddDataError, useAddDataSource } from "../shared";
-import { searchCsw, type CswRecord, type CswResource } from "../csw";
+import { fetchCswGeoJson, searchCsw, type CswRecord, type CswResource } from "../csw";
 
 export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
@@ -46,9 +46,7 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
     source.setError(null);
     if (resource.kind === "geojson") {
       try {
-        const response = await fetch(resource.url);
-        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-        const geojson = (await response.json()) as GeoJSON.FeatureCollection;
+        const geojson = await fetchCswGeoJson(resource.url);
         if (geojson.type !== "FeatureCollection") throw new Error(t("addData.csw.invalidGeoJson"));
         source.addAndClose(
           {
