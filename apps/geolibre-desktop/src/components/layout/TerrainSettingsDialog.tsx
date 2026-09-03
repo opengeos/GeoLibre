@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -15,9 +16,10 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
   Slider,
 } from "@geolibre/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   clampExaggeration,
@@ -25,6 +27,7 @@ import {
   MAX_EXAGGERATION,
   MIN_EXAGGERATION,
 } from "../../lib/terrain-exaggeration";
+import { terrainRasterLayerOptions } from "../../lib/terrain-raster-layer";
 
 // Default sourced from the map package so it can't drift from the control's.
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
@@ -52,6 +55,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
   const [terrainUrl, setTerrainUrl] = useState("");
+  const [rasterLayerId, setRasterLayerId] = useState("");
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
   // Free-text draft for the number input so a fractional value like "2.5" can be
@@ -59,6 +63,8 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
   // changes elsewhere (slider, dialog open, reset).
   const [draft, setDraft] = useState(String(DEFAULT_EXAGGERATION));
+  const layers = useAppStore((state) => state.layers);
+  const rasterLayerOptions = useMemo(() => terrainRasterLayerOptions(layers), [layers]);
   useEffect(() => setDraft(String(exaggeration)), [exaggeration]);
 
   useEffect(() => {
@@ -74,7 +80,10 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       );
       setExaggeration(value);
       setDraft(String(value));
-      setTerrainUrl(mapControllerRef.current?.getTerrainCogSource() ?? "");
+      const currentSource = mapControllerRef.current?.getTerrainCogSource() ?? "";
+      const currentLayer = rasterLayerOptions.find((option) => option.source === currentSource);
+      setTerrainUrl(currentLayer ? "" : currentSource);
+      setRasterLayerId(currentLayer?.id ?? "");
       setSourceError(null);
       // A COG still opening from a previous session of this dialog would
       // otherwise leave the controls disabled and the button reading "Opening
@@ -93,7 +102,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       window.removeEventListener(TERRAIN_SETTINGS_EVENT, handleOpen);
       window.removeEventListener(TERRAIN_SETTINGS_CLOSE_EVENT, handleClose);
     };
-  }, [mapControllerRef]);
+  }, [mapControllerRef, rasterLayerOptions]);
 
   // Coalesce the live map update to one per animation frame so a fast slider
   // drag (Radix fires onValueChange on every 0.1 step) doesn't spray dozens of
@@ -174,14 +183,30 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     }
   };
 
-  const applyCogSource = () => applyTerrainSource(terrainUrl);
+  const applyCogSource = () =>
+    applyTerrainSource(terrainUrl, () => {
+      setRasterLayerId("");
+    });
 
   // Keep the URL input empty: a local filename is not a fetchable URL, and
   // leaving it in this field would let a later "Use COG DEM" click try to open
   // it as an HTTP source.
-  const applyLocalCogSource = (file: File) => applyTerrainSource(file, () => setTerrainUrl(""));
+  const applyLocalCogSource = (file: File) =>
+    applyTerrainSource(file, () => {
+      setTerrainUrl("");
+      setRasterLayerId("");
+    });
 
-  const restoreDefaultSource = () => applyTerrainSource(null, () => setTerrainUrl(""));
+  const applyRasterLayerSource = () => {
+    const option = rasterLayerOptions.find((candidate) => candidate.id === rasterLayerId);
+    if (option) void applyTerrainSource(option.source, () => setTerrainUrl(""));
+  };
+
+  const restoreDefaultSource = () =>
+    applyTerrainSource(null, () => {
+      setTerrainUrl("");
+      setRasterLayerId("");
+    });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -224,6 +249,39 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
             <p className="text-muted-foreground text-sm">
               {t("terrainSettings.sourceDescription")}
             </p>
+            <div className="space-y-1">
+              <Label htmlFor="terrain-raster-layer">{t("terrainSettings.rasterLayerLabel")}</Label>
+              <Select
+                id="terrain-raster-layer"
+                value={rasterLayerId}
+                disabled={
+                  sourceLoading || !mapControllerRef.current || rasterLayerOptions.length === 0
+                }
+                onChange={(event) => setRasterLayerId(event.target.value)}
+              >
+                <option value="">{t("terrainSettings.rasterLayerPlaceholder")}</option>
+                {rasterLayerOptions.map((layer) => (
+                  <option key={layer.id} value={layer.id}>
+                    {layer.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                {rasterLayerOptions.length > 0
+                  ? t("terrainSettings.rasterLayerDescription")
+                  : t("terrainSettings.noRasterLayers")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={sourceLoading || !rasterLayerId || !mapControllerRef.current}
+                onClick={applyRasterLayerSource}
+              >
+                {sourceLoading
+                  ? t("terrainSettings.sourceLoading")
+                  : t("terrainSettings.useRasterLayer")}
+              </Button>
+            </div>
             <Input
               id="terrain-cog-url"
               type="url"
