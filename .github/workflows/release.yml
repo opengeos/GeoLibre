@@ -3,12 +3,17 @@ name: Release Desktop App
 on:
   release:
     types: [published]
+  # Build-only trial run, to catch a break before a tag is cut rather than
+  # after. Every step and job that writes anything outside this run (release
+  # assets, Homebrew, AUR, COPR, winget) is gated on the `release` event below,
+  # so a dispatch builds the same artifacts and publishes none of them.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ github.event_name }}-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -41,6 +46,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach Chrome extension to GitHub Release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
@@ -137,8 +143,8 @@ jobs:
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         with:
           projectPath: apps/geolibre-desktop
-          releaseId: ${{ github.event.release.id }}
-          tagName: ${{ github.event.release.tag_name }}
+          releaseId: ${{ github.event_name == 'release' && github.event.release.id || '' }}
+          tagName: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
           args: ${{ matrix.args }}
           uploadPlainBinary: true
 
@@ -156,10 +162,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
           image="$(scripts/select-single-appimage.sh "$ARTIFACT_PATHS")"
           scripts/embed-appimage-update-info.sh "$image"
+          if [ "$EVENT_NAME" != "release" ]; then
+            echo "::notice::Trial run: patched $image and generated its .zsync, not uploading."
+            exit 0
+          fi
           gh release upload "$TAG" "$image" "$image.zsync" --clobber
 
       - name: Build MSIX package
@@ -169,7 +180,7 @@ jobs:
         run: ./packaging/msix/build-msix.ps1
 
       - name: Upload MSIX release asset
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'release'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -187,7 +198,7 @@ jobs:
         run: ./packaging/portable/build-portable.ps1
 
       - name: Upload portable zip release asset
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'release'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -210,7 +221,7 @@ jobs:
       group: homebrew-tap-update
       cancel-in-progress: false
     # Only update the tap for full releases, not prereleases.
-    if: ${{ !github.event.release.prerelease }}
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -276,7 +287,7 @@ jobs:
       group: aur-publish
       cancel-in-progress: false
     # Only publish for full releases, not prereleases.
-    if: ${{ !github.event.release.prerelease }}
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
     env:
       # Surfaced as an env var so steps can skip cleanly when the secret is
       # absent (forks, or before the maintainer configures it).
@@ -329,7 +340,7 @@ jobs:
     concurrency:
       group: copr-publish
       cancel-in-progress: false
-    if: ${{ !github.event.release.prerelease }}
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
     env:
       COPR_API_TOKEN: ${{ secrets.COPR_API_TOKEN }}
     steps:
@@ -399,7 +410,7 @@ jobs:
       group: winget-publish
       cancel-in-progress: false
     # Only publish for full releases, not prereleases.
-    if: ${{ !github.event.release.prerelease }}
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
     env:
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
