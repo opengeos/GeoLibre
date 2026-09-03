@@ -7,7 +7,13 @@ import { openAddData } from "../open-add-data";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldString, type ServiceLibraryEntry } from "../service-library";
 import { AddDataError, useAddDataSource } from "../shared";
-import { fetchCswGeoJson, searchCsw, type CswRecord, type CswResource } from "../csw";
+import {
+  fetchCswGeoJson,
+  isHttpCswEndpoint,
+  searchCsw,
+  type CswRecord,
+  type CswResource,
+} from "../csw";
 
 export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
@@ -25,7 +31,7 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
     source.setError(null);
-    if (!/^https?:\/\//i.test(endpoint.trim())) {
+    if (!isHttpCswEndpoint(endpoint.trim())) {
       source.setError(t("addData.csw.errorUrl"));
       return;
     }

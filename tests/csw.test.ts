@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   classifyCswResource,
   createCswGetRecordsUrl,
+  isHttpCswEndpoint,
   parseCswRecords,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/csw";
 
@@ -38,6 +39,13 @@ describe("CSW catalog helpers", () => {
       ["wms", "geojson"],
     );
     assert.equal(records[0].resources[0].name, "transport:roads");
+  });
+
+  it("rejects endpoints that createCswGetRecordsUrl cannot parse", () => {
+    assert.equal(isHttpCswEndpoint("https://catalog.test/csw"), true);
+    assert.equal(isHttpCswEndpoint("https://"), false);
+    assert.equal(isHttpCswEndpoint("ftp://catalog.test/csw"), false);
+    assert.equal(isHttpCswEndpoint("catalog.test/csw"), false);
   });
 
   it("recognizes ArcGIS and WFS resource URLs", () => {

@@ -166,7 +166,7 @@ const KIND_LABEL: Record<ServiceLibraryKind, string> = {
 };
 
 /** Kind grouping order under Services, mirroring the Add Data source order. */
-const KIND_ORDER: readonly ServiceLibraryKind[] = ["xyz", "wms", "wfs", "wmts", "arcgis", "csw"];
+const KIND_ORDER: readonly ServiceLibraryKind[] = ["xyz", "wms", "csw", "wfs", "wmts", "arcgis"];
 
 /**
  * Groups services by kind (XYZ / WMS / WFS / WMTS / ArcGIS) so the tree mirrors

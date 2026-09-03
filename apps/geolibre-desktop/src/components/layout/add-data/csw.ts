@@ -74,6 +74,18 @@ export function parseCswRecords(xmlText: string): CswRecord[] {
   });
 }
 
+/** True when the endpoint is an absolute http(s) URL. A bare `https://` passes a
+ * `^https?://` regex but makes {@link createCswGetRecordsUrl} throw, so callers
+ * validate here to surface their own message instead of a raw `TypeError`. */
+export function isHttpCswEndpoint(endpoint: string): boolean {
+  try {
+    const { protocol } = new URL(endpoint);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function createCswGetRecordsUrl(endpoint: string, keyword: string, maxRecords = 20): string {
   const url = new URL(endpoint);
   const operationKeys = new Set([
