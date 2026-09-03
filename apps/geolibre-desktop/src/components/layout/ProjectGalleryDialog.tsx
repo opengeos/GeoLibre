@@ -30,6 +30,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { observeGalleryEnd } from "../../lib/gallery-auto-load";
 import { openExternalLink } from "../../lib/open-external";
 import {
   fetchMyProjects,
@@ -125,6 +126,7 @@ export function ProjectGalleryDialog({
   );
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const reloadGenerationRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
@@ -249,6 +251,7 @@ export function ProjectGalleryDialog({
   // `loadPage` identity changes with scope); reset transient state and abort any
   // in-flight request when it closes.
   useEffect(() => {
+    reloadGenerationRef.current += 1;
     if (open) {
       setProjects([]);
       setQuery("");
@@ -296,16 +299,15 @@ export function ProjectGalleryDialog({
     const sentinel = loadMoreSentinelRef.current;
     if (!open || !root || !sentinel || !hasMore || trimmedQuery || status !== "idle") return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        observer.unobserve(sentinel);
-        void loadPage(rawOffset);
-      },
-      { root, rootMargin: "0px 0px 300px 0px" },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    const generation = reloadGenerationRef.current;
+    return observeGalleryEnd({
+      root,
+      sentinel,
+      generation,
+      currentGeneration: () => reloadGenerationRef.current,
+      isLoading: () => abortRef.current !== null,
+      onLoad: () => void loadPage(rawOffset),
+    });
   }, [hasMore, loadPage, open, rawOffset, status, trimmedQuery]);
 
   const showInitialSpinner = status === "loading" && projects.length === 0;
@@ -426,41 +428,47 @@ export function ProjectGalleryDialog({
                 {t("gallery.retry")}
               </Button>
             </div>
-          ) : showEmpty ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              {trimmedQuery
-                ? t("gallery.noMatches")
-                : effectiveScope === "mine"
-                  ? t("gallery.emptyMine")
-                  : effectiveScope === "featured"
-                    ? t("gallery.emptyFeatured")
-                    : t("gallery.empty")}
-            </p>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleProjects.map((project) => (
-                  <GalleryCard
-                    key={project.id}
-                    project={project}
-                    openingAction={openingState?.id === project.id ? openingState.action : null}
-                    disabled={openingState !== null}
-                    onOpen={() => void handleOpen(project)}
-                    onOpenCopy={() => void handleOpen(project, { asCopy: true })}
-                  />
-                ))}
-              </div>
+              {showEmpty ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  {trimmedQuery
+                    ? t("gallery.noMatches")
+                    : effectiveScope === "mine"
+                      ? t("gallery.emptyMine")
+                      : effectiveScope === "featured"
+                        ? t("gallery.emptyFeatured")
+                        : t("gallery.empty")}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleProjects.map((project) => (
+                    <GalleryCard
+                      key={project.id}
+                      project={project}
+                      openingAction={openingState?.id === project.id ? openingState.action : null}
+                      disabled={openingState !== null}
+                      onOpen={() => void handleOpen(project)}
+                      onOpenCopy={() => void handleOpen(project, { asCopy: true })}
+                    />
+                  ))}
+                </div>
+              )}
               {hasMore && !trimmedQuery ? (
                 <div
                   ref={loadMoreSentinelRef}
-                  className="flex min-h-12 items-center justify-center py-4 text-sm text-muted-foreground"
+                  className="flex min-h-12 items-center justify-center py-4"
                 >
                   {status === "loadingMore" ? (
-                    <>
+                    <span className="flex items-center text-sm text-muted-foreground">
                       <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       {t("gallery.loadingMore")}
-                    </>
-                  ) : null}
+                    </span>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => loadPage(rawOffset)}>
+                      {t("gallery.loadMore")}
+                    </Button>
+                  )}
                 </div>
               ) : null}
             </>
