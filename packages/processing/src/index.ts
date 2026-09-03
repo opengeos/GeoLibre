@@ -57,8 +57,6 @@ export {
   type CompositeScoreResult,
 } from "./statistics-tools";
 export {
-  H3_TOOLS,
-  getH3Tool,
   buildBinSql,
   buildGridFromBboxSql,
   buildH3CompactSql,
