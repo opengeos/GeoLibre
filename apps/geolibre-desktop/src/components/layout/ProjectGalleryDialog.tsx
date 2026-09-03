@@ -99,8 +99,8 @@ function galleryErrorMessage(error: unknown, t: TFunction): string {
  * GeoLibre.
  *
  * The listing endpoint only paginates (no server-side search), so this loads
- * pages on demand via "Load more" and filters the already-loaded set in the
- * browser.
+ * pages automatically as the user nears the end of the list and filters the
+ * already-loaded set in the browser.
  */
 export function ProjectGalleryDialog({
   open,
@@ -125,6 +125,8 @@ export function ProjectGalleryDialog({
   );
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Without a token, the "My projects" scope isn't available; fall back to the
   // featured tab.
@@ -286,6 +288,26 @@ export function ProjectGalleryDialog({
     ? projects.filter((p) => searchHaystack(p).includes(trimmedQuery))
     : projects;
 
+  // Fetch the next page shortly before the end of the gallery scrolls into
+  // view. Recreating the observer after each request also prevents a sentinel
+  // that remains visible from starting the same page more than once.
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!open || !root || !sentinel || !hasMore || trimmedQuery || status !== "idle") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        observer.unobserve(sentinel);
+        void loadPage(rawOffset);
+      },
+      { root, rootMargin: "0px 0px 300px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadPage, open, rawOffset, status, trimmedQuery]);
+
   const showInitialSpinner = status === "loading" && projects.length === 0;
   const showEmpty = status !== "loading" && !error && visibleProjects.length === 0;
 
@@ -385,7 +407,10 @@ export function ProjectGalleryDialog({
             `touch-pan-y` + `overscroll-contain` keep the vertical gesture on
             this element on iOS Safari, where the dialog's scroll-lock
             (react-remove-scroll) otherwise swallows the touchmove. */}
-        <div className="-mx-1 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-1 [-webkit-overflow-scrolling:touch]">
+        <div
+          ref={scrollContainerRef}
+          className="-mx-1 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-1 [-webkit-overflow-scrolling:touch]"
+        >
           {showInitialSpinner ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -426,22 +451,16 @@ export function ProjectGalleryDialog({
                 ))}
               </div>
               {hasMore && !trimmedQuery ? (
-                <div className="flex justify-center py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={status === "loadingMore"}
-                    onClick={() => loadPage(rawOffset)}
-                  >
-                    {status === "loadingMore" ? (
-                      <>
-                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
-                        {t("gallery.loadingMore")}
-                      </>
-                    ) : (
-                      t("gallery.loadMore")
-                    )}
-                  </Button>
+                <div
+                  ref={loadMoreSentinelRef}
+                  className="flex min-h-12 items-center justify-center py-4 text-sm text-muted-foreground"
+                >
+                  {status === "loadingMore" ? (
+                    <>
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      {t("gallery.loadingMore")}
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </>
