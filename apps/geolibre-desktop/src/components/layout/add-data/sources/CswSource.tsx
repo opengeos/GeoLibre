@@ -1,6 +1,6 @@
 import { Button, Input, Label } from "@geolibre/ui";
 import { ExternalLink, Loader2, Search } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createBaseLayer } from "../helpers";
 import { openAddData } from "../open-add-data";
@@ -38,34 +38,57 @@ export function CswSource({
   const [endpoint, setEndpoint] = useState(initialUrl);
   const [keyword, setKeyword] = useState(initialKeyword);
   const [records, setRecords] = useState<CswRecord[]>([]);
+  // The endpoint these records came from. Results are only shown (and only
+  // recorded as a layer's catalog) while it still matches the field, so an
+  // edited endpoint can never leave another catalog's resources addable.
+  const [recordsEndpoint, setRecordsEndpoint] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
+
+  // A response that arrives after the form moved on must not repopulate the
+  // list, so abandon the request when the source unmounts.
+  useEffect(() => () => searchAbortRef.current?.abort(), []);
 
   const applySaved = (entry: ServiceLibraryEntry) => {
     setEndpoint(serviceFieldString(entry.fields, "endpoint"));
     setKeyword(serviceFieldString(entry.fields, "keyword"));
     // The results belong to the previous catalog and their resource URLs would
-    // still be addable, so drop them until the new endpoint is searched.
+    // still be addable, so drop them — and any search still in flight for that
+    // catalog — until the new endpoint is searched.
+    searchAbortRef.current?.abort();
     setRecords([]);
+    setRecordsEndpoint("");
     source.setError(null);
   };
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
     source.setError(null);
-    if (!isHttpCswEndpoint(endpoint.trim())) {
+    const target = endpoint.trim();
+    // Whatever the previous search was about to return is now stale.
+    searchAbortRef.current?.abort();
+    setRecords([]);
+    setRecordsEndpoint("");
+    if (!isHttpCswEndpoint(target)) {
       source.setError(t("addData.csw.errorUrl"));
       return;
     }
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
     setIsSearching(true);
     try {
-      const next = await searchCsw(endpoint.trim(), keyword);
+      const next = await searchCsw(target, keyword, controller.signal);
+      if (controller.signal.aborted) return;
       setRecords(next);
+      setRecordsEndpoint(target);
       if (next.length === 0) source.setError(t("addData.csw.noResults"));
     } catch (error) {
+      if (controller.signal.aborted) return;
       source.setError(error instanceof Error ? error.message : t("addData.csw.searchError"));
       setRecords([]);
     } finally {
-      setIsSearching(false);
+      // A superseded search must not clear the spinner the newer one turned on.
+      if (!controller.signal.aborted) setIsSearching(false);
     }
   };
 
@@ -83,7 +106,7 @@ export function CswSource({
               { type: "geojson", data: geojson },
               {
                 sourceKind: "csw",
-                catalogUrl: endpoint,
+                catalogUrl: recordsEndpoint,
               },
               { geojson },
             ),
@@ -110,6 +133,10 @@ export function CswSource({
       window.setTimeout(() => openAddData(kind, { url: resource.url, layer }), 0);
     }
   };
+
+  // Typing a new endpoint without searching leaves the old results on screen;
+  // they describe a catalog the form no longer points at, so hide them.
+  const visibleRecords = recordsEndpoint === endpoint.trim() ? records : [];
 
   return (
     <form className="space-y-4" onSubmit={handleSearch}>
@@ -143,9 +170,9 @@ export function CswSource({
         </div>
       </div>
       {source.error ? <AddDataError message={source.error} /> : null}
-      {records.length > 0 ? (
+      {visibleRecords.length > 0 ? (
         <div className="max-h-80 space-y-2 overflow-y-auto" aria-label={t("addData.csw.results")}>
-          {records.map((record) => (
+          {visibleRecords.map((record) => (
             <article key={record.identifier} className="space-y-2 rounded-md border p-3">
               <div className="font-medium">{record.title}</div>
               {record.abstract ? (
