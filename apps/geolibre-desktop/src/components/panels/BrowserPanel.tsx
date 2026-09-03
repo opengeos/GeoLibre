@@ -442,6 +442,12 @@ export function BrowserPanel({
         }
         return;
       }
+      if (entry.kind === "csw") {
+        openAddData("csw", {
+          url: typeof entry.fields.endpoint === "string" ? entry.fields.endpoint : undefined,
+        });
+        return;
+      }
       beginBusy(node.id);
       try {
         await applyServiceEntry(entry, { addLayer, mapControllerRef });

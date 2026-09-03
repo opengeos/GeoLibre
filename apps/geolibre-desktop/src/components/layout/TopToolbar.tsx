@@ -1194,6 +1194,11 @@ export function TopToolbar({
       // Reject kinds the Mac App Store build hides so a stray event cannot
       // open a dialog whose backing service is compiled out.
       if (detail?.kind && !masHidesDataSource(detail.kind)) {
+        setInitialService(
+          detail.url
+            ? { kind: detail.kind, url: detail.url, layer: detail.layer ?? null, styleUrl: null }
+            : null,
+        );
         setAddDataPostgres(detail.postgres);
         setAddDataTargetGroupId(detail.groupId ?? null);
         addDataInitialLayerIdsRef.current = new Set(

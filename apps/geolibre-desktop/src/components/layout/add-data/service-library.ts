@@ -27,7 +27,7 @@ import {
 } from "./constants";
 
 /** The web-service source kinds that participate in the saved library. */
-export type ServiceLibraryKind = "wms" | "wfs" | "wmts" | "xyz" | "arcgis";
+export type ServiceLibraryKind = "wms" | "wfs" | "wmts" | "xyz" | "arcgis" | "csw";
 
 export type ServiceFieldValue = string | number | boolean;
 
@@ -48,7 +48,7 @@ export interface ServiceLibraryEntry {
   builtin?: boolean;
 }
 
-const SERVICE_KINDS: readonly ServiceLibraryKind[] = ["wms", "wfs", "wmts", "xyz", "arcgis"];
+const SERVICE_KINDS: readonly ServiceLibraryKind[] = ["wms", "wfs", "wmts", "xyz", "arcgis", "csw"];
 
 /** Label used for entries that have no category set. */
 export const UNCATEGORIZED_LABEL = "Uncategorized";

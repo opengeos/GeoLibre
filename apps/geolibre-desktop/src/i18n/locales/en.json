@@ -276,6 +276,10 @@
         "label": "Add WMS Layer",
         "description": "Add a WMS GetMap service as a tiled raster layer."
       },
+      "csw": {
+        "label": "Search CSW Catalog",
+        "description": "Search an OGC Catalogue Service for datasets and add supported web resources to the map."
+      },
       "wfs": {
         "label": "Add WFS Layer",
         "description": "Add WFS features by requesting GeoJSON from a GetFeature service."
@@ -426,6 +430,21 @@
       "noLayersFound": "No layers were found for this service.",
       "retrieveError": "Could not retrieve layers from this service.",
       "version": "WMS version"
+    },
+    "csw": {
+      "defaultName": "CSW Catalog",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Keyword",
+      "search": "Search",
+      "searching": "Searching...",
+      "results": "Catalog results",
+      "errorUrl": "Enter a valid HTTP or HTTPS CSW service URL.",
+      "searchError": "Could not search this catalog.",
+      "noResults": "No matching datasets were found.",
+      "invalidGeoJson": "The selected resource is not a GeoJSON FeatureCollection.",
+      "addError": "Could not add this catalog resource.",
+      "addResource": "Add {{kind}}",
+      "noSupportedResources": "No supported WMS, WFS, ArcGIS, or GeoJSON resource was advertised."
     },
     "wfs": {
       "defaultName": "WFS Layer",
@@ -2437,6 +2456,7 @@
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
       "wms": "WMS Layer",
+      "csw": "CSW Catalog",
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
       "ogcFeatures": "OGC API - Features",
