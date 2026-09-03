@@ -524,6 +524,10 @@ fn enqueue_project_paths(app: &tauri::AppHandle, paths: Vec<String>) {
 
 fn focus_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // `unminimize` is desktop-only in Tauri v2: there is no minimized state
+        // on mobile, and referencing it fails to compile for both
+        // aarch64-linux-android and aarch64-apple-ios.
+        #[cfg(desktop)]
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();

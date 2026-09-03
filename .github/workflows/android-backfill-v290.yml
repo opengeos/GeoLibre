@@ -1,0 +1,125 @@
+# TEMPORARY — delete once v2.9.0 has its Android assets.
+#
+# v2.9.0 published without an Android APK or AAB. `focus_main_window` in
+# `src-tauri/src/lib.rs` called `window.unminimize()`, which is desktop-only in
+# Tauri v2, so the `aarch64-linux-android` build failed to compile and the
+# release-triggered Android run never reached its upload step. The same line
+# broke the iOS build for the same reason. The fix is a `#[cfg(desktop)]` gate,
+# but it landed after the tag, so re-running the release event is not an option.
+#
+# This workflow attaches the artifacts from an ordinary `android.yml` run to an
+# existing release, which `android.yml` itself will not do outside a `release`
+# event. Two steps:
+#
+#   1. Build. Run android.yml manually against a ref that contains the fix:
+#        gh workflow run android.yml -R opengeos/GeoLibre --ref main
+#      Wait for it to finish and note the run id. It signs with the release
+#      keystore exactly as a release run does, because the signing path keys off
+#      the presence of ANDROID_KEYSTORE_BASE64, not the event name.
+#
+#   2. Attach. Run this workflow, leaving `run_id` blank to pick up the most
+#      recent successful android.yml run on the default branch:
+#        gh workflow run android-backfill-v290.yml -R opengeos/GeoLibre
+#
+# The APKs will be built from `main` rather than from the v2.9.0 tag. At the
+# time of writing those differ only by the one-line mobile compile fix, and
+# tauri.conf.json still reads 2.9.0, so the APK versions as 2.9.0. Check that
+# main has not moved further before running this; if it has, build from a ref
+# that is v2.9.0 plus the fix instead.
+#
+# Delete this file once the v2.9.0 release has its .apk and .aab assets.
+name: Attach Android build to v2.9.0 (temporary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the Android assets to
+        required: true
+        default: v2.9.0
+      run_id:
+        description: >-
+          android.yml run to take artifacts from. Leave blank to use the most
+          recent successful run on the default branch.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  attach:
+    name: Attach APKs and AAB to ${{ inputs.tag }}
+    runs-on: ubuntu-22.04
+    permissions:
+      # Upload release assets, and read artifacts from the android.yml run.
+      contents: write
+      actions: read
+    steps:
+      - name: Resolve the android.yml run to take artifacts from
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "$RUN_ID" ]; then
+            resolved="$RUN_ID"
+          else
+            resolved="$(gh run list -R "$REPO" \
+              --workflow android.yml --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty')"
+          fi
+          if [ -z "$resolved" ]; then
+            echo "::error::No successful android.yml run found. Build one first: gh workflow run android.yml --ref main"
+            exit 1
+          fi
+          echo "run_id=$resolved" >> "$GITHUB_OUTPUT"
+          gh run view -R "$REPO" "$resolved" \
+            --json displayTitle,headBranch,headSha,conclusion \
+            --jq '"Using android.yml run \(.displayTitle) on \(.headBranch) @ \(.headSha[0:7]) (\(.conclusion))"'
+
+      - name: Verify the release exists and has no Android assets yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "$TAG" -R "$REPO" --json assets \
+            --jq '[.assets[].name | select(endswith(".apk") or endswith(".aab"))] | join(", ")')"
+          if [ -n "$existing" ]; then
+            echo "::warning::$TAG already carries Android assets ($existing); they will be overwritten."
+          fi
+
+      - name: Download the signed APKs
+        uses: actions/download-artifact@v7
+        with:
+          name: geolibre-android-release-apks
+          path: apks
+          run-id: ${{ steps.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download the Play AAB
+        # Only release-keystore runs produce an AAB. If this step fails, the
+        # android.yml run was debug-signed and must not be published at all.
+        uses: actions/download-artifact@v7
+        with:
+          name: geolibre-android-play-aab
+          path: aab
+          run-id: ${{ steps.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          ls -l apks aab
+          gh release upload "$TAG" -R "$REPO" apks/*.apk aab/*.aab --clobber
+          echo "Attached to $TAG:"
+          gh release view "$TAG" -R "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith(".apk") or endswith(".aab")) | "  \(.name) (\(.size) bytes)"'
