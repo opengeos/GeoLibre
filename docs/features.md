@@ -66,8 +66,8 @@ kepler.gl, see the [Comparison](comparison.md).
 - Layer Library: save a fully configured layer — source, style, labels, filters, joins, virtual fields, and attribute form — from the layer actions menu, then re-add it to any later project in one click from the Browser panel's **My Data** section
     - Entries can be renamed, removed, and exported or imported as a JSON bundle to share with a team
     - Entries store the source specification rather than the data, so a saved COG, PostGIS table, or remote GeoParquet always reflects its source's current contents
-- A GeoParquet's `geo` metadata block is read in full — `version`, `primary_column`, `encoding`, `geometry_types`, `bbox`, `covering`, and `edges` — alongside the CRS a Parquet 2.0 file records only on its geometry column's GEOMETRY/GEOGRAPHY logical type. A 3D `bbox` is read minima-first rather than mistaking its ymax for an elevation, and a lon/lat table carrying no geometry column is recognized as one
     - Layers whose features exist only in memory or in a local file embed them behind a size cap
+- A GeoParquet's `geo` metadata block is read in full — `version`, `primary_column`, `encoding`, `geometry_types`, `bbox`, `covering`, and `edges` — alongside the CRS a Parquet 2.0 file records only on its geometry column's GEOMETRY/GEOGRAPHY logical type. A 3D `bbox` is read minima-first rather than mistaking its ymax for an elevation, and a lon/lat table carrying no geometry column is recognized as one
 - Deck.gl Layer builder for composing deck.gl overlays from uploaded files or remote URLs
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers, with the cadence, last-synchronized time, last error, and on-failure policy persisted with the project as a `connection` record — so a reopened project keeps refreshing on schedule and the Layers panel can show each live layer's synchronization status
@@ -110,11 +110,11 @@ kepler.gl, see the [Comparison](comparison.md).
     - Expression-driven label properties and placement priority
     - A Duplicate labels option, plus unique and concatenate modes that collapse points stacked at the same coordinate into a single deduplicated label
 - Popup and tooltip designer that decides what a viewer sees on click and hover, per layer, instead of dumping every property into the Identify popup
-- **Identify every visible layer at once**, folding vector features and raster pixel values from all visible queryable layers into one grouped, expandable popup with expand-all and collapse-all, instead of picking a layer first and clicking again
     - Pick which fields appear and in what order, relabel them, and format each value as text, a number with decimals and thousands separators, a date, a link, or an image, with an optional prefix and suffix
     - Title the popup from a field or an expression, or replace the rows entirely with an expression-built sentence, and show or hide the feature id
     - Independent click and hover switches, so a layer can carry a full popup, a light tooltip that follows the pointer, both, or neither
     - Saved with the project, so a shared map, a `layout=viewer` embed, and a story-map chapter show the reader the fields that were meant to be read rather than join artifacts, editor-tracking columns, and internal ids. See [Project format](project-format.md)
+- **Identify every visible layer at once**, folding vector features and raster pixel values from all visible queryable layers into one grouped, expandable popup with expand-all and collapse-all, instead of picking a layer first and clicking again
 - Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
 - NetCDF and HDF grids are first-class raster layers rather than a single grey band
     - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
@@ -271,9 +271,9 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Earthdata GIS**, which searches NASA's EOSDIS ArcGIS portal and renders its imagery, map, and feature services and published web maps as first-class layers
     - **Planet Open Data**, which opens Planet's disaster releases through the STAC browser with the public catalog preselected
     - **Vantor Open Data**, a STAC explorer for pre-event and post-event imagery that filters by event and phase, takes the map extent or a drawn bounding box, and picks its own COG rendering engine (GPU, WebAssembly, or TiTiler)
-    - Catalog plugins that share panel state are mutually exclusive, and a failed switch reactivates the plugin it displaced rather than leaving both off
     - **Hugging Face**, for searching the Hub, walking a dataset repo's folders, adding its vector and raster files to the map, and creating and uploading dataset repos
     - **[GeoLens](https://github.com/geolens-io/geolens)**, which connects to a self-hosted GeoLens server and adds datasets as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles — and writes edits to a GeoJSON-loaded dataset back to the GeoLens server, feature by feature, when the server allows it
+    - Catalog plugins that share panel state are mutually exclusive, and a failed switch reactivates the plugin it displaced rather than leaving both off
 - Analysis and editing integrations: Elevation Profile, Overture Maps, USGS LiDAR, GeoAgent, and GeoEditor
     - Elevation Profile charts a drawn line or the line features currently selected on a layer, so a route already on the map does not have to be traced again
     - USGS LiDAR clips a point cloud to an area of interest and downloads the result as COPC
