@@ -445,6 +445,9 @@ export function BrowserPanel({
       if (entry.kind === "csw") {
         openAddData("csw", {
           url: typeof entry.fields.endpoint === "string" ? entry.fields.endpoint : undefined,
+          // The entry saves the search term alongside the endpoint, so restore
+          // it too rather than reopening on an empty keyword field.
+          keyword: typeof entry.fields.keyword === "string" ? entry.fields.keyword : undefined,
         });
         return;
       }

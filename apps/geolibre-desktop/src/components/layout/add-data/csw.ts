@@ -155,6 +155,14 @@ export async function searchCsw(endpoint: string, keyword: string, signal?: Abor
   }
 }
 
+/** A catalog can advertise any JSON under a GeoJSON scheme, so check the shape
+ * the map actually needs — `type` alone leaves `features` free to be missing. */
+export function isCswFeatureCollection(value: unknown): value is GeoJSON.FeatureCollection {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { type?: unknown; features?: unknown };
+  return candidate.type === "FeatureCollection" && Array.isArray(candidate.features);
+}
+
 /** Downloads a GeoJSON resource advertised by a CSW record using the same
  * CORS-safe desktop/dev transport as catalog requests. */
 export async function fetchCswGeoJson(url: string): Promise<GeoJSON.FeatureCollection> {

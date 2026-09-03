@@ -57,6 +57,8 @@ interface AddDataDialogProps {
   initialLayer?: string;
   /** Style document accompanying a deep-linked vector tileset. */
   initialStyleUrl?: string;
+  /** Search term a saved CSW connection was stored with. */
+  initialKeyword?: string;
 }
 
 /**
@@ -71,6 +73,7 @@ function renderSource(
   initialUrl: string | undefined,
   initialLayer: string | undefined,
   initialStyleUrl: string | undefined,
+  initialKeyword: string | undefined,
 ) {
   switch (kind) {
     case "xyz":
@@ -78,7 +81,7 @@ function renderSource(
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
     case "csw":
-      return <CswSource initialUrl={initialUrl} />;
+      return <CswSource initialUrl={initialUrl} initialKeyword={initialKeyword} />;
     case "wfs":
       return <WfsSource initialUrl={initialUrl} initialTypeName={initialLayer} />;
     case "wmts":
@@ -138,6 +141,7 @@ export function AddDataDialog({
   initialUrl,
   initialLayer,
   initialStyleUrl,
+  initialKeyword,
 }: AddDataDialogProps) {
   const { t } = useTranslation();
   const open = kind !== null;
@@ -196,6 +200,7 @@ export function AddDataDialog({
               initialUrl,
               initialLayer,
               initialStyleUrl,
+              initialKeyword,
             )}
           </AddDataShellProvider>
         ) : null}

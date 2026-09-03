@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   classifyCswResource,
   createCswGetRecordsUrl,
+  isCswFeatureCollection,
   isHttpCswEndpoint,
   parseCswRecords,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/csw";
@@ -46,6 +47,13 @@ describe("CSW catalog helpers", () => {
     assert.equal(isHttpCswEndpoint("https://"), false);
     assert.equal(isHttpCswEndpoint("ftp://catalog.test/csw"), false);
     assert.equal(isHttpCswEndpoint("catalog.test/csw"), false);
+  });
+
+  it("requires a features array, not just a FeatureCollection type", () => {
+    assert.equal(isCswFeatureCollection({ type: "FeatureCollection", features: [] }), true);
+    assert.equal(isCswFeatureCollection({ type: "FeatureCollection" }), false);
+    assert.equal(isCswFeatureCollection({ type: "Feature", geometry: null }), false);
+    assert.equal(isCswFeatureCollection(null), false);
   });
 
   it("recognizes ArcGIS and WFS resource URLs", () => {

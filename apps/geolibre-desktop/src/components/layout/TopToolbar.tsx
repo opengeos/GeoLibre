@@ -122,7 +122,7 @@ import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
-import { serviceUrlParameter } from "../../lib/data-url";
+import { serviceUrlParameter, type ServiceUrlParameter } from "../../lib/data-url";
 import {
   OPEN_ADD_DATA_EVENT,
   type OpenAddDataDetail,
@@ -1150,7 +1150,11 @@ export function TopToolbar({
       current.terrain === terrainEnabled ? current : { ...current, terrain: terrainEnabled },
     );
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, terrainEnabled]);
-  const [initialService, setInitialService] = useState(() =>
+  // `keyword` has no deep-link parameter — only the Browser panel's saved CSW
+  // entries carry one — so it widens the parsed shape rather than joining it.
+  const [initialService, setInitialService] = useState<
+    (ServiceUrlParameter & { keyword?: string | null }) | null
+  >(() =>
     viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(() => {
@@ -1196,7 +1200,13 @@ export function TopToolbar({
       if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setInitialService(
           detail.url
-            ? { kind: detail.kind, url: detail.url, layer: detail.layer ?? null, styleUrl: null }
+            ? {
+                kind: detail.kind,
+                url: detail.url,
+                layer: detail.layer ?? null,
+                styleUrl: null,
+                keyword: detail.keyword ?? null,
+              }
             : null,
         );
         setAddDataPostgres(detail.postgres);
@@ -2278,6 +2288,9 @@ export function TopToolbar({
         }
         initialStyleUrl={
           addDataKind === initialService?.kind ? (initialService.styleUrl ?? undefined) : undefined
+        }
+        initialKeyword={
+          addDataKind === initialService?.kind ? (initialService.keyword ?? undefined) : undefined
         }
         onOpenChange={(open: boolean) => {
           if (!open) {

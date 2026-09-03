@@ -28,6 +28,8 @@ export interface OpenAddDataDetail {
   url?: string;
   /** Optional WMS layer or WFS feature type advertised by a catalog. */
   layer?: string;
+  /** Saved search term for the CSW source (only meaningful when `kind` is "csw"). */
+  keyword?: string;
 }
 
 /**
@@ -41,7 +43,13 @@ export interface OpenAddDataDetail {
  */
 export function openAddData(
   kind: AddDataKind,
-  options?: { postgres?: OpenAddDataPostgres; groupId?: string; url?: string; layer?: string },
+  options?: {
+    postgres?: OpenAddDataPostgres;
+    groupId?: string;
+    url?: string;
+    layer?: string;
+    keyword?: string;
+  },
 ): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -52,6 +60,7 @@ export function openAddData(
         groupId: options?.groupId,
         url: options?.url,
         layer: options?.layer,
+        keyword: options?.keyword,
       },
     }),
   );

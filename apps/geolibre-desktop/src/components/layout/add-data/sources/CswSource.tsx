@@ -9,6 +9,7 @@ import { serviceFieldString, type ServiceLibraryEntry } from "../service-library
 import { AddDataError, useAddDataSource } from "../shared";
 import {
   fetchCswGeoJson,
+  isCswFeatureCollection,
   isHttpCswEndpoint,
   searchCsw,
   type CswRecord,
@@ -25,11 +26,17 @@ const RESOURCE_LABEL: Record<CswResource["kind"], string> = {
   unknown: "",
 };
 
-export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
+export function CswSource({
+  initialUrl = "",
+  initialKeyword = "",
+}: {
+  initialUrl?: string;
+  initialKeyword?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.csw.defaultName"));
   const [endpoint, setEndpoint] = useState(initialUrl);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [records, setRecords] = useState<CswRecord[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -67,7 +74,7 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
     if (resource.kind === "geojson") {
       try {
         const geojson = await fetchCswGeoJson(resource.url);
-        if (geojson.type !== "FeatureCollection") throw new Error(t("addData.csw.invalidGeoJson"));
+        if (!isCswFeatureCollection(geojson)) throw new Error(t("addData.csw.invalidGeoJson"));
         source.addAndClose(
           {
             ...createBaseLayer(
