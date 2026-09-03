@@ -18,11 +18,7 @@ export function observeGalleryEnd({
 }: GalleryAutoLoadOptions): () => void {
   const observer = new IntersectionObserver(
     ([entry]) => {
-      if (
-        !entry?.isIntersecting ||
-        generation !== currentGeneration() ||
-        isLoading()
-      ) {
+      if (!entry?.isIntersecting || generation !== currentGeneration() || isLoading()) {
         return;
       }
       observer.unobserve(sentinel);
