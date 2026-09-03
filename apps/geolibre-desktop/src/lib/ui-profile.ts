@@ -93,6 +93,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   // Web services
   { id: "xyz", section: "webServices", labelKey: "toolbar.layerType.xyz", tier: "basic" },
   { id: "wms", section: "webServices", labelKey: "toolbar.layerType.wms", tier: "basic" },
+  { id: "csw", section: "webServices", labelKey: "toolbar.layerType.csw", tier: "intermediate" },
   { id: "wfs", section: "webServices", labelKey: "toolbar.layerType.wfs", tier: "intermediate" },
   { id: "wmts", section: "webServices", labelKey: "toolbar.layerType.wmts", tier: "intermediate" },
   {

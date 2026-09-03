@@ -67,6 +67,7 @@ export function AddDataMenu({
     "osm-pbf": { onSelect: onOpenOsmPbfDialog, disabled: osmPbfBusy },
     xyz: { onSelect: () => onSetAddDataKind("xyz") },
     wms: { onSelect: () => onSetAddDataKind("wms") },
+    csw: { onSelect: () => onSetAddDataKind("csw") },
     wfs: { onSelect: () => onSetAddDataKind("wfs") },
     wmts: { onSelect: () => onSetAddDataKind("wmts") },
     "ogc-features": { onSelect: () => onSetAddDataKind("ogc-features") },

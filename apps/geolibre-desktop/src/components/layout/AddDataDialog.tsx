@@ -23,6 +23,7 @@ import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
 import { WfsSource } from "./add-data/sources/WfsSource";
 import { WmsSource } from "./add-data/sources/WmsSource";
+import { CswSource } from "./add-data/sources/CswSource";
 import { WmtsSource } from "./add-data/sources/WmtsSource";
 import { XyzSource } from "./add-data/sources/XyzSource";
 import type { AddDataKind } from "./add-data/types";
@@ -76,6 +77,8 @@ function renderSource(
       return <XyzSource initialUrl={initialUrl} />;
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
+    case "csw":
+      return <CswSource />;
     case "wfs":
       return <WfsSource initialUrl={initialUrl} initialTypeName={initialLayer} />;
     case "wmts":

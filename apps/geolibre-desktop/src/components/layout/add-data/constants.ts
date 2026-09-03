@@ -14,6 +14,7 @@ export const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
 export type KindI18nKey =
   | "xyz"
   | "wms"
+  | "csw"
   | "wfs"
   | "wmts"
   | "ogcFeatures"
@@ -40,6 +41,7 @@ export type KindI18nKey =
 export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   xyz: "xyz",
   wms: "wms",
+  csw: "csw",
   wfs: "wfs",
   wmts: "wmts",
   "ogc-features": "ogcFeatures",
@@ -144,6 +146,7 @@ export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 // Keep in sync with WMS_PROXY_PATH in vite.config.ts (the dev proxy binds it
 // there). Used to fetch a WMS GetCapabilities document without tripping CORS.
 export const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+export const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts. Used to fetch a WFS
 // GetCapabilities document (and GetFeature responses) without tripping CORS.
 export const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
