@@ -161,22 +161,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
+          # On a release this is the tag. A trial run has none, and the script
+          # requires one: it derives the zsync glob by rewriting `_<version>_`
+          # in the bundle's file name and bails if the tag's version is not in
+          # there. Fall back to the version tauri-action actually stamped, which
+          # is what test-build.yml already feeds this same step.
+          TAG: ${{ github.event.release.tag_name || format('v{0}', steps.tauri.outputs.appVersion) }}
           EVENT_NAME: ${{ github.event_name }}
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
           image="$(scripts/select-single-appimage.sh "$ARTIFACT_PATHS")"
-          # A trial run has no tag, but the script requires one: it derives the
-          # zsync glob by rewriting `_<version>_` in the bundle's file name, and
-          # bails if the tag's version is not in there. Deriving the tag from
-          # the version the bundler actually stamped keeps that guard meaningful
-          # on a dry run instead of skipping the whole update-info path, which
-          # is the fiddly part most worth exercising before a release.
-          if [ -z "$TAG" ]; then
-            TAG="v$(node -p "require('./apps/geolibre-desktop/package.json').version")"
-            export TAG
-            echo "::notice::Trial run: derived tag $TAG from package.json for update-info embedding."
-          fi
           scripts/embed-appimage-update-info.sh "$image"
           if [ "$EVENT_NAME" != "release" ]; then
             echo "::notice::Trial run: patched $image and generated its .zsync, not uploading."
