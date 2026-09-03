@@ -465,7 +465,13 @@ export function ProjectGalleryDialog({
                       {t("gallery.loadingMore")}
                     </span>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => loadPage(rawOffset)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (abortRef.current === null) void loadPage(rawOffset);
+                      }}
+                    >
                       {t("gallery.loadMore")}
                     </Button>
                   )}

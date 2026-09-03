@@ -9,6 +9,35 @@ describe("project gallery auto-load observer", () => {
     Object.assign(globalThis, { IntersectionObserver: originalObserver });
   });
 
+  it("unobserves the sentinel before loading the next page", () => {
+    let fire: (entries: IntersectionObserverEntry[]) => void = () => {};
+    const events: string[] = [];
+    class FakeIntersectionObserver {
+      constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+        fire = callback;
+      }
+      observe() {}
+      unobserve(target: Element) {
+        events.push(target === sentinel ? "unobserve" : "wrong target");
+      }
+      disconnect() {}
+    }
+    Object.assign(globalThis, { IntersectionObserver: FakeIntersectionObserver });
+
+    const sentinel = {} as Element;
+    observeGalleryEnd({
+      root: {} as Element,
+      sentinel,
+      generation: 1,
+      currentGeneration: () => 1,
+      isLoading: () => false,
+      onLoad: () => events.push("load"),
+    });
+
+    fire([{ isIntersecting: true, target: sentinel } as IntersectionObserverEntry]);
+    assert.deepEqual(events, ["unobserve", "load"]);
+  });
+
   it("ignores a callback from before a scope reload", () => {
     let fire: (entries: IntersectionObserverEntry[]) => void = () => {};
     class FakeIntersectionObserver {
