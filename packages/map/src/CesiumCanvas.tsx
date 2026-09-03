@@ -125,6 +125,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // autonomous camera settle (terrain streaming in, a container resize) leaves
   // it false and must not mark the project dirty.
   const userMovedRef = useRef(false);
+  // Whether the camera's current position came from the user rather than from
+  // `applyView`. Unlike `userMovedRef` (which moveEnd consumes) this stays set
+  // until the next programmatic apply, and it is what stops the terrain
+  // correction below from fighting live navigation — see the handler for why.
+  const userOwnsCameraRef = useRef(false);
   // Flips true once the viewer exists so the store-driven apply effects re-run
   // and drive the freshly created camera.
   const [ready, setReady] = useState(false);
@@ -243,6 +248,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
     const viewer = viewerRef.current;
     if (!Cesium || !viewer || viewer.isDestroyed()) return;
     lastAppliedRef.current = view;
+    // This placement is ours, so the terrain correction may adjust it.
+    userOwnsCameraRef.current = false;
     lastGroundHeightRef.current = groundHeightAt(Cesium, viewer, view.center[0], view.center[1]);
     applyMapViewToCamera(Cesium, viewer, view);
   }
@@ -310,9 +317,13 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         // isn't a move either, so pointermove only counts while a button is down.
         const markUserMove = () => {
           userMovedRef.current = true;
+          userOwnsCameraRef.current = true;
         };
         const markUserDrag = (event: PointerEvent) => {
-          if (event.buttons !== 0) userMovedRef.current = true;
+          if (event.buttons !== 0) {
+            userMovedRef.current = true;
+            userOwnsCameraRef.current = true;
+          }
         };
         const canvas = viewer.canvas;
         const opts: AddEventListenerOptions = { passive: true };
@@ -368,10 +379,20 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         // changed, so the globe settles onto the real surface. The guard makes
         // this a no-op without terrain (height stays 0) and stops it recursing:
         // the re-apply's own load settles at the same height.
+        //
+        // It corrects a *programmatic* placement only. Navigating loads finer
+        // terrain, which drains the queue at a new height mid-gesture; without
+        // the `userOwnsCameraRef` guard that re-applied `lastAppliedRef` — the
+        // last settled view — and yanked the camera back, so a wheel zoom over
+        // terrain snapped straight back to where it started and the store never
+        // saw the move (the yank's own moveEnd read as the suppressed echo).
+        // Once the user is driving, their camera is authoritative and Cesium's
+        // own navigation already keeps it above the terrain.
         viewer.scene.globe.tileLoadProgressEvent.addEventListener((queued: number) => {
           const ns = cesiumRef.current;
           const view = lastAppliedRef.current;
           if (queued > 0 || !ns || !view || viewer.isDestroyed()) return;
+          if (userOwnsCameraRef.current) return;
           const height = groundHeightAt(ns, viewer, view.center[0], view.center[1]);
           if (Math.abs(height - lastGroundHeightRef.current) < 1) return;
           applyView(view);
@@ -470,6 +491,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // viewer exists (the initial seed above already covers the mount value).
   useEffect(() => {
     if (!ready || !syncView) return;
+    // The view this canvas just published arrives straight back here through the
+    // store. Re-applying it would `lookAt` the camera again — repositioning it
+    // to the last settled view and undoing whatever the user has scrolled since.
+    // Only a camera that genuinely differs is worth applying.
+    if (lastAppliedRef.current && isSameView(globalView, lastAppliedRef.current)) return;
     applyView(globalView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -485,6 +511,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // Not synced: follow this pane's own saved camera.
   useEffect(() => {
     if (!ready || syncView || !entryView) return;
+    // Same echo guard as the synced effect above.
+    if (lastAppliedRef.current && isSameView(entryView, lastAppliedRef.current)) return;
     applyView(entryView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
