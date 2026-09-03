@@ -2294,6 +2294,7 @@ export function TopToolbar({
         initialKeyword={
           addDataKind === initialService?.kind ? (initialService.keyword ?? undefined) : undefined
         }
+        targetGroupId={addDataTargetGroupId}
         onOpenChange={(open: boolean) => {
           if (!open) {
             if (addDataTargetGroupId) {

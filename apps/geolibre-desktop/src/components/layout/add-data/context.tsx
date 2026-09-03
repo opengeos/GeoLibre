@@ -18,6 +18,13 @@ export interface AddDataShellContextValue {
   setIsSubmitting: (value: boolean) => void;
   /** Run close cleanups (e.g. transient Martin shutdown) and close the dialog. */
   closeDialog: () => void;
+  /**
+   * Group the layers added in this dialog session are moved into ("Add data to
+   * group"), or null. A source that closes and reopens the dialog on another
+   * kind must pass this back through {@link openAddData}, since closing clears
+   * the shell's copy.
+   */
+  targetGroupId: string | null;
   martin: MartinConnection;
 }
 

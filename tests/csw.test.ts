@@ -83,4 +83,9 @@ describe("CSW catalog helpers", () => {
     assert.equal(classifyCswResource("https://x.test/docs/wms-user-guide.pdf"), "unknown");
     assert.equal(classifyCswResource("https://x.test/geoserver/wms"), "wms");
   });
+
+  it("claims Esri REST endpoints but not UMN MapServer CGI", () => {
+    assert.equal(classifyCswResource("https://x.test/rest/services/A/MapServer/0"), "arcgis");
+    assert.equal(classifyCswResource("http://x.test/cgi-bin/mapserver.cgi?map=foo"), "unknown");
+  });
 });

@@ -40,7 +40,10 @@ export function classifyCswResource(url: string, scheme = ""): CswResourceKind {
   }
   if (/\bwfs\b/.test(protocol) || /service=wfs|\/wfs(?:[/?]|$)/.test(value)) return "wfs";
   const both = `${protocol} ${value}`;
-  if (/arcgis|featureserver|mapserver|imageserver/.test(both)) return "arcgis";
+  // Esri REST endpoints end in a /MapServer, /FeatureServer or /ImageServer
+  // path segment. A bare substring would also claim UMN MapServer's
+  // "/cgi-bin/mapserver.cgi", which ArcGISSource cannot open.
+  if (/arcgis|\/(?:feature|map|image)server(?:[/?]|$)/.test(both)) return "arcgis";
   if (/geojson|\.geojson(?:[?#]|$)|[?&](?:f|format)=geojson/.test(both)) return "geojson";
   return "unknown";
 }
@@ -202,5 +205,11 @@ export async function fetchCswGeoJson(url: string): Promise<GeoJSON.FeatureColle
     if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
     text = await response.text();
   }
-  return JSON.parse(text) as GeoJSON.FeatureCollection;
+  try {
+    return JSON.parse(text) as GeoJSON.FeatureCollection;
+  } catch {
+    // A misconfigured host can answer 200 with an HTML error page; a raw
+    // SyntaxError ("Unexpected token '<'") would surface verbatim to the user.
+    throw new Error("The resource did not return GeoJSON.");
+  }
 }

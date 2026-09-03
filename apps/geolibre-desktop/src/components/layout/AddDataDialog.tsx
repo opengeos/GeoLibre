@@ -59,6 +59,9 @@ interface AddDataDialogProps {
   initialStyleUrl?: string;
   /** Search term a saved CSW connection was stored with. */
   initialKeyword?: string;
+  /** Group this dialog session's layers are moved into, when opened via
+   * "Add data to group". */
+  targetGroupId?: string | null;
 }
 
 /**
@@ -142,6 +145,7 @@ export function AddDataDialog({
   initialLayer,
   initialStyleUrl,
   initialKeyword,
+  targetGroupId = null,
 }: AddDataDialogProps) {
   const { t } = useTranslation();
   const open = kind !== null;
@@ -176,8 +180,9 @@ export function AddDataDialog({
       setIsSubmitting,
       closeDialog,
       martin,
+      targetGroupId,
     }),
-    [mapControllerRef, addLayer, existingLayers, isSubmitting, closeDialog, martin],
+    [mapControllerRef, addLayer, existingLayers, isSubmitting, closeDialog, martin, targetGroupId],
   );
 
   return (

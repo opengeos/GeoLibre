@@ -136,11 +136,15 @@ export function CswSource({
       // sublayer ids, not the catalog's human-readable resource name — so only
       // WMS/WFS get the layer hint.
       const layer = kind === "arcgis" ? undefined : resource.name;
+      // Closing clears the shell's target group (no layer was added yet), so
+      // carry it into the reopened dialog or an "Add data to group" session
+      // would silently drop the layer outside the group.
+      const groupId = source.shell.targetGroupId ?? undefined;
       // Close first so the dialog remounts on the new kind, then reopen on the
       // next tick: openAddData sets the kind through the same shell state the
       // close is clearing, and a same-tick call would be overwritten.
       source.shell.closeDialog();
-      window.setTimeout(() => openAddData(kind, { url: resource.url, layer }), 0);
+      window.setTimeout(() => openAddData(kind, { url: resource.url, layer, groupId }), 0);
     }
   };
 
