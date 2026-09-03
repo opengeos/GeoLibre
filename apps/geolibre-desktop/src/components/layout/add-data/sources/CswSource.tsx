@@ -49,13 +49,23 @@ export function CswSource({
   // list, so abandon the request when the source unmounts.
   useEffect(() => () => searchAbortRef.current?.abort(), []);
 
+  // Abandon a request still in flight. An aborted search skips the spinner reset
+  // in its own `finally` (so it cannot clear a spinner a newer search turned
+  // on), which leaves this the only place that clears it when nothing replaces
+  // the abandoned request.
+  const abortSearch = () => {
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+    setIsSearching(false);
+  };
+
   const applySaved = (entry: ServiceLibraryEntry) => {
     setEndpoint(serviceFieldString(entry.fields, "endpoint"));
     setKeyword(serviceFieldString(entry.fields, "keyword"));
     // The results belong to the previous catalog and their resource URLs would
     // still be addable, so drop them — and any search still in flight for that
     // catalog — until the new endpoint is searched.
-    searchAbortRef.current?.abort();
+    abortSearch();
     setRecords([]);
     setRecordsEndpoint("");
     source.setError(null);
@@ -66,7 +76,7 @@ export function CswSource({
     source.setError(null);
     const target = endpoint.trim();
     // Whatever the previous search was about to return is now stale.
-    searchAbortRef.current?.abort();
+    abortSearch();
     setRecords([]);
     setRecordsEndpoint("");
     if (!isHttpCswEndpoint(target)) {

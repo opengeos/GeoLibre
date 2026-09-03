@@ -146,6 +146,8 @@ export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 // Keep in sync with WMS_PROXY_PATH in vite.config.ts (the dev proxy binds it
 // there). Used to fetch a WMS GetCapabilities document without tripping CORS.
 export const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+// Keep in sync with CSW_PROXY_PATH in vite.config.ts. Used to fetch a CSW
+// GetRecords response (and a record's GeoJSON) without tripping CORS.
 export const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts. Used to fetch a WFS
 // GetCapabilities document (and GetFeature responses) without tripping CORS.
