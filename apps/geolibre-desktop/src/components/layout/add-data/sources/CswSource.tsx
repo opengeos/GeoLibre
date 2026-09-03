@@ -15,6 +15,16 @@ import {
   type CswResource,
 } from "../csw";
 
+/** Display casing for resource buttons; `kind.toUpperCase()` would render
+ * "ARCGIS"/"GEOJSON" instead of the casing used elsewhere in the UI. */
+const RESOURCE_LABEL: Record<CswResource["kind"], string> = {
+  wms: "WMS",
+  wfs: "WFS",
+  arcgis: "ArcGIS",
+  geojson: "GeoJSON",
+  unknown: "",
+};
+
 export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.csw.defaultName"));
@@ -26,6 +36,10 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
   const applySaved = (entry: ServiceLibraryEntry) => {
     setEndpoint(serviceFieldString(entry.fields, "endpoint"));
     setKeyword(serviceFieldString(entry.fields, "keyword"));
+    // The results belong to the previous catalog and their resource URLs would
+    // still be addable, so drop them until the new endpoint is searched.
+    setRecords([]);
+    source.setError(null);
   };
 
   const handleSearch = async (event: FormEvent) => {
@@ -78,8 +92,15 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
     }
     if (resource.kind === "wms" || resource.kind === "wfs" || resource.kind === "arcgis") {
       const kind = resource.kind;
+      // ArcGISSource has no layer prop — its equivalent field takes numeric
+      // sublayer ids, not the catalog's human-readable resource name — so only
+      // WMS/WFS get the layer hint.
+      const layer = kind === "arcgis" ? undefined : resource.name;
+      // Close first so the dialog remounts on the new kind, then reopen on the
+      // next tick: openAddData sets the kind through the same shell state the
+      // close is clearing, and a same-tick call would be overwritten.
       source.shell.closeDialog();
-      window.setTimeout(() => openAddData(kind, { url: resource.url, layer: resource.name }), 0);
+      window.setTimeout(() => openAddData(kind, { url: resource.url, layer }), 0);
     }
   };
 
@@ -135,7 +156,7 @@ export function CswSource({ initialUrl = "" }: { initialUrl?: string }) {
                       onClick={() => void addResource(record, resource)}
                     >
                       <ExternalLink className="me-1.5 h-3.5 w-3.5" />
-                      {t("addData.csw.addResource", { kind: resource.kind.toUpperCase() })}
+                      {t("addData.csw.addResource", { kind: RESOURCE_LABEL[resource.kind] })}
                     </Button>
                   ))}
                 {record.resources.every((item) => item.kind === "unknown") ? (
