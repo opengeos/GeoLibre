@@ -62,6 +62,22 @@ describe("CSW catalog helpers", () => {
     assert.equal(classifyCswResource("https://x.test/ows?service=WFS"), "wfs");
   });
 
+  it("parses SummaryRecord responses from servers that ignore elementSetName", () => {
+    const records = parseCswRecords(`
+      <csw:GetRecordsResponse xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
+        xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <csw:SearchResults>
+          <csw:SummaryRecord>
+            <dc:identifier>rivers</dc:identifier><dc:title>Rivers</dc:title>
+            <dc:URI protocol="OGC:WFS">https://maps.test/ows</dc:URI>
+          </csw:SummaryRecord>
+        </csw:SearchResults>
+      </csw:GetRecordsResponse>`);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].title, "Rivers");
+    assert.equal(records[0].resources[0].kind, "wfs");
+  });
+
   it("reads a bare service token from the scheme but not from the URL", () => {
     assert.equal(classifyCswResource("https://x.test/ows", "OGC:WMS"), "wms");
     assert.equal(classifyCswResource("https://x.test/docs/wms-user-guide.pdf"), "unknown");

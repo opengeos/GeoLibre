@@ -1199,7 +1199,9 @@ export function TopToolbar({
       // open a dialog whose backing service is compiled out.
       if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setInitialService(
-          detail.url
+          // An empty string is still a prefill (a saved CSW entry can carry a
+          // keyword and a blank endpoint); only a missing url means "no prefill".
+          detail.url !== undefined
             ? {
                 kind: detail.kind,
                 url: detail.url,

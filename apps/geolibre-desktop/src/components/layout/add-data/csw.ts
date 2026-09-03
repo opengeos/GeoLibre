@@ -54,8 +54,13 @@ export function parseCswRecords(xmlText: string): CswRecord[] {
       (root.textContent ?? "The CSW service returned an error.").trim().slice(0, 500),
     );
   }
-  const elements = Array.from(doc.querySelectorAll("*")).filter((element) =>
-    hasLocalName(element, "Record"),
+  // A server may answer elementSetName=full with SummaryRecord/BriefRecord
+  // instead; parsing only "Record" would report those catalogs as empty.
+  const elements = Array.from(doc.querySelectorAll("*")).filter(
+    (element) =>
+      hasLocalName(element, "Record") ||
+      hasLocalName(element, "SummaryRecord") ||
+      hasLocalName(element, "BriefRecord"),
   );
   return elements.map((record, index) => {
     const resources: CswResource[] = [];
