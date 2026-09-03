@@ -17,6 +17,10 @@ export function terrainRasterLayerOptions(
 ): TerrainRasterLayerOption[] {
   return layers.flatMap((layer) => {
     if (layer.type !== "cog" && layer.type !== "raster") return [];
+    const tiles = (layer.source as { tiles?: unknown }).tiles;
+    // A service layer may retain its capabilities URL alongside tile
+    // templates. That URL is not a GeoTIFF and cannot be opened as a COG DEM.
+    if (Array.isArray(tiles) && tiles.length > 0) return [];
     const source = rasterExportUrl(layer);
     return source ? [{ id: layer.id, name: layer.name, source }] : [];
   });

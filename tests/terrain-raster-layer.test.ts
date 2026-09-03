@@ -4,6 +4,7 @@ import test from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { terrainRasterLayerOptions } from "../apps/geolibre-desktop/src/lib/terrain-raster-layer";
 
+/** Build the minimum store layer needed by terrain option tests. */
 function layer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
   return {
     id: "layer-1",
@@ -41,6 +42,15 @@ test("terrainRasterLayerOptions excludes vectors and tile-only rasters", () => {
     terrainRasterLayerOptions([
       layer({ id: "vector", type: "geojson" }),
       layer({ id: "tiles", type: "raster", source: { type: "raster", tiles: ["x/{z}"] } }),
+      layer({
+        id: "service",
+        type: "raster",
+        source: {
+          type: "raster",
+          url: "https://example.com/wms",
+          tiles: ["https://example.com/wms/{z}/{x}/{y}"],
+        },
+      }),
     ]),
     [],
   );
