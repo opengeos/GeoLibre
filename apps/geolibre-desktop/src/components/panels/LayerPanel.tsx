@@ -79,6 +79,7 @@ import {
   buildGeoLibreQueryStyle,
   buildQml,
   buildSld,
+  isCesiumSupportedLayerType,
   isPlaceholderLayer,
   mapboxStyleToJson,
   geoLibreStyleSourceName,
@@ -659,6 +660,9 @@ export function LayerPanel({
   );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
+  // The 3D globe draws a subset of the layer kinds MapLibre does, so rows it
+  // cannot render are flagged while it owns the primary map area (#2217).
+  const cesiumPrimary = useAppStore((s) => s.primaryRenderer === "cesium");
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const removeLayerGroup = useAppStore((s) => s.removeLayerGroup);
   const renameLayerGroup = useAppStore((s) => s.renameLayerGroup);
@@ -3310,7 +3314,11 @@ export function LayerPanel({
             const canExportRaster = layerCaps.export && canExportRasterLayer(layer);
             // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
             // via the in-browser geolibre-wasm extractors, drawn on the map.
-            const canExtractSubset = layerCaps.export && canExtractRasterSubset(layer);
+            // `!cesiumPrimary`: the subset panel draws its extract box on the
+            // MapLibre canvas, which does not exist while the globe is primary
+            // (DesktopShell unmounts the panel there) — #2217 review.
+            const canExtractSubset =
+              layerCaps.export && !cesiumPrimary && canExtractRasterSubset(layer);
             // Rasters added through the floating Add Raster Layer panel are
             // styled there; offer a shortcut to reopen that panel since it is
             // dismissed (and its on-map icon removed) when closed.
@@ -3515,6 +3523,18 @@ export function LayerPanel({
                             className="h-3 w-3 shrink-0 text-primary"
                             aria-label={t("quickFilters.layerFilteredHint")}
                           />
+                        </span>
+                      )}
+                      {/* The 3D globe renders a subset of the layer kinds the
+                          2D map does (#2217). An unsupported layer stays in the
+                          project and comes back when MapLibre does, so flag the
+                          row rather than leaving the layer silently absent. */}
+                      {cesiumPrimary && !isCesiumSupportedLayerType(layer) && (
+                        <span
+                          title={t("renderer.layerUnsupported")}
+                          className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
+                        >
+                          {t("mapGrid.only2d")}
                         </span>
                       )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">

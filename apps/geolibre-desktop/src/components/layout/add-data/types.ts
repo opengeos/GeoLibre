@@ -5,6 +5,7 @@
 export type AddDataKind =
   | "xyz"
   | "wms"
+  | "csw"
   | "wfs"
   | "wmts"
   | "ogc-features"

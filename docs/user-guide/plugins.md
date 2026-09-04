@@ -64,3 +64,8 @@ Compatibility is checked against each entry's `minGeoLibreVersion`, so incompati
 ## Writing your own plugin
 
 To build a plugin, see [Reference → Plugin API](../plugin-api.md) for the TypeScript interfaces, the `plugin.json` manifest contract, and the list of built-in plugins.
+
+## USGS NLDI
+
+See [USGS NLDI workflows](usgs-nldi.md) for point-to-flowline tracing,
+hydrolocation, upstream basin, COMID navigation, and GeoJSON export.

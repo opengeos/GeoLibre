@@ -146,6 +146,152 @@ def test_buffer_antimeridian_crossing_raises_value_error() -> None:
         run_vector_tool("buffer", ANTIMERIDIAN_LAYER, parameters={"distance": 1})
 
 
+def _polygon_area(geojson: dict) -> float:
+    """Planar area of a one-feature polygon FeatureCollection, in square degrees.
+
+    Degrees are fine here: the assertions only compare the buffer sides against
+    the same unbuffered square, so the units cancel out.
+    """
+    gpd = pytest.importorskip("geopandas")
+    return float(gpd.GeoDataFrame.from_features(geojson["features"]).geometry.area.sum())
+
+
+@requires_geopandas
+def test_buffer_inside_shrinks_the_polygon() -> None:
+    # GeoLibre#2235: the buffer only ever grew a feature; `side` picks the
+    # direction, and `inside` must erode the polygon rather than grow it.
+    outward, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10})
+    inward, messages = run_vector_tool(
+        "buffer", SQUARE, parameters={"distance": 10, "side": "inside"}
+    )
+    assert len(inward["features"]) == 1
+    assert _polygon_area(inward) < _polygon_area(SQUARE) < _polygon_area(outward)
+    assert "(inside)" in messages[0]
+
+
+@requires_geopandas
+def test_buffer_both_keeps_a_band_with_a_hole() -> None:
+    both, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10, "side": "both"})
+    assert len(both["features"]) == 1
+    rings = both["features"][0]["geometry"]["coordinates"]
+    # An outer ring plus the hole left where the inward buffer was cut out.
+    assert len(rings) == 2
+    # The band is thinner than either solid it was cut from.
+    assert _polygon_area(both) < _polygon_area(SQUARE)
+    assert both["features"][0]["properties"]["name"] == "a"
+
+
+@requires_geopandas
+def test_buffer_inside_drops_features_it_empties() -> None:
+    # A point has no interior, so the inward buffer empties it. The result must
+    # be an empty layer, not a feature carrying a ring-less polygon.
+    geojson, messages = run_vector_tool(
+        "buffer", POINT_IN_SQUARE, parameters={"distance": 1, "side": "inside"}
+    )
+    assert geojson["features"] == []
+    assert any("Dropped 1 feature(s)" in message for message in messages)
+
+
+@requires_geopandas
+def test_buffer_rejects_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": "sideways"})
+
+
+@requires_geopandas
+def test_buffer_rejects_empty_side() -> None:
+    # An explicitly blank side is rejected rather than silently growing, the way
+    # a blank `units` reaches the unit lookup and is rejected there. Only an
+    # absent `side` defaults to "outside". The client engine matches.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": ""})
+
+
+@requires_geopandas
+def test_buffer_defaults_to_outside_when_side_is_absent() -> None:
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": 1})
+    assert "(outside)" in messages[0]
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_side_before_negative_distance() -> None:
+    # The client engine validates in this same order (units, side, distance
+    # finiteness, distance sign), so a call with several bad parameters at once
+    # gets the same *first* error from both engines.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": -5, "side": "bogus"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_unit_before_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool(
+            "buffer", SQUARE, parameters={"distance": 1, "units": "furlongs", "side": "bogus"}
+        )
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_unit_before_unparseable_distance() -> None:
+    # The distance is parsed only after `units`/`side`, so an unparseable one
+    # cannot pre-empt either check. Before that ordering, `float("abc")` raised
+    # first and neither check was reached.
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "units": "furlongs"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_side_before_unparseable_distance() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "side": "bogus"})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", [True, False, [5], [], {}])
+def test_buffer_rejects_a_non_numeric_distance_type(distance: object) -> None:
+    # `or 0` reads every falsy value as 0 and `float` raises on a non-empty
+    # list, where JavaScript coerces the same values to 0/1/5. Rejecting the
+    # type is the only reading both engines share; the client matches.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("field", ["units", "side", "distance"])
+def test_buffer_reads_an_explicit_null_as_the_default(field: str) -> None:
+    # An absent parameter and an explicit JSON null take the same default, for
+    # every field. Before this, `units: None` reached the lookup as the unit
+    # "None" and `distance: None` was rejected, while the client defaulted both.
+    parameters: dict[str, object] = {"distance": 1, field: None}
+    _, messages = run_vector_tool("buffer", SQUARE, parameters=parameters)
+    assert messages[0] == "Buffered 1 feature(s) by 1.0 kilometers (outside)"
+
+
+@requires_geopandas
+def test_buffer_reads_an_empty_string_distance_as_zero() -> None:
+    # The one non-number both engines agree on: `"" or 0` is 0 here, and
+    # `Number("")` is 0 on the client.
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": ""})
+    assert "by 0.0 kilometers" in messages[0]
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", ["abc", "0x10", "   "])
+def test_buffer_rejects_unparseable_distance_with_the_tools_own_message(distance: str) -> None:
+    # Not `float`'s raw "could not convert string to float: 'abc'" — the client
+    # engine logs "buffer distance must be a finite number" for the same inputs.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
+def test_buffer_rejects_non_finite_distance(distance: float) -> None:
+    # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN
+    # compares False against the >= 0 bound rather than tripping it.
+    with pytest.raises(ValueError, match="finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
 @requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;

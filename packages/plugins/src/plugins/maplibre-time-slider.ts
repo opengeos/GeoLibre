@@ -376,7 +376,10 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   // Normalize an open end to `undefined` (never `null`) so the open-end sentinel
   // the library expects (`endDate?: string`) is honored even if a hand-edited
   // project carried `"endDate": null`, rather than leaking null past the cast.
-  return { ...candidate, endDate: candidate.endDate ?? undefined } as TimeSliderConfig;
+  return {
+    ...candidate,
+    endDate: candidate.endDate ?? undefined,
+  } as TimeSliderConfig;
 }
 
 // Only sourceadd/sourceremove change the store's layer set. statechange also
@@ -443,7 +446,10 @@ function attachDisplaySync(control: TimeSliderControl): () => void {
       // was mirrored from, so restoring a project does not re-push what the
       // control just rendered.
       if (!previous) continue;
-      control.setSourceProperty(layer.id, { opacity, visible } as Partial<SourceSpec>);
+      control.setSourceProperty(layer.id, {
+        opacity,
+        visible,
+      } as Partial<SourceSpec>);
     }
     for (const id of [...lastDisplay.keys()]) {
       if (!ids.has(id)) lastDisplay.delete(id);
@@ -1164,6 +1170,12 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
 export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
+  const authoredUrl = ["url", "tiles", "baseUrl", "data"]
+    .map((key) => {
+      const value = key in spec ? spec[key as keyof SourceSpec] : undefined;
+      return typeof value === "string" ? value.trim() : "";
+    })
+    .find(Boolean);
   // COG and mosaic sources carry real source values, so Identify reads their
   // bands at the timeline's current date (see time-slider-pixel-identify) the
   // same way it reads a COG added through Add Raster Layer. XYZ/WMS sources are
@@ -1206,6 +1218,12 @@ export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
       sourceId,
       sourceIds: [sourceId],
       sourceKind: STORE_LAYER_SOURCE_KIND,
+      // The renderer is owned by the control, so `source` intentionally holds
+      // only its native id. Keep the authored reference on the mirror as well:
+      // share readiness otherwise mistakes this hosted temporal layer for a
+      // local/query layer with no recipient-openable source. `originalUrl` is
+      // already a recognized, credential-scrubbed reference field.
+      ...(authoredUrl ? { originalUrl: authoredUrl } : {}),
     },
   };
 }

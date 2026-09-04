@@ -19,10 +19,10 @@ if (typeof maplibregl.setRTLTextPlugin === "function") {
   // setRTLTextPlugin rejects if a plugin was already registered for the page;
   // only register when none is set yet ("unavailable" is the initial state).
   if (!status || status === "unavailable") {
-    // Lazy (second arg `true`): defer downloading the plugin worker until a map
-    // actually encounters RTL text, so the bytes are not paid for on LTR-only
-    // maps. Returns a promise that resolves once the plugin is requested.
-    maplibregl.setRTLTextPlugin(rtlTextPluginUrl, true).catch((error: unknown) => {
+    // Load eagerly so the worker can shape text before the first symbol bucket is
+    // built. With lazy loading, dynamically added RTL labels can remain unshaped
+    // because their bucket is not rebuilt after the plugin becomes available.
+    maplibregl.setRTLTextPlugin(rtlTextPluginUrl, false).catch((error: unknown) => {
       console.error("[GeoLibre] Failed to load RTL text plugin", error);
     });
   }

@@ -1,6 +1,6 @@
 {
   "name": "geolibre-desktop",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -76,7 +76,7 @@
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^6.6.0",
     "maplibre-gl-3d-tiles": "^0.5.6",
-    "maplibre-gl-basemap-control": "^0.14.0",
+    "maplibre-gl-basemap-control": "^0.14.3",
     "maplibre-gl-components": "^0.31.1",
     "maplibre-gl-duckdb": "^0.2.4",
     "maplibre-gl-earth-engine": "^0.4.2",
@@ -93,7 +93,7 @@
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.7.0",
     "maplibre-gl-swipe": "^0.11.2",
-    "maplibre-gl-time-slider": "^1.8.4",
+    "maplibre-gl-time-slider": "^1.8.7",
     "maplibre-gl-usgs-lidar": "^0.11.5",
     "maplibre-gl-vector": "^0.10.13",
     "openai": "^7.8.0",

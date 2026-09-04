@@ -1671,6 +1671,24 @@
     },
     "pixelTimeSeriesMode": {
       "start": "पिक्सेल टाइम सीरीज़"
+    },
+    "identifyAll": {
+      "title": "पहचाने गए परिणाम ({{count}})",
+      "resultCount_one": "{{count}} परिणाम",
+      "resultCount_other": "{{count}} परिणाम",
+      "featureFallback": "फ़ीचर {{index}}",
+      "pixel": "पिक्सेल",
+      "expandAll": "सभी विस्तृत करें",
+      "collapseAll": "सभी संक्षिप्त करें",
+      "loadingTitle": "दृश्यमान लेयर पहचानें",
+      "loading": "लोड हो रहा है...",
+      "errorLabel": "त्रुटि",
+      "error": "इस लेयर की पहचान नहीं हो सकी।",
+      "band": "बैंड {{index}}",
+      "nodata": "कोई डेटा नहीं",
+      "coordinates": "देशांतर, अक्षांश",
+      "row": "पंक्ति",
+      "column": "कॉलम"
     }
   },
   "terrainSettings": {
@@ -1680,6 +1698,11 @@
     "controlLabel": "भू-भाग टॉगल करें (अतिशयोक्ति के लिए डबल-क्लिक करें)",
     "sourceLabel": "भूभाग स्रोत",
     "sourceDescription": "ऊंचाई स्रोत के रूप में EPSG:3857 या EPSG:4326 एकल-बैंड COG का उपयोग करें। फ़ाइल को CORS और HTTP रेंज अनुरोधों की अनुमति देनी चाहिए।",
+    "rasterLayerLabel": "रास्टर परत",
+    "rasterLayerPlaceholder": "रास्टर परत चुनें",
+    "rasterLayerDescription": "मानचित्र पर पहले से लोड की गई COG रास्टर परत को ऊँचाई स्रोत के रूप में उपयोग करें।",
+    "noRasterLayers": "मानचित्र पर फ़ाइल-आधारित रास्टर परतें उपलब्ध नहीं हैं।",
+    "useRasterLayer": "रास्टर परत का उपयोग करें",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "स्थानीय COG DEM",
     "localSourceDescription": "फ़ाइल इसी डिवाइस पर रहती है और भूभाग टाइलों की आवश्यकता के अनुसार छोटे भागों में पढ़ी जाती है।",
@@ -1824,7 +1847,8 @@
     "removePane": "मानचित्र {{number}} हटाएँ",
     "show3d": "मानचित्र {{number}} को 3D ग्लोब के रूप में दिखाएँ",
     "show2d": "मानचित्र {{number}} को 2D मानचित्र के रूप में दिखाएँ",
-    "only2d": "केवल 2D"
+    "only2d": "केवल 2D",
+    "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए सेटिंग्स में Cesium Ion टोकन जोड़ें"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "निर्देशांक क्लिपबोर्ड पर कॉपी करें",
@@ -2084,6 +2108,7 @@
       "tokenHostInvalid": "इस परिनियोजन के प्रोजेक्ट साझाकरण सर्वर का पता अमान्य है, इसलिए इस टोकन का उपयोग नहीं किया जा सकता।",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion टोकन",
+      "cesiumTokenDescription": "3D ग्लोब (एक स्प्लिट-व्यू पैनल) टोकन के बिना भी काम करता है: यह प्रोजेक्ट का बेसमैप दिखाता है। एक एक्सेस टोकन Cesium World Terrain और Ion वर्ल्ड इमेजरी जोड़ता है। <tokenLink>ion.cesium.com/tokens</tokenLink> पर एक मुफ़्त खाता बनाएँ, अपना डिफ़ॉल्ट एक्सेस टोकन कॉपी करें, और उसे नीचे पेस्ट करें।",
       "cesiumTokenStorageNote": "इस डिवाइस पर स्थानीय रूप से संग्रहीत (प्रोजेक्ट फ़ाइल में नहीं, इसलिए यह कभी साझा नहीं होता) और केवल Cesium Ion को भेजा जाता है। वेब बिल्ड पर यह अन्य साइट डेटा के समान ब्राउज़र स्टोरेज साझा करता है।",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "एनवायरनमेंट वेरिएबल",
@@ -2907,6 +2932,7 @@
       "maplibre-gl-geo-editor": "GeoEditor",
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
+      "maplibre-gl-vantor": "Vantor खुला डेटा",
       "maplibre-gl-graticule": "ग्रिडलाइन्स",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4483,6 +4509,15 @@
                 "kilometers": "किलोमीटर",
                 "meters": "मीटर",
                 "miles": "मील"
+              }
+            },
+            "side": {
+              "label": "बफर की दिशा",
+              "description": "बाहर प्रत्येक फ़ीचर को बड़ा करता है, अंदर उसे छोटा करता है, और दोनों ओर उसकी सीमा के दोनों ओर दी गई दूरी के भीतर का क्षेत्र रखता है। अंदर के लिए पॉलिगन परत आवश्यक है — बिंदु या रेखा का कोई आंतरिक भाग नहीं होता।",
+              "options": {
+                "outside": "बाहर (बड़ा करें)",
+                "inside": "अंदर (छोटा करें)",
+                "both": "दोनों ओर"
               }
             }
           }
@@ -6609,6 +6644,7 @@
       "categories": "श्रेणियां",
       "classColor": "वर्ग {{index}} रंग",
       "classColorPick": "स्क्रीन से वर्ग {{index}} रंग चुनें",
+      "classOpacity": "वर्ग {{index}} अपारदर्शिता",
       "classValue": "वर्ग {{index}} मान",
       "colorExpression": "रंग एक्सप्रेशन",
       "applyStyleType": "शैली प्रकार लागू करें",
@@ -6618,6 +6654,8 @@
       "pointRendererClustered": "क्लस्टर्ड",
       "heatmapRadius": "हीटमैप त्रिज्या",
       "heatmapIntensity": "हीटमैप तीव्रता",
+      "heatmapWeightField": "भार फ़ील्ड",
+      "heatmapEqualWeight": "कोई नहीं (समान भार)",
       "clusterRadius": "क्लस्टर त्रिज्या (px)",
       "clusterMaxZoom": "क्लस्टर अधिकतम ज़ूम",
       "strokeWidthUnit": "स्ट्रोक चौड़ाई इकाई",
@@ -6974,6 +7012,8 @@
     "metadata": "मेटाडेटा",
     "removeLayer": "लेयर हटाएं",
     "identifyFeatures": "फ़ीचर पहचानें",
+    "identifyVisibleLayers": "दृश्यमान लेयर पहचानें",
+    "identifyVisibleLayersHint": "सभी दृश्यमान क्वेरी-योग्य लेयर से फ़ीचर और पिक्सेल मान पहचानने के लिए मानचित्र पर क्लिक करें।",
     "identifyDeactivate": "पहचान निष्क्रिय करें",
     "identifyInspectPixels": "पिक्सेल मान जांचें",
     "identifyStopInspectPixels": "पिक्सेल मान जांचना बंद करें",
@@ -7638,5 +7678,69 @@
     "added": "{{count}} फ़ीचर{{layer}} जोड़े गए।",
     "badResponse": "SamGeo API ने GeoJSON FeatureCollection नहीं लौटाया।",
     "unknownProjection": "परिणाम WGS84 में नहीं है और छवि में कोई पठनीय प्रोजेक्शन नहीं है, इसलिए इसे मैप पर नहीं रखा जा सकता। एक जियोरेफ़रेंस्ड GeoTIFF का उपयोग करें।"
+  },
+  "vantor": {
+    "title": "Vantor STAC एक्सप्लोरर",
+    "collapsePanel": "पैनल संक्षिप्त करें",
+    "openPanel": "Vantor STAC एक्सप्लोरर खोलें",
+    "ready": "तैयार",
+    "searchSection": "खोज",
+    "event": "घटना",
+    "loadingEvents": "घटनाएँ लोड हो रही हैं…",
+    "refreshCatalog": "कैटलॉग रीफ़्रेश करें",
+    "phase": "चरण",
+    "phaseAll": "सभी",
+    "phasePre": "घटना से पहले",
+    "phasePost": "घटना के बाद",
+    "renderingEngine": "रेंडरिंग इंजन",
+    "engineGpu": "GPU (तेज़)",
+    "engineWasm": "WASM (ग्लोब संगत)",
+    "engineTitiler": "TiTiler (सर्वर)",
+    "useMapExtent": "मानचित्र विस्तार का उपयोग करें",
+    "drawBbox": "BBox बनाएँ",
+    "clear": "साफ़ करें",
+    "search": "खोजें",
+    "searching": "खोजा जा रहा है…",
+    "results": "परिणाम",
+    "itemsFound": "{{count}} आइटम मिले",
+    "selectAll": "सभी चुनें",
+    "deselectAll": "सभी का चयन हटाएँ",
+    "columnId": "ID",
+    "columnDate": "दिनांक",
+    "columnPhase": "चरण",
+    "columnSensor": "सेंसर",
+    "columnCloud": "बादल%",
+    "columnGsd": "GSD",
+    "visualize": "विज़ुअलाइज़ करें",
+    "downloadAction": "डाउनलोड करें",
+    "cancel": "रद्द करें",
+    "noEvents": "कोई घटना नहीं मिली",
+    "downloadProgress": {
+      "cancelled": "डाउनलोड रद्द किया गया। {{count}} डाउनलोड शुरू हुए।",
+      "invalidUrl": "{{id}} छोड़ा गया: अमान्य HTTPS URL।",
+      "starting": "{{filename}} शुरू हो रहा है…",
+      "started": "{{filename}} शुरू हुआ ({{started}}/{{total}})",
+      "failed": "{{filename}} शुरू नहीं हो सका: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "कैटलॉग प्राप्त किया जा रहा है…",
+      "eventsFound": "{{count}} घटनाएँ मिलीं। कोई घटना चुनें और खोजें पर क्लिक करें।",
+      "catalogFailed": "कैटलॉग प्राप्त नहीं हो सका: {{message}}",
+      "selectEvent": "कृपया पहले कोई घटना चुनें।",
+      "fetchingItems": "आइटम प्राप्त किए जा रहे हैं…",
+      "itemsFound": "{{count}} आइटम मिले। विज़ुअलाइज़ या डाउनलोड करने के लिए आइटम चुनें।",
+      "itemsFailed": "आइटम प्राप्त नहीं हो सके: {{message}}",
+      "drawingCancelled": "बाउंडिंग बॉक्स बनाना रद्द किया गया।",
+      "drawRectangle": "मानचित्र पर एक आयत बनाएँ…",
+      "bboxSet": "बाउंडिंग बॉक्स सेट किया गया। फ़िल्टर करने के लिए खोजें पर क्लिक करें।",
+      "bboxCleared": "बाउंडिंग बॉक्स साफ़ किया गया।",
+      "noSelection": "कोई आइटम नहीं चुना गया। पहले आइटम चुनें।",
+      "addingLayers": "{{count}} COG लेयर जोड़ी जा रही हैं…",
+      "addFailed": "{{id}} जोड़ा नहीं जा सका: {{message}}",
+      "layersAdded": "{{count}} COG लेयर जोड़ी गईं।",
+      "startingDownloads": "{{count}} डाउनलोड शुरू हो रहे हैं…",
+      "downloadsStarted": "{{started}} डाउनलोड शुरू हुए। {{failed}} विफल रहे।",
+      "downloadCancelled": "डाउनलोड रद्द हुआ या विफल रहा।"
+    }
   }
 }

@@ -2,7 +2,6 @@ import { normalizeModelGraph, useAppStore } from "@geolibre/core";
 import {
   ALGORITHMS,
   VECTOR_TOOLS,
-  H3_TOOLS,
   STATISTICS_TOOLS,
   fetchRemoteWhiteboxCatalogSnapshot,
   listWasmToolManifests,
@@ -107,7 +106,7 @@ async function whiteboxTools(): Promise<WhiteboxTool[]> {
  * "Copy as Python" eligibility can never drift from what actually runs.
  */
 export function allAlgorithms(): ProcessingAlgorithm[] {
-  return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS, ...STATISTICS_TOOLS];
+  return [...ALGORITHMS, ...VECTOR_TOOLS, ...STATISTICS_TOOLS];
 }
 
 /** Validate a required string `layerId` param, with a clear error if missing. */

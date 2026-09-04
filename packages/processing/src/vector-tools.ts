@@ -200,6 +200,97 @@ function computeStat(nums: number[], statistic: string): number | null {
   return null;
 }
 
+/** Which side of a feature's boundary {@link bufferTool} keeps. */
+type BufferSide = "outside" | "inside" | "both";
+
+const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
+
+/** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
+type BufferUnits = "kilometers" | "meters" | "miles";
+
+const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
+
+/**
+ * Python's decimal-float grammar, which `Number()` does not share.
+ *
+ * `Number()` reads JavaScript's `0x`/`0b`/`0o` bases (`Number("0x10")` is 16)
+ * and whitespace-only input (`Number("  ")` is 0), where Python's `float()`
+ * raises on all of them — so a string distance that the sidecar rejects would
+ * otherwise buffer happily on the client. This is deliberately the narrower of
+ * the two grammars: it also rejects Python's digit separators (`float("1_000")`
+ * is 1000, `Number("1_000")` is `NaN`), which both engines then refuse.
+ */
+const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
+
+/**
+ * A buffered feature, or `null` when the operation left nothing behind.
+ *
+ * An inward buffer erodes a polygon and can consume it entirely; on a point or
+ * line, which has no interior, it always does. jsts answers with an empty
+ * geometry rather than nothing at all, so an emptied feature reaches us as a
+ * polygon with zero rings — a shape no renderer can draw and every downstream
+ * tool has to special-case. Drop those here instead.
+ */
+function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
+  const geometry = result?.geometry as Polygon | MultiPolygon | undefined;
+  if (!geometry || !hasPositions(geometry.coordinates)) return null;
+  return result as Feature;
+}
+
+/**
+ * Whether a GeoJSON coordinate array holds at least one real position.
+ *
+ * Zero rings is the shape jsts usually returns for an emptied geometry, but not
+ * the only one: a `Polygon` can come back with a single *empty* ring
+ * (`[[]]`), and a `MultiPolygon` with several individually degenerate parts —
+ * both of which have a non-zero `coordinates.length` while still being
+ * undrawable. Recursing to the first number catches every arity.
+ *
+ * Exported for tests: turf rejects a degenerate geometry on the way *in*
+ * ("coordinates must contain numbers"), so this guard's job is to catch one
+ * coming back *out* and cannot be reached through the tool's own parameters.
+ */
+export function hasPositions(coordinates: unknown): boolean {
+  if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+  if (typeof coordinates[0] === "number") return true;
+  return coordinates.some(hasPositions);
+}
+
+/**
+ * Buffer one feature on the requested side of its boundary.
+ *
+ * `outside` grows the feature (the historical behavior), `inside` shrinks it by
+ * buffering with a negative radius, and `both` keeps only the band within
+ * `radius` of the boundary — the grown shape with the eroded one cut back out.
+ *
+ * For `both` on a feature with no interior left to erode (a point, a line, or a
+ * polygon thinner than twice the radius) the grown shape *is* the band, so it is
+ * returned whole rather than treated as a failure.
+ */
+function bufferOneFeature(
+  feature: Feature,
+  radius: number,
+  side: BufferSide,
+  units: BufferUnits,
+): Feature | null {
+  const options = { units };
+  if (side === "inside") return nonEmptyBuffer(buffer(feature, -radius, options));
+  const outer = nonEmptyBuffer(buffer(feature, radius, options));
+  if (side === "outside" || !outer) return outer;
+  const inner = nonEmptyBuffer(buffer(feature, -radius, options));
+  if (!inner) return outer;
+  const band = difference(
+    featureCollection([
+      outer as Feature<Polygon | MultiPolygon>,
+      inner as Feature<Polygon | MultiPolygon>,
+    ]),
+  );
+  const kept = nonEmptyBuffer(band as Feature | null);
+  // turf carries the first input's properties through, but that input is our own
+  // intermediate buffer — restore the source feature's attributes explicitly.
+  return kept ? { ...kept, properties: feature.properties ?? {} } : null;
+}
+
 export const bufferTool: ProcessingAlgorithm = {
   id: "buffer",
   name: "Buffer",
@@ -228,20 +319,123 @@ export const bufferTool: ProcessingAlgorithm = {
         { value: "miles", label: "Miles" },
       ],
     },
+    {
+      id: "side",
+      label: "Buffer side",
+      type: "select",
+      default: "outside",
+      description:
+        "Outside grows each feature, Inside shrinks it, and Both keeps the zone within the distance on either side of its boundary. Inside needs polygon input — a point or line has no interior to buffer into.",
+      options: [
+        { value: "outside", label: "Outside (grow)" },
+        { value: "inside", label: "Inside (shrink)" },
+        { value: "both", label: "Both sides" },
+      ],
+    },
   ],
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
+    // Validate in the Python engine's order (`_buffer`: units, then side, then
+    // distance finiteness, then distance sign) so a call with several bad
+    // parameters at once gets the same first error from both engines, not just
+    // the same accept/reject verdict.
+    const rawUnits = ctx.parameters.units;
+    const units = (rawUnits == null ? "kilometers" : String(rawUnits)) as BufferUnits;
+    if (!BUFFER_UNITS.has(units)) {
+      // turf throws on a unit it does not know, and the per-feature `try`/`catch`
+      // below would swallow that into the `Skipped` count — reporting a
+      // successful run that buffered nothing where the Python engine raises
+      // "Unknown unit". Reject up front so the two engines agree.
+      ctx.log(`Error: unknown unit '${units}'; expected ${[...BUFFER_UNITS].join(", ")}`);
+      return;
+    }
+    // Only a missing `side` defaults; an explicitly empty one falls through to
+    // the check below, matching the Python engine (and the way an empty `units`
+    // reaches its own lookup there). Direction is a deliberate choice, so a
+    // caller that sends a blank one gets an error rather than a silent grow.
+    const rawSide = ctx.parameters.side;
+    const side = (rawSide == null ? "outside" : String(rawSide)) as BufferSide;
+    if (!BUFFER_SIDES.has(side)) {
+      // Reject rather than fall back, so the client and Python engines answer a
+      // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
+      ctx.log(`Error: unknown buffer side '${side}'; expected ${[...BUFFER_SIDES].join(", ")}`);
+      return;
+    }
+    const rawDistance = ctx.parameters.distance;
+    // `numberParam` folds a non-finite or unparseable value into its fallback,
+    // which would hand a programmatic caller a silent 1-unit buffer where the
+    // Python engine raises. Check the raw parameter so both engines reject it.
+    // A string is held to Python's grammar rather than `Number()`'s (see
+    // DECIMAL_NUMBER), so `"0x10"` and `"  "` are rejected here the way
+    // `float()` rejects them there. An *empty* string is the one case both
+    // engines already agree on — `"" or 0` is 0 in Python — so it falls
+    // through to `numberParam`.
+    // A distance must be a number or a numeric string. Anything else is caller
+    // error, and the two languages coerce it differently enough that letting it
+    // through diverges: `Number(false)` is 0 and `Number([5])` is 5 (both of
+    // which `numberParam` then discards for the fallback 1), while Python's
+    // `raw or 0` reads `false`/`[]`/`{}` as 0 and raises on `[5]`. Rejecting the
+    // type outright is the only reading both engines share.
+    const distanceType = typeof rawDistance;
+    const badDistanceType = distanceType !== "number" && distanceType !== "string";
+    const badDistanceString =
+      typeof rawDistance === "string" && rawDistance !== "" && !DECIMAL_NUMBER.test(rawDistance);
+    if (
+      rawDistance != null &&
+      (badDistanceType || badDistanceString || !Number.isFinite(Number(rawDistance)))
+    ) {
+      ctx.log("Error: buffer distance must be a finite number");
+      return;
+    }
     const distance = numberParam(ctx, "distance", 1);
-    const units = (ctx.parameters.units as string) || "kilometers";
+    if (distance < 0) {
+      // The dialog's `min: 0` binds the form, not a programmatic caller (Model
+      // Builder, the assistant, a replayed history entry). Reject rather than
+      // erode: direction belongs to `side`, and the Python engine already
+      // answers a negative distance this way.
+      ctx.log("Error: buffer distance must be >= 0; use the buffer side to buffer inward");
+      return;
+    }
     // turf bakes in Earth's radius, so the requested distance would lay out as
     // Earth ground on a Moon/Mars project. Convert to the Earth-equivalent that
     // spans the same distance on this body (GeoLibre#1128) — a no-op on Earth.
-    const buffered = buffer(fc, bodyLengthToEarth(distance), {
-      units: units as "kilometers" | "meters" | "miles",
-    });
-    const features = ((buffered?.features ?? []) as Feature[]).filter((f) => Boolean(f?.geometry));
-    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units}`);
+    const radius = bodyLengthToEarth(distance);
+    const features: Feature[] = [];
+    let dropped = 0;
+    let failed = 0;
+    for (const feature of fc.features) {
+      // A null-geometry feature counts as dropped, not skipped in silence: the
+      // Python engine loads it into the GeoDataFrame and its `isna()` filter
+      // reports it, so counting it here keeps the two engines' totals equal.
+      if (!feature?.geometry) {
+        dropped += 1;
+        continue;
+      }
+      let buffered: Feature | null = null;
+      try {
+        buffered = bufferOneFeature(feature, radius, side, units);
+      } catch {
+        // jsts can throw on a degenerate or self-intersecting geometry — the
+        // erosion step in `inside`/`both` is a new way to produce one. Report
+        // it separately from an empty result (the geometry was not buffered
+        // away, it could not be buffered at all) rather than let it abort the
+        // whole batch and discard every feature already buffered.
+        failed += 1;
+        continue;
+      }
+      if (buffered) features.push(buffered);
+      else dropped += 1;
+    }
+    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units} (${side})`);
+    if (dropped > 0) {
+      // Deliberately not "the inward buffer": an outward buffer also drops a
+      // feature whose geometry is missing or degenerate enough to come back empty.
+      ctx.log(`Dropped ${dropped} feature(s) the buffer left empty`);
+    }
+    if (failed > 0) {
+      ctx.log(`Skipped ${failed} feature(s) the buffer could not process`);
+    }
     ctx.addResultLayer?.("Buffer", featureCollection(features));
   },
 };

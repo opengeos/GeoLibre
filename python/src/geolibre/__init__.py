@@ -25,7 +25,7 @@ _js_dist = [
 ]
 _css_dist: list[dict[str, str]] = []
 
-__version__ = "2.8.0"
+__version__ = "2.9.0"
 __all__ = [
     "Feature",
     "Layer",

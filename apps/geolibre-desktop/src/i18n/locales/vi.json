@@ -1627,6 +1627,23 @@
     },
     "pixelTimeSeriesMode": {
       "start": "Chuỗi thời gian pixel"
+    },
+    "identifyAll": {
+      "title": "Kết quả nhận dạng ({{count}})",
+      "resultCount_other": "{{count}} kết quả",
+      "featureFallback": "Đối tượng {{index}}",
+      "pixel": "Pixel",
+      "expandAll": "Mở rộng tất cả",
+      "collapseAll": "Thu gọn tất cả",
+      "loadingTitle": "Nhận dạng các lớp đang hiển thị",
+      "loading": "Đang tải...",
+      "errorLabel": "Lỗi",
+      "error": "Không thể nhận dạng lớp này.",
+      "band": "Kênh {{index}}",
+      "nodata": "không có dữ liệu",
+      "coordinates": "lon, lat",
+      "row": "hàng",
+      "column": "cột"
     }
   },
   "terrainSettings": {
@@ -1636,6 +1653,11 @@
     "controlLabel": "Chuyển đổi địa hình (nhấp đúp để phóng đại)",
     "sourceLabel": "Nguồn địa hình",
     "sourceDescription": "Dùng một COG đơn dải theo EPSG:3857 hoặc EPSG:4326 làm nguồn độ cao. Tệp phải cho phép CORS và các yêu cầu phạm vi HTTP.",
+    "rasterLayerLabel": "Lớp raster",
+    "rasterLayerPlaceholder": "Chọn một lớp raster",
+    "rasterLayerDescription": "Dùng lớp raster COG đã tải trên bản đồ làm nguồn độ cao.",
+    "noRasterLayers": "Không có lớp raster dựa trên tệp nào trên bản đồ.",
+    "useRasterLayer": "Dùng lớp raster",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "COG DEM cục bộ",
     "localSourceDescription": "Tệp vẫn nằm trên thiết bị này và được đọc theo từng phạm vi nhỏ khi cần các ô địa hình.",
@@ -1780,7 +1802,8 @@
     "removePane": "Xóa ô số {{number}}?",
     "show3d": "Hiển thị bản đồ {{number}} dưới dạng quả địa cầu 3D",
     "show2d": "Hiển thị bản đồ {{number}} dưới dạng bản đồ 2D",
-    "only2d": "chỉ 2D"
+    "only2d": "chỉ 2D",
+    "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
   "mapContextMenu": {
     "zoomInHere": "Phóng to ở đây",
@@ -2039,7 +2062,8 @@
       "tokenUnavailable": "Quá trình triển khai này không có máy chủ chia sẻ dự án nào được định cấu hình nên không cần mã thông báo API.",
       "tokenHostInvalid": "Địa chỉ máy chủ chia sẻ dự án của quá trình triển khai này không hợp lệ nên không thể sử dụng mã thông báo này.",
       "tokenPlaceholder": "glb_…",
-      "cesiumTokenTitle": "Mã thông báo ion Caesium",
+      "cesiumTokenTitle": "Mã thông báo Cesium Ion",
+      "cesiumTokenDescription": "Quả địa cầu 3D (khung xem chia đôi) hoạt động mà không cần mã thông báo: nó hiển thị bản đồ nền của dự án. Mã thông báo truy cập bổ sung Cesium World Terrain và ảnh vệ tinh toàn cầu của Ion. Tạo một tài khoản miễn phí tại <tokenLink>ion.cesium.com/tokens</tokenLink>, sao chép mã thông báo truy cập mặc định của bạn và dán vào bên dưới.",
       "nameAria": "Tên biến",
       "namePlaceholder": "VITE_EXAMPLE_KEY",
       "valueAria": "Giá trị biến",
@@ -2050,8 +2074,8 @@
       "errorNamePattern": "Tên biến môi trường phải bắt đầu bằng một chữ cái hoặc dấu gạch dưới và chỉ chứa các chữ cái, số và dấu gạch dưới.",
       "errorDuplicate": "Biến môi trường \"{{name}}\" bị trùng lặp.",
       "stripPromptTitle": "Xóa thông tin đăng nhập?",
-      "cesiumTokenStorageNote": "Được lưu trữ cục bộ trên thiết bị này (không có trong tệp dự án, vì vậy nó không bao giờ được chia sẻ) và chỉ được gửi tới Caesium Ion. Trên bản dựng web, nó chia sẻ cùng bộ lưu trữ trình duyệt với dữ liệu trang web khác.",
-      "cesiumTokenPlaceholder": "Giá trị biến",
+      "cesiumTokenStorageNote": "Được lưu trữ cục bộ trên thiết bị này (không có trong tệp dự án, vì vậy nó không bao giờ được chia sẻ) và chỉ được gửi tới Cesium Ion. Trên bản dựng web, nó chia sẻ cùng bộ lưu trữ trình duyệt với dữ liệu trang web khác.",
+      "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Biến môi trường",
       "variablesCount_other": "{{count}} đã bật các biến thời gian chạy.",
       "secretsWarning": "Các giá trị được lưu trữ ở dạng văn bản thuần túy trong tệp dự án và có thể bị lộ khi dự án được chia sẻ. Tránh đặt bí mật ở đây trừ khi tệp dự án được giữ ở chế độ riêng tư.",
@@ -2874,7 +2898,8 @@
       "osm-basemap": "Sơ đồ cơ sở OpenStreetMap",
       "maplibre-gl-annotations": "Chú thích",
       "maplibre-gl-streetview": "Chế độ xem phố",
-      "maplibre-gl-time-slider": "Thanh trượt thời gian"
+      "maplibre-gl-time-slider": "Thanh trượt thời gian",
+      "maplibre-gl-vantor": "Dữ liệu mở Vantor"
     },
     "fileDrop": {
       "addedRasterLayers_other": "Đã thêm các lớp raster {{count}} vào bảng điều khiển Lớp.",
@@ -4413,6 +4438,15 @@
                 "kilometers": "Kilômét",
                 "meters": "Mét",
                 "miles": "Dặm"
+              }
+            },
+            "side": {
+              "label": "Phía vùng đệm",
+              "description": "Bên ngoài mở rộng từng đối tượng, Bên trong thu nhỏ nó, và Cả hai phía chỉ giữ vùng nằm trong khoảng cách đó ở hai bên ranh giới. Bên trong cần lớp vùng — điểm hoặc đường không có phần bên trong.",
+              "options": {
+                "outside": "Bên ngoài (mở rộng)",
+                "inside": "Bên trong (thu nhỏ)",
+                "both": "Cả hai phía"
               }
             }
           }
@@ -6523,6 +6557,7 @@
       "schemeQuantile": "lượng tử",
       "schemeNaturalBreaks": "Nghỉ giải lao tự nhiên",
       "classColorPick": "Chọn màu cho hạng {{index}}",
+      "classOpacity": "Lớp {{index}} độ mờ",
       "classValue": "Giá trị hạng {{index}}",
       "colorExpression": "Biểu hiện màu sắc",
       "applyStyleType": "Áp dụng kiểu kiểu",
@@ -6532,6 +6567,8 @@
       "pointRendererClustered": "Được nhóm lại",
       "heatmapRadius": "Bán kính bản đồ nhiệt",
       "heatmapIntensity": "Cường độ bản đồ nhiệt",
+      "heatmapWeightField": "Trường trọng số",
+      "heatmapEqualWeight": "Không có (trọng số bằng nhau)",
       "fillPatterns": {
         "none": "Không có (điền đặc)",
         "hatch": "nở",
@@ -6896,6 +6933,8 @@
     "metadata": "Siêu dữ liệu",
     "removeLayer": "Xóa lớp",
     "identifyFeatures": "Xác định đặc điểm",
+    "identifyVisibleLayers": "Nhận dạng các lớp đang hiển thị",
+    "identifyVisibleLayersHint": "Nhấp vào bản đồ để nhận dạng đối tượng và giá trị pixel từ mọi lớp đang hiển thị có thể truy vấn.",
     "identifyDeactivate": "Dán kiểu",
     "identifyInspectPixels": "Kiểm tra giá trị pixel",
     "identifyStopInspectPixels": "Dừng kiểm tra giá trị pixel",
@@ -7555,5 +7594,69 @@
     "added": "Đã thêm {{count}} đối tượng{{layer}}.",
     "badResponse": "API SamGeo không trả về một FeatureCollection GeoJSON.",
     "unknownProjection": "Kết quả không ở hệ WGS84 và hình ảnh cũng không mang phép chiếu đọc được, nên không thể đặt lên bản đồ. Hãy dùng một tệp GeoTIFF đã tham chiếu địa lý."
+  },
+  "vantor": {
+    "title": "Trình khám phá STAC của Vantor",
+    "collapsePanel": "Thu gọn bảng điều khiển",
+    "openPanel": "Mở trình khám phá STAC của Vantor",
+    "ready": "Sẵn sàng",
+    "searchSection": "Tìm kiếm",
+    "event": "Sự kiện",
+    "loadingEvents": "Đang tải sự kiện…",
+    "refreshCatalog": "Làm mới danh mục",
+    "phase": "Giai đoạn",
+    "phaseAll": "Tất cả",
+    "phasePre": "Trước sự kiện",
+    "phasePost": "Sau sự kiện",
+    "renderingEngine": "Công cụ kết xuất",
+    "engineGpu": "GPU (nhanh hơn)",
+    "engineWasm": "WASM (tương thích quả địa cầu)",
+    "engineTitiler": "TiTiler (máy chủ)",
+    "useMapExtent": "Sử dụng phạm vi bản đồ",
+    "drawBbox": "Vẽ hộp giới hạn",
+    "clear": "Xóa",
+    "search": "Tìm kiếm",
+    "searching": "Đang tìm kiếm…",
+    "results": "Kết quả",
+    "itemsFound": "Tìm thấy {{count}} mục",
+    "selectAll": "Chọn tất cả",
+    "deselectAll": "Bỏ chọn tất cả",
+    "columnId": "ID",
+    "columnDate": "Ngày",
+    "columnPhase": "Giai đoạn",
+    "columnSensor": "Cảm biến",
+    "columnCloud": "Mây%",
+    "columnGsd": "GSD",
+    "visualize": "Hiển thị trực quan",
+    "downloadAction": "Tải xuống",
+    "cancel": "Hủy",
+    "noEvents": "Không tìm thấy sự kiện nào",
+    "downloadProgress": {
+      "cancelled": "Đã hủy tải xuống. Đã bắt đầu {{count}} lượt tải xuống.",
+      "invalidUrl": "Đã bỏ qua {{id}}: URL HTTPS không hợp lệ.",
+      "starting": "Đang bắt đầu {{filename}}…",
+      "started": "Đã bắt đầu {{filename}} ({{started}}/{{total}})",
+      "failed": "Không thể bắt đầu {{filename}}: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "Đang lấy danh mục…",
+      "eventsFound": "Tìm thấy {{count}} sự kiện. Chọn một sự kiện rồi nhấp “Tìm kiếm”.",
+      "catalogFailed": "Không thể lấy danh mục: {{message}}",
+      "selectEvent": "Vui lòng chọn một sự kiện trước.",
+      "fetchingItems": "Đang lấy các mục…",
+      "itemsFound": "Tìm thấy {{count}} mục. Đánh dấu các mục để hiển thị hoặc tải xuống.",
+      "itemsFailed": "Không thể lấy các mục: {{message}}",
+      "drawingCancelled": "Đã hủy việc vẽ hộp giới hạn.",
+      "drawRectangle": "Vẽ một hình chữ nhật trên bản đồ…",
+      "bboxSet": "Đã đặt hộp giới hạn. Nhấp “Tìm kiếm” để lọc.",
+      "bboxCleared": "Đã xóa hộp giới hạn.",
+      "noSelection": "Chưa chọn mục nào. Hãy đánh dấu các mục trước.",
+      "addingLayers": "Đang thêm {{count}} lớp COG…",
+      "addFailed": "Không thể thêm {{id}}: {{message}}",
+      "layersAdded": "Đã thêm {{count}} lớp COG.",
+      "startingDownloads": "Đang bắt đầu {{count}} lượt tải xuống…",
+      "downloadsStarted": "Đã bắt đầu {{started}} lượt tải xuống. {{failed}} lượt thất bại.",
+      "downloadCancelled": "Tải xuống đã bị hủy hoặc thất bại."
+    }
   }
 }

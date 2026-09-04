@@ -50,6 +50,7 @@ const GALLERY_UNAVAILABLE_ID = "project-menu-gallery-unavailable";
 const SAVE_DENIED_ID = "project-menu-save-denied";
 const SHARE_DENIED_ID = "project-menu-share-denied";
 const EXPORT_DATA_DENIED_ID = "project-menu-export-data-denied";
+const CESIUM_DENIED_ID = "project-menu-cesium-denied";
 const EXPORT_IMAGE_DENIED_ID = "project-menu-export-image-denied";
 
 interface ProjectMenuProps {
@@ -106,6 +107,10 @@ export function ProjectMenu({
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
+  // The offline-region panel traces the extract area on the MapLibre canvas via
+  // a `MapController`. The globe has none and DesktopShell unmounts the panel
+  // there, so the entry would open nothing at all (#2217 review).
+  const cesiumPrimary = useAppStore((s) => s.primaryRenderer) === "cesium";
   const recentProjects = useAppStore((s) => s.recentProjects);
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
@@ -417,8 +422,10 @@ export function ProjectMenu({
         {show("project.offlineRegion") && (
           <DropdownMenuItem
             onSelect={onOpenOfflineBasemap}
-            disabled={!exportDataCapability.granted}
-            aria-describedby={exportDataDeniedBy}
+            disabled={cesiumPrimary || !exportDataCapability.granted}
+            // The globe reason wins when both apply: it is the one the user can
+            // act on from here, and only one id can be announced.
+            aria-describedby={cesiumPrimary ? CESIUM_DENIED_ID : exportDataDeniedBy}
           >
             <HardDriveDownload className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineBasemapEllipsis")}
@@ -438,6 +445,14 @@ export function ProjectMenu({
             of them would be orphaned when only the other is on screen. */}
         {showExportDataActions && (
           <CapabilityNotice id={EXPORT_DATA_DENIED_ID} capability={exportDataCapability} />
+        )}
+        {show("project.offlineRegion") && cesiumPrimary && (
+          <DropdownMenuLabel
+            id={CESIUM_DENIED_ID}
+            className="pt-0 text-xs font-normal text-muted-foreground"
+          >
+            {t("toolbar.item.mapLibreOnly")}
+          </DropdownMenuLabel>
         )}
         {show("project.printLayout") && (
           <CapabilityNotice id={EXPORT_IMAGE_DENIED_ID} capability={exportImageCapability} />

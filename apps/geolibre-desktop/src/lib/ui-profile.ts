@@ -93,6 +93,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   // Web services
   { id: "xyz", section: "webServices", labelKey: "toolbar.layerType.xyz", tier: "basic" },
   { id: "wms", section: "webServices", labelKey: "toolbar.layerType.wms", tier: "basic" },
+  { id: "csw", section: "webServices", labelKey: "toolbar.layerType.csw", tier: "intermediate" },
   { id: "wfs", section: "webServices", labelKey: "toolbar.layerType.wfs", tier: "intermediate" },
   { id: "wmts", section: "webServices", labelKey: "toolbar.layerType.wmts", tier: "intermediate" },
   {
@@ -404,6 +405,21 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     menuId: "view",
     labelKey: "toolbar.item.splitView",
     tier: "intermediate",
+  },
+  {
+    // "basic", not "advanced": this is the only control that switches the
+    // primary map back to MapLibre, and a preset *hides* items above its tier
+    // rather than disabling them. A beginner opening a project saved with
+    // `primaryRenderer: "cesium"` would otherwise land on the globe with the
+    // MapLibre-only tools greyed out and no visible way back (#2217 review).
+    // Two overrides back this up while the globe is active, covering the two
+    // ways a hand-edited profile could hide the escape hatch: ViewMenu forces
+    // this submenu visible past `hiddenMenuItems`, and TopToolbar mounts
+    // ViewMenu at all past `hiddenMenus: ["view"]`.
+    id: "view.renderingEngine",
+    menuId: "view",
+    labelKey: "toolbar.item.renderingEngine",
+    tier: "basic",
   },
   {
     id: "view.googleMaps",

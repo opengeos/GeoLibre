@@ -6,6 +6,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_MAP_GRID_LAYOUT,
+  DEFAULT_PRIMARY_RENDERER,
   DEFAULT_STORY_MAP,
   MAX_DASHBOARD_COLUMNS,
   MAX_MAP_GRID_DIM,
@@ -24,6 +25,7 @@ import {
   type LegendCustomItem,
   type LegendItemOverride,
   type MapGridLayout,
+  type MapRendererKind,
   type MapScaleUnit,
   type MapViewState,
   MAX_PROCESSING_HISTORY,
@@ -318,6 +320,11 @@ export function parseProject(json: string): GeoLibreProject {
             ? { primaryMapLabel: normalizeString(data.primaryMapLabel) }
             : {}),
         }
+      : {}),
+    // The primary renderer is independent of the grid, so it sits outside the
+    // `mapLayout` block above: a 1x1 Cesium project has no grid to persist.
+    ...(normalizePrimaryRenderer(data.primaryRenderer)
+      ? { primaryRenderer: "cesium" as const }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(parsedComments.length > 0 ? { comments: parsedComments } : {}),
@@ -915,6 +922,19 @@ export function normalizeMapLayout(value: unknown): MapGridLayout | null {
     cols,
     syncView: normalizeBoolean(candidate.syncView, DEFAULT_MAP_GRID_LAYOUT.syncView),
   };
+}
+
+/**
+ * Coerce an untrusted `primaryRenderer` into a known engine id (issue #2217).
+ *
+ * Returns null for the default 2D map — absent, unknown, or an explicit
+ * `"maplibre"` — because the field is only written when it is not the default,
+ * so a MapLibre project serializes byte-identically to before this existed.
+ * The return type is narrowed to `"cesium" | null` rather than the full
+ * {@link MapRendererKind} for that reason: `"maplibre"` is never a result.
+ */
+export function normalizePrimaryRenderer(value: unknown): "cesium" | null {
+  return value === "cesium" ? "cesium" : null;
 }
 
 /**
@@ -1549,6 +1569,7 @@ export function projectFromStore(state: {
   mapLayout?: MapGridLayout;
   secondaryMapViews?: SecondaryMapView[];
   primaryMapLabel?: string;
+  primaryRenderer?: MapRendererKind;
   /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
   styleLibrary?: StyleLibraryEntry[] | null;
   comments?: ProjectComment[] | null;
@@ -1624,6 +1645,12 @@ export function projectFromStore(state: {
             ? { primaryMapLabel: normalizeString(state.primaryMapLabel) }
             : {}),
         }
+      : {}),
+    // Written only for the non-default renderer, and independently of the grid:
+    // a single-pane Cesium project persists `primaryRenderer` with no
+    // `mapLayout`, and a MapLibre project writes neither.
+    ...(normalizePrimaryRenderer(state.primaryRenderer)
+      ? { primaryRenderer: "cesium" as const }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(comments.length > 0 ? { comments } : {}),
@@ -1762,6 +1789,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   mapLayout: MapGridLayout;
   secondaryMapViews: SecondaryMapView[];
   primaryMapLabel: string;
+  primaryRenderer: MapRendererKind;
   projectStyleLibrary: StyleLibraryEntry[];
   comments: ProjectComment[];
   metadata: Record<string, unknown>;
@@ -1865,6 +1893,9 @@ export function applyProjectToStore(project: GeoLibreProject): {
     mapLayout,
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
+    // An unknown or absent value resolves to the 2D map, so a project written
+    // before #2217 (and any hand-edited one) opens on MapLibre as before.
+    primaryRenderer: normalizePrimaryRenderer(project.primaryRenderer) ?? DEFAULT_PRIMARY_RENDERER,
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
     comments: scrubbedComments,
     metadata: project.metadata,

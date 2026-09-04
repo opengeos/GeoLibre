@@ -60,8 +60,12 @@ describe("Vantor Open Data built-in plugin", () => {
     assert.equal(maplibreVantorPlugin.version, "0.2.1");
     assert.ok(WEB_SERVICE_PLUGIN_IDS.includes(VANTOR_PLUGIN_ID));
     assert.equal(
-      WEB_SERVICE_PLUGIN_IDS.indexOf(VANTOR_PLUGIN_ID),
+      WEB_SERVICE_PLUGIN_IDS.indexOf("maplibre-usgs-nldi"),
       WEB_SERVICE_PLUGIN_IDS.indexOf("maplibre-gl-national-map") + 1,
+    );
+    assert.equal(
+      WEB_SERVICE_PLUGIN_IDS.indexOf(VANTOR_PLUGIN_ID),
+      WEB_SERVICE_PLUGIN_IDS.indexOf("maplibre-usgs-nldi") + 1,
     );
     assert.equal(pluginTier(VANTOR_PLUGIN_ID), "advanced");
   });

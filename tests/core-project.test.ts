@@ -994,6 +994,69 @@ describe("multi-map grid persistence", () => {
     assert.deepEqual(reparsed.secondaryMapViews?.[1].layerVisibility, {});
   });
 
+  it("omits primaryRenderer for a default MapLibre project", () => {
+    const project = projectFromStore({
+      projectName: "2D",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      primaryRenderer: "maplibre",
+      metadata: {},
+    });
+    // The 2D map is the default, so a MapLibre project stays byte-identical to
+    // one written before the setting existed.
+    assert.equal(project.primaryRenderer, undefined);
+    assert.equal(parseProject(serializeProject(project)).primaryRenderer, undefined);
+  });
+
+  it("round-trips a Cesium primary renderer without a grid", () => {
+    const project = projectFromStore({
+      projectName: "3D",
+      mapView: { center: [-95, 40], zoom: 4, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      primaryRenderer: "cesium",
+      metadata: {},
+    });
+    assert.equal(project.primaryRenderer, "cesium");
+    // The renderer is independent of the grid: a single-pane Cesium project
+    // persists the renderer and no `mapLayout`.
+    assert.equal(project.mapLayout, undefined);
+    const reparsed = parseProject(serializeProject(project));
+    assert.equal(reparsed.primaryRenderer, "cesium");
+    assert.equal(applyProjectToStore(reparsed).primaryRenderer, "cesium");
+  });
+
+  it("falls back to the 2D map for an unknown primaryRenderer", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Bad renderer",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        primaryRenderer: "webgpu",
+      }),
+    );
+    assert.equal(reparsed.primaryRenderer, undefined);
+    assert.equal(applyProjectToStore(reparsed).primaryRenderer, "maplibre");
+  });
+
+  it("opens a project written before #2217 on the 2D map", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Legacy",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      }),
+    );
+    assert.equal(applyProjectToStore(reparsed).primaryRenderer, "maplibre");
+  });
+
   it("ignores a 1x1 grid so single-map files stay clean", () => {
     const reparsed = parseProject(
       JSON.stringify({
@@ -1019,6 +1082,44 @@ describe("app store", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Test Project" });
     useAppStore.getState().clearRecentProjects();
+  });
+
+  it("switches the primary renderer without disturbing the project", () => {
+    const store = useAppStore.getState();
+    store.setMapView({ center: [-122.4, 37.8], zoom: 9, bearing: 30, pitch: 45 });
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [],
+    });
+    const before = useAppStore.getState();
+    assert.equal(before.primaryRenderer, "maplibre");
+
+    useAppStore.getState().setPrimaryRenderer("cesium");
+    const after = useAppStore.getState();
+    assert.equal(after.primaryRenderer, "cesium");
+    // Switching engines changes what draws the project, never the project: the
+    // camera, layers, basemap, and grid all carry across untouched.
+    assert.deepEqual(after.mapView, before.mapView);
+    assert.deepEqual(
+      after.layers.map((layer) => layer.id),
+      [layerId],
+    );
+    assert.equal(after.basemapStyleUrl, before.basemapStyleUrl);
+    assert.deepEqual(after.mapLayout, before.mapLayout);
+    assert.deepEqual(after.secondaryMapViews, before.secondaryMapViews);
+    // The choice is project state, so it marks the project dirty.
+    assert.equal(after.isDirty, true);
+
+    useAppStore.getState().setPrimaryRenderer("maplibre");
+    assert.equal(useAppStore.getState().primaryRenderer, "maplibre");
+  });
+
+  it("ignores a no-op primary renderer change", () => {
+    const before = useAppStore.getState();
+    assert.equal(before.isDirty, false);
+    useAppStore.getState().setPrimaryRenderer("maplibre");
+    // Re-selecting the active renderer must not dirty a freshly opened project.
+    assert.equal(useAppStore.getState().isDirty, false);
   });
 
   it("adds, selects, moves, and removes layers consistently", () => {

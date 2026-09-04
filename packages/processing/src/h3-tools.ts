@@ -1,6 +1,9 @@
+// H3 SQL builders and resolution math. The user-facing H3 algorithms live in
+// `dggs-tools.ts` (the DGGS Generator / Binning / Compact tools, `dggsType:
+// "h3"`), which is what `VECTOR_TOOLS` registers; this module has no registry
+// of its own.
 import type { FeatureCollection, Geometry } from "geojson";
 import { unwrapAntimeridianGeometry } from "./antimeridian";
-import type { ProcessingAlgorithm } from "./types";
 
 /** Average area (km^2) of an H3 cell at each resolution 0..15 (official values). */
 export const H3_AVG_AREA_KM2: number[] = [
@@ -285,10 +288,4 @@ export function rowsToFeatureCollection(
     });
   }
   return { type: "FeatureCollection", features };
-}
-
-export const H3_TOOLS: ProcessingAlgorithm[] = [];
-
-export function getH3Tool(id: string): ProcessingAlgorithm | undefined {
-  return H3_TOOLS.find((tool) => tool.id === id);
 }

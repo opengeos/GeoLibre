@@ -28,7 +28,7 @@ kepler.gl, see the [Comparison](comparison.md).
 ## Map workspace and basemaps
 
 - MapLibre map workspace
-    - **Basemaps**: OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart, with stacking of multiple raster basemaps, blank background support, and double-click to swap the core basemap from the layer panel
+    - **Basemaps**: OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart, with stacking of multiple raster basemaps, blank background support (which takes a custom color that follows the theme by default and survives a style reload, without bleeding into the planetary and regional styles that carry their own), and double-click to swap the core basemap from the layer panel
     - **Regional basemaps**: a collapsed Regional section in both the New Project and Change Basemap panels for providers with local coverage the global defaults lack, starting with five keyless Chinese basemaps (高德地图, 高德卫星, 高德混合, 腾讯地图, 腾讯深色), with the same providers plus Tianditu available through the Basemaps control plugin
     - **A remembered basemap**: an empty startup workspace opens on the basemap you last selected, while a project's own basemap stays authoritative
     - **Previews, not just names**: each raster entry in the Basemaps panel shows a z=2 tile of itself, and each keyless style entry shows its background color and then a small offscreen MapLibre snapshot once the row scrolls into view, so a basemap can be told apart before it is applied
@@ -67,6 +67,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Entries can be renamed, removed, and exported or imported as a JSON bundle to share with a team
     - Entries store the source specification rather than the data, so a saved COG, PostGIS table, or remote GeoParquet always reflects its source's current contents
     - Layers whose features exist only in memory or in a local file embed them behind a size cap
+- A GeoParquet's `geo` metadata block is read in full — `version`, `primary_column`, `encoding`, `geometry_types`, `bbox`, `covering`, and `edges` — alongside the CRS a Parquet 2.0 file records only on its geometry column's GEOMETRY/GEOGRAPHY logical type. A 3D `bbox` is read minima-first rather than mistaking its ymax for an elevation, and a lon/lat table carrying no geometry column is recognized as one
 - Deck.gl Layer builder for composing deck.gl overlays from uploaded files or remote URLs
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers, with the cadence, last-synchronized time, last error, and on-failure policy persisted with the project as a `connection` record — so a reopened project keeps refreshing on schedule and the Layers panel can show each live layer's synchronization status
@@ -113,6 +114,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Title the popup from a field or an expression, or replace the rows entirely with an expression-built sentence, and show or hide the feature id
     - Independent click and hover switches, so a layer can carry a full popup, a light tooltip that follows the pointer, both, or neither
     - Saved with the project, so a shared map, a `layout=viewer` embed, and a story-map chapter show the reader the fields that were meant to be read rather than join artifacts, editor-tracking columns, and internal ids. See [Project format](project-format.md)
+- **Identify every visible layer at once**, folding vector features and raster pixel values from all visible queryable layers into one grouped, expandable popup with expand-all and collapse-all, instead of picking a layer first and clicking again
 - Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
 - NetCDF and HDF grids are first-class raster layers rather than a single grey band
     - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
@@ -190,6 +192,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - The web build embeds a self-hosted JupyterLite site with an in-browser Pyodide kernel; the desktop build launches a uv-managed JupyterLab server
     - Notebook cells drive the map through an auto-loaded `geolibre` client, and external Jupyter frontends attached to that server (VS Code's Jupyter extension, `jupyter console`, nbclient) drive the map too
 - Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with two-way project sync. See the [Python package guide](python.md)
+    - A `DashMap` component embeds the same app in a [Plotly Dash](https://dash.plotly.com) application, pushing project changes into a mounted iframe after the ready handshake so a callback can drive the map
     - An expanded leafmap-style API: local raster, marker/cluster, and choropleth layers; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected and drawn features; and `to_html` export
     - Layer management and camera control as plain project mutations on `Map` and `Layer` — reorder, duplicate, rename, and remove layers, read attribute values, and frame the map — with the project authoring helpers exported for scripts that never display a widget, and credentials swept out of the layer records and basemap URLs a notebook cell prints back
     - The bundled Whitebox WASM catalog runs from the widget through `list_whitebox_tools` and `run_whitebox_tool`, resolving `Layer` handles to layer ids and adding both vector and raster outputs back to the map, so terrain and raster work no longer means leaving the notebook for the UI
@@ -217,6 +220,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Download OSM Vector's four boundary numbers render as one Area of interest control with Use map extent and Draw on map shortcuts
 - Vector menu
     - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
+    - Buffer takes a side: Outside grows each feature, Inside shrinks it, and Both sides keeps only the zone within the distance on either side of its boundary. Inside shrinks polygons only: a point or line has no interior, so the inward buffer empties it and the feature is dropped from the result and reported in the run log
     - **Data management**: merge layers, through a multi-layer parameter picker that unites attribute schemas and can record each feature's source layer
     - **Vertices and sampling**: extract vertices as points carrying their part and vertex index, and generate points along lines and polygon boundaries at a fixed geodesic interval
     - **Data quality**: check validity, fix geometries, and check topology rules
@@ -244,7 +248,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 ## Projects and sharing
 
-- Project menu to create, open, save, and Save As `.geolibre` projects, with legacy `.geolibre.json` support, desktop file association, standalone interactive HTML export that runs offline with no server, and a project gallery for browsing and opening shared projects with one click
+- Project menu to create, open, save, and Save As `.geolibre` projects, with legacy `.geolibre.json` support, desktop file association (double-clicking a project in the file manager opens it, using native project events on macOS) and drag-and-drop of a project file onto the map, which switches projects while keeping the unsaved-work prompt and reports a bad file as a project error rather than a failed layer, standalone interactive HTML export that runs offline with no server, and a project gallery for browsing and opening shared projects with one click
 - Share-readiness check in the Share dialog: before the upload, every data source the project references is classified and probed anonymously from the browser, and the ones a recipient could not load are listed with a plain-language reason and a fix, covering credential-gated services, hosts with no cross-origin headers, expired or moved links, and local or private-network sources. It informs rather than blocks. See [Projects](user-guide/projects.md#share-readiness-check)
 - Autosave with a browsable project history. See [Projects](user-guide/projects.md#project-history-and-crash-recovery)
     - Snapshots are written to local device storage a few seconds after each change settles, and listed newest first with their layer count and zoom
@@ -260,13 +264,17 @@ kepler.gl, see the [Comparison](comparison.md).
 ## Plugins
 
 - Built-in plugins for the map surface: basemap, layer control, MapLibre components, and swipe
+- Web Services plugins dock in the shared panel host rather than floating over the map, so a catalog browser resizes, collapses, and sits alongside the Layers and Style panels while keeping its own MapLibre control lifecycle and layer sync
 - Imagery and street level: street view, Mapillary coverage and street-level image viewer, OpenAerialMap open-aerial-imagery search, and Historical Imagery
 - Data catalog browsers:
     - **Natural Earth** and **Source Cooperative**, including opening or streaming large GeoParquet from Source Cooperative
     - **STAC catalogs**, which discovers catalogs from STAC Index, connects to both static catalogs and STAC APIs, searches a collection's items, and adds any visualizable asset as a layer (COG, PMTiles, GeoParquet, and Zarr with a variable picker), including an Icechunk repository read through its own manifest and Azure-hosted assets signed at add time so private Planetary Computer containers open like public ones. A static catalog can also be walked as a tree, opening a folder to read it and starting a search from whatever you picked
     - **Earthdata GIS**, which searches NASA's EOSDIS ArcGIS portal and renders its imagery, map, and feature services and published web maps as first-class layers
+    - **Planet Open Data**, which opens Planet's disaster releases through the STAC browser with the public catalog preselected
+    - **Vantor Open Data**, a STAC explorer for pre-event and post-event imagery that filters by event and phase, takes the map extent or a drawn bounding box, and picks its own COG rendering engine (GPU, WebAssembly, or TiTiler)
     - **Hugging Face**, for searching the Hub, walking a dataset repo's folders, adding its vector and raster files to the map, and creating and uploading dataset repos
     - **[GeoLens](https://github.com/geolens-io/geolens)**, which connects to a self-hosted GeoLens server and adds datasets as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles — and writes edits to a GeoJSON-loaded dataset back to the GeoLens server, feature by feature, when the server allows it
+    - Catalog plugins that share panel state are mutually exclusive, and a failed switch reactivates the plugin it displaced rather than leaving both off
 - Analysis and editing integrations: Elevation Profile, Overture Maps, USGS LiDAR, GeoAgent, and GeoEditor
     - Elevation Profile charts a drawn line or the line features currently selected on a layer, so a route already on the map does not have to be traced again
     - USGS LiDAR clips a point cloud to an area of interest and downloads the result as COPC

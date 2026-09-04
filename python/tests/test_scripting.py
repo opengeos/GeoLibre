@@ -430,6 +430,16 @@ def test_redact_credentials_keeps_the_first_party_map_controls():
                 "settings": {
                     "maplibre-gl-components": {"legend": {"A": "#111"}},
                     "maplibre-gl-swipe": {"position": 50},
+                    "maplibre-gl-time-slider": {
+                        "datesUrl": "https://example.com/dates.json",
+                        "sources": [
+                            {
+                                "type": "mosaic",
+                                "id": "acdom",
+                                "url": "https://example.com/{date:YYYYMMDD}_acdom.json",
+                            }
+                        ],
+                    },
                     "some-third-party-plugin": {"apiKey": "third-party-secret"},
                 }
             }
@@ -438,6 +448,16 @@ def test_redact_credentials_keeps_the_first_party_map_controls():
     settings = safe["plugins"]["settings"]
     assert settings["maplibre-gl-components"] == {"legend": {"A": "#111"}}
     assert settings["maplibre-gl-swipe"] == {"position": 50}
+    assert settings["maplibre-gl-time-slider"] == {
+        "datesUrl": "https://example.com/dates.json",
+        "sources": [
+            {
+                "type": "mosaic",
+                "id": "acdom",
+                "url": "https://example.com/{date:YYYYMMDD}_acdom.json",
+            }
+        ],
+    }
     # An unknown plugin's blob is free-form and can hold a key, so it still goes.
     assert "some-third-party-plugin" not in settings
 

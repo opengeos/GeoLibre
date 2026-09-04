@@ -36,6 +36,7 @@ import {
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
 import { isNonTiledRasterError } from "./non-tiled-raster-error";
 import { convertTiffYCbCrToRgb } from "./tiff-ycbcr";
+import { readableStacLayerHref } from "./stac-signing";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -628,6 +629,26 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // early, and the next control event would then prune the not-yet-replayed
     // layers out of the store.
     const localFiles = await readLocalRasterFiles(control);
+    const remoteSources = new Map(
+      await Promise.all(
+        useAppStore
+          .getState()
+          .layers.filter(isRasterControlStoreLayer)
+          .flatMap((layer) => {
+            const url =
+              typeof layer.source.url === "string" && layer.source.url
+                ? layer.source.url
+                : undefined;
+            return url
+              ? [
+                  readableStacLayerHref(layer, url).then(
+                    (href) => [layer.id, { sourceUrl: url, href }] as const,
+                  ),
+                ]
+              : [];
+          }),
+      ),
+    );
 
     // Re-read the store after the await: the project may have changed while
     // the control class was loading.
@@ -668,8 +689,13 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         if (!isRasterControlStoreLayer(layer)) continue;
         if (control.getRaster(layer.id)) continue;
 
-        const url =
+        const storedUrl =
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
+        const resolvedSource = remoteSources.get(layer.id);
+        const url =
+          resolvedSource && resolvedSource.sourceUrl === storedUrl
+            ? resolvedSource.href
+            : storedUrl;
         // A local file that was re-read above replays from its bytes; the
         // control re-derives its own blob URL from the File, as on a fresh add.
         const source = url ?? localFiles.get(layer.id);

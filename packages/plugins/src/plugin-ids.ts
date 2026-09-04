@@ -14,5 +14,8 @@ export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
 /** Annotations: the drawing toolbar (text, pin, note, arrow, freehand, …). */
 export const ANNOTATIONS_PLUGIN_ID = "maplibre-gl-annotations";
 
+/** Dimensions: CAD/ArcGIS-Pro-style linear/aligned/angular dimension lines. */
+export const DIMENSIONS_PLUGIN_ID = "maplibre-gl-dimensions";
+
 /** GeoAgent: the AI chat control, whose results sync into the store. */
 export const GEOAGENT_PLUGIN_ID = "maplibre-gl-geoagent";

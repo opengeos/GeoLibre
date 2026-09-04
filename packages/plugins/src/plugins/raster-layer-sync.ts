@@ -6,6 +6,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -271,6 +272,7 @@ export const GEOLIBRE_OWNED_METADATA_KEYS = [
   "rasterSymbology",
   "rasterAttributeTable",
   "localBytesUrl",
+  STAC_ASSET_ACCESS_METADATA_KEY,
 ] as const;
 
 export function syncRasterLayersToStoreWithOptions(
@@ -318,12 +320,25 @@ export function syncRasterLayersToStoreWithOptions(
       // wipe them.
       const preserved: Record<string, unknown> = {};
       for (const key of GEOLIBRE_OWNED_METADATA_KEYS) {
+        if (key === STAC_ASSET_ACCESS_METADATA_KEY) {
+          const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+          const access = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+          if (access) preserved[key] = access;
+          continue;
+        }
         if (existing.metadata[key] !== undefined) {
           preserved[key] = existing.metadata[key];
         }
       }
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
+      const stacAssetAccess = preserved[STAC_ASSET_ACCESS_METADATA_KEY] as
+        | ReturnType<typeof stacAssetAccessFromLayer>
+        | undefined;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
 
       // A control still reporting the value this module last knows it to hold
       // is echoing that value, not recording a user edit. Mirroring the echo
@@ -350,8 +365,8 @@ export function syncRasterLayersToStoreWithOptions(
       if (
         existing.visible !== visible ||
         existing.opacity !== opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
         !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
@@ -359,8 +374,8 @@ export function syncRasterLayersToStoreWithOptions(
           // survive a raster being swapped out under the same id.
           metadata,
           opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
+          source,
+          sourcePath,
           visible,
         });
       }

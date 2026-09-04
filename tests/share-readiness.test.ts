@@ -107,10 +107,17 @@ describe("isPrivateHostname", () => {
 });
 
 describe("probeTargetFor", () => {
-  it("collapses a tile template to its origin", () => {
+  it("expands a tile template to a representative route", () => {
     assert.equal(
       probeTargetFor("https://tile.example.com/data/{z}/{x}/{y}.png"),
-      "https://tile.example.com",
+      "https://tile.example.com/data/0/0/0.png",
+    );
+  });
+
+  it("expands a formatted Time Slider date template to a representative route", () => {
+    assert.equal(
+      probeTargetFor("https://data.example.com/json/{date:YYYYMMDD}_acdom.json"),
+      "https://data.example.com/json/20000101_acdom.json",
     );
   });
 
@@ -118,6 +125,13 @@ describe("probeTargetFor", () => {
     assert.equal(
       probeTargetFor("https://data.example.com/dem.tif"),
       "https://data.example.com/dem.tif",
+    );
+  });
+
+  it("does not treat arbitrary brace content as a supported template", () => {
+    assert.equal(
+      probeTargetFor("https://data.example.com/query/{not/a/template}"),
+      "https://data.example.com/query/%7Bnot/a/template%7D",
     );
   });
 
@@ -132,8 +146,16 @@ describe("collectShareSources", () => {
     const refs = collectShareSources({
       layers: [
         layer({ geojson: { type: "FeatureCollection", features: [] } }),
-        layer({ id: "b", name: "B", metadata: { embeddedGeoJSON: { type: "FeatureCollection" } } }),
-        layer({ id: "c", name: "C", source: { url: "https://x.example.com/a.fgb" } }),
+        layer({
+          id: "b",
+          name: "B",
+          metadata: { embeddedGeoJSON: { type: "FeatureCollection" } },
+        }),
+        layer({
+          id: "c",
+          name: "C",
+          source: { url: "https://x.example.com/a.fgb" },
+        }),
       ],
       embeddedLayerIds: new Set(["c"]),
     });
@@ -143,7 +165,12 @@ describe("collectShareSources", () => {
   it("flags a local path and a private host without probing them", () => {
     const refs = collectShareSources({
       layers: [
-        layer({ id: "a", name: "DEM", type: "cog", source: { url: "/home/me/dem.tif" } }),
+        layer({
+          id: "a",
+          name: "DEM",
+          type: "cog",
+          source: { url: "/home/me/dem.tif" },
+        }),
         layer({
           id: "b",
           name: "Intranet tiles",
@@ -168,7 +195,9 @@ describe("collectShareSources", () => {
           id: "a",
           name: "Keyed tiles",
           type: "xyz",
-          source: { url: "https://api.example.com/{z}/{x}/{y}.png?apiKey=secret" },
+          source: {
+            url: "https://api.example.com/{z}/{x}/{y}.png?apiKey=secret",
+          },
         }),
       ],
     });
@@ -203,7 +232,10 @@ describe("collectShareSources", () => {
           id: "a",
           name: "Public tileset",
           type: "3d-tiles",
-          source: { url: "https://tiles.example.com/tileset.json", requestHeaders: {} },
+          source: {
+            url: "https://tiles.example.com/tileset.json",
+            requestHeaders: {},
+          },
         }),
       ],
     });
@@ -242,6 +274,34 @@ describe("collectShareSources", () => {
     });
     assert.equal(refs[0].status, "local");
     assert.equal(refs[0].reason, "no-source");
+  });
+
+  it("checks a Time Slider mirror through its authored hosted template", () => {
+    const template =
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/{date:YYYYMMDD}_acdom.json";
+    const refs = collectShareSources({
+      layers: [
+        layer({
+          id: "acdom",
+          name: "aCDOM440",
+          type: "raster",
+          source: { type: "raster", sourceId: "acdom" },
+          metadata: {
+            externalNativeLayer: true,
+            sourceKind: "time-slider",
+            originalUrl: template,
+          },
+        }),
+      ],
+    });
+
+    assert.equal(refs.length, 1);
+    assert.equal(refs[0].url, template);
+    assert.equal(refs[0].reason, "ok");
+    assert.equal(
+      refs[0].probeUrl,
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/20000101_acdom.json",
+    );
   });
 
   it("de-duplicates one template repeated across source and metadata", () => {
@@ -283,7 +343,13 @@ describe("collectShareSources", () => {
 
   it("says nothing about an inline data: payload", () => {
     const refs = collectShareSources({
-      layers: [layer({ id: "a", type: "image", source: { url: "data:image/png;base64,AAA" } })],
+      layers: [
+        layer({
+          id: "a",
+          type: "image",
+          source: { url: "data:image/png;base64,AAA" },
+        }),
+      ],
     });
     assert.deepEqual(refs, []);
   });
@@ -303,12 +369,15 @@ describe("probeShareSources", () => {
         }),
       ],
     });
-    const { fn, calls } = fakeFetch({ "https://tile.example.com": 200 });
+    const { fn, calls } = fakeFetch({
+      "https://tile.example.com/0/0/0.png": 200,
+      "https://tile.example.com/other/0/0/0.png": 200,
+    });
     const result = await probeShareSources(refs, { fetchImpl: fn });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].method, "HEAD");
-    assert.equal(calls[0].credentials, "omit");
-    assert.equal(result.probeCount, 1);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.method === "HEAD"));
+    assert.ok(calls.every((call) => call.credentials === "omit"));
+    assert.equal(result.probeCount, 2);
     assert.deepEqual(
       result.refs.map((ref) => ref.status),
       ["reachable", "reachable"],
@@ -318,8 +387,18 @@ describe("probeShareSources", () => {
   it("maps 401 to credentialed and 404 to missing", async () => {
     const refs = collectShareSources({
       layers: [
-        layer({ id: "a", name: "A", type: "cog", source: { url: "https://a.example.com/a.tif" } }),
-        layer({ id: "b", name: "B", type: "cog", source: { url: "https://b.example.com/b.tif" } }),
+        layer({
+          id: "a",
+          name: "A",
+          type: "cog",
+          source: { url: "https://a.example.com/a.tif" },
+        }),
+        layer({
+          id: "b",
+          name: "B",
+          type: "cog",
+          source: { url: "https://b.example.com/b.tif" },
+        }),
       ],
     });
     const { fn } = fakeFetch({
@@ -336,10 +415,26 @@ describe("probeShareSources", () => {
     );
   });
 
+  it("accepts a readable 404 for a representative template expansion", async () => {
+    const template = "https://tiles.example.com/{z}/{x}/{y}.png";
+    const refs = collectShareSources({
+      layers: [layer({ id: "a", name: "A", type: "xyz", source: { url: template } })],
+    });
+    const { fn } = fakeFetch({ "https://tiles.example.com/0/0/0.png": 404 });
+    const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
+    assert.equal(probed[0].status, "reachable");
+    assert.equal(probed[0].reason, "ok");
+  });
+
   it("retries a HEAD-refusing host with a ranged GET before calling it gated", async () => {
     const refs = collectShareSources({
       layers: [
-        layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
+        layer({
+          id: "a",
+          name: "A",
+          type: "cog",
+          source: { url: "https://s3.example.com/a.tif" },
+        }),
       ],
     });
     let first = true;
@@ -369,7 +464,12 @@ describe("probeShareSources", () => {
   it("falls back to the HEAD verdict when only the ranged GET is rejected", async () => {
     const refs = collectShareSources({
       layers: [
-        layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
+        layer({
+          id: "a",
+          name: "A",
+          type: "cog",
+          source: { url: "https://s3.example.com/a.tif" },
+        }),
       ],
     });
     // HEAD answers 405, so the host is up and readable cross-origin; the ranged
@@ -389,7 +489,12 @@ describe("probeShareSources", () => {
   it("keeps a HEAD 403 credentialed when the ranged GET is also rejected", async () => {
     const refs = collectShareSources({
       layers: [
-        layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
+        layer({
+          id: "a",
+          name: "A",
+          type: "cog",
+          source: { url: "https://s3.example.com/a.tif" },
+        }),
       ],
     });
     const { fn, attempts } = rejectingRangedGet(403);
@@ -532,7 +637,13 @@ describe("checkShareReadiness", () => {
     delete globalThis.fetch;
     try {
       const report = await checkShareReadiness({
-        layers: [layer({ id: "a", type: "cog", source: { url: "https://a.example.com/a.tif" } })],
+        layers: [
+          layer({
+            id: "a",
+            type: "cog",
+            source: { url: "https://a.example.com/a.tif" },
+          }),
+        ],
       });
       assert.equal(report.probeCount, 0);
       assert.equal(report.items[0].status, "unchecked");

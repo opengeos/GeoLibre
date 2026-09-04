@@ -170,6 +170,46 @@ describe("raster symbology render injection", () => {
     assert.equal(created[0]?.opts.width, 256);
   });
 
+  it("rebuilds the classified texture when class opacity changes", () => {
+    const layer = rasterLayer("r1", {
+      rasterSymbology: {
+        classified: true,
+        ramp: "viridis",
+        customColors: ["#ff0000", "#0000ff"],
+        method: "equal-interval",
+        classCount: 2,
+        breaks: [0, 1, 2],
+      },
+    });
+    useAppStore.getState().addLayer(layer);
+    const control = fakeControl();
+    let created = 0;
+    let destroyed = 0;
+    control._layerManager._device = {
+      createTexture: () => {
+        created += 1;
+        return { destroy: () => (destroyed += 1) };
+      },
+    };
+    activateRasterClassification(control);
+    renderColormapProps(control, "r1");
+    assert.equal(created, 1);
+
+    useAppStore.getState().updateLayer("r1", {
+      metadata: {
+        ...layer.metadata,
+        rasterSymbology: {
+          ...(layer.metadata.rasterSymbology as Record<string, unknown>),
+          classOpacities: [0, 1],
+        },
+      },
+    });
+    renderColormapProps(control, "r1");
+
+    assert.equal(created, 2);
+    assert.equal(destroyed, 1);
+  });
+
   it("switches from the WASM renderer when discrete classes need the GPU pipeline", () => {
     useAppStore.getState().addLayer(
       rasterLayer("r1", {

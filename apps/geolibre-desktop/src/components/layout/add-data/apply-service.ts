@@ -455,6 +455,8 @@ export async function applyServiceEntry(
   const { addLayer, mapControllerRef, beforeLayerId = null } = deps;
 
   switch (entry.kind) {
+    case "csw":
+      throw new Error("CSW catalog connections must be opened before choosing a dataset.");
     case "xyz": {
       const request = xyzFieldsToRequest(entry.fields);
       if (!request.url.trim()) throw new Error("This service has no tile URL.");

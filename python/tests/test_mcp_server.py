@@ -581,6 +581,28 @@ def test_add_ogc_layer_requires_layers_for_wms(server, project_path):
     )
 
 
+@pytest.mark.parametrize(
+    ("service", "arguments"),
+    [
+        ("wms", {"endpoint": "https://example.com/wms", "layers": "topo"}),
+        ("wmts", {"endpoint": "https://example.com/wmts/{z}/{y}/{x}.png"}),
+    ],
+)
+def test_add_ogc_layer_passes_bounds_through(server, project_path, tmp_path, service, arguments):
+    """Both branches build a different layer, and either is unreachable without bounds."""
+    call(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="Service",
+        service=service,
+        bounds=[8.14, 38.85, 9.83, 41.31],
+        **arguments,
+    )
+    written = json.loads((tmp_path / project_path).read_text(encoding="utf-8"))
+    assert written["layers"][-1]["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+
+
 def test_add_ogc_layer_rejects_an_unknown_service(server, project_path):
     assert "wms" in call_error(
         server,

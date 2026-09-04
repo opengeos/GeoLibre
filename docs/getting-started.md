@@ -61,12 +61,10 @@ See the [Python Package](python.md) reference to get started.
 ### In R
 
 The [`geolibre`](r.md) R package embeds GeoLibre as an interactive HTML widget
-in RStudio, Quarto, R Markdown, and Shiny. Install the development release from
-GitHub:
+in RStudio, Quarto, R Markdown, and Shiny. Install it from CRAN:
 
 ```r
-install.packages("pak")
-pak::pak("opengeos/geolibre-r")
+install.packages("geolibre")
 ```
 
 [Read the R package guide](r.md){ .md-button .md-button--primary }

@@ -17,6 +17,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   ArrowLeft,
   ArrowRight,
+  Box,
   Compass,
   Crosshair,
   Earth,
@@ -34,7 +35,7 @@ import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
-import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
 
 /** Selectable map-grid presets offered in the Split View submenu. */
@@ -93,6 +94,8 @@ interface ViewMenuProps {
  * camera's rotation/tilt. Hidden on narrow screens (via
  * `chrome.secondaryButtonClass`) so the menu bar stays one row.
  */
+const CESIUM_DENIED_ID = "view-menu-cesium-denied";
+
 export function ViewMenu({
   chrome,
   history,
@@ -111,6 +114,8 @@ export function ViewMenu({
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const setPrimaryRenderer = useAppStore((s) => s.setPrimaryRenderer);
   // Camera snapshot taken when the menu opens. The dropdown blocks map
   // interaction while open, so a single read on open stays accurate for the
   // life of the menu and lets items grey out at their limit (#708, #710).
@@ -121,7 +126,13 @@ export function ViewMenu({
   const atMaxZoom = camera != null && camera.zoom >= camera.maxZoom - 1e-3;
   const bearingIsNorth = camera != null && Math.abs(camera.bearing) < 1e-2;
   const pitchIsFlat = camera != null && Math.abs(camera.pitch) < 1e-2;
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // TopToolbar keeps this menu mounted while the globe is primary even when a
+  // profile hid the whole "view" menu, so that the escape hatch back to 2D
+  // survives (#2217 review). Honour the admin's intent in that case by showing
+  // nothing but the Rendering engine submenu, rather than the full menu the
+  // profile asked to hide.
+  const menuHiddenByProfile = !isMenuVisible(uiProfile, "view");
+  const show = (id: string) => !menuHiddenByProfile && isMenuItemVisible(uiProfile, id);
   const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation = show("view.previousView") || show("view.nextView");
   const showResetPitch = show("view.resetPitch");
@@ -137,15 +148,44 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
+  // Always offered while the globe owns the primary map, whatever the UI
+  // profile says: this submenu is the only way back to the 2D map, and hiding
+  // it there would strand a user on a renderer whose tools are all disabled.
+  const showRenderingEngine = show("view.renderingEngine") || primaryRenderer === "cesium";
+  // Every item in this menu except Split View and Rendering engine drives the
+  // MapLibre `MapController` — zoom, viewport history, orientation, Set View,
+  // and the Google Maps/Earth hand-offs all read or animate that map. The globe
+  // has no controller, so they would silently do nothing; grey them out so the
+  // menu shows they are unavailable rather than failing quietly (#2217). The
+  // Rendering engine submenu below stays enabled as the way back to 2D.
+  const noMapLibreMap = primaryRenderer === "cesium";
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
   const showExternal = showGoogleMaps || showGoogleEarth;
+  // A disabled DropdownMenuItem is `pointer-events-none`, so a native `title`
+  // can never be hovered — the reason has to be a rendered line the items point
+  // at (the CapabilityNotice convention). One line at the menu's foot serves
+  // all of them, since they are disabled by the same thing (#2217 review).
+  // Only when one of them is actually on screen: a profile that hid them all
+  // leaves the menu showing Rendering engine alone, and `aria-describedby`
+  // must never name an id that is not mounted.
+  const showMapLibreOnlyNote =
+    noMapLibreMap && (showZoom || showNavigation || showReset || showSetView || showExternal);
+  const mapLibreOnlyNote = showMapLibreOnlyNote ? CESIUM_DENIED_ID : undefined;
   const paneCount = mapLayout.rows * mapLayout.cols;
   const gridKey = `${mapLayout.rows}x${mapLayout.cols}`;
   // A custom profile could hide every item; render nothing rather than a menu
   // whose dropdown is an empty shell. (TopToolbar's isMenuVisible guard normally
   // hides the menu first, but don't rely on that invariant here.)
-  if (!showZoom && !showNavigation && !showReset && !showSetView && !showSplitView && !showExternal)
+  if (
+    !showZoom &&
+    !showNavigation &&
+    !showReset &&
+    !showSetView &&
+    !showSplitView &&
+    !showRenderingEngine &&
+    !showExternal
+  )
     return null;
 
   return (
@@ -169,26 +209,42 @@ export function ViewMenu({
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
-          <DropdownMenuItem disabled={atMaxZoom} onSelect={onZoomIn}>
+          <DropdownMenuItem
+            disabled={atMaxZoom || noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={onZoomIn}
+          >
             <ZoomIn className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomIn")}</span>
           </DropdownMenuItem>
         )}
         {show("view.zoomOut") && (
-          <DropdownMenuItem disabled={atMinZoom} onSelect={onZoomOut}>
+          <DropdownMenuItem
+            disabled={atMinZoom || noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={onZoomOut}
+          >
             <ZoomOut className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomOut")}</span>
           </DropdownMenuItem>
         )}
         {showZoom && showNavigation && <DropdownMenuSeparator />}
         {show("view.previousView") && (
-          <DropdownMenuItem disabled={!history.canGoBack} onSelect={history.goBack}>
+          <DropdownMenuItem
+            disabled={!history.canGoBack || noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={history.goBack}
+          >
             <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.previousView")}</span>
           </DropdownMenuItem>
         )}
         {show("view.nextView") && (
-          <DropdownMenuItem disabled={!history.canGoForward} onSelect={history.goForward}>
+          <DropdownMenuItem
+            disabled={!history.canGoForward || noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={history.goForward}
+          >
             <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.nextView")}</span>
           </DropdownMenuItem>
@@ -197,7 +253,8 @@ export function ViewMenu({
         {showReset && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger
-              disabled={allResetDisabled}
+              disabled={allResetDisabled || noMapLibreMap}
+              aria-describedby={mapLibreOnlyNote}
               className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
@@ -234,7 +291,11 @@ export function ViewMenu({
         )}
         {(showZoom || showNavigation || showReset) && showSetView && <DropdownMenuSeparator />}
         {showSetView && (
-          <DropdownMenuItem onSelect={onSetView}>
+          <DropdownMenuItem
+            disabled={noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={onSetView}
+          >
             <Crosshair className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.setView")}</span>
           </DropdownMenuItem>
@@ -294,18 +355,65 @@ export function ViewMenu({
           </DropdownMenuSub>
         )}
         {(showZoom || showNavigation || showReset || showSetView || showSplitView) &&
+          showRenderingEngine && <DropdownMenuSeparator />}
+        {showRenderingEngine && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Box className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t("toolbar.item.renderingEngine")}</span>
+            </DropdownMenuSubTrigger>
+            {/* `style`, not `min-w-48` — see the Reset Orientation submenu above. */}
+            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
+              <DropdownMenuRadioGroup
+                value={primaryRenderer}
+                onValueChange={(value: string) =>
+                  setPrimaryRenderer(value === "cesium" ? "cesium" : "maplibre")
+                }
+              >
+                <DropdownMenuRadioItem value="maplibre">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererMapLibre")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="cesium">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererCesium")}</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView ||
+          showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
-          <DropdownMenuItem onSelect={onViewInGoogleMaps}>
+          <DropdownMenuItem
+            disabled={noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={onViewInGoogleMaps}
+          >
             <MapIcon className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleMaps")}</span>
           </DropdownMenuItem>
         )}
         {showGoogleEarth && (
-          <DropdownMenuItem onSelect={onViewInGoogleEarth}>
+          <DropdownMenuItem
+            disabled={noMapLibreMap}
+            aria-describedby={mapLibreOnlyNote}
+            onSelect={onViewInGoogleEarth}
+          >
             <Earth className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleEarth")}</span>
           </DropdownMenuItem>
+        )}
+        {showMapLibreOnlyNote && (
+          <DropdownMenuLabel
+            id={CESIUM_DENIED_ID}
+            className="pt-0 text-xs font-normal text-muted-foreground"
+          >
+            {t("toolbar.item.mapLibreOnly")}
+          </DropdownMenuLabel>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

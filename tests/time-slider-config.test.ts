@@ -304,6 +304,31 @@ describe("Time Slider store layer identify metadata", () => {
     assert.equal(layer.metadata.pixelIdentify, true);
   });
 
+  it("keeps the hosted mosaic template on its store mirror for share readiness", () => {
+    const url =
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/{date:YYYYMMDD}_acdom.json";
+    const layer = createStoreLayer({
+      type: "mosaic",
+      id: "acdom",
+      name: "aCDOM440",
+      url,
+    } as SourceSpec);
+
+    assert.equal(layer.source.sourceId, "acdom");
+    assert.equal(layer.metadata.originalUrl, url);
+  });
+
+  it("uses the first non-empty authored URL", () => {
+    const layer = createStoreLayer({
+      type: "xyz",
+      id: "tiles",
+      url: "",
+      tiles: "https://example.com/{z}/{x}/{y}.png",
+    } as unknown as SourceSpec);
+
+    assert.equal(layer.metadata.originalUrl, "https://example.com/{z}/{x}/{y}.png");
+  });
+
   it("leaves pre-rendered tile sources unidentifiable", () => {
     // An XYZ/WMS source is a picture; there are no source values to report, so
     // the Identify icon stays disabled rather than opening an empty popup.

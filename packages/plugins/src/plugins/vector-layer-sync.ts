@@ -14,6 +14,7 @@ import {
 } from "@geolibre/core";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
 
@@ -262,26 +263,35 @@ export function syncVectorLayersToStore(
         known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
       const visible = visibleIsEcho ? existing.visible : layer.visible;
       const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
+      const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+      const stacAssetAccess = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+      const metadata = stacAssetAccess
+        ? { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess }
+        : layer.metadata;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
 
       if (
         existing.type !== layer.type ||
         existing.visible !== visible ||
         existing.opacity !== opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
-        !recordsEqual(existing.metadata, layer.metadata)
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
+        !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
-          // Replace metadata wholesale so stale keys (bounds, featureCount,
-          // and any embeddedGeoJSON loaded from the project) cannot survive a
-          // layer being swapped out under the same id. embeddedGeoJSON is not
-          // kept live: the web Save flow re-materializes it fresh from the
-          // control (getLayerGeoJSON), so a reopened layer drops its loaded
-          // blob here and re-embeds current data on the next save.
-          metadata: layer.metadata,
+          // Replace control-derived metadata wholesale so stale keys (bounds,
+          // featureCount, and loaded embeddedGeoJSON) cannot survive a layer
+          // being swapped out under the same id. Only the STAC access record is
+          // host-owned and carried forward so a protected URL can be re-signed.
+          // The web Save flow re-materializes embeddedGeoJSON fresh from the
+          // control (getLayerGeoJSON), so it intentionally is not preserved.
+          metadata,
           opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
+          source,
+          sourcePath,
           // A render-mode switch in the panel flips geojson <-> vector-tiles.
           type: layer.type,
           visible,

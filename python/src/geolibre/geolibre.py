@@ -1480,9 +1480,25 @@ class Map(anywidget.AnyWidget):
         *,
         radius: float = 30,
         intensity: float = 1,
+        color_ramp: str = "turbo",
+        weight_field: str = "",
         **style: Any,
     ) -> str:
-        """Add point data using GeoLibre's density heatmap renderer."""
+        """Add point data using GeoLibre's density heatmap renderer.
+
+        Args:
+            points: Points in any form accepted by :meth:`add_markers`.
+            name: Layer display name.
+            radius: Heatmap radius in pixels.
+            intensity: Heatmap intensity multiplier.
+            color_ramp: Name of the built-in heatmap color ramp.
+            weight_field: Numeric property used to weight each point, or an
+                empty string to give every point equal weight.
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
         # NaN and infinity slip past the comparisons below, so check finiteness
         # first rather than storing an unusable renderer setting.
         if not math.isfinite(float(radius)) or float(radius) <= 0:
@@ -1492,6 +1508,8 @@ class Map(anywidget.AnyWidget):
         style.setdefault("pointRenderer", "heatmap")
         style.setdefault("heatmapRadius", float(radius))
         style.setdefault("heatmapIntensity", float(intensity))
+        style.setdefault("heatmapColorRamp", str(color_ramp))
+        style.setdefault("heatmapWeightProperty", str(weight_field))
         return self.add_markers(points, name=name, **style)
 
     @staticmethod
@@ -2129,6 +2147,7 @@ class Map(anywidget.AnyWidget):
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -2144,10 +2163,16 @@ class Map(anywidget.AnyWidget):
             version: WMS protocol version, ``"1.1.1"`` (default) or
                 ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
                 some servers accept only one version.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84. A WMS layer has no geometry to derive an extent from,
+                so without these "zoom to layer" cannot reach it.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
         """
         return self._add_layer(
             _project.wms_layer(
@@ -2159,6 +2184,7 @@ class Map(anywidget.AnyWidget):
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                bounds=bounds,
                 **style,
             )
         )
@@ -2169,6 +2195,7 @@ class Map(anywidget.AnyWidget):
         name: str = "WMTS Layer",
         *,
         tile_size: int = 256,
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMTS layer from a tile URL template.
@@ -2177,12 +2204,19 @@ class Map(anywidget.AnyWidget):
             url: A WMTS tile URL template (``{z}/{y}/{x}``).
             name: Layer display name.
             tile_size: Tile size in pixels.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
         """
-        return self._add_layer(_project.wmts_layer(name, url, tile_size=tile_size, **style))
+        return self._add_layer(
+            _project.wmts_layer(name, url, tile_size=tile_size, bounds=bounds, **style)
+        )
 
     def add_wfs(
         self,

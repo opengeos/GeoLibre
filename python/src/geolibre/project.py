@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
+import math
 import re
 import socket
 import uuid
@@ -331,6 +332,8 @@ DEFAULT_LAYER_STYLE: dict[str, Any] = {
     "pointRenderer": "single",
     "heatmapRadius": 30,
     "heatmapIntensity": 1,
+    "heatmapColorRamp": "turbo",
+    "heatmapWeightProperty": "",
     "clusterRadius": 50,
     "clusterMaxZoom": 14,
     "rasterBrightnessMin": 0,
@@ -572,6 +575,50 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
+def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
+    """Validate optional layer bounds and coerce them to floats.
+
+    A service layer has no geometry of its own, so these are the only extent
+    the app can zoom to; a malformed list would reach the project file as one
+    it cannot use.
+
+    Args:
+        bounds: ``[west, south, east, north]`` in WGS84, or None.
+
+    Returns:
+        The four coordinates as floats, or None when *bounds* is None.
+
+    Raises:
+        ValueError: If *bounds* does not hold four finite numbers, or its
+            latitudes are inverted or outside +/-90. West > east is allowed:
+            that is how RFC 7946 writes an antimeridian-crossing box.
+    """
+    if bounds is None:
+        return None
+    # Convert before measuring: len() on an iterable that is not sized raises a
+    # bare TypeError, and the MCP tool wrapper only restates ValueError, so the
+    # agent would see "Error executing tool" with no sentence to correct.
+    try:
+        values = [float(v) for v in bounds]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"bounds must be four numbers; got {bounds!r}") from exc
+    if len(values) != 4:
+        raise ValueError(
+            "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
+        )
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(f"bounds must contain finite numbers; got {bounds!r}")
+    _, south, _, north = values
+    if south > north:
+        raise ValueError(f"bounds has its latitudes inverted; got {bounds!r}")
+    if not (-90 <= south and north <= 90):
+        raise ValueError(f"bounds latitudes must lie within +/-90; got {bounds!r}")
+    # Longitudes are deliberately not ordered. RFC 7946 section 5.2 writes a box
+    # crossing the antimeridian with west > east - Fiji is [170, -20, -170, -10] -
+    # and authoring.fit_bounds already frames such a box rather than refusing it.
+    return values
+
+
 def _normalize_wms_version(version: str | None) -> str:
     """Normalize a WMS version to the "1.1.1"/"1.3.0" pair the builder emits.
 
@@ -597,6 +644,7 @@ def wms_layer(
     transparent: bool = True,
     tile_size: int = 256,
     version: str | None = "1.1.1",
+    bounds: list[float] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -617,10 +665,17 @@ def wms_layer(
             Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
             only one version. EPSG:3857 keeps its axis order in both, so the
             BBOX template is unchanged. None falls back to ``"1.1.1"``.
+        bounds: Optional ``[west, south, east, north]`` request bounds, in
+            WGS84. Take them from the service's ``EX_GeographicBoundingBox``,
+            which is always lon/lat, rather than a 1.3.0 ``BoundingBox
+            CRS="EPSG:4326"``, whose axis order servers often get wrong.
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
     """
     wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
@@ -640,7 +695,7 @@ def wms_layer(
         ],
     )
     layer = _layer_base(name, "wms", **style)
-    layer["source"] = {
+    source: dict[str, Any] = {
         "type": "raster",
         "tiles": [tile_url],
         "tileSize": tile_size,
@@ -651,6 +706,10 @@ def wms_layer(
         "transparent": transparent,
         "version": wms_version,
     }
+    resolved_bounds = _resolve_bounds(bounds)
+    if resolved_bounds is not None:
+        source["bounds"] = resolved_bounds
+    layer["source"] = source
     layer["metadata"] = {"service": "wms"}
     return layer
 
@@ -660,6 +719,7 @@ def wmts_layer(
     url: str,
     *,
     tile_size: int = 256,
+    bounds: list[float] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMTS layer from a tile URL template.
@@ -670,18 +730,28 @@ def wmts_layer(
             before column — unlike XYZ templates in ``tile_layer``/``add_tile_layer``,
             which use ``{z}/{x}/{y}``).
         tile_size: Tile size in pixels.
+        bounds: Optional ``[west, south, east, north]`` request bounds, in
+            WGS84. WMTS capabilities carry it as ``ows:WGS84BoundingBox``
+            (``EX_GeographicBoundingBox`` is a WMS element and is absent here).
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
     """
     layer = _layer_base(name, "wmts", **style)
-    layer["source"] = {
+    source: dict[str, Any] = {
         "type": "raster",
         "tiles": [url],
         "tileSize": tile_size,
         "url": url,
     }
+    resolved_bounds = _resolve_bounds(bounds)
+    if resolved_bounds is not None:
+        source["bounds"] = resolved_bounds
+    layer["source"] = source
     layer["metadata"] = {"service": "wmts"}
     return layer
 
@@ -1110,6 +1180,11 @@ COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
 PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
     SWIPE_PLUGIN_ID: None,
     COMPONENTS_PLUGIN_ID: ("legend", "colorbar"),
+    # The timeline config owns its temporal source definitions. Its mirrored
+    # store layers only carry internal source ids, so dropping this state makes
+    # shared Time Slider layers impossible to reconstruct. The retained value
+    # is still recursively credential-scrubbed by the caller.
+    "maplibre-gl-time-slider": None,
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in

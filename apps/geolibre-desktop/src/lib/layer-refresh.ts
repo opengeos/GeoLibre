@@ -15,6 +15,12 @@ import { isIcebergLayer } from "./iceberg";
 // GeoRSS refreshes; the name is historical.
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
+const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
+// Add Data tags a layer built from a CSW record's GeoJSON resource with this
+// sourceKind. Canonical copy is CSW_SOURCE_KIND-equivalent literal in
+// components/layout/add-data/sources/CswSource.tsx; kept local for the same
+// reason as the WFS/GPX proxy paths above.
+const CSW_SOURCE_KIND = "csw";
 const FETCH_TIMEOUT_MS = 30_000;
 // Feature cap for refreshing an OGC API - Features layer whose stored request
 // carries no `maxFeatures` (added before it was persisted, or hand-edited).
@@ -36,6 +42,7 @@ const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   GEORSS_SOURCE_KIND,
   OGC_FEATURES_SOURCE_KIND,
   ARCGIS_FEATURE_SOURCE_KIND,
+  CSW_SOURCE_KIND,
 ]);
 
 // Add Vector Layer (maplibre-gl-vector) tags its store layers with this
@@ -130,11 +137,16 @@ export function createWfsGetFeatureUrl(options: {
 
 export async function fetchGeoJsonFeatureCollection(
   url: string,
-  options: { useWfsProxy?: boolean; signal?: AbortSignal } = {},
+  options: { useWfsProxy?: boolean; useCswProxy?: boolean; signal?: AbortSignal } = {},
 ): Promise<FeatureCollection> {
   let response: Response;
+  const requestUrl = options.useWfsProxy
+    ? proxyWfsRequestUrl(url)
+    : options.useCswProxy
+      ? proxyCswRequestUrl(url)
+      : url;
   try {
-    response = await fetch(options.useWfsProxy ? proxyWfsRequestUrl(url) : url, {
+    response = await fetch(requestUrl, {
       // Combine signals so a caller-supplied signal does not drop the timeout.
       signal: options.signal
         ? AbortSignal.any([options.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)])
@@ -286,6 +298,9 @@ export async function refreshGeoJsonLayer(layer: GeoLibreLayer): Promise<GeoJson
 
   const data = await fetchGeoJsonFeatureCollection(sourceUrl, {
     useWfsProxy: isWfsLayer(layer),
+    // A catalog's GeoJSON resource is usually a third-party host with no CORS
+    // headers, the same reason the CSW source fetches it through the proxy.
+    useCswProxy: layer.metadata.sourceKind === CSW_SOURCE_KIND,
   });
 
   return {
@@ -656,6 +671,10 @@ function isViteDevServer(): boolean {
 
 function proxyWfsRequestUrl(url: string): string {
   return isViteDevServer() ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
+}
+
+function proxyCswRequestUrl(url: string): string {
+  return isViteDevServer() ? `${CSW_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
 }
 
 function proxyFeedRequestUrl(url: string): string {

@@ -17,7 +17,6 @@ import {
   connectStac,
   horizontalBbox,
   icechunkBranch,
-  isAzureBlobHref,
   isIcechunkAsset,
   isVisualizableAsset,
   requiresTarget,
@@ -44,7 +43,7 @@ import {
 } from "./stac-api";
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
-import { addVectorLayerFromUrl } from "./maplibre-vector";
+import { addVectorLayersFromUrl } from "./maplibre-vector";
 import { addZarrRasterLayer } from "./maplibre-components";
 import {
   icechunkLayerUrl,
@@ -53,6 +52,12 @@ import {
   repositoryOpenError,
   type ZarrKeyReader,
 } from "./stac-icechunk";
+import {
+  createStacAssetAccess,
+  readableStacAssetHref,
+  STAC_ASSET_ACCESS_METADATA_KEY,
+  type StacAssetAccess,
+} from "./stac-signing";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 export const PLANET_OPEN_DATA_PLUGIN_ID = "geolibre-planet-open-data";
@@ -664,45 +669,53 @@ function assetOptionLabel(item: StacItem, key: string, asset: StacAsset): string
   return `${assetLabel(key, asset)} — ${assetFormatLabel(asset)}${addability}`;
 }
 
-type SasSigner = { signUrl(url: string, collectionId: string): Promise<string> };
-let sasManager: Promise<SasSigner> | null = null;
-
-function planetaryComputerSigner(): Promise<SasSigner> {
-  sasManager ??= import("maplibre-gl-planetary-computer")
-    .then((module) => new module.SASTokenManager())
-    .catch((error) => {
-      // Don't let one failed import disable signing for the rest of the session.
-      sasManager = null;
-      throw error;
-    });
-  return sasManager;
+/**
+ * Planetary Computer serves several collections from private containers that answer 409 without
+ * a SAS token, while others (NAIP) read fine anonymously.
+ * Signed URLs expire within the hour, so they are minted when the asset is added rather than when
+ * the item is parsed, and cached until shortly before expiry. Anything
+ * that is not an eligible Planetary Computer Azure blob, or that cannot be signed, is read
+ * unsigned. COG and GeoParquet layers retain the unsigned asset identity in metadata so project
+ * restore can mint a fresh token instead of replaying an expired one.
+ */
+function assetAccess(
+  connection: StacConnection,
+  item: StacItem,
+  href: string,
+): StacAssetAccess | null {
+  return createStacAssetAccess(connection.url, item.collection, href);
 }
 
 /**
- * Planetary Computer serves several collections — most of the GeoParquet ones — from private
- * containers that answer 409 without a SAS token, while others (NAIP) read fine anonymously.
- * Tokens are per-collection and expire within the hour, so they are minted when the asset is
- * added rather than when the item is parsed, and the upstream manager caches them. Anything
- * that is not an Azure blob, or that cannot be signed, is read unsigned.
+ * Records how a layer's asset can be signed again, so a saved project restores
+ * a private asset instead of replaying an expired token.
  *
- * Only the GeoParquet path signs, because that is the one this branch made addable and it cannot
- * read a private container at all unsigned. PMTiles and COG read unsigned exactly as they did
- * before, rather than gaining a token they never had.
- *
- * Every one of these formats persists whatever URL it is handed: PMTiles and COG through the
- * store layer they create, and the vector control through `createVectorStoreLayer`, which records
- * the URL as both `source.url` and `sourcePath`. A project saved with a signed GeoParquet layer
- * therefore holds a token that `restoreVectorLayers` replays as-is and never re-signs, so the
- * layer stops reloading once the token lapses (about an hour). Fixing that properly means minting
- * the token per request, or re-signing on restore, rather than baking one in at add time.
+ * The layer has to be in the store already: every add path here resolves only
+ * after its control's store sync has written it (see the Zarr branch below).
+ * Should that ever stop holding, signed assets would quietly stop surviving a
+ * project save, so say so rather than dropping the record in silence.
  */
-async function readableHref(item: StacItem, href: string): Promise<string> {
-  if (!isAzureBlobHref(href) || !item.collection) return href;
-  try {
-    return await (await planetaryComputerSigner()).signUrl(href, item.collection);
-  } catch {
-    return href;
+function rememberAssetAccess(layerId: string, access: StacAssetAccess | null): void {
+  if (!access) return;
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
+  if (!layer) {
+    console.warn("[GeoLibre] STAC asset access could not be stored: no layer", layerId);
+    return;
   }
+  useAppStore.getState().updateLayer(layerId, {
+    metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+    source: { ...layer.source, url: access.href },
+    sourcePath: access.href,
+  });
+}
+
+function readableHref(
+  connection: StacConnection,
+  item: StacItem,
+  href: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return readableStacAssetHref(assetAccess(connection, item, href), href, signal);
 }
 
 /**
@@ -725,6 +738,7 @@ async function openIcechunkAsset(
 }
 
 async function visualizeAsset(
+  connection: StacConnection,
   item: StacItem,
   key: string,
   asset: StacAsset,
@@ -737,6 +751,9 @@ async function visualizeAsset(
   switch (format) {
     case "pmtiles": {
       // No appRef check: the layer goes to the store, not through the app API.
+      // Read unsigned, exactly as before: Planetary Computer serves no PMTiles
+      // from a private container, and a tile URL that outlives its token would
+      // break the layer an hour later rather than fix it.
       if (!(await addPMTilesAsset(asset.href, name, signal))) {
         throw new Error(labels.addNoSourceLayers);
       }
@@ -744,7 +761,7 @@ async function visualizeAsset(
     }
     case "geojson": {
       if (!appRef) throw new Error(labels.addFailed);
-      const response = await fetch(asset.href, {
+      const response = await fetch(await readableHref(connection, item, asset.href, signal), {
         headers: { Accept: "application/geo+json, application/json" },
         signal,
       });
@@ -755,9 +772,13 @@ async function visualizeAsset(
     }
     case "parquet": {
       if (!appRef) throw new Error(labels.addFailed);
-      if (!(await addVectorLayerFromUrl(appRef, await readableHref(item, asset.href), { name }))) {
+      const access = assetAccess(connection, item, asset.href);
+      const href = await readableStacAssetHref(access, asset.href, signal);
+      const layerIds = await addVectorLayersFromUrl(appRef, href, { name });
+      if (!layerIds?.length) {
         throw new Error(labels.addFailed);
       }
+      for (const layerId of layerIds) rememberAssetAccess(layerId, access);
       return;
     }
     case "zarr": {
@@ -816,7 +837,10 @@ async function visualizeAsset(
     }
     case "cog": {
       if (!appRef?.addCogLayer) throw new Error(labels.cogUnsupported);
-      await appRef.addCogLayer(name, asset.href, cogOptions);
+      const access = assetAccess(connection, item, asset.href);
+      const href = await readableStacAssetHref(access, asset.href, signal);
+      const layerId = await appRef.addCogLayer(name, href, cogOptions);
+      rememberAssetAccess(layerId, access);
       return;
     }
     case null:
@@ -1243,6 +1267,9 @@ function buildPanel(container: HTMLElement): () => void {
         targetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
         targetSelect.title = labels.chooseTarget;
         let adding = false;
+        // Which asset's download is being signed, so switching the dropdown to
+        // another asset does not find its own button disabled.
+        let signingDownloadKey: string | null = null;
 
         const syncAsset = (): void => {
           const [key, asset] = selected();
@@ -1262,6 +1289,9 @@ function buildPanel(container: HTMLElement): () => void {
           assetSelect.title = asset.href;
           download.title = asset.href;
           setDisabled(add, adding || !addable);
+          // A private asset is signed before it opens, so the button says so
+          // by going quiet rather than looking like a dead click.
+          setDisabled(download, signingDownloadKey === key);
           add.title = addReason(item, key, asset);
         };
 
@@ -1274,7 +1304,16 @@ function buildPanel(container: HTMLElement): () => void {
           syncAsset();
           setStatus(labels.adding(assetLabel(key, asset)));
           try {
-            await visualizeAsset(item, key, asset, cogOptions(), controller.signal, target);
+            if (!connection) throw new Error(labels.addFailed);
+            await visualizeAsset(
+              connection,
+              item,
+              key,
+              asset,
+              cogOptions(),
+              controller.signal,
+              target,
+            );
             setStatus(labels.added(assetLabel(key, asset)));
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
@@ -1283,7 +1322,27 @@ function buildPanel(container: HTMLElement): () => void {
             syncAsset();
           }
         });
-        download.addEventListener("click", () => appRef?.openExternalUrl?.(selected()[1].href));
+        download.addEventListener("click", async () => {
+          const [key, asset] = selected();
+          if (!connection) {
+            setStatus(labels.addFailed, true);
+            return;
+          }
+          signingDownloadKey = key;
+          syncAsset();
+          try {
+            appRef?.openExternalUrl?.(
+              await readableHref(connection, item, asset.href, controller.signal),
+            );
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : labels.addFailed, true);
+          } finally {
+            // Only this asset's own sign clears the flag: the user may have
+            // moved on and started another one.
+            if (signingDownloadKey === key) signingDownloadKey = null;
+            syncAsset();
+          }
+        });
         syncAsset();
         actions.append(assetSelect, targetSelect, add, download);
       }

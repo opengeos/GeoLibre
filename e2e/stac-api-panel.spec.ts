@@ -6,6 +6,9 @@ import { waitForMap } from "./helpers";
 // has no tree at all: it answers item search itself, and offering a tree of its hierarchy would
 // promise a way in that its endpoint does not honour.
 const API = "https://api.stac.test/v1";
+const PLANETARY_COMPUTER_API = "https://planetarycomputer.microsoft.com/api/stac/v1/";
+const PRIVATE_PLANETARY_COMPUTER_COG =
+  "https://ai4edataeuwest.blob.core.windows.net/private-cog/example.tif";
 
 const COLLECTIONS = [
   {
@@ -140,6 +143,71 @@ test("asset options identify their format and whether they can be added", async 
     "Dataset root — Parquet",
     "Metadata — Unknown format (not addable)",
   ]);
+});
+
+test("Planetary Computer COG assets are signed before raster reads", async ({ page }) => {
+  const assetRequests: string[] = [];
+  let signingRequests = 0;
+  await page.route("https://planetarycomputer.microsoft.com/**", async (route) => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+
+    if (url.pathname.endsWith("/api/sas/v1/sign")) {
+      signingRequests += 1;
+      expect(url.searchParams.get("href")).toBe(PRIVATE_PLANETARY_COMPUTER_COG);
+      return json({
+        href: `${PRIVATE_PLANETARY_COMPUTER_COG}?sp=r&sig=signed-for-test`,
+        "msft:expiry": "2099-01-01T00:00:00Z",
+      });
+    }
+    if (url.pathname.endsWith("/collections")) {
+      return json({ collections: [{ id: "private-cog", title: "Private COG" }] });
+    }
+    if (url.pathname.endsWith("/search")) {
+      return json({
+        type: "FeatureCollection",
+        features: [
+          item("private-cog-1", "private-cog", {
+            data: { href: PRIVATE_PLANETARY_COMPUTER_COG, type: "image/tiff" },
+          }),
+        ],
+        numberMatched: 1,
+        links: [],
+      });
+    }
+    return json({
+      type: "Catalog",
+      id: "planetary-computer",
+      title: "Planetary Computer",
+      conformsTo: ["https://api.stacspec.org/v1.0.0/item-search"],
+      links: [
+        { rel: "data", href: `${PLANETARY_COMPUTER_API}collections` },
+        { rel: "search", href: `${PLANETARY_COMPUTER_API}search`, method: "POST" },
+      ],
+    });
+  });
+  await page.route(`${PRIVATE_PLANETARY_COMPUTER_COG}**`, async (route) => {
+    assetRequests.push(route.request().url());
+    await route.fulfill({ status: 404, body: "fixture only checks the signed request" });
+  });
+
+  await waitForMap(page);
+  await connect(page, PLANETARY_COMPUTER_API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page
+    .locator("select")
+    .filter({ has: page.locator('option[value="private-cog"]') })
+    .selectOption("private-cog");
+  await page.getByRole("button", { name: "Search items" }).click();
+  await expect(page.getByText(/Showing 1 of 1 items\./)).toBeVisible();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+
+  await expect.poll(() => assetRequests.length).toBeGreaterThan(0);
+  expect(signingRequests).toBe(1);
+  const requestedAsset = new URL(assetRequests[0]);
+  expect(requestedAsset.searchParams.get("sp")).toBe("r");
+  expect(requestedAsset.searchParams.get("sig")).toBe("signed-for-test");
 });
 
 async function connect(page: Page, url: string): Promise<void> {

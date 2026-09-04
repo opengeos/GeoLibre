@@ -46,6 +46,7 @@ export function projectChanged(a: AppState, b: AppState): boolean {
     a.mapLayout !== b.mapLayout ||
     a.secondaryMapViews !== b.secondaryMapViews ||
     a.primaryMapLabel !== b.primaryMapLabel ||
+    a.primaryRenderer !== b.primaryRenderer ||
     a.projectStyleLibrary !== b.projectStyleLibrary ||
     a.metadata !== b.metadata
   );
