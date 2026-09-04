@@ -153,8 +153,16 @@ def _buffer(
     # bad parameters reports the same *first* error here as on the client (whose
     # `bufferTool.run` checks them in this order). Converting earlier would let
     # an unparseable distance pre-empt both checks above.
+    raw_distance = parameters.get("distance", 1)
+    # A distance must be a number or a numeric string. `or 0` below reads every
+    # other falsy value (False, [], {}) as 0 while raising on a non-empty list,
+    # where JavaScript coerces the same values to 0/1/5 — so the type is checked
+    # before the value, giving both engines one reading to share. `bool` is
+    # excluded explicitly because it is an `int` subclass in Python.
+    if isinstance(raw_distance, bool) or not isinstance(raw_distance, (int, float, str)):
+        raise ValueError("Buffer distance must be a finite number")
     try:
-        distance = float(parameters.get("distance", 1) or 0)
+        distance = float(raw_distance or 0)
     except (TypeError, ValueError) as exc:
         # Surface the tool's own message rather than `float`'s raw "could not
         # convert string to float: 'abc'", which the client never produces.

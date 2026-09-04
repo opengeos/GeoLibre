@@ -371,9 +371,20 @@ export const bufferTool: ProcessingAlgorithm = {
     // `float()` rejects them there. An *empty* string is the one case both
     // engines already agree on — `"" or 0` is 0 in Python — so it falls
     // through to `numberParam`.
+    // A distance must be a number or a numeric string. Anything else is caller
+    // error, and the two languages coerce it differently enough that letting it
+    // through diverges: `Number(false)` is 0 and `Number([5])` is 5 (both of
+    // which `numberParam` then discards for the fallback 1), while Python's
+    // `raw or 0` reads `false`/`[]`/`{}` as 0 and raises on `[5]`. Rejecting the
+    // type outright is the only reading both engines share.
+    const distanceType = typeof rawDistance;
+    const badDistanceType = distanceType !== "number" && distanceType !== "string";
     const badDistanceString =
       typeof rawDistance === "string" && rawDistance !== "" && !DECIMAL_NUMBER.test(rawDistance);
-    if (rawDistance != null && (badDistanceString || !Number.isFinite(Number(rawDistance)))) {
+    if (
+      rawDistance != null &&
+      (badDistanceType || badDistanceString || !Number.isFinite(Number(rawDistance)))
+    ) {
       ctx.log("Error: buffer distance must be a finite number");
       return;
     }

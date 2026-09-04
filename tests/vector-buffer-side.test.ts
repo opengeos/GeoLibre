@@ -200,6 +200,37 @@ describe("buffer tool (client engine)", () => {
     });
   }
 
+  for (const [label, distance] of [
+    ["a boolean", true],
+    ["false", false],
+    ["an array", [5]],
+    ["an empty array", []],
+    ["an object", {}],
+  ] as [string, unknown][]) {
+    it(`rejects ${label} as a distance`, async () => {
+      // The two languages coerce these differently — `Number(false)` is 0 and
+      // `Number([5])` is 5 (both discarded by `numberParam` for the fallback
+      // 1), while Python's `raw or 0` reads false/[]/{} as 0 and raises on [5].
+      // Rejecting the type is the only reading both engines share.
+      const { output, logs } = await runBuffer(SQUARE, { distance, units: "kilometers" });
+      assert.equal(output, null);
+      assert.ok(
+        logs.some((m) => m === "Error: buffer distance must be a finite number"),
+        `expected a finite-distance error, got ${JSON.stringify(logs)}`,
+      );
+    });
+  }
+
+  it("reads an empty-string distance as zero, matching the Python engine", async () => {
+    // The one non-number both engines agree on: Python's `"" or 0` is 0.
+    const { output, logs } = await runBuffer(SQUARE, { distance: "", units: "kilometers" });
+    assert.ok(output);
+    assert.ok(
+      logs.some((m) => m === "Buffered 1 feature(s) by 0 kilometers (outside)"),
+      `expected a zero-distance buffer, got ${JSON.stringify(logs)}`,
+    );
+  });
+
   it("rejects an explicitly empty side rather than falling back to outside", async () => {
     // The Python engine treats an empty `side` the same way it treats an empty
     // `units` — it reaches the lookup and is rejected there.

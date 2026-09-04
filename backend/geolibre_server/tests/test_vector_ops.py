@@ -246,6 +246,24 @@ def test_buffer_reports_unknown_side_before_unparseable_distance() -> None:
 
 
 @requires_geopandas
+@pytest.mark.parametrize("distance", [True, False, [5], [], {}])
+def test_buffer_rejects_a_non_numeric_distance_type(distance: object) -> None:
+    # `or 0` reads every falsy value as 0 and `float` raises on a non-empty
+    # list, where JavaScript coerces the same values to 0/1/5. Rejecting the
+    # type is the only reading both engines share; the client matches.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
+def test_buffer_reads_an_empty_string_distance_as_zero() -> None:
+    # The one non-number both engines agree on: `"" or 0` is 0 here, and
+    # `Number("")` is 0 on the client.
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": ""})
+    assert "by 0.0 kilometers" in messages[0]
+
+
+@requires_geopandas
 @pytest.mark.parametrize("distance", ["abc", "0x10", "   "])
 def test_buffer_rejects_unparseable_distance_with_the_tools_own_message(distance: str) -> None:
     # Not `float`'s raw "could not convert string to float: 'abc'" — the client
