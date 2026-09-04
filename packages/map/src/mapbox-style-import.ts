@@ -6,27 +6,16 @@ import {
   type LayerStyle,
   type VectorStyleStop,
 } from "@geolibre/core";
+import { heatmapColorRampExpression } from "./style-mapper";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
-
-function heatmapRampExpression(colors: readonly string[]): unknown[] {
-  const expression: unknown[] = [
-    "interpolate",
-    ["linear"],
-    ["heatmap-density"],
-    0,
-    "rgba(0,0,0,0)",
-  ];
-  colors.forEach((color, index) => expression.push((index + 1) / colors.length, color));
-  return expression;
-}
 
 function heatmapRampName(value: unknown): string | null {
   const serialized = JSON.stringify(value);
   return (
     VECTOR_COLOR_RAMPS.find(
-      (ramp) => JSON.stringify(heatmapRampExpression(ramp.colors)) === serialized,
+      (ramp) => JSON.stringify(heatmapColorRampExpression(ramp.colors)) === serialized,
     )?.value ?? null
   );
 }

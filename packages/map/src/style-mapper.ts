@@ -128,8 +128,7 @@ export function circlePaint(style: LayerStyle, opacity: number) {
   };
 }
 
-function heatmapColorRamp(style: LayerStyle): ExpressionSpecification {
-  const colors = getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors;
+export function heatmapColorRampExpression(colors: readonly string[]): ExpressionSpecification {
   const expression: unknown[] = [
     "interpolate",
     ["linear"],
@@ -141,6 +140,12 @@ function heatmapColorRamp(style: LayerStyle): ExpressionSpecification {
     expression.push((index + 1) / colors.length, color);
   });
   return expression as ExpressionSpecification;
+}
+
+function heatmapColorRamp(style: LayerStyle): ExpressionSpecification {
+  return heatmapColorRampExpression(
+    getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors,
+  );
 }
 
 function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {

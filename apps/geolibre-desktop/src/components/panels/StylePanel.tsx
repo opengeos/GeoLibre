@@ -3500,6 +3500,7 @@ export function StylePanel({
     label: string,
     value: string,
     onSelect: (property: string) => void,
+    emptyLabel = t("style.generator.fieldNone"),
   ) => (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
@@ -3513,7 +3514,7 @@ export function StylePanel({
           <option value="">{t("style.labels.noAttributes")}</option>
         ) : (
           <>
-            <option value="">{t("style.generator.fieldNone")}</option>
+            <option value="">{emptyLabel}</option>
             {numericPropertyOptions.map((property) => (
               <option key={property} value={property}>
                 {property}
@@ -4306,33 +4307,13 @@ export function StylePanel({
                       ramps={VECTOR_COLOR_RAMPS}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="heatmapWeightProperty">
-                      {t("style.symbology.heatmapWeightField")}
-                    </Label>
-                    <Select
-                      id="heatmapWeightProperty"
-                      value={styleValue(style, "heatmapWeightProperty")}
-                      onChange={(event) =>
-                        setLayerStyle(layer.id, { heatmapWeightProperty: event.target.value })
-                      }
-                    >
-                      <option value="">{t("style.symbology.heatmapEqualWeight")}</option>
-                      {numericPropertyOptions.map((property) => (
-                        <option key={property} value={property}>
-                          {property}
-                        </option>
-                      ))}
-                      {styleValue(style, "heatmapWeightProperty") !== "" &&
-                      !numericPropertyOptions.includes(
-                        styleValue(style, "heatmapWeightProperty"),
-                      ) ? (
-                        <option value={styleValue(style, "heatmapWeightProperty")}>
-                          {styleValue(style, "heatmapWeightProperty")}
-                        </option>
-                      ) : null}
-                    </Select>
-                  </div>
+                  {generatorFieldSelect(
+                    "heatmapWeightProperty",
+                    t("style.symbology.heatmapWeightField"),
+                    styleValue(style, "heatmapWeightProperty"),
+                    (heatmapWeightProperty) => setLayerStyle(layer.id, { heatmapWeightProperty }),
+                    t("style.symbology.heatmapEqualWeight"),
+                  )}
                 </>
               ) : null}
               <NumericStyleInput
