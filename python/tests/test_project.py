@@ -161,6 +161,12 @@ def test_ogc_layer_bounds_reject_non_numbers(builder, args):
     # An int too large for a float raises OverflowError, not ValueError.
     with pytest.raises(ValueError, match="four numbers"):
         builder(*args, bounds=[8, 38, 9, 10**1000])
+    # An iterable without len() must not escape as a bare TypeError: the MCP
+    # tool wrapper only restates ValueError, so anything else reaches the agent
+    # stripped of its message.
+    assert builder(*args, bounds=iter([8, 38, 9, 41]))["source"]["bounds"] == [8.0, 38.0, 9.0, 41.0]
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        builder(*args, bounds=iter([8, 38, 9]))
 
 
 @pytest.mark.parametrize(

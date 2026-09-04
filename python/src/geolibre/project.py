@@ -593,14 +593,17 @@ def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
     """
     if bounds is None:
         return None
-    if len(bounds) != 4:
-        raise ValueError(
-            "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
-        )
+    # Convert before measuring: len() on an iterable that is not sized raises a
+    # bare TypeError, and the MCP tool wrapper only restates ValueError, so the
+    # agent would see "Error executing tool" with no sentence to correct.
     try:
         values = [float(v) for v in bounds]
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"bounds must be four numbers; got {bounds!r}") from exc
+    if len(values) != 4:
+        raise ValueError(
+            "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
+        )
     if not all(math.isfinite(value) for value in values):
         raise ValueError(f"bounds must contain finite numbers; got {bounds!r}")
     _, south, _, north = values
