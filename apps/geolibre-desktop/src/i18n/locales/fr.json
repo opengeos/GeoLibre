@@ -4510,6 +4510,15 @@
                 "meters": "Mètres",
                 "miles": "Milles"
               }
+            },
+            "side": {
+              "label": "Côté de la zone tampon",
+              "description": "Extérieur agrandit chaque entité, Intérieur la réduit et Les deux côtés ne conserve que la zone située à cette distance de part et d'autre de sa limite. Intérieur exige des polygones — un point ou une ligne n'a pas d'intérieur.",
+              "options": {
+                "outside": "Extérieur (agrandir)",
+                "inside": "Intérieur (réduire)",
+                "both": "Les deux côtés"
+              }
             }
           }
         },

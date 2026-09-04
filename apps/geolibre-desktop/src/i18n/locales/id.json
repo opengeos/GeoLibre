@@ -4439,6 +4439,15 @@
                 "meters": "Meter",
                 "miles": "Mil"
               }
+            },
+            "side": {
+              "label": "Sisi buffer",
+              "description": "Luar memperbesar setiap fitur, Dalam memperkecilnya, dan Kedua sisi hanya menyimpan zona dalam jarak tersebut di kedua sisi batasnya. Dalam memerlukan lapisan poligon — titik atau garis tidak memiliki bagian dalam.",
+              "options": {
+                "outside": "Luar (perbesar)",
+                "inside": "Dalam (perkecil)",
+                "both": "Kedua sisi"
+              }
             }
           }
         },

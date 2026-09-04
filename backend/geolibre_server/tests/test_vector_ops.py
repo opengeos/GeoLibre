@@ -146,6 +146,58 @@ def test_buffer_antimeridian_crossing_raises_value_error() -> None:
         run_vector_tool("buffer", ANTIMERIDIAN_LAYER, parameters={"distance": 1})
 
 
+def _polygon_area(geojson: dict) -> float:
+    """Planar area of a one-feature polygon FeatureCollection, in square degrees.
+
+    Degrees are fine here: the assertions only compare the buffer sides against
+    the same unbuffered square, so the units cancel out.
+    """
+    gpd = pytest.importorskip("geopandas")
+    return float(gpd.GeoDataFrame.from_features(geojson["features"]).geometry.area.sum())
+
+
+@requires_geopandas
+def test_buffer_inside_shrinks_the_polygon() -> None:
+    # GeoLibre#2235: the buffer only ever grew a feature; `side` picks the
+    # direction, and `inside` must erode the polygon rather than grow it.
+    outward, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10})
+    inward, messages = run_vector_tool(
+        "buffer", SQUARE, parameters={"distance": 10, "side": "inside"}
+    )
+    assert len(inward["features"]) == 1
+    assert _polygon_area(inward) < _polygon_area(SQUARE) < _polygon_area(outward)
+    assert "(inside)" in messages[0]
+
+
+@requires_geopandas
+def test_buffer_both_keeps_a_band_with_a_hole() -> None:
+    both, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10, "side": "both"})
+    assert len(both["features"]) == 1
+    rings = both["features"][0]["geometry"]["coordinates"]
+    # An outer ring plus the hole left where the inward buffer was cut out.
+    assert len(rings) == 2
+    # The band is thinner than either solid it was cut from.
+    assert _polygon_area(both) < _polygon_area(SQUARE)
+    assert both["features"][0]["properties"]["name"] == "a"
+
+
+@requires_geopandas
+def test_buffer_inside_drops_features_it_empties() -> None:
+    # A point has no interior, so the inward buffer empties it. The result must
+    # be an empty layer, not a feature carrying a ring-less polygon.
+    geojson, messages = run_vector_tool(
+        "buffer", POINT_IN_SQUARE, parameters={"distance": 1, "side": "inside"}
+    )
+    assert geojson["features"] == []
+    assert any("Dropped 1 feature(s)" in message for message in messages)
+
+
+@requires_geopandas
+def test_buffer_rejects_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": "sideways"})
+
+
 @requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;

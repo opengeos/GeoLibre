@@ -4510,6 +4510,15 @@
                 "meters": "Metros",
                 "miles": "Millas"
               }
+            },
+            "side": {
+              "label": "Lado del búfer",
+              "description": "Exterior expande cada entidad, Interior la reduce y Ambos lados conserva la zona situada a esa distancia a cada lado de su límite. Interior requiere polígonos — un punto o una línea no tiene interior.",
+              "options": {
+                "outside": "Exterior (expandir)",
+                "inside": "Interior (reducir)",
+                "both": "Ambos lados"
+              }
             }
           }
         },

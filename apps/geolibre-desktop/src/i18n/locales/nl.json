@@ -4510,6 +4510,15 @@
                 "meters": "Meter",
                 "miles": "Mijl"
               }
+            },
+            "side": {
+              "label": "Bufferzijde",
+              "description": "Buiten vergroot elk object, Binnen verkleint het en Beide zijden behoudt alleen de zone binnen die afstand aan weerszijden van de grens. Binnen vereist polygonen — een punt of lijn heeft geen binnenkant.",
+              "options": {
+                "outside": "Buiten (vergroten)",
+                "inside": "Binnen (verkleinen)",
+                "both": "Beide zijden"
+              }
             }
           }
         },

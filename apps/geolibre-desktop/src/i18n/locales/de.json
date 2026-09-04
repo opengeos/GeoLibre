@@ -4510,6 +4510,15 @@
                 "meters": "Meter",
                 "miles": "Meilen"
               }
+            },
+            "side": {
+              "label": "Pufferseite",
+              "description": "Außen vergrößert jedes Objekt, Innen verkleinert es, und Beide Seiten behält nur die Zone innerhalb der Distanz beiderseits seiner Grenze. Innen benötigt Polygone — ein Punkt oder eine Linie hat kein Inneres.",
+              "options": {
+                "outside": "Außen (vergrößern)",
+                "inside": "Innen (verkleinern)",
+                "both": "Beide Seiten"
+              }
             }
           }
         },

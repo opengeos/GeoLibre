@@ -200,6 +200,66 @@ function computeStat(nums: number[], statistic: string): number | null {
   return null;
 }
 
+/** Which side of a feature's boundary {@link bufferTool} keeps. */
+type BufferSide = "outside" | "inside" | "both";
+
+const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
+
+/** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
+type BufferUnits = "kilometers" | "meters" | "miles";
+
+/**
+ * A buffered feature, or `null` when the operation left nothing behind.
+ *
+ * An inward buffer erodes a polygon and can consume it entirely; on a point or
+ * line, which has no interior, it always does. jsts answers with an empty
+ * geometry rather than nothing at all, so an emptied feature reaches us as a
+ * polygon with zero rings — a shape no renderer can draw and every downstream
+ * tool has to special-case. Drop those here instead.
+ */
+function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
+  const geometry = result?.geometry as Polygon | MultiPolygon | undefined;
+  if (!geometry || !Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
+    return null;
+  }
+  return result as Feature;
+}
+
+/**
+ * Buffer one feature on the requested side of its boundary.
+ *
+ * `outside` grows the feature (the historical behavior), `inside` shrinks it by
+ * buffering with a negative radius, and `both` keeps only the band within
+ * `radius` of the boundary — the grown shape with the eroded one cut back out.
+ *
+ * For `both` on a feature with no interior left to erode (a point, a line, or a
+ * polygon thinner than twice the radius) the grown shape *is* the band, so it is
+ * returned whole rather than treated as a failure.
+ */
+function bufferOneFeature(
+  feature: Feature,
+  radius: number,
+  side: BufferSide,
+  units: BufferUnits,
+): Feature | null {
+  const options = { units };
+  if (side === "inside") return nonEmptyBuffer(buffer(feature, -radius, options));
+  const outer = nonEmptyBuffer(buffer(feature, radius, options));
+  if (side === "outside" || !outer) return outer;
+  const inner = nonEmptyBuffer(buffer(feature, -radius, options));
+  if (!inner) return outer;
+  const band = difference(
+    featureCollection([
+      outer as Feature<Polygon | MultiPolygon>,
+      inner as Feature<Polygon | MultiPolygon>,
+    ]),
+  );
+  const kept = nonEmptyBuffer(band as Feature | null);
+  // turf carries the first input's properties through, but that input is our own
+  // intermediate buffer — restore the source feature's attributes explicitly.
+  return kept ? { ...kept, properties: feature.properties ?? {} } : null;
+}
+
 export const bufferTool: ProcessingAlgorithm = {
   id: "buffer",
   name: "Buffer",
@@ -228,20 +288,48 @@ export const bufferTool: ProcessingAlgorithm = {
         { value: "miles", label: "Miles" },
       ],
     },
+    {
+      id: "side",
+      label: "Buffer side",
+      type: "select",
+      default: "outside",
+      description:
+        "Outside grows each feature, Inside shrinks it, and Both keeps the zone within the distance on either side of its boundary. Inside needs polygon input — a point or line has no interior to buffer into.",
+      options: [
+        { value: "outside", label: "Outside (grow)" },
+        { value: "inside", label: "Inside (shrink)" },
+        { value: "both", label: "Both sides" },
+      ],
+    },
   ],
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
     const distance = numberParam(ctx, "distance", 1);
-    const units = (ctx.parameters.units as string) || "kilometers";
+    const units = ((ctx.parameters.units as string) || "kilometers") as BufferUnits;
+    const side = (ctx.parameters.side as BufferSide) || "outside";
+    if (!BUFFER_SIDES.has(side)) {
+      // Reject rather than fall back, so the client and Python engines answer a
+      // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
+      ctx.log(`Error: unknown buffer side '${side}'; expected ${[...BUFFER_SIDES].join(", ")}`);
+      return;
+    }
     // turf bakes in Earth's radius, so the requested distance would lay out as
     // Earth ground on a Moon/Mars project. Convert to the Earth-equivalent that
     // spans the same distance on this body (GeoLibre#1128) — a no-op on Earth.
-    const buffered = buffer(fc, bodyLengthToEarth(distance), {
-      units: units as "kilometers" | "meters" | "miles",
-    });
-    const features = ((buffered?.features ?? []) as Feature[]).filter((f) => Boolean(f?.geometry));
-    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units}`);
+    const radius = bodyLengthToEarth(distance);
+    const features: Feature[] = [];
+    let dropped = 0;
+    for (const feature of fc.features) {
+      if (!feature?.geometry) continue;
+      const buffered = bufferOneFeature(feature, radius, side, units);
+      if (buffered) features.push(buffered);
+      else dropped += 1;
+    }
+    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units} (${side})`);
+    if (dropped > 0) {
+      ctx.log(`Dropped ${dropped} feature(s) that the inward buffer left empty`);
+    }
     ctx.addResultLayer?.("Buffer", featureCollection(features));
   },
 };

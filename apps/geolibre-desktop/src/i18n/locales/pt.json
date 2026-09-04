@@ -4510,6 +4510,15 @@
                 "meters": "Metros",
                 "miles": "Milhas"
               }
+            },
+            "side": {
+              "label": "Lado do buffer",
+              "description": "Fora expande cada feição, Dentro a reduz e Ambos os lados mantém apenas a zona dentro dessa distância de cada lado do seu limite. Dentro exige polígonos — um ponto ou uma linha não tem interior.",
+              "options": {
+                "outside": "Fora (expandir)",
+                "inside": "Dentro (reduzir)",
+                "both": "Ambos os lados"
+              }
             }
           }
         },

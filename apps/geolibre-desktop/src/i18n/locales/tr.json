@@ -4510,6 +4510,15 @@
                 "meters": "Metre",
                 "miles": "Mil"
               }
+            },
+            "side": {
+              "label": "Tampon yönü",
+              "description": "Dış her nesneyi büyütür, İç küçültür ve Her iki taraf yalnızca sınırın her iki yanında belirtilen mesafe içindeki bölgeyi tutar. İç için poligon katmanı gerekir — noktanın veya çizginin iç alanı yoktur.",
+              "options": {
+                "outside": "Dış (büyüt)",
+                "inside": "İç (küçült)",
+                "both": "Her iki taraf"
+              }
             }
           }
         },

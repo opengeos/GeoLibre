@@ -34,6 +34,10 @@ _DISTANCE_UNITS = {
     "miles": 1609.344,
 }
 
+# Which side of a feature's boundary the buffer keeps. Mirrors the `side`
+# parameter of the client-side buffer tool in packages/processing.
+_BUFFER_SIDES = ("outside", "inside", "both")
+
 
 class VectorInputTooLarge(ValueError):
     """Raised when an input layer exceeds :data:`MAX_FEATURES`.
@@ -125,31 +129,55 @@ def _buffer(
 ) -> tuple[dict, list[str]]:
     """Buffer each feature by a distance applied in a local metric (UTM) CRS.
 
-    Reads ``distance`` (in ``units``: kilometers/meters/miles) from
+    Reads ``distance`` (in ``units``: kilometers/meters/miles) and ``side``
+    (``outside`` grows each feature, ``inside`` shrinks it, ``both`` keeps the
+    zone within the distance on either side of its boundary) from
     ``parameters``, buffers in the estimated UTM CRS so the offset is in
-    real-world meters, then reprojects back to WGS84. Negative distance is
-    rejected.
+    real-world meters, then reprojects back to WGS84. Direction is carried by
+    ``side``, so a negative distance is still rejected.
     """
     gdf = _load_gdf(geojson, "Input layer")
     distance = float(parameters.get("distance", 1) or 0)
     units = str(parameters.get("units", "kilometers"))
+    side = str(parameters.get("side") or "outside")
     factor = _DISTANCE_UNITS.get(units)
     if factor is None:
         raise ValueError(f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}")
+    if side not in _BUFFER_SIDES:
+        raise ValueError(f"Unknown buffer side '{side}'. Accepted: {list(_BUFFER_SIDES)}")
     meters = distance * factor
     if meters < 0:
-        # The UI enforces a non-negative distance; keep the server consistent
-        # rather than silently performing an inward (erosion) buffer.
-        raise ValueError("Buffer distance must be >= 0")
+        # Direction belongs to `side`; keep the server consistent with the UI's
+        # non-negative distance rather than silently accepting a second way to
+        # ask for an inward (erosion) buffer.
+        raise ValueError("Buffer distance must be >= 0; use 'side' to buffer inward")
     # Buffer in a local metric CRS so the distance is in real-world meters,
     # then reproject the result back to WGS84.
     metric_crs = _estimate_metric_crs(gdf)
     projected = gdf.to_crs(metric_crs)
-    projected["geometry"] = projected.geometry.buffer(meters)
-    return (
-        _to_feature_collection(projected),
-        [f"Buffered {len(gdf)} feature(s) by {distance} {units}"],
-    )
+    if side == "inside":
+        geometry = projected.geometry.buffer(-meters)
+    elif side == "both":
+        # The band across the boundary: grown shape minus eroded shape. For a
+        # feature with no interior left to erode (a point, a line, a polygon
+        # thinner than 2 x distance) the eroded shape is empty and the
+        # difference is the grown shape, which is exactly the band.
+        geometry = projected.geometry.buffer(meters).difference(projected.geometry.buffer(-meters))
+    else:
+        geometry = projected.geometry.buffer(meters)
+    projected = projected.assign(geometry=geometry)
+    # An inward buffer can consume a feature entirely, and on a point or line it
+    # always does. Shapely answers with an empty geometry, which serializes to a
+    # ring-less polygon that no renderer can draw; drop those instead. `isna`
+    # rather than `notna`: GeoSeries.notna warns when the series holds empty
+    # geometries, which is precisely the case being filtered here.
+    kept = projected[~(projected.geometry.isna() | projected.geometry.is_empty)]
+    messages = [f"Buffered {len(kept)} feature(s) by {distance} {units} ({side})"]
+    if len(kept) < len(projected):
+        messages.append(
+            f"Dropped {len(projected) - len(kept)} feature(s) that the inward buffer left empty"
+        )
+    return _to_feature_collection(kept), messages
 
 
 def _centroids(

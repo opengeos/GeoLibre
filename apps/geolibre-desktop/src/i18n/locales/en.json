@@ -4574,6 +4574,15 @@
                 "meters": "Meters",
                 "miles": "Miles"
               }
+            },
+            "side": {
+              "label": "Buffer side",
+              "description": "Outside grows each feature, Inside shrinks it, and Both keeps the zone within the distance on either side of its boundary. Inside needs polygon input — a point or line has no interior to buffer into.",
+              "options": {
+                "outside": "Outside (grow)",
+                "inside": "Inside (shrink)",
+                "both": "Both sides"
+              }
             }
           }
         },

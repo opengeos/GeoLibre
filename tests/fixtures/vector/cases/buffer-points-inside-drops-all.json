@@ -1,0 +1,39 @@
+{
+  "name": "buffer-points-inside-drops-all",
+  "tool": "buffer",
+  "description": "A point has no interior, so side=inside empties every feature and both engines drop them instead of emitting ring-less polygons.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-80.8, 35.2]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": 5,
+    "units": "kilometers",
+    "side": "inside"
+  },
+  "expect": {
+    "featureCount": 0,
+    "geometryTypes": []
+  }
+}

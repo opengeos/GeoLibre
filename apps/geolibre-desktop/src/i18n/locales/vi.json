@@ -4439,6 +4439,15 @@
                 "meters": "Mét",
                 "miles": "Dặm"
               }
+            },
+            "side": {
+              "label": "Phía vùng đệm",
+              "description": "Bên ngoài mở rộng từng đối tượng, Bên trong thu nhỏ nó, và Cả hai phía chỉ giữ vùng nằm trong khoảng cách đó ở hai bên ranh giới. Bên trong cần lớp vùng — điểm hoặc đường không có phần bên trong.",
+              "options": {
+                "outside": "Bên ngoài (mở rộng)",
+                "inside": "Bên trong (thu nhỏ)",
+                "both": "Cả hai phía"
+              }
             }
           }
         },

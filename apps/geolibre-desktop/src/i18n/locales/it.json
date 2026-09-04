@@ -4510,6 +4510,15 @@
                 "meters": "Metri",
                 "miles": "Miglia"
               }
+            },
+            "side": {
+              "label": "Lato del buffer",
+              "description": "Esterno ingrandisce ogni elemento, Interno lo riduce ed Entrambi i lati conserva solo la zona entro quella distanza su entrambi i lati del suo confine. Interno richiede poligoni — un punto o una linea non ha un interno.",
+              "options": {
+                "outside": "Esterno (ingrandisci)",
+                "inside": "Interno (riduci)",
+                "both": "Entrambi i lati"
+              }
             }
           }
         },
