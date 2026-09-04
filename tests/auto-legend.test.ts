@@ -342,6 +342,7 @@ describe("buildAutoLegend — vector layers", () => {
     assert.ok(entry.gradient);
     assert.equal(entry.gradient?.minLabel, null);
     assert.equal(entry.gradient?.maxLabel, null);
+    assert.equal(entry.gradient?.colors[0], "rgba(0,0,0,0)");
     assert.ok((entry.gradient?.colors.length ?? 0) >= 2);
   });
 

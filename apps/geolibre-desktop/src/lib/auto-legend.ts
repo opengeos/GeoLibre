@@ -52,11 +52,6 @@ export const MAX_LEGEND_ROWS = 100;
 /** Colors sampled per gradient bar. */
 const GRADIENT_SAMPLES = 6;
 
-/**
- * The map's heatmap ramp colors (mirrors `HEATMAP_COLOR_RAMP` in
- * `@geolibre/map`'s style-mapper, minus the fully-transparent zero stop so the
- * bar starts visible).
- */
 /** One row (class / rule / size step / custom item) under a legend entry. */
 export interface AutoLegendRow {
   /** Stable override key (`<entryId>::p:<index>` in the panel namespace). */
@@ -687,7 +682,7 @@ function vectorParts(
     const colors = getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors;
     return {
       rows: [...diagrams, ...generatorRows],
-      gradient: { colors: [...colors], minLabel: null, maxLabel: null },
+      gradient: { colors: ["rgba(0,0,0,0)", ...colors], minLabel: null, maxLabel: null },
       headerSwatch: null,
     };
   }

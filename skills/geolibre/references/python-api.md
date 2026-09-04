@@ -85,7 +85,7 @@ m.add_marker(-122.4, 37.8, properties={"name": "San Francisco"})
 m.add_markers(points)
 m.add_circle_markers(points)
 m.add_marker_cluster(points, cluster_radius=50, cluster_max_zoom=14)
-m.add_heatmap(points, radius=35, intensity=1)
+m.add_heatmap(points, radius=35, intensity=1, color_ramp="turbo", weight_field="value")
 m.add_polyline(...)
 ```
 

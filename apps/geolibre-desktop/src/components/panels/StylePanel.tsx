@@ -4292,43 +4292,49 @@ export function StylePanel({
           </div>
           {pointRenderer === "heatmap" ? (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="heatmapColorRamp">{t("style.symbology.colormap")}</Label>
-                <ColorRampSelect
-                  id="heatmapColorRamp"
-                  aria-label={t("style.symbology.colormap")}
-                  value={styleValue(style, "heatmapColorRamp")}
-                  onValueChange={(heatmapColorRamp) =>
-                    setLayerStyle(layer.id, { heatmapColorRamp })
-                  }
-                  ramps={VECTOR_COLOR_RAMPS}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="heatmapWeightProperty">
-                  {t("style.symbology.heatmapWeightField")}
-                </Label>
-                <Select
-                  id="heatmapWeightProperty"
-                  value={styleValue(style, "heatmapWeightProperty")}
-                  onChange={(event) =>
-                    setLayerStyle(layer.id, { heatmapWeightProperty: event.target.value })
-                  }
-                >
-                  <option value="">{t("style.symbology.heatmapEqualWeight")}</option>
-                  {numericPropertyOptions.map((property) => (
-                    <option key={property} value={property}>
-                      {property}
-                    </option>
-                  ))}
-                  {styleValue(style, "heatmapWeightProperty") !== "" &&
-                  !numericPropertyOptions.includes(styleValue(style, "heatmapWeightProperty")) ? (
-                    <option value={styleValue(style, "heatmapWeightProperty")}>
-                      {styleValue(style, "heatmapWeightProperty")}
-                    </option>
-                  ) : null}
-                </Select>
-              </div>
+              {!controlRendersLayer(layer) ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="heatmapColorRamp">{t("style.symbology.colormap")}</Label>
+                    <ColorRampSelect
+                      id="heatmapColorRamp"
+                      aria-label={t("style.symbology.colormap")}
+                      value={styleValue(style, "heatmapColorRamp")}
+                      onValueChange={(heatmapColorRamp) =>
+                        setLayerStyle(layer.id, { heatmapColorRamp })
+                      }
+                      ramps={VECTOR_COLOR_RAMPS}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="heatmapWeightProperty">
+                      {t("style.symbology.heatmapWeightField")}
+                    </Label>
+                    <Select
+                      id="heatmapWeightProperty"
+                      value={styleValue(style, "heatmapWeightProperty")}
+                      onChange={(event) =>
+                        setLayerStyle(layer.id, { heatmapWeightProperty: event.target.value })
+                      }
+                    >
+                      <option value="">{t("style.symbology.heatmapEqualWeight")}</option>
+                      {numericPropertyOptions.map((property) => (
+                        <option key={property} value={property}>
+                          {property}
+                        </option>
+                      ))}
+                      {styleValue(style, "heatmapWeightProperty") !== "" &&
+                      !numericPropertyOptions.includes(
+                        styleValue(style, "heatmapWeightProperty"),
+                      ) ? (
+                        <option value={styleValue(style, "heatmapWeightProperty")}>
+                          {styleValue(style, "heatmapWeightProperty")}
+                        </option>
+                      ) : null}
+                    </Select>
+                  </div>
+                </>
+              ) : null}
               <NumericStyleInput
                 id="heatmapRadius"
                 label={t("style.symbology.heatmapRadius")}

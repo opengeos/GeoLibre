@@ -103,7 +103,7 @@ The click payload has the form `{"lngLat": {"lng": ..., "lat": ...},
 | `add_geojson(data, name=, **style)` | Add GeoJSON (dict, path, URL, JSON, or GeoDataFrame). |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv` / `add_xy_data` `(data, x=, y=, name=, **style)` | Add points from CSV, a DataFrame, or row mappings. |
-| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add a point density heatmap. |
+| `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add a point density heatmap, optionally weighted by a numeric field. |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON) or a local file (read via GeoPandas, inlined). |
 | `add_geoparquet` / `add_flatgeobuf` / `add_shp` / `add_kml` / `add_gpkg` | Format-specific wrappers over `add_vector`. |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add vector tiles from a TileJSON endpoint. |

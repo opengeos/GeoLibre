@@ -276,7 +276,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_markers(points, name=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
 | `add_circle_markers(points, name=, radius=, **style)` | Add circle markers with an explicit `radius`. |
 | `add_marker_cluster(points, name=, cluster_radius=, cluster_max_zoom=, **style)` | Add clustered point markers. |
-| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add point data using the density heatmap renderer. |
+| `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add point data using the density heatmap renderer, optionally weighted by a numeric field. |
 | `add_choropleth(data, column, name=, class_count=, colormap=, scheme=, **style)` | Add a GeoJSON layer with graduated symbology computed from a numeric `column`. |
 | `add_data(data, column=None, name=, **kwargs)` | Add data; a choropleth when `column` is given, else a plain GeoJSON layer (leafmap parity). |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON, …) or a local file (read via GeoPandas and inlined). |
