@@ -381,6 +381,8 @@ describe("syncRasterLayersToStore", () => {
       useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
       access,
     );
+    assert.equal(useAppStore.getState().layers[0].source.url, access.href);
+    assert.equal(useAppStore.getState().layers[0].sourcePath, access.href);
 
     syncRasterLayersToStore(
       fakeControl([

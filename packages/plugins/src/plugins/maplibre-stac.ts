@@ -672,8 +672,8 @@ function assetOptionLabel(item: StacItem, key: string, asset: StacAsset): string
 /**
  * Planetary Computer serves several collections from private containers that answer 409 without
  * a SAS token, while others (NAIP) read fine anonymously.
- * Tokens are per-collection and expire within the hour, so they are minted when the asset is
- * added rather than when the item is parsed, and the upstream manager caches them. Anything
+ * Signed URLs expire within the hour, so they are minted when the asset is added rather than when
+ * the item is parsed, and cached until shortly before expiry. Anything
  * that is not an eligible Planetary Computer Azure blob, or that cannot be signed, is read
  * unsigned. COG and GeoParquet layers retain the unsigned asset identity in metadata so project
  * restore can mint a fresh token instead of replaying an expired one.
@@ -692,6 +692,8 @@ function rememberAssetAccess(layerId: string, access: StacAssetAccess | null): v
   if (!layer) return;
   useAppStore.getState().updateLayer(layerId, {
     metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+    source: { ...layer.source, url: access.href },
+    sourcePath: access.href,
   });
 }
 

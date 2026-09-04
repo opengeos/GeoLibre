@@ -332,6 +332,13 @@ export function syncRasterLayersToStoreWithOptions(
       }
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
+      const stacAssetAccess = preserved[STAC_ASSET_ACCESS_METADATA_KEY] as
+        | ReturnType<typeof stacAssetAccessFromLayer>
+        | undefined;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
 
       // A control still reporting the value this module last knows it to hold
       // is echoing that value, not recording a user edit. Mirroring the echo
@@ -358,8 +365,8 @@ export function syncRasterLayersToStoreWithOptions(
       if (
         existing.visible !== visible ||
         existing.opacity !== opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
         !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
@@ -367,8 +374,8 @@ export function syncRasterLayersToStoreWithOptions(
           // survive a raster being swapped out under the same id.
           metadata,
           opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
+          source,
+          sourcePath,
           visible,
         });
       }

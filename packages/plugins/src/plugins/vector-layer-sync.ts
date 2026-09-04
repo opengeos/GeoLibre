@@ -268,13 +268,17 @@ export function syncVectorLayersToStore(
       const metadata = stacAssetAccess
         ? { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess }
         : layer.metadata;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
 
       if (
         existing.type !== layer.type ||
         existing.visible !== visible ||
         existing.opacity !== opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
         !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
@@ -286,8 +290,8 @@ export function syncVectorLayersToStore(
           // control (getLayerGeoJSON), so it intentionally is not preserved.
           metadata,
           opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
+          source,
+          sourcePath,
           // A render-mode switch in the panel flips geojson <-> vector-tiles.
           type: layer.type,
           visible,

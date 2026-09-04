@@ -640,7 +640,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
                 ? layer.source.url
                 : undefined;
             return url
-              ? [readableStacLayerHref(layer, url).then((href) => [layer.id, href] as const)]
+              ? [
+                  readableStacLayerHref(layer, url).then(
+                    (href) => [layer.id, { sourceUrl: url, href }] as const,
+                  ),
+                ]
               : [];
           }),
       ),
@@ -687,7 +691,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
 
         const storedUrl =
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
-        const url = remoteSources.get(layer.id) ?? storedUrl;
+        const resolvedSource = remoteSources.get(layer.id);
+        const url =
+          resolvedSource && resolvedSource.sourceUrl === storedUrl
+            ? resolvedSource.href
+            : storedUrl;
         // A local file that was re-read above replays from its bytes; the
         // control re-derives its own blob URL from the File, as on a fresh add.
         const source = url ?? localFiles.get(layer.id);

@@ -147,16 +147,17 @@ test("asset options identify their format and whether they can be added", async 
 
 test("Planetary Computer COG assets are signed before raster reads", async ({ page }) => {
   const assetRequests: string[] = [];
-  let tokenRequests = 0;
+  let signingRequests = 0;
   await page.route("https://planetarycomputer.microsoft.com/**", async (route) => {
     const url = new URL(route.request().url());
     const json = (body: unknown) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
-    if (url.pathname.endsWith("/api/sas/v1/token/private-cog")) {
-      tokenRequests += 1;
+    if (url.pathname.endsWith("/api/sas/v1/sign")) {
+      signingRequests += 1;
+      expect(url.searchParams.get("href")).toBe(PRIVATE_PLANETARY_COMPUTER_COG);
       return json({
-        token: "sp=r&sig=signed-for-test",
+        href: `${PRIVATE_PLANETARY_COMPUTER_COG}?sp=r&sig=signed-for-test`,
         "msft:expiry": "2099-01-01T00:00:00Z",
       });
     }
@@ -203,7 +204,7 @@ test("Planetary Computer COG assets are signed before raster reads", async ({ pa
   await page.getByRole("button", { name: "Add", exact: true }).click();
 
   await expect.poll(() => assetRequests.length).toBeGreaterThan(0);
-  expect(tokenRequests).toBe(1);
+  expect(signingRequests).toBe(1);
   const requestedAsset = new URL(assetRequests[0]);
   expect(requestedAsset.searchParams.get("sp")).toBe("r");
   expect(requestedAsset.searchParams.get("sig")).toBe("signed-for-test");

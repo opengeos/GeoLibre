@@ -37,6 +37,14 @@ test("Planetary Computer Azure assets retain the information needed for re-signi
 test("third-party catalogs cannot send Azure asset details to the MPC signer", () => {
   assert.equal(createStacAssetAccess("https://third-party.example/stac/", "private", ASSET), null);
   assert.equal(createStacAssetAccess(CATALOG, "private", "https://example.com/data.tif"), null);
+  assert.equal(
+    createStacAssetAccess(
+      CATALOG,
+      "private",
+      "http://ai4edataeuwest.blob.core.windows.net/io-lulc/data.tif",
+    ),
+    null,
+  );
   assert.equal(stacAssetAccessFromLayer(layerWithAccess({ collectionId: "private" })), null);
 });
 
@@ -62,7 +70,7 @@ test("a saved STAC layer receives a fresh token when it is restored", async () =
     tokenUrl = String(input);
     return new Response(
       JSON.stringify({
-        token: "sp=rl&sig=fresh-token",
+        href: `${ASSET}?sp=rl&sig=fresh-token`,
         "msft:expiry": "2099-01-01T00:00:00Z",
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
@@ -72,7 +80,7 @@ test("a saved STAC layer receives a fresh token when it is restored", async () =
     const href = await readableStacLayerHref(layerWithAccess(access), `${ASSET}?sig=expired`);
     assert.equal(
       tokenUrl,
-      "https://planetarycomputer.microsoft.com/api/sas/v1/token/io-lulc-annual-v02",
+      `https://planetarycomputer.microsoft.com/api/sas/v1/sign?href=${encodeURIComponent(ASSET)}`,
     );
     assert.equal(href, `${ASSET}?sp=rl&sig=fresh-token`);
   } finally {
