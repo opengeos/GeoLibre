@@ -42,7 +42,7 @@ single sign-on layer.
 
 ## Web Services
 
-The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen catalog and service browsers, from the United States federal sources below to general-purpose STAC, ArcGIS Hub, Source Cooperative, and Hugging Face browsers. Each one is documented on its own page: see **[Web Services](web-services.md)**.
+The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen catalog and service browsers, from the United States federal sources below to general-purpose STAC, ArcGIS Hub, Source Cooperative, and Hugging Face browsers. All seventeen are documented on the **[Web Services](web-services.md)** page.
 
 | Service | Data |
 | --- | --- |
@@ -74,7 +74,7 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen
 | --- | --- |
 | **GeoAgent** | AI-assisted geospatial analysis. |
 
-All of these are activated from the [Plugins menu](plugins.md), where you can also set their on-map position.
+All of these are activated from the [Plugins menu](plugins.md), where you can also set their on-map position. The Web Services panels are the exception, including **Vantor Open Data** and **Planet Open Data** above: they dock beside the Layers panel instead of floating over the map, so they offer no position choice.
 
 ## Geocoding
 
