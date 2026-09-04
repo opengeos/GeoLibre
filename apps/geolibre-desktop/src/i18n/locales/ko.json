@@ -6557,6 +6557,7 @@
       "categories": "카테고리",
       "classColor": "클래스 {{index}} 색상",
       "classColorPick": "화면에서 클래스 {{index}} 색상 선택",
+      "classOpacity": "클래스 {{index}} 불투명도",
       "classValue": "클래스 {{index}} 값",
       "colorExpression": "색상 표현식",
       "applyStyleType": "스타일 유형 적용",

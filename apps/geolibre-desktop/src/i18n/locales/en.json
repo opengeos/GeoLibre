@@ -6699,6 +6699,7 @@
       "categories": "Categories",
       "classColor": "Class {{index}} color",
       "classColorPick": "Pick class {{index}} color from the screen",
+      "classOpacity": "Class {{index}} opacity",
       "classValue": "Class {{index}} value",
       "colorExpression": "Color expression",
       "applyStyleType": "Apply style type",

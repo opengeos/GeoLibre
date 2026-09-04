@@ -1133,7 +1133,7 @@ function ClassOpacityInput({
         max={100}
         step={1}
         className="h-7 pe-6 text-xs"
-        aria-label={`${t("rasterSymbology.classes")} ${index + 1} ${t("layers.opacity")}`}
+        aria-label={t("style.symbology.classOpacity", { index: index + 1 })}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commitDraft}

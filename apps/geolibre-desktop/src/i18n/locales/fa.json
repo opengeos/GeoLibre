@@ -6635,6 +6635,7 @@
       "categories": "دسته‌ها",
       "classColor": "رنگ کلاس {{index}}",
       "classColorPick": "برگزیدن رنگ کلاس {{index}} از صفحه",
+      "classOpacity": "کدری کلاس {{index}}",
       "classValue": "مقدار کلاس {{index}}",
       "colorExpression": "عبارت رنگ",
       "applyStyleType": "اعمال نوع شیوهٔ نمایش",

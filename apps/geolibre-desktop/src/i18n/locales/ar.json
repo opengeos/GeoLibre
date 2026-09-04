@@ -6946,6 +6946,7 @@
       "categories": "الأصناف",
       "classColor": "لون الفئة {{index}}",
       "classColorPick": "التقاط لون الفئة {{index}} من الشاشة",
+      "classOpacity": "عتامة الفئة {{index}}",
       "classValue": "قيمة الفئة {{index}}",
       "colorExpression": "تعبير اللون",
       "applyStyleType": "تطبيق نوع النمط",

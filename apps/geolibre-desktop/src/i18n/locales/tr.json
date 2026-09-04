@@ -6635,6 +6635,7 @@
       "categories": "Kategoriler",
       "classColor": "Sınıf {{index}} rengi",
       "classColorPick": "Sınıf {{index}} rengini ekrandan seç",
+      "classOpacity": "Sınıf {{index}} opaklığı",
       "classValue": "Sınıf {{index}} değeri",
       "colorExpression": "Renk ifadesi",
       "applyStyleType": "Stil türünü uygula",

@@ -6557,6 +6557,7 @@
       "categories": "หมวดหมู่",
       "classColor": "สีของชั้นข้อมูลที่ {{index}}",
       "classColorPick": "เลือกสีของชั้นข้อมูลที่ {{index}} จากหน้าจอ",
+      "classOpacity": "ความทึบของชั้นข้อมูลที่ {{index}}",
       "classValue": "ค่าของชั้นข้อมูลที่ {{index}}",
       "colorExpression": "นิพจน์สี",
       "applyStyleType": "ใช้ชนิดของสไตล์นี้",

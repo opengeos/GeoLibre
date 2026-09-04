@@ -6635,6 +6635,7 @@
       "categories": "Categorieën",
       "classColor": "Kleur klasse {{index}}",
       "classColorPick": "Kleur voor klasse {{index}} van het scherm oppikken",
+      "classOpacity": "Dekking klasse {{index}}",
       "classValue": "Waarde klasse {{index}}",
       "colorExpression": "Kleurexpressie",
       "applyStyleType": "Stijltype toepassen",

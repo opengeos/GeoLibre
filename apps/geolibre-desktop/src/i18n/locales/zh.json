@@ -6557,6 +6557,7 @@
       "categories": "类别",
       "classColor": "分类 {{index}} 颜色",
       "classColorPick": "从屏幕上拾取分类 {{index}} 的颜色",
+      "classOpacity": "分类 {{index}} 不透明度",
       "classValue": "分类 {{index}} 值",
       "colorExpression": "颜色表达式",
       "applyStyleType": "应用样式类型",

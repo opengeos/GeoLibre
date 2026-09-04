@@ -6635,6 +6635,7 @@
       "categories": "Kategorien",
       "classColor": "Farbe für Klasse {{index}}",
       "classColorPick": "Farbe für Klasse {{index}} vom Bildschirm auswählen",
+      "classOpacity": "Deckkraft für Klasse {{index}}",
       "classValue": "Wert für Klasse {{index}}",
       "colorExpression": "Farbausdruck",
       "applyStyleType": "Stiltyp anwenden",

@@ -6635,6 +6635,7 @@
       "categories": "श्रेणियां",
       "classColor": "वर्ग {{index}} रंग",
       "classColorPick": "स्क्रीन से वर्ग {{index}} रंग चुनें",
+      "classOpacity": "वर्ग {{index}} अपारदर्शिता",
       "classValue": "वर्ग {{index}} मान",
       "colorExpression": "रंग एक्सप्रेशन",
       "applyStyleType": "शैली प्रकार लागू करें",

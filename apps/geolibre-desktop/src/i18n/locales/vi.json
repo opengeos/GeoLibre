@@ -6548,6 +6548,7 @@
       "schemeQuantile": "lượng tử",
       "schemeNaturalBreaks": "Nghỉ giải lao tự nhiên",
       "classColorPick": "Chọn màu cho hạng {{index}}",
+      "classOpacity": "Lớp {{index}} độ mờ",
       "classValue": "Giá trị hạng {{index}}",
       "colorExpression": "Biểu hiện màu sắc",
       "applyStyleType": "Áp dụng kiểu kiểu",

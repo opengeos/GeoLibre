@@ -6635,6 +6635,7 @@
       "categories": "კატეგორიები",
       "classColor": "კლასი {{index}}-ის ფერი",
       "classColorPick": "კლასი {{index}}-ის ფერის აღება ეკრანიდან",
+      "classOpacity": "კლასი {{index}}-ის გამჭვირვალობა",
       "classValue": "კლასი {{index}}-ის მნიშვნელობა",
       "colorExpression": "ფერის გამოსახულება",
       "applyStyleType": "სტილის ტიპის გამოყენება",

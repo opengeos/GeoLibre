@@ -6557,6 +6557,7 @@
       "categories": "Kategori",
       "classColor": "Warna kelas {{index}}",
       "classColorPick": "Pilih warna kelas {{index}} dari layar",
+      "classOpacity": "Opasitas kelas {{index}}",
       "classValue": "Nilai kelas {{index}}",
       "colorExpression": "Ekspresi warna",
       "applyStyleType": "Terapkan jenis gaya",

@@ -6557,6 +6557,7 @@
       "categories": "カテゴリ",
       "classColor": "クラス{{index}}の色",
       "classColorPick": "画面からクラス{{index}}の色を選択",
+      "classOpacity": "クラス{{index}}の不透明度",
       "classValue": "クラス{{index}}の値",
       "colorExpression": "色の式",
       "applyStyleType": "スタイルタイプを適用",

@@ -6791,6 +6791,7 @@
       "categories": "Категории",
       "classColor": "Цвет класса {{index}}",
       "classColorPick": "Выбрать цвет класса {{index}} с экрана",
+      "classOpacity": "Непрозрачность класса {{index}}",
       "classValue": "Значение класса {{index}}",
       "colorExpression": "Выражение цвета",
       "applyStyleType": "Применить тип стиля",
