@@ -7,6 +7,7 @@ import {
   clampRasterClassCount,
   computeRasterBreaks,
   defaultRasterSymbology,
+  normalizeRasterClassOpacities,
   percentileFromHistogram,
   savedRasterSymbology,
 } from "../packages/plugins/src/plugins/raster-symbology";
@@ -115,6 +116,47 @@ describe("buildSteppedColormapRgba", () => {
     assert.deepEqual([rgba[0], rgba[1], rgba[2]], [255, 0, 0]);
     assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [0, 0, 255]);
   });
+
+  it("writes per-class opacity into the texture alpha channel", () => {
+    const rgba = buildSteppedColormapRgba(
+      [0, 1, 2],
+      "viridis",
+      false,
+      ["#ff0000", "#0000ff"],
+      [0, 0.5],
+    );
+    assert.equal(rgba[3], 0);
+    assert.equal(rgba[127 * 4 + 3], 0);
+    assert.equal(rgba[128 * 4 + 3], 128);
+    assert.equal(rgba[255 * 4 + 3], 128);
+  });
+
+  it("keeps opacity attached to value classes when the ramp is reversed", () => {
+    const rgba = buildSteppedColormapRgba(
+      [0, 1, 2],
+      "viridis",
+      true,
+      ["#ff0000", "#0000ff"],
+      [0.25, 0.75],
+    );
+    assert.deepEqual([rgba[0], rgba[1], rgba[2], rgba[3]], [0, 0, 255, 64]);
+    assert.deepEqual(
+      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2], rgba[255 * 4 + 3]],
+      [255, 0, 0, 191],
+    );
+  });
+});
+
+describe("normalizeRasterClassOpacities", () => {
+  it("clamps finite values and omits fully opaque lists", () => {
+    assert.deepEqual(normalizeRasterClassOpacities([-1, 0.5, 2], 3), [0, 0.5, 1]);
+    assert.equal(normalizeRasterClassOpacities([1, 1], 2), undefined);
+  });
+
+  it("rejects malformed or incorrectly sized lists", () => {
+    assert.equal(normalizeRasterClassOpacities([0.5], 2), undefined);
+    assert.equal(normalizeRasterClassOpacities([0.5, Number.NaN], 2), undefined);
+  });
 });
 
 describe("buildContinuousColormapRgba", () => {
@@ -211,6 +253,36 @@ describe("savedRasterSymbology", () => {
     );
     assert.ok(result);
     assert.deepEqual(result.customColors, ["#ff0000", "#00ff00"]);
+  });
+
+  it("keeps normalized per-class opacity", () => {
+    const result = savedRasterSymbology(
+      layerWith({
+        classified: true,
+        ramp: "viridis",
+        method: "equal-interval",
+        classCount: 2,
+        breaks: [0, 1, 2],
+        classOpacities: [-1, 0.5],
+      }),
+    );
+    assert.ok(result);
+    assert.deepEqual(result.classOpacities, [0, 0.5]);
+  });
+
+  it("drops opacity lists that do not match the class count", () => {
+    const result = savedRasterSymbology(
+      layerWith({
+        classified: true,
+        ramp: "viridis",
+        method: "equal-interval",
+        classCount: 2,
+        breaks: [0, 1, 2],
+        classOpacities: [0.5],
+      }),
+    );
+    assert.ok(result);
+    assert.equal(result.classOpacities, undefined);
   });
 
   it("drops custom colors that resolve to fewer than two valid entries", () => {
