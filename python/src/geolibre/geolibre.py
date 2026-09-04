@@ -2129,6 +2129,7 @@ class Map(anywidget.AnyWidget):
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -2144,10 +2145,16 @@ class Map(anywidget.AnyWidget):
             version: WMS protocol version, ``"1.1.1"`` (default) or
                 ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
                 some servers accept only one version.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84. A WMS layer has no geometry to derive an extent from,
+                so without these "zoom to layer" cannot reach it.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is given without exactly four numbers.
         """
         return self._add_layer(
             _project.wms_layer(
@@ -2159,6 +2166,7 @@ class Map(anywidget.AnyWidget):
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                bounds=bounds,
                 **style,
             )
         )
@@ -2169,6 +2177,7 @@ class Map(anywidget.AnyWidget):
         name: str = "WMTS Layer",
         *,
         tile_size: int = 256,
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMTS layer from a tile URL template.
@@ -2177,12 +2186,19 @@ class Map(anywidget.AnyWidget):
             url: A WMTS tile URL template (``{z}/{y}/{x}``).
             name: Layer display name.
             tile_size: Tile size in pixels.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is given without exactly four numbers.
         """
-        return self._add_layer(_project.wmts_layer(name, url, tile_size=tile_size, **style))
+        return self._add_layer(
+            _project.wmts_layer(name, url, tile_size=tile_size, bounds=bounds, **style)
+        )
 
     def add_wfs(
         self,

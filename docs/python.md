@@ -289,8 +289,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
 | `add_ee_layer(ee_object, vis_params=, name=, shown=, opacity=)` | Add an authenticated Google Earth Engine object as raster tiles (needs `earthengine-api`). |
-| `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
-| `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
+| `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, version=, bounds=, **style)` | Add a WMS layer (GetMap, tiled raster). `bounds` is `[west, south, east, north]`, needed for zoom-to-layer. |
+| `add_wmts(url, name=, tile_size=, bounds=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=, **style)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
 | `add_raster(source, name=, bands=, colormap=, rescale=, array_args=, **style)` | Add a COG/GeoTIFF URL or path, or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |

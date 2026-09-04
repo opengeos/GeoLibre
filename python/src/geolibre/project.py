@@ -572,6 +572,34 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
+def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
+    """Validate optional layer bounds and coerce them to floats.
+
+    A service layer has no geometry of its own, so these are the only extent
+    the app can zoom to; a malformed list would reach the project file as one
+    it cannot use.
+
+    Args:
+        bounds: ``[west, south, east, north]`` in WGS84, or None.
+
+    Returns:
+        The four coordinates as floats, or None when *bounds* is None.
+
+    Raises:
+        ValueError: If *bounds* does not hold exactly four numbers.
+    """
+    if bounds is None:
+        return None
+    if len(bounds) != 4:
+        raise ValueError(
+            "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
+        )
+    try:
+        return [float(v) for v in bounds]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"bounds must be four numbers; got {bounds!r}") from exc
+
+
 def _normalize_wms_version(version: str | None) -> str:
     """Normalize a WMS version to the "1.1.1"/"1.3.0" pair the builder emits.
 
@@ -628,7 +656,7 @@ def wms_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four values.
+        ValueError: If ``bounds`` is given without exactly four numbers.
     """
     wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
@@ -659,12 +687,9 @@ def wms_layer(
         "transparent": transparent,
         "version": wms_version,
     }
-    if bounds is not None:
-        if len(bounds) != 4:
-            raise ValueError(
-                "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
-            )
-        source["bounds"] = [float(v) for v in bounds]
+    resolved_bounds = _resolve_bounds(bounds)
+    if resolved_bounds is not None:
+        source["bounds"] = resolved_bounds
     layer["source"] = source
     layer["metadata"] = {"service": "wms"}
     return layer
@@ -694,7 +719,7 @@ def wmts_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four values.
+        ValueError: If ``bounds`` is given without exactly four numbers.
     """
     layer = _layer_base(name, "wmts", **style)
     source: dict[str, Any] = {
@@ -703,12 +728,9 @@ def wmts_layer(
         "tileSize": tile_size,
         "url": url,
     }
-    if bounds is not None:
-        if len(bounds) != 4:
-            raise ValueError(
-                "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
-            )
-        source["bounds"] = [float(v) for v in bounds]
+    resolved_bounds = _resolve_bounds(bounds)
+    if resolved_bounds is not None:
+        source["bounds"] = resolved_bounds
     layer["source"] = source
     layer["metadata"] = {"service": "wmts"}
     return layer

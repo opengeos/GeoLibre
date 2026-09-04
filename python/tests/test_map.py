@@ -70,6 +70,15 @@ def test_add_wmts(m):
     assert _last_layer(m)["type"] == "wmts"
 
 
+def test_add_wms_and_add_wmts_forward_bounds(m):
+    # Without an extent a service layer cannot be reached by zoom-to-layer,
+    # and a notebook has no other way to give it one.
+    m.add_wms("https://e/wms", "a", bounds=[8.14, 38.85, 9.83, 41.31])
+    assert _last_layer(m)["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+    m.add_wmts("https://t/{z}/{y}/{x}.png", bounds=[-10, 35, 5, 45])
+    assert _last_layer(m)["source"]["bounds"] == [-10.0, 35.0, 5.0, 45.0]
+
+
 def test_add_ee_layer_from_map_id(m):
     class TileFetcher:
         url_format = "https://earthengine.googleapis.com/maps/test/tiles/{z}/{x}/{y}"

@@ -148,6 +148,20 @@ def test_ogc_layer_bounds_must_have_four_values(bad):
         (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
     ],
 )
+def test_ogc_layer_bounds_reject_non_numbers(builder, args):
+    # Four values of the wrong kind must fail like the wrong count does, not
+    # with a bare "could not convert string to float" from the comprehension.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, "x"])
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
 def test_ogc_layer_bounds_are_coerced_to_floats(builder, args):
     # Ints compare equal to floats, so assert the stored types: what reaches
     # the project file has to be JSON numbers the app reads as coordinates.
