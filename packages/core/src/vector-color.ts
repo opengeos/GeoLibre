@@ -1,4 +1,5 @@
-import { styleValue, type LayerStyle, type VectorRule } from "./types";
+import { DEFAULT_LAYER_STYLE, styleValue, type LayerStyle, type VectorRule } from "./types";
+import { getVectorColorRamp } from "./color-ramp";
 import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
 import { removeTrailingJsonCommas } from "./expressions";
 
@@ -701,6 +702,25 @@ export function vectorFillOpacityValue(
   fallback: number | unknown[],
 ): number | unknown[] {
   return ruleOverrideValue(style, "fillOpacity", fallback) as number | unknown[];
+}
+
+/**
+ * The color-ramp colors a density heatmap paints with.
+ *
+ * {@link getVectorColorRamp} falls back to the *first* ramp ("viridis") for an
+ * unknown name, which is not the heatmap default ("turbo"). Both the map paint
+ * (`heatmapPaint` in `@geolibre/map`) and the auto-legend gradient resolve the
+ * ramp here so a stale or hand-edited `heatmapColorRamp` cannot make the legend
+ * and the rendered heatmap disagree about which ramp is in use.
+ *
+ * @param style - The layer style.
+ * @returns The ramp's colors, or the default ramp's colors for an unknown name.
+ */
+export function heatmapRampColors(style: LayerStyle): readonly string[] {
+  const value = styleValue(style, "heatmapColorRamp");
+  const ramp = getVectorColorRamp(value);
+  return (ramp.value === value ? ramp : getVectorColorRamp(DEFAULT_LAYER_STYLE.heatmapColorRamp))
+    .colors;
 }
 
 /** The validated proportional (graduated) size configuration of a layer. */

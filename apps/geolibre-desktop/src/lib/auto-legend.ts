@@ -15,7 +15,7 @@
  */
 import {
   effectiveVectorRules,
-  getVectorColorRamp,
+  heatmapRampColors,
   isHexColor,
   proportionalSizeRange,
   styleValue,
@@ -679,7 +679,7 @@ function vectorParts(
 
   // A density heatmap renders no per-feature symbols: the entry is the ramp.
   if (shape === "circle" && styleValue(style, "pointRenderer") === "heatmap") {
-    const colors = getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors;
+    const colors = heatmapRampColors(style);
     return {
       rows: [...diagrams, ...generatorRows],
       gradient: { colors: ["rgba(0,0,0,0)", ...colors], minLabel: null, maxLabel: null },

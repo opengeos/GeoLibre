@@ -3,7 +3,7 @@ import {
   circleRadiusValue,
   extrusionColorValue,
   extrusionHeightValue,
-  getVectorColorRamp,
+  heatmapRampColors,
   lineWidthValue,
   mapZoomStepOutputs,
   simpleStyleNumberValue,
@@ -142,13 +142,6 @@ export function heatmapColorRampExpression(colors: readonly string[]): Expressio
   return expression as ExpressionSpecification;
 }
 
-function heatmapColorRamp(style: LayerStyle): ExpressionSpecification {
-  const value = styleValue(style, "heatmapColorRamp");
-  const ramp = getVectorColorRamp(value);
-  const fallback = getVectorColorRamp(DEFAULT_LAYER_STYLE.heatmapColorRamp);
-  return heatmapColorRampExpression((ramp.value === value ? ramp : fallback).colors);
-}
-
 function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {
   const property = styleValue(style, "heatmapWeightProperty").trim();
   return property === ""
@@ -162,7 +155,7 @@ export function heatmapPaint(style: LayerStyle, opacity: number) {
     "heatmap-intensity": styleValue(style, "heatmapIntensity"),
     "heatmap-weight": heatmapWeight(style),
     "heatmap-opacity": opacity,
-    "heatmap-color": heatmapColorRamp(style),
+    "heatmap-color": heatmapColorRampExpression(heatmapRampColors(style)),
   };
 }
 
