@@ -412,8 +412,10 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     // rather than disabling them. A beginner opening a project saved with
     // `primaryRenderer: "cesium"` would otherwise land on the globe with the
     // MapLibre-only tools greyed out and no visible way back (#2217 review).
-    // ViewMenu additionally forces the submenu visible while the globe is
-    // active, which covers a custom profile that hid it by hand.
+    // Two overrides back this up while the globe is active, covering the two
+    // ways a hand-edited profile could hide the escape hatch: ViewMenu forces
+    // this submenu visible past `hiddenMenuItems`, and TopToolbar mounts
+    // ViewMenu at all past `hiddenMenus: ["view"]`.
     id: "view.renderingEngine",
     menuId: "view",
     labelKey: "toolbar.item.renderingEngine",
