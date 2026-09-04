@@ -381,6 +381,14 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     }
   });
 
+  it("warns instead of throwing for a malformed clamped heatmap weight", () => {
+    const result = parseMapboxStyle({
+      layers: [{ id: "heat", type: "heatmap", paint: { "heatmap-weight": ["max", 0, null] } }],
+    });
+    assert.equal(result.style.heatmapWeightProperty, undefined);
+    assert.ok(result.warnings.some((warning) => /heatmap weight expression/.test(warning)));
+  });
+
   it("recovers 3D extrusion including height, scale, and base", () => {
     const original = style({
       extrusionEnabled: true,

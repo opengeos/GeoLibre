@@ -28,6 +28,7 @@ function heatmapWeightProperty(value: unknown): string | null {
   if (expression.length === 3 && expression[0] === "max" && expression[1] === 0) {
     expression = expression[2];
   }
+  if (!Array.isArray(expression)) return null;
   if (
     expression.length === 3 &&
     expression[0] === "to-number" &&

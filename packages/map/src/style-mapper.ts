@@ -143,9 +143,10 @@ export function heatmapColorRampExpression(colors: readonly string[]): Expressio
 }
 
 function heatmapColorRamp(style: LayerStyle): ExpressionSpecification {
-  return heatmapColorRampExpression(
-    getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors,
-  );
+  const value = styleValue(style, "heatmapColorRamp");
+  const ramp = getVectorColorRamp(value);
+  const fallback = getVectorColorRamp(DEFAULT_LAYER_STYLE.heatmapColorRamp);
+  return heatmapColorRampExpression((ramp.value === value ? ramp : fallback).colors);
 }
 
 function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {
