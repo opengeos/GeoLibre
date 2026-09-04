@@ -230,6 +230,44 @@ describe("CesiumLayerSync", () => {
     for (const layer of layers) assert.equal(isCesiumSupportedLayerType(layer), true, layer.type);
   });
 
+  it("renders a layer kind the module never names, keyed on the data alone", async () => {
+    // The globe decides on `layer.geojson`, not on a list of blessed types, so
+    // a producer that starts attaching a FeatureCollection to a kind this
+    // module has never heard of renders with no change here. `"zarr"` and
+    // `"lidar"` are only stand-ins for that: nothing populates their geojson
+    // today, and this asserts the mechanism rather than either kind's behavior.
+    const sync = newSync(f);
+    const types = ["zarr", "lidar"] as const;
+    const layers = types.map((type, index) =>
+      mkLayer({
+        id: `unlisted-${index}`,
+        type,
+        geojson: { type: "FeatureCollection", features: [{}] } as never,
+      }),
+    );
+
+    sync.sync(layers);
+    await f.flush();
+
+    assert.equal(f.calls.geojsonLoads.length, types.length);
+    for (const layer of layers) assert.equal(isCesiumSupportedLayerType(layer), true, layer.type);
+  });
+
+  it("keeps an imagery layer on the imagery path despite a stray FeatureCollection", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      type: "xyz",
+      geojson: { type: "FeatureCollection", features: [{}] } as never,
+      source: { tiles: ["https://example.com/{z}/{x}/{y}.png"] },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    assert.equal(f.calls.geojsonLoads.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 1);
+  });
+
   it("keeps vector-tile layers 2D-only even if they carry incidental GeoJSON", async () => {
     const sync = newSync(f);
     const layers = ["vector-tiles", "pmtiles", "mbtiles"].map((type, index) =>

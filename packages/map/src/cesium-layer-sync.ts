@@ -25,12 +25,28 @@ type CesiumNs = typeof import("@cesium/engine");
 
 /** Layer kinds this pass renders on the globe. */
 const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
-const GEOJSON_BACKED_TYPES = new Set([
-  "geojson",
-  "flatgeobuf",
-  "geoparquet",
-  "duckdb-query",
-  "arcgis",
+
+/**
+ * Kinds that never take the GeoJSON path, whatever `layer.geojson` holds.
+ *
+ * Cesium draws imagery and 3D Tiles natively, so those go to their own
+ * branches. The tile-backed vector kinds and the deck.gl overlay keep their
+ * features somewhere Cesium has no renderer for, and a FeatureCollection that
+ * lands on one of them is a partial read-back (the attribute table pulls one
+ * off the map source), not the layer's contents — drawing it would show a
+ * viewport's worth of features as if it were the whole layer.
+ *
+ * Everything else is decided by the data rather than the type: any layer
+ * carrying a FeatureCollection renders through the GeoJSON path, so a producer
+ * that starts populating `layer.geojson` needs no change here.
+ */
+const NON_GEOJSON_TYPES = new Set([
+  ...IMAGERY_TYPES,
+  "3d-tiles",
+  "vector-tiles",
+  "pmtiles",
+  "mbtiles",
+  "deckgl-viz",
 ]);
 
 /**
@@ -92,7 +108,7 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
 }
 
 function hasGeoJsonCollection(layer: GeoLibreLayer): boolean {
-  return GEOJSON_BACKED_TYPES.has(layer.type) && layer.geojson?.type === "FeatureCollection";
+  return !NON_GEOJSON_TYPES.has(layer.type) && layer.geojson?.type === "FeatureCollection";
 }
 
 function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
@@ -226,7 +242,12 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
 function isSupported(layer: GeoLibreLayer): boolean {
   if (!isCesiumSupportedLayerType(layer)) return false;
   if (hasRenderableGeoJson(layer)) return true;
-  if (GEOJSON_BACKED_TYPES.has(layer.type)) return false;
+  // A layer that carries a FeatureCollection renders from it or not at all.
+  // Falling through to the imagery checks below would let an incidental
+  // `source.tiles` draw a layer whose features are empty or still loading.
+  // `"geojson"` is named explicitly for the case where nothing has loaded yet
+  // and there is no collection to recognize it by.
+  if (hasGeoJsonCollection(layer) || layer.type === "geojson") return false;
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
   // MapServer only: ArcGisMapServerImageryProvider speaks the MapServer REST
   // surface (a `?f=json` capabilities document, `/export`), which an ImageServer
