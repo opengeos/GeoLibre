@@ -4,6 +4,8 @@
 
 They are grouped together because they behave the same way, not because they share a data source: every one of them opens a **docked side panel** rather than a floating on-map control, so it sits alongside the Layers and Style panels, resizes with them, and can be collapsed. That is also why these entries have no "position" submenu — unlike most plugins, there is no on-map control to place in a corner.
 
+![The Plugins menu with the Web Services submenu open, listing all seventeen catalog and service browsers](https://assets.geolibre.app/images/geolibre-web-services-menu.webp)
+
 ## How the panels behave
 
 - **Activating** an entry opens its panel; closing the panel deactivates the plugin. A check mark next to **Web Services** in the Plugins menu means at least one of them is active.
@@ -45,6 +47,8 @@ Searches the [FEMA National Flood Hazard Layer](https://www.fema.gov/flood-maps/
 - **Zoom to layer extent**, taken from the service capabilities.
 - **Insert before** places new layers beneath an existing map layer (for example, below basemap labels).
 
+![The FEMA NFHL panel with Flood Hazard Zones checked, drawn over Miami Beach at 55% opacity](https://assets.geolibre.app/images/geolibre-web-services-fema-nfhl.webp)
+
 ## NASA Earthdata
 
 Browses [NASA GIBS](https://earthdata.nasa.gov/gibs) (Global Imagery Browse Services), the pre-rendered global imagery tiles behind Worldview.
@@ -55,6 +59,8 @@ Browses [NASA GIBS](https://earthdata.nasa.gov/gibs) (Global Imagery Browse Serv
 
 !!! tip "GIBS dates"
     Some GIBS products publish with a lag, so today's date can return empty tiles. Step back a day if a layer looks blank.
+
+![The NASA Earthdata panel with MODIS Aqua true-color imagery on the globe and a date picker under Added layers](https://assets.geolibre.app/images/geolibre-web-services-nasa-earthdata.webp)
 
 ## US EPA EnviroAtlas
 
@@ -123,6 +129,8 @@ Searches public datasets published to [ArcGIS Hub](https://hub.arcgis.com/).
 - **Add to map** loads supported layers, **Zoom** frames them, and **Download** saves the data. A dataset with several layers downloads only the first, and the panel tells you so.
 - Results are paged: the panel shows how many of the total you are looking at, with **Load more** to continue.
 
+![The ArcGIS Hub panel showing search results for national park boundaries, with the NPS feature service added to the map](https://assets.geolibre.app/images/geolibre-web-services-arcgis-hub.webp)
+
 ## Socrata
 
 Searches public [Socrata](https://dev.socrata.com/) open-data catalogs — the platform behind many city, county, and state data portals — and adds their GeoJSON datasets to the map. Keyword search, paged results, and **Load more**, the same as ArcGIS Hub.
@@ -143,6 +151,8 @@ A general-purpose [STAC](https://stacspec.org/) browser that works with any STAC
 - **Add an asset** to the map. GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, and Zarr (including Icechunk repositories) are supported; unsupported assets say so rather than failing silently.
 - **Raster rendering options** — bands, colormap, min/max, and NoData — apply to assets added after you change them. The COG rendering engine picker is global: it applies to every raster on the map, including ones already added.
 - Search-result footprints are drawn as their own layer, and each item can be zoomed to, added, or downloaded.
+
+![The STAC Catalogs panel connected to Earth Search, with a Sentinel-2 true-color scene added over New Orleans](https://assets.geolibre.app/images/geolibre-web-services-stac-catalogs.webp)
 
 ## Source Cooperative
 
