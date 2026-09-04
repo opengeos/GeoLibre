@@ -3314,7 +3314,11 @@ export function LayerPanel({
             const canExportRaster = layerCaps.export && canExportRasterLayer(layer);
             // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
             // via the in-browser geolibre-wasm extractors, drawn on the map.
-            const canExtractSubset = layerCaps.export && canExtractRasterSubset(layer);
+            // `!cesiumPrimary`: the subset panel draws its extract box on the
+            // MapLibre canvas, which does not exist while the globe is primary
+            // (DesktopShell unmounts the panel there) — #2217 review.
+            const canExtractSubset =
+              layerCaps.export && !cesiumPrimary && canExtractRasterSubset(layer);
             // Rasters added through the floating Add Raster Layer panel are
             // styled there; offer a shortcut to reopen that panel since it is
             // dismissed (and its on-map icon removed) when closed.

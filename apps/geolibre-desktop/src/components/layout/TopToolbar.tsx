@@ -1145,6 +1145,9 @@ export function TopToolbar({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
+  // The globe owns the primary map, so the MapLibre-only entries below are dead
+  // while it is active and the View menu becomes the only way back to 2D (#2217).
+  const cesiumPrimary = useAppStore((s) => s.primaryRenderer) === "cesium";
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
   const loadEditorFeaturesOpen = useAppStore((s) => s.ui.loadEditorFeaturesOpen);
@@ -1681,22 +1684,29 @@ export function TopToolbar({
             run: () => setSegmentationOpen(true),
           },
         ]),
-    {
-      id: "proc.objectDetection",
-      title: t("toolbar.command.objectDetection"),
-      group: t("toolbar.commandGroup.processing"),
-      keywords: "object detection yolo onnx ai detect imagery boxes",
-      icon: Sparkles,
-      run: () => setObjectDetectionOpen(true),
-    },
-    {
-      id: "proc.segmentEverything",
-      title: t("toolbar.command.segmentEverything"),
-      group: t("toolbar.commandGroup.processing"),
-      keywords: "segment everything slimsam sam automatic mask imagery polygons",
-      icon: Sparkles,
-      run: () => setSegmentEverythingOpen(true),
-    },
+    // Both panels need the MapLibre canvas, which the globe replaces; the
+    // palette has no disabled state, so drop the commands rather than offer
+    // two that silently do nothing (#2217 review).
+    ...(cesiumPrimary
+      ? []
+      : [
+          {
+            id: "proc.objectDetection",
+            title: t("toolbar.command.objectDetection"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "object detection yolo onnx ai detect imagery boxes",
+            icon: Sparkles,
+            run: () => setObjectDetectionOpen(true),
+          },
+          {
+            id: "proc.segmentEverything",
+            title: t("toolbar.command.segmentEverything"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "segment everything slimsam sam automatic mask imagery polygons",
+            icon: Sparkles,
+            run: () => setSegmentEverythingOpen(true),
+          },
+        ]),
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.conversion.${kind}`,
       title: t(titleKey),
@@ -2128,7 +2138,13 @@ export function TopToolbar({
       {!viewer && isMenuVisible(uiProfile, "edit") && (
         <EditMenu chrome={chrome} mapControllerRef={mapControllerRef} />
       )}
-      {isMenuVisible(uiProfile, "view") && (
+      {/* `|| cesiumPrimary`: an admin or custom profile can hide the whole "view"
+          menu via `hiddenMenus`, which ViewMenu's own item-level override cannot
+          defeat. Hiding it while a project opens with `primaryRenderer: "cesium"`
+          would strand the user on the globe with no path back to MapLibre, so
+          the menu stays mounted there and renders only the Rendering engine
+          submenu (#2217 review). */}
+      {(isMenuVisible(uiProfile, "view") || cesiumPrimary) && (
         <ViewMenu
           chrome={chrome}
           history={viewportHistory}

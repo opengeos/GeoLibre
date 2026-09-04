@@ -77,6 +77,10 @@ export function ProcessingMenu({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
+  // Both panels read the map canvas through a `MapController`, which does not
+  // exist while the globe owns the primary map — DesktopShell unmounts them
+  // there, so selecting either would do nothing at all (#2217 review).
+  const cesiumPrimary = useAppStore((s) => s.primaryRenderer) === "cesium";
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
@@ -702,14 +706,20 @@ export function ProcessingMenu({
               {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.objectDetection") && (
-                <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
+                <DropdownMenuItem
+                  disabled={cesiumPrimary}
+                  onSelect={() => setObjectDetectionOpen(true)}
+                >
                   {t("toolbar.command.objectDetection")}
                 </DropdownMenuItem>
               )}
               {/* SlimSAM "segment everything" also runs client-side (onnxruntime-web),
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.segmentEverything") && (
-                <DropdownMenuItem onSelect={() => setSegmentEverythingOpen(true)}>
+                <DropdownMenuItem
+                  disabled={cesiumPrimary}
+                  onSelect={() => setSegmentEverythingOpen(true)}
+                >
                   {t("toolbar.command.segmentEverything")}
                 </DropdownMenuItem>
               )}

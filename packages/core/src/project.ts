@@ -930,8 +930,10 @@ export function normalizeMapLayout(value: unknown): MapGridLayout | null {
  * Returns null for the default 2D map — absent, unknown, or an explicit
  * `"maplibre"` — because the field is only written when it is not the default,
  * so a MapLibre project serializes byte-identically to before this existed.
+ * The return type is narrowed to `"cesium" | null` rather than the full
+ * {@link MapRendererKind} for that reason: `"maplibre"` is never a result.
  */
-export function normalizePrimaryRenderer(value: unknown): MapRendererKind | null {
+export function normalizePrimaryRenderer(value: unknown): "cesium" | null {
   return value === "cesium" ? "cesium" : null;
 }
 

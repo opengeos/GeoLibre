@@ -35,7 +35,7 @@ import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
-import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
 
 /** Selectable map-grid presets offered in the Split View submenu. */
@@ -124,7 +124,13 @@ export function ViewMenu({
   const atMaxZoom = camera != null && camera.zoom >= camera.maxZoom - 1e-3;
   const bearingIsNorth = camera != null && Math.abs(camera.bearing) < 1e-2;
   const pitchIsFlat = camera != null && Math.abs(camera.pitch) < 1e-2;
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // TopToolbar keeps this menu mounted while the globe is primary even when a
+  // profile hid the whole "view" menu, so that the escape hatch back to 2D
+  // survives (#2217 review). Honour the admin's intent in that case by showing
+  // nothing but the Rendering engine submenu, rather than the full menu the
+  // profile asked to hide.
+  const menuHiddenByProfile = !isMenuVisible(uiProfile, "view");
+  const show = (id: string) => !menuHiddenByProfile && isMenuItemVisible(uiProfile, id);
   const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation = show("view.previousView") || show("view.nextView");
   const showResetPitch = show("view.resetPitch");
@@ -147,8 +153,9 @@ export function ViewMenu({
   // Every item in this menu except Split View and Rendering engine drives the
   // MapLibre `MapController` — zoom, viewport history, orientation, Set View,
   // and the Google Maps/Earth hand-offs all read or animate that map. The globe
-  // has no controller, so they would silently do nothing; grey them out, and
-  // let the on-map notice say why (#2217).
+  // has no controller, so they would silently do nothing; grey them out so the
+  // menu shows they are unavailable rather than failing quietly (#2217). The
+  // Rendering engine submenu below stays enabled as the way back to 2D.
   const noMapLibreMap = primaryRenderer === "cesium";
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");

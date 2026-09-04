@@ -106,6 +106,10 @@ export function ProjectMenu({
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
+  // The offline-region panel traces the extract area on the MapLibre canvas via
+  // a `MapController`. The globe has none and DesktopShell unmounts the panel
+  // there, so the entry would open nothing at all (#2217 review).
+  const cesiumPrimary = useAppStore((s) => s.primaryRenderer) === "cesium";
   const recentProjects = useAppStore((s) => s.recentProjects);
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
@@ -417,7 +421,7 @@ export function ProjectMenu({
         {show("project.offlineRegion") && (
           <DropdownMenuItem
             onSelect={onOpenOfflineBasemap}
-            disabled={!exportDataCapability.granted}
+            disabled={cesiumPrimary || !exportDataCapability.granted}
             aria-describedby={exportDataDeniedBy}
           >
             <HardDriveDownload className="me-2 h-3.5 w-3.5" />

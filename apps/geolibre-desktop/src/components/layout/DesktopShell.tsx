@@ -1354,16 +1354,27 @@ export function DesktopShell({
    */
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const cesiumPrimary = primaryRenderer === "cesium";
+  const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
+  const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   // Switching to the globe destroys the MapLibre map, which would otherwise
   // leave `mapControllerRef` pointing at a removed map and `mapReadyGeneration`
   // claiming one is live. Reset both to the boot state — the "no map yet" case
   // every consumer already handles — so nothing calls into a dead map. Switching
   // back remounts MapCanvas, which fires onControllerReady and re-arms them.
+  //
+  // The four MapLibre-only panels below unmount with the map, so any that were
+  // open are closed here too. Without this their open flags survive on the
+  // globe and the panel springs back the moment the user returns to 2D, long
+  // after they meant to dismiss it (#2217 review).
   useEffect(() => {
     if (!cesiumPrimary) return;
     mapControllerRef.current = null;
     setMapReadyGeneration(0);
-  }, [cesiumPrimary]);
+    setRasterSubsetLayer(null);
+    setBasemapExtractOpen(false);
+    setObjectDetectionOpen(false);
+    setSegmentEverythingOpen(false);
+  }, [cesiumPrimary, setObjectDetectionOpen, setSegmentEverythingOpen]);
 
   // Keep the on-map compass (reset pitch/bearing) control's tooltip translated.
   // Re-runs when the controller (re)initialises (mapReadyGeneration) and on
