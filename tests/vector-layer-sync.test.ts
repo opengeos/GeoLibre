@@ -8,6 +8,7 @@ import type {
   VectorLayerStyle,
 } from "maplibre-gl-vector";
 import { replayVectorLayer } from "../packages/plugins/src/plugins/maplibre-vector";
+import { STAC_ASSET_ACCESS_METADATA_KEY } from "../packages/plugins/src/plugins/stac-signing";
 import {
   createVectorStoreLayer,
   isEmbeddableLocalVectorLayer,
@@ -436,6 +437,26 @@ describe("syncVectorLayersToStore", () => {
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
     assert.equal(layer.source.type, "vector");
     assert.equal(layer.type, "vector-tiles");
+  });
+
+  it("keeps STAC access metadata across repeated syncs", () => {
+    syncVectorLayersToStore(fakeControl([vectorInfo()]).control);
+    const access = {
+      catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      collectionId: "private-parquet",
+      href: "https://example.blob.core.windows.net/private-parquet/data.parquet",
+    };
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+    });
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.4 })]).control);
+
+    assert.deepEqual(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      access,
+    );
   });
 
   it("refreshes the saved panel collapsed state", () => {

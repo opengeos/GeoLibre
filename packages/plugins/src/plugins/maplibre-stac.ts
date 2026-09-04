@@ -17,7 +17,6 @@ import {
   connectStac,
   horizontalBbox,
   icechunkBranch,
-  isAzureBlobHref,
   isIcechunkAsset,
   isVisualizableAsset,
   requiresTarget,
@@ -53,6 +52,12 @@ import {
   repositoryOpenError,
   type ZarrKeyReader,
 } from "./stac-icechunk";
+import {
+  createStacAssetAccess,
+  readableStacAssetHref,
+  STAC_ASSET_ACCESS_METADATA_KEY,
+  type StacAssetAccess,
+} from "./stac-signing";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 export const PLANET_OPEN_DATA_PLUGIN_ID = "geolibre-planet-open-data";
@@ -664,45 +669,34 @@ function assetOptionLabel(item: StacItem, key: string, asset: StacAsset): string
   return `${assetLabel(key, asset)} — ${assetFormatLabel(asset)}${addability}`;
 }
 
-type SasSigner = { signUrl(url: string, collectionId: string): Promise<string> };
-let sasManager: Promise<SasSigner> | null = null;
-
-function planetaryComputerSigner(): Promise<SasSigner> {
-  sasManager ??= import("maplibre-gl-planetary-computer")
-    .then((module) => new module.SASTokenManager())
-    .catch((error) => {
-      // Don't let one failed import disable signing for the rest of the session.
-      sasManager = null;
-      throw error;
-    });
-  return sasManager;
-}
-
 /**
- * Planetary Computer serves several collections — most of the GeoParquet ones — from private
- * containers that answer 409 without a SAS token, while others (NAIP) read fine anonymously.
+ * Planetary Computer serves several collections from private containers that answer 409 without
+ * a SAS token, while others (NAIP) read fine anonymously.
  * Tokens are per-collection and expire within the hour, so they are minted when the asset is
  * added rather than when the item is parsed, and the upstream manager caches them. Anything
- * that is not an Azure blob, or that cannot be signed, is read unsigned.
- *
- * Only the GeoParquet path signs, because that is the one this branch made addable and it cannot
- * read a private container at all unsigned. PMTiles and COG read unsigned exactly as they did
- * before, rather than gaining a token they never had.
- *
- * Every one of these formats persists whatever URL it is handed: PMTiles and COG through the
- * store layer they create, and the vector control through `createVectorStoreLayer`, which records
- * the URL as both `source.url` and `sourcePath`. A project saved with a signed GeoParquet layer
- * therefore holds a token that `restoreVectorLayers` replays as-is and never re-signs, so the
- * layer stops reloading once the token lapses (about an hour). Fixing that properly means minting
- * the token per request, or re-signing on restore, rather than baking one in at add time.
+ * that is not an eligible Planetary Computer Azure blob, or that cannot be signed, is read
+ * unsigned. COG and GeoParquet layers retain the unsigned asset identity in metadata so project
+ * restore can mint a fresh token instead of replaying an expired one.
  */
-async function readableHref(item: StacItem, href: string): Promise<string> {
-  if (!isAzureBlobHref(href) || !item.collection) return href;
-  try {
-    return await (await planetaryComputerSigner()).signUrl(href, item.collection);
-  } catch {
-    return href;
-  }
+function assetAccess(
+  connection: StacConnection,
+  item: StacItem,
+  href: string,
+): StacAssetAccess | null {
+  return createStacAssetAccess(connection.url, item.collection, href);
+}
+
+function rememberAssetAccess(layerId: string, access: StacAssetAccess | null): void {
+  if (!access) return;
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
+  if (!layer) return;
+  useAppStore.getState().updateLayer(layerId, {
+    metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+  });
+}
+
+function readableHref(connection: StacConnection, item: StacItem, href: string): Promise<string> {
+  return readableStacAssetHref(assetAccess(connection, item, href), href);
 }
 
 /**
@@ -725,6 +719,7 @@ async function openIcechunkAsset(
 }
 
 async function visualizeAsset(
+  connection: StacConnection,
   item: StacItem,
   key: string,
   asset: StacAsset,
@@ -744,7 +739,7 @@ async function visualizeAsset(
     }
     case "geojson": {
       if (!appRef) throw new Error(labels.addFailed);
-      const response = await fetch(asset.href, {
+      const response = await fetch(await readableHref(connection, item, asset.href), {
         headers: { Accept: "application/geo+json, application/json" },
         signal,
       });
@@ -755,8 +750,16 @@ async function visualizeAsset(
     }
     case "parquet": {
       if (!appRef) throw new Error(labels.addFailed);
-      if (!(await addVectorLayerFromUrl(appRef, await readableHref(item, asset.href), { name }))) {
+      const access = assetAccess(connection, item, asset.href);
+      const href = await readableStacAssetHref(access, asset.href);
+      const previousIds = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+      if (!(await addVectorLayerFromUrl(appRef, href, { name }))) {
         throw new Error(labels.addFailed);
+      }
+      for (const layer of useAppStore.getState().layers) {
+        if (!previousIds.has(layer.id) && layer.source.url === href) {
+          rememberAssetAccess(layer.id, access);
+        }
       }
       return;
     }
@@ -816,7 +819,10 @@ async function visualizeAsset(
     }
     case "cog": {
       if (!appRef?.addCogLayer) throw new Error(labels.cogUnsupported);
-      await appRef.addCogLayer(name, asset.href, cogOptions);
+      const access = assetAccess(connection, item, asset.href);
+      const href = await readableStacAssetHref(access, asset.href);
+      const layerId = await appRef.addCogLayer(name, href, cogOptions);
+      rememberAssetAccess(layerId, access);
       return;
     }
     case null:
@@ -1274,7 +1280,16 @@ function buildPanel(container: HTMLElement): () => void {
           syncAsset();
           setStatus(labels.adding(assetLabel(key, asset)));
           try {
-            await visualizeAsset(item, key, asset, cogOptions(), controller.signal, target);
+            if (!connection) throw new Error(labels.addFailed);
+            await visualizeAsset(
+              connection,
+              item,
+              key,
+              asset,
+              cogOptions(),
+              controller.signal,
+              target,
+            );
             setStatus(labels.added(assetLabel(key, asset)));
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
@@ -1283,7 +1298,13 @@ function buildPanel(container: HTMLElement): () => void {
             syncAsset();
           }
         });
-        download.addEventListener("click", () => appRef?.openExternalUrl?.(selected()[1].href));
+        download.addEventListener("click", () => {
+          const asset = selected()[1];
+          if (!connection) return;
+          void readableHref(connection, item, asset.href).then((href) =>
+            appRef?.openExternalUrl?.(href),
+          );
+        });
         syncAsset();
         actions.append(assetSelect, targetSelect, add, download);
       }

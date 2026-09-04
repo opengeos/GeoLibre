@@ -18,6 +18,7 @@ import {
   wireRasterStoreSync,
   type RasterSyncableControl,
 } from "../packages/plugins/src/plugins/raster-layer-sync";
+import { STAC_ASSET_ACCESS_METADATA_KEY } from "../packages/plugins/src/plugins/stac-signing";
 
 function rasterState(patch: Partial<RasterLayerState> = {}): RasterLayerState {
   return {
@@ -353,6 +354,28 @@ describe("syncRasterLayersToStore", () => {
     } finally {
       rememberLocalRasterPath("raster-1", undefined);
     }
+  });
+
+  it("keeps STAC access metadata across repeated syncs", () => {
+    syncRasterLayersToStore(fakeControl([rasterInfo()]).control);
+    const access = {
+      catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      collectionId: "private-cog",
+      href: "https://example.blob.core.windows.net/private-cog/data.tif",
+    };
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+    });
+
+    syncRasterLayersToStore(
+      fakeControl([rasterInfo({ state: rasterState({ opacity: 0.4 }) })]).control,
+    );
+
+    assert.deepEqual(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      access,
+    );
   });
 
   it("removes store layers whose rasters are gone", () => {

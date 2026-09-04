@@ -6,6 +6,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
+import { STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -271,6 +272,7 @@ export const GEOLIBRE_OWNED_METADATA_KEYS = [
   "rasterSymbology",
   "rasterAttributeTable",
   "localBytesUrl",
+  STAC_ASSET_ACCESS_METADATA_KEY,
 ] as const;
 
 export function syncRasterLayersToStoreWithOptions(

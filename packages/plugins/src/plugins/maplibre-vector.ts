@@ -36,6 +36,7 @@ import {
   unwireVectorStoreSync,
   wireVectorStoreSync,
 } from "./vector-layer-sync";
+import { readableStacLayerHref } from "./stac-signing";
 import type { FeatureCollection } from "geojson";
 
 const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -336,9 +337,11 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           pending.push(
             trackReplay(
               layer.id,
-              replayVectorLayer(control, layer, url, restoredGroups, {
-                onError: () => failedLayerIds.add(layer.id),
-              }),
+              readableStacLayerHref(layer, url).then((href) =>
+                replayVectorLayer(control, layer, href, restoredGroups, {
+                  onError: () => failedLayerIds.add(layer.id),
+                }),
+              ),
             ),
           );
           continue;
@@ -573,7 +576,7 @@ export async function replayVectorControlLayerById(
   replayingLayerIds.add(id);
   suspendVectorStoreSync();
   try {
-    await replayVectorLayer(control, layer, url, groups);
+    await replayVectorLayer(control, layer, await readableStacLayerHref(layer, url), groups);
   } finally {
     resumeVectorStoreSync();
     replayingLayerIds.delete(id);
