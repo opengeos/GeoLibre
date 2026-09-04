@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DOMParser } from "linkedom";
+import { CSW_SAMPLES } from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
 import {
   classifyCswResource,
   createCswGetRecordsUrl,
@@ -88,4 +89,42 @@ describe("CSW catalog helpers", () => {
     assert.equal(classifyCswResource("https://x.test/rest/services/A/MapServer/0"), "arcgis");
     assert.equal(classifyCswResource("http://x.test/cgi-bin/mapserver.cgi?map=foo"), "unknown");
   });
+});
+
+/**
+ * The Add CSW Catalog dialog offers these as one-click samples. A CSW endpoint
+ * is unguessable, so a sample the search step rejects before it ever leaves the
+ * browser reads as a broken panel. These checks run the entries through the same
+ * validation and request builder the dialog uses; whether a catalog is reachable
+ * is a network question the suite deliberately leaves alone.
+ */
+describe("Add Data CSW catalog samples", () => {
+  it("offers samples with unique labels and endpoints", () => {
+    assert.ok(CSW_SAMPLES.length > 0, "no CSW samples are offered");
+    assert.equal(new Set(CSW_SAMPLES.map((s) => s.label)).size, CSW_SAMPLES.length);
+    assert.equal(new Set(CSW_SAMPLES.map((s) => s.endpoint)).size, CSW_SAMPLES.length);
+  });
+
+  for (const sample of CSW_SAMPLES) {
+    it(`builds a GetRecords request for ${sample.label}`, () => {
+      // The dialog trims before validating, so a stray space would still search;
+      // it would also be a typo, and every other field is compared untrimmed.
+      assert.equal(sample.endpoint, sample.endpoint.trim());
+      assert.ok(isHttpCswEndpoint(sample.endpoint), "endpoint is not an http(s) URL");
+      const url = new URL(createCswGetRecordsUrl(sample.endpoint, sample.keyword));
+      const endpoint = new URL(sample.endpoint);
+      assert.equal(url.origin, endpoint.origin);
+      assert.equal(url.pathname, endpoint.pathname);
+      assert.equal(url.searchParams.get("request"), "GetRecords");
+      assert.equal(url.searchParams.get("service"), "CSW");
+      // A keyword only reaches the server as a CQL constraint, so an entry that
+      // ships one must produce it (and one that doesn't must not send an empty
+      // constraint the server would reject).
+      if (sample.keyword) {
+        assert.match(url.searchParams.get("constraint") ?? "", new RegExp(sample.keyword, "i"));
+      } else {
+        assert.equal(url.searchParams.get("constraint"), null);
+      }
+    });
+  }
 });

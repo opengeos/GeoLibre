@@ -2,11 +2,12 @@ import { Button, Input, Label } from "@geolibre/ui";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CSW_SAMPLES } from "../constants";
 import { createBaseLayer } from "../helpers";
 import { openAddData } from "../open-add-data";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldString, type ServiceLibraryEntry } from "../service-library";
-import { AddDataError, useAddDataSource } from "../shared";
+import { AddDataError, SampleDataSelect, useAddDataSource } from "../shared";
 import {
   fetchCswGeoJson,
   isCswFeatureCollection,
@@ -59,16 +60,24 @@ export function CswSource({
     setIsSearching(false);
   };
 
-  const applySaved = (entry: ServiceLibraryEntry) => {
-    setEndpoint(serviceFieldString(entry.fields, "endpoint"));
-    setKeyword(serviceFieldString(entry.fields, "keyword"));
-    // The results belong to the previous catalog and their resource URLs would
-    // still be addable, so drop them — and any search still in flight for that
-    // catalog — until the new endpoint is searched.
+  // Points the form at another catalog. The results on screen belong to the
+  // previous one and their resource URLs would still be addable, so drop them —
+  // and any search still in flight for that catalog — until the new endpoint is
+  // searched.
+  const applyCatalog = (next: { endpoint: string; keyword: string }) => {
+    setEndpoint(next.endpoint);
+    setKeyword(next.keyword);
     abortSearch();
     setRecords([]);
     setRecordsEndpoint("");
     source.setError(null);
+  };
+
+  const applySaved = (entry: ServiceLibraryEntry) => {
+    applyCatalog({
+      endpoint: serviceFieldString(entry.fields, "endpoint"),
+      keyword: serviceFieldString(entry.fields, "keyword"),
+    });
   };
 
   const handleSearch = async (event: FormEvent) => {
@@ -217,6 +226,13 @@ export function CswSource({
           ))}
         </div>
       ) : null}
+      <SampleDataSelect
+        samples={CSW_SAMPLES.map((sample) => ({
+          label: sample.label,
+          value: { endpoint: sample.endpoint, keyword: sample.keyword },
+        }))}
+        onSelect={applyCatalog}
+      />
       <div className="flex justify-end">
         <Button type="button" variant="outline" onClick={source.shell.closeDialog}>
           {t("common.close")}

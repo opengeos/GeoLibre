@@ -204,6 +204,46 @@ export const CAD_SAMPLES: readonly {
   },
 ];
 
+// Public CSW catalogs offered in the Add CSW Catalog dialog's "Load sample data"
+// dropdown. A CSW endpoint is unguessable, so without these the panel opens on an
+// empty field with nothing to try. Each entry was checked to answer an anonymous
+// GetRecords over CORS *and* to return records carrying WMS/WFS/ArcGIS/GeoJSON
+// online resources, which is what makes the result list's Add buttons appear —
+// a conforming catalog whose records advertise no services (the pycsw demo
+// servers, for one) searches fine but offers nothing to add. A broad listing
+// buries those records, so three entries ship the keyword "WMS": it is the word
+// service-backed records carry in their own metadata, and searching it fills the
+// first page with entries that have something to add. Open Canada needs no
+// keyword and its unfiltered listing also advertises GeoJSON, which the dialog
+// adds to the map directly instead of handing off to another source. Labels are
+// organization names, so like CAD_SAMPLES above they stay untranslated.
+export const CSW_SAMPLES: readonly {
+  label: string;
+  endpoint: string;
+  keyword: string;
+}[] = [
+  {
+    label: "Open Canada (Government of Canada)",
+    endpoint: "https://csw.open.canada.ca/geonetwork/srv/csw",
+    keyword: "",
+  },
+  {
+    label: "European Environment Agency (SDI)",
+    endpoint: "https://sdi.eea.europa.eu/catalogue/srv/eng/csw",
+    keyword: "WMS",
+  },
+  {
+    label: "geocat.ch (Swiss geodata catalog)",
+    endpoint: "https://www.geocat.ch/geonetwork/srv/eng/csw",
+    keyword: "WMS",
+  },
+  {
+    label: "Nationaal Georegister (Netherlands)",
+    endpoint: "https://nationaalgeoregister.nl/geonetwork/srv/dut/csw",
+    keyword: "WMS",
+  },
+];
+
 export const DELIMITED_TEXT_DELIMITERS: Record<
   Exclude<DelimitedTextDelimiter, "custom">,
   string
