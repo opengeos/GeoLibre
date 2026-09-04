@@ -331,6 +331,8 @@ DEFAULT_LAYER_STYLE: dict[str, Any] = {
     "pointRenderer": "single",
     "heatmapRadius": 30,
     "heatmapIntensity": 1,
+    "heatmapColorRamp": "turbo",
+    "heatmapWeightProperty": "",
     "clusterRadius": 50,
     "clusterMaxZoom": 14,
     "rasterBrightnessMin": 0,

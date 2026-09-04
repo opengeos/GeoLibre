@@ -867,11 +867,19 @@ def test_add_circle_markers_sets_radius(m):
 
 
 def test_add_heatmap_sets_renderer(m):
-    m.add_heatmap([(0, 0), (1, 1)], radius=42, intensity=1.5)
+    m.add_heatmap(
+        [(0, 0), (1, 1)],
+        radius=42,
+        intensity=1.5,
+        color_ramp="viridis",
+        weight_field="nb_ruches",
+    )
     style = _last_layer(m)["style"]
     assert style["pointRenderer"] == "heatmap"
     assert style["heatmapRadius"] == 42
     assert style["heatmapIntensity"] == 1.5
+    assert style["heatmapColorRamp"] == "viridis"
+    assert style["heatmapWeightProperty"] == "nb_ruches"
 
 
 def test_add_heatmap_validates_parameters(m):

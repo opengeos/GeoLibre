@@ -4321,6 +4321,12 @@ export function StylePanel({
                       {property}
                     </option>
                   ))}
+                  {styleValue(style, "heatmapWeightProperty") !== "" &&
+                  !numericPropertyOptions.includes(styleValue(style, "heatmapWeightProperty")) ? (
+                    <option value={styleValue(style, "heatmapWeightProperty")}>
+                      {styleValue(style, "heatmapWeightProperty")}
+                    </option>
+                  ) : null}
                 </Select>
               </div>
               <NumericStyleInput

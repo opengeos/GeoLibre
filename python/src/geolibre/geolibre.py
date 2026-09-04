@@ -1480,9 +1480,25 @@ class Map(anywidget.AnyWidget):
         *,
         radius: float = 30,
         intensity: float = 1,
+        color_ramp: str = "turbo",
+        weight_field: str = "",
         **style: Any,
     ) -> str:
-        """Add point data using GeoLibre's density heatmap renderer."""
+        """Add point data using GeoLibre's density heatmap renderer.
+
+        Args:
+            points: Points in any form accepted by :meth:`add_markers`.
+            name: Layer display name.
+            radius: Heatmap radius in pixels.
+            intensity: Heatmap intensity multiplier.
+            color_ramp: Name of the built-in heatmap color ramp.
+            weight_field: Numeric property used to weight each point, or an
+                empty string to give every point equal weight.
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
         # NaN and infinity slip past the comparisons below, so check finiteness
         # first rather than storing an unusable renderer setting.
         if not math.isfinite(float(radius)) or float(radius) <= 0:
@@ -1492,6 +1508,8 @@ class Map(anywidget.AnyWidget):
         style.setdefault("pointRenderer", "heatmap")
         style.setdefault("heatmapRadius", float(radius))
         style.setdefault("heatmapIntensity", float(intensity))
+        style.setdefault("heatmapColorRamp", str(color_ramp))
+        style.setdefault("heatmapWeightProperty", str(weight_field))
         return self.add_markers(points, name=name, **style)
 
     @staticmethod
