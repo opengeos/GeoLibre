@@ -40,16 +40,17 @@ See [Self-Hosting & Private Data](../self-hosting.md) for the full deployment
 guide, including how to serve GeoLibre and GeoLens from one origin behind a
 single sign-on layer.
 
-## Federal Web Services
+## Web Services
 
-The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four United States federal data sources:
+The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen catalog and service browsers, from the United States federal sources below to general-purpose STAC, ArcGIS Hub, Source Cooperative, and Hugging Face browsers. Each one is documented on its own page: see **[Web Services](web-services.md)**.
 
 | Service | Data |
 | --- | --- |
-| **FEMA** | National Flood Hazard Layer (NFHL) flood data. |
+| **FEMA NFHL** | National Flood Hazard Layer (NFHL) flood data. |
 | **NASA Earthdata** | NASA satellite and Earth science imagery. |
 | **EPA EnviroAtlas** | Environmental and ecosystem data. |
-| **USGS** | The National Map topographic and geographic layers. |
+| **USGS National Map** | The National Map topographic and geographic layers. |
+| **USGS NLDI** | Flowline tracing, hydrolocation, basins, and network navigation. See [USGS NLDI workflows](usgs-nldi.md). |
 
 ## Imagery and street-level
 

@@ -16,7 +16,7 @@ The built-in plugins are:
 | **GeoEditor** | Drawing, vertex editing, and deletion tools for GeoJSON layers. |
 | **Annotations** | The map-annotation toolbar and Elements panel. See [Annotations](map-controls.md#annotations-and-the-elements-panel). |
 | **Basemaps** | A basemap gallery for switching the background map, from the same catalog as the [Change basemap dialog](adding-data.md#basemaps). |
-| **Web Services** | A submenu of catalog and service browsers: FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas, USGS National Map, Vantor Open Data, Planet Open Data, Earthdata GIS, OpenAerialMap, ArcGIS Hub, Socrata, CKAN, STAC Catalogs, Source Cooperative, Natural Earth, Hugging Face, and GeoLens. See [Data Integrations](data-integrations.md). |
+| **Web Services** | A submenu of catalog and service browsers: FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas, USGS National Map, USGS NLDI, Vantor Open Data, Planet Open Data, Earthdata GIS, OpenAerialMap, ArcGIS Hub, Socrata, CKAN, STAC Catalogs, Source Cooperative, Natural Earth, Hugging Face, and GeoLens. See [Web Services](web-services.md). |
 | **Historical Imagery** | Browse historical aerial and satellite imagery for a location. |
 | **Time Slider** | Filter a temporal layer by a date or number field. |
 | **Timelapse** | Animate annual cloudless basemaps (EOX Sentinel-2, and NASA GIBS Landsat/WELD and MODIS land cover) with a provider picker and legend. |
@@ -68,4 +68,5 @@ To build a plugin, see [Reference → Plugin API](../plugin-api.md) for the Type
 ## USGS NLDI
 
 See [USGS NLDI workflows](usgs-nldi.md) for point-to-flowline tracing,
-hydrolocation, upstream basin, COMID navigation, and GeoJSON export.
+hydrolocation, upstream basin, COMID navigation, and GeoJSON export. It is
+activated from the [Web Services](web-services.md) submenu.

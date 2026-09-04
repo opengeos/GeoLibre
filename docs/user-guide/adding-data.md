@@ -168,7 +168,7 @@ Three of them, grouped under **Plugins → Web Services**, search public dataset
 | **Socrata** | Public Socrata open-data catalogs, adding their GeoJSON datasets. |
 | **CKAN** | The Humanitarian Data Exchange CKAN catalog, adding its available GeoJSON resources. |
 
-Each panel shows how many of the total results you are looking at and offers **Load more** to page further.
+Each panel shows how many of the total results you are looking at and offers **Load more** to page further. See [Web Services](web-services.md) for the other fourteen browsers in that submenu.
 
 !!! note "Browser vs desktop"
     URL-based sources work in both the browser and the desktop app. Local file dialogs, local MBTiles, local raster reads, and PostgreSQL require the desktop app. See [Getting Started](../getting-started.md).

@@ -64,6 +64,8 @@ nav:
       - AI Assistant: user-guide/ai-assistant.md
       - Data Integrations: user-guide/data-integrations.md
       - Plugins & Marketplace: user-guide/plugins.md
+      - Web Services: user-guide/web-services.md
+      - USGS NLDI: user-guide/usgs-nldi.md
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
