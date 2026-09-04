@@ -256,6 +256,17 @@ def test_buffer_rejects_a_non_numeric_distance_type(distance: object) -> None:
 
 
 @requires_geopandas
+@pytest.mark.parametrize("field", ["units", "side", "distance"])
+def test_buffer_reads_an_explicit_null_as_the_default(field: str) -> None:
+    # An absent parameter and an explicit JSON null take the same default, for
+    # every field. Before this, `units: None` reached the lookup as the unit
+    # "None" and `distance: None` was rejected, while the client defaulted both.
+    parameters: dict[str, object] = {"distance": 1, field: None}
+    _, messages = run_vector_tool("buffer", SQUARE, parameters=parameters)
+    assert messages[0] == "Buffered 1 feature(s) by 1.0 kilometers (outside)"
+
+
+@requires_geopandas
 def test_buffer_reads_an_empty_string_distance_as_zero() -> None:
     # The one non-number both engines agree on: `"" or 0` is 0 here, and
     # `Number("")` is 0 on the client.

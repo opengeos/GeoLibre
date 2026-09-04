@@ -137,11 +137,16 @@ def _buffer(
     ``side``, so a negative distance is still rejected.
     """
     gdf = _load_gdf(geojson, "Input layer")
-    units = str(parameters.get("units", "kilometers"))
-    # Only a missing `side` defaults; an explicitly empty one falls through to
-    # the unknown-side check below, the way an empty `units` reaches the unit
-    # lookup and is rejected there. Direction is a deliberate choice, so a
-    # caller that sends a blank one gets an error rather than a silent grow.
+    # An absent parameter and an explicit JSON `null` both take the default, for
+    # all three of units/side/distance — `str(None)` would otherwise reach the
+    # lookup below as the unit "None". The client reads `null` the same way, so
+    # a caller that omits a field and one that nulls it get the same buffer.
+    raw_units = parameters.get("units")
+    units = "kilometers" if raw_units is None else str(raw_units)
+    # An explicitly *empty* side is not a missing one: it falls through to the
+    # unknown-side check below, the way an empty `units` reaches the unit lookup
+    # and is rejected there. Direction is a deliberate choice, so a caller that
+    # sends a blank one gets an error rather than a silent grow.
     raw_side = parameters.get("side")
     side = "outside" if raw_side is None else str(raw_side)
     factor = _DISTANCE_UNITS.get(units)
@@ -153,7 +158,9 @@ def _buffer(
     # bad parameters reports the same *first* error here as on the client (whose
     # `bufferTool.run` checks them in this order). Converting earlier would let
     # an unparseable distance pre-empt both checks above.
-    raw_distance = parameters.get("distance", 1)
+    raw_distance = parameters.get("distance")
+    if raw_distance is None:
+        raw_distance = 1
     # A distance must be a number or a numeric string. `or 0` below reads every
     # other falsy value (False, [], {}) as 0 while raising on a non-empty list,
     # where JavaScript coerces the same values to 0/1/5 — so the type is checked

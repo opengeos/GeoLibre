@@ -221,6 +221,16 @@ describe("buffer tool (client engine)", () => {
     });
   }
 
+  for (const field of ["units", "side", "distance"] as const) {
+    it(`reads an explicit null ${field} as the default, matching the Python engine`, async () => {
+      const { logs } = await runBuffer(SQUARE, { distance: 1, [field]: null });
+      assert.ok(
+        logs.some((m) => m === "Buffered 1 feature(s) by 1 kilometers (outside)"),
+        `expected the default buffer, got ${JSON.stringify(logs)}`,
+      );
+    });
+  }
+
   it("reads an empty-string distance as zero, matching the Python engine", async () => {
     // The one non-number both engines agree on: Python's `"" or 0` is 0.
     const { output, logs } = await runBuffer(SQUARE, { distance: "", units: "kilometers" });
