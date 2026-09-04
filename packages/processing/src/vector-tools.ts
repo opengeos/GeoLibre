@@ -306,10 +306,15 @@ export const bufferTool: ProcessingAlgorithm = {
     const fc = requireFeatures(ctx);
     if (!fc) return;
     const rawDistance = ctx.parameters.distance;
-    if (rawDistance != null && !Number.isFinite(Number(rawDistance))) {
-      // `numberParam` folds a non-finite or unparseable value into its fallback,
-      // which would hand a programmatic caller a silent 1-unit buffer where the
-      // Python engine raises. Check the raw parameter so both engines reject it.
+    // `numberParam` folds a non-finite or unparseable value into its fallback,
+    // which would hand a programmatic caller a silent 1-unit buffer where the
+    // Python engine raises. Check the raw parameter so both engines reject it.
+    // A whitespace-only string is one of those: `Number("  ")` is 0 here while
+    // the Python engine's `float("  ")` raises. An *empty* string is not — both
+    // engines read that as 0.
+    const blankDistance =
+      typeof rawDistance === "string" && rawDistance !== "" && rawDistance.trim() === "";
+    if (rawDistance != null && (blankDistance || !Number.isFinite(Number(rawDistance)))) {
       ctx.log("Error: buffer distance must be a finite number");
       return;
     }
@@ -336,26 +341,38 @@ export const bufferTool: ProcessingAlgorithm = {
     const radius = bodyLengthToEarth(distance);
     const features: Feature[] = [];
     let dropped = 0;
+    let failed = 0;
     for (const feature of fc.features) {
-      if (!feature?.geometry) continue;
+      // A null-geometry feature counts as dropped, not skipped in silence: the
+      // Python engine loads it into the GeoDataFrame and its `isna()` filter
+      // reports it, so counting it here keeps the two engines' totals equal.
+      if (!feature?.geometry) {
+        dropped += 1;
+        continue;
+      }
       let buffered: Feature | null = null;
       try {
         buffered = bufferOneFeature(feature, radius, side, units);
       } catch {
         // jsts can throw on a degenerate or self-intersecting geometry — the
-        // erosion step in `inside`/`both` is a new way to produce one. Count it
-        // as a drop rather than let it abort the whole batch and discard every
-        // feature already buffered.
-        buffered = null;
+        // erosion step in `inside`/`both` is a new way to produce one. Report
+        // it separately from an empty result (the geometry was not buffered
+        // away, it could not be buffered at all) rather than let it abort the
+        // whole batch and discard every feature already buffered.
+        failed += 1;
+        continue;
       }
       if (buffered) features.push(buffered);
       else dropped += 1;
     }
     ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units} (${side})`);
     if (dropped > 0) {
-      // Deliberately not "the inward buffer": an outward buffer can also drop a
-      // feature when the input geometry is degenerate enough to fail.
+      // Deliberately not "the inward buffer": an outward buffer also drops a
+      // feature whose geometry is missing or degenerate enough to come back empty.
       ctx.log(`Dropped ${dropped} feature(s) the buffer left empty`);
+    }
+    if (failed > 0) {
+      ctx.log(`Skipped ${failed} feature(s) the buffer could not process`);
     }
     ctx.addResultLayer?.("Buffer", featureCollection(features));
   },
