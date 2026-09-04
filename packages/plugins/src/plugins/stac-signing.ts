@@ -160,23 +160,56 @@ function sameAssetHref(left: string, right: string): boolean {
 }
 
 /**
+ * Stops waiting for a signing request as soon as the caller's own signal
+ * aborts.
+ *
+ * The request itself is left running: it is shared with every other caller
+ * waiting on the same asset, and it fills the cache for the next one. Only
+ * this caller walks away.
+ */
+function untilAborted(request: Promise<string>, signal: AbortSignal): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const abort = (): void =>
+      reject(signal.reason ?? new DOMException("Signing was cancelled", "AbortError"));
+    if (signal.aborted) {
+      // The request still settles for the callers that are waiting on it.
+      void request.catch(() => {});
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    request.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+/**
  * Returns a fresh signed URL for a protected asset, or its unsigned URL when
  * signing is unavailable. Signed URLs are cached until they near expiry, so
  * calling this again during project restore is inexpensive.
+ *
+ * An aborted `signal` rejects rather than falling back: a cancelled add must
+ * not carry on with a URL that cannot be read.
  */
 export async function readableStacAssetHref(
   access: StacAssetAccess | null,
   fallbackHref: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!access) return fallbackHref;
+  const request = planetaryComputerSignedHref(access.href);
   try {
-    return await planetaryComputerSignedHref(access.href);
-  } catch {
+    return await (signal ? untilAborted(request, signal) : request);
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return access.href;
   }
 }
 
 /** Re-signs a saved STAC-backed layer from its retained unsigned asset URL. */
-export function readableStacLayerHref(layer: GeoLibreLayer, fallbackHref: string): Promise<string> {
-  return readableStacAssetHref(stacAssetAccessFromLayer(layer, fallbackHref), fallbackHref);
+export function readableStacLayerHref(
+  layer: GeoLibreLayer,
+  fallbackHref: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return readableStacAssetHref(stacAssetAccessFromLayer(layer, fallbackHref), fallbackHref, signal);
 }

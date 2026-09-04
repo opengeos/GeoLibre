@@ -3,6 +3,7 @@ import test from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
   createStacAssetAccess,
+  readableStacAssetHref,
   readableStacLayerHref,
   STAC_ASSET_ACCESS_METADATA_KEY,
   stacAssetAccessFromLayer,
@@ -120,6 +121,43 @@ test("layers pointing at one asset share a single signing request", async () => 
     release();
     assert.deepEqual(await hrefs, Array(3).fill(`${asset}?sp=rl&sig=fresh-token`));
     assert.equal(requests, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a cancelled add stops waiting for its signing request", async () => {
+  const asset = "https://ai4edataeuwest.blob.core.windows.net/io-lulc/cancelled.tif";
+  const access = createStacAssetAccess(CATALOG, "io-lulc-annual-v02", asset);
+  assert.ok(access);
+  const originalFetch = globalThis.fetch;
+  let release = (): void => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  globalThis.fetch = (async () => {
+    await gate;
+    return new Response(
+      JSON.stringify({
+        href: `${asset}?sp=rl&sig=fresh-token`,
+        "msft:expiry": "2099-01-01T00:00:00Z",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }) as typeof fetch;
+  const controller = new AbortController();
+  try {
+    // Closing the panel must not leave the add handler pending on a stalled
+    // signer, and it must not fall back to the unreadable unsigned URL either.
+    const pending = readableStacAssetHref(access, `${asset}?sig=expired`, controller.signal);
+    controller.abort();
+    await assert.rejects(pending, (error: Error) => error.name === "AbortError");
+    // The request itself lives on for whoever is still waiting on it.
+    release();
+    assert.equal(
+      await readableStacAssetHref(access, `${asset}?sig=expired`),
+      `${asset}?sp=rl&sig=fresh-token`,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

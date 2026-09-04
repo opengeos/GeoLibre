@@ -697,8 +697,13 @@ function rememberAssetAccess(layerId: string, access: StacAssetAccess | null): v
   });
 }
 
-function readableHref(connection: StacConnection, item: StacItem, href: string): Promise<string> {
-  return readableStacAssetHref(assetAccess(connection, item, href), href);
+function readableHref(
+  connection: StacConnection,
+  item: StacItem,
+  href: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return readableStacAssetHref(assetAccess(connection, item, href), href, signal);
 }
 
 /**
@@ -741,7 +746,7 @@ async function visualizeAsset(
     }
     case "geojson": {
       if (!appRef) throw new Error(labels.addFailed);
-      const response = await fetch(await readableHref(connection, item, asset.href), {
+      const response = await fetch(await readableHref(connection, item, asset.href, signal), {
         headers: { Accept: "application/geo+json, application/json" },
         signal,
       });
@@ -753,7 +758,7 @@ async function visualizeAsset(
     case "parquet": {
       if (!appRef) throw new Error(labels.addFailed);
       const access = assetAccess(connection, item, asset.href);
-      const href = await readableStacAssetHref(access, asset.href);
+      const href = await readableStacAssetHref(access, asset.href, signal);
       const layerIds = await addVectorLayersFromUrl(appRef, href, { name });
       if (!layerIds?.length) {
         throw new Error(labels.addFailed);
@@ -818,7 +823,7 @@ async function visualizeAsset(
     case "cog": {
       if (!appRef?.addCogLayer) throw new Error(labels.cogUnsupported);
       const access = assetAccess(connection, item, asset.href);
-      const href = await readableStacAssetHref(access, asset.href);
+      const href = await readableStacAssetHref(access, asset.href, signal);
       const layerId = await appRef.addCogLayer(name, href, cogOptions);
       rememberAssetAccess(layerId, access);
       return;
@@ -1306,7 +1311,9 @@ function buildPanel(container: HTMLElement): () => void {
           signingDownload = true;
           syncAsset();
           try {
-            appRef?.openExternalUrl?.(await readableHref(connection, item, asset.href));
+            appRef?.openExternalUrl?.(
+              await readableHref(connection, item, asset.href, controller.signal),
+            );
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
