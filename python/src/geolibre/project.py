@@ -1110,6 +1110,11 @@ COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
 PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
     SWIPE_PLUGIN_ID: None,
     COMPONENTS_PLUGIN_ID: ("legend", "colorbar"),
+    # The timeline config owns its temporal source definitions. Its mirrored
+    # store layers only carry internal source ids, so dropping this state makes
+    # shared Time Slider layers impossible to reconstruct. The retained value
+    # is still recursively credential-scrubbed by the caller.
+    "maplibre-gl-time-slider": None,
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in

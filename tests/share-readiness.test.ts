@@ -114,6 +114,13 @@ describe("probeTargetFor", () => {
     );
   });
 
+  it("collapses a formatted Time Slider date template to its origin", () => {
+    assert.equal(
+      probeTargetFor("https://data.example.com/json/{date:YYYYMMDD}_acdom.json"),
+      "https://data.example.com",
+    );
+  });
+
   it("keeps a concrete URL intact so an expired link is still caught", () => {
     assert.equal(
       probeTargetFor("https://data.example.com/dem.tif"),
@@ -242,6 +249,31 @@ describe("collectShareSources", () => {
     });
     assert.equal(refs[0].status, "local");
     assert.equal(refs[0].reason, "no-source");
+  });
+
+  it("checks a Time Slider mirror through its authored hosted template", () => {
+    const template =
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/{date:YYYYMMDD}_acdom.json";
+    const refs = collectShareSources({
+      layers: [
+        layer({
+          id: "acdom",
+          name: "aCDOM440",
+          type: "raster",
+          source: { type: "raster", sourceId: "acdom" },
+          metadata: {
+            externalNativeLayer: true,
+            sourceKind: "time-slider",
+            originalUrl: template,
+          },
+        }),
+      ],
+    });
+
+    assert.equal(refs.length, 1);
+    assert.equal(refs[0].url, template);
+    assert.equal(refs[0].reason, "ok");
+    assert.equal(refs[0].probeUrl, "https://huggingface.co");
   });
 
   it("de-duplicates one template repeated across source and metadata", () => {

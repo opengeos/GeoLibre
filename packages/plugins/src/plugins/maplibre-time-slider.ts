@@ -1164,6 +1164,16 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
 export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
+  const authoredUrl =
+    "url" in spec && typeof spec.url === "string"
+      ? spec.url.trim()
+      : "tiles" in spec && typeof spec.tiles === "string"
+        ? spec.tiles.trim()
+        : "baseUrl" in spec && typeof spec.baseUrl === "string"
+          ? spec.baseUrl.trim()
+          : "data" in spec && typeof spec.data === "string"
+            ? spec.data.trim()
+            : "";
   // COG and mosaic sources carry real source values, so Identify reads their
   // bands at the timeline's current date (see time-slider-pixel-identify) the
   // same way it reads a COG added through Add Raster Layer. XYZ/WMS sources are
@@ -1206,6 +1216,12 @@ export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
       sourceId,
       sourceIds: [sourceId],
       sourceKind: STORE_LAYER_SOURCE_KIND,
+      // The renderer is owned by the control, so `source` intentionally holds
+      // only its native id. Keep the authored reference on the mirror as well:
+      // share readiness otherwise mistakes this hosted temporal layer for a
+      // local/query layer with no recipient-openable source. `originalUrl` is
+      // already a recognized, credential-scrubbed reference field.
+      ...(authoredUrl ? { originalUrl: authoredUrl } : {}),
     },
   };
 }

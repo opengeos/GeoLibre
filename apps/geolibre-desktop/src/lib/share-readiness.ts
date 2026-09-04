@@ -256,7 +256,11 @@ export function isPrivateHostname(hostname: string): boolean {
 
 /** Whether a URL still holds a tile/service placeholder such as `{z}`. */
 function isTemplateUrl(url: string): boolean {
-  return /\{[a-z0-9_-]+\}/i.test(url);
+  // Besides map tiles (`{z}`), temporal sources use format-bearing tokens such
+  // as `{date:YYYYMMDD}`. Treat any non-empty brace token as a template; URL
+  // parses percent-encode the braces before probing, which would otherwise ask
+  // the host for a literal placeholder and misreport a healthy source as 404.
+  return /\{[^{}]+\}/.test(url);
 }
 
 /**

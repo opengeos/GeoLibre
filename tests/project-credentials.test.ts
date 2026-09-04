@@ -80,12 +80,42 @@ describe("project credential redaction", () => {
       external: { arbitraryName: "plugin-secret" },
       "maplibre-gl-components": { legend: { A: "#112233" } },
       "maplibre-gl-swipe": { position: 50 },
+      "maplibre-gl-time-slider": {
+        startDate: "2024-01-01T00:00:00.000Z",
+        interval: 1,
+        granularity: "day",
+        currentDate: "2024-01-01T00:00:00.000Z",
+        speed: 800,
+        loop: false,
+        sources: [
+          {
+            type: "mosaic",
+            id: "acdom",
+            url: "https://example.com/{date:YYYYMMDD}_acdom.json",
+          },
+        ],
+      },
     };
     const { project, redactedPaths } = redactProjectCredentials(original);
     const settings = project.plugins!.settings;
 
     assert.deepEqual(settings["maplibre-gl-components"], { legend: { A: "#112233" } });
     assert.deepEqual(settings["maplibre-gl-swipe"], { position: 50 });
+    assert.deepEqual(settings["maplibre-gl-time-slider"], {
+      startDate: "2024-01-01T00:00:00.000Z",
+      interval: 1,
+      granularity: "day",
+      currentDate: "2024-01-01T00:00:00.000Z",
+      speed: 800,
+      loop: false,
+      sources: [
+        {
+          type: "mosaic",
+          id: "acdom",
+          url: "https://example.com/{date:YYYYMMDD}_acdom.json",
+        },
+      ],
+    });
     // An unknown plugin's blob is free-form and can hold a key, so it still goes.
     assert.ok(!("external" in settings));
     assert.ok(redactedPaths.includes("plugins.settings"));
