@@ -274,6 +274,10 @@
         "label": "Mặt Trăng",
         "description": "Thêm dịch vụ WMS GetMap dưới dạng lớp raster xếp chồng."
       },
+      "csw": {
+        "label": "Tìm kiếm danh mục CSW",
+        "description": "Tìm kiếm tập dữ liệu trong dịch vụ danh mục OGC và thêm các tài nguyên web được hỗ trợ vào bản đồ."
+      },
       "wfs": {
         "label": "Thêm lớp WFS",
         "description": "Thêm các tính năng WFS bằng cách yêu cầu GeoJSON từ dịch vụ GetFeature."
@@ -421,6 +425,21 @@
       "noLayersFound": "Không có lớp nào được tìm thấy cho dịch vụ này.",
       "retrieveError": "Không thể truy xuất các lớp từ dịch vụ này.",
       "version": "Phiên bản WMS"
+    },
+    "csw": {
+      "defaultName": "Danh mục CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Từ khóa",
+      "search": "Tìm kiếm",
+      "searching": "Đang tìm kiếm…",
+      "results": "Kết quả danh mục",
+      "errorUrl": "Hãy nhập URL dịch vụ CSW hợp lệ theo HTTP hoặc HTTPS.",
+      "searchError": "Không thể tìm kiếm trong danh mục này.",
+      "noResults": "Không tìm thấy tập dữ liệu nào phù hợp.",
+      "invalidGeoJson": "Tài nguyên đã chọn không phải là FeatureCollection GeoJSON.",
+      "addError": "Không thể thêm tài nguyên danh mục này.",
+      "addResource": "Thêm {{kind}}",
+      "noSupportedResources": "Không có tài nguyên WMS, WFS, ArcGIS hoặc GeoJSON nào được hỗ trợ được công bố."
     },
     "wfs": {
       "urlPlaceholder": "https://example.com/geoserver/wfs",
@@ -1805,6 +1824,9 @@
     "only2d": "chỉ 2D",
     "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
+  "renderer": {
+    "layerUnsupported": "Không được kết xuất trên quả địa cầu 3D"
+  },
   "mapContextMenu": {
     "zoomInHere": "Phóng to ở đây",
     "viewInGoogleMaps": "Xem trên Google Maps",
@@ -2390,6 +2412,7 @@
       "mbtiles": "Lớp MBTiles",
       "xyz": "Lớp XYZ",
       "wms": "Lớp WMS",
+      "csw": "Danh mục CSW",
       "wfs": "Lớp WFS",
       "wmts": "Lớp WMTS",
       "ogcFeatures": "API OGC - Tính năng",
@@ -2653,6 +2676,10 @@
       "splitViewGrid2x3": "Lưới 2 × 3",
       "splitViewGrid3x3": "Lưới 3 × 3",
       "splitViewSync": "Đồng bộ hóa lượt xem",
+      "renderingEngine": "Bộ kết xuất",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "Không khả dụng trên quả địa cầu 3D. Hãy quay lại MapLibre 2D qua Xem → Bộ kết xuất.",
       "viewInGoogleMaps": "Xem trên Google Maps",
       "viewInGoogleEarth": "Xem trong Google Earth",
       "zoomIn": "Phóng to",
@@ -2851,6 +2878,7 @@
       "batchTools": "Công cụ hàng loạt"
     },
     "plugin": {
+      "maplibre-gl-dimensions": "Kích thước",
       "maplibre-gl-directions": "Chỉ đường",
       "maplibre-gl-earthdata-gis": "GIS dữ liệu trái đất",
       "maplibre-gl-enviroatlas": "EPA Hoa Kỳ EnviroAtlas",
@@ -3843,6 +3871,27 @@
       "thick": "Dày"
     },
     "deleteLast": "Xóa chú thích cuối cùng"
+  },
+  "dimensions": {
+    "toolbar": "Công cụ ghi kích thước",
+    "layerName": "Kích thước",
+    "tools": {
+      "linear": "Kích thước thẳng",
+      "angular": "Kích thước góc"
+    },
+    "unit": "Đơn vị",
+    "snap": "Bắt dính vào đỉnh",
+    "color": "Màu kích thước",
+    "width": "Chiều rộng đường",
+    "widthOptions": {
+      "thin": "Mảnh",
+      "medium": "Trung bình",
+      "thick": "Dày"
+    },
+    "deleteLast": "Xóa kích thước cuối cùng",
+    "clearAll": "Xóa tất cả kích thước",
+    "newLayer": "Lớp kích thước mới",
+    "confirmClearAll_other": "Xóa toàn bộ {{count}} kích thước trong lớp này? Thao tác này không thể hoàn tác."
   },
   "pythonConsole": {
     "runScript": "__PH0__ tiện ích",
@@ -7658,5 +7707,65 @@
       "downloadsStarted": "Đã bắt đầu {{started}} lượt tải xuống. {{failed}} lượt thất bại.",
       "downloadCancelled": "Tải xuống đã bị hủy hoặc thất bại."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "Công cụ mạng lưới USGS NLDI",
+    "hint": "Trước tiên hãy chọn hướng của đường dòng chảy rồi nhấp lên bản đồ. Sau đó chọn hướng dẫn hướng, nhấn nút được làm nổi bật để nạp các danh mục có sẵn, chọn một danh mục như trạm đo dòng chảy hoặc giếng nước, rồi nhấn lại để vẽ danh mục đó.",
+    "directionComplete": "Toàn bộ đường dòng chảy — trả về trọn đoạn sông NHD",
+    "directionUp": "Chỉ thượng lưu — trả về đoạn sông phía trên điểm đã chọn",
+    "directionDown": "Chỉ hạ lưu — trả về đoạn sông phía dưới điểm đã chọn",
+    "basinButton": "Lưu vực từ vị trí thủy văn",
+    "navigationPlaceholder": "Chọn hướng — bắt buộc trước khi vẽ",
+    "navigationUpstreamMain": "Dòng chính thượng lưu — đi theo lòng dẫn chính",
+    "navigationUpstreamTributaries": "Phụ lưu thượng lưu — tìm các nhánh đổ vào",
+    "navigationDownstreamMain": "Dòng chính hạ lưu — đi theo lòng dẫn chính",
+    "navigationDownstreamDiversions": "Phân lưu hạ lưu — đi theo các nhánh tách dòng",
+    "sourcePlaceholder": "Hãy nhấn “Nạp nguồn và vẽ” trước",
+    "distancePlaceholder": "Khoảng cách (km)",
+    "navigationButton": "1. Nạp nguồn và vẽ dẫn hướng",
+    "navigationButtonAgain": "Vẽ thêm một lớp dẫn hướng",
+    "exportButton": "Xuất kết quả đã vẽ sang GeoJSON",
+    "addLayersButton": "Thêm kết quả đã vẽ vào Lớp của GeoLibre",
+    "clearButton": "Xóa kết quả NLDI",
+    "noComid": "Không có COMID nào được trả về cho điểm này.",
+    "requestingBasin": "Đang yêu cầu lưu vực thượng lưu…",
+    "basinRendered": "Đã vẽ lưu vực thượng lưu cho COMID {{comid}}.",
+    "basinFailed": "Yêu cầu lưu vực thất bại.",
+    "selectNavigation": "Hãy chọn một phương thức dẫn hướng sau khi dò một điểm.",
+    "invalidDistance": "Khoảng cách phải nằm trong khoảng từ 1 đến 9999 km.",
+    "discoveringSources": "Đang dò tìm các nguồn dẫn hướng NLDI…",
+    "navigationUnavailable": "Phương thức dẫn hướng đó không khả dụng cho COMID này.",
+    "noPlottableSource": "NLDI không trả về nguồn dẫn hướng nào có thể vẽ được.",
+    "navigationEmpty": "{{source}} không trả về đối tượng nào có thể lập bản đồ cho lần dẫn hướng này.",
+    "navigationAdded": "Đã thêm {{source}} qua {{navigation}} cho COMID {{comid}} ({{km}} km). Các lớp dẫn hướng hiện có vẫn ở trên bản đồ.",
+    "navigationFailed": "Yêu cầu dẫn hướng thất bại.",
+    "tracing": "Đang dò tới đường dòng chảy NHD gần nhất…",
+    "flowline": "Đã vẽ đường dòng chảy.",
+    "flowlineComid": "Đã vẽ đường dòng chảy; COMID {{comid}} đã sẵn sàng cho quy trình lưu vực.",
+    "flowlineFallback": "Đã vẽ đường dòng chảy bằng phương án dự phòng vị trí thủy văn của NLDI.",
+    "flowlineFallbackComid": "Đã vẽ đường dòng chảy bằng phương án dự phòng vị trí thủy văn của NLDI; COMID {{comid}} đã sẵn sàng cho quy trình lưu vực.",
+    "requestFailed": "Yêu cầu NLDI thất bại.",
+    "nothingToAdd": "Không có đối tượng NLDI đã vẽ nào để thêm.",
+    "layersAdded_other": "Đã thêm {{count}} lớp NLDI vào một nhóm “Kết quả USGS NLDI”.",
+    "layerGroupName": "Kết quả USGS NLDI",
+    "layerFlowline": "Đường dòng chảy NLDI",
+    "layerRaindrop": "Đường đi hạt mưa NLDI",
+    "layerSelectedPoint": "Điểm đã chọn NLDI",
+    "layerBasin": "Lưu vực thượng lưu NLDI",
+    "layerNavigation": "Dẫn hướng NLDI {{index}}",
+    "resultCleared": "Đã xóa kết quả NLDI.",
+    "directionalUnavailable": "Không thể dò dòng chảy theo hướng khi tiến trình của USGS đang ngoại tuyến. Hãy chọn “Toàn bộ đường dòng chảy” hoặc thử lại sau.",
+    "noFlowlineNearby": "NLDI không tìm thấy đường dòng chảy nào gần điểm này.",
+    "httpError": "USGS NLDI trả về HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI trả về HTTP {{status}}: {{detail}}",
+    "noAttributes": "NLDI không trả về thuộc tính nào.",
+    "catalogCaGages": "Trạm đo dòng chảy California (ca_gages)",
+    "catalogNwisSite": "Trạm nước mặt NWIS (trạm đo dòng chảy)",
+    "catalogNwisGw": "Giếng nước ngầm NWIS",
+    "catalogGfv11Pois": "Điểm thuộc USGS Geospatial Fabric",
+    "catalogHuc12pp": "Điểm thoát nước HUC12",
+    "catalogNmwdiSt": "Trạm quan trắc nước New Mexico",
+    "catalogFlowlines": "Đường dòng chảy NHDPlus"
   }
 }

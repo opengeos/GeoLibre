@@ -274,6 +274,10 @@
         "label": "WMSレイヤーを追加",
         "description": "WMS GetMapサービスをタイル化されたラスターレイヤーとして追加します。"
       },
+      "csw": {
+        "label": "CSWカタログを検索",
+        "description": "OGCカタログサービスからデータセットを検索し、対応するWebリソースを地図に追加します。"
+      },
       "wfs": {
         "label": "WFSレイヤーを追加",
         "description": "GetFeatureサービスからGeoJSONを要求してWFSフィーチャを追加します。"
@@ -421,6 +425,21 @@
       "noLayersFound": "このサービスにはレイヤーが見つかりませんでした。",
       "retrieveError": "このサービスからレイヤーを取得できませんでした。",
       "version": "WMSバージョン"
+    },
+    "csw": {
+      "defaultName": "CSWカタログ",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "キーワード",
+      "search": "検索",
+      "searching": "検索中…",
+      "results": "カタログの検索結果",
+      "errorUrl": "有効なHTTPまたはHTTPSのCSWサービスURLを入力してください。",
+      "searchError": "このカタログを検索できませんでした。",
+      "noResults": "一致するデータセットは見つかりませんでした。",
+      "invalidGeoJson": "選択したリソースはGeoJSONのFeatureCollectionではありません。",
+      "addError": "このカタログリソースを追加できませんでした。",
+      "addResource": "{{kind}}を追加",
+      "noSupportedResources": "対応するWMS、WFS、ArcGIS、GeoJSONのリソースは提供されていません。"
     },
     "wfs": {
       "defaultName": "WFSレイヤー",
@@ -1805,6 +1824,9 @@
     "only2d": "2Dのみ",
     "cesiumTokenHint": "地形とIon衛星画像を使うには、設定でCesium Ionトークンを追加してください"
   },
+  "renderer": {
+    "layerUnsupported": "3D地球儀では描画されません"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "座標をクリップボードにコピー",
     "quickActions": "クイックアクション",
@@ -2390,6 +2412,7 @@
       "mbtiles": "MBTilesレイヤー",
       "xyz": "XYZレイヤー",
       "wms": "WMSレイヤー",
+      "csw": "CSWカタログ",
       "wfs": "WFSレイヤー",
       "wmts": "WMTSレイヤー",
       "ogcFeatures": "OGC API - Features",
@@ -2653,6 +2676,10 @@
       "splitViewGrid2x3": "2 × 3 グリッド",
       "splitViewGrid3x3": "3 × 3 グリッド",
       "splitViewSync": "ビューを同期",
+      "renderingEngine": "レンダリングエンジン",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "3D地球儀では利用できません。「表示 → レンダリングエンジン」からMapLibre 2Dに戻してください。",
       "viewInGoogleMaps": "Google マップで表示",
       "viewInGoogleEarth": "Google Earth で表示",
       "zoomIn": "ズームイン",
@@ -2852,6 +2879,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "注釈",
+      "maplibre-gl-dimensions": "寸法",
       "maplibre-gl-streetview": "ストリートビュー",
       "maplibre-gl-time-slider": "タイムスライダー",
       "geolibre-timelapse": "タイムラプス",
@@ -3843,6 +3871,27 @@
     "saveElement": "要素を保存",
     "atPoint": "地点に固定",
     "pinnedToExtent": "範囲に固定"
+  },
+  "dimensions": {
+    "toolbar": "寸法ツール",
+    "layerName": "寸法",
+    "tools": {
+      "linear": "直線寸法",
+      "angular": "角度寸法"
+    },
+    "unit": "単位",
+    "snap": "頂点にスナップ",
+    "color": "寸法の色",
+    "width": "線幅",
+    "widthOptions": {
+      "thin": "細い",
+      "medium": "中",
+      "thick": "太い"
+    },
+    "deleteLast": "最後の寸法を削除",
+    "clearAll": "すべての寸法を消去",
+    "newLayer": "新しい寸法レイヤー",
+    "confirmClearAll_other": "このレイヤーの寸法{{count}}件をすべて削除しますか？この操作は元に戻せません。"
   },
   "pythonConsole": {
     "title": "Pythonコンソール",
@@ -7658,5 +7707,65 @@
       "downloadsStarted": "{{started}} 件のダウンロードを開始しました。{{failed}} 件が失敗しました。",
       "downloadCancelled": "ダウンロードがキャンセルまたは失敗しました。"
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI 水系ネットワークツール",
+    "hint": "まず流路の方向を選んで地図をクリックします。次にナビゲーション方向を選び、強調表示されたボタンを押して利用可能なカタログを読み込み、観測所や井戸などのカタログを選択して、もう一度押すとそのカタログが描画されます。",
+    "directionComplete": "流路全体 — NHDリーチ全体を返します",
+    "directionUp": "上流のみ — 地点より上流のリーチを返します",
+    "directionDown": "下流のみ — 地点より下流のリーチを返します",
+    "basinButton": "水文位置から流域を取得",
+    "navigationPlaceholder": "方向を選択 — 描画前に必須です",
+    "navigationUpstreamMain": "上流本流 — 主流路をたどります",
+    "navigationUpstreamTributaries": "上流支流 — 流入する分岐を探します",
+    "navigationDownstreamMain": "下流本流 — 主流路をたどります",
+    "navigationDownstreamDiversions": "下流分流 — 分岐した流路をたどります",
+    "sourcePlaceholder": "先に「ソースを読み込んで描画」を押してください",
+    "distancePlaceholder": "距離 (km)",
+    "navigationButton": "1. ソースを読み込んでナビゲーションを描画",
+    "navigationButtonAgain": "別のナビゲーションレイヤーを描画",
+    "exportButton": "描画結果をGeoJSONにエクスポート",
+    "addLayersButton": "描画結果をGeoLibreのレイヤーに追加",
+    "clearButton": "NLDIの結果をクリア",
+    "noComid": "この地点に対するCOMIDは返されませんでした。",
+    "requestingBasin": "上流域を要求しています…",
+    "basinRendered": "COMID {{comid}} の上流域を描画しました。",
+    "basinFailed": "流域の要求に失敗しました。",
+    "selectNavigation": "地点をトレースした後にナビゲーション方法を選択してください。",
+    "invalidDistance": "距離は1〜9999 kmの範囲で指定してください。",
+    "discoveringSources": "NLDIのナビゲーションソースを検出しています…",
+    "navigationUnavailable": "そのナビゲーション方法はこのCOMIDでは利用できません。",
+    "noPlottableSource": "NLDIから描画可能なナビゲーションソースが返されませんでした。",
+    "navigationEmpty": "{{source}} はこのナビゲーションで地図化できるフィーチャを返しませんでした。",
+    "navigationAdded": "COMID {{comid}} に対して {{navigation}} 経由で {{source}} を追加しました ({{km}} km)。既存のナビゲーションレイヤーは地図上に残ります。",
+    "navigationFailed": "ナビゲーションの要求に失敗しました。",
+    "tracing": "最も近いNHD流路までトレースしています…",
+    "flowline": "流路を描画しました。",
+    "flowlineComid": "流路を描画しました。COMID {{comid}} は流域ワークフローで利用できます。",
+    "flowlineFallback": "NLDIの水文位置フォールバックを使って流路を描画しました。",
+    "flowlineFallbackComid": "NLDIの水文位置フォールバックを使って流路を描画しました。COMID {{comid}} は流域ワークフローで利用できます。",
+    "requestFailed": "NLDIの要求に失敗しました。",
+    "nothingToAdd": "追加できる描画済みのNLDIフィーチャがありません。",
+    "layersAdded_other": "{{count}}個のNLDIレイヤーを1つの「USGS NLDIの結果」グループに追加しました。",
+    "layerGroupName": "USGS NLDIの結果",
+    "layerFlowline": "NLDI流路",
+    "layerRaindrop": "NLDI雨滴経路",
+    "layerSelectedPoint": "NLDI選択地点",
+    "layerBasin": "NLDI上流域",
+    "layerNavigation": "NLDIナビゲーション {{index}}",
+    "resultCleared": "NLDIの結果をクリアしました。",
+    "directionalUnavailable": "USGSの処理がオフラインの間は、方向付きの流路トレースは利用できません。「流路全体」を選ぶか、後でもう一度お試しください。",
+    "noFlowlineNearby": "NLDIはこの地点の近くに流路を見つけられませんでした。",
+    "httpError": "USGS NLDIがHTTP {{status}}を返しました",
+    "httpErrorDetail": "USGS NLDIがHTTP {{status}}を返しました: {{detail}}",
+    "noAttributes": "NLDIから属性は返されませんでした。",
+    "catalogCaGages": "カリフォルニア州の観測所 (ca_gages)",
+    "catalogNwisSite": "NWIS地表水観測地点 (流量観測所)",
+    "catalogNwisGw": "NWIS地下水井戸",
+    "catalogGfv11Pois": "USGS Geospatial Fabricの地点",
+    "catalogHuc12pp": "HUC12流出点",
+    "catalogNmwdiSt": "ニューメキシコ州の水文観測地点",
+    "catalogFlowlines": "NHDPlus流路"
   }
 }

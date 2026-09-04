@@ -280,6 +280,10 @@
         "label": "Добавить слой WMS",
         "description": "Добавить сервис WMS GetMap как тайловый растровый слой."
       },
+      "csw": {
+        "label": "Поиск в каталоге CSW",
+        "description": "Поиск наборов данных в службе каталога OGC и добавление поддерживаемых веб-ресурсов на карту."
+      },
       "wfs": {
         "label": "Добавить слой WFS",
         "description": "Добавить объекты WFS, запросив GeoJSON у сервиса GetFeature."
@@ -436,6 +440,21 @@
       "noLayersFound": "Для этого сервиса не найдено слоёв.",
       "retrieveError": "Не удалось получить слои из этого сервиса.",
       "version": "Версия WMS"
+    },
+    "csw": {
+      "defaultName": "Каталог CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Ключевое слово",
+      "search": "Найти",
+      "searching": "Поиск…",
+      "results": "Результаты каталога",
+      "errorUrl": "Введите корректный URL службы CSW по протоколу HTTP или HTTPS.",
+      "searchError": "Не удалось выполнить поиск в этом каталоге.",
+      "noResults": "Подходящие наборы данных не найдены.",
+      "invalidGeoJson": "Выбранный ресурс не является GeoJSON FeatureCollection.",
+      "addError": "Не удалось добавить этот ресурс каталога.",
+      "addResource": "Добавить {{kind}}",
+      "noSupportedResources": "Не объявлено ни одного поддерживаемого ресурса WMS, WFS, ArcGIS или GeoJSON."
     },
     "wfs": {
       "defaultName": "Слой WFS",
@@ -1940,6 +1959,9 @@
     "only2d": "Только 2D",
     "cesiumTokenHint": "Добавьте токен Cesium Ion в настройках, чтобы получить рельеф и снимки Ion"
   },
+  "renderer": {
+    "layerUnsupported": "Не отображается на 3D-глобусе"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Копировать координаты в буфер обмена",
     "quickActions": "Быстрые действия",
@@ -2531,6 +2553,7 @@
       "mbtiles": "Слой MBTiles",
       "xyz": "Слой XYZ",
       "wms": "Слой WMS",
+      "csw": "Каталог CSW",
       "wfs": "Слой WFS",
       "wmts": "Слой WMTS",
       "ogcFeatures": "OGC API - Features",
@@ -2794,6 +2817,10 @@
       "splitViewGrid2x3": "Сетка 2 × 3",
       "splitViewGrid3x3": "Сетка 3 × 3",
       "splitViewSync": "Синхронизировать виды",
+      "renderingEngine": "Механизм отрисовки",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "Недоступно на 3D-глобусе. Вернитесь к MapLibre 2D через Вид → Механизм отрисовки.",
       "viewInGoogleMaps": "Открыть в Google Maps",
       "viewInGoogleEarth": "Открыть в Google Earth",
       "zoomIn": "Приблизить",
@@ -3002,6 +3029,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Аннотации",
+      "maplibre-gl-dimensions": "Размеры",
       "maplibre-gl-streetview": "Панорама улиц",
       "maplibre-gl-time-slider": "Ползунок времени",
       "geolibre-timelapse": "Таймлапс",
@@ -4035,6 +4063,30 @@
     "saveElement": "Сохранить элемент",
     "atPoint": "В точке",
     "pinnedToExtent": "Привязано к охвату"
+  },
+  "dimensions": {
+    "toolbar": "Инструменты простановки размеров",
+    "layerName": "Размеры",
+    "tools": {
+      "linear": "Линейный размер",
+      "angular": "Угловой размер"
+    },
+    "unit": "Единица измерения",
+    "snap": "Привязка к вершинам",
+    "color": "Цвет размера",
+    "width": "Толщина линии",
+    "widthOptions": {
+      "thin": "Тонкая",
+      "medium": "Средняя",
+      "thick": "Толстая"
+    },
+    "deleteLast": "Удалить последний размер",
+    "clearAll": "Очистить все размеры",
+    "newLayer": "Новый слой размеров",
+    "confirmClearAll_few": "Удалить все {{count}} размера в этом слое? Это действие нельзя отменить.",
+    "confirmClearAll_many": "Удалить все {{count}} размеров в этом слое? Это действие нельзя отменить.",
+    "confirmClearAll_one": "Удалить этот размер? Это действие нельзя отменить.",
+    "confirmClearAll_other": "Удалить все {{count}} размера в этом слое? Это действие нельзя отменить."
   },
   "pythonConsole": {
     "title": "Консоль Python",
@@ -7910,5 +7962,68 @@
       "downloadsStarted": "Запущено загрузок: {{started}}. Не удалось: {{failed}}.",
       "downloadCancelled": "Загрузка отменена или не удалась."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "Сетевые инструменты USGS NLDI",
+    "hint": "Сначала выберите направление водотока и щёлкните по карте. Затем выберите направление навигации, нажмите подсвеченную кнопку, чтобы загрузить доступные каталоги, выберите каталог — например, гидропосты или скважины — и нажмите её ещё раз, чтобы отобразить этот каталог.",
+    "directionComplete": "Весь водоток — возвращает полный участок NHD",
+    "directionUp": "Только вверх по течению — возвращает участок выше точки",
+    "directionDown": "Только вниз по течению — возвращает участок ниже точки",
+    "basinButton": "Бассейн по гидрологическому местоположению",
+    "navigationPlaceholder": "Выберите направление — обязательно перед построением",
+    "navigationUpstreamMain": "Главное русло вверх по течению — следует по основному руслу",
+    "navigationUpstreamTributaries": "Притоки вверх по течению — находит впадающие ответвления",
+    "navigationDownstreamMain": "Главное русло вниз по течению — следует по основному руслу",
+    "navigationDownstreamDiversions": "Отводы вниз по течению — следует по путям разделения стока",
+    "sourcePlaceholder": "Сначала нажмите «Загрузить источники и построить»",
+    "distancePlaceholder": "Расстояние (км)",
+    "navigationButton": "1. Загрузить источники и построить навигацию",
+    "navigationButtonAgain": "Построить ещё один слой навигации",
+    "exportButton": "Экспортировать построенные результаты в GeoJSON",
+    "addLayersButton": "Добавить построенные результаты в слои GeoLibre",
+    "clearButton": "Очистить результат NLDI",
+    "noComid": "Для этой точки не возвращён COMID.",
+    "requestingBasin": "Запрос бассейна выше по течению…",
+    "basinRendered": "Бассейн выше по течению построен для COMID {{comid}}.",
+    "basinFailed": "Запрос бассейна не выполнен.",
+    "selectNavigation": "Выберите способ навигации после трассировки точки.",
+    "invalidDistance": "Расстояние должно быть от 1 до 9999 км.",
+    "discoveringSources": "Определение источников навигации NLDI…",
+    "navigationUnavailable": "Этот способ навигации недоступен для данного COMID.",
+    "noPlottableSource": "NLDI не вернул ни одного пригодного для построения источника навигации.",
+    "navigationEmpty": "{{source}} не вернул объектов, пригодных для отображения на карте, для этой навигации.",
+    "navigationAdded": "Добавлен источник {{source}} через {{navigation}} для COMID {{comid}} ({{km}} км). Существующие слои навигации остаются на карте.",
+    "navigationFailed": "Запрос навигации не выполнен.",
+    "tracing": "Трассировка до ближайшего водотока NHD…",
+    "flowline": "Водоток построен.",
+    "flowlineComid": "Водоток построен; COMID {{comid}} готов для работы с бассейнами.",
+    "flowlineFallback": "Водоток построен через резервное гидрологическое местоположение NLDI.",
+    "flowlineFallbackComid": "Водоток построен через резервное гидрологическое местоположение NLDI; COMID {{comid}} готов для работы с бассейнами.",
+    "requestFailed": "Запрос NLDI не выполнен.",
+    "nothingToAdd": "Нет построенных объектов NLDI для добавления.",
+    "layersAdded_few": "{{count}} слоя NLDI добавлены в группу «Результаты USGS NLDI».",
+    "layersAdded_many": "{{count}} слоёв NLDI добавлены в группу «Результаты USGS NLDI».",
+    "layersAdded_one": "{{count}} слой NLDI добавлен в группу «Результаты USGS NLDI».",
+    "layersAdded_other": "{{count}} слоя NLDI добавлены в группу «Результаты USGS NLDI».",
+    "layerGroupName": "Результаты USGS NLDI",
+    "layerFlowline": "Водоток NLDI",
+    "layerRaindrop": "Путь дождевой капли NLDI",
+    "layerSelectedPoint": "Выбранная точка NLDI",
+    "layerBasin": "Бассейн выше по течению NLDI",
+    "layerNavigation": "Навигация NLDI {{index}}",
+    "resultCleared": "Результат NLDI очищен.",
+    "directionalUnavailable": "Направленная трассировка стока недоступна, пока служба USGS не в сети. Выберите «Весь водоток» или повторите попытку позже.",
+    "noFlowlineNearby": "NLDI не удалось найти водоток рядом с этой точкой.",
+    "httpError": "USGS NLDI вернул HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI вернул HTTP {{status}}: {{detail}}",
+    "noAttributes": "NLDI не вернул атрибутов.",
+    "catalogCaGages": "Гидропосты Калифорнии (ca_gages)",
+    "catalogNwisSite": "Пункты наблюдения за поверхностными водами NWIS (гидропосты)",
+    "catalogNwisGw": "Скважины подземных вод NWIS",
+    "catalogGfv11Pois": "Точки USGS Geospatial Fabric",
+    "catalogHuc12pp": "Замыкающие створы HUC12",
+    "catalogNmwdiSt": "Водные пункты Нью-Мексико",
+    "catalogFlowlines": "Водотоки NHDPlus"
   }
 }

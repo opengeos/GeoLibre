@@ -276,6 +276,10 @@
         "label": "WMS Katmanı Ekle",
         "description": "Bir WMS GetMap servisini döşenmiş raster katman olarak ekleyin."
       },
+      "csw": {
+        "label": "CSW Kataloğunda Ara",
+        "description": "Bir OGC Katalog Servisinde veri kümeleri arayın ve desteklenen web kaynaklarını haritaya ekleyin."
+      },
       "wfs": {
         "label": "WFS Katmanı Ekle",
         "description": "Bir GetFeature servisinden GeoJSON isteyerek WFS öğelerini ekleyin."
@@ -426,6 +430,21 @@
       "noLayersFound": "Bu servis için katman bulunamadı.",
       "retrieveError": "Bu servisten katmanlar alınamadı.",
       "version": "WMS sürümü"
+    },
+    "csw": {
+      "defaultName": "CSW Kataloğu",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Anahtar kelime",
+      "search": "Ara",
+      "searching": "Aranıyor…",
+      "results": "Katalog sonuçları",
+      "errorUrl": "Geçerli bir HTTP veya HTTPS CSW servis URL'si girin.",
+      "searchError": "Bu katalogda arama yapılamadı.",
+      "noResults": "Eşleşen veri kümesi bulunamadı.",
+      "invalidGeoJson": "Seçilen kaynak bir GeoJSON FeatureCollection değil.",
+      "addError": "Bu katalog kaynağı eklenemedi.",
+      "addResource": "{{kind}} ekle",
+      "noSupportedResources": "Desteklenen bir WMS, WFS, ArcGIS veya GeoJSON kaynağı sunulmadı."
     },
     "wfs": {
       "defaultName": "WFS Katmanı",
@@ -1850,6 +1869,9 @@
     "only2d": "Yalnızca 2B",
     "cesiumTokenHint": "Arazi ve Ion görüntüleri için Ayarlar'dan bir Cesium Ion belirteci ekleyin"
   },
+  "renderer": {
+    "layerUnsupported": "3D küre tarafından çizilmiyor"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Koordinatları panoya kopyala",
     "quickActions": "Hızlı eylemler",
@@ -2437,6 +2459,7 @@
       "mbtiles": "MBTiles Katmanı",
       "xyz": "XYZ Katmanı",
       "wms": "WMS Katmanı",
+      "csw": "CSW Kataloğu",
       "wfs": "WFS Katmanı",
       "wmts": "WMTS Katmanı",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "2 × 3 ızgara",
       "splitViewGrid3x3": "3 × 3 ızgara",
       "splitViewSync": "Görünümleri eşzamanla",
+      "renderingEngine": "Çizim motoru",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "3D kürede kullanılamaz. Görünüm → Çizim motoru üzerinden MapLibre 2D'ye geri dönün.",
       "viewInGoogleMaps": "Google Haritalar'da görüntüle",
       "viewInGoogleEarth": "Google Earth'te görüntüle",
       "zoomIn": "Yakınlaştır",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Ek açıklamalar",
+      "maplibre-gl-dimensions": "Ölçülendirme",
       "maplibre-gl-streetview": "Sokak Görünümü",
       "maplibre-gl-time-slider": "Zaman Kaydırıcısı",
       "geolibre-timelapse": "Timelapse",
@@ -3907,6 +3935,28 @@
     "saveElement": "Ögeyi Kaydet",
     "atPoint": "Noktada",
     "pinnedToExtent": "Kapsama Sabitlendi"
+  },
+  "dimensions": {
+    "toolbar": "Ölçülendirme araçları",
+    "layerName": "Ölçüler",
+    "tools": {
+      "linear": "Doğrusal ölçü",
+      "angular": "Açısal ölçü"
+    },
+    "unit": "Birim",
+    "snap": "Köşe noktalarına yapış",
+    "color": "Ölçü rengi",
+    "width": "Çizgi kalınlığı",
+    "widthOptions": {
+      "thin": "İnce",
+      "medium": "Orta",
+      "thick": "Kalın"
+    },
+    "deleteLast": "Son ölçüyü sil",
+    "clearAll": "Tüm ölçüleri temizle",
+    "newLayer": "Yeni ölçülendirme katmanı",
+    "confirmClearAll_one": "Bu ölçü silinsin mi? Bu işlem geri alınamaz.",
+    "confirmClearAll_other": "Bu katmandaki {{count}} ölçünün tamamı silinsin mi? Bu işlem geri alınamaz."
   },
   "pythonConsole": {
     "title": "Python Konsolu",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "{{started}} indirme başlatıldı. {{failed}} başarısız oldu.",
       "downloadCancelled": "İndirme iptal edildi veya başarısız oldu."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI ağ araçları",
+    "hint": "Önce bir akış hattı yönü seçip haritaya tıklayın. Ardından bir gezinme yönü seçin, mevcut katalogları yüklemek için vurgulanan düğmeye basın, akış gözlem istasyonları veya kuyular gibi bir katalog seçin ve o kataloğu çizmek için düğmeye tekrar basın.",
+    "directionComplete": "Tam akış hattı — NHD kolunun tamamını döndürür",
+    "directionUp": "Yalnızca memba — noktanın yukarısındaki kolu döndürür",
+    "directionDown": "Yalnızca mansap — noktanın aşağısındaki kolu döndürür",
+    "basinButton": "Hidrokonumdan havza",
+    "navigationPlaceholder": "Yön seçin — çizimden önce gereklidir",
+    "navigationUpstreamMain": "Memba ana kol — birincil kanalı izler",
+    "navigationUpstreamTributaries": "Memba yan kolları — besleyen kolları bulur",
+    "navigationDownstreamMain": "Mansap ana kol — birincil kanalı izler",
+    "navigationDownstreamDiversions": "Mansap saptırmaları — ayrılan akış yollarını izler",
+    "sourcePlaceholder": "Önce «Kaynakları yükle ve çiz»e basın",
+    "distancePlaceholder": "Mesafe (km)",
+    "navigationButton": "1. Kaynakları yükle ve gezinmeyi çiz",
+    "navigationButtonAgain": "Başka bir gezinme katmanı çiz",
+    "exportButton": "Çizilen sonuçları GeoJSON olarak dışa aktar",
+    "addLayersButton": "Çizilen sonuçları GeoLibre Katmanlarına ekle",
+    "clearButton": "NLDI sonucunu temizle",
+    "noComid": "Bu nokta için COMID döndürülmedi.",
+    "requestingBasin": "Memba havzası isteniyor…",
+    "basinRendered": "COMID {{comid}} için memba havzası çizildi.",
+    "basinFailed": "Havza isteği başarısız oldu.",
+    "selectNavigation": "Bir noktayı izledikten sonra bir gezinme yöntemi seçin.",
+    "invalidDistance": "Mesafe 1 ile 9999 km arasında olmalıdır.",
+    "discoveringSources": "NLDI gezinme kaynakları keşfediliyor…",
+    "navigationUnavailable": "Bu gezinme yöntemi bu COMID için kullanılamıyor.",
+    "noPlottableSource": "NLDI çizilebilir bir gezinme kaynağı döndürmedi.",
+    "navigationEmpty": "{{source}} bu gezinme için haritalanabilir öğe döndürmedi.",
+    "navigationAdded": "COMID {{comid}} için {{navigation}} üzerinden {{source}} eklendi ({{km}} km). Mevcut gezinme katmanları haritada kalır.",
+    "navigationFailed": "Gezinme isteği başarısız oldu.",
+    "tracing": "En yakın NHD akış hattına izleniyor…",
+    "flowline": "Akış hattı çizildi.",
+    "flowlineComid": "Akış hattı çizildi; COMID {{comid}} havza iş akışları için hazır.",
+    "flowlineFallback": "Akış hattı NLDI hidrokonum yedeği kullanılarak çizildi.",
+    "flowlineFallbackComid": "Akış hattı NLDI hidrokonum yedeği kullanılarak çizildi; COMID {{comid}} havza iş akışları için hazır.",
+    "requestFailed": "NLDI isteği başarısız oldu.",
+    "nothingToAdd": "Eklenecek çizilmiş NLDI öğesi yok.",
+    "layersAdded_one": "{{count}} NLDI katmanı tek bir «USGS NLDI sonuçları» grubuna eklendi.",
+    "layersAdded_other": "{{count}} NLDI katmanı tek bir «USGS NLDI sonuçları» grubuna eklendi.",
+    "layerGroupName": "USGS NLDI sonuçları",
+    "layerFlowline": "NLDI akış hattı",
+    "layerRaindrop": "NLDI yağmur damlası izi",
+    "layerSelectedPoint": "NLDI seçili nokta",
+    "layerBasin": "NLDI memba havzası",
+    "layerNavigation": "NLDI gezinmesi {{index}}",
+    "resultCleared": "NLDI sonucu temizlendi.",
+    "directionalUnavailable": "USGS süreci çevrimdışıyken yönlü akış izleme kullanılamaz. «Tam akış hattı»nı seçin veya daha sonra tekrar deneyin.",
+    "noFlowlineNearby": "NLDI bu noktanın yakınında bir akış hattı bulamadı.",
+    "httpError": "USGS NLDI HTTP {{status}} döndürdü",
+    "httpErrorDetail": "USGS NLDI HTTP {{status}} döndürdü: {{detail}}",
+    "noAttributes": "NLDI tarafından öznitelik döndürülmedi.",
+    "catalogCaGages": "Kaliforniya akış gözlem istasyonları (ca_gages)",
+    "catalogNwisSite": "NWIS yüzey suyu istasyonları (akış gözlem)",
+    "catalogNwisGw": "NWIS yeraltı suyu kuyuları",
+    "catalogGfv11Pois": "USGS Geospatial Fabric noktaları",
+    "catalogHuc12pp": "HUC12 çıkış noktaları",
+    "catalogNmwdiSt": "New Mexico su istasyonları",
+    "catalogFlowlines": "NHDPlus akış hatları"
   }
 }
