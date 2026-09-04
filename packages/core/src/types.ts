@@ -536,6 +536,10 @@ export interface LayerStyle {
   pointRenderer: PointRenderer;
   heatmapRadius: number;
   heatmapIntensity: number;
+  /** Built-in color ramp used by the heatmap density renderer. */
+  heatmapColorRamp: string;
+  /** Numeric feature property used as heatmap weight; blank gives every point equal weight. */
+  heatmapWeightProperty: string;
   clusterRadius: number;
   clusterMaxZoom: number;
   /**
@@ -707,6 +711,8 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   pointRenderer: "single",
   heatmapRadius: 30,
   heatmapIntensity: 1,
+  heatmapColorRamp: "turbo",
+  heatmapWeightProperty: "",
   clusterRadius: 50,
   clusterMaxZoom: 14,
   invertedFillEnabled: false,

@@ -6566,6 +6566,8 @@
       "pointRendererClustered": "Berkluster",
       "heatmapRadius": "Radius peta panas",
       "heatmapIntensity": "Intensitas peta panas",
+      "heatmapWeightField": "Bidang bobot",
+      "heatmapEqualWeight": "Tidak ada (bobot sama)",
       "clusterRadius": "Radius kluster (px)",
       "clusterMaxZoom": "Zoom maksimum kluster",
       "strokeWidthUnit": "Satuan lebar garis tepi",

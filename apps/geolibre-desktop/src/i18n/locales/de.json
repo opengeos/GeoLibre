@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Geclustert",
       "heatmapRadius": "Heatmap-Radius",
       "heatmapIntensity": "Heatmap-Intensität",
+      "heatmapWeightField": "Gewichtungsfeld",
+      "heatmapEqualWeight": "Keines (gleiche Gewichtung)",
       "clusterRadius": "Cluster-Radius (px)",
       "clusterMaxZoom": "Cluster max. Zoom",
       "strokeWidthUnit": "Einheit der Strichstärke",

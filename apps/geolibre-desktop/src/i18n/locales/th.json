@@ -6566,6 +6566,8 @@
       "pointRendererClustered": "จัดกลุ่ม",
       "heatmapRadius": "รัศมีของแผนที่ความร้อน",
       "heatmapIntensity": "ความเข้มของแผนที่ความร้อน",
+      "heatmapWeightField": "ฟิลด์น้ำหนัก",
+      "heatmapEqualWeight": "ไม่มี (น้ำหนักเท่ากัน)",
       "clusterRadius": "รัศมีของกลุ่ม (พิกเซล)",
       "clusterMaxZoom": "ระดับซูมสูงสุดที่ยังจัดกลุ่ม",
       "strokeWidthUnit": "หน่วยความหนาเส้น",

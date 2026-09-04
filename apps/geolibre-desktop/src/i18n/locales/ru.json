@@ -6800,6 +6800,8 @@
       "pointRendererClustered": "Кластеризация",
       "heatmapRadius": "Радиус тепловой карты",
       "heatmapIntensity": "Интенсивность тепловой карты",
+      "heatmapWeightField": "Поле веса",
+      "heatmapEqualWeight": "Нет (равный вес)",
       "clusterRadius": "Радиус кластера (px)",
       "clusterMaxZoom": "Макс. масштаб кластеризации",
       "strokeWidthUnit": "Единица толщины обводки",

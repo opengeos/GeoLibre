@@ -6955,6 +6955,8 @@
       "pointRendererClustered": "مجمَّع",
       "heatmapRadius": "نصف قطر الخريطة الحرارية",
       "heatmapIntensity": "شدة الخريطة الحرارية",
+      "heatmapWeightField": "حقل الوزن",
+      "heatmapEqualWeight": "لا شيء (وزن متساوٍ)",
       "clusterRadius": "نصف قطر التجميع (بكسل)",
       "clusterMaxZoom": "الحد الأقصى لتكبير التجميع",
       "strokeWidthUnit": "وحدة عرض الحد الخارجي",

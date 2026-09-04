@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Kümelenmiş",
       "heatmapRadius": "Isı haritası yarıçapı",
       "heatmapIntensity": "Isı haritası yoğunluğu",
+      "heatmapWeightField": "Ağırlık alanı",
+      "heatmapEqualWeight": "Yok (eşit ağırlık)",
       "clusterRadius": "Küme yarıçapı (px)",
       "clusterMaxZoom": "Maksimum küme yakınlaştırması",
       "strokeWidthUnit": "Kenarlık kalınlığı birimi",

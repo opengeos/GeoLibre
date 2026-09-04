@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "क्लस्टर्ड",
       "heatmapRadius": "हीटमैप त्रिज्या",
       "heatmapIntensity": "हीटमैप तीव्रता",
+      "heatmapWeightField": "भार फ़ील्ड",
+      "heatmapEqualWeight": "कोई नहीं (समान भार)",
       "clusterRadius": "क्लस्टर त्रिज्या (px)",
       "clusterMaxZoom": "क्लस्टर अधिकतम ज़ूम",
       "strokeWidthUnit": "स्ट्रोक चौड़ाई इकाई",

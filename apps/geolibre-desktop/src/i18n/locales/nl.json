@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Geclusterd",
       "heatmapRadius": "Heatmap-straal",
       "heatmapIntensity": "Heatmap-intensiteit",
+      "heatmapWeightField": "Wegingsveld",
+      "heatmapEqualWeight": "Geen (gelijke weging)",
       "clusterRadius": "Clusterstraal (px)",
       "clusterMaxZoom": "Max. zoom cluster",
       "strokeWidthUnit": "Eenheid van lijndikte",

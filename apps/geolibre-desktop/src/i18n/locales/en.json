@@ -6708,6 +6708,8 @@
       "pointRendererClustered": "Clustered",
       "heatmapRadius": "Heatmap radius",
       "heatmapIntensity": "Heatmap intensity",
+      "heatmapWeightField": "Weight field",
+      "heatmapEqualWeight": "None (equal weight)",
       "clusterRadius": "Cluster radius (px)",
       "clusterMaxZoom": "Cluster max zoom",
       "strokeWidthUnit": "Stroke width unit",

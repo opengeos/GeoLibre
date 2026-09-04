@@ -100,6 +100,36 @@ describe("point renderer sync", () => {
     assert.ok(!layers.has("layer-pts-circle"));
   });
 
+  it("applies the selected heatmap ramp and numeric weight field", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      pointLayer({
+        pointRenderer: "heatmap",
+        heatmapColorRamp: "viridis",
+        heatmapWeightProperty: "nb_ruches",
+      }),
+    );
+
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], ["max", 0, ["to-number", ["get", "nb_ruches"], 0]]);
+    assert.deepEqual(paint["heatmap-color"], [
+      "interpolate",
+      ["linear"],
+      ["heatmap-density"],
+      0,
+      "rgba(0,0,0,0)",
+      0.25,
+      "#440154",
+      0.5,
+      "#31688e",
+      0.75,
+      "#35b779",
+      1,
+      "#fde725",
+    ]);
+  });
+
   it("clusters: a clustered source plus cluster, count, and unclustered layers", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(

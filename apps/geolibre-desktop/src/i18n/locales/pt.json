@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Agrupado",
       "heatmapRadius": "Raio do mapa de calor",
       "heatmapIntensity": "Intensidade do mapa de calor",
+      "heatmapWeightField": "Campo de ponderação",
+      "heatmapEqualWeight": "Nenhum (peso igual)",
       "clusterRadius": "Raio do agrupamento (px)",
       "clusterMaxZoom": "Zoom máximo do agrupamento",
       "strokeWidthUnit": "Unidade da espessura do traço",

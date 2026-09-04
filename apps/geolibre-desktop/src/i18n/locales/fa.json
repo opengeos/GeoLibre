@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "خوشه‌بندی‌شده",
       "heatmapRadius": "شعاع نقشهٔ حرارتی",
       "heatmapIntensity": "شدت نقشهٔ حرارتی",
+      "heatmapWeightField": "فیلد وزن",
+      "heatmapEqualWeight": "هیچ‌کدام (وزن برابر)",
       "clusterRadius": "شعاع خوشه (پیکسل)",
       "clusterMaxZoom": "بیشینهٔ بزرگ‌نمایی خوشه",
       "strokeWidthUnit": "یکای ضخامت خط",

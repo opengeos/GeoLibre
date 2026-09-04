@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "დაჯგუფებული",
       "heatmapRadius": "სითბური რუკის რადიუსი",
       "heatmapIntensity": "სითბური რუკის ინტენსივობა",
+      "heatmapWeightField": "წონის ველი",
+      "heatmapEqualWeight": "არცერთი (თანაბარი წონა)",
       "clusterRadius": "კლასტერის რადიუსი (px)",
       "clusterMaxZoom": "კლასტერის მაქს. zoom",
       "strokeWidthUnit": "ხაზის სისქის ერთეული",

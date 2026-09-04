@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Agrupado",
       "heatmapRadius": "Radio de Heatmap",
       "heatmapIntensity": "Intensidad de Heatmap",
+      "heatmapWeightField": "Campo de ponderación",
+      "heatmapEqualWeight": "Ninguno (ponderación igual)",
       "clusterRadius": "Radio de clúster (px)",
       "clusterMaxZoom": "Zoom máximo de clúster",
       "strokeWidthUnit": "Unidad de ancho de trazo",

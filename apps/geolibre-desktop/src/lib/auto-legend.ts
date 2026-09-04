@@ -15,6 +15,7 @@
  */
 import {
   effectiveVectorRules,
+  getVectorColorRamp,
   isHexColor,
   proportionalSizeRange,
   styleValue,
@@ -56,14 +57,6 @@ const GRADIENT_SAMPLES = 6;
  * `@geolibre/map`'s style-mapper, minus the fully-transparent zero stop so the
  * bar starts visible).
  */
-export const HEATMAP_RAMP_COLORS: readonly string[] = [
-  "rgb(103,169,207)",
-  "rgb(209,229,240)",
-  "rgb(253,219,199)",
-  "rgb(239,138,98)",
-  "rgb(178,24,43)",
-];
-
 /** One row (class / rule / size step / custom item) under a legend entry. */
 export interface AutoLegendRow {
   /** Stable override key (`<entryId>::p:<index>` in the panel namespace). */
@@ -691,9 +684,10 @@ function vectorParts(
 
   // A density heatmap renders no per-feature symbols: the entry is the ramp.
   if (shape === "circle" && styleValue(style, "pointRenderer") === "heatmap") {
+    const colors = getVectorColorRamp(styleValue(style, "heatmapColorRamp")).colors;
     return {
       rows: [...diagrams, ...generatorRows],
-      gradient: { colors: [...HEATMAP_RAMP_COLORS], minLabel: null, maxLabel: null },
+      gradient: { colors: [...colors], minLabel: null, maxLabel: null },
       headerSwatch: null,
     };
   }

@@ -6644,6 +6644,8 @@
       "pointRendererClustered": "Regroupé",
       "heatmapRadius": "Rayon de la Heatmap",
       "heatmapIntensity": "Intensité de la Heatmap",
+      "heatmapWeightField": "Champ de pondération",
+      "heatmapEqualWeight": "Aucun (poids égal)",
       "clusterRadius": "Rayon de cluster (px)",
       "clusterMaxZoom": "Zoom max du cluster",
       "strokeWidthUnit": "Unité d'épaisseur du trait",

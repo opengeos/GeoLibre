@@ -6566,6 +6566,8 @@
       "pointRendererClustered": "클러스터링",
       "heatmapRadius": "히트맵 반경",
       "heatmapIntensity": "히트맵 강도",
+      "heatmapWeightField": "가중치 필드",
+      "heatmapEqualWeight": "없음 (동일 가중치)",
       "clusterRadius": "클러스터 반경(px)",
       "clusterMaxZoom": "클러스터 최대 줌",
       "strokeWidthUnit": "선 너비 단위",

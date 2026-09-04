@@ -6566,6 +6566,8 @@
       "pointRendererClustered": "クラスタリング",
       "heatmapRadius": "ヒートマップの半径",
       "heatmapIntensity": "ヒートマップの強度",
+      "heatmapWeightField": "重みフィールド",
+      "heatmapEqualWeight": "なし（均等な重み）",
       "clusterRadius": "クラスタ半径 (px)",
       "clusterMaxZoom": "クラスタの最大ズーム",
       "strokeWidthUnit": "線幅の単位",

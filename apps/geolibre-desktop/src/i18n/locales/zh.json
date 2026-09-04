@@ -6566,6 +6566,8 @@
       "pointRendererClustered": "聚类",
       "heatmapRadius": "热力图半径",
       "heatmapIntensity": "热力图强度",
+      "heatmapWeightField": "权重字段",
+      "heatmapEqualWeight": "无（等权重）",
       "clusterRadius": "聚类半径 (px)",
       "clusterMaxZoom": "聚类最大缩放级别",
       "strokeWidthUnit": "描边宽度单位",

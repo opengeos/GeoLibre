@@ -6557,6 +6557,8 @@
       "pointRendererClustered": "Được nhóm lại",
       "heatmapRadius": "Bán kính bản đồ nhiệt",
       "heatmapIntensity": "Cường độ bản đồ nhiệt",
+      "heatmapWeightField": "Trường trọng số",
+      "heatmapEqualWeight": "Không có (trọng số bằng nhau)",
       "fillPatterns": {
         "none": "Không có (điền đặc)",
         "hatch": "nở",
