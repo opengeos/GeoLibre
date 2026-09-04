@@ -579,6 +579,11 @@ def build_server(workspace: Workspace) -> MCPServer:
 
         Returns:
             The new layer's id and the project's updated layer count.
+
+        Raises:
+            ValueError: If `service` is not `wms` or `wmts`, if `layers` is
+                missing for `wms`, or if `bounds` is not four finite numbers
+                with valid latitudes.
         """
         if service == "wmts":
             layer = _project.wmts_layer(name, endpoint, tile_size=tile_size, bounds=bounds)
