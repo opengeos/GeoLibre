@@ -34,7 +34,12 @@ const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
  * features somewhere Cesium has no renderer for, and a FeatureCollection that
  * lands on one of them is a partial read-back (the attribute table pulls one
  * off the map source), not the layer's contents — drawing it would show a
- * viewport's worth of features as if it were the whole layer.
+ * viewport's worth of features as if it were the whole layer. `"arcgis"`
+ * belongs with them: every `type: "arcgis"` layer is VectorTileServer-backed,
+ * because `addArcGISLayer` routes FeatureServer layers to `addGeoJsonLayer`
+ * (making them `type: "geojson"`) and map/image services to a raster layer. No
+ * in-app producer attaches a collection to one, but a hand-authored
+ * `.geolibre.json`, an MCP-generated project, or the embed API could.
  *
  * Everything else is decided by the data rather than the type: any layer
  * carrying a FeatureCollection renders through the GeoJSON path, so a producer
@@ -47,6 +52,7 @@ const NON_GEOJSON_TYPES = new Set([
   "pmtiles",
   "mbtiles",
   "deckgl-viz",
+  "arcgis",
 ]);
 
 /**

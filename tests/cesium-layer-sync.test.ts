@@ -213,7 +213,7 @@ describe("CesiumLayerSync", () => {
 
   it("renders every non-tile layer carrying GeoJSON through the GeoJSON path", async () => {
     const sync = newSync(f);
-    const types = ["flatgeobuf", "geoparquet", "duckdb-query", "arcgis"] as const;
+    const types = ["flatgeobuf", "geoparquet", "duckdb-query"] as const;
     const layers = types.map((type, index) =>
       mkLayer({
         id: `geojson-backed-${index}`,
@@ -268,12 +268,12 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.imageryAdded.length, 1);
   });
 
-  it("keeps vector-tile layers 2D-only even if they carry incidental GeoJSON", async () => {
+  it("keeps tile-backed vector layers 2D-only even if they carry incidental GeoJSON", async () => {
     const sync = newSync(f);
-    const layers = ["vector-tiles", "pmtiles", "mbtiles"].map((type, index) =>
+    const layers = ["vector-tiles", "pmtiles", "mbtiles", "arcgis"].map((type, index) =>
       mkLayer({
         id: `vector-tiles-${index}`,
-        type: type as "vector-tiles" | "pmtiles" | "mbtiles",
+        type: type as "vector-tiles" | "pmtiles" | "mbtiles" | "arcgis",
         geojson: { type: "FeatureCollection", features: [{}] } as never,
       }),
     );
