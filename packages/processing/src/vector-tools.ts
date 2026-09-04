@@ -208,6 +208,8 @@ const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
 /** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
 type BufferUnits = "kilometers" | "meters" | "miles";
 
+const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
+
 /**
  * A buffered feature, or `null` when the operation left nothing behind.
  *
@@ -305,6 +307,32 @@ export const bufferTool: ProcessingAlgorithm = {
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
+    // Validate in the Python engine's order (`_buffer`: units, then side, then
+    // distance finiteness, then distance sign) so a call with several bad
+    // parameters at once gets the same first error from both engines, not just
+    // the same accept/reject verdict.
+    const rawUnits = ctx.parameters.units;
+    const units = (rawUnits == null ? "kilometers" : String(rawUnits)) as BufferUnits;
+    if (!BUFFER_UNITS.has(units)) {
+      // turf throws on a unit it does not know, and the per-feature `try`/`catch`
+      // below would swallow that into the `Skipped` count — reporting a
+      // successful run that buffered nothing where the Python engine raises
+      // "Unknown unit". Reject up front so the two engines agree.
+      ctx.log(`Error: unknown unit '${units}'; expected ${[...BUFFER_UNITS].join(", ")}`);
+      return;
+    }
+    // Only a missing `side` defaults; an explicitly empty one falls through to
+    // the check below, matching the Python engine (and the way an empty `units`
+    // reaches its own lookup there). Direction is a deliberate choice, so a
+    // caller that sends a blank one gets an error rather than a silent grow.
+    const rawSide = ctx.parameters.side;
+    const side = (rawSide == null ? "outside" : String(rawSide)) as BufferSide;
+    if (!BUFFER_SIDES.has(side)) {
+      // Reject rather than fall back, so the client and Python engines answer a
+      // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
+      ctx.log(`Error: unknown buffer side '${side}'; expected ${[...BUFFER_SIDES].join(", ")}`);
+      return;
+    }
     const rawDistance = ctx.parameters.distance;
     // `numberParam` folds a non-finite or unparseable value into its fallback,
     // which would hand a programmatic caller a silent 1-unit buffer where the
@@ -325,19 +353,6 @@ export const bufferTool: ProcessingAlgorithm = {
       // erode: direction belongs to `side`, and the Python engine already
       // answers a negative distance this way.
       ctx.log("Error: buffer distance must be >= 0; use the buffer side to buffer inward");
-      return;
-    }
-    const units = ((ctx.parameters.units as string) || "kilometers") as BufferUnits;
-    // Only a missing `side` defaults; an explicitly empty one falls through to
-    // the check below, matching the Python engine (and the way an empty `units`
-    // reaches its own lookup there). Direction is a deliberate choice, so a
-    // caller that sends a blank one gets an error rather than a silent grow.
-    const rawSide = ctx.parameters.side;
-    const side = (rawSide == null ? "outside" : String(rawSide)) as BufferSide;
-    if (!BUFFER_SIDES.has(side)) {
-      // Reject rather than fall back, so the client and Python engines answer a
-      // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
-      ctx.log(`Error: unknown buffer side '${side}'; expected ${[...BUFFER_SIDES].join(", ")}`);
       return;
     }
     // turf bakes in Earth's radius, so the requested distance would lay out as

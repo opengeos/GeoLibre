@@ -214,6 +214,23 @@ def test_buffer_defaults_to_outside_when_side_is_absent() -> None:
 
 
 @requires_geopandas
+def test_buffer_reports_unknown_side_before_negative_distance() -> None:
+    # The client engine validates in this same order (units, side, distance
+    # finiteness, distance sign), so a call with several bad parameters at once
+    # gets the same *first* error from both engines.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": -5, "side": "bogus"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_unit_before_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool(
+            "buffer", SQUARE, parameters={"distance": 1, "units": "furlongs", "side": "bogus"}
+        )
+
+
+@requires_geopandas
 @pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
 def test_buffer_rejects_non_finite_distance(distance: float) -> None:
     # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN

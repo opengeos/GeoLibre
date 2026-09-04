@@ -180,3 +180,53 @@ describe("buffer tool (client engine)", () => {
     );
   });
 });
+
+describe("buffer tool validation order (client engine)", () => {
+  // `vector_ops._buffer` validates units, then side, then distance finiteness,
+  // then distance sign. The client mirrors that order so a call with several
+  // bad parameters at once gets the same *first* error from both engines, not
+  // merely the same accept/reject verdict.
+  it("reports the unknown side before the negative distance", async () => {
+    const { output, logs } = await runBuffer(SQUARE, { distance: -5, side: "bogus" });
+    assert.equal(output, null);
+    assert.ok(
+      logs.some((m) => m.startsWith("Error: unknown buffer side 'bogus'")),
+      `expected the side error to win, got ${JSON.stringify(logs)}`,
+    );
+  });
+
+  it("reports the unknown unit before the unknown side", async () => {
+    const { output, logs } = await runBuffer(SQUARE, {
+      distance: 1,
+      units: "furlongs",
+      side: "bogus",
+    });
+    assert.equal(output, null);
+    assert.ok(
+      logs.some((m) => m.startsWith("Error: unknown unit 'furlongs'")),
+      `expected the unit error to win, got ${JSON.stringify(logs)}`,
+    );
+  });
+
+  it("rejects an unknown unit rather than letting the catch report an empty run", async () => {
+    // turf throws on a unit it does not know. Without an up-front check the
+    // per-feature try/catch turns that into "Buffered 0 feature(s) … / Skipped
+    // 1 feature(s)" — a successful-looking empty layer where the Python engine
+    // raises "Unknown unit".
+    const { output, logs } = await runBuffer(SQUARE, { distance: 1, units: "furlongs" });
+    assert.equal(output, null);
+    assert.ok(
+      logs.every((m) => !m.startsWith("Buffered ")),
+      `expected no success line, got ${JSON.stringify(logs)}`,
+    );
+  });
+
+  it("rejects an explicitly empty unit, matching the Python engine", async () => {
+    const { output, logs } = await runBuffer(SQUARE, { distance: 1, units: "" });
+    assert.equal(output, null);
+    assert.ok(
+      logs.some((m) => m.startsWith("Error: unknown unit ''")),
+      `expected an unknown-unit error, got ${JSON.stringify(logs)}`,
+    );
+  });
+});
