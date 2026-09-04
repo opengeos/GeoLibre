@@ -276,6 +276,10 @@
         "label": "WMS შრის დამატება",
         "description": "დაამატეთ WMS GetMap სერვისი ფილებად დაყოფილ რასტრულ შრედ."
       },
+      "csw": {
+        "label": "CSW კატალოგში ძებნა",
+        "description": "მოძებნეთ მონაცემთა ნაკრებები OGC კატალოგის სერვისში და დაამატეთ რუკაზე მხარდაჭერილი ვებრესურსები."
+      },
       "wfs": {
         "label": "WFS შრის დამატება",
         "description": "დაამატეთ WFS ობიექტები GetFeature სერვისიდან GeoJSON-ის მოთხოვნით."
@@ -426,6 +430,21 @@
       "noLayersFound": "ამ სერვისისთვის შრეები ვერ მოიძებნა.",
       "retrieveError": "ამ სერვისიდან შრეების მიღება ვერ მოხერხდა.",
       "version": "WMS ვერსია"
+    },
+    "csw": {
+      "defaultName": "CSW კატალოგი",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "საკვანძო სიტყვა",
+      "search": "ძებნა",
+      "searching": "მიმდინარეობს ძებნა…",
+      "results": "კატალოგის შედეგები",
+      "errorUrl": "შეიყვანეთ CSW სერვისის სწორი HTTP ან HTTPS URL.",
+      "searchError": "ამ კატალოგში ძებნა ვერ მოხერხდა.",
+      "noResults": "შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
+      "invalidGeoJson": "არჩეული რესურსი არ არის GeoJSON FeatureCollection.",
+      "addError": "ამ კატალოგის რესურსის დამატება ვერ მოხერხდა.",
+      "addResource": "{{kind}}-ის დამატება",
+      "noSupportedResources": "მხარდაჭერილი WMS, WFS, ArcGIS ან GeoJSON რესურსი არ გამოცხადებულა."
     },
     "wfs": {
       "defaultName": "WFS შრე",
@@ -1850,6 +1869,9 @@
     "only2d": "მხოლოდ 2D",
     "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token პარამეტრებში"
   },
+  "renderer": {
+    "layerUnsupported": "3D გლობუსზე არ ისახება"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "კოორდინატების კოპირება ბუფერში",
     "quickActions": "სწრაფი მოქმედებები",
@@ -2437,6 +2459,7 @@
       "mbtiles": "MBTiles შრე",
       "xyz": "XYZ შრე",
       "wms": "WMS შრე",
+      "csw": "CSW კატალოგი",
       "wfs": "WFS შრე",
       "wmts": "WMTS შრე",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "2 × 3 ბადე",
       "splitViewGrid3x3": "3 × 3 ბადე",
       "splitViewSync": "ხედების სინქრონიზაცია",
+      "renderingEngine": "რენდერინგის ძრავა",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "3D გლობუსზე მიუწვდომელია. დაბრუნდით MapLibre 2D-ზე ხედი → რენდერინგის ძრავა-დან.",
       "viewInGoogleMaps": "ნახვა Google Maps-ში",
       "viewInGoogleEarth": "ნახვა Google Earth-ში",
       "zoomIn": "მიახლოება",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "ანოტაციები",
+      "maplibre-gl-dimensions": "ზომები",
       "maplibre-gl-streetview": "Street View",
       "maplibre-gl-time-slider": "დროის სლაიდერი",
       "geolibre-timelapse": "Timelapse",
@@ -3907,6 +3935,28 @@
     "saveElement": "ელემენტის შენახვა",
     "atPoint": "წერტილზე",
     "pinnedToExtent": "მიმაგრებულია არეზე"
+  },
+  "dimensions": {
+    "toolbar": "ზომების ხელსაწყოები",
+    "layerName": "ზომები",
+    "tools": {
+      "linear": "წრფივი ზომა",
+      "angular": "კუთხური ზომა"
+    },
+    "unit": "ერთეული",
+    "snap": "მიბმა წვეროებზე",
+    "color": "ზომის ფერი",
+    "width": "ხაზის სიგანე",
+    "widthOptions": {
+      "thin": "წვრილი",
+      "medium": "საშუალო",
+      "thick": "მსხვილი"
+    },
+    "deleteLast": "ბოლო ზომის წაშლა",
+    "clearAll": "ყველა ზომის გასუფთავება",
+    "newLayer": "ახალი ზომების ფენა",
+    "confirmClearAll_one": "წავშალოთ ეს ზომა? ამის გაუქმება შეუძლებელია.",
+    "confirmClearAll_other": "წავშალოთ ამ ფენის ყველა {{count}} ზომა? ამის გაუქმება შეუძლებელია."
   },
   "pythonConsole": {
     "title": "Python კონსოლი",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "დაიწყო {{started}} ჩამოტვირთვა. {{failed}} ვერ შესრულდა.",
       "downloadCancelled": "ჩამოტვირთვა გაუქმდა ან ვერ შესრულდა."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI ქსელის ხელსაწყოები",
+    "hint": "ჯერ აირჩიეთ ნაკადის ხაზის მიმართულება და დააწკაპუნეთ რუკაზე. შემდეგ აირჩიეთ ნავიგაციის მიმართულება, დააჭირეთ გამოკვეთილ ღილაკს ხელმისაწვდომი კატალოგების ჩასატვირთად, აირჩიეთ კატალოგი, მაგალითად ჰიდროსაგუშაგოები ან ჭაბურღილები, და კვლავ დააჭირეთ ამ კატალოგის დასახატად.",
+    "directionComplete": "სრული ნაკადის ხაზი — აბრუნებს NHD-ის მთელ მონაკვეთს",
+    "directionUp": "მხოლოდ ზემოთ დინებით — აბრუნებს წერტილის ზემოთ მდებარე მონაკვეთს",
+    "directionDown": "მხოლოდ ქვემოთ დინებით — აბრუნებს წერტილის ქვემოთ მდებარე მონაკვეთს",
+    "basinButton": "აუზი ჰიდროლოკაციიდან",
+    "navigationPlaceholder": "აირჩიეთ მიმართულება — საჭიროა დახატვამდე",
+    "navigationUpstreamMain": "ზემო დინების მთავარი კალაპოტი — მიჰყვება ძირითად კალაპოტს",
+    "navigationUpstreamTributaries": "ზემო დინების შენაკადები — პოულობს შემერთებულ განშტოებებს",
+    "navigationDownstreamMain": "ქვემო დინების მთავარი კალაპოტი — მიჰყვება ძირითად კალაპოტს",
+    "navigationDownstreamDiversions": "ქვემო დინების განშტოებები — მიჰყვება გაყოფილი ნაკადის გზებს",
+    "sourcePlaceholder": "ჯერ დააჭირეთ „წყაროების ჩატვირთვა და დახატვა“",
+    "distancePlaceholder": "მანძილი (კმ)",
+    "navigationButton": "1. წყაროების ჩატვირთვა და ნავიგაციის დახატვა",
+    "navigationButtonAgain": "კიდევ ერთი ნავიგაციის ფენის დახატვა",
+    "exportButton": "დახატული შედეგების ექსპორტი GeoJSON-ში",
+    "addLayersButton": "დახატული შედეგების დამატება GeoLibre-ის ფენებში",
+    "clearButton": "NLDI შედეგის გასუფთავება",
+    "noComid": "ამ წერტილისთვის COMID არ დაბრუნებულა.",
+    "requestingBasin": "მიმდინარეობს ზემო დინების აუზის მოთხოვნა…",
+    "basinRendered": "ზემო დინების აუზი დახატულია COMID {{comid}}-ისთვის.",
+    "basinFailed": "აუზის მოთხოვნა ვერ შესრულდა.",
+    "selectNavigation": "წერტილის ტრასირების შემდეგ აირჩიეთ ნავიგაციის მეთოდი.",
+    "invalidDistance": "მანძილი უნდა იყოს 1-დან 9999 კმ-მდე.",
+    "discoveringSources": "მიმდინარეობს NLDI ნავიგაციის წყაროების აღმოჩენა…",
+    "navigationUnavailable": "ეს ნავიგაციის მეთოდი მიუწვდომელია ამ COMID-ისთვის.",
+    "noPlottableSource": "NLDI-მ არ დააბრუნა დასახატად ვარგისი ნავიგაციის წყარო.",
+    "navigationEmpty": "{{source}}-მა ამ ნავიგაციისთვის რუკაზე გამოსახვადი ობიექტები არ დააბრუნა.",
+    "navigationAdded": "დაემატა {{source}} {{navigation}}-ის მეშვეობით COMID {{comid}}-ისთვის ({{km}} კმ). არსებული ნავიგაციის ფენები რუკაზე რჩება.",
+    "navigationFailed": "ნავიგაციის მოთხოვნა ვერ შესრულდა.",
+    "tracing": "მიმდინარეობს ტრასირება უახლოეს NHD ნაკადის ხაზამდე…",
+    "flowline": "ნაკადის ხაზი დახატულია.",
+    "flowlineComid": "ნაკადის ხაზი დახატულია; COMID {{comid}} მზადაა აუზის სამუშაო პროცესებისთვის.",
+    "flowlineFallback": "ნაკადის ხაზი დახატულია NLDI ჰიდროლოკაციის სათადარიგო მექანიზმით.",
+    "flowlineFallbackComid": "ნაკადის ხაზი დახატულია NLDI ჰიდროლოკაციის სათადარიგო მექანიზმით; COMID {{comid}} მზადაა აუზის სამუშაო პროცესებისთვის.",
+    "requestFailed": "NLDI მოთხოვნა ვერ შესრულდა.",
+    "nothingToAdd": "დასამატებელი დახატული NLDI ობიექტები არ არის.",
+    "layersAdded_one": "{{count}} NLDI ფენა დაემატა ერთ ჯგუფს „USGS NLDI შედეგები“.",
+    "layersAdded_other": "{{count}} NLDI ფენა დაემატა ერთ ჯგუფს „USGS NLDI შედეგები“.",
+    "layerGroupName": "USGS NLDI შედეგები",
+    "layerFlowline": "NLDI ნაკადის ხაზი",
+    "layerRaindrop": "NLDI წვიმის წვეთის გზა",
+    "layerSelectedPoint": "NLDI არჩეული წერტილი",
+    "layerBasin": "NLDI ზემო დინების აუზი",
+    "layerNavigation": "NLDI ნავიგაცია {{index}}",
+    "resultCleared": "NLDI შედეგი გასუფთავდა.",
+    "directionalUnavailable": "მიმართულებითი ნაკადის ტრასირება მიუწვდომელია, სანამ USGS-ის პროცესი ხაზგარეშეა. აირჩიეთ „სრული ნაკადის ხაზი“ ან სცადეთ მოგვიანებით.",
+    "noFlowlineNearby": "NLDI-მ ამ წერტილთან ახლოს ნაკადის ხაზი ვერ იპოვა.",
+    "httpError": "USGS NLDI-მ დააბრუნა HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI-მ დააბრუნა HTTP {{status}}: {{detail}}",
+    "noAttributes": "NLDI-მ ატრიბუტები არ დააბრუნა.",
+    "catalogCaGages": "კალიფორნიის ჰიდროსაგუშაგოები (ca_gages)",
+    "catalogNwisSite": "NWIS ზედაპირული წყლის პუნქტები (ჰიდროსაგუშაგოები)",
+    "catalogNwisGw": "NWIS მიწისქვეშა წყლის ჭაბურღილები",
+    "catalogGfv11Pois": "USGS Geospatial Fabric-ის წერტილები",
+    "catalogHuc12pp": "HUC12 ჩამონადენის წერტილები",
+    "catalogNmwdiSt": "ნიუ-მექსიკოს წყლის პუნქტები",
+    "catalogFlowlines": "NHDPlus ნაკადის ხაზები"
   }
 }

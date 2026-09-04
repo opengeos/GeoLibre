@@ -276,6 +276,10 @@
         "label": "WMS लेयर जोड़ें",
         "description": "एक WMS GetMap सेवा को टाइल्ड रास्टर लेयर के रूप में जोड़ें।"
       },
+      "csw": {
+        "label": "CSW कैटलॉग खोजें",
+        "description": "किसी OGC कैटलॉग सेवा में डेटासेट खोजें और समर्थित वेब संसाधनों को मानचित्र में जोड़ें।"
+      },
       "wfs": {
         "label": "WFS लेयर जोड़ें",
         "description": "GetFeature सेवा से GeoJSON का अनुरोध करके WFS फ़ीचर जोड़ें।"
@@ -426,6 +430,21 @@
       "noLayersFound": "इस सेवा के लिए कोई लेयर नहीं मिली।",
       "retrieveError": "इस सेवा से लेयर प्राप्त नहीं हो सकीं।",
       "version": "WMS संस्करण"
+    },
+    "csw": {
+      "defaultName": "CSW कैटलॉग",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "कीवर्ड",
+      "search": "खोजें",
+      "searching": "खोजा जा रहा है…",
+      "results": "कैटलॉग परिणाम",
+      "errorUrl": "एक मान्य HTTP या HTTPS CSW सेवा URL दर्ज करें।",
+      "searchError": "इस कैटलॉग में खोज नहीं की जा सकी।",
+      "noResults": "कोई मेल खाता डेटासेट नहीं मिला।",
+      "invalidGeoJson": "चयनित संसाधन GeoJSON FeatureCollection नहीं है।",
+      "addError": "यह कैटलॉग संसाधन जोड़ा नहीं जा सका।",
+      "addResource": "{{kind}} जोड़ें",
+      "noSupportedResources": "कोई समर्थित WMS, WFS, ArcGIS या GeoJSON संसाधन घोषित नहीं किया गया।"
     },
     "wfs": {
       "defaultName": "WFS लेयर",
@@ -1850,6 +1869,9 @@
     "only2d": "केवल 2D",
     "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए सेटिंग्स में Cesium Ion टोकन जोड़ें"
   },
+  "renderer": {
+    "layerUnsupported": "3D ग्लोब द्वारा रेंडर नहीं किया गया"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "निर्देशांक क्लिपबोर्ड पर कॉपी करें",
     "quickActions": "त्वरित क्रियाएँ",
@@ -2437,6 +2459,7 @@
       "mbtiles": "MBTiles लेयर",
       "xyz": "XYZ लेयर",
       "wms": "WMS लेयर",
+      "csw": "CSW कैटलॉग",
       "wfs": "WFS लेयर",
       "wmts": "WMTS लेयर",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "2 × 3 ग्रिड",
       "splitViewGrid3x3": "3 × 3 ग्रिड",
       "splitViewSync": "दृश्य सिंक करें",
+      "renderingEngine": "रेंडरिंग इंजन",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "3D ग्लोब पर उपलब्ध नहीं है। दृश्य → रेंडरिंग इंजन से MapLibre 2D पर वापस जाएँ।",
       "viewInGoogleMaps": "Google Maps में देखें",
       "viewInGoogleEarth": "Google Earth में देखें",
       "zoomIn": "ज़ूम इन",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "एनोटेशन",
+      "maplibre-gl-dimensions": "विमाएँ",
       "maplibre-gl-streetview": "स्ट्रीट व्यू",
       "maplibre-gl-time-slider": "समय स्लाइडर",
       "geolibre-timelapse": "टाइमलैप्स",
@@ -3907,6 +3935,28 @@
     "saveElement": "तत्व सहेजें",
     "atPoint": "बिंदु पर",
     "pinnedToExtent": "विस्तार से संलग्न"
+  },
+  "dimensions": {
+    "toolbar": "विमांकन टूल्स",
+    "layerName": "विमाएँ",
+    "tools": {
+      "linear": "रैखिक विमा",
+      "angular": "कोणीय विमा"
+    },
+    "unit": "इकाई",
+    "snap": "शीर्षों पर स्नैप करें",
+    "color": "विमा रंग",
+    "width": "रेखा चौड़ाई",
+    "widthOptions": {
+      "thin": "पतली",
+      "medium": "मध्यम",
+      "thick": "मोटी"
+    },
+    "deleteLast": "अंतिम विमा हटाएं",
+    "clearAll": "सभी विमाएँ साफ़ करें",
+    "newLayer": "नई विमा परत",
+    "confirmClearAll_one": "क्या यह विमा हटानी है? इसे पूर्ववत नहीं किया जा सकता।",
+    "confirmClearAll_other": "क्या इस परत की सभी {{count}} विमाएँ हटानी हैं? इसे पूर्ववत नहीं किया जा सकता।"
   },
   "pythonConsole": {
     "title": "Python कंसोल",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "{{started}} डाउनलोड शुरू हुए। {{failed}} विफल रहे।",
       "downloadCancelled": "डाउनलोड रद्द हुआ या विफल रहा।"
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI नेटवर्क टूल्स",
+    "hint": "पहले प्रवाह-रेखा की दिशा चुनें और मानचित्र पर क्लिक करें। फिर नेविगेशन दिशा चुनें, उपलब्ध कैटलॉग लोड करने के लिए हाइलाइट किया गया बटन दबाएँ, धारा-मापी या कुएँ जैसा कोई कैटलॉग चुनें, और उस कैटलॉग को आलेखित करने के लिए बटन दोबारा दबाएँ।",
+    "directionComplete": "पूरी प्रवाह-रेखा — संपूर्ण NHD खंड लौटाती है",
+    "directionUp": "केवल अपस्ट्रीम — बिंदु के ऊपर का खंड लौटाती है",
+    "directionDown": "केवल डाउनस्ट्रीम — बिंदु के नीचे का खंड लौटाती है",
+    "basinButton": "हाइड्रोलोकेशन से जलग्रहण क्षेत्र",
+    "navigationPlaceholder": "दिशा चुनें — आलेखन से पहले आवश्यक",
+    "navigationUpstreamMain": "अपस्ट्रीम मुख्य धारा — प्राथमिक जलमार्ग का अनुसरण",
+    "navigationUpstreamTributaries": "अपस्ट्रीम सहायक नदियाँ — मिलने वाली शाखाएँ खोजें",
+    "navigationDownstreamMain": "डाउनस्ट्रीम मुख्य धारा — प्राथमिक जलमार्ग का अनुसरण",
+    "navigationDownstreamDiversions": "डाउनस्ट्रीम विपथन — विभाजित प्रवाह पथों का अनुसरण",
+    "sourcePlaceholder": "पहले «स्रोत लोड करें और आलेखित करें» दबाएँ",
+    "distancePlaceholder": "दूरी (किमी)",
+    "navigationButton": "1. स्रोत लोड करें और नेविगेशन आलेखित करें",
+    "navigationButtonAgain": "एक और नेविगेशन परत आलेखित करें",
+    "exportButton": "आलेखित परिणामों को GeoJSON में निर्यात करें",
+    "addLayersButton": "आलेखित परिणामों को GeoLibre लेयर में जोड़ें",
+    "clearButton": "NLDI परिणाम साफ़ करें",
+    "noComid": "इस बिंदु के लिए कोई COMID नहीं लौटाया गया।",
+    "requestingBasin": "अपस्ट्रीम जलग्रहण क्षेत्र का अनुरोध किया जा रहा है…",
+    "basinRendered": "COMID {{comid}} के लिए अपस्ट्रीम जलग्रहण क्षेत्र आलेखित किया गया।",
+    "basinFailed": "जलग्रहण क्षेत्र का अनुरोध विफल रहा।",
+    "selectNavigation": "किसी बिंदु का पता लगाने के बाद नेविगेशन विधि चुनें।",
+    "invalidDistance": "दूरी 1 से 9999 किमी के बीच होनी चाहिए।",
+    "discoveringSources": "NLDI नेविगेशन स्रोत खोजे जा रहे हैं…",
+    "navigationUnavailable": "वह नेविगेशन विधि इस COMID के लिए उपलब्ध नहीं है।",
+    "noPlottableSource": "NLDI ने कोई आलेखन-योग्य नेविगेशन स्रोत नहीं लौटाया।",
+    "navigationEmpty": "{{source}} ने इस नेविगेशन के लिए कोई मानचित्रण-योग्य फ़ीचर नहीं लौटाया।",
+    "navigationAdded": "COMID {{comid}} के लिए {{navigation}} के माध्यम से {{source}} जोड़ा गया ({{km}} किमी)। मौजूदा नेविगेशन लेयर मानचित्र पर बनी रहती हैं।",
+    "navigationFailed": "नेविगेशन अनुरोध विफल रहा।",
+    "tracing": "निकटतम NHD प्रवाह-रेखा तक ट्रेस किया जा रहा है…",
+    "flowline": "प्रवाह-रेखा आलेखित की गई।",
+    "flowlineComid": "प्रवाह-रेखा आलेखित की गई; COMID {{comid}} जलग्रहण कार्यप्रवाहों के लिए तैयार है।",
+    "flowlineFallback": "NLDI हाइड्रोलोकेशन फ़ॉलबैक का उपयोग करके प्रवाह-रेखा आलेखित की गई।",
+    "flowlineFallbackComid": "NLDI हाइड्रोलोकेशन फ़ॉलबैक का उपयोग करके प्रवाह-रेखा आलेखित की गई; COMID {{comid}} जलग्रहण कार्यप्रवाहों के लिए तैयार है।",
+    "requestFailed": "NLDI अनुरोध विफल रहा।",
+    "nothingToAdd": "जोड़ने के लिए कोई आलेखित NLDI फ़ीचर नहीं है।",
+    "layersAdded_one": "{{count}} NLDI लेयर एक «USGS NLDI परिणाम» समूह में जोड़ी गई।",
+    "layersAdded_other": "{{count}} NLDI लेयर एक «USGS NLDI परिणाम» समूह में जोड़ी गईं।",
+    "layerGroupName": "USGS NLDI परिणाम",
+    "layerFlowline": "NLDI प्रवाह-रेखा",
+    "layerRaindrop": "NLDI वर्षा-बूंद पथ",
+    "layerSelectedPoint": "NLDI चयनित बिंदु",
+    "layerBasin": "NLDI अपस्ट्रीम जलग्रहण क्षेत्र",
+    "layerNavigation": "NLDI नेविगेशन {{index}}",
+    "resultCleared": "NLDI परिणाम साफ़ कर दिया गया।",
+    "directionalUnavailable": "जब तक USGS प्रक्रिया ऑफ़लाइन है, दिशात्मक प्रवाह-ट्रेसिंग उपलब्ध नहीं है। «पूरी प्रवाह-रेखा» चुनें या बाद में पुनः प्रयास करें।",
+    "noFlowlineNearby": "NLDI इस बिंदु के पास कोई प्रवाह-रेखा नहीं खोज सका।",
+    "httpError": "USGS NLDI ने HTTP {{status}} लौटाया",
+    "httpErrorDetail": "USGS NLDI ने HTTP {{status}} लौटाया: {{detail}}",
+    "noAttributes": "NLDI द्वारा कोई विशेषता नहीं लौटाई गई।",
+    "catalogCaGages": "कैलिफ़ोर्निया धारा-मापी (ca_gages)",
+    "catalogNwisSite": "NWIS सतही जल स्थल (धारा-मापी)",
+    "catalogNwisGw": "NWIS भूजल कुएँ",
+    "catalogGfv11Pois": "USGS Geospatial Fabric बिंदु",
+    "catalogHuc12pp": "HUC12 निकास बिंदु",
+    "catalogNmwdiSt": "न्यू मैक्सिको जल स्थल",
+    "catalogFlowlines": "NHDPlus प्रवाह-रेखाएँ"
   }
 }

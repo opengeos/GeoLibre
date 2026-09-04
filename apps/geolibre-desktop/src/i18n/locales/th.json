@@ -274,6 +274,10 @@
         "label": "เพิ่มเลเยอร์ WMS",
         "description": "เพิ่มบริการ WMS GetMap เป็นเลเยอร์แรสเตอร์แบบไทล์"
       },
+      "csw": {
+        "label": "ค้นหาแคตาล็อก CSW",
+        "description": "ค้นหาชุดข้อมูลจากบริการแคตาล็อก OGC และเพิ่มทรัพยากรเว็บที่รองรับลงในแผนที่"
+      },
       "wfs": {
         "label": "เพิ่มเลเยอร์ WFS",
         "description": "เพิ่มฟีเจอร์จาก WFS โดยร้องขอ GeoJSON จากบริการ GetFeature"
@@ -421,6 +425,21 @@
       "noLayersFound": "ไม่พบเลเยอร์สำหรับบริการนี้",
       "retrieveError": "ไม่สามารถดึงรายการเลเยอร์จากบริการนี้ได้",
       "version": "เวอร์ชัน WMS"
+    },
+    "csw": {
+      "defaultName": "แคตาล็อก CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "คำสำคัญ",
+      "search": "ค้นหา",
+      "searching": "กำลังค้นหา…",
+      "results": "ผลลัพธ์จากแคตาล็อก",
+      "errorUrl": "โปรดป้อน URL ของบริการ CSW แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
+      "searchError": "ไม่สามารถค้นหาในแคตาล็อกนี้ได้",
+      "noResults": "ไม่พบชุดข้อมูลที่ตรงกัน",
+      "invalidGeoJson": "ทรัพยากรที่เลือกไม่ใช่ FeatureCollection ของ GeoJSON",
+      "addError": "ไม่สามารถเพิ่มทรัพยากรจากแคตาล็อกนี้ได้",
+      "addResource": "เพิ่ม{{kind}}",
+      "noSupportedResources": "ไม่มีการประกาศทรัพยากร WMS, WFS, ArcGIS หรือ GeoJSON ที่รองรับ"
     },
     "wfs": {
       "defaultName": "เลเยอร์ WFS",
@@ -1805,6 +1824,9 @@
     "only2d": "2 มิติเท่านั้น",
     "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ในการตั้งค่าเพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
   },
+  "renderer": {
+    "layerUnsupported": "ไม่แสดงผลบนลูกโลก 3 มิติ"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "คัดลอกพิกัดไปยังคลิปบอร์ด",
     "quickActions": "การดำเนินการด่วน",
@@ -2390,6 +2412,7 @@
       "mbtiles": "เลเยอร์ MBTiles",
       "xyz": "เลเยอร์ XYZ",
       "wms": "เลเยอร์ WMS",
+      "csw": "แคตาล็อก CSW",
       "wfs": "เลเยอร์ WFS",
       "wmts": "เลเยอร์ WMTS",
       "ogcFeatures": "OGC API - Features",
@@ -2653,6 +2676,10 @@
       "splitViewGrid2x3": "กริด 2 × 3",
       "splitViewGrid3x3": "กริด 3 × 3",
       "splitViewSync": "ซิงค์มุมมอง",
+      "renderingEngine": "เอนจินการแสดงผล",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "ใช้ไม่ได้บนลูกโลก 3 มิติ กลับไปใช้ MapLibre 2D ที่ มุมมอง → เอนจินการแสดงผล",
       "viewInGoogleMaps": "ดูใน Google Maps",
       "viewInGoogleEarth": "ดูใน Google Earth",
       "zoomIn": "ซูมเข้า",
@@ -2852,6 +2879,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "คำอธิบายประกอบ",
+      "maplibre-gl-dimensions": "เส้นบอกขนาด",
       "maplibre-gl-streetview": "Street View",
       "maplibre-gl-time-slider": "แถบเลื่อนเวลา",
       "geolibre-timelapse": "ภาพเคลื่อนไหวตามช่วงเวลา",
@@ -3843,6 +3871,27 @@
     "saveElement": "บันทึกองค์ประกอบ",
     "atPoint": "ที่จุด",
     "pinnedToExtent": "ตรึงกับขอบเขต"
+  },
+  "dimensions": {
+    "toolbar": "เครื่องมือเส้นบอกขนาด",
+    "layerName": "เส้นบอกขนาด",
+    "tools": {
+      "linear": "เส้นบอกขนาดเชิงเส้น",
+      "angular": "เส้นบอกขนาดเชิงมุม"
+    },
+    "unit": "หน่วย",
+    "snap": "สแนปเข้ากับจุดยอด",
+    "color": "สีเส้นบอกขนาด",
+    "width": "ความหนาเส้น",
+    "widthOptions": {
+      "thin": "บาง",
+      "medium": "ปานกลาง",
+      "thick": "หนา"
+    },
+    "deleteLast": "ลบเส้นบอกขนาดล่าสุด",
+    "clearAll": "ล้างเส้นบอกขนาดทั้งหมด",
+    "newLayer": "เลเยอร์เส้นบอกขนาดใหม่",
+    "confirmClearAll_other": "ลบเส้นบอกขนาดทั้ง {{count}} รายการในเลเยอร์นี้หรือไม่ การกระทำนี้ไม่สามารถย้อนกลับได้"
   },
   "pythonConsole": {
     "title": "คอนโซล Python",
@@ -7658,5 +7707,65 @@
       "downloadsStarted": "เริ่มดาวน์โหลด {{started}} รายการ ล้มเหลว {{failed}} รายการ",
       "downloadCancelled": "การดาวน์โหลดถูกยกเลิกหรือล้มเหลว"
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "เครื่องมือโครงข่าย USGS NLDI",
+    "hint": "ก่อนอื่นให้เลือกทิศทางของเส้นทางน้ำแล้วคลิกบนแผนที่ จากนั้นเลือกทิศทางการนำทาง กดปุ่มที่ถูกเน้นเพื่อโหลดแคตาล็อกที่มีอยู่ เลือกแคตาล็อกเช่นสถานีวัดน้ำท่าหรือบ่อน้ำบาดาล แล้วกดอีกครั้งเพื่อพล็อตแคตาล็อกนั้น",
+    "directionComplete": "เส้นทางน้ำทั้งเส้น — คืนค่าช่วงลำน้ำ NHD ทั้งหมด",
+    "directionUp": "เฉพาะต้นน้ำ — คืนค่าช่วงลำน้ำเหนือจุดที่เลือก",
+    "directionDown": "เฉพาะปลายน้ำ — คืนค่าช่วงลำน้ำใต้จุดที่เลือก",
+    "basinButton": "ลุ่มน้ำจากตำแหน่งอุทกวิทยา",
+    "navigationPlaceholder": "เลือกทิศทาง — จำเป็นก่อนพล็อต",
+    "navigationUpstreamMain": "ลำน้ำสายหลักต้นน้ำ — ตามลำน้ำสายหลัก",
+    "navigationUpstreamTributaries": "ลำน้ำสาขาต้นน้ำ — ค้นหาสาขาที่ไหลมาสมทบ",
+    "navigationDownstreamMain": "ลำน้ำสายหลักปลายน้ำ — ตามลำน้ำสายหลัก",
+    "navigationDownstreamDiversions": "การผันน้ำปลายน้ำ — ตามเส้นทางน้ำที่แยกออก",
+    "sourcePlaceholder": "กด “โหลดแหล่งข้อมูลและพล็อต” ก่อน",
+    "distancePlaceholder": "ระยะทาง (กม.)",
+    "navigationButton": "1. โหลดแหล่งข้อมูลและพล็อตการนำทาง",
+    "navigationButtonAgain": "พล็อตเลเยอร์การนำทางอีกชุด",
+    "exportButton": "ส่งออกผลลัพธ์ที่พล็อตเป็น GeoJSON",
+    "addLayersButton": "เพิ่มผลลัพธ์ที่พล็อตไปยังเลเยอร์ของ GeoLibre",
+    "clearButton": "ล้างผลลัพธ์ NLDI",
+    "noComid": "ไม่มีการคืนค่า COMID สำหรับจุดนี้",
+    "requestingBasin": "กำลังขอข้อมูลลุ่มน้ำต้นน้ำ…",
+    "basinRendered": "พล็อตลุ่มน้ำต้นน้ำสำหรับ COMID {{comid}} แล้ว",
+    "basinFailed": "คำขอข้อมูลลุ่มน้ำล้มเหลว",
+    "selectNavigation": "เลือกวิธีการนำทางหลังจากลากเส้นจากจุดแล้ว",
+    "invalidDistance": "ระยะทางต้องอยู่ระหว่าง 1 ถึง 9999 กม.",
+    "discoveringSources": "กำลังค้นหาแหล่งข้อมูลการนำทางของ NLDI…",
+    "navigationUnavailable": "วิธีการนำทางนั้นใช้ไม่ได้กับ COMID นี้",
+    "noPlottableSource": "NLDI ไม่ได้คืนค่าแหล่งข้อมูลการนำทางที่พล็อตได้",
+    "navigationEmpty": "{{source}} ไม่ได้คืนค่าฟีเจอร์ที่แสดงบนแผนที่ได้สำหรับการนำทางนี้",
+    "navigationAdded": "เพิ่ม {{source}} ผ่าน {{navigation}} สำหรับ COMID {{comid}} ({{km}} กม.) แล้ว เลเยอร์การนำทางเดิมยังคงอยู่บนแผนที่",
+    "navigationFailed": "คำขอการนำทางล้มเหลว",
+    "tracing": "กำลังลากเส้นไปยังเส้นทางน้ำ NHD ที่ใกล้ที่สุด…",
+    "flowline": "พล็อตเส้นทางน้ำแล้ว",
+    "flowlineComid": "พล็อตเส้นทางน้ำแล้ว COMID {{comid}} พร้อมใช้กับกระบวนงานลุ่มน้ำ",
+    "flowlineFallback": "พล็อตเส้นทางน้ำโดยใช้ตำแหน่งอุทกวิทยาสำรองของ NLDI",
+    "flowlineFallbackComid": "พล็อตเส้นทางน้ำโดยใช้ตำแหน่งอุทกวิทยาสำรองของ NLDI COMID {{comid}} พร้อมใช้กับกระบวนงานลุ่มน้ำ",
+    "requestFailed": "คำขอ NLDI ล้มเหลว",
+    "nothingToAdd": "ไม่มีฟีเจอร์ NLDI ที่พล็อตไว้ให้เพิ่ม",
+    "layersAdded_other": "เพิ่มเลเยอร์ NLDI {{count}} เลเยอร์ไปยังกลุ่ม “ผลลัพธ์ USGS NLDI” หนึ่งกลุ่มแล้ว",
+    "layerGroupName": "ผลลัพธ์ USGS NLDI",
+    "layerFlowline": "เส้นทางน้ำ NLDI",
+    "layerRaindrop": "เส้นทางหยดน้ำฝน NLDI",
+    "layerSelectedPoint": "จุดที่เลือกของ NLDI",
+    "layerBasin": "ลุ่มน้ำต้นน้ำ NLDI",
+    "layerNavigation": "การนำทาง NLDI {{index}}",
+    "resultCleared": "ล้างผลลัพธ์ NLDI แล้ว",
+    "directionalUnavailable": "การลากเส้นทางน้ำแบบมีทิศทางใช้ไม่ได้ขณะที่กระบวนการของ USGS ออฟไลน์ โปรดเลือก “เส้นทางน้ำทั้งเส้น” หรือลองใหม่ภายหลัง",
+    "noFlowlineNearby": "NLDI ไม่พบเส้นทางน้ำใกล้กับจุดนี้",
+    "httpError": "USGS NLDI คืนค่า HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI คืนค่า HTTP {{status}}: {{detail}}",
+    "noAttributes": "NLDI ไม่ได้คืนค่าแอตทริบิวต์ใด ๆ",
+    "catalogCaGages": "สถานีวัดน้ำท่าในแคลิฟอร์เนีย (ca_gages)",
+    "catalogNwisSite": "สถานีตรวจวัดน้ำผิวดินของ NWIS (สถานีวัดน้ำท่า)",
+    "catalogNwisGw": "บ่อน้ำบาดาลของ NWIS",
+    "catalogGfv11Pois": "จุดข้อมูล USGS Geospatial Fabric",
+    "catalogHuc12pp": "จุดระบายน้ำ HUC12",
+    "catalogNmwdiSt": "สถานีตรวจวัดน้ำในรัฐนิวเม็กซิโก",
+    "catalogFlowlines": "เส้นทางน้ำ NHDPlus"
   }
 }

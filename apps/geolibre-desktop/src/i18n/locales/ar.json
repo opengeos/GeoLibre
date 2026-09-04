@@ -284,6 +284,10 @@
         "label": "إضافة طبقة WMS",
         "description": "إضافة خدمة WMS GetMap كطبقة بيانات نقطية مبلطة."
       },
+      "csw": {
+        "label": "البحث في كتالوج CSW",
+        "description": "ابحث عن مجموعات البيانات في خدمة كتالوج OGC وأضِف الموارد الشبكية المدعومة إلى الخريطة."
+      },
       "wfs": {
         "label": "إضافة طبقة WFS",
         "description": "إضافة معالم WFS عبر طلب GeoJSON من خدمة GetFeature."
@@ -446,6 +450,21 @@
       "noLayersFound": "لم يُعثر على أي طبقات لهذه الخدمة.",
       "retrieveError": "تعذر جلب الطبقات من هذه الخدمة.",
       "version": "إصدار WMS"
+    },
+    "csw": {
+      "defaultName": "كتالوج CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "كلمة مفتاحية",
+      "search": "بحث",
+      "searching": "جارٍ البحث…",
+      "results": "نتائج الكتالوج",
+      "errorUrl": "أدخل عنوان URL صالحًا لخدمة CSW عبر HTTP أو HTTPS.",
+      "searchError": "تعذّر البحث في هذا الكتالوج.",
+      "noResults": "لم يُعثر على مجموعات بيانات مطابقة.",
+      "invalidGeoJson": "المورد المحدد ليس FeatureCollection من نوع GeoJSON.",
+      "addError": "تعذّرت إضافة مورد الكتالوج هذا.",
+      "addResource": "إضافة {{kind}}",
+      "noSupportedResources": "لم يُعلَن عن أي مورد مدعوم من نوع WMS أو WFS أو ArcGIS أو GeoJSON."
     },
     "wfs": {
       "defaultName": "طبقة WFS",
@@ -2029,6 +2048,9 @@
     "only2d": "ثنائي الأبعاد فقط",
     "cesiumTokenHint": "أضف رمز Cesium Ion من الإعدادات للحصول على التضاريس وصور Ion"
   },
+  "renderer": {
+    "layerUnsupported": "لا تُعرَض على الكرة الأرضية ثلاثية الأبعاد"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "نسخ الإحداثيات إلى الحافظة",
     "quickActions": "إجراءات سريعة",
@@ -2624,6 +2646,7 @@
       "mbtiles": "طبقة MBTiles",
       "xyz": "طبقة XYZ",
       "wms": "طبقة WMS",
+      "csw": "كتالوج CSW",
       "wfs": "طبقة WFS",
       "wmts": "طبقة WMTS",
       "ogcFeatures": "OGC API - Features",
@@ -2887,6 +2910,10 @@
       "splitViewGrid2x3": "شبكة 2 × 3",
       "splitViewGrid3x3": "شبكة 3 × 3",
       "splitViewSync": "مزامنة العروض",
+      "renderingEngine": "محرك العرض",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "غير متاح على الكرة الأرضية ثلاثية الأبعاد. عُد إلى MapLibre 2D من العرض ← محرك العرض.",
       "viewInGoogleMaps": "عرض في Google Maps",
       "viewInGoogleEarth": "عرض في Google Earth",
       "zoomIn": "تكبير",
@@ -3101,6 +3128,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "التعليقات التوضيحية",
+      "maplibre-gl-dimensions": "الأبعاد",
       "maplibre-gl-streetview": "عرض الشارع",
       "maplibre-gl-time-slider": "شريط تمرير الزمن",
       "geolibre-timelapse": "التسلسل الزمني",
@@ -4162,6 +4190,32 @@
     "saveElement": "حفظ العنصر",
     "atPoint": "عند نقطة",
     "pinnedToExtent": "مثبت على النطاق"
+  },
+  "dimensions": {
+    "toolbar": "أدوات الأبعاد",
+    "layerName": "الأبعاد",
+    "tools": {
+      "linear": "بُعد خطي",
+      "angular": "بُعد زاوي"
+    },
+    "unit": "الوحدة",
+    "snap": "الالتقاط إلى الرؤوس",
+    "color": "لون البُعد",
+    "width": "عرض الخط",
+    "widthOptions": {
+      "thin": "رفيع",
+      "medium": "متوسط",
+      "thick": "سميك"
+    },
+    "deleteLast": "حذف آخر بُعد",
+    "clearAll": "مسح كل الأبعاد",
+    "newLayer": "طبقة أبعاد جديدة",
+    "confirmClearAll_few": "حذف كل الأبعاد الـ{{count}} في هذه الطبقة؟ لا يمكن التراجع عن ذلك.",
+    "confirmClearAll_many": "حذف كل الأبعاد الـ{{count}} في هذه الطبقة؟ لا يمكن التراجع عن ذلك.",
+    "confirmClearAll_one": "حذف هذا البُعد؟ لا يمكن التراجع عن ذلك.",
+    "confirmClearAll_other": "حذف كل الأبعاد الـ{{count}} في هذه الطبقة؟ لا يمكن التراجع عن ذلك.",
+    "confirmClearAll_two": "حذف البُعدين ({{count}}) في هذه الطبقة؟ لا يمكن التراجع عن ذلك.",
+    "confirmClearAll_zero": "حذف الأبعاد في هذه الطبقة ({{count}})؟ لا يمكن التراجع عن ذلك."
   },
   "pythonConsole": {
     "title": "وحدة تحكم Python",
@@ -8077,5 +8131,70 @@
       "downloadsStarted": "بدأ {{started}} من التنزيلات. أخفق {{failed}}.",
       "downloadCancelled": "أُلغي التنزيل أو أخفق."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "أدوات شبكة USGS NLDI",
+    "hint": "اختر أولًا اتجاه خط المجرى وانقر على الخريطة. ثم اختر اتجاه التتبع، واضغط الزر المميّز لتحميل الكتالوجات المتاحة، واختر كتالوجًا مثل محطات القياس أو الآبار، ثم اضغطه مرة أخرى لرسم ذلك الكتالوج.",
+    "directionComplete": "خط المجرى الكامل — يعيد مقطع NHD بالكامل",
+    "directionUp": "المنبع فقط — يعيد المقطع الواقع أعلى النقطة",
+    "directionDown": "المصب فقط — يعيد المقطع الواقع أسفل النقطة",
+    "basinButton": "الحوض من الموقع الهيدرولوجي",
+    "navigationPlaceholder": "اختر اتجاهًا — مطلوب قبل الرسم",
+    "navigationUpstreamMain": "المجرى الرئيسي نحو المنبع — يتبع القناة الرئيسية",
+    "navigationUpstreamTributaries": "روافد المنبع — يعثر على الفروع المغذية",
+    "navigationDownstreamMain": "المجرى الرئيسي نحو المصب — يتبع القناة الرئيسية",
+    "navigationDownstreamDiversions": "تحويلات المصب — يتبع مسارات التدفق المتفرعة",
+    "sourcePlaceholder": "اضغط «تحميل المصادر والرسم» أولًا",
+    "distancePlaceholder": "المسافة (كم)",
+    "navigationButton": "١. تحميل المصادر ورسم التتبع",
+    "navigationButtonAgain": "رسم طبقة تتبع أخرى",
+    "exportButton": "تصدير النتائج المرسومة إلى GeoJSON",
+    "addLayersButton": "إضافة النتائج المرسومة إلى طبقات GeoLibre",
+    "clearButton": "مسح نتيجة NLDI",
+    "noComid": "لم يُعَد أي COMID لهذه النقطة.",
+    "requestingBasin": "جارٍ طلب حوض المنبع…",
+    "basinRendered": "تم رسم حوض المنبع للـ COMID {{comid}}.",
+    "basinFailed": "فشل طلب الحوض.",
+    "selectNavigation": "اختر طريقة تتبع بعد تتبّع نقطة.",
+    "invalidDistance": "يجب أن تتراوح المسافة بين 1 و9999 كم.",
+    "discoveringSources": "جارٍ اكتشاف مصادر تتبع NLDI…",
+    "navigationUnavailable": "طريقة التتبع تلك غير متاحة لهذا الـ COMID.",
+    "noPlottableSource": "لم يُعِد NLDI أي مصدر تتبع قابل للرسم.",
+    "navigationEmpty": "لم يُعِد {{source}} أي معالم قابلة للرسم على الخريطة لهذا التتبع.",
+    "navigationAdded": "تمت إضافة {{source}} عبر {{navigation}} للـ COMID {{comid}} ({{km}} كم). تبقى طبقات التتبع الحالية على الخريطة.",
+    "navigationFailed": "فشل طلب التتبع.",
+    "tracing": "جارٍ التتبع إلى أقرب خط مجرى في NHD…",
+    "flowline": "تم رسم خط المجرى.",
+    "flowlineComid": "تم رسم خط المجرى؛ الـ COMID {{comid}} جاهز لسير عمل الأحواض.",
+    "flowlineFallback": "تم رسم خط المجرى باستخدام البديل الاحتياطي للموقع الهيدرولوجي في NLDI.",
+    "flowlineFallbackComid": "تم رسم خط المجرى باستخدام البديل الاحتياطي للموقع الهيدرولوجي في NLDI؛ الـ COMID {{comid}} جاهز لسير عمل الأحواض.",
+    "requestFailed": "فشل طلب NLDI.",
+    "nothingToAdd": "لا توجد معالم NLDI مرسومة لإضافتها.",
+    "layersAdded_few": "تمت إضافة {{count}} طبقات NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layersAdded_many": "تمت إضافة {{count}} طبقة NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layersAdded_one": "تمت إضافة {{count}} طبقة NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layersAdded_other": "تمت إضافة {{count}} طبقة NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layersAdded_two": "تمت إضافة {{count}} طبقتَي NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layersAdded_zero": "تمت إضافة {{count}} طبقة NLDI إلى مجموعة «نتائج USGS NLDI» واحدة.",
+    "layerGroupName": "نتائج USGS NLDI",
+    "layerFlowline": "خط مجرى NLDI",
+    "layerRaindrop": "مسار قطرة المطر في NLDI",
+    "layerSelectedPoint": "النقطة المحددة في NLDI",
+    "layerBasin": "حوض المنبع في NLDI",
+    "layerNavigation": "تتبع NLDI {{index}}",
+    "resultCleared": "تم مسح نتيجة NLDI.",
+    "directionalUnavailable": "التتبع الاتجاهي للتدفق غير متاح ما دامت خدمة USGS غير متصلة. اختر «خط المجرى الكامل» أو أعِد المحاولة لاحقًا.",
+    "noFlowlineNearby": "لم يتمكن NLDI من العثور على خط مجرى قرب هذه النقطة.",
+    "httpError": "أعاد USGS NLDI الرمز HTTP {{status}}",
+    "httpErrorDetail": "أعاد USGS NLDI الرمز HTTP {{status}}: {{detail}}",
+    "noAttributes": "لم يُعِد NLDI أي سمات.",
+    "catalogCaGages": "محطات قياس الجريان في كاليفورنيا (ca_gages)",
+    "catalogNwisSite": "مواقع المياه السطحية في NWIS (محطات القياس)",
+    "catalogNwisGw": "آبار المياه الجوفية في NWIS",
+    "catalogGfv11Pois": "نقاط USGS Geospatial Fabric",
+    "catalogHuc12pp": "نقاط المصب HUC12",
+    "catalogNmwdiSt": "مواقع المياه في نيومكسيكو",
+    "catalogFlowlines": "خطوط مجاري NHDPlus"
   }
 }

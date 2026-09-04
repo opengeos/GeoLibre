@@ -276,6 +276,10 @@
         "label": "Ajouter une couche WMS",
         "description": "Ajouter un service WMS GetMap comme couche raster en tuiles."
       },
+      "csw": {
+        "label": "Rechercher dans un catalogue CSW",
+        "description": "Rechercher des jeux de données dans un service de catalogue OGC et ajouter à la carte les ressources web prises en charge."
+      },
       "wfs": {
         "label": "Ajouter une couche WFS",
         "description": "Ajouter des entités WFS en demandant du GeoJSON à un service GetFeature."
@@ -426,6 +430,21 @@
       "noLayersFound": "Aucune couche n'a été trouvée pour ce service.",
       "retrieveError": "Impossible de récupérer les couches de ce service.",
       "version": "Version WMS"
+    },
+    "csw": {
+      "defaultName": "Catalogue CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Mot-clé",
+      "search": "Rechercher",
+      "searching": "Recherche en cours…",
+      "results": "Résultats du catalogue",
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de service CSW.",
+      "searchError": "Impossible de rechercher dans ce catalogue.",
+      "noResults": "Aucun jeu de données correspondant n’a été trouvé.",
+      "invalidGeoJson": "La ressource sélectionnée n’est pas une FeatureCollection GeoJSON.",
+      "addError": "Impossible d’ajouter cette ressource du catalogue.",
+      "addResource": "Ajouter {{kind}}",
+      "noSupportedResources": "Aucune ressource WMS, WFS, ArcGIS ou GeoJSON prise en charge n’a été annoncée."
     },
     "wfs": {
       "defaultName": "Couche WFS",
@@ -1850,6 +1869,9 @@
     "only2d": "2D uniquement",
     "cesiumTokenHint": "Ajoutez un jeton Cesium Ion dans les Paramètres pour le relief et l'imagerie Ion"
   },
+  "renderer": {
+    "layerUnsupported": "Non rendu par le globe 3D"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copier les coordonnées dans le presse-papiers",
     "quickActions": "Actions rapides",
@@ -2437,6 +2459,7 @@
       "mbtiles": "Couche MBTiles",
       "xyz": "Couche XYZ",
       "wms": "Couche WMS",
+      "csw": "Catalogue CSW",
       "wfs": "Couche WFS",
       "wmts": "Couche WMTS",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "Grille 2 × 3",
       "splitViewGrid3x3": "Grille 3 × 3",
       "splitViewSync": "Synchroniser les vues",
+      "renderingEngine": "Moteur de rendu",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "Indisponible sur le globe 3D. Revenez à MapLibre 2D via Affichage → Moteur de rendu.",
       "viewInGoogleMaps": "Voir dans Google Maps",
       "viewInGoogleEarth": "Voir dans Google Earth",
       "zoomIn": "Zoomer",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",
+      "maplibre-gl-dimensions": "Cotation",
       "maplibre-gl-streetview": "Vue de rue",
       "maplibre-gl-time-slider": "Curseur temporel",
       "geolibre-timelapse": "Timelapse",
@@ -3907,6 +3935,28 @@
     "saveElement": "Enregistrer l'élément",
     "atPoint": "Au point",
     "pinnedToExtent": "Ancré à l'emprise"
+  },
+  "dimensions": {
+    "toolbar": "Outils de cotation",
+    "layerName": "Cotes",
+    "tools": {
+      "linear": "Cote linéaire",
+      "angular": "Cote angulaire"
+    },
+    "unit": "Unité",
+    "snap": "Accrocher aux sommets",
+    "color": "Couleur de cotation",
+    "width": "Épaisseur de ligne",
+    "widthOptions": {
+      "thin": "Fine",
+      "medium": "Moyenne",
+      "thick": "Épaisse"
+    },
+    "deleteLast": "Supprimer la dernière cote",
+    "clearAll": "Effacer toutes les cotes",
+    "newLayer": "Nouveau calque de cotation",
+    "confirmClearAll_one": "Supprimer cette cote ? Cette action est irréversible.",
+    "confirmClearAll_other": "Supprimer les {{count}} cotes de ce calque ? Cette action est irréversible."
   },
   "pythonConsole": {
     "title": "Console Python",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "Téléchargements démarrés : {{started}}. En échec : {{failed}}.",
       "downloadCancelled": "Téléchargement annulé ou échoué."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "Outils réseau USGS NLDI",
+    "hint": "Choisissez d’abord un sens de tronçon hydrographique et cliquez sur la carte. Choisissez ensuite un sens de navigation, appuyez sur le bouton mis en évidence pour charger les catalogues disponibles, sélectionnez un catalogue tel que les stations de jaugeage ou les puits, puis appuyez à nouveau pour tracer ce catalogue.",
+    "directionComplete": "Tronçon complet — renvoie le bief NHD entier",
+    "directionUp": "Amont uniquement — renvoie le bief situé au-dessus du point",
+    "directionDown": "Aval uniquement — renvoie le bief situé en dessous du point",
+    "basinButton": "Bassin versant à partir de l’hydrolocalisation",
+    "navigationPlaceholder": "Sélectionner un sens — requis avant le tracé",
+    "navigationUpstreamMain": "Cours principal amont — suit le chenal principal",
+    "navigationUpstreamTributaries": "Affluents amont — recherche les branches contributives",
+    "navigationDownstreamMain": "Cours principal aval — suit le chenal principal",
+    "navigationDownstreamDiversions": "Dérivations aval — suit les chemins de flux divisé",
+    "sourcePlaceholder": "Appuyez d’abord sur « Charger les sources et tracer »",
+    "distancePlaceholder": "Distance (km)",
+    "navigationButton": "1. Charger les sources et tracer la navigation",
+    "navigationButtonAgain": "Tracer un autre calque de navigation",
+    "exportButton": "Exporter les résultats tracés en GeoJSON",
+    "addLayersButton": "Ajouter les résultats tracés aux couches GeoLibre",
+    "clearButton": "Effacer le résultat NLDI",
+    "noComid": "Aucun COMID n’a été renvoyé pour ce point.",
+    "requestingBasin": "Demande du bassin versant amont…",
+    "basinRendered": "Bassin versant amont tracé pour le COMID {{comid}}.",
+    "basinFailed": "La demande de bassin versant a échoué.",
+    "selectNavigation": "Sélectionnez une méthode de navigation après avoir tracé un point.",
+    "invalidDistance": "La distance doit être comprise entre 1 et 9999 km.",
+    "discoveringSources": "Découverte des sources de navigation NLDI…",
+    "navigationUnavailable": "Cette méthode de navigation n’est pas disponible pour ce COMID.",
+    "noPlottableSource": "NLDI n’a renvoyé aucune source de navigation traçable.",
+    "navigationEmpty": "{{source}} n’a renvoyé aucune entité cartographiable pour cette navigation.",
+    "navigationAdded": "Source ajoutée : {{source}} via {{navigation}} pour le COMID {{comid}} ({{km}} km). Les calques de navigation existants restent sur la carte.",
+    "navigationFailed": "La requête de navigation a échoué.",
+    "tracing": "Traçage jusqu’au tronçon NHD le plus proche…",
+    "flowline": "Tronçon hydrographique tracé.",
+    "flowlineComid": "Tronçon hydrographique tracé ; le COMID {{comid}} est prêt pour les traitements de bassin versant.",
+    "flowlineFallback": "Tronçon hydrographique tracé via la solution de repli d’hydrolocalisation NLDI.",
+    "flowlineFallbackComid": "Tronçon hydrographique tracé via la solution de repli d’hydrolocalisation NLDI ; le COMID {{comid}} est prêt pour les traitements de bassin versant.",
+    "requestFailed": "La requête NLDI a échoué.",
+    "nothingToAdd": "Il n’y a aucune entité NLDI tracée à ajouter.",
+    "layersAdded_one": "{{count}} couche NLDI ajoutée à un groupe « Résultats USGS NLDI ».",
+    "layersAdded_other": "{{count}} couches NLDI ajoutées à un groupe « Résultats USGS NLDI ».",
+    "layerGroupName": "Résultats USGS NLDI",
+    "layerFlowline": "Tronçon hydrographique NLDI",
+    "layerRaindrop": "Trajet de goutte de pluie NLDI",
+    "layerSelectedPoint": "Point sélectionné NLDI",
+    "layerBasin": "Bassin versant amont NLDI",
+    "layerNavigation": "Navigation NLDI {{index}}",
+    "resultCleared": "Résultat NLDI effacé.",
+    "directionalUnavailable": "Le traçage directionnel de l’écoulement est indisponible tant que le processus USGS est hors ligne. Choisissez « Tronçon complet » ou réessayez plus tard.",
+    "noFlowlineNearby": "NLDI n’a trouvé aucun tronçon hydrographique à proximité de ce point.",
+    "httpError": "USGS NLDI a renvoyé HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI a renvoyé HTTP {{status}} : {{detail}}",
+    "noAttributes": "Aucun attribut renvoyé par NLDI.",
+    "catalogCaGages": "Stations de jaugeage de Californie (ca_gages)",
+    "catalogNwisSite": "Stations d’eaux de surface NWIS (jaugeages)",
+    "catalogNwisGw": "Puits d’eaux souterraines NWIS",
+    "catalogGfv11Pois": "Points du Geospatial Fabric de l’USGS",
+    "catalogHuc12pp": "Exutoires HUC12",
+    "catalogNmwdiSt": "Stations hydrologiques du Nouveau-Mexique",
+    "catalogFlowlines": "Tronçons hydrographiques NHDPlus"
   }
 }

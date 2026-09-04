@@ -274,6 +274,10 @@
         "label": "添加 WMS 图层",
         "description": "将 WMS GetMap 服务添加为瓦片栅格图层。"
       },
+      "csw": {
+        "label": "搜索 CSW 目录",
+        "description": "在 OGC 目录服务中搜索数据集，并将支持的网络资源添加到地图。"
+      },
       "wfs": {
         "label": "添加 WFS 图层",
         "description": "通过向 GetFeature 服务请求 GeoJSON 来添加 WFS 要素。"
@@ -421,6 +425,21 @@
       "noLayersFound": "未在该服务中找到任何图层。",
       "retrieveError": "无法从该服务获取图层。",
       "version": "WMS 版本"
+    },
+    "csw": {
+      "defaultName": "CSW 目录",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "关键词",
+      "search": "搜索",
+      "searching": "正在搜索…",
+      "results": "目录结果",
+      "errorUrl": "请输入有效的 HTTP 或 HTTPS CSW 服务地址。",
+      "searchError": "无法搜索此目录。",
+      "noResults": "未找到匹配的数据集。",
+      "invalidGeoJson": "所选资源不是 GeoJSON FeatureCollection。",
+      "addError": "无法添加此目录资源。",
+      "addResource": "添加{{kind}}",
+      "noSupportedResources": "未提供支持的 WMS、WFS、ArcGIS 或 GeoJSON 资源。"
     },
     "wfs": {
       "defaultName": "WFS 图层",
@@ -1805,6 +1824,9 @@
     "only2d": "仅 2D",
     "cesiumTokenHint": "在设置中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
   },
+  "renderer": {
+    "layerUnsupported": "3D 地球不渲染此图层"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "复制坐标到剪贴板",
     "quickActions": "快捷操作",
@@ -2389,6 +2411,7 @@
       "mbtiles": "MBTiles 图层",
       "xyz": "XYZ 图层",
       "wms": "WMS 图层",
+      "csw": "CSW 目录",
       "wfs": "WFS 图层",
       "wmts": "WMTS 图层",
       "ogcFeatures": "OGC API - Features",
@@ -2653,6 +2676,10 @@
       "splitViewGrid2x3": "2 × 3 网格",
       "splitViewGrid3x3": "3 × 3 网格",
       "splitViewSync": "同步视图",
+      "renderingEngine": "渲染引擎",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "在 3D 地球上不可用。请通过“视图 → 渲染引擎”切换回 MapLibre 2D。",
       "viewInGoogleMaps": "在 Google 地图中查看",
       "viewInGoogleEarth": "在 Google Earth 中查看",
       "zoomIn": "放大",
@@ -2852,6 +2879,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "注释",
+      "maplibre-gl-dimensions": "尺寸标注",
       "maplibre-gl-streetview": "街景",
       "maplibre-gl-time-slider": "时间滑块",
       "geolibre-timelapse": "延时影像",
@@ -3843,6 +3871,27 @@
     "saveElement": "保存元素",
     "atPoint": "位于点",
     "pinnedToExtent": "固定到范围"
+  },
+  "dimensions": {
+    "toolbar": "尺寸标注工具",
+    "layerName": "尺寸标注",
+    "tools": {
+      "linear": "线性标注",
+      "angular": "角度标注"
+    },
+    "unit": "单位",
+    "snap": "捕捉到顶点",
+    "color": "标注颜色",
+    "width": "线宽",
+    "widthOptions": {
+      "thin": "细",
+      "medium": "中",
+      "thick": "粗"
+    },
+    "deleteLast": "删除最后一个标注",
+    "clearAll": "清除全部标注",
+    "newLayer": "新建尺寸标注图层",
+    "confirmClearAll_other": "确定要删除此图层中的全部 {{count}} 个尺寸标注吗？此操作无法撤销。"
   },
   "pythonConsole": {
     "title": "Python 控制台",
@@ -7658,5 +7707,65 @@
       "downloadsStarted": "已开始 {{started}} 个下载。{{failed}} 个失败。",
       "downloadCancelled": "下载已取消或失败。"
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI 水系网络工具",
+    "hint": "请先选择河段方向并单击地图。然后选择导航方向，按下高亮按钮加载可用目录，选择诸如水文站或水井之类的目录，再次按下该按钮即可绘制该目录。",
+    "directionComplete": "完整河段 — 返回整条 NHD 河段",
+    "directionUp": "仅上游 — 返回该点以上的河段",
+    "directionDown": "仅下游 — 返回该点以下的河段",
+    "basinButton": "由水文定位生成流域",
+    "navigationPlaceholder": "选择方向 — 绘制前必须选择",
+    "navigationUpstreamMain": "上游干流 — 沿主河道追踪",
+    "navigationUpstreamTributaries": "上游支流 — 查找汇入的分支",
+    "navigationDownstreamMain": "下游干流 — 沿主河道追踪",
+    "navigationDownstreamDiversions": "下游分流 — 沿分汊水道追踪",
+    "sourcePlaceholder": "请先按“加载数据源并绘制”",
+    "distancePlaceholder": "距离（公里）",
+    "navigationButton": "1. 加载数据源并绘制导航",
+    "navigationButtonAgain": "绘制另一个导航图层",
+    "exportButton": "将绘制结果导出为 GeoJSON",
+    "addLayersButton": "将绘制结果添加到 GeoLibre 图层",
+    "clearButton": "清除 NLDI 结果",
+    "noComid": "该点未返回 COMID。",
+    "requestingBasin": "正在请求上游流域…",
+    "basinRendered": "已绘制 COMID {{comid}} 的上游流域。",
+    "basinFailed": "流域请求失败。",
+    "selectNavigation": "追踪一个点后，请选择导航方式。",
+    "invalidDistance": "距离必须介于 1 到 9999 公里之间。",
+    "discoveringSources": "正在发现 NLDI 导航数据源…",
+    "navigationUnavailable": "该导航方式不适用于此 COMID。",
+    "noPlottableSource": "NLDI 未返回可绘制的导航数据源。",
+    "navigationEmpty": "{{source}} 未针对此导航返回可制图的要素。",
+    "navigationAdded": "已通过 {{navigation}} 为 COMID {{comid}} 添加 {{source}}（{{km}} 公里）。现有导航图层仍保留在地图上。",
+    "navigationFailed": "导航请求失败。",
+    "tracing": "正在追踪至最近的 NHD 河段…",
+    "flowline": "已绘制河段。",
+    "flowlineComid": "已绘制河段；COMID {{comid}} 可用于流域工作流。",
+    "flowlineFallback": "已使用 NLDI 水文定位回退方式绘制河段。",
+    "flowlineFallbackComid": "已使用 NLDI 水文定位回退方式绘制河段；COMID {{comid}} 可用于流域工作流。",
+    "requestFailed": "NLDI 请求失败。",
+    "nothingToAdd": "没有可添加的已绘制 NLDI 要素。",
+    "layersAdded_other": "已将 {{count}} 个 NLDI 图层添加到一个“USGS NLDI 结果”组。",
+    "layerGroupName": "USGS NLDI 结果",
+    "layerFlowline": "NLDI 河段",
+    "layerRaindrop": "NLDI 雨滴路径",
+    "layerSelectedPoint": "NLDI 选定点",
+    "layerBasin": "NLDI 上游流域",
+    "layerNavigation": "NLDI 导航 {{index}}",
+    "resultCleared": "已清除 NLDI 结果。",
+    "directionalUnavailable": "USGS 服务离线时无法使用定向流向追踪。请选择“完整河段”或稍后重试。",
+    "noFlowlineNearby": "NLDI 未能在该点附近找到河段。",
+    "httpError": "USGS NLDI 返回 HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI 返回 HTTP {{status}}：{{detail}}",
+    "noAttributes": "NLDI 未返回任何属性。",
+    "catalogCaGages": "加利福尼亚水文站（ca_gages）",
+    "catalogNwisSite": "NWIS 地表水站点（水文站）",
+    "catalogNwisGw": "NWIS 地下水井",
+    "catalogGfv11Pois": "USGS Geospatial Fabric 点",
+    "catalogHuc12pp": "HUC12 出水口",
+    "catalogNmwdiSt": "新墨西哥州水文站点",
+    "catalogFlowlines": "NHDPlus 河段"
   }
 }

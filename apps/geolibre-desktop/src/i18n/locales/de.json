@@ -276,6 +276,10 @@
         "label": "WMS-Ebene hinzufügen",
         "description": "Fügt einen WMS-GetMap-Dienst als gekachelte Rasterebene hinzu."
       },
+      "csw": {
+        "label": "CSW-Katalog durchsuchen",
+        "description": "Einen OGC-Katalogdienst nach Datensätzen durchsuchen und unterstützte Webressourcen zur Karte hinzufügen."
+      },
       "wfs": {
         "label": "WFS-Ebene hinzufügen",
         "description": "Fügt WFS-Objekte hinzu, indem GeoJSON von einem GetFeature-Dienst angefordert wird."
@@ -426,6 +430,21 @@
       "noLayersFound": "Für diesen Dienst wurden keine Ebenen gefunden.",
       "retrieveError": "Ebenen konnten nicht von diesem Dienst abgerufen werden.",
       "version": "WMS-Version"
+    },
+    "csw": {
+      "defaultName": "CSW-Katalog",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Stichwort",
+      "search": "Suchen",
+      "searching": "Suche läuft …",
+      "results": "Katalogergebnisse",
+      "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL eines CSW-Dienstes ein.",
+      "searchError": "Dieser Katalog konnte nicht durchsucht werden.",
+      "noResults": "Es wurden keine passenden Datensätze gefunden.",
+      "invalidGeoJson": "Die ausgewählte Ressource ist keine GeoJSON-FeatureCollection.",
+      "addError": "Diese Katalogressource konnte nicht hinzugefügt werden.",
+      "addResource": "{{kind}} hinzufügen",
+      "noSupportedResources": "Es wurde keine unterstützte WMS-, WFS-, ArcGIS- oder GeoJSON-Ressource angeboten."
     },
     "wfs": {
       "defaultName": "WFS-Ebene",
@@ -1850,6 +1869,9 @@
     "only2d": "Nur 2D",
     "cesiumTokenHint": "Fügen Sie in den Einstellungen ein Cesium-Ion-Token für Gelände und Ion-Bilder hinzu"
   },
+  "renderer": {
+    "layerUnsupported": "Wird vom 3D-Globus nicht dargestellt"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Koordinaten in die Zwischenablage kopieren",
     "quickActions": "Schnellaktionen",
@@ -2437,6 +2459,7 @@
       "mbtiles": "MBTiles-Ebene",
       "xyz": "XYZ-Ebene",
       "wms": "WMS-Ebene",
+      "csw": "CSW-Katalog",
       "wfs": "WFS-Ebene",
       "wmts": "WMTS-Ebene",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "2 × 3-Raster",
       "splitViewGrid3x3": "3 × 3-Raster",
       "splitViewSync": "Ansichten synchronisieren",
+      "renderingEngine": "Rendering-Engine",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "Auf dem 3D-Globus nicht verfügbar. Wechseln Sie über Ansicht → Rendering-Engine zurück zu MapLibre 2D.",
       "viewInGoogleMaps": "In Google Maps ansehen",
       "viewInGoogleEarth": "In Google Earth ansehen",
       "zoomIn": "Vergrößern",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Anmerkungen",
+      "maplibre-gl-dimensions": "Bemaßung",
       "maplibre-gl-streetview": "Straßenansicht",
       "maplibre-gl-time-slider": "Zeitschieberegler",
       "geolibre-timelapse": "Zeitraffer",
@@ -3907,6 +3935,28 @@
     "saveElement": "Element speichern",
     "atPoint": "Am Punkt",
     "pinnedToExtent": "An Ausdehnung geheftet"
+  },
+  "dimensions": {
+    "toolbar": "Bemaßungswerkzeuge",
+    "layerName": "Bemaßungen",
+    "tools": {
+      "linear": "Lineare Bemaßung",
+      "angular": "Winkelbemaßung"
+    },
+    "unit": "Einheit",
+    "snap": "An Stützpunkten fangen",
+    "color": "Bemaßungsfarbe",
+    "width": "Linienbreite",
+    "widthOptions": {
+      "thin": "Dünn",
+      "medium": "Mittel",
+      "thick": "Dick"
+    },
+    "deleteLast": "Letzte Bemaßung löschen",
+    "clearAll": "Alle Bemaßungen löschen",
+    "newLayer": "Neue Bemaßungsebene",
+    "confirmClearAll_one": "Diese Bemaßung löschen? Dies kann nicht rückgängig gemacht werden.",
+    "confirmClearAll_other": "Alle {{count}} Bemaßungen in dieser Ebene löschen? Dies kann nicht rückgängig gemacht werden."
   },
   "pythonConsole": {
     "title": "Python-Konsole",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "Gestartete Downloads: {{started}}. Fehlgeschlagen: {{failed}}.",
       "downloadCancelled": "Download abgebrochen oder fehlgeschlagen."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS-NLDI-Netzwerkwerkzeuge",
+    "hint": "Wählen Sie zuerst eine Fließrichtung und klicken Sie auf die Karte. Wählen Sie dann eine Navigationsrichtung, drücken Sie die hervorgehobene Schaltfläche, um die verfügbaren Kataloge zu laden, wählen Sie einen Katalog wie Pegel oder Brunnen aus und drücken Sie sie erneut, um diesen Katalog darzustellen.",
+    "directionComplete": "Vollständige Gewässerlinie — liefert den gesamten NHD-Abschnitt",
+    "directionUp": "Nur flussaufwärts — liefert den Abschnitt oberhalb des Punktes",
+    "directionDown": "Nur flussabwärts — liefert den Abschnitt unterhalb des Punktes",
+    "basinButton": "Einzugsgebiet aus Hydrolokation",
+    "navigationPlaceholder": "Richtung wählen — vor der Darstellung erforderlich",
+    "navigationUpstreamMain": "Flussaufwärts Hauptlauf — dem Hauptgerinne folgen",
+    "navigationUpstreamTributaries": "Flussaufwärts Zuflüsse — zufließende Verzweigungen finden",
+    "navigationDownstreamMain": "Flussabwärts Hauptlauf — dem Hauptgerinne folgen",
+    "navigationDownstreamDiversions": "Flussabwärts Ableitungen — Abzweigungen folgen",
+    "sourcePlaceholder": "Zuerst „Quellen laden & darstellen“ drücken",
+    "distancePlaceholder": "Entfernung (km)",
+    "navigationButton": "1. Quellen laden & Navigation darstellen",
+    "navigationButtonAgain": "Weitere Navigationsebene darstellen",
+    "exportButton": "Dargestellte Ergebnisse als GeoJSON exportieren",
+    "addLayersButton": "Dargestellte Ergebnisse zu den GeoLibre-Ebenen hinzufügen",
+    "clearButton": "NLDI-Ergebnis löschen",
+    "noComid": "Für diesen Punkt wurde keine COMID zurückgegeben.",
+    "requestingBasin": "Oberliegendes Einzugsgebiet wird angefordert …",
+    "basinRendered": "Oberliegendes Einzugsgebiet für COMID {{comid}} dargestellt.",
+    "basinFailed": "Anfrage für das Einzugsgebiet fehlgeschlagen.",
+    "selectNavigation": "Wählen Sie nach dem Verfolgen eines Punktes eine Navigationsmethode.",
+    "invalidDistance": "Die Entfernung muss zwischen 1 und 9999 km liegen.",
+    "discoveringSources": "NLDI-Navigationsquellen werden ermittelt …",
+    "navigationUnavailable": "Diese Navigationsmethode ist für diese COMID nicht verfügbar.",
+    "noPlottableSource": "NLDI hat keine darstellbare Navigationsquelle zurückgegeben.",
+    "navigationEmpty": "{{source}} hat für diese Navigation keine kartierbaren Objekte zurückgegeben.",
+    "navigationAdded": "{{source}} über {{navigation}} für COMID {{comid}} ({{km}} km) hinzugefügt. Vorhandene Navigationsebenen bleiben auf der Karte.",
+    "navigationFailed": "Navigationsanfrage fehlgeschlagen.",
+    "tracing": "Verfolgung zur nächstgelegenen NHD-Gewässerlinie …",
+    "flowline": "Gewässerlinie dargestellt.",
+    "flowlineComid": "Gewässerlinie dargestellt; COMID {{comid}} ist bereit für Einzugsgebiets-Workflows.",
+    "flowlineFallback": "Gewässerlinie über den NLDI-Hydrolokations-Fallback dargestellt.",
+    "flowlineFallbackComid": "Gewässerlinie über den NLDI-Hydrolokations-Fallback dargestellt; COMID {{comid}} ist bereit für Einzugsgebiets-Workflows.",
+    "requestFailed": "NLDI-Anfrage fehlgeschlagen.",
+    "nothingToAdd": "Es sind keine dargestellten NLDI-Objekte zum Hinzufügen vorhanden.",
+    "layersAdded_one": "{{count}} NLDI-Ebene zu einer Gruppe „USGS-NLDI-Ergebnisse“ hinzugefügt.",
+    "layersAdded_other": "{{count}} NLDI-Ebenen zu einer Gruppe „USGS-NLDI-Ergebnisse“ hinzugefügt.",
+    "layerGroupName": "USGS-NLDI-Ergebnisse",
+    "layerFlowline": "NLDI-Gewässerlinie",
+    "layerRaindrop": "NLDI-Regentropfenpfad",
+    "layerSelectedPoint": "NLDI-ausgewählter Punkt",
+    "layerBasin": "NLDI-Einzugsgebiet oberhalb",
+    "layerNavigation": "NLDI-Navigation {{index}}",
+    "resultCleared": "NLDI-Ergebnis gelöscht.",
+    "directionalUnavailable": "Die gerichtete Fließverfolgung ist nicht verfügbar, solange der USGS-Dienst offline ist. Wählen Sie „Vollständige Gewässerlinie“ oder versuchen Sie es später erneut.",
+    "noFlowlineNearby": "NLDI konnte in der Nähe dieses Punktes keine Gewässerlinie finden.",
+    "httpError": "USGS NLDI hat HTTP {{status}} zurückgegeben",
+    "httpErrorDetail": "USGS NLDI hat HTTP {{status}} zurückgegeben: {{detail}}",
+    "noAttributes": "Von NLDI wurden keine Attribute zurückgegeben.",
+    "catalogCaGages": "Pegel in Kalifornien (ca_gages)",
+    "catalogNwisSite": "NWIS-Oberflächenwassermessstellen (Pegel)",
+    "catalogNwisGw": "NWIS-Grundwasserbrunnen",
+    "catalogGfv11Pois": "Punkte des USGS Geospatial Fabric",
+    "catalogHuc12pp": "HUC12-Abflusspunkte",
+    "catalogNmwdiSt": "Wassermessstellen in New Mexico",
+    "catalogFlowlines": "NHDPlus-Gewässerlinien"
   }
 }

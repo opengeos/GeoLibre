@@ -2726,7 +2726,7 @@
       "renderingEngine": "Rendering engine",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "Unavailable on the 3D globe. Switch View \u2192 Rendering engine back to MapLibre 2D.",
+      "mapLibreOnly": "Unavailable on the 3D globe. Switch View → Rendering engine back to MapLibre 2D.",
       "viewInGoogleMaps": "View in Google Maps",
       "viewInGoogleEarth": "View in Google Earth",
       "zoomIn": "Zoom In",

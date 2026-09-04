@@ -276,6 +276,10 @@
         "label": "WMS-laag toevoegen",
         "description": "Voeg een WMS GetMap-service toe als een getegelde rasterlaag."
       },
+      "csw": {
+        "label": "CSW-catalogus doorzoeken",
+        "description": "Doorzoek een OGC-catalogusdienst op datasets en voeg ondersteunde webbronnen toe aan de kaart."
+      },
       "wfs": {
         "label": "WFS-laag toevoegen",
         "description": "Voeg WFS-features toe door GeoJSON op te vragen bij een GetFeature-service."
@@ -426,6 +430,21 @@
       "noLayersFound": "Er zijn geen lagen gevonden voor deze service.",
       "retrieveError": "Kan geen lagen ophalen van deze service.",
       "version": "WMS-versie"
+    },
+    "csw": {
+      "defaultName": "CSW-catalogus",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Trefwoord",
+      "search": "Zoeken",
+      "searching": "Bezig met zoeken…",
+      "results": "Catalogusresultaten",
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL van een CSW-service in.",
+      "searchError": "Kon niet zoeken in deze catalogus.",
+      "noResults": "Er zijn geen overeenkomende datasets gevonden.",
+      "invalidGeoJson": "De geselecteerde bron is geen GeoJSON-FeatureCollection.",
+      "addError": "Kon deze catalogusbron niet toevoegen.",
+      "addResource": "{{kind}} toevoegen",
+      "noSupportedResources": "Er is geen ondersteunde WMS-, WFS-, ArcGIS- of GeoJSON-bron aangeboden."
     },
     "wfs": {
       "defaultName": "WFS-laag",
@@ -1850,6 +1869,9 @@
     "only2d": "Alleen 2D",
     "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
+  "renderer": {
+    "layerUnsupported": "Niet weergegeven door de 3D-globe"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Coördinaten naar klembord kopiëren",
     "quickActions": "Snelle acties",
@@ -2437,6 +2459,7 @@
       "mbtiles": "MBTiles-laag",
       "xyz": "XYZ-laag",
       "wms": "WMS-laag",
+      "csw": "CSW-catalogus",
       "wfs": "WFS-laag",
       "wmts": "WMTS-laag",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "2 × 3-raster",
       "splitViewGrid3x3": "3 × 3-raster",
       "splitViewSync": "Weergaven synchroniseren",
+      "renderingEngine": "Renderengine",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "Niet beschikbaar op de 3D-globe. Schakel via Beeld → Renderengine terug naar MapLibre 2D.",
       "viewInGoogleMaps": "Bekijken in Google Maps",
       "viewInGoogleEarth": "Bekijken in Google Earth",
       "zoomIn": "Inzoomen",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotaties",
+      "maplibre-gl-dimensions": "Maatvoering",
       "maplibre-gl-streetview": "Straatbeeld",
       "maplibre-gl-time-slider": "Tijdschuif",
       "geolibre-timelapse": "Timelapse",
@@ -3907,6 +3935,28 @@
     "saveElement": "Element opslaan",
     "atPoint": "Op punt",
     "pinnedToExtent": "Vastgezet op bereik"
+  },
+  "dimensions": {
+    "toolbar": "Maatvoeringsgereedschap",
+    "layerName": "Maatlijnen",
+    "tools": {
+      "linear": "Lineaire maatlijn",
+      "angular": "Hoekmaatlijn"
+    },
+    "unit": "Eenheid",
+    "snap": "Aan hoekpunten vastklikken",
+    "color": "Maatlijnkleur",
+    "width": "Lijndikte",
+    "widthOptions": {
+      "thin": "Dun",
+      "medium": "Gemiddeld",
+      "thick": "Dik"
+    },
+    "deleteLast": "Laatste maatlijn verwijderen",
+    "clearAll": "Alle maatlijnen wissen",
+    "newLayer": "Nieuwe maatvoeringslaag",
+    "confirmClearAll_one": "Deze maatlijn verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    "confirmClearAll_other": "Alle {{count}} maatlijnen in deze laag verwijderen? Dit kan niet ongedaan worden gemaakt."
   },
   "pythonConsole": {
     "title": "Python-console",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "Gestarte downloads: {{started}}. Mislukt: {{failed}}.",
       "downloadCancelled": "Download geannuleerd of mislukt."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI-netwerkgereedschap",
+    "hint": "Kies eerst een stroomlijnrichting en klik op de kaart. Kies vervolgens een navigatierichting, druk op de gemarkeerde knop om de beschikbare catalogi te laden, selecteer een catalogus zoals meetstations of putten en druk er nogmaals op om die catalogus te tekenen.",
+    "directionComplete": "Volledige stroomlijn — geeft het hele NHD-traject terug",
+    "directionUp": "Alleen stroomopwaarts — geeft het traject boven het punt terug",
+    "directionDown": "Alleen stroomafwaarts — geeft het traject onder het punt terug",
+    "basinButton": "Stroomgebied uit hydrolocatie",
+    "navigationPlaceholder": "Kies een richting — vereist vóór het tekenen",
+    "navigationUpstreamMain": "Hoofdloop stroomopwaarts — volgt de hoofdgeul",
+    "navigationUpstreamTributaries": "Zijrivieren stroomopwaarts — zoekt bijdragende zijtakken",
+    "navigationDownstreamMain": "Hoofdloop stroomafwaarts — volgt de hoofdgeul",
+    "navigationDownstreamDiversions": "Aftakkingen stroomafwaarts — volgt gesplitste stroompaden",
+    "sourcePlaceholder": "Druk eerst op ‘Bronnen laden en tekenen’",
+    "distancePlaceholder": "Afstand (km)",
+    "navigationButton": "1. Bronnen laden en navigatie tekenen",
+    "navigationButtonAgain": "Nog een navigatielaag tekenen",
+    "exportButton": "Getekende resultaten naar GeoJSON exporteren",
+    "addLayersButton": "Getekende resultaten aan de GeoLibre-lagen toevoegen",
+    "clearButton": "NLDI-resultaat wissen",
+    "noComid": "Er is geen COMID teruggegeven voor dit punt.",
+    "requestingBasin": "Stroomopwaarts stroomgebied opvragen…",
+    "basinRendered": "Stroomopwaarts stroomgebied getekend voor COMID {{comid}}.",
+    "basinFailed": "Aanvraag voor het stroomgebied is mislukt.",
+    "selectNavigation": "Kies een navigatiemethode nadat u een punt hebt getraceerd.",
+    "invalidDistance": "De afstand moet tussen 1 en 9999 km liggen.",
+    "discoveringSources": "NLDI-navigatiebronnen worden opgezocht…",
+    "navigationUnavailable": "Die navigatiemethode is niet beschikbaar voor deze COMID.",
+    "noPlottableSource": "NLDI gaf geen tekenbare navigatiebron terug.",
+    "navigationEmpty": "{{source}} gaf geen kaartbare objecten terug voor deze navigatie.",
+    "navigationAdded": "{{source}} toegevoegd via {{navigation}} voor COMID {{comid}} ({{km}} km). Bestaande navigatielagen blijven op de kaart staan.",
+    "navigationFailed": "Navigatieaanvraag is mislukt.",
+    "tracing": "Traceren naar de dichtstbijzijnde NHD-stroomlijn…",
+    "flowline": "Stroomlijn getekend.",
+    "flowlineComid": "Stroomlijn getekend; COMID {{comid}} is klaar voor stroomgebiedworkflows.",
+    "flowlineFallback": "Stroomlijn getekend via de NLDI-hydrolocatieterugval.",
+    "flowlineFallbackComid": "Stroomlijn getekend via de NLDI-hydrolocatieterugval; COMID {{comid}} is klaar voor stroomgebiedworkflows.",
+    "requestFailed": "NLDI-aanvraag is mislukt.",
+    "nothingToAdd": "Er zijn geen getekende NLDI-objecten om toe te voegen.",
+    "layersAdded_one": "{{count}} NLDI-laag toegevoegd aan één groep ‘USGS NLDI-resultaten’.",
+    "layersAdded_other": "{{count}} NLDI-lagen toegevoegd aan één groep ‘USGS NLDI-resultaten’.",
+    "layerGroupName": "USGS NLDI-resultaten",
+    "layerFlowline": "NLDI-stroomlijn",
+    "layerRaindrop": "NLDI-regendruppelpad",
+    "layerSelectedPoint": "NLDI-geselecteerd punt",
+    "layerBasin": "NLDI-stroomgebied stroomopwaarts",
+    "layerNavigation": "NLDI-navigatie {{index}}",
+    "resultCleared": "NLDI-resultaat gewist.",
+    "directionalUnavailable": "Richtinggebonden stroomtracering is niet beschikbaar zolang het USGS-proces offline is. Kies ‘Volledige stroomlijn’ of probeer het later opnieuw.",
+    "noFlowlineNearby": "NLDI kon geen stroomlijn in de buurt van dit punt vinden.",
+    "httpError": "USGS NLDI gaf HTTP {{status}} terug",
+    "httpErrorDetail": "USGS NLDI gaf HTTP {{status}} terug: {{detail}}",
+    "noAttributes": "Geen attributen teruggegeven door NLDI.",
+    "catalogCaGages": "Meetstations in Californië (ca_gages)",
+    "catalogNwisSite": "NWIS-oppervlaktewaterlocaties (meetstations)",
+    "catalogNwisGw": "NWIS-grondwaterputten",
+    "catalogGfv11Pois": "Punten van de USGS Geospatial Fabric",
+    "catalogHuc12pp": "HUC12-uitstroompunten",
+    "catalogNmwdiSt": "Waterlocaties in New Mexico",
+    "catalogFlowlines": "NHDPlus-stroomlijnen"
   }
 }

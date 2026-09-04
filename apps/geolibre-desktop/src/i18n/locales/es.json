@@ -276,6 +276,10 @@
         "label": "Añadir capa WMS",
         "description": "Añade un servicio WMS GetMap como capa ráster teselada."
       },
+      "csw": {
+        "label": "Buscar en catálogo CSW",
+        "description": "Busca conjuntos de datos en un servicio de catálogo OGC y añade al mapa los recursos web compatibles."
+      },
       "wfs": {
         "label": "Añadir capa WFS",
         "description": "Añade entidades WFS solicitando GeoJSON a un servicio GetFeature."
@@ -426,6 +430,21 @@
       "noLayersFound": "No se encontraron capas para este servicio.",
       "retrieveError": "No se pudieron recuperar las capas de este servicio.",
       "version": "Versión de WMS"
+    },
+    "csw": {
+      "defaultName": "Catálogo CSW",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Palabra clave",
+      "search": "Buscar",
+      "searching": "Buscando…",
+      "results": "Resultados del catálogo",
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida del servicio CSW.",
+      "searchError": "No se pudo buscar en este catálogo.",
+      "noResults": "No se encontraron conjuntos de datos coincidentes.",
+      "invalidGeoJson": "El recurso seleccionado no es una FeatureCollection de GeoJSON.",
+      "addError": "No se pudo añadir este recurso del catálogo.",
+      "addResource": "Añadir {{kind}}",
+      "noSupportedResources": "No se anunció ningún recurso WMS, WFS, ArcGIS o GeoJSON compatible."
     },
     "wfs": {
       "defaultName": "Capa WFS",
@@ -1850,6 +1869,9 @@
     "only2d": "Solo 2D",
     "cesiumTokenHint": "Añada un token de Cesium Ion en Configuración para el terreno y las imágenes de Ion"
   },
+  "renderer": {
+    "layerUnsupported": "No se representa en el globo 3D"
+  },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copiar coordenadas al portapapeles",
     "quickActions": "Acciones rápidas",
@@ -2437,6 +2459,7 @@
       "mbtiles": "Capa MBTiles",
       "xyz": "Capa XYZ",
       "wms": "Capa WMS",
+      "csw": "Catálogo CSW",
       "wfs": "Capa WFS",
       "wmts": "Capa WMTS",
       "ogcFeatures": "OGC API - Features",
@@ -2700,6 +2723,10 @@
       "splitViewGrid2x3": "Cuadrícula 2 × 3",
       "splitViewGrid3x3": "Cuadrícula 3 × 3",
       "splitViewSync": "Sincronizar vistas",
+      "renderingEngine": "Motor de representación",
+      "rendererMapLibre": "MapLibre 2D",
+      "rendererCesium": "Cesium 3D",
+      "mapLibreOnly": "No disponible en el globo 3D. Vuelva a MapLibre 2D en Ver → Motor de representación.",
       "viewInGoogleMaps": "Ver en Google Maps",
       "viewInGoogleEarth": "Ver en Google Earth",
       "zoomIn": "Acercar",
@@ -2902,6 +2929,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Anotaciones",
+      "maplibre-gl-dimensions": "Acotaciones",
       "maplibre-gl-streetview": "Vista de calle",
       "maplibre-gl-time-slider": "Control de tiempo",
       "geolibre-timelapse": "Timelapse",
@@ -3907,6 +3935,28 @@
     "saveElement": "Guardar elemento",
     "atPoint": "En el punto",
     "pinnedToExtent": "Anclado a la extensión"
+  },
+  "dimensions": {
+    "toolbar": "Herramientas de acotación",
+    "layerName": "Acotaciones",
+    "tools": {
+      "linear": "Acotación lineal",
+      "angular": "Acotación angular"
+    },
+    "unit": "Unidad",
+    "snap": "Ajustar a vértices",
+    "color": "Color de la acotación",
+    "width": "Ancho de línea",
+    "widthOptions": {
+      "thin": "Fino",
+      "medium": "Medio",
+      "thick": "Grueso"
+    },
+    "deleteLast": "Eliminar última acotación",
+    "clearAll": "Borrar todas las acotaciones",
+    "newLayer": "Nueva capa de acotaciones",
+    "confirmClearAll_one": "¿Eliminar esta acotación? Esta acción no se puede deshacer.",
+    "confirmClearAll_other": "¿Eliminar las {{count}} acotaciones de esta capa? Esta acción no se puede deshacer."
   },
   "pythonConsole": {
     "title": "Consola de Python",
@@ -7742,5 +7792,66 @@
       "downloadsStarted": "Descargas iniciadas: {{started}}. Con error: {{failed}}.",
       "downloadCancelled": "Descarga cancelada o fallida."
     }
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "Herramientas de red USGS NLDI",
+    "hint": "Primero elija una dirección de línea de flujo y haga clic en el mapa. Después elija una dirección de navegación, pulse el botón resaltado para cargar los catálogos disponibles, seleccione un catálogo como estaciones de aforo o pozos, y púlselo de nuevo para representar ese catálogo.",
+    "directionComplete": "Línea de flujo completa — devuelve el tramo NHD completo",
+    "directionUp": "Solo aguas arriba — devuelve el tramo situado por encima del punto",
+    "directionDown": "Solo aguas abajo — devuelve el tramo situado por debajo del punto",
+    "basinButton": "Cuenca a partir de la hidrolocalización",
+    "navigationPlaceholder": "Seleccione una dirección — obligatorio antes de representar",
+    "navigationUpstreamMain": "Cauce principal aguas arriba — sigue el canal principal",
+    "navigationUpstreamTributaries": "Afluentes aguas arriba — encuentra las ramas contribuyentes",
+    "navigationDownstreamMain": "Cauce principal aguas abajo — sigue el canal principal",
+    "navigationDownstreamDiversions": "Derivaciones aguas abajo — sigue las rutas de flujo bifurcado",
+    "sourcePlaceholder": "Pulse antes «Cargar fuentes y representar»",
+    "distancePlaceholder": "Distancia (km)",
+    "navigationButton": "1. Cargar fuentes y representar la navegación",
+    "navigationButtonAgain": "Representar otra capa de navegación",
+    "exportButton": "Exportar los resultados representados a GeoJSON",
+    "addLayersButton": "Añadir los resultados representados a las capas de GeoLibre",
+    "clearButton": "Borrar el resultado NLDI",
+    "noComid": "No se devolvió ningún COMID para este punto.",
+    "requestingBasin": "Solicitando la cuenca aguas arriba…",
+    "basinRendered": "Cuenca aguas arriba representada para el COMID {{comid}}.",
+    "basinFailed": "La solicitud de la cuenca falló.",
+    "selectNavigation": "Seleccione un método de navegación después de trazar un punto.",
+    "invalidDistance": "La distancia debe estar entre 1 y 9999 km.",
+    "discoveringSources": "Detectando las fuentes de navegación de NLDI…",
+    "navigationUnavailable": "Ese método de navegación no está disponible para este COMID.",
+    "noPlottableSource": "NLDI no devolvió ninguna fuente de navegación representable.",
+    "navigationEmpty": "{{source}} no devolvió entidades cartografiables para esta navegación.",
+    "navigationAdded": "Fuente añadida: {{source}} mediante {{navigation}} para el COMID {{comid}} ({{km}} km). Las capas de navegación existentes permanecen en el mapa.",
+    "navigationFailed": "La solicitud de navegación falló.",
+    "tracing": "Trazando hasta la línea de flujo NHD más cercana…",
+    "flowline": "Línea de flujo representada.",
+    "flowlineComid": "Línea de flujo representada; el COMID {{comid}} está listo para los flujos de trabajo de cuencas.",
+    "flowlineFallback": "Línea de flujo representada mediante la hidrolocalización alternativa de NLDI.",
+    "flowlineFallbackComid": "Línea de flujo representada mediante la hidrolocalización alternativa de NLDI; el COMID {{comid}} está listo para los flujos de trabajo de cuencas.",
+    "requestFailed": "La solicitud a NLDI falló.",
+    "nothingToAdd": "No hay entidades NLDI representadas que añadir.",
+    "layersAdded_one": "Se añadió {{count}} capa NLDI a un grupo «Resultados de USGS NLDI».",
+    "layersAdded_other": "Se añadieron {{count}} capas NLDI a un grupo «Resultados de USGS NLDI».",
+    "layerGroupName": "Resultados de USGS NLDI",
+    "layerFlowline": "Línea de flujo NLDI",
+    "layerRaindrop": "Trayectoria de gota de lluvia NLDI",
+    "layerSelectedPoint": "Punto seleccionado NLDI",
+    "layerBasin": "Cuenca aguas arriba NLDI",
+    "layerNavigation": "Navegación NLDI {{index}}",
+    "resultCleared": "Resultado NLDI borrado.",
+    "directionalUnavailable": "El trazado direccional del flujo no está disponible mientras el proceso del USGS esté fuera de servicio. Elija «Línea de flujo completa» o inténtelo más tarde.",
+    "noFlowlineNearby": "NLDI no pudo encontrar ninguna línea de flujo cerca de este punto.",
+    "httpError": "USGS NLDI devolvió HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI devolvió HTTP {{status}}: {{detail}}",
+    "noAttributes": "NLDI no devolvió ningún atributo.",
+    "catalogCaGages": "Estaciones de aforo de California (ca_gages)",
+    "catalogNwisSite": "Estaciones de aguas superficiales del NWIS (aforos)",
+    "catalogNwisGw": "Pozos de aguas subterráneas del NWIS",
+    "catalogGfv11Pois": "Puntos del Geospatial Fabric del USGS",
+    "catalogHuc12pp": "Puntos de vertido HUC12",
+    "catalogNmwdiSt": "Estaciones hídricas de Nuevo México",
+    "catalogFlowlines": "Líneas de flujo NHDPlus"
   }
 }
