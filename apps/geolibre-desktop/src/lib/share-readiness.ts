@@ -266,22 +266,36 @@ function isTemplateUrl(url: string): boolean {
 /**
  * What to actually request for a reference.
  *
- * A tile template cannot be fetched literally, and substituting a nominal
- * `0/0/0` tile would 404 on any service whose data starts deeper, reporting a
- * healthy basemap as missing. The origin answers the questions this check
- * actually asks anyway: is the host up, does it send cross-origin headers, does
- * it demand a credential. Collapsing to the origin is also what makes the probe
- * budget hold for a project with dozens of tile layers on one host.
+ * A template cannot be fetched literally. Probe a representative expansion
+ * instead of the bare origin: data hosts such as ArcGIS and Hugging Face often
+ * apply CORS to their tile/object routes but not to their home page, so probing
+ * the origin falsely reports their working browser sources as blocked.
  */
 export function probeTargetFor(url: string): string | null {
+  const representative = url.replace(/\{([^{}]+)\}/g, (_token, raw: string) => {
+    const token = raw.toLowerCase();
+    if (token === "z" || token === "x" || token === "y" || token === "-y") return "0";
+    const dateFormat = /^date:(.+)$/i.exec(raw)?.[1];
+    if (dateFormat) {
+      return dateFormat
+        .replace(/YYYY/g, "2000")
+        .replace(/YY/g, "00")
+        .replace(/MM/g, "01")
+        .replace(/DD/g, "01")
+        .replace(/HH/g, "00")
+        .replace(/mm/g, "00")
+        .replace(/ss/g, "00");
+    }
+    return "0";
+  });
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(representative);
   } catch {
     return null;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-  return isTemplateUrl(url) ? parsed.origin : parsed.toString();
+  return parsed.toString();
 }
 
 interface Classification {
@@ -586,6 +600,13 @@ export async function probeShareSources(
       if (ref.status !== "unchecked" || !ref.probeUrl) return ref;
       const outcome = outcomes.get(ref.probeUrl);
       if (!outcome) return { ...ref, reason: "probe-budget" };
+      // A representative expansion can legitimately miss when a tiled source
+      // begins above z0 or a temporal series has no frame on the nominal date.
+      // Receiving that readable response still proves the browser can reach
+      // the real route; only concrete URLs can be declared stale from a 404.
+      if (outcome.status === "missing" && isTemplateUrl(ref.url)) {
+        return { ...ref, status: "reachable", reason: "ok" };
+      }
       return { ...ref, ...outcome };
     }),
     probeCount: outcomes.size,

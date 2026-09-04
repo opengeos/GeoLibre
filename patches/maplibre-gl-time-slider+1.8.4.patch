@@ -1,0 +1,40 @@
+diff --git a/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-BFCO32ol.cjs b/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-BFCO32ol.cjs
+index aa0107a..942db03 100644
+--- a/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-BFCO32ol.cjs
++++ b/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-BFCO32ol.cjs
+@@ -1689,13 +1689,13 @@ var MosaicAdapter = class extends BaseAdapter {
+ 	*/
+ 	async render(date) {
+ 		this.lastDate = date;
++		const seq = ++this.requestSeq;
+ 		if (!this.mercatorEnsured && this.isGpuEngine) {
+ 			this.mercatorEnsured = true;
+ 			this.ensureMercator();
+ 		}
+ 		const url = await resolveUrl(this.spec.url, date);
+-		if (this.removed || url === this.currentUrl) return;
+-		const seq = ++this.requestSeq;
++		if (this.removed || seq !== this.requestSeq || url === this.currentUrl) return;
+ 		if (this.missingUrls.has(url)) {
+ 			this.clearCurrent();
+ 			this.onDataStatus?.(this.id, false);
+diff --git a/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-Cvfhqvrq.js b/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-Cvfhqvrq.js
+index f92412e..8cc745f 100644
+--- a/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-Cvfhqvrq.js
++++ b/node_modules/maplibre-gl-time-slider/dist/TimeSliderControl-Cvfhqvrq.js
+@@ -1689,13 +1689,13 @@ var MosaicAdapter = class extends BaseAdapter {
+ 	*/
+ 	async render(date) {
+ 		this.lastDate = date;
++		const seq = ++this.requestSeq;
+ 		if (!this.mercatorEnsured && this.isGpuEngine) {
+ 			this.mercatorEnsured = true;
+ 			this.ensureMercator();
+ 		}
+ 		const url = await resolveUrl(this.spec.url, date);
+-		if (this.removed || url === this.currentUrl) return;
+-		const seq = ++this.requestSeq;
++		if (this.removed || seq !== this.requestSeq || url === this.currentUrl) return;
+ 		if (this.missingUrls.has(url)) {
+ 			this.clearCurrent();
+ 			this.onDataStatus?.(this.id, false);

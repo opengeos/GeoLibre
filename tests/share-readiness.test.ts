@@ -107,17 +107,17 @@ describe("isPrivateHostname", () => {
 });
 
 describe("probeTargetFor", () => {
-  it("collapses a tile template to its origin", () => {
+  it("expands a tile template to a representative route", () => {
     assert.equal(
       probeTargetFor("https://tile.example.com/data/{z}/{x}/{y}.png"),
-      "https://tile.example.com",
+      "https://tile.example.com/data/0/0/0.png",
     );
   });
 
-  it("collapses a formatted Time Slider date template to its origin", () => {
+  it("expands a formatted Time Slider date template to a representative route", () => {
     assert.equal(
       probeTargetFor("https://data.example.com/json/{date:YYYYMMDD}_acdom.json"),
-      "https://data.example.com",
+      "https://data.example.com/json/20000101_acdom.json",
     );
   });
 
@@ -273,7 +273,10 @@ describe("collectShareSources", () => {
     assert.equal(refs.length, 1);
     assert.equal(refs[0].url, template);
     assert.equal(refs[0].reason, "ok");
-    assert.equal(refs[0].probeUrl, "https://huggingface.co");
+    assert.equal(
+      refs[0].probeUrl,
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/20000101_acdom.json",
+    );
   });
 
   it("de-duplicates one template repeated across source and metadata", () => {
@@ -335,12 +338,15 @@ describe("probeShareSources", () => {
         }),
       ],
     });
-    const { fn, calls } = fakeFetch({ "https://tile.example.com": 200 });
+    const { fn, calls } = fakeFetch({
+      "https://tile.example.com/0/0/0.png": 200,
+      "https://tile.example.com/other/0/0/0.png": 200,
+    });
     const result = await probeShareSources(refs, { fetchImpl: fn });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].method, "HEAD");
-    assert.equal(calls[0].credentials, "omit");
-    assert.equal(result.probeCount, 1);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.method === "HEAD"));
+    assert.ok(calls.every((call) => call.credentials === "omit"));
+    assert.equal(result.probeCount, 2);
     assert.deepEqual(
       result.refs.map((ref) => ref.status),
       ["reachable", "reachable"],
@@ -366,6 +372,17 @@ describe("probeShareSources", () => {
         ["missing", "not-found"],
       ],
     );
+  });
+
+  it("accepts a readable 404 for a representative template expansion", async () => {
+    const template = "https://tiles.example.com/{z}/{x}/{y}.png";
+    const refs = collectShareSources({
+      layers: [layer({ id: "a", name: "A", type: "xyz", source: { url: template } })],
+    });
+    const { fn } = fakeFetch({ "https://tiles.example.com/0/0/0.png": 404 });
+    const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
+    assert.equal(probed[0].status, "reachable");
+    assert.equal(probed[0].reason, "ok");
   });
 
   it("retries a HEAD-refusing host with a ranged GET before calling it gated", async () => {
