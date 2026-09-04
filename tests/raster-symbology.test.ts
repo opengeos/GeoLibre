@@ -6,6 +6,7 @@ import {
   buildSteppedColormapRgba,
   clampRasterClassCount,
   computeRasterBreaks,
+  customColorsForRasterClassEdit,
   defaultRasterSymbology,
   normalizeRasterClassOpacities,
   percentileFromHistogram,
@@ -156,6 +157,29 @@ describe("normalizeRasterClassOpacities", () => {
   it("rejects malformed or incorrectly sized lists", () => {
     assert.equal(normalizeRasterClassOpacities([0.5], 2), undefined);
     assert.equal(normalizeRasterClassOpacities([0.5, Number.NaN], 2), undefined);
+  });
+});
+
+describe("customColorsForRasterClassEdit", () => {
+  it("updates a class directly when the ramp is not reversed", () => {
+    assert.deepEqual(customColorsForRasterClassEdit(["#ff0000", "#00ff00"], 0, "#0000FF"), [
+      "#0000ff",
+      "#00ff00",
+    ]);
+  });
+
+  it("converts a reversed value-order edit back to stored ramp order", () => {
+    assert.deepEqual(customColorsForRasterClassEdit(["#ff0000", "#00ff00"], 0, "#0000ff", true), [
+      "#00ff00",
+      "#0000ff",
+    ]);
+  });
+
+  it("ignores an invalid edit without corrupting the stored colors", () => {
+    assert.deepEqual(customColorsForRasterClassEdit(["#ff0000", "#00ff00"], 9, "invalid"), [
+      "#ff0000",
+      "#00ff00",
+    ]);
   });
 });
 

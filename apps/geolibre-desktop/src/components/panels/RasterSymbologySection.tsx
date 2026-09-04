@@ -14,6 +14,7 @@ import {
   type RasterSymbology,
   colormapColors,
   computeRasterBreaks,
+  customColorsForRasterClassEdit,
   getPaletteLegend,
   getRasterBandStats,
   normalizeRasterClassOpacities,
@@ -23,6 +24,7 @@ import {
 } from "@geolibre/plugins";
 import {
   Button,
+  ColorField,
   type ColorRampOption,
   ColorRampSelect,
   Input,
@@ -590,6 +592,17 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     commit({ symbology: next });
   }
 
+  /** Promotes the displayed class colors to a custom ramp and edits one class. */
+  function setClassColor(index: number, color: string): void {
+    if (!symbology?.classified) return;
+    commit({
+      symbology: {
+        ...symbology,
+        customColors: customColorsForRasterClassEdit(classColors, index, color, reversed),
+      },
+    });
+  }
+
   // Switch to / edit / clear a user-defined ramp. `next` is the parsed color
   // list (>= 2 colors) or undefined to drop back to the named ramp.
   function setCustomColors(next: string[] | undefined): void {
@@ -767,6 +780,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           }}
           onRange={(range) => recomputeSymbology({ ...symbology }, { range })}
           classColors={classColors}
+          onClassColor={setClassColor}
           onClassOpacity={setClassOpacity}
         />
       )}
@@ -947,6 +961,7 @@ function ClassificationControls({
   onManualBreaks,
   onRange,
   classColors,
+  onClassColor,
   onClassOpacity,
 }: {
   symbology: RasterSymbology;
@@ -956,6 +971,7 @@ function ClassificationControls({
   onManualBreaks: (breaks: number[]) => void;
   onRange: (range: [number, number]) => void;
   classColors: string[];
+  onClassColor: (index: number, color: string) => void;
   onClassOpacity: (index: number, opacity: number) => void;
 }) {
   const { t } = useTranslation();
@@ -1050,12 +1066,14 @@ function ClassificationControls({
         {Array.from({ length: symbology.classCount }, (_, index) => (
           <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="h-4 w-4 shrink-0 rounded-sm border border-border"
-                style={{
-                  backgroundColor: classColors[index] ?? "#808080",
-                  opacity: symbology.classOpacities?.[index] ?? 1,
-                }}
+              <ColorField
+                fill={false}
+                className="h-7 w-8 p-0.5"
+                buttonClassName="h-7 w-7"
+                aria-label={t("style.symbology.classColor", { index: index + 1 })}
+                eyedropperLabel={t("style.symbology.classColorPick", { index: index + 1 })}
+                value={classColors[index] ?? "#808080"}
+                onChange={(color) => onClassColor(index, color)}
               />
               <span className="truncate text-[10px] text-muted-foreground">
                 {formatLegendNumber(symbology.breaks[index])} -{" "}

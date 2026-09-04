@@ -266,6 +266,7 @@ export {
   type RasterSymbology,
   clampRasterClassCount,
   computeRasterBreaks,
+  customColorsForRasterClassEdit,
   defaultRasterSymbology,
   normalizeRasterClassOpacities,
   savedRasterSymbology,

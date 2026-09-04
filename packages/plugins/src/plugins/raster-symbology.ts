@@ -93,6 +93,29 @@ export function normalizeRasterClassOpacities(
   return normalized.some((value) => value < 1) ? normalized : undefined;
 }
 
+/**
+ * Converts a class color edit from value order into the stored ramp order.
+ * Raster reversal flips colors at render time, so an edit made while reversed
+ * must flip the displayed list back before persistence.
+ *
+ * @param classColors - Current colors from the lowest value class to the highest.
+ * @param index - The value-order class index being edited.
+ * @param color - The replacement color.
+ * @param reversed - Whether the raster ramp is currently reversed.
+ * @returns A full custom color list in stored ramp order.
+ */
+export function customColorsForRasterClassEdit(
+  classColors: readonly string[],
+  index: number,
+  color: string,
+  reversed = false,
+): string[] {
+  const next = [...classColors];
+  const normalized = normalizeHexColor(color);
+  if (normalized && index >= 0 && index < next.length) next[index] = normalized;
+  return reversed ? next.reverse() : next;
+}
+
 /** A single band's statistics, as produced by `computeAutoStats`. */
 export type RasterBandStats = {
   min: number;
