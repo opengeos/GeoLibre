@@ -162,3 +162,34 @@ test("a cancelled add stops waiting for its signing request", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("a failed signing request does not block a later retry of the same asset", async () => {
+  const asset = "https://ai4edataeuwest.blob.core.windows.net/io-lulc/retried.tif";
+  const access = createStacAssetAccess(CATALOG, "io-lulc-annual-v02", asset);
+  assert.ok(access);
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = (async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("network down");
+    return new Response(
+      JSON.stringify({
+        href: `${asset}?sp=rl&sig=fresh-token`,
+        "msft:expiry": "2099-01-01T00:00:00Z",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }) as typeof fetch;
+  try {
+    // The first attempt falls back to the unsigned URL; the shared request it
+    // registered has to be gone by then, or the asset stays unsignable.
+    assert.equal(await readableStacAssetHref(access, `${asset}?sig=expired`), asset);
+    assert.equal(
+      await readableStacAssetHref(access, `${asset}?sig=expired`),
+      `${asset}?sp=rl&sig=fresh-token`,
+    );
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

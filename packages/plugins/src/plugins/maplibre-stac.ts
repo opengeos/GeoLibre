@@ -686,10 +686,22 @@ function assetAccess(
   return createStacAssetAccess(connection.url, item.collection, href);
 }
 
+/**
+ * Records how a layer's asset can be signed again, so a saved project restores
+ * a private asset instead of replaying an expired token.
+ *
+ * The layer has to be in the store already: every add path here resolves only
+ * after its control's store sync has written it (see the Zarr branch below).
+ * Should that ever stop holding, signed assets would quietly stop surviving a
+ * project save, so say so rather than dropping the record in silence.
+ */
 function rememberAssetAccess(layerId: string, access: StacAssetAccess | null): void {
   if (!access) return;
   const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
-  if (!layer) return;
+  if (!layer) {
+    console.warn("[GeoLibre] STAC asset access could not be stored: no layer", layerId);
+    return;
+  }
   useAppStore.getState().updateLayer(layerId, {
     metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
     source: { ...layer.source, url: access.href },
@@ -739,6 +751,9 @@ async function visualizeAsset(
   switch (format) {
     case "pmtiles": {
       // No appRef check: the layer goes to the store, not through the app API.
+      // Read unsigned, exactly as before: Planetary Computer serves no PMTiles
+      // from a private container, and a tile URL that outlives its token would
+      // break the layer an hour later rather than fix it.
       if (!(await addPMTilesAsset(asset.href, name, signal))) {
         throw new Error(labels.addNoSourceLayers);
       }

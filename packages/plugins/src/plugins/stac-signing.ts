@@ -4,6 +4,8 @@ import { isAzureBlobHref } from "./stac-api";
 const PLANETARY_COMPUTER_HOST = "planetarycomputer.microsoft.com";
 const PLANETARY_COMPUTER_SIGN_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/sign";
 const SIGNING_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+/** How long one signing request may hang before it is given up on. */
+const SIGNING_REQUEST_TIMEOUT_MS = 20 * 1000;
 
 /** Metadata key used to retain the unsigned STAC asset identity across project saves. */
 export const STAC_ASSET_ACCESS_METADATA_KEY = "stacAssetAccess";
@@ -102,23 +104,34 @@ function rememberSignedHref(href: string, signed: string, expiresAt: number): vo
 async function requestSignedHref(href: string): Promise<string> {
   const endpoint = new URL(PLANETARY_COMPUTER_SIGN_URL);
   endpoint.searchParams.set("href", href);
-  const response = await fetch(endpoint);
-  if (!response.ok) throw new Error(`Planetary Computer signing failed: ${response.status}`);
-  const data = (await response.json()) as Record<string, unknown>;
-  if (typeof data.href !== "string" || typeof data["msft:expiry"] !== "string") {
-    throw new Error("Planetary Computer returned an invalid signed URL");
+  // Everyone waiting on this asset shares this request, and the entry that
+  // makes that possible is only cleared once it settles, so it has to. A
+  // signer that hangs would otherwise leave the asset unsignable for the rest
+  // of the session. This timeout is the request's own: a caller cancelling its
+  // wait never abandons the request for the others.
+  const expiry = new AbortController();
+  const timer = setTimeout(() => expiry.abort(), SIGNING_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, { signal: expiry.signal });
+    if (!response.ok) throw new Error(`Planetary Computer signing failed: ${response.status}`);
+    const data = (await response.json()) as Record<string, unknown>;
+    if (typeof data.href !== "string" || typeof data["msft:expiry"] !== "string") {
+      throw new Error("Planetary Computer returned an invalid signed URL");
+    }
+    const expiresAt = Date.parse(data["msft:expiry"]);
+    const signedUrl = new URL(data.href);
+    if (
+      !Number.isFinite(expiresAt) ||
+      signedUrl.protocol !== "https:" ||
+      !sameAssetHref(data.href, href)
+    ) {
+      throw new Error("Planetary Computer returned a signed URL for a different asset");
+    }
+    rememberSignedHref(href, data.href, expiresAt);
+    return data.href;
+  } finally {
+    clearTimeout(timer);
   }
-  const expiresAt = Date.parse(data["msft:expiry"]);
-  const signedUrl = new URL(data.href);
-  if (
-    !Number.isFinite(expiresAt) ||
-    signedUrl.protocol !== "https:" ||
-    !sameAssetHref(data.href, href)
-  ) {
-    throw new Error("Planetary Computer returned a signed URL for a different asset");
-  }
-  rememberSignedHref(href, data.href, expiresAt);
-  return data.href;
 }
 
 /** Reads and validates persisted STAC asset access metadata from a layer. */
