@@ -153,6 +153,11 @@ def test_ogc_layer_bounds_reject_non_numbers(builder, args):
     # with a bare "could not convert string to float" from the comprehension.
     with pytest.raises(ValueError, match="four numbers"):
         builder(*args, bounds=[8, 38, 9, "x"])
+    # float() takes "nan" and "inf" without a word, and either would reach the
+    # app as an extent it cannot fit to. Map.fit_bounds refuses them too.
+    for bad in ([float("nan"), 38, 9, 41], [8, 38, float("inf"), 41]):
+        with pytest.raises(ValueError, match="finite numbers"):
+            builder(*args, bounds=bad)
 
 
 @pytest.mark.parametrize(

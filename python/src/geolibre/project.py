@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
+import math
 import re
 import socket
 import uuid
@@ -586,7 +587,7 @@ def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
         The four coordinates as floats, or None when *bounds* is None.
 
     Raises:
-        ValueError: If *bounds* does not hold exactly four numbers.
+        ValueError: If *bounds* does not hold exactly four finite numbers.
     """
     if bounds is None:
         return None
@@ -595,9 +596,12 @@ def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
             "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
         )
     try:
-        return [float(v) for v in bounds]
+        values = [float(v) for v in bounds]
     except (TypeError, ValueError) as exc:
         raise ValueError(f"bounds must be four numbers; got {bounds!r}") from exc
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(f"bounds must contain finite numbers; got {bounds!r}")
+    return values
 
 
 def _normalize_wms_version(version: str | None) -> str:
@@ -656,7 +660,7 @@ def wms_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four numbers.
+        ValueError: If ``bounds`` is given without exactly four finite numbers.
     """
     wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
@@ -719,7 +723,7 @@ def wmts_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four numbers.
+        ValueError: If ``bounds`` is given without exactly four finite numbers.
     """
     layer = _layer_base(name, "wmts", **style)
     source: dict[str, Any] = {
