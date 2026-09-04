@@ -974,7 +974,7 @@ function ClassificationControls({
   onClassColor: (index: number, color: string) => void;
   onClassOpacity: (index: number, opacity: number) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const min = symbology.breaks[0];
   const max = symbology.breaks[symbology.breaks.length - 1];
   return (
@@ -1076,8 +1076,8 @@ function ClassificationControls({
                 onChange={(color) => onClassColor(index, color)}
               />
               <span className="truncate text-[10px] text-muted-foreground">
-                {formatLegendNumber(symbology.breaks[index])} -{" "}
-                {formatLegendNumber(symbology.breaks[index + 1])}
+                {formatLegendNumber(symbology.breaks[index], i18n.language)} -{" "}
+                {formatLegendNumber(symbology.breaks[index + 1], i18n.language)}
               </span>
             </div>
             <ClassOpacityInput
