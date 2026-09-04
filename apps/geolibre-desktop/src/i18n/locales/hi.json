@@ -7841,7 +7841,7 @@
     "layerBasin": "NLDI अपस्ट्रीम जलग्रहण क्षेत्र",
     "layerNavigation": "NLDI नेविगेशन {{index}}",
     "resultCleared": "NLDI परिणाम साफ़ कर दिया गया।",
-    "directionalUnavailable": "जब तक USGS प्रक्रिया ऑफ़लाइन है, दिशात्मक फ़्लोट्रेस उपलब्ध नहीं है। «पूरी प्रवाह-रेखा» चुनें या बाद में पुनः प्रयास करें।",
+    "directionalUnavailable": "जब तक USGS प्रक्रिया ऑफ़लाइन है, दिशात्मक प्रवाह-ट्रेसिंग उपलब्ध नहीं है। «पूरी प्रवाह-रेखा» चुनें या बाद में पुनः प्रयास करें।",
     "noFlowlineNearby": "NLDI इस बिंदु के पास कोई प्रवाह-रेखा नहीं खोज सका।",
     "httpError": "USGS NLDI ने HTTP {{status}} लौटाया",
     "httpErrorDetail": "USGS NLDI ने HTTP {{status}} लौटाया: {{detail}}",

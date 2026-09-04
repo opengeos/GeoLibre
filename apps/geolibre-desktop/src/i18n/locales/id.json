@@ -3880,7 +3880,7 @@
       "angular": "Dimensi sudut"
     },
     "unit": "Satuan",
-    "snap": "Rekatkan ke verteks",
+    "snap": "Snap ke verteks",
     "color": "Warna dimensi",
     "width": "Lebar garis",
     "widthOptions": {

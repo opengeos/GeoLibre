@@ -7823,7 +7823,7 @@
     "navigationUnavailable": "Esse método de navegação não está disponível para este COMID.",
     "noPlottableSource": "O NLDI não retornou nenhuma fonte de navegação plotável.",
     "navigationEmpty": "{{source}} não retornou feições mapeáveis para esta navegação.",
-    "navigationAdded": "{{source}} adicionado via {{navigation}} para o COMID {{comid}} ({{km}} km). As camadas de navegação existentes permanecem no mapa.",
+    "navigationAdded": "Fonte adicionada: {{source}} via {{navigation}} para o COMID {{comid}} ({{km}} km). As camadas de navegação existentes permanecem no mapa.",
     "navigationFailed": "A solicitação de navegação falhou.",
     "tracing": "Traçando até a linha de fluxo NHD mais próxima…",
     "flowline": "Linha de fluxo plotada.",

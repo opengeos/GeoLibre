@@ -7823,7 +7823,7 @@
     "navigationUnavailable": "Quel metodo di navigazione non è disponibile per questo COMID.",
     "noPlottableSource": "NLDI non ha restituito alcuna sorgente di navigazione tracciabile.",
     "navigationEmpty": "{{source}} non ha restituito elementi mappabili per questa navigazione.",
-    "navigationAdded": "Aggiunto {{source}} tramite {{navigation}} per il COMID {{comid}} ({{km}} km). I livelli di navigazione esistenti restano sulla mappa.",
+    "navigationAdded": "Sorgente aggiunta: {{source}} tramite {{navigation}} per il COMID {{comid}} ({{km}} km). I livelli di navigazione esistenti restano sulla mappa.",
     "navigationFailed": "Richiesta di navigazione non riuscita.",
     "tracing": "Tracciamento verso la linea di deflusso NHD più vicina…",
     "flowline": "Linea di deflusso tracciata.",

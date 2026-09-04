@@ -7823,7 +7823,7 @@
     "navigationUnavailable": "Cette méthode de navigation n’est pas disponible pour ce COMID.",
     "noPlottableSource": "NLDI n’a renvoyé aucune source de navigation traçable.",
     "navigationEmpty": "{{source}} n’a renvoyé aucune entité cartographiable pour cette navigation.",
-    "navigationAdded": "{{source}} ajouté via {{navigation}} pour le COMID {{comid}} ({{km}} km). Les calques de navigation existants restent sur la carte.",
+    "navigationAdded": "Source ajoutée : {{source}} via {{navigation}} pour le COMID {{comid}} ({{km}} km). Les calques de navigation existants restent sur la carte.",
     "navigationFailed": "La requête de navigation a échoué.",
     "tracing": "Traçage jusqu’au tronçon NHD le plus proche…",
     "flowline": "Tronçon hydrographique tracé.",

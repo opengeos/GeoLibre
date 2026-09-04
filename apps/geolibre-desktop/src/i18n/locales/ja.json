@@ -7755,7 +7755,7 @@
     "layerBasin": "NLDI上流域",
     "layerNavigation": "NLDIナビゲーション {{index}}",
     "resultCleared": "NLDIの結果をクリアしました。",
-    "directionalUnavailable": "USGSの処理がオフラインの間は、方向付きのフロートレースは利用できません。「流路全体」を選ぶか、後でもう一度お試しください。",
+    "directionalUnavailable": "USGSの処理がオフラインの間は、方向付きの流路トレースは利用できません。「流路全体」を選ぶか、後でもう一度お試しください。",
     "noFlowlineNearby": "NLDIはこの地点の近くに流路を見つけられませんでした。",
     "httpError": "USGS NLDIがHTTP {{status}}を返しました",
     "httpErrorDetail": "USGS NLDIがHTTP {{status}}を返しました: {{detail}}",

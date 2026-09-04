@@ -7823,7 +7823,7 @@
     "navigationUnavailable": "Ese método de navegación no está disponible para este COMID.",
     "noPlottableSource": "NLDI no devolvió ninguna fuente de navegación representable.",
     "navigationEmpty": "{{source}} no devolvió entidades cartografiables para esta navegación.",
-    "navigationAdded": "Se añadió {{source}} mediante {{navigation}} para el COMID {{comid}} ({{km}} km). Las capas de navegación existentes permanecen en el mapa.",
+    "navigationAdded": "Fuente añadida: {{source}} mediante {{navigation}} para el COMID {{comid}} ({{km}} km). Las capas de navegación existentes permanecen en el mapa.",
     "navigationFailed": "La solicitud de navegación falló.",
     "tracing": "Trazando hasta la línea de flujo NHD más cercana…",
     "flowline": "Línea de flujo representada.",

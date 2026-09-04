@@ -7841,7 +7841,7 @@
     "layerBasin": "NLDI-Einzugsgebiet oberhalb",
     "layerNavigation": "NLDI-Navigation {{index}}",
     "resultCleared": "NLDI-Ergebnis gelöscht.",
-    "directionalUnavailable": "Die gerichtete Fließverfolgung ist nicht verfügbar, solange der USGS-Prozess offline ist. Wählen Sie „Vollständige Gewässerlinie“ oder versuchen Sie es später erneut.",
+    "directionalUnavailable": "Die gerichtete Fließverfolgung ist nicht verfügbar, solange der USGS-Dienst offline ist. Wählen Sie „Vollständige Gewässerlinie“ oder versuchen Sie es später erneut.",
     "noFlowlineNearby": "NLDI konnte in der Nähe dieses Punktes keine Gewässerlinie finden.",
     "httpError": "USGS NLDI hat HTTP {{status}} zurückgegeben",
     "httpErrorDetail": "USGS NLDI hat HTTP {{status}} zurückgegeben: {{detail}}",
