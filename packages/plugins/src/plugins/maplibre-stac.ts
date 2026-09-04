@@ -1324,7 +1324,10 @@ function buildPanel(container: HTMLElement): () => void {
         });
         download.addEventListener("click", async () => {
           const [key, asset] = selected();
-          if (!connection) return;
+          if (!connection) {
+            setStatus(labels.addFailed, true);
+            return;
+          }
           signingDownloadKey = key;
           syncAsset();
           try {

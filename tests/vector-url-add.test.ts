@@ -59,6 +59,24 @@ describe("addVectorLayersThroughControl", () => {
     assert.deepEqual(fast, ["fast-1"]);
   });
 
+  it("still reports new layers when the control rewrites the url it records", async () => {
+    // The control stores a url source verbatim today. If it ever stopped, an
+    // add that worked must not be reported as one that added nothing.
+    const layers: { id: string; source: { kind: "url"; url: string } }[] = [];
+    const control = {
+      addData: async (url: string) => {
+        layers.push({ id: "rewritten", source: { kind: "url" as const, url: `${url}/` } });
+        return {} as never;
+      },
+      getLayers: () => layers.slice(),
+    } as unknown as VectorUrlSink;
+
+    assert.deepEqual(
+      await addVectorLayersThroughControl(control, "https://example.com/places.parquet"),
+      ["rewritten"],
+    );
+  });
+
   it("ignores layers the control already held for the same url", async () => {
     const { control } = createSlowControl({
       "https://example.com/places.parquet": { ids: ["places-1"], delayMs: 0 },

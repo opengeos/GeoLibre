@@ -744,7 +744,10 @@ export type VectorUrlSink = Pick<VectorControl, "addData" | "getLayers">;
  * a caller that tags what it added (the STAC panel writes an asset-access
  * record onto every returned id) would stamp one dataset's identity onto
  * another's layer. Only layers the control recorded against this url count as
- * ours; the control echoes the url back on `source` verbatim.
+ * ours: the control echoes a url source back unchanged (`describeSource`
+ * stores the string it was handed). Were that ever to stop holding, the new
+ * layers are reported anyway rather than an add that succeeded being called a
+ * failure.
  *
  * @param control - The vector control (or anything with `addData`/`getLayers`).
  * @param url - An http(s) URL to a vector dataset.
@@ -758,13 +761,11 @@ export async function addVectorLayersThroughControl(
 ): Promise<string[]> {
   const previousIds = new Set(control.getLayers().map((layer) => layer.id));
   await control.addData(url, options);
-  return control
-    .getLayers()
-    .filter(
-      (layer) =>
-        !previousIds.has(layer.id) && layer.source.kind === "url" && layer.source.url === url,
-    )
-    .map((layer) => layer.id);
+  const created = control.getLayers().filter((layer) => !previousIds.has(layer.id));
+  const fromThisUrl = created.filter(
+    (layer) => layer.source.kind === "url" && layer.source.url === url,
+  );
+  return (fromThisUrl.length ? fromThisUrl : created).map((layer) => layer.id);
 }
 
 /**
