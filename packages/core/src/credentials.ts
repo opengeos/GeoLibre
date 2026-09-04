@@ -51,6 +51,12 @@ export const PROJECT_CREDENTIAL_FIELDS = {
 export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> = {
   "maplibre-gl-swipe": null,
   "maplibre-gl-components": ["legend", "colorbar"],
+  // This is the source of truth for dock-owned temporal layers. Dropping it
+  // leaves only their external-native store mirrors in a shared project; those
+  // mirrors contain a MapLibre source id, not enough information to recreate
+  // the COG/mosaic/tiles for a recipient. The retained blob is still passed
+  // through redactConfigurationValue below, including every source URL.
+  "maplibre-gl-time-slider": null,
 };
 
 export interface CredentialRedactionResult {

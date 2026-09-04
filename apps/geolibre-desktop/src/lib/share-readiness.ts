@@ -88,7 +88,7 @@ export interface ShareSourceRef {
   url: string;
   /**
    * What a probe should request, or null when the verdict is already settled
-   * without the network. Tile templates resolve to their origin (see
+   * without the network. Templates resolve to a representative data route (see
    * {@link probeTargetFor}).
    */
   probeUrl: string | null;
@@ -158,10 +158,10 @@ export interface ShareProbeOptions {
 export const SHARE_PROBE_TIMEOUT_MS = 6000;
 
 /**
- * Distinct targets to request. Templates collapse to their origin and every
- * target is de-duplicated, so a large project usually stays well under this;
- * the cap only bites on a project that genuinely spans many hosts, where the
- * remainder is reported as unchecked rather than silently dropped.
+ * Distinct targets to request. Representative template routes and concrete
+ * URLs are de-duplicated. Different routes on one host still consume separate
+ * probes so the check observes their actual CORS behavior; once the cap is
+ * reached, the remainder is reported as unchecked rather than silently dropped.
  */
 export const SHARE_MAX_PROBES = 16;
 
@@ -256,28 +256,49 @@ export function isPrivateHostname(hostname: string): boolean {
 
 /** Whether a URL still holds a tile/service placeholder such as `{z}`. */
 function isTemplateUrl(url: string): boolean {
-  return /\{[a-z0-9_-]+\}/i.test(url);
+  // Besides map tiles (`{z}`), temporal sources use format-bearing tokens such
+  // as `{date:YYYYMMDD}`. Limit recognition to the identifier and formatted
+  // identifier syntaxes the supported sources author; arbitrary brace content
+  // remains concrete so a real 404 is not forgiven as a template miss.
+  return /\{[a-z0-9_-]+(?::[a-z0-9_-]+)?\}/i.test(url);
 }
 
 /**
  * What to actually request for a reference.
  *
- * A tile template cannot be fetched literally, and substituting a nominal
- * `0/0/0` tile would 404 on any service whose data starts deeper, reporting a
- * healthy basemap as missing. The origin answers the questions this check
- * actually asks anyway: is the host up, does it send cross-origin headers, does
- * it demand a credential. Collapsing to the origin is also what makes the probe
- * budget hold for a project with dozens of tile layers on one host.
+ * A template cannot be fetched literally. Probe a representative expansion
+ * instead of the bare origin: data hosts such as ArcGIS and Hugging Face often
+ * apply CORS to their tile/object routes but not to their home page, so probing
+ * the origin falsely reports their working browser sources as blocked.
  */
 export function probeTargetFor(url: string): string | null {
+  const representative = url.replace(
+    /\{([a-z0-9_-]+(?::[a-z0-9_-]+)?)\}/gi,
+    (_token, raw: string) => {
+      const token = raw.toLowerCase();
+      if (token === "z" || token === "x" || token === "y" || token === "-y") return "0";
+      const dateFormat = /^date:(.+)$/i.exec(raw)?.[1];
+      if (dateFormat) {
+        return dateFormat
+          .replace(/YYYY/g, "2000")
+          .replace(/YY/g, "00")
+          .replace(/MM/g, "01")
+          .replace(/DD/g, "01")
+          .replace(/HH/g, "00")
+          .replace(/mm/g, "00")
+          .replace(/ss/g, "00");
+      }
+      return "0";
+    },
+  );
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(representative);
   } catch {
     return null;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-  return isTemplateUrl(url) ? parsed.origin : parsed.toString();
+  return parsed.toString();
 }
 
 interface Classification {
@@ -321,12 +342,20 @@ function classifyReference(url: string): Classification | null {
   // The upload strips these, so the recipient gets the URL without the secret.
   // Probing would only confirm what the redaction rules already guarantee.
   if (redactUrlCredentials(value) !== value) {
-    return { status: "credentialed", reason: "credential-stripped", probeUrl: null };
+    return {
+      status: "credentialed",
+      reason: "credential-stripped",
+      probeUrl: null,
+    };
   }
   if (isGooglePhotorealisticTilesetUrl(value)) {
     // The key rides in a request header that is stripped before persisting, so
     // the tileset is authored-working and recipient-broken by design.
-    return { status: "credentialed", reason: "credential-stripped", probeUrl: null };
+    return {
+      status: "credentialed",
+      reason: "credential-stripped",
+      probeUrl: null,
+    };
   }
   return { status: "unchecked", reason: "ok", probeUrl: probeTargetFor(value) };
 }
@@ -582,6 +611,13 @@ export async function probeShareSources(
       if (ref.status !== "unchecked" || !ref.probeUrl) return ref;
       const outcome = outcomes.get(ref.probeUrl);
       if (!outcome) return { ...ref, reason: "probe-budget" };
+      // A representative expansion can legitimately miss when a tiled source
+      // begins above z0 or a temporal series has no frame on the nominal date.
+      // Receiving that readable response still proves the browser can reach
+      // the real route; only concrete URLs can be declared stale from a 404.
+      if (outcome.status === "missing" && isTemplateUrl(ref.url)) {
+        return { ...ref, status: "reachable", reason: "ok" };
+      }
       return { ...ref, ...outcome };
     }),
     probeCount: outcomes.size,

@@ -57,7 +57,7 @@ add_raster_layer(path, name, url, bands=None, colormap=None, rescale=None,
 add_tile_layer(path, name, url, tile_size=256, attribution=None, index=None)
 add_ogc_layer(path, name, service, endpoint, layers=None, styles="",
               image_format="image/png", transparent=True, tile_size=256,
-              version="1.1.1", index=None)
+              version="1.1.1", bounds=None, index=None)
 add_tiles_layer(path, name, url, kind="pmtiles", tile_type="vector",
                 source_layers=None, style=None, index=None)
 add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
@@ -74,7 +74,14 @@ add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
   the browser fetches the tiles directly.
 - `add_ogc_layer`: `layers` is required when `service="wms"`. `version` defaults
   to `1.1.1`; pass what the server advertises when it differs. For
-  `service="wmts"`, `endpoint` is a full tile URL template.
+  `service="wmts"`, `endpoint` is a full tile URL template. `bounds` is the
+  layer's extent as `[west, south, east, north]`: a service layer has no
+  geometry to derive it from, so without it "zoom to layer" has nowhere to go.
+  Read it from the capabilities document: `EX_GeographicBoundingBox` for WMS,
+  `ows:WGS84BoundingBox` for WMTS, which is where the WMS element is absent.
+  Both are already lon/lat, unlike a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`,
+  whose axis order servers often get wrong. Passing anything other than four
+  values is an error rather than a silently dropped extent.
 
 ### Editing
 

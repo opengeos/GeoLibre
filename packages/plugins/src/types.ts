@@ -542,6 +542,12 @@ export interface GeoLibreAppAPI {
    * to it, and return the new group id.
    */
   addLayerGroup?: (name?: string, layerIds?: string[]) => string;
+  /**
+   * Move existing layers into a Layers-panel group (or out of one, with a null
+   * group id). Lets a plugin append to a group it created earlier instead of
+   * creating a second group with the same name. No-op if the group is gone.
+   */
+  moveLayersToGroup?: (layerIds: string[], groupId: string | null) => void;
   /** Remove a Layers-panel group without removing its child layers. */
   removeLayerGroup?: (id: string) => void;
   fitBounds?: (bounds: [number, number, number, number]) => void;

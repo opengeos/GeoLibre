@@ -1,5 +1,13 @@
 import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
-import type { Cesium3DTileset, CesiumWidget, DataSource, ImageryLayer } from "@cesium/engine";
+import type {
+  Cesium3DTileset,
+  CesiumWidget,
+  DataSource,
+  ImageryLayer,
+  ImageryProvider,
+  Resource,
+  TilingScheme,
+} from "@cesium/engine";
 
 // Reconciles the store's `GeoLibreLayer[]` onto a Cesium globe, mirroring what
 // MapController.syncLayers does for MapLibre. M3 covers the layer kinds where
@@ -15,7 +23,15 @@ import type { Cesium3DTileset, CesiumWidget, DataSource, ImageryLayer } from "@c
 type CesiumNs = typeof import("@cesium/engine");
 
 /** Layer kinds this pass renders on the globe. */
-const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts"]);
+const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
+
+/**
+ * `metadata.sourceKind` of the ArcGIS layers Cesium has a native provider for.
+ * Must stay in sync with `ARCGIS_MAP_SERVICE_SOURCE_KIND` in
+ * `packages/plugins/src/plugins/arcgis-layer.ts`, which writes it — `@geolibre/map`
+ * cannot import from `@geolibre/plugins` (the dependency runs the other way).
+ */
+const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
 type EntryKind = "imagery" | "geojson" | "3dtiles";
 
@@ -35,6 +51,29 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
 
+/**
+ * Whether credential-bearing request headers may be sent to this URL.
+ *
+ * The scheme is read off a parsed URL rather than matched as a prefix, so an
+ * unusually-cased `HTTPS://` from a hand-authored or MCP-generated project is
+ * normalized instead of being misread as plaintext. A relative or unparseable
+ * URL throws and is refused, matching `isAllowedPluginManifestUrl` in
+ * `@geolibre/core`.
+ */
+function allowsCredentials(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol === "https:") return true;
+    // Loopback over http so a local dev tile server still works.
+    return (
+      protocol === "http:" &&
+      (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function firstTile(layer: GeoLibreLayer): string | undefined {
   const tiles = layer.source.tiles;
   return Array.isArray(tiles) ? str(tiles[0]) : undefined;
@@ -42,6 +81,115 @@ function firstTile(layer: GeoLibreLayer): string | undefined {
 
 function tilesetUrl(layer: GeoLibreLayer): string | undefined {
   return str(layer.source.url) ?? str(layer.sourcePath);
+}
+
+/**
+ * Resolves the ArcGIS access token for a layer.
+ *
+ * The Add ArcGIS Layer flow bakes the token into the pre-built export/cache tile
+ * URL rather than storing it on the layer (`arcgis-layer.ts`), and `sourcePath`
+ * — the service URL Cesium's provider needs — is the bare, token-less one. So a
+ * token-protected service renders in 2D but would authenticate nowhere on the
+ * globe unless it is read back off the tile template.
+ */
+function arcgisToken(layer: GeoLibreLayer): string | undefined {
+  const explicit = str(layer.source.token);
+  if (explicit) return explicit;
+  const tile = firstTile(layer);
+  if (!tile) return undefined;
+  // A cached tile template carries no query string at all; without this guard
+  // indexOf returns -1 and the whole URL would be parsed as if it were one.
+  const q = tile.indexOf("?");
+  if (q === -1) return undefined;
+  return str(new URLSearchParams(tile.slice(q + 1)).get("token") ?? undefined);
+}
+
+/** The cached `[west, south, east, north]` an image layer's producer wrote, if usable. */
+function boundsFromMetadata(layer: GeoLibreLayer): [number, number, number, number] | undefined {
+  const b = layer.metadata?.bounds;
+  if (
+    Array.isArray(b) &&
+    b.length === 4 &&
+    b.every((v) => typeof v === "number" && Number.isFinite(v))
+  ) {
+    return [b[0], b[1], b[2], b[3]];
+  }
+  return undefined;
+}
+
+/**
+ * Extracts the 2D bounding box [west, south, east, north] in degrees from an
+ * image layer's four corner coordinates, falling back to `metadata.bounds`.
+ *
+ * `source.coordinates` is preferred over the cached `metadata.bounds` because
+ * it is what the 2D `ImageSource` renders from, it is antimeridian-aware (see
+ * below), and it keeps `needsRebuild` honest for a future edit-GCPs flow that
+ * would move the corners without rewriting `metadata.bounds`. Both current
+ * producers (`cornersToBounds` in the Georeferencer, and the KML ground-overlay
+ * importer) derive `metadata.bounds` from these same corners with a plain
+ * min/max, which inverts across the antimeridian — so the fallback only matters
+ * for a hand-authored project that omits the corners, and there the array's own
+ * west/east order is taken as authoritative.
+ */
+function imageBounds(layer: GeoLibreLayer): [number, number, number, number] | undefined {
+  const c = layer.source.coordinates;
+  if (
+    Array.isArray(c) &&
+    c.length === 4 &&
+    c.every(
+      (pt) =>
+        Array.isArray(pt) &&
+        pt.length >= 2 &&
+        typeof pt[0] === "number" &&
+        Number.isFinite(pt[0]) &&
+        typeof pt[1] === "number" &&
+        Number.isFinite(pt[1]),
+    )
+  ) {
+    // Note: Reducing a georeferenced image's 4 corners to an axis-aligned min/max
+    // bounding box will visibly distort rotated KML GroundOverlays since
+    // SingleTileImageryProvider cannot render a skewed quad. This is an accepted
+    // approximation for now.
+    const lngs = c.map((pt) => pt[0]);
+    const lats = c.map((pt) => pt[1]);
+    let minLng = Math.min(...lngs);
+    let maxLng = Math.max(...lngs);
+    if (maxLng - minLng > 180) {
+      const eastOfZero = lngs.filter((lng) => lng > 0);
+      const westOfZero = lngs.filter((lng) => lng < 0);
+      // In-range longitudes spanning more than 180° always straddle zero, so
+      // both sides are non-empty. Out-of-range corners from a hand-authored
+      // project can empty one, and Math.min/max of nothing is ±Infinity — fall
+      // back to metadata.bounds rather than hand Cesium an infinite corner
+      // (Rectangle.fromDegrees would throw into createImagery's catch, blanking
+      // the layer with no diagnostic tied to this cause).
+      if (!eastOfZero.length || !westOfZero.length) return boundsFromMetadata(layer);
+      minLng = Math.min(...eastOfZero);
+      maxLng = Math.max(...westOfZero);
+    }
+    return [minLng, Math.min(...lats), maxLng, Math.max(...lats)];
+  }
+  return boundsFromMetadata(layer);
+}
+
+/**
+ * The pieces a capabilities-driven WMTS layer (no tile template) needs to build a
+ * `WebMapTileServiceImageryProvider`, or undefined if any is missing.
+ *
+ * Cesium requires all three — it throws a `DeveloperError` on a missing
+ * `tileMatrixSetID` rather than defaulting one. A guessed matrix set is worse
+ * than none: the provider would request matrix identifiers the server does not
+ * publish and 404 per tile, so the layer reads as globe-capable but renders
+ * blank. Reporting an incomplete entry as 2D-only fails loudly instead.
+ */
+function wmtsCapabilities(
+  layer: GeoLibreLayer,
+): { url: string; layer: string; tileMatrixSetID: string } | undefined {
+  const url = str(layer.source.url);
+  const id = str(layer.source.layer) ?? str(layer.source.layers);
+  const tileMatrixSetID = str(layer.source.tileMatrixSetID) ?? str(layer.source.tileMatrixSet);
+  if (!url || !id || !tileMatrixSetID) return undefined;
+  return { url, layer: id, tileMatrixSetID };
 }
 
 /**
@@ -58,9 +206,29 @@ function isSupported(layer: GeoLibreLayer): boolean {
   if (!isCesiumSupportedLayerType(layer)) return false;
   if (layer.type === "geojson") return Boolean(layer.geojson?.features?.length);
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
-  // Mirror createImagery's real capability: WMS builds from source.url, but
-  // xyz/raster/wmts need a tile template — a url alone would render nothing.
-  return layer.type === "wms" ? Boolean(str(layer.source.url)) : Boolean(firstTile(layer));
+  // MapServer only: ArcGisMapServerImageryProvider speaks the MapServer REST
+  // surface (a `?f=json` capabilities document, `/export`), which an ImageServer
+  // does not expose (it answers `/exportImage` and takes a renderingRule instead
+  // of layers). Image services keep falling through to their pre-built tile
+  // template like any other raster.
+  // Without a sourcePath there is no service URL for the provider, but
+  // createImagery then falls through to the generic tile-template branch — so
+  // stay in step with it rather than reporting the layer unsupported and
+  // dropping globe rendering a plain raster would have had.
+  if (layer.type === "raster" && layer.metadata?.sourceKind === ARCGIS_MAP_SERVICE_KIND) {
+    return Boolean(str(layer.sourcePath)) || Boolean(firstTile(layer));
+  }
+  if (layer.type === "image") {
+    return Boolean(str(layer.source.url)) && Boolean(imageBounds(layer));
+  }
+  // WebMapServiceImageryProvider defaults `layers` to "", so a service URL alone
+  // is enough for WMS. WMTS needs a layer identifier: without one createImagery
+  // has no branch to take and would register an entry that renders nothing.
+  if (layer.type === "wms") return Boolean(str(layer.source.url)) || Boolean(firstTile(layer));
+  if (layer.type === "wmts") {
+    return Boolean(wmtsCapabilities(layer)) || Boolean(firstTile(layer));
+  }
+  return Boolean(firstTile(layer));
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
@@ -99,13 +267,34 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         prev.source.maxzoom !== next.source.maxzoom ||
         prev.source.minzoom !== next.source.minzoom ||
         str(prev.source.url) !== str(next.source.url) ||
+        str(prev.metadata?.sourceKind) !== str(next.metadata?.sourceKind) ||
+        str(prev.sourcePath) !== str(next.sourcePath) ||
+        str(prev.metadata?.arcgisSublayers) !== str(next.metadata?.arcgisSublayers) ||
+        // Only the ArcGIS branch reads a token, and only the image branch reads
+        // bounds. Gate both on the kind that consumes them: `metadata.bounds` is
+        // set broadly (raster/time-slider layers too), and any tile URL can carry
+        // an unrelated `token=` param, so diffing them for every imagery kind
+        // would both waste work and force spurious rebuilds.
+        (next.metadata?.sourceKind === ARCGIS_MAP_SERVICE_KIND &&
+          arcgisToken(prev) !== arcgisToken(next)) ||
         str(prev.source.layers) !== str(next.source.layers) ||
-        // WMS GetMap params baked into the provider at creation; a change must
-        // rebuild it so the globe doesn't keep the stale WebMapServiceImageryProvider.
+        str(prev.source.layer) !== str(next.source.layer) ||
         str(prev.source.styles) !== str(next.source.styles) ||
+        str(prev.source.style) !== str(next.source.style) ||
+        str(prev.source.tileMatrixSetID) !== str(next.source.tileMatrixSetID) ||
+        str(prev.source.tileMatrixSet) !== str(next.source.tileMatrixSet) ||
+        str(prev.source.tilingScheme) !== str(next.source.tilingScheme) ||
+        JSON.stringify(prev.source.tileMatrixLabels ?? null) !==
+          JSON.stringify(next.source.tileMatrixLabels ?? null) ||
+        // WMS/WMTS params baked into the provider at creation; a change must
+        // rebuild it so the globe doesn't keep the stale provider.
         str(prev.source.format) !== str(next.source.format) ||
         str(prev.source.version) !== str(next.source.version) ||
-        prev.source.transparent !== next.source.transparent
+        prev.source.transparent !== next.source.transparent ||
+        (next.type === "image" &&
+          JSON.stringify(imageBounds(prev)) !== JSON.stringify(imageBounds(next))) ||
+        JSON.stringify(prev.source.requestHeaders ?? null) !==
+          JSON.stringify(next.source.requestHeaders ?? null)
       );
     case "3dtiles":
       return (
@@ -121,6 +310,8 @@ export class CesiumLayerSync {
   private readonly entries = new Map<string, LayerEntry>();
   /** Imagery id order last asserted on the globe, to skip redundant reorders. */
   private lastImageryOrder = "";
+  /** Active layer list from the current/latest sync pass. */
+  private currentLayers: GeoLibreLayer[] = [];
 
   constructor(
     private readonly Cesium: CesiumNs,
@@ -129,6 +320,7 @@ export class CesiumLayerSync {
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
   sync(layers: GeoLibreLayer[]): void {
+    this.currentLayers = layers;
     const nextIds = new Set(layers.map((l) => l.id));
     for (const [id, entry] of this.entries) {
       if (!nextIds.has(id)) {
@@ -181,12 +373,7 @@ export class CesiumLayerSync {
       .map((l) => l.id)
       .join("\n");
     if (imageryRebuilt || imageryOrder !== this.lastImageryOrder) {
-      for (const layer of layers) {
-        const entry = this.entries.get(layer.id);
-        if (entry?.kind === "imagery" && entry.handle) {
-          this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
-        }
-      }
+      this.reorderImagery();
       this.lastImageryOrder = imageryOrder;
     }
   }
@@ -196,26 +383,101 @@ export class CesiumLayerSync {
     this.entries.clear();
   }
 
+  private reorderImagery(): void {
+    for (const layer of this.currentLayers) {
+      const entry = this.entries.get(layer.id);
+      if (entry?.kind === "imagery" && entry.handle) {
+        this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
+      }
+    }
+  }
+
   private createEntry(layer: GeoLibreLayer): void {
     const kind = entryKind(layer);
     const entry: LayerEntry = { kind, layer, handle: null, cancelled: false };
     this.entries.set(layer.id, entry);
-    if (kind === "imagery") this.createImagery(entry);
+    if (kind === "imagery") void this.createImagery(entry);
     else if (kind === "geojson") void this.createGeoJson(entry);
     else void this.createTileset(entry);
   }
 
-  private createImagery(entry: LayerEntry): void {
+  private async createImagery(entry: LayerEntry): Promise<void> {
     const { Cesium, viewer } = this;
     const layer = entry.layer;
     try {
-      let provider;
-      if (layer.type === "wms" && str(layer.source.url)) {
-        // Pass through the same GetMap params the 2D path records on the layer
-        // (WmsSource.tsx), so a non-default style/format/version or an opaque
-        // (transparent:false) overlay renders the same on the globe as on the map.
+      let provider: ImageryProvider | undefined;
+      let isAsync = false;
+      const headers = layer.source.requestHeaders as Record<string, string> | undefined;
+      const hasHeaders = Boolean(headers && Object.keys(headers).length);
+      // A tile template wins over the capabilities metadata: it needs no
+      // provider-side matrix-set negotiation.
+      const wmtsCaps =
+        layer.type === "wmts" && !firstTile(layer) ? wmtsCapabilities(layer) : undefined;
+      // Credentials (request headers, an ArcGIS token) never go out over
+      // plaintext — loopback excepted, so a local dev tile server still works.
+      // Residual exposure: Cesium.Resource issues these through XHR/fetch, which
+      // give no redirect control, so a service that 3xx-redirects cross-origin
+      // still sees non-Authorization headers replayed (the browser strips only
+      // Authorization). CORS preflight means the redirect target must opt into
+      // the header by name, and the endpoint is user-configured, so this is
+      // accepted rather than proxied.
+      // Refusing the whole layer beats quietly stripping them: an
+      // unauthenticated request would look like a working layer that renders
+      // nothing. The outer catch turns this into the same best-effort skip a
+      // failing provider already gets.
+      const requireSecure = (url: string, what: string) => {
+        if (allowsCredentials(url)) return;
+        console.warn(
+          `[GeoLibre] skipping "${layer.name}" on the globe: ${what} cannot be sent over ${url}`,
+        );
+        throw new Error("credentials require https");
+      };
+      // Every provider's `url` option is typed `Resource | string`, so the
+      // union is passed through as-is rather than cast.
+      const makeResource = (url: string): string | Resource => {
+        if (!hasHeaders) return url;
+        requireSecure(url, "request headers");
+        return new Cesium.Resource({ url, headers });
+      };
+
+      if (
+        layer.type === "raster" &&
+        layer.metadata?.sourceKind === ARCGIS_MAP_SERVICE_KIND &&
+        str(layer.sourcePath)
+      ) {
+        isAsync = true;
+        const url = String(layer.sourcePath);
+        const resource = makeResource(url);
+        const sublayers = str(layer.metadata?.arcgisSublayers);
+        // arcgis-layer.ts writes a bare id list ("0,2,5"); the `show:` prefix only
+        // ever appears in the tile URL's query string. Stripping it here is purely
+        // defensive, for a hand-authored or MCP project that copies the ArcGIS
+        // `layers=show:0,1` param form straight into the metadata field.
+        const cleanLayers = sublayers?.replace(/^show:/i, "").trim() || undefined;
+        const options: Record<string, unknown> = {};
+        if (cleanLayers) options.layers = cleanLayers;
+        const token = arcgisToken(layer);
+        if (token) {
+          requireSecure(url, "an access token");
+          options.token = token;
+        }
+
+        provider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(resource, options);
+      } else if (layer.type === "image" && str(layer.source.url)) {
+        isAsync = true;
+        const url = String(layer.source.url);
+        const bounds = imageBounds(layer);
+        if (!bounds) return;
+        const resource = makeResource(url);
+        const rectangle = Cesium.Rectangle.fromDegrees(bounds[0], bounds[1], bounds[2], bounds[3]);
+        const options = { rectangle };
+
+        provider = await Cesium.SingleTileImageryProvider.fromUrl(resource, options);
+      } else if (layer.type === "wms" && str(layer.source.url)) {
+        const url = String(layer.source.url);
+        const resource = makeResource(url);
         provider = new Cesium.WebMapServiceImageryProvider({
-          url: String(layer.source.url),
+          url: resource,
           layers: String(layer.source.layers ?? ""),
           parameters: {
             transparent: layer.source.transparent !== false,
@@ -224,27 +486,97 @@ export class CesiumLayerSync {
             version: str(layer.source.version) ?? "1.1.1",
           },
         });
+      } else if (wmtsCaps) {
+        const url = wmtsCaps.url;
+        const resource = makeResource(url);
+        const maxLevel = Number(layer.source.maxzoom);
+        const minLevel = Number(layer.source.minzoom);
+        // No UI writes `tilingScheme`/`tileMatrixLabels` today; they come from a
+        // hand-authored or MCP-generated `.geolibre.json` (`source` is a
+        // free-form record), which is how non-default WMTS matrix sets are
+        // expressed. Left in so those projects render on the globe.
+        const schemeId = str(layer.source.tilingScheme);
+        let tilingScheme: TilingScheme | undefined;
+        if (schemeId) {
+          if (schemeId === "GeographicTilingScheme")
+            tilingScheme = new Cesium.GeographicTilingScheme();
+          else if (schemeId === "WebMercatorTilingScheme")
+            tilingScheme = new Cesium.WebMercatorTilingScheme();
+          else {
+            // Warn rather than bail silently: the layer still reads as
+            // globe-supported in the layer menu, so a mute skip looks like a
+            // broken renderer.
+            console.warn(
+              `[GeoLibre] skipping "${layer.name}" on the globe: unsupported WMTS tiling scheme "${schemeId}"`,
+            );
+            return;
+          }
+        }
+        const labels = layer.source.tileMatrixLabels;
+        const tileMatrixLabels = Array.isArray(labels) ? labels.map(String) : undefined;
+
+        provider = new Cesium.WebMapTileServiceImageryProvider({
+          url: resource,
+          layer: wmtsCaps.layer,
+          style: str(layer.source.style) ?? str(layer.source.styles) ?? "",
+          // Cesium's own WebMapTileServiceImageryProvider default. The WMS
+          // branch above defaults to image/png instead because WMS overlays are
+          // usually drawn transparent over the globe, while WMTS sets are
+          // typically opaque base imagery — the asymmetry is deliberate.
+          format: str(layer.source.format) ?? "image/jpeg",
+          tileMatrixSetID: wmtsCaps.tileMatrixSetID,
+          maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
+          minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
+          tilingScheme,
+          tileMatrixLabels,
+        });
       } else {
         const url = firstTile(layer);
         if (!url) return;
+        const resource = makeResource(url);
         const maxLevel = Number(layer.source.maxzoom);
         const minLevel = Number(layer.source.minzoom);
         provider = new Cesium.UrlTemplateImageryProvider({
-          url,
+          url: resource,
           maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
-          // Honour the service's min-zoom floor so the globe doesn't request
-          // (and 404 on) tiles below the levels the service actually serves.
           minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
         });
       }
+
+      if (!provider || entry.cancelled) return;
       // addImageryProvider appends above the base imagery (and earlier store
       // layers), so store order maps to Cesium's bottom-to-top stacking.
       const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
+      if (entry.cancelled) {
+        viewer.imageryLayers.remove(imageryLayer, true);
+        return;
+      }
       entry.handle = imageryLayer;
       this.applyAppearance(entry);
+      if (isAsync) {
+        // Unlike sync()'s reorder this one is unguarded, since the store order
+        // key can't tell whether an async layer has landed yet. Each resolve
+        // therefore costs its own O(n) raiseToTop sweep, so a project loading
+        // many ArcGIS/image layers at once pays O(n^2) overall. Fine for the
+        // handful a project typically has; worth coalescing into one deferred
+        // reorder if that stops being true.
+        this.reorderImagery();
+      }
     } catch {
-      // A provider that throws synchronously (e.g. malformed WMS params) should
-      // not abort the sync pass; mirror createGeoJson/createTileset's best-effort.
+      // A provider that throws synchronously (e.g. malformed params) or rejects
+      // should not abort the sync pass; mirror createGeoJson/createTileset's best-effort.
+      // The entry stays registered with a null handle rather than being deleted:
+      // sync() re-runs on every unrelated store change (an opacity drag, a
+      // reorder), so a deleted entry would be recreated — re-issuing the failing
+      // request and re-warning — on every pass. Retrying is left to needsRebuild,
+      // i.e. an actual change to this layer's source.
+      if (this.entries.get(entry.layer.id) === entry) {
+        entry.cancelled = true;
+        if (entry.handle) {
+          viewer.imageryLayers.remove(entry.handle as ImageryLayer, true);
+          entry.handle = null;
+        }
+      }
     }
   }
 

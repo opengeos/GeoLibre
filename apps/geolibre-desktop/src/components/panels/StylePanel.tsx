@@ -3500,6 +3500,7 @@ export function StylePanel({
     label: string,
     value: string,
     onSelect: (property: string) => void,
+    emptyLabel = t("style.generator.fieldNone"),
   ) => (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
@@ -3513,7 +3514,7 @@ export function StylePanel({
           <option value="">{t("style.labels.noAttributes")}</option>
         ) : (
           <>
-            <option value="">{t("style.generator.fieldNone")}</option>
+            <option value="">{emptyLabel}</option>
             {numericPropertyOptions.map((property) => (
               <option key={property} value={property}>
                 {property}
@@ -4292,6 +4293,29 @@ export function StylePanel({
           </div>
           {pointRenderer === "heatmap" ? (
             <>
+              {!controlRendersLayer(layer) ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="heatmapColorRamp">{t("style.symbology.colormap")}</Label>
+                    <ColorRampSelect
+                      id="heatmapColorRamp"
+                      aria-label={t("style.symbology.colormap")}
+                      value={styleValue(style, "heatmapColorRamp")}
+                      onValueChange={(heatmapColorRamp) =>
+                        setLayerStyle(layer.id, { heatmapColorRamp })
+                      }
+                      ramps={VECTOR_COLOR_RAMPS}
+                    />
+                  </div>
+                  {generatorFieldSelect(
+                    "heatmapWeightProperty",
+                    t("style.symbology.heatmapWeightField"),
+                    styleValue(style, "heatmapWeightProperty"),
+                    (heatmapWeightProperty) => setLayerStyle(layer.id, { heatmapWeightProperty }),
+                    t("style.symbology.heatmapEqualWeight"),
+                  )}
+                </>
+              ) : null}
               <NumericStyleInput
                 id="heatmapRadius"
                 label={t("style.symbology.heatmapRadius")}

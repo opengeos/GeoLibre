@@ -3,6 +3,7 @@ import {
   circleRadiusValue,
   extrusionColorValue,
   extrusionHeightValue,
+  heatmapRampColors,
   lineWidthValue,
   mapZoomStepOutputs,
   simpleStyleNumberValue,
@@ -127,31 +128,34 @@ export function circlePaint(style: LayerStyle, opacity: number) {
   };
 }
 
-// A perceptually-ordered cold→hot ramp over MapLibre's heatmap-density (0..1).
-const HEATMAP_COLOR_RAMP: ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["heatmap-density"],
-  0,
-  "rgba(33,102,172,0)",
-  0.2,
-  "rgb(103,169,207)",
-  0.4,
-  "rgb(209,229,240)",
-  0.6,
-  "rgb(253,219,199)",
-  0.8,
-  "rgb(239,138,98)",
-  1,
-  "rgb(178,24,43)",
-];
+export function heatmapColorRampExpression(colors: readonly string[]): ExpressionSpecification {
+  const expression: unknown[] = [
+    "interpolate",
+    ["linear"],
+    ["heatmap-density"],
+    0,
+    "rgba(0,0,0,0)",
+  ];
+  colors.forEach((color, index) => {
+    expression.push((index + 1) / colors.length, color);
+  });
+  return expression as ExpressionSpecification;
+}
+
+function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {
+  const property = styleValue(style, "heatmapWeightProperty").trim();
+  return property === ""
+    ? 1
+    : (["max", 0, ["to-number", ["get", property], 0]] as PropertyValueSpecification<number>);
+}
 
 export function heatmapPaint(style: LayerStyle, opacity: number) {
   return {
     "heatmap-radius": styleValue(style, "heatmapRadius"),
     "heatmap-intensity": styleValue(style, "heatmapIntensity"),
+    "heatmap-weight": heatmapWeight(style),
     "heatmap-opacity": opacity,
-    "heatmap-color": HEATMAP_COLOR_RAMP,
+    "heatmap-color": heatmapColorRampExpression(heatmapRampColors(style)),
   };
 }
 

@@ -1671,6 +1671,24 @@
     },
     "pixelTimeSeriesMode": {
       "start": "Série temporal de pixels"
+    },
+    "identifyAll": {
+      "title": "Resultados identificados ({{count}})",
+      "resultCount_one": "{{count}} resultado",
+      "resultCount_other": "{{count}} resultados",
+      "featureFallback": "Feição {{index}}",
+      "pixel": "Pixel",
+      "expandAll": "Expandir tudo",
+      "collapseAll": "Recolher tudo",
+      "loadingTitle": "Identificar camadas visíveis",
+      "loading": "Carregando...",
+      "errorLabel": "Erro",
+      "error": "Não foi possível identificar esta camada.",
+      "band": "Banda {{index}}",
+      "nodata": "sem dados",
+      "coordinates": "lon, lat",
+      "row": "linha",
+      "column": "coluna"
     }
   },
   "terrainSettings": {
@@ -1680,6 +1698,11 @@
     "controlLabel": "Alternar terreno (clique duas vezes para exagero)",
     "sourceLabel": "Fonte do terreno",
     "sourceDescription": "Use um COG de banda única em EPSG:3857 ou EPSG:4326 como fonte de elevação. O ficheiro deve permitir CORS e pedidos de intervalo HTTP.",
+    "rasterLayerLabel": "Camada raster",
+    "rasterLayerPlaceholder": "Selecionar uma camada raster",
+    "rasterLayerDescription": "Use como fonte de elevação uma camada raster COG já carregada no mapa.",
+    "noRasterLayers": "Não há camadas raster baseadas em arquivo disponíveis no mapa.",
+    "useRasterLayer": "Usar camada raster",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "DEM COG local",
     "localSourceDescription": "O ficheiro permanece neste dispositivo e é lido em pequenos intervalos à medida que os mosaicos de terreno são necessários.",
@@ -1824,7 +1847,8 @@
     "removePane": "Remover mapa {{number}}",
     "show3d": "Mostrar mapa {{number}} como um globo 3D",
     "show2d": "Mostrar mapa {{number}} como um mapa 2D",
-    "only2d": "Somente 2D"
+    "only2d": "Somente 2D",
+    "cesiumTokenHint": "Adicione um token do Cesium Ion em Configurações para terreno e imagens do Ion"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copiar coordenadas para a área de transferência",
@@ -2084,6 +2108,7 @@
       "tokenHostInvalid": "O endereço do servidor de compartilhamento de projetos desta implantação não é válido, portanto este token não pode ser usado.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token do Cesium Ion",
+      "cesiumTokenDescription": "O globo 3D (um painel de visualização dividida) funciona sem token: ele exibe o mapa base do projeto. Um token de acesso adiciona o Cesium World Terrain e as imagens mundiais do Ion. Crie uma conta gratuita em <tokenLink>ion.cesium.com/tokens</tokenLink>, copie seu token de acesso padrão e cole-o abaixo.",
       "cesiumTokenStorageNote": "Armazenado localmente neste dispositivo (não no arquivo do projeto, portanto nunca é compartilhado) e enviado apenas para o Cesium Ion. Na versão web, ele compartilha o mesmo armazenamento do navegador que outros dados do site.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Variáveis de ambiente",
@@ -2907,6 +2932,7 @@
       "maplibre-gl-geo-editor": "GeoEditor",
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
+      "maplibre-gl-vantor": "Dados Abertos Vantor",
       "maplibre-gl-graticule": "Linhas de grade",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4483,6 +4509,15 @@
                 "kilometers": "Quilômetros",
                 "meters": "Metros",
                 "miles": "Milhas"
+              }
+            },
+            "side": {
+              "label": "Lado do buffer",
+              "description": "Fora expande cada feição, Dentro a reduz e Ambos os lados mantém apenas a zona dentro dessa distância de cada lado do seu limite. Dentro exige polígonos — um ponto ou uma linha não tem interior.",
+              "options": {
+                "outside": "Fora (expandir)",
+                "inside": "Dentro (reduzir)",
+                "both": "Ambos os lados"
               }
             }
           }
@@ -6609,6 +6644,7 @@
       "categories": "Categorias",
       "classColor": "Cor da classe {{index}}",
       "classColorPick": "Escolher a cor da classe {{index}} da tela",
+      "classOpacity": "Opacidade da classe {{index}}",
       "classValue": "Valor da classe {{index}}",
       "colorExpression": "Expressão de cor",
       "applyStyleType": "Aplicar tipo de estilo",
@@ -6618,6 +6654,8 @@
       "pointRendererClustered": "Agrupado",
       "heatmapRadius": "Raio do mapa de calor",
       "heatmapIntensity": "Intensidade do mapa de calor",
+      "heatmapWeightField": "Campo de ponderação",
+      "heatmapEqualWeight": "Nenhum (peso igual)",
       "clusterRadius": "Raio do agrupamento (px)",
       "clusterMaxZoom": "Zoom máximo do agrupamento",
       "strokeWidthUnit": "Unidade da espessura do traço",
@@ -6974,6 +7012,8 @@
     "metadata": "Metadados",
     "removeLayer": "Remover camada",
     "identifyFeatures": "Identificar feições",
+    "identifyVisibleLayers": "Identificar camadas visíveis",
+    "identifyVisibleLayersHint": "Clique no mapa para identificar feições e valores de pixel de todas as camadas consultáveis visíveis.",
     "identifyDeactivate": "Desativar identificação",
     "identifyInspectPixels": "Inspecionar valores de pixel",
     "identifyStopInspectPixels": "Parar de inspecionar valores de pixel",
@@ -7638,5 +7678,69 @@
     "added": "{{count}} feição(ões) adicionada(s){{layer}}.",
     "badResponse": "A API do SamGeo não retornou uma FeatureCollection GeoJSON.",
     "unknownProjection": "O resultado não está em WGS84 e a imagem não traz uma projeção legível, por isso não pode ser posicionado no mapa. Use um GeoTIFF georreferenciado."
+  },
+  "vantor": {
+    "title": "Explorador STAC do Vantor",
+    "collapsePanel": "Recolher painel",
+    "openPanel": "Abrir o explorador STAC do Vantor",
+    "ready": "Pronto",
+    "searchSection": "Pesquisa",
+    "event": "Evento",
+    "loadingEvents": "Carregando eventos…",
+    "refreshCatalog": "Atualizar catálogo",
+    "phase": "Fase",
+    "phaseAll": "Todas",
+    "phasePre": "Pré-evento",
+    "phasePost": "Pós-evento",
+    "renderingEngine": "Mecanismo de renderização",
+    "engineGpu": "GPU (mais rápido)",
+    "engineWasm": "WASM (compatível com o globo)",
+    "engineTitiler": "TiTiler (servidor)",
+    "useMapExtent": "Usar extensão do mapa",
+    "drawBbox": "Desenhar BBox",
+    "clear": "Limpar",
+    "search": "Pesquisar",
+    "searching": "Pesquisando…",
+    "results": "Resultados",
+    "itemsFound": "Itens encontrados: {{count}}",
+    "selectAll": "Selecionar tudo",
+    "deselectAll": "Desmarcar tudo",
+    "columnId": "ID",
+    "columnDate": "Data",
+    "columnPhase": "Fase",
+    "columnSensor": "Sensor",
+    "columnCloud": "Nuvens %",
+    "columnGsd": "GSD",
+    "visualize": "Visualizar",
+    "downloadAction": "Baixar",
+    "cancel": "Cancelar",
+    "noEvents": "Nenhum evento encontrado",
+    "downloadProgress": {
+      "cancelled": "Download cancelado. Downloads iniciados: {{count}}.",
+      "invalidUrl": "{{id}} ignorado: URL HTTPS inválida.",
+      "starting": "Iniciando {{filename}}…",
+      "started": "{{filename}} iniciado ({{started}}/{{total}})",
+      "failed": "Falha ao iniciar {{filename}}: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "Obtendo o catálogo…",
+      "eventsFound": "Eventos encontrados: {{count}}. Selecione um evento e clique em “Pesquisar”.",
+      "catalogFailed": "Falha ao obter o catálogo: {{message}}",
+      "selectEvent": "Selecione um evento primeiro.",
+      "fetchingItems": "Obtendo itens…",
+      "itemsFound": "Itens encontrados: {{count}}. Marque itens para visualizar ou baixar.",
+      "itemsFailed": "Falha ao obter os itens: {{message}}",
+      "drawingCancelled": "Desenho da caixa delimitadora cancelado.",
+      "drawRectangle": "Desenhe um retângulo no mapa…",
+      "bboxSet": "Caixa delimitadora definida. Clique em “Pesquisar” para filtrar.",
+      "bboxCleared": "Caixa delimitadora limpa.",
+      "noSelection": "Nenhum item selecionado. Marque itens primeiro.",
+      "addingLayers": "Adicionando camadas COG: {{count}}…",
+      "addFailed": "Falha ao adicionar {{id}}: {{message}}",
+      "layersAdded": "Camadas COG adicionadas: {{count}}.",
+      "startingDownloads": "Iniciando downloads: {{count}}…",
+      "downloadsStarted": "Downloads iniciados: {{started}}. Com falha: {{failed}}.",
+      "downloadCancelled": "Download cancelado ou com falha."
+    }
   }
 }

@@ -276,6 +276,10 @@
         "label": "Add WMS Layer",
         "description": "Add a WMS GetMap service as a tiled raster layer."
       },
+      "csw": {
+        "label": "Search CSW Catalog",
+        "description": "Search an OGC Catalogue Service for datasets and add supported web resources to the map."
+      },
       "wfs": {
         "label": "Add WFS Layer",
         "description": "Add WFS features by requesting GeoJSON from a GetFeature service."
@@ -426,6 +430,21 @@
       "noLayersFound": "No layers were found for this service.",
       "retrieveError": "Could not retrieve layers from this service.",
       "version": "WMS version"
+    },
+    "csw": {
+      "defaultName": "CSW Catalog",
+      "urlPlaceholder": "https://example.com/csw",
+      "keyword": "Keyword",
+      "search": "Search",
+      "searching": "Searching...",
+      "results": "Catalog results",
+      "errorUrl": "Enter a valid HTTP or HTTPS CSW service URL.",
+      "searchError": "Could not search this catalog.",
+      "noResults": "No matching datasets were found.",
+      "invalidGeoJson": "The selected resource is not a GeoJSON FeatureCollection.",
+      "addError": "Could not add this catalog resource.",
+      "addResource": "Add {{kind}}",
+      "noSupportedResources": "No supported WMS, WFS, ArcGIS, or GeoJSON resource was advertised."
     },
     "wfs": {
       "defaultName": "WFS Layer",
@@ -1698,6 +1717,11 @@
     "controlLabel": "Toggle terrain (double-click for exaggeration)",
     "sourceLabel": "Terrain source",
     "sourceDescription": "Use an EPSG:3857 or EPSG:4326 single-band COG as the elevation source. The file must allow CORS and HTTP range requests.",
+    "rasterLayerLabel": "Raster layer",
+    "rasterLayerPlaceholder": "Select a raster layer",
+    "rasterLayerDescription": "Use a COG raster layer already loaded on the map as the elevation source.",
+    "noRasterLayers": "No file-backed raster layers are available on the map.",
+    "useRasterLayer": "Use raster layer",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Local COG DEM",
     "localSourceDescription": "The file stays on this device and is read in small ranges as terrain tiles are needed.",
@@ -2435,6 +2459,7 @@
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
       "wms": "WMS Layer",
+      "csw": "CSW Catalog",
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
       "ogcFeatures": "OGC API - Features",
@@ -2903,6 +2928,7 @@
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",
+      "maplibre-gl-dimensions": "Dimensions",
       "maplibre-gl-streetview": "Street View",
       "maplibre-gl-time-slider": "Time Slider",
       "geolibre-timelapse": "Timelapse",
@@ -3973,6 +3999,28 @@
     "atPoint": "At Point",
     "pinnedToExtent": "Pinned to Extent"
   },
+  "dimensions": {
+    "toolbar": "Dimension tools",
+    "layerName": "Dimensions",
+    "tools": {
+      "linear": "Linear dimension",
+      "angular": "Angular dimension"
+    },
+    "unit": "Unit",
+    "snap": "Snap to vertices",
+    "color": "Dimension color",
+    "width": "Line width",
+    "widthOptions": {
+      "thin": "Thin",
+      "medium": "Medium",
+      "thick": "Thick"
+    },
+    "deleteLast": "Delete last dimension",
+    "clearAll": "Clear all dimensions",
+    "newLayer": "New dimension layer",
+    "confirmClearAll_one": "Delete this dimension? This cannot be undone.",
+    "confirmClearAll_other": "Delete all {{count}} dimensions in this layer? This cannot be undone."
+  },
   "pythonConsole": {
     "title": "Python Console",
     "resize": "Resize Python console",
@@ -4574,6 +4622,15 @@
                 "kilometers": "Kilometers",
                 "meters": "Meters",
                 "miles": "Miles"
+              }
+            },
+            "side": {
+              "label": "Buffer side",
+              "description": "Outside grows each feature, Inside shrinks it, and Both keeps the zone within the distance on either side of its boundary. Inside needs polygon input — a point or line has no interior to buffer into.",
+              "options": {
+                "outside": "Outside (grow)",
+                "inside": "Inside (shrink)",
+                "both": "Both sides"
               }
             }
           }
@@ -6700,6 +6757,7 @@
       "categories": "Categories",
       "classColor": "Class {{index}} color",
       "classColorPick": "Pick class {{index}} color from the screen",
+      "classOpacity": "Class {{index}} opacity",
       "classValue": "Class {{index}} value",
       "colorExpression": "Color expression",
       "applyStyleType": "Apply style type",
@@ -6709,6 +6767,8 @@
       "pointRendererClustered": "Clustered",
       "heatmapRadius": "Heatmap radius",
       "heatmapIntensity": "Heatmap intensity",
+      "heatmapWeightField": "Weight field",
+      "heatmapEqualWeight": "None (equal weight)",
       "clusterRadius": "Cluster radius (px)",
       "clusterMaxZoom": "Cluster max zoom",
       "strokeWidthUnit": "Stroke width unit",
@@ -7731,5 +7791,66 @@
     "added": "Added {{count}} feature(s){{layer}}.",
     "badResponse": "SamGeo API did not return a GeoJSON FeatureCollection.",
     "unknownProjection": "The result is not in WGS84 and the image carries no readable projection, so it cannot be placed on the map. Use a georeferenced GeoTIFF."
+  },
+  "usgsNldi": {
+    "panelTitle": "USGS NLDI",
+    "title": "USGS NLDI network tools",
+    "hint": "First choose a flowline direction and click the map. Then choose a navigation direction, press the highlighted button to load available catalogs, select a catalog such as streamgages or wells, and press it again to plot that catalog.",
+    "directionComplete": "Complete flowline — returns the full NHD reach",
+    "directionUp": "Upstream only — returns the reach above the point",
+    "directionDown": "Downstream only — returns the reach below the point",
+    "basinButton": "Basin from hydrolocation",
+    "navigationPlaceholder": "Select direction — required before plotting",
+    "navigationUpstreamMain": "Upstream main — follow the primary channel",
+    "navigationUpstreamTributaries": "Upstream tributaries — find contributing branches",
+    "navigationDownstreamMain": "Downstream main — follow the primary channel",
+    "navigationDownstreamDiversions": "Downstream diversions — follow split-flow paths",
+    "sourcePlaceholder": "Press ‘Load sources & plot’ first",
+    "distancePlaceholder": "Distance (km)",
+    "navigationButton": "1. Load sources & plot navigation",
+    "navigationButtonAgain": "Plot another navigation layer",
+    "exportButton": "Export rendered results to GeoJSON",
+    "addLayersButton": "Add rendered results to GeoLibre Layers",
+    "clearButton": "Clear NLDI result",
+    "noComid": "No COMID was returned for this point.",
+    "requestingBasin": "Requesting upstream basin…",
+    "basinRendered": "Upstream basin rendered for COMID {{comid}}.",
+    "basinFailed": "Basin request failed.",
+    "selectNavigation": "Select a navigation method after tracing a point.",
+    "invalidDistance": "Distance must be between 1 and 9999 km.",
+    "discoveringSources": "Discovering NLDI navigation sources…",
+    "navigationUnavailable": "That navigation method is not available for this COMID.",
+    "noPlottableSource": "NLDI returned no plottable navigation source.",
+    "navigationEmpty": "{{source}} returned no mappable features for this navigation.",
+    "navigationAdded": "Added {{source}} via {{navigation}} for COMID {{comid}} ({{km}} km). Existing navigation layers remain on the map.",
+    "navigationFailed": "Navigation request failed.",
+    "tracing": "Tracing to the nearest NHD flowline…",
+    "flowline": "Flowline rendered.",
+    "flowlineComid": "Flowline rendered; COMID {{comid}} is ready for basin workflows.",
+    "flowlineFallback": "Flowline rendered using NLDI hydrolocation fallback.",
+    "flowlineFallbackComid": "Flowline rendered using NLDI hydrolocation fallback; COMID {{comid}} is ready for basin workflows.",
+    "requestFailed": "NLDI request failed.",
+    "nothingToAdd": "There are no rendered NLDI features to add.",
+    "layersAdded_one": "Added {{count}} NLDI layer to one “USGS NLDI results” group.",
+    "layersAdded_other": "Added {{count}} NLDI layers to one “USGS NLDI results” group.",
+    "layerGroupName": "USGS NLDI results",
+    "layerFlowline": "NLDI flowline",
+    "layerRaindrop": "NLDI raindrop path",
+    "layerSelectedPoint": "NLDI selected point",
+    "layerBasin": "NLDI upstream basin",
+    "layerNavigation": "NLDI navigation {{index}}",
+    "resultCleared": "NLDI result cleared.",
+    "directionalUnavailable": "Directional flowtrace is unavailable while the USGS process is offline. Choose Complete flowline or try again later.",
+    "noFlowlineNearby": "NLDI could not find a flowline near this point.",
+    "httpError": "USGS NLDI returned HTTP {{status}}",
+    "httpErrorDetail": "USGS NLDI returned HTTP {{status}}: {{detail}}",
+    "noAttributes": "No attributes returned by NLDI.",
+    "catalogCaGages": "California streamgages (ca_gages)",
+    "catalogNwisSite": "NWIS surface-water sites (streamgages)",
+    "catalogNwisGw": "NWIS groundwater wells",
+    "catalogGfv11Pois": "USGS Geospatial Fabric points",
+    "catalogHuc12pp": "HUC12 pour points",
+    "catalogNmwdiSt": "New Mexico water sites",
+    "catalogFlowlines": "NHDPlus flowlines"
   }
 }

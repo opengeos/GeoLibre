@@ -1,5 +1,6 @@
 # R package
 
+[![CRAN status](https://www.r-pkg.org/badges/version/geolibre)](https://CRAN.R-project.org/package=geolibre)
 [![R-CMD-check](https://github.com/opengeos/geolibre-r/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/opengeos/geolibre-r/actions/workflows/R-CMD-check.yaml)
 
 The **`geolibre`** R package embeds the full GeoLibre map in RStudio, Quarto,
@@ -13,18 +14,18 @@ the GeoLibre web or desktop application.
 
 ## Installation
 
-The package is currently available from GitHub while its first CRAN submission
-is prepared:
+Install the released version from
+[CRAN](https://CRAN.R-project.org/package=geolibre):
+
+```r
+install.packages("geolibre")
+```
+
+Or the development version from GitHub:
 
 ```r
 install.packages("pak")
 pak::pak("opengeos/geolibre-r")
-```
-
-After it is published on CRAN, install the released version with:
-
-```r
-install.packages("geolibre")
 ```
 
 ## Quick start

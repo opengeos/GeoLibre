@@ -1671,6 +1671,24 @@
     },
     "pixelTimeSeriesMode": {
       "start": "Pixel-tijdreeks"
+    },
+    "identifyAll": {
+      "title": "Geïdentificeerde resultaten ({{count}})",
+      "resultCount_one": "{{count}} resultaat",
+      "resultCount_other": "{{count}} resultaten",
+      "featureFallback": "Object {{index}}",
+      "pixel": "Pixel",
+      "expandAll": "Alles uitvouwen",
+      "collapseAll": "Alles samenvouwen",
+      "loadingTitle": "Zichtbare lagen identificeren",
+      "loading": "Bezig met laden...",
+      "errorLabel": "Fout",
+      "error": "Deze laag kon niet worden geïdentificeerd.",
+      "band": "Band {{index}}",
+      "nodata": "geen gegevens",
+      "coordinates": "lon, lat",
+      "row": "rij",
+      "column": "kolom"
     }
   },
   "terrainSettings": {
@@ -1680,6 +1698,11 @@
     "controlLabel": "Terrein in-/uitschakelen (dubbelklik voor overdrijving)",
     "sourceLabel": "Terreinbron",
     "sourceDescription": "Gebruik een enkelbands COG in EPSG:3857 of EPSG:4326 als hoogtebron. Het bestand moet CORS en HTTP-bereikverzoeken toestaan.",
+    "rasterLayerLabel": "Rasterlaag",
+    "rasterLayerPlaceholder": "Selecteer een rasterlaag",
+    "rasterLayerDescription": "Gebruik een COG-rasterlaag die al op de kaart is geladen als hoogtebron.",
+    "noRasterLayers": "Er zijn geen bestandsgebaseerde rasterlagen beschikbaar op de kaart.",
+    "useRasterLayer": "Rasterlaag gebruiken",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Lokale COG-DEM",
     "localSourceDescription": "Het bestand blijft op dit apparaat en wordt in kleine bereiken gelezen wanneer terreintegels nodig zijn.",
@@ -1824,7 +1847,8 @@
     "removePane": "Kaart {{number}} verwijderen",
     "show3d": "Kaart {{number}} weergeven als 3D-globe",
     "show2d": "Kaart {{number}} weergeven als 2D-kaart",
-    "only2d": "Alleen 2D"
+    "only2d": "Alleen 2D",
+    "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Coördinaten naar klembord kopiëren",
@@ -2084,6 +2108,7 @@
       "tokenHostInvalid": "Het adres van de server voor het delen van projecten in deze implementatie is ongeldig, dus dit token kan niet worden gebruikt.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion-token",
+      "cesiumTokenDescription": "De 3D-globe (een gesplitst weergavepaneel) werkt zonder token: hij toont de achtergrondkaart van het project. Een toegangstoken voegt Cesium World Terrain en Ion-wereldbeelden toe. Maak een gratis account aan op <tokenLink>ion.cesium.com/tokens</tokenLink>, kopieer uw standaard toegangstoken en plak het hieronder.",
       "cesiumTokenStorageNote": "Lokaal opgeslagen op dit apparaat (niet in het projectbestand, dus nooit gedeeld) en alleen verzonden naar Cesium Ion. In de webversie wordt dezelfde browseropslag gebruikt als voor andere sitegegevens.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Omgevingsvariabelen",
@@ -2907,6 +2932,7 @@
       "maplibre-gl-geo-editor": "GeoEditor",
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
+      "maplibre-gl-vantor": "Open data van Vantor",
       "maplibre-gl-graticule": "Rasterlijnen",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4483,6 +4509,15 @@
                 "kilometers": "Kilometer",
                 "meters": "Meter",
                 "miles": "Mijl"
+              }
+            },
+            "side": {
+              "label": "Bufferzijde",
+              "description": "Buiten vergroot elk object, Binnen verkleint het en Beide zijden behoudt alleen de zone binnen die afstand aan weerszijden van de grens. Binnen vereist polygonen — een punt of lijn heeft geen binnenkant.",
+              "options": {
+                "outside": "Buiten (vergroten)",
+                "inside": "Binnen (verkleinen)",
+                "both": "Beide zijden"
               }
             }
           }
@@ -6609,6 +6644,7 @@
       "categories": "Categorieën",
       "classColor": "Kleur klasse {{index}}",
       "classColorPick": "Kleur voor klasse {{index}} van het scherm oppikken",
+      "classOpacity": "Dekking klasse {{index}}",
       "classValue": "Waarde klasse {{index}}",
       "colorExpression": "Kleurexpressie",
       "applyStyleType": "Stijltype toepassen",
@@ -6618,6 +6654,8 @@
       "pointRendererClustered": "Geclusterd",
       "heatmapRadius": "Heatmap-straal",
       "heatmapIntensity": "Heatmap-intensiteit",
+      "heatmapWeightField": "Wegingsveld",
+      "heatmapEqualWeight": "Geen (gelijke weging)",
       "clusterRadius": "Clusterstraal (px)",
       "clusterMaxZoom": "Max. zoom cluster",
       "strokeWidthUnit": "Eenheid van lijndikte",
@@ -6974,6 +7012,8 @@
     "metadata": "Metadata",
     "removeLayer": "Laag verwijderen",
     "identifyFeatures": "Objecten identificeren",
+    "identifyVisibleLayers": "Zichtbare lagen identificeren",
+    "identifyVisibleLayersHint": "Klik op de kaart om objecten en pixelwaarden van alle zichtbare bevraagbare lagen te identificeren.",
     "identifyDeactivate": "Identificeren uitschakelen",
     "identifyInspectPixels": "Pixelwaarden inspecteren",
     "identifyStopInspectPixels": "Pixelwaarden-inspectie stoppen",
@@ -7638,5 +7678,69 @@
     "added": "{{count}} feature(s){{layer}} toegevoegd.",
     "badResponse": "De SamGeo-API heeft geen GeoJSON-FeatureCollection geretourneerd.",
     "unknownProjection": "Het resultaat is niet in WGS84 en de afbeelding bevat geen leesbare projectie, dus het kan niet op de kaart worden geplaatst. Gebruik een gegeorefereerde GeoTIFF."
+  },
+  "vantor": {
+    "title": "Vantor STAC-verkenner",
+    "collapsePanel": "Paneel samenvouwen",
+    "openPanel": "Vantor STAC-verkenner openen",
+    "ready": "Gereed",
+    "searchSection": "Zoeken",
+    "event": "Gebeurtenis",
+    "loadingEvents": "Gebeurtenissen worden geladen…",
+    "refreshCatalog": "Catalogus vernieuwen",
+    "phase": "Fase",
+    "phaseAll": "Alle",
+    "phasePre": "Vóór de gebeurtenis",
+    "phasePost": "Na de gebeurtenis",
+    "renderingEngine": "Rendering-engine",
+    "engineGpu": "GPU (sneller)",
+    "engineWasm": "WASM (globe-compatibel)",
+    "engineTitiler": "TiTiler (server)",
+    "useMapExtent": "Kaartbereik gebruiken",
+    "drawBbox": "BBox tekenen",
+    "clear": "Wissen",
+    "search": "Zoeken",
+    "searching": "Zoeken…",
+    "results": "Resultaten",
+    "itemsFound": "Gevonden items: {{count}}",
+    "selectAll": "Alles selecteren",
+    "deselectAll": "Alles deselecteren",
+    "columnId": "ID",
+    "columnDate": "Datum",
+    "columnPhase": "Fase",
+    "columnSensor": "Sensor",
+    "columnCloud": "Bewolking %",
+    "columnGsd": "GSD",
+    "visualize": "Visualiseren",
+    "downloadAction": "Downloaden",
+    "cancel": "Annuleren",
+    "noEvents": "Geen gebeurtenissen gevonden",
+    "downloadProgress": {
+      "cancelled": "Download geannuleerd. Gestarte downloads: {{count}}.",
+      "invalidUrl": "{{id}} overgeslagen: ongeldige HTTPS-URL.",
+      "starting": "{{filename}} wordt gestart…",
+      "started": "{{filename}} gestart ({{started}}/{{total}})",
+      "failed": "Kan {{filename}} niet starten: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "Catalogus wordt opgehaald…",
+      "eventsFound": "Gevonden gebeurtenissen: {{count}}. Selecteer een gebeurtenis en klik op ‘Zoeken’.",
+      "catalogFailed": "Kan de catalogus niet ophalen: {{message}}",
+      "selectEvent": "Selecteer eerst een gebeurtenis.",
+      "fetchingItems": "Items worden opgehaald…",
+      "itemsFound": "Gevonden items: {{count}}. Vink items aan om te visualiseren of te downloaden.",
+      "itemsFailed": "Kan de items niet ophalen: {{message}}",
+      "drawingCancelled": "Tekenen van begrenzingskader geannuleerd.",
+      "drawRectangle": "Teken een rechthoek op de kaart…",
+      "bboxSet": "Begrenzingskader ingesteld. Klik op ‘Zoeken’ om te filteren.",
+      "bboxCleared": "Begrenzingskader gewist.",
+      "noSelection": "Geen items geselecteerd. Vink eerst items aan.",
+      "addingLayers": "COG-lagen worden toegevoegd: {{count}}…",
+      "addFailed": "Kan {{id}} niet toevoegen: {{message}}",
+      "layersAdded": "Toegevoegde COG-lagen: {{count}}.",
+      "startingDownloads": "Downloads worden gestart: {{count}}…",
+      "downloadsStarted": "Gestarte downloads: {{started}}. Mislukt: {{failed}}.",
+      "downloadCancelled": "Download geannuleerd of mislukt."
+    }
   }
 }

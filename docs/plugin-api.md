@@ -370,6 +370,7 @@ change. If you also touched pages under `docs/`, build the site — CI runs
 | `maplibre-gl-basemap-control` | Adds a MapLibre basemap picker                                                                                      |
 | `maplibre-gl-components`      | Adds the MapLibre Components control grid and panels for FlatGeobuf, COG, PMTiles, Zarr, LiDAR, and Gaussian splats |
 | `maplibre-gl-geo-editor`      | Adds GeoEditor drawing controls                                                                                     |
+| `maplibre-gl-dimensions`      | Adds Dimension tools (linear/angular CAD-style dimension lines, with optional vertex snapping)                     |
 | `maplibre-gl-geoagent`        | Adds GeoAgent map assistant controls                                                                                |
 | `maplibre-gl-lidar`           | Adds LiDAR controls                                                                                                 |
 | `maplibre-gl-streetview`      | Adds street view controls                                                                                           |

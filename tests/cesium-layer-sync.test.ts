@@ -21,6 +21,9 @@ function makeFakes() {
     primitivesRemoved: [] as unknown[],
     urlProviders: [] as Record<string, unknown>[],
     wmsProviders: [] as Record<string, unknown>[],
+    arcgisProviders: [] as { url: unknown; options?: Record<string, unknown> }[],
+    wmtsProviders: [] as Record<string, unknown>[],
+    singleTileProviders: [] as { url: unknown; options?: Record<string, unknown> }[],
     geojsonLoads: [] as { data: unknown; options: Record<string, unknown> }[],
     tilesetUrls: [] as unknown[],
   };
@@ -67,6 +70,8 @@ function makeFakes() {
   };
 
   const Cesium = {
+    GeographicTilingScheme: class {},
+    WebMercatorTilingScheme: class {},
     UrlTemplateImageryProvider: class {
       url?: string;
       constructor(opts: Record<string, unknown>) {
@@ -80,6 +85,37 @@ function makeFakes() {
         this.url = opts.url as string | undefined;
         calls.wmsProviders.push(opts);
       }
+    },
+    WebMapTileServiceImageryProvider: class {
+      url?: string;
+      constructor(opts: Record<string, unknown>) {
+        this.url = opts.url as string | undefined;
+        calls.wmtsProviders.push(opts);
+      }
+    },
+    ArcGisMapServerImageryProvider: {
+      fromUrl: (url: unknown, options?: Record<string, unknown>) => {
+        calls.arcgisProviders.push({ url, options });
+        const providerUrl =
+          typeof url === "string" ? url : (url as { opts?: { url?: string } })?.opts?.url;
+        return Promise.resolve({ url: providerUrl });
+      },
+    },
+    SingleTileImageryProvider: {
+      fromUrl: (url: unknown, options?: Record<string, unknown>) => {
+        calls.singleTileProviders.push({ url, options });
+        const providerUrl =
+          typeof url === "string" ? url : (url as { opts?: { url?: string } })?.opts?.url;
+        return Promise.resolve({ url: providerUrl });
+      },
+    },
+    Rectangle: {
+      fromDegrees: (west: number, south: number, east: number, north: number) => ({
+        west,
+        south,
+        east,
+        north,
+      }),
     },
     GeoJsonDataSource: {
       load: (data: unknown, options: Record<string, unknown>) => {
@@ -286,6 +322,35 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.urlProviders.length, 0);
   });
 
+  it("does not rebuild a tile layer when unrelated bounds or token metadata change", () => {
+    // metadata.bounds is set broadly (raster/time-slider layers), and a tile URL
+    // can carry an unrelated token= param; neither feeds a UrlTemplateImageryProvider.
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "r",
+      type: "raster",
+      source: { tiles: ["https://tiles.host/{z}/{x}/{y}.png?token=abc"] },
+      metadata: { bounds: [0, 0, 1, 1] },
+    });
+    sync.sync([base]);
+    assert.equal(f.calls.urlProviders.length, 1);
+
+    sync.sync([{ ...base, metadata: { bounds: [0, 0, 2, 2] } }]);
+    assert.equal(f.calls.urlProviders.length, 1);
+    assert.equal(f.calls.imageryRemoved.length, 0);
+  });
+
+  it("treats a wms layer with only a service url as globe-supported", () => {
+    // WebMapServiceImageryProvider defaults `layers` to "", so a url is enough —
+    // a scripted or hand-edited project without `layers` must not read "2D only".
+    const wms = mkLayer({ id: "w", type: "wms", source: { url: "https://wms.host/ows" } });
+    assert.equal(isCesiumSupportedLayerType(wms), true);
+    const sync = newSync(f);
+    sync.sync([wms]);
+    assert.equal(f.calls.wmsProviders.length, 1);
+    assert.equal(f.calls.wmsProviders[0].layers, "");
+  });
+
   it("re-asserts imagery stacking in store order after a middle-layer rebuild", () => {
     const sync = newSync(f);
     const A = mkLayer({ id: "a", type: "xyz", source: { tiles: ["a/{z}/{x}/{y}"] } });
@@ -407,8 +472,517 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.imageryRemoved.length, 1);
   });
 
+  it("renders an arcgis MapServer layer via ArcGisMapServerImageryProvider.fromUrl", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "arc",
+        type: "raster",
+        sourcePath: "https://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer",
+        source: {
+          tiles: [
+            "https://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer/export?token=secret-token",
+          ],
+          token: "secret-token",
+        },
+        metadata: {
+          sourceKind: "arcgis-map-service",
+          arcgisSublayers: "0,1",
+          hasAccessToken: true,
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 1);
+    assert.equal(
+      f.calls.arcgisProviders[0].url,
+      "https://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer",
+    );
+    assert.equal(f.calls.arcgisProviders[0].options?.layers, "0,1");
+    assert.equal(f.calls.arcgisProviders[0].options?.token, "secret-token");
+    assert.equal(f.calls.imageryAdded.length, 1);
+  });
+
+  it("forwards requestHeaders on an arcgis layer via Cesium.Resource", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "arc",
+        type: "raster",
+        sourcePath: "https://secure.arcgis/MapServer",
+        source: {
+          tiles: ["https://secure.arcgis/MapServer/export"],
+          requestHeaders: { Authorization: "Bearer token123" },
+        },
+        metadata: {
+          sourceKind: "arcgis-map-service",
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 1);
+    const res = f.calls.arcgisProviders[0].url as {
+      opts: { url: string; headers: Record<string, string> };
+    };
+    assert.equal(res.opts.url, "https://secure.arcgis/MapServer");
+    assert.equal(res.opts.headers["Authorization"], "Bearer token123");
+  });
+
+  it("reads the arcgis token off the pre-built export tile url", async () => {
+    // The Add ArcGIS Layer flow only ever bakes the token into the tile
+    // template; `source.token` is never populated.
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "arc",
+        type: "raster",
+        sourcePath: "https://server/MapServer",
+        source: { tiles: ["https://server/MapServer/export?bbox=1&token=secret-token&f=image"] },
+        metadata: { sourceKind: "arcgis-map-service", hasAccessToken: true },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 1);
+    assert.equal(f.calls.arcgisProviders[0].options?.token, "secret-token");
+  });
+
+  it("routes an arcgis image service through the tile template, not the MapServer provider", async () => {
+    // ArcGisMapServerImageryProvider speaks `/export` + a MapServer capabilities
+    // document; an ImageServer answers neither.
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "img",
+        type: "raster",
+        sourcePath: "https://server/ImageServer",
+        source: { tiles: ["https://server/ImageServer/exportImage?f=image"] },
+        metadata: { sourceKind: "arcgis-image-service" },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 0);
+    assert.equal(f.calls.urlProviders.length, 1);
+    assert.equal(f.calls.urlProviders[0].url, "https://server/ImageServer/exportImage?f=image");
+  });
+
+  it("skips a layer whose request headers would go out over plaintext", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "insecure",
+        type: "xyz",
+        source: {
+          tiles: ["http://tiles.example/{z}/{x}/{y}.png"],
+          requestHeaders: { Authorization: "Bearer token123" },
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.urlProviders.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 0);
+  });
+
+  it("does not retry a failed provider on every unrelated sync pass", async () => {
+    const sync = newSync(f);
+    const bad = mkLayer({
+      id: "insecure",
+      type: "xyz",
+      source: {
+        tiles: ["http://tiles.example/{z}/{x}/{y}.png"],
+        requestHeaders: { Authorization: "Bearer token123" },
+      },
+    });
+    const other = mkLayer({ id: "ok", type: "xyz", source: { tiles: ["a/{z}/{x}/{y}"] } });
+    sync.sync([bad, other]);
+    await f.flush();
+    assert.equal(f.calls.urlProviders.length, 1);
+
+    // An unrelated change (opacity) re-runs sync for the whole pane; the failed
+    // layer must not re-attempt its provider.
+    sync.sync([bad, { ...other, opacity: 0.5 }]);
+    await f.flush();
+    assert.equal(f.calls.urlProviders.length, 1);
+  });
+
+  it("keeps both arcgis FeatureServer shapes out of imagery sync", async () => {
+    // arcgis-layer.ts stores a FeatureServer two ways, and neither is imagery:
+    // createArcGISStoreLayer() emits type "arcgis" (maplibre-arcgis renders it
+    // natively, so it is 2D-only on the globe), while the paged query flow emits
+    // a plain geojson layer tagged arcgis-feature-query, which the globe renders
+    // through the GeoJsonDataSource path. Only type "raster" +
+    // sourceKind "arcgis-map-service" may reach ArcGisMapServerImageryProvider.
+    const native = mkLayer({
+      id: "feat-native",
+      type: "arcgis",
+      sourcePath: "https://server/arcgis/rest/services/USA/FeatureServer/0",
+      source: {
+        url: "https://server/arcgis/rest/services/USA/FeatureServer/0",
+        layerType: "feature",
+        type: "geojson",
+      },
+      metadata: { sourceKind: "arcgis-feature-url", arcgisLayerType: "feature" },
+    });
+    const queried = mkLayer({
+      id: "feat-query",
+      type: "geojson",
+      source: { type: "geojson", arcgisQueryUrl: "https://server/FeatureServer/0/query" },
+      metadata: { sourceKind: "arcgis-feature-query" },
+      geojson: { type: "FeatureCollection", features: [{}] } as never,
+    });
+
+    assert.equal(isCesiumSupportedLayerType(native), false);
+    assert.equal(isCesiumSupportedLayerType(queried), true);
+
+    const sync = newSync(f);
+    sync.sync([native, queried]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 0);
+    // The queried layer still renders — via GeoJSON, not imagery.
+    assert.equal(f.calls.geojsonLoads.length, 1);
+  });
+
+  it("renders an arcgis-tagged raster with no sourcePath via its tile template", async () => {
+    // createImagery's ArcGIS branch needs a sourcePath for the service URL and
+    // otherwise falls through to the generic tile-template branch; isSupported
+    // must agree, or a hand-authored/MCP project that tags a plain raster
+    // arcgis-map-service silently loses the globe rendering it had.
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "arc-tiles",
+      type: "raster",
+      source: { tiles: ["https://server/MapServer/tile/{z}/{y}/{x}"] },
+      metadata: { sourceKind: "arcgis-map-service" },
+    });
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+    sync.sync([layer]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 0);
+    assert.equal(f.calls.urlProviders.length, 1);
+    assert.equal(f.calls.urlProviders[0].url, "https://server/MapServer/tile/{z}/{y}/{x}");
+    assert.equal(f.calls.imageryAdded.length, 1);
+  });
+
+  it("rebuilds an arcgis layer when url or sublayers change", async () => {
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "arc",
+      type: "raster",
+      sourcePath: "https://server/MapServer",
+      source: { tiles: ["https://server/MapServer/export"] },
+      metadata: { sourceKind: "arcgis-map-service", arcgisSublayers: "1,2" },
+    });
+    sync.sync([base]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 1);
+
+    sync.sync([{ ...base, metadata: { ...base.metadata, arcgisSublayers: "1,2,3" } }]);
+    await f.flush();
+    assert.equal(f.calls.arcgisProviders.length, 2);
+    assert.equal(f.calls.imageryRemoved.length, 1);
+    assert.equal(f.calls.arcgisProviders[1].options?.layers, "1,2,3");
+  });
+
+  it("renders a capabilities-driven wmts layer via WebMapTileServiceImageryProvider", () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "wmts",
+        type: "wmts",
+        source: {
+          url: "https://wmts.service/endpoint",
+          layer: "ortho",
+          style: "default",
+          format: "image/png",
+          tileMatrixSetID: "EPSG:3857",
+          minzoom: 1,
+          maxzoom: 19,
+        },
+      }),
+    ]);
+    assert.equal(f.calls.wmtsProviders.length, 1);
+    assert.equal(f.calls.wmtsProviders[0].url, "https://wmts.service/endpoint");
+    assert.equal(f.calls.wmtsProviders[0].layer, "ortho");
+    assert.equal(f.calls.wmtsProviders[0].style, "default");
+    assert.equal(f.calls.wmtsProviders[0].format, "image/png");
+    assert.equal(f.calls.wmtsProviders[0].tileMatrixSetID, "EPSG:3857");
+    assert.equal(f.calls.wmtsProviders[0].minimumLevel, 1);
+    assert.equal(f.calls.wmtsProviders[0].maximumLevel, 19);
+    assert.equal(f.calls.imageryAdded.length, 1);
+  });
+
+  it("reports a capabilities-driven wmts layer with no tileMatrixSetID as 2D only", () => {
+    // Cesium throws on a missing tileMatrixSetID and a guessed one 404s per
+    // tile, so an incomplete hand-authored entry must not read as globe-capable.
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "wmts",
+      type: "wmts",
+      source: { url: "https://wmts.service/endpoint", layer: "ortho" },
+    });
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+    sync.sync([layer]);
+    assert.equal(f.calls.wmtsProviders.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 0);
+
+    // A tile template needs no matrix-set negotiation, so it still renders.
+    sync.sync([
+      {
+        ...layer,
+        source: { ...layer.source, tiles: ["https://wmts.service/{z}/{x}/{y}.png"] },
+      },
+    ]);
+    assert.equal(f.calls.urlProviders.length, 1);
+  });
+
+  it("rebuilds a wmts layer when tileMatrixSetID or layer changes", () => {
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "wmts",
+      type: "wmts",
+      source: {
+        url: "https://wmts.service/endpoint",
+        layer: "l1",
+        tileMatrixSetID: "setA",
+      },
+    });
+    sync.sync([base]);
+    assert.equal(f.calls.wmtsProviders.length, 1);
+    sync.sync([{ ...base, source: { ...base.source, tileMatrixSetID: "setB" } }]);
+    assert.equal(f.calls.wmtsProviders.length, 2);
+    assert.equal(f.calls.imageryRemoved.length, 1);
+    assert.equal(f.calls.wmtsProviders[1].tileMatrixSetID, "setB");
+
+    // test tilingScheme change
+    sync.sync([{ ...base, source: { ...base.source, tilingScheme: "GeographicTilingScheme" } }]);
+    assert.equal(f.calls.wmtsProviders.length, 3);
+    assert.equal(f.calls.imageryRemoved.length, 2);
+
+    // test tileMatrixLabels change
+    sync.sync([{ ...base, source: { ...base.source, tileMatrixLabels: ["0", "1", "2"] } }]);
+    assert.equal(f.calls.wmtsProviders.length, 4);
+    assert.equal(f.calls.imageryRemoved.length, 3);
+  });
+
+  it("renders an image layer via SingleTileImageryProvider from bounds or coordinates", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "img1",
+        type: "image",
+        source: {
+          url: "https://images.org/photo.png",
+        },
+        metadata: {
+          bounds: [-122.5, 37.5, -122.0, 38.0],
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 1);
+    assert.equal(f.calls.singleTileProviders[0].url, "https://images.org/photo.png");
+    assert.deepEqual(f.calls.singleTileProviders[0].options?.rectangle, {
+      west: -122.5,
+      south: 37.5,
+      east: -122.0,
+      north: 38.0,
+    });
+    assert.equal(f.calls.imageryAdded.length, 1);
+
+    // Test with 4 corner coordinates (top-left, top-right, bottom-right, bottom-left)
+    const sync2 = newSync(f);
+    sync2.sync([
+      mkLayer({
+        id: "img2",
+        type: "image",
+        source: {
+          url: "data:image/png;base64,AAA",
+          coordinates: [
+            [-10, 20],
+            [5, 20],
+            [5, 10],
+            [-10, 10],
+          ],
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 2);
+    assert.deepEqual(f.calls.singleTileProviders[1].options?.rectangle, {
+      west: -10,
+      south: 10,
+      east: 5,
+      north: 20,
+    });
+
+    // Test antimeridian crossing (e.g. 179 to -179)
+    const sync3 = newSync(f);
+    sync3.sync([
+      mkLayer({
+        id: "img3",
+        type: "image",
+        source: {
+          url: "data:image/png;base64,AAA",
+          coordinates: [
+            [179, 20],
+            [-179, 20],
+            [-179, 10],
+            [179, 10],
+          ],
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 3);
+    assert.deepEqual(f.calls.singleTileProviders[2].options?.rectangle, {
+      west: 179,
+      south: 10,
+      east: -179,
+      north: 20,
+    });
+  });
+
+  it("prefers corner coordinates over a plain min/max metadata.bounds", async () => {
+    // cornersToBounds() (Georeferencer) and the KML ground-overlay importer both
+    // cache metadata.bounds as a plain min/max, which inverts to a near-global
+    // rectangle across the antimeridian. The corners are authoritative.
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "img",
+      type: "image",
+      source: {
+        url: "data:image/png;base64,AAA",
+        coordinates: [
+          [179, 20],
+          [-179, 20],
+          [-179, 10],
+          [179, 10],
+        ],
+      },
+      metadata: { bounds: [-179, 10, 179, 20] },
+    });
+    sync.sync([base]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 1);
+    assert.deepEqual(f.calls.singleTileProviders[0].options?.rectangle, {
+      west: 179,
+      south: 10,
+      east: -179,
+      north: 20,
+    });
+
+    // A corner-only edit (a future edit-GCPs flow) rebuilds even though the
+    // cached metadata.bounds is untouched.
+    sync.sync([
+      {
+        ...base,
+        source: {
+          ...base.source,
+          coordinates: [
+            [178, 20],
+            [-179, 20],
+            [-179, 10],
+            [178, 10],
+          ],
+        },
+      },
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 2);
+    assert.deepEqual(f.calls.singleTileProviders[1].options?.rectangle, {
+      west: 178,
+      south: 10,
+      east: -179,
+      north: 20,
+    });
+  });
+
+  it("falls back to metadata.bounds when out-of-range corners can't be unwrapped", async () => {
+    // A >180 degree spread that doesn't straddle zero (only reachable with
+    // out-of-range longitudes from a hand-authored project) would leave
+    // Math.min/max of an empty array — an infinite corner Cesium would throw on.
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "img",
+        type: "image",
+        source: {
+          url: "data:image/png;base64,AAA",
+          coordinates: [
+            [0, 20],
+            [200, 20],
+            [200, 10],
+            [0, 10],
+          ],
+        },
+        metadata: { bounds: [0, 10, 20, 20] },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 1);
+    assert.deepEqual(f.calls.singleTileProviders[0].options?.rectangle, {
+      west: 0,
+      south: 10,
+      east: 20,
+      north: 20,
+    });
+  });
+
+  it("rebuilds an image layer when url or bounds change", async () => {
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "img",
+      type: "image",
+      source: {
+        url: "https://images.org/a.png",
+      },
+      metadata: { bounds: [0, 0, 10, 10] },
+    });
+    sync.sync([base]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 1);
+
+    sync.sync([{ ...base, metadata: { ...base.metadata, bounds: [0, 0, 15, 15] } }]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 2);
+    assert.equal(f.calls.imageryRemoved.length, 1);
+  });
+
+  it("skips an image layer missing bounds or coordinates", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "img",
+        type: "image",
+        source: { url: "https://images.org/a.png" },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.singleTileProviders.length, 0);
+    assert.equal(f.calls.imageryAdded.length, 0);
+  });
+
+  it("re-asserts imagery stacking after an async provider resolves", async () => {
+    const sync = newSync(f);
+    const A = mkLayer({ id: "a", type: "xyz", source: { tiles: ["a/{z}/{x}/{y}"] } });
+    const B = mkLayer({
+      id: "b",
+      type: "raster",
+      sourcePath: "https://server/MapServer",
+      metadata: { sourceKind: "arcgis-map-service" },
+      source: { tiles: ["https://server/MapServer/export"] },
+    });
+    const C = mkLayer({ id: "c", type: "xyz", source: { tiles: ["c/{z}/{x}/{y}"] } });
+    sync.sync([A, B, C]);
+    await f.flush();
+    assert.deepEqual(
+      f.calls.imageryStack.map((l) => l.url),
+      ["a/{z}/{x}/{y}", "https://server/MapServer", "c/{z}/{x}/{y}"],
+    );
+  });
+
   it("classifies supported vs 2D-only layer kinds", () => {
-    for (const type of ["geojson", "xyz", "raster", "wms", "wmts", "3d-tiles"] as const) {
+    for (const type of ["geojson", "xyz", "raster", "wms", "wmts", "image", "3d-tiles"] as const) {
       assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), true, type);
     }
     for (const type of [

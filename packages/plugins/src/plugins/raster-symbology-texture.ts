@@ -55,7 +55,7 @@ type ClassificationEntry = {
   /** Whether the ramp is reversed (from `rasterState.reversed`); baked into
    * the injected texture. */
   reversed: boolean;
-  /** Cache key for the built texture (breaks + ramp + customColors + reversed). */
+  /** Cache key for the built texture (breaks + ramp + colors + opacity + reverse). */
   key: string;
   texture?: GpuTexture;
 };
@@ -111,6 +111,7 @@ function symbologyKey(symbology: RasterSymbology, reversed: boolean): string {
     symbology.breaks,
     symbology.ramp,
     symbology.customColors ?? null,
+    symbology.classOpacities ?? null,
     reversed,
   ]);
 }
@@ -197,7 +198,7 @@ function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry):
   if (entry.texture && entry.key === key) return entry.texture;
   entry.texture?.destroy?.();
   try {
-    const { classified, breaks, ramp, customColors } = entry.symbology;
+    const { classified, breaks, ramp, customColors, classOpacities } = entry.symbology;
     const reversed = entry.reversed;
     // Classified ramps step through the class breaks; a custom continuous ramp
     // is a smooth gradient of the user's colors. (A built-in continuous ramp
@@ -215,6 +216,7 @@ function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry):
           ramp,
           reversed,
           custom ?? colormapColors(ramp) ?? undefined,
+          classOpacities,
         )
       : buildContinuousColormapRgba(custom ?? ["#000000", "#ffffff"], reversed);
     // The DOM ImageData ctor types its buffer as ArrayBuffer (not the wider

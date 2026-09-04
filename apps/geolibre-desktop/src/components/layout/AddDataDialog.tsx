@@ -23,6 +23,7 @@ import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
 import { WfsSource } from "./add-data/sources/WfsSource";
 import { WmsSource } from "./add-data/sources/WmsSource";
+import { CswSource } from "./add-data/sources/CswSource";
 import { WmtsSource } from "./add-data/sources/WmtsSource";
 import { XyzSource } from "./add-data/sources/XyzSource";
 import type { AddDataKind } from "./add-data/types";
@@ -56,6 +57,11 @@ interface AddDataDialogProps {
   initialLayer?: string;
   /** Style document accompanying a deep-linked vector tileset. */
   initialStyleUrl?: string;
+  /** Search term a saved CSW connection was stored with. */
+  initialKeyword?: string;
+  /** Group this dialog session's layers are moved into, when opened via
+   * "Add data to group". */
+  targetGroupId?: string | null;
 }
 
 /**
@@ -70,12 +76,15 @@ function renderSource(
   initialUrl: string | undefined,
   initialLayer: string | undefined,
   initialStyleUrl: string | undefined,
+  initialKeyword: string | undefined,
 ) {
   switch (kind) {
     case "xyz":
       return <XyzSource initialUrl={initialUrl} />;
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
+    case "csw":
+      return <CswSource initialUrl={initialUrl} initialKeyword={initialKeyword} />;
     case "wfs":
       return <WfsSource initialUrl={initialUrl} initialTypeName={initialLayer} />;
     case "wmts":
@@ -135,6 +144,8 @@ export function AddDataDialog({
   initialUrl,
   initialLayer,
   initialStyleUrl,
+  initialKeyword,
+  targetGroupId = null,
 }: AddDataDialogProps) {
   const { t } = useTranslation();
   const open = kind !== null;
@@ -169,8 +180,9 @@ export function AddDataDialog({
       setIsSubmitting,
       closeDialog,
       martin,
+      targetGroupId,
     }),
-    [mapControllerRef, addLayer, existingLayers, isSubmitting, closeDialog, martin],
+    [mapControllerRef, addLayer, existingLayers, isSubmitting, closeDialog, martin, targetGroupId],
   );
 
   return (
@@ -193,6 +205,7 @@ export function AddDataDialog({
               initialUrl,
               initialLayer,
               initialStyleUrl,
+              initialKeyword,
             )}
           </AddDataShellProvider>
         ) : null}

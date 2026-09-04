@@ -1671,6 +1671,24 @@
     },
     "pixelTimeSeriesMode": {
       "start": "Serie temporal de píxeles"
+    },
+    "identifyAll": {
+      "title": "Resultados identificados ({{count}})",
+      "resultCount_one": "{{count}} resultado",
+      "resultCount_other": "{{count}} resultados",
+      "featureFallback": "Entidad {{index}}",
+      "pixel": "Píxel",
+      "expandAll": "Expandir todo",
+      "collapseAll": "Contraer todo",
+      "loadingTitle": "Identificar capas visibles",
+      "loading": "Cargando...",
+      "errorLabel": "Error",
+      "error": "No se pudo identificar esta capa.",
+      "band": "Banda {{index}}",
+      "nodata": "sin datos",
+      "coordinates": "lon, lat",
+      "row": "fila",
+      "column": "columna"
     }
   },
   "terrainSettings": {
@@ -1680,6 +1698,11 @@
     "controlLabel": "Alternar terreno (doble clic para exageración)",
     "sourceLabel": "Fuente de terreno",
     "sourceDescription": "Utilice un COG de una sola banda en EPSG:3857 o EPSG:4326 como fuente de elevación. El archivo debe permitir CORS y solicitudes de rango HTTP.",
+    "rasterLayerLabel": "Capa ráster",
+    "rasterLayerPlaceholder": "Seleccionar una capa ráster",
+    "rasterLayerDescription": "Usar como fuente de elevación una capa ráster COG ya cargada en el mapa.",
+    "noRasterLayers": "No hay capas ráster respaldadas por archivos disponibles en el mapa.",
+    "useRasterLayer": "Usar capa ráster",
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "DEM COG local",
     "localSourceDescription": "El archivo permanece en este dispositivo y se lee en pequeños rangos a medida que se necesitan teselas de terreno.",
@@ -1824,7 +1847,8 @@
     "removePane": "Quitar mapa {{number}}",
     "show3d": "Mostrar el mapa {{number}} como globo 3D",
     "show2d": "Mostrar el mapa {{number}} como mapa 2D",
-    "only2d": "Solo 2D"
+    "only2d": "Solo 2D",
+    "cesiumTokenHint": "Añada un token de Cesium Ion en Configuración para el terreno y las imágenes de Ion"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copiar coordenadas al portapapeles",
@@ -2084,6 +2108,7 @@
       "tokenHostInvalid": "La dirección del servidor para compartir proyectos de esta implementación no es válida, por lo que este token no se puede usar.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token de Cesium Ion",
+      "cesiumTokenDescription": "El globo 3D (un panel de vista dividida) funciona sin token: representa el mapa base del proyecto. Un token de acceso añade Cesium World Terrain y las imágenes mundiales de Ion. Cree una cuenta gratuita en <tokenLink>ion.cesium.com/tokens</tokenLink>, copie su token de acceso predeterminado y péguelo a continuación.",
       "cesiumTokenStorageNote": "Se almacena localmente en este dispositivo (no en el archivo del proyecto, así que nunca se comparte) y solo se envía a Cesium Ion. En la compilación web, comparte el mismo almacenamiento del navegador que otros datos del sitio.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "Variables de entorno",
@@ -2907,6 +2932,7 @@
       "maplibre-gl-geo-editor": "GeoEditor",
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
+      "maplibre-gl-vantor": "Datos abiertos de Vantor",
       "maplibre-gl-graticule": "Cuadrícula",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4483,6 +4509,15 @@
                 "kilometers": "Kilómetros",
                 "meters": "Metros",
                 "miles": "Millas"
+              }
+            },
+            "side": {
+              "label": "Lado del búfer",
+              "description": "Exterior expande cada entidad, Interior la reduce y Ambos lados conserva la zona situada a esa distancia a cada lado de su límite. Interior requiere polígonos — un punto o una línea no tiene interior.",
+              "options": {
+                "outside": "Exterior (expandir)",
+                "inside": "Interior (reducir)",
+                "both": "Ambos lados"
               }
             }
           }
@@ -6609,6 +6644,7 @@
       "categories": "Categorías",
       "classColor": "Color de la clase {{index}}",
       "classColorPick": "Elegir el color de la clase {{index}} de la pantalla",
+      "classOpacity": "Opacidad de la clase {{index}}",
       "classValue": "Valor de la clase {{index}}",
       "colorExpression": "Expresión de color",
       "applyStyleType": "Aplicar tipo de estilo",
@@ -6618,6 +6654,8 @@
       "pointRendererClustered": "Agrupado",
       "heatmapRadius": "Radio de Heatmap",
       "heatmapIntensity": "Intensidad de Heatmap",
+      "heatmapWeightField": "Campo de ponderación",
+      "heatmapEqualWeight": "Ninguno (ponderación igual)",
       "clusterRadius": "Radio de clúster (px)",
       "clusterMaxZoom": "Zoom máximo de clúster",
       "strokeWidthUnit": "Unidad de ancho de trazo",
@@ -6974,6 +7012,8 @@
     "metadata": "Metadatos",
     "removeLayer": "Quitar capa",
     "identifyFeatures": "Identificar entidades",
+    "identifyVisibleLayers": "Identificar capas visibles",
+    "identifyVisibleLayersHint": "Haga clic en el mapa para identificar entidades y valores de píxel de todas las capas consultables visibles.",
     "identifyDeactivate": "Desactivar identificación",
     "identifyInspectPixels": "Inspeccionar valores de píxel",
     "identifyStopInspectPixels": "Dejar de inspeccionar valores de píxel",
@@ -7638,5 +7678,69 @@
     "added": "Se añadieron {{count}} entidad(es){{layer}}.",
     "badResponse": "La API de SamGeo no devolvió una FeatureCollection de GeoJSON.",
     "unknownProjection": "El resultado no está en WGS84 y la imagen no incluye una proyección legible, por lo que no se puede situar en el mapa. Use un GeoTIFF georreferenciado."
+  },
+  "vantor": {
+    "title": "Explorador STAC de Vantor",
+    "collapsePanel": "Contraer panel",
+    "openPanel": "Abrir el explorador STAC de Vantor",
+    "ready": "Listo",
+    "searchSection": "Búsqueda",
+    "event": "Evento",
+    "loadingEvents": "Cargando eventos…",
+    "refreshCatalog": "Actualizar catálogo",
+    "phase": "Fase",
+    "phaseAll": "Todas",
+    "phasePre": "Anterior al evento",
+    "phasePost": "Posterior al evento",
+    "renderingEngine": "Motor de renderizado",
+    "engineGpu": "GPU (más rápido)",
+    "engineWasm": "WASM (compatible con el globo)",
+    "engineTitiler": "TiTiler (servidor)",
+    "useMapExtent": "Usar la extensión del mapa",
+    "drawBbox": "Dibujar BBox",
+    "clear": "Borrar",
+    "search": "Buscar",
+    "searching": "Buscando…",
+    "results": "Resultados",
+    "itemsFound": "Elementos encontrados: {{count}}",
+    "selectAll": "Seleccionar todo",
+    "deselectAll": "Deseleccionar todo",
+    "columnId": "ID",
+    "columnDate": "Fecha",
+    "columnPhase": "Fase",
+    "columnSensor": "Sensor",
+    "columnCloud": "Nubes %",
+    "columnGsd": "GSD",
+    "visualize": "Visualizar",
+    "downloadAction": "Descargar",
+    "cancel": "Cancelar",
+    "noEvents": "No se encontraron eventos",
+    "downloadProgress": {
+      "cancelled": "Descarga cancelada. Descargas iniciadas: {{count}}.",
+      "invalidUrl": "Se omitió {{id}}: URL HTTPS no válida.",
+      "starting": "Iniciando {{filename}}…",
+      "started": "Se inició {{filename}} ({{started}}/{{total}})",
+      "failed": "No se pudo iniciar {{filename}}: {{message}}"
+    },
+    "status": {
+      "fetchingCatalog": "Obteniendo el catálogo…",
+      "eventsFound": "Eventos encontrados: {{count}}. Seleccione un evento y haga clic en «Buscar».",
+      "catalogFailed": "No se pudo obtener el catálogo: {{message}}",
+      "selectEvent": "Seleccione primero un evento.",
+      "fetchingItems": "Obteniendo elementos…",
+      "itemsFound": "Elementos encontrados: {{count}}. Marque elementos para visualizarlos o descargarlos.",
+      "itemsFailed": "No se pudieron obtener los elementos: {{message}}",
+      "drawingCancelled": "Dibujo del cuadro delimitador cancelado.",
+      "drawRectangle": "Dibuje un rectángulo en el mapa…",
+      "bboxSet": "Cuadro delimitador definido. Haga clic en «Buscar» para filtrar.",
+      "bboxCleared": "Cuadro delimitador borrado.",
+      "noSelection": "No hay elementos seleccionados. Marque elementos primero.",
+      "addingLayers": "Añadiendo capas COG: {{count}}…",
+      "addFailed": "No se pudo añadir {{id}}: {{message}}",
+      "layersAdded": "Capas COG añadidas: {{count}}.",
+      "startingDownloads": "Iniciando descargas: {{count}}…",
+      "downloadsStarted": "Descargas iniciadas: {{started}}. Con error: {{failed}}.",
+      "downloadCancelled": "Descarga cancelada o fallida."
+    }
   }
 }

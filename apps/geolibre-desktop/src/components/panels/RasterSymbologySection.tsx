@@ -1,4 +1,9 @@
-import { type GeoLibreLayer, parseHexColorList, useAppStore } from "@geolibre/core";
+import {
+  type GeoLibreLayer,
+  interpolateColors,
+  parseHexColorList,
+  useAppStore,
+} from "@geolibre/core";
 import {
   RASTER_MAX_CLASSES,
   RASTER_MAX_STORED_CLASSES,
@@ -9,14 +14,17 @@ import {
   type RasterSymbology,
   colormapColors,
   computeRasterBreaks,
+  customColorsForRasterClassEdit,
   getPaletteLegend,
   getRasterBandStats,
+  normalizeRasterClassOpacities,
   type PaletteLegendEntry,
   savedRasterSymbology,
   warmColormapColors,
 } from "@geolibre/plugins";
 import {
   Button,
+  ColorField,
   type ColorRampOption,
   ColorRampSelect,
   Input,
@@ -35,7 +43,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
-import { setLegendCustomEntry } from "../../lib/auto-legend";
+import { formatLegendNumber, setLegendCustomEntry } from "../../lib/auto-legend";
 import { savedRasterAttributeTable } from "../../lib/raster-attribute-table";
 
 type RasterStateRecord = {
@@ -339,6 +347,13 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         );
     const custom =
       (next.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS ? next.customColors : undefined;
+    const classOpacities = normalizeRasterClassOpacities(
+      Array.from(
+        { length: breaks.length - 1 },
+        (_, index) => symbology?.classOpacities?.[index] ?? 1,
+      ),
+      breaks.length - 1,
+    );
     commit({
       statePatch: { colormap: next.ramp, rescale: rangeFromBreaks(breaks) },
       symbology: {
@@ -352,6 +367,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         classCount: breaks.length - 1,
         breaks,
         ...(custom ? { customColors: custom } : {}),
+        ...(classOpacities ? { classOpacities } : {}),
       },
     });
   }
@@ -562,6 +578,31 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     commit({ statePatch: { reversed: next } });
   }
 
+  /** Updates one classified value range without disturbing the other classes. */
+  function setClassOpacity(index: number, opacity: number): void {
+    if (!symbology?.classified) return;
+    const values = Array.from(
+      { length: symbology.classCount },
+      (_, classIndex) => symbology.classOpacities?.[classIndex] ?? 1,
+    );
+    values[index] = opacity;
+    const classOpacities = normalizeRasterClassOpacities(values, symbology.classCount);
+    const next = { ...symbology, classOpacities };
+    if (!classOpacities) delete next.classOpacities;
+    commit({ symbology: next });
+  }
+
+  /** Promotes the displayed class colors to a custom ramp and edits one class. */
+  function setClassColor(index: number, color: string): void {
+    if (!symbology?.classified) return;
+    commit({
+      symbology: {
+        ...symbology,
+        customColors: customColorsForRasterClassEdit(classColors, index, color, reversed),
+      },
+    });
+  }
+
   // Switch to / edit / clear a user-defined ramp. `next` is the parsed color
   // list (>= 2 colors) or undefined to drop back to the named ramp.
   function setCustomColors(next: string[] | undefined): void {
@@ -619,6 +660,11 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     // Preview the actual user-defined colors when a custom ramp is active.
     colors: isCustom ? (customColors as string[]) : [],
   });
+  const classColors = interpolateColors(
+    previewCustom ?? (rampPreview.length > 0 ? rampPreview : ["#808080"]),
+    classCount,
+  );
+  if (reversed) classColors.reverse();
 
   return (
     <div className="space-y-3">
@@ -733,6 +779,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
             });
           }}
           onRange={(range) => recomputeSymbology({ ...symbology }, { range })}
+          classColors={classColors}
+          onClassColor={setClassColor}
+          onClassOpacity={setClassOpacity}
         />
       )}
 
@@ -911,6 +960,9 @@ function ClassificationControls({
   onClassCount,
   onManualBreaks,
   onRange,
+  classColors,
+  onClassColor,
+  onClassOpacity,
 }: {
   symbology: RasterSymbology;
   stats: RasterBandStats | null;
@@ -918,8 +970,11 @@ function ClassificationControls({
   onClassCount: (count: number) => void;
   onManualBreaks: (breaks: number[]) => void;
   onRange: (range: [number, number]) => void;
+  classColors: string[];
+  onClassColor: (index: number, color: string) => void;
+  onClassOpacity: (index: number, opacity: number) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const min = symbology.breaks[0];
   const max = symbology.breaks[symbology.breaks.length - 1];
   return (
@@ -1003,9 +1058,92 @@ function ClassificationControls({
         </div>
       )}
 
+      <div className="space-y-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2 text-[10px] font-medium text-muted-foreground">
+          <span>{t("rasterSymbology.classes")}</span>
+          <span>{t("layers.opacity")}</span>
+        </div>
+        {Array.from({ length: symbology.classCount }, (_, index) => (
+          <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <ColorField
+                fill={false}
+                className="h-7 w-8 p-0.5"
+                buttonClassName="h-7 w-7"
+                aria-label={t("style.symbology.classColor", { index: index + 1 })}
+                eyedropperLabel={t("style.symbology.classColorPick", { index: index + 1 })}
+                value={classColors[index] ?? "#808080"}
+                onChange={(color) => onClassColor(index, color)}
+              />
+              <span className="truncate text-[10px] text-muted-foreground">
+                {formatLegendNumber(symbology.breaks[index], i18n.language)} -{" "}
+                {formatLegendNumber(symbology.breaks[index + 1], i18n.language)}
+              </span>
+            </div>
+            <ClassOpacityInput
+              index={index}
+              value={symbology.classOpacities?.[index] ?? 1}
+              onCommit={(opacity) => onClassOpacity(index, opacity)}
+            />
+          </div>
+        ))}
+      </div>
+
       {symbology.method !== "manual" && !stats && (
         <p className="text-[10px] text-muted-foreground">Computing data range…</p>
       )}
+    </div>
+  );
+}
+
+/** A compact percentage editor for one classified raster value range. */
+function ClassOpacityInput({
+  index,
+  value,
+  onCommit,
+}: {
+  index: number;
+  value: number;
+  onCommit: (value: number) => void;
+}) {
+  const { t } = useTranslation();
+  const percent = String(Math.round(value * 100));
+  const [draft, setDraft] = useState(percent);
+  useEffect(() => setDraft(percent), [percent]);
+  const commitDraft = () => {
+    if (!draft.trim()) {
+      setDraft(percent);
+      return;
+    }
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(percent);
+      return;
+    }
+    const clamped = Math.min(100, Math.max(0, parsed));
+    setDraft(String(clamped));
+    onCommit(clamped / 100);
+  };
+  return (
+    <div className="relative">
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        max={100}
+        step={1}
+        className="h-7 pe-6 text-xs"
+        aria-label={t("style.symbology.classOpacity", { index: index + 1 })}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+      />
+      <span className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+        %
+      </span>
     </div>
   );
 }

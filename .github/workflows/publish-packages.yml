@@ -3,6 +3,10 @@ name: Publish core and map packages
 on:
   release:
     types: [published]
+  # Build-only trial run before a tag is cut. The publish steps below also
+  # require the `release` event, so a dispatch installs, builds, prepares the
+  # manifests, and checks the registry without publishing anything.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -64,11 +68,11 @@ jobs:
       # be made: the first version is published from a maintainer's machine
       # once, then every later release goes through here.
       - name: Publish @geolibre/core
-        if: steps.version.outputs.core == 'true'
+        if: github.event_name == 'release' && steps.version.outputs.core == 'true'
         run: npm publish -w @geolibre/core --provenance --access public
 
       # Published after core so a consumer installing @geolibre/map never
       # resolves a pinned @geolibre/core that is not on the registry yet.
       - name: Publish @geolibre/map
-        if: steps.version.outputs.map == 'true'
+        if: github.event_name == 'release' && steps.version.outputs.map == 'true'
         run: npm publish -w @geolibre/map --provenance --access public

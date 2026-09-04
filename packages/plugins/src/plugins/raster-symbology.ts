@@ -44,6 +44,11 @@ export type RasterSymbology = {
   classCount: number;
   /** Class edges, ascending, length `classCount + 1` (min..max inclusive). */
   breaks: number[];
+  /**
+   * Per-class opacity values in [0, 1], ordered from the lowest value class to
+   * the highest. Omitted when every class is fully opaque.
+   */
+  classOpacities?: number[];
 };
 
 /** Minimum and maximum class count for raster classification. */
@@ -64,6 +69,52 @@ export const COLORMAP_TEXTURE_WIDTH = 256;
 
 /** Minimum colors that make a usable custom ramp (fewer can't interpolate). */
 export const RASTER_MIN_CUSTOM_COLORS = 2;
+
+/**
+ * Validates and clamps a per-class opacity list. Fully opaque lists are
+ * represented by `undefined` so existing project files remain compact.
+ *
+ * @param values - Candidate opacity values.
+ * @param classCount - The number of raster classes the values must describe.
+ * @returns A normalized opacity list, or undefined when invalid or all opaque.
+ */
+export function normalizeRasterClassOpacities(
+  values: unknown,
+  classCount: number,
+): number[] | undefined {
+  if (
+    !Array.isArray(values) ||
+    values.length !== classCount ||
+    !values.every((value) => typeof value === "number" && Number.isFinite(value))
+  ) {
+    return undefined;
+  }
+  const normalized = (values as number[]).map((value) => Math.min(1, Math.max(0, value)));
+  return normalized.some((value) => value < 1) ? normalized : undefined;
+}
+
+/**
+ * Converts a class color edit from value order into the stored ramp order.
+ * Raster reversal flips colors at render time, so an edit made while reversed
+ * must flip the displayed list back before persistence.
+ *
+ * @param classColors - Current colors from the lowest value class to the highest.
+ * @param index - The value-order class index being edited.
+ * @param color - The replacement color.
+ * @param reversed - Whether the raster ramp is currently reversed.
+ * @returns A full custom color list in stored ramp order.
+ */
+export function customColorsForRasterClassEdit(
+  classColors: readonly string[],
+  index: number,
+  color: string,
+  reversed = false,
+): string[] {
+  const next = [...classColors];
+  const normalized = normalizeHexColor(color);
+  if (normalized && index >= 0 && index < next.length) next[index] = normalized;
+  return reversed ? next.reverse() : next;
+}
 
 /** A single band's statistics, as produced by `computeAutoStats`. */
 export type RasterBandStats = {
@@ -186,6 +237,7 @@ export function rampBaseColors(ramp: string, customColors?: readonly string[]): 
  * @param ramp - The color ramp name.
  * @param reversed - Whether to reverse the class colors.
  * @param customColors - Optional user-defined anchor colors overriding `ramp`.
+ * @param classOpacities - Optional per-class opacity values in [0, 1].
  * @returns A 256x1 RGBA buffer (length COLORMAP_TEXTURE_WIDTH * 4).
  */
 export function buildSteppedColormapRgba(
@@ -193,12 +245,14 @@ export function buildSteppedColormapRgba(
   ramp: string,
   reversed = false,
   customColors?: readonly string[],
+  classOpacities?: readonly number[],
 ): Uint8ClampedArray {
   const width = COLORMAP_TEXTURE_WIDTH;
   const rgba = new Uint8ClampedArray(width * 4);
   const classCount = Math.max(1, breaks.length - 1);
   const colors = interpolateColors(rampBaseColors(ramp, customColors), classCount);
   const orderedColors = reversed ? [...colors].reverse() : colors;
+  const opacities = normalizeRasterClassOpacities(classOpacities, classCount);
 
   const min = breaks[0];
   const max = breaks[breaks.length - 1];
@@ -223,7 +277,7 @@ export function buildSteppedColormapRgba(
     rgba[offset] = color.r;
     rgba[offset + 1] = color.g;
     rgba[offset + 2] = color.b;
-    rgba[offset + 3] = 255;
+    rgba[offset + 3] = Math.round((opacities?.[classIndex] ?? 1) * 255);
   }
   return rgba;
 }
@@ -309,6 +363,11 @@ export function savedRasterSymbology(layer: GeoLibreLayer): RasterSymbology | nu
   }
   const classCount = breaks.length - 1;
 
+  // Class opacity is optional for backward compatibility. A malformed list is
+  // ignored, while finite out-of-range values are clamped into the renderable
+  // range so a hand-edited project cannot create invalid texture data.
+  const classOpacities = normalizeRasterClassOpacities(candidate.classOpacities, classCount);
+
   // A custom ramp needs at least two valid colors; drop malformed entries so a
   // hand-edited project silently falls back to the named ramp rather than
   // rendering a broken texture.
@@ -328,6 +387,7 @@ export function savedRasterSymbology(layer: GeoLibreLayer): RasterSymbology | nu
     method: candidate.method,
     classCount,
     breaks,
+    ...(classOpacities ? { classOpacities } : {}),
   };
 }
 

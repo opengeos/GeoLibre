@@ -117,6 +117,93 @@ def test_wms_layer_shape_and_url():
     assert "WIDTH=256" in tile
 
 
+def test_wms_layer_bounds_are_optional():
+    # A service layer carries no geometry, so without bounds the app has
+    # nothing to zoom to; omitting them must leave the source as it was.
+    layer = project.wms_layer("x", "https://e/wms", "a", bounds=[8.14, 38.85, 9.83, 41.31])
+    assert layer["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+    assert "bounds" not in project.wms_layer("x", "https://e/wms", "a")["source"]
+
+
+def test_wmts_layer_bounds_are_optional():
+    layer = project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=[-10, 35, 5, 45])
+    assert layer["source"]["bounds"] == [-10, 35, 5, 45]
+    assert "bounds" not in project.wmts_layer("x", "https://e/{z}/{y}/{x}.png")["source"]
+
+
+@pytest.mark.parametrize("bad", [[], [1, 2], [1, 2, 3, 4, 5]])
+def test_ogc_layer_bounds_must_have_four_values(bad):
+    # A short list would reach the app as an extent it cannot use, and an empty
+    # one would be dropped without a word, so both are refused here.
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wms_layer("x", "https://e/wms", "a", bounds=bad)
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=bad)
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_reject_non_numbers(builder, args):
+    # Four values of the wrong kind must fail like the wrong count does, not
+    # with a bare "could not convert string to float" from the comprehension.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, "x"])
+    # float() takes "nan" and "inf" without a word, and either would reach the
+    # app as an extent it cannot fit to. Map.fit_bounds refuses them too.
+    for bad in ([float("nan"), 38, 9, 41], [8, 38, float("inf"), 41]):
+        with pytest.raises(ValueError, match="finite numbers"):
+            builder(*args, bounds=bad)
+    # An int too large for a float raises OverflowError, not ValueError.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, 10**1000])
+    # An iterable without len() must not escape as a bare TypeError: the MCP
+    # tool wrapper only restates ValueError, so anything else reaches the agent
+    # stripped of its message.
+    assert builder(*args, bounds=iter([8, 38, 9, 41]))["source"]["bounds"] == [8.0, 38.0, 9.0, 41.0]
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        builder(*args, bounds=iter([8, 38, 9]))
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_check_latitudes_but_not_longitudes(builder, args):
+    # A south > north box is the axis-order mixup the docstrings warn about,
+    # and latitudes have no wraparound to excuse it.
+    with pytest.raises(ValueError, match="latitudes inverted"):
+        builder(*args, bounds=[8, 41, 9, 38])
+    with pytest.raises(ValueError, match=r"within \+/-90"):
+        builder(*args, bounds=[8, -95, 9, 41])
+    # Longitudes are another matter: RFC 7946 section 5.2 writes a box crossing
+    # the antimeridian as west > east, and authoring.fit_bounds frames one.
+    fiji = builder(*args, bounds=[170, -20, -170, -10])
+    assert fiji["source"]["bounds"] == [170.0, -20.0, -170.0, -10.0]
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_are_coerced_to_floats(builder, args):
+    # Ints compare equal to floats, so assert the stored types: what reaches
+    # the project file has to be JSON numbers the app reads as coordinates.
+    stored = builder(*args, bounds=[8, 38, 9, 41])["source"]["bounds"]
+    assert stored == [8.0, 38.0, 9.0, 41.0]
+    assert all(isinstance(v, float) for v in stored)
+
+
 def test_wms_layer_version_1_3_0_uses_crs():
     # A 1.3.0-only server (e.g. the IGN Géoplateforme raster endpoint) rejects
     # a 1.1.1 GetMap, so the version must be honored and SRS renamed to CRS.

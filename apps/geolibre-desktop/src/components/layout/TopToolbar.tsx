@@ -25,6 +25,7 @@ import {
   openThreeDTilesLayerPanel,
   openVectorLayerPanel,
   setAnnotationLabels,
+  setDimensionLabels,
   setBasemapControlLabels,
   setGeoEditorLabels,
   setGraticuleLabels,
@@ -36,6 +37,7 @@ import {
   setOlcLabels,
   setGeohashLabels,
   setTilecodeLabels,
+  setUsgsNldiLabels,
   setMapillaryLabels,
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
@@ -122,7 +124,7 @@ import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
-import { serviceUrlParameter } from "../../lib/data-url";
+import { serviceUrlParameter, type ServiceUrlParameter } from "../../lib/data-url";
 import {
   OPEN_ADD_DATA_EVENT,
   type OpenAddDataDetail,
@@ -281,6 +283,29 @@ export function TopToolbar({
       saveElement: t("annotations.saveElement"),
       atPoint: t("annotations.atPoint"),
       pinnedToExtent: t("annotations.pinnedToExtent"),
+    });
+    setDimensionLabels({
+      toolbar: t("dimensions.toolbar"),
+      collapse: t("sharedRail.collapse", { title: t("dimensions.toolbar") }),
+      expand: t("sharedRail.expand", { title: t("dimensions.toolbar") }),
+      layerName: t("dimensions.layerName"),
+      tools: {
+        linear: t("dimensions.tools.linear"),
+        angular: t("dimensions.tools.angular"),
+      },
+      unit: t("dimensions.unit"),
+      snap: t("dimensions.snap"),
+      color: t("dimensions.color"),
+      width: t("dimensions.width"),
+      widthOptions: {
+        thin: t("dimensions.widthOptions.thin"),
+        medium: t("dimensions.widthOptions.medium"),
+        thick: t("dimensions.widthOptions.thick"),
+      },
+      deleteLast: t("dimensions.deleteLast"),
+      clearAll: t("dimensions.clearAll"),
+      newLayer: t("dimensions.newLayer"),
+      confirmClearAll: (count) => t("dimensions.confirmClearAll", { count }),
     });
     setMapillaryLabels({
       title: t("mapillary.title"),
@@ -848,6 +873,71 @@ export function TopToolbar({
       includeNeighbors: t("geohashPlugin.includeNeighbors"),
       includeParent: t("geohashPlugin.includeParent"),
     });
+    setUsgsNldiLabels({
+      panelTitle: t("usgsNldi.panelTitle"),
+      title: t("usgsNldi.title"),
+      hint: t("usgsNldi.hint"),
+      directionComplete: t("usgsNldi.directionComplete"),
+      directionUp: t("usgsNldi.directionUp"),
+      directionDown: t("usgsNldi.directionDown"),
+      basinButton: t("usgsNldi.basinButton"),
+      navigationPlaceholder: t("usgsNldi.navigationPlaceholder"),
+      navigationUpstreamMain: t("usgsNldi.navigationUpstreamMain"),
+      navigationUpstreamTributaries: t("usgsNldi.navigationUpstreamTributaries"),
+      navigationDownstreamMain: t("usgsNldi.navigationDownstreamMain"),
+      navigationDownstreamDiversions: t("usgsNldi.navigationDownstreamDiversions"),
+      sourcePlaceholder: t("usgsNldi.sourcePlaceholder"),
+      distancePlaceholder: t("usgsNldi.distancePlaceholder"),
+      navigationButton: t("usgsNldi.navigationButton"),
+      navigationButtonAgain: t("usgsNldi.navigationButtonAgain"),
+      exportButton: t("usgsNldi.exportButton"),
+      addLayersButton: t("usgsNldi.addLayersButton"),
+      clearButton: t("usgsNldi.clearButton"),
+      noComid: t("usgsNldi.noComid"),
+      requestingBasin: t("usgsNldi.requestingBasin"),
+      basinRendered: (comid) => t("usgsNldi.basinRendered", { comid }),
+      basinFailed: t("usgsNldi.basinFailed"),
+      selectNavigation: t("usgsNldi.selectNavigation"),
+      invalidDistance: t("usgsNldi.invalidDistance"),
+      discoveringSources: t("usgsNldi.discoveringSources"),
+      navigationUnavailable: t("usgsNldi.navigationUnavailable"),
+      noPlottableSource: t("usgsNldi.noPlottableSource"),
+      navigationEmpty: (source) => t("usgsNldi.navigationEmpty", { source }),
+      navigationAdded: (source, navigation, comid, km) =>
+        t("usgsNldi.navigationAdded", { source, navigation, comid, km }),
+      navigationFailed: t("usgsNldi.navigationFailed"),
+      tracing: t("usgsNldi.tracing"),
+      flowlineRendered: (comid, usedFallback) =>
+        comid
+          ? t(usedFallback ? "usgsNldi.flowlineFallbackComid" : "usgsNldi.flowlineComid", { comid })
+          : t(usedFallback ? "usgsNldi.flowlineFallback" : "usgsNldi.flowline"),
+      requestFailed: t("usgsNldi.requestFailed"),
+      nothingToAdd: t("usgsNldi.nothingToAdd"),
+      layersAdded: (count) => t("usgsNldi.layersAdded", { count }),
+      layerGroupName: t("usgsNldi.layerGroupName"),
+      layerFlowline: t("usgsNldi.layerFlowline"),
+      layerRaindrop: t("usgsNldi.layerRaindrop"),
+      layerSelectedPoint: t("usgsNldi.layerSelectedPoint"),
+      layerBasin: t("usgsNldi.layerBasin"),
+      layerNavigation: (index) => t("usgsNldi.layerNavigation", { index }),
+      resultCleared: t("usgsNldi.resultCleared"),
+      directionalUnavailable: t("usgsNldi.directionalUnavailable"),
+      noFlowlineNearby: t("usgsNldi.noFlowlineNearby"),
+      httpError: (status, detail) =>
+        detail
+          ? t("usgsNldi.httpErrorDetail", { status, detail })
+          : t("usgsNldi.httpError", { status }),
+      noAttributes: t("usgsNldi.noAttributes"),
+      catalogNames: {
+        ca_gages: t("usgsNldi.catalogCaGages"),
+        nwissite: t("usgsNldi.catalogNwisSite"),
+        nwisgw: t("usgsNldi.catalogNwisGw"),
+        gfv11_pois: t("usgsNldi.catalogGfv11Pois"),
+        huc12pp: t("usgsNldi.catalogHuc12pp"),
+        "nmwdi-st": t("usgsNldi.catalogNmwdiSt"),
+        flowlines: t("usgsNldi.catalogFlowlines"),
+      },
+    });
     setTilecodeLabels({
       title: t("tilecodePlugin.title"),
       getTitle: () => i18n.t("tilecodePlugin.title"),
@@ -1150,7 +1240,11 @@ export function TopToolbar({
       current.terrain === terrainEnabled ? current : { ...current, terrain: terrainEnabled },
     );
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, terrainEnabled]);
-  const [initialService, setInitialService] = useState(() =>
+  // `keyword` has no deep-link parameter — only the Browser panel's saved CSW
+  // entries carry one — so it widens the parsed shape rather than joining it.
+  const [initialService, setInitialService] = useState<
+    (ServiceUrlParameter & { keyword?: string | null }) | null
+  >(() =>
     viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(() => {
@@ -1194,6 +1288,19 @@ export function TopToolbar({
       // Reject kinds the Mac App Store build hides so a stray event cannot
       // open a dialog whose backing service is compiled out.
       if (detail?.kind && !masHidesDataSource(detail.kind)) {
+        setInitialService(
+          // An empty string is still a prefill (a saved CSW entry can carry a
+          // keyword and a blank endpoint); only a missing url means "no prefill".
+          detail.url !== undefined
+            ? {
+                kind: detail.kind,
+                url: detail.url,
+                layer: detail.layer ?? null,
+                styleUrl: null,
+                keyword: detail.keyword ?? null,
+              }
+            : null,
+        );
         setAddDataPostgres(detail.postgres);
         setAddDataTargetGroupId(detail.groupId ?? null);
         addDataInitialLayerIdsRef.current = new Set(
@@ -2274,6 +2381,10 @@ export function TopToolbar({
         initialStyleUrl={
           addDataKind === initialService?.kind ? (initialService.styleUrl ?? undefined) : undefined
         }
+        initialKeyword={
+          addDataKind === initialService?.kind ? (initialService.keyword ?? undefined) : undefined
+        }
+        targetGroupId={addDataTargetGroupId}
         onOpenChange={(open: boolean) => {
           if (!open) {
             if (addDataTargetGroupId) {

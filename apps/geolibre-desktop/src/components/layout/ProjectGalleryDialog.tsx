@@ -30,6 +30,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { observeGalleryEnd } from "../../lib/gallery-auto-load";
 import { openExternalLink } from "../../lib/open-external";
 import {
   fetchMyProjects,
@@ -99,8 +100,8 @@ function galleryErrorMessage(error: unknown, t: TFunction): string {
  * GeoLibre.
  *
  * The listing endpoint only paginates (no server-side search), so this loads
- * pages on demand via "Load more" and filters the already-loaded set in the
- * browser.
+ * pages automatically as the user nears the end of the list and filters the
+ * already-loaded set in the browser.
  */
 export function ProjectGalleryDialog({
   open,
@@ -125,6 +126,9 @@ export function ProjectGalleryDialog({
   );
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const reloadGenerationRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Without a token, the "My projects" scope isn't available; fall back to the
   // featured tab.
@@ -247,6 +251,7 @@ export function ProjectGalleryDialog({
   // `loadPage` identity changes with scope); reset transient state and abort any
   // in-flight request when it closes.
   useEffect(() => {
+    reloadGenerationRef.current += 1;
     if (open) {
       setProjects([]);
       setQuery("");
@@ -285,6 +290,25 @@ export function ProjectGalleryDialog({
   const visibleProjects = trimmedQuery
     ? projects.filter((p) => searchHaystack(p).includes(trimmedQuery))
     : projects;
+
+  // Fetch the next page shortly before the end of the gallery scrolls into
+  // view. Recreating the observer after each request also prevents a sentinel
+  // that remains visible from starting the same page more than once.
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!open || !root || !sentinel || !hasMore || trimmedQuery || status !== "idle") return;
+
+    const generation = reloadGenerationRef.current;
+    return observeGalleryEnd({
+      root,
+      sentinel,
+      generation,
+      currentGeneration: () => reloadGenerationRef.current,
+      isLoading: () => abortRef.current !== null,
+      onLoad: () => void loadPage(rawOffset),
+    });
+  }, [hasMore, loadPage, open, rawOffset, status, trimmedQuery]);
 
   const showInitialSpinner = status === "loading" && projects.length === 0;
   const showEmpty = status !== "loading" && !error && visibleProjects.length === 0;
@@ -385,7 +409,10 @@ export function ProjectGalleryDialog({
             `touch-pan-y` + `overscroll-contain` keep the vertical gesture on
             this element on iOS Safari, where the dialog's scroll-lock
             (react-remove-scroll) otherwise swallows the touchmove. */}
-        <div className="-mx-1 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-1 [-webkit-overflow-scrolling:touch]">
+        <div
+          ref={scrollContainerRef}
+          className="-mx-1 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-1 [-webkit-overflow-scrolling:touch]"
+        >
           {showInitialSpinner ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -401,47 +428,53 @@ export function ProjectGalleryDialog({
                 {t("gallery.retry")}
               </Button>
             </div>
-          ) : showEmpty ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              {trimmedQuery
-                ? t("gallery.noMatches")
-                : effectiveScope === "mine"
-                  ? t("gallery.emptyMine")
-                  : effectiveScope === "featured"
-                    ? t("gallery.emptyFeatured")
-                    : t("gallery.empty")}
-            </p>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleProjects.map((project) => (
-                  <GalleryCard
-                    key={project.id}
-                    project={project}
-                    openingAction={openingState?.id === project.id ? openingState.action : null}
-                    disabled={openingState !== null}
-                    onOpen={() => void handleOpen(project)}
-                    onOpenCopy={() => void handleOpen(project, { asCopy: true })}
-                  />
-                ))}
-              </div>
+              {showEmpty ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  {trimmedQuery
+                    ? t("gallery.noMatches")
+                    : effectiveScope === "mine"
+                      ? t("gallery.emptyMine")
+                      : effectiveScope === "featured"
+                        ? t("gallery.emptyFeatured")
+                        : t("gallery.empty")}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleProjects.map((project) => (
+                    <GalleryCard
+                      key={project.id}
+                      project={project}
+                      openingAction={openingState?.id === project.id ? openingState.action : null}
+                      disabled={openingState !== null}
+                      onOpen={() => void handleOpen(project)}
+                      onOpenCopy={() => void handleOpen(project, { asCopy: true })}
+                    />
+                  ))}
+                </div>
+              )}
               {hasMore && !trimmedQuery ? (
-                <div className="flex justify-center py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={status === "loadingMore"}
-                    onClick={() => loadPage(rawOffset)}
-                  >
-                    {status === "loadingMore" ? (
-                      <>
-                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
-                        {t("gallery.loadingMore")}
-                      </>
-                    ) : (
-                      t("gallery.loadMore")
-                    )}
-                  </Button>
+                <div
+                  ref={loadMoreSentinelRef}
+                  className="flex min-h-12 items-center justify-center py-4"
+                >
+                  {status === "loadingMore" ? (
+                    <span className="flex items-center text-sm text-muted-foreground">
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      {t("gallery.loadingMore")}
+                    </span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (abortRef.current === null) void loadPage(rawOffset);
+                      }}
+                    >
+                      {t("gallery.loadMore")}
+                    </Button>
+                  )}
                 </div>
               ) : null}
             </>

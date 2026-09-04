@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
+  getVectorColorRamp,
   type GeoLibreLayer,
   type LegendConfig,
 } from "../packages/core/src/index";
@@ -342,7 +343,33 @@ describe("buildAutoLegend — vector layers", () => {
     assert.ok(entry.gradient);
     assert.equal(entry.gradient?.minLabel, null);
     assert.equal(entry.gradient?.maxLabel, null);
+    assert.equal(entry.gradient?.colors[0], "rgba(0,0,0,0)");
     assert.ok((entry.gradient?.colors.length ?? 0) >= 2);
+  });
+
+  it("falls back to the default heatmap ramp the map paints, not the first ramp", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "heat",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            pointRenderer: "heatmap",
+            heatmapColorRamp: "not-a-ramp",
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    // getVectorColorRamp alone would answer "viridis" here, which is not what
+    // heatmapPaint renders: both go through heatmapRampColors, so an unknown
+    // ramp name resolves to the default ("turbo") in the legend too.
+    assert.deepEqual(entries[0].gradient?.colors, [
+      "rgba(0,0,0,0)",
+      ...getVectorColorRamp(DEFAULT_LAYER_STYLE.heatmapColorRamp).colors,
+    ]);
   });
 
   it("adds proportional-symbol size rows for a point layer", () => {

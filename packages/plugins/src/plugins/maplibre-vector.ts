@@ -36,6 +36,7 @@ import {
   unwireVectorStoreSync,
   wireVectorStoreSync,
 } from "./vector-layer-sync";
+import { readableStacLayerHref } from "./stac-signing";
 import type { FeatureCollection } from "geojson";
 
 const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -336,9 +337,11 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           pending.push(
             trackReplay(
               layer.id,
-              replayVectorLayer(control, layer, url, restoredGroups, {
-                onError: () => failedLayerIds.add(layer.id),
-              }),
+              readableStacLayerHref(layer, url).then((href) =>
+                replayVectorLayer(control, layer, href, restoredGroups, {
+                  onError: () => failedLayerIds.add(layer.id),
+                }),
+              ),
             ),
           );
           continue;
@@ -573,7 +576,7 @@ export async function replayVectorControlLayerById(
   replayingLayerIds.add(id);
   suspendVectorStoreSync();
   try {
-    await replayVectorLayer(control, layer, url, groups);
+    await replayVectorLayer(control, layer, await readableStacLayerHref(layer, url), groups);
   } finally {
     resumeVectorStoreSync();
     replayingLayerIds.delete(id);
@@ -714,17 +717,71 @@ async function ensureVectorControl(app: GeoLibreAppAPI): Promise<VectorControl |
  * @param app - The GeoLibre app API.
  * @param url - An http(s) URL to a vector dataset.
  * @param options - Display name, fitBounds, explicit format, ...
- * @returns True when the layer was added.
+ * @returns The created layer ids, or null when the control is unavailable.
+ */
+export async function addVectorLayersFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: VectorLayerOptions = {},
+): Promise<string[] | null> {
+  const control = await ensureVectorControl(app);
+  if (!control) return null;
+  return addVectorLayersThroughControl(control, url, options);
+}
+
+/** The subset of VectorControl used to add a remote dataset (eases testing). */
+export type VectorUrlSink = Pick<VectorControl, "addData" | "getLayers">;
+
+/**
+ * Adds one remote dataset through a control and reports the layer ids it
+ * created.
+ *
+ * `addData` resolves with a single layer while a multi-layer container adds
+ * several, so the created ids are read as a before/after diff of
+ * `getLayers()`. A load that overlaps another one -- two "Add" clicks in the
+ * STAC panel, a Hugging Face add while a large GeoParquet is still
+ * downloading -- would otherwise pick up the other load's layers as well, and
+ * a caller that tags what it added (the STAC panel writes an asset-access
+ * record onto every returned id) would stamp one dataset's identity onto
+ * another's layer. Only layers the control recorded against this url count as
+ * ours: the control echoes a url source back unchanged (`describeSource`
+ * stores the string it was handed). Were that ever to stop holding, the new
+ * layers are reported anyway rather than an add that succeeded being called a
+ * failure.
+ *
+ * @param control - The vector control (or anything with `addData`/`getLayers`).
+ * @param url - An http(s) URL to a vector dataset.
+ * @param options - Display name, fitBounds, explicit format, ...
+ * @returns The ids of the layers this call created.
+ */
+export async function addVectorLayersThroughControl(
+  control: VectorUrlSink,
+  url: string,
+  options: VectorLayerOptions = {},
+): Promise<string[]> {
+  const previousIds = new Set(control.getLayers().map((layer) => layer.id));
+  await control.addData(url, options);
+  const created = control.getLayers().filter((layer) => !previousIds.has(layer.id));
+  const fromThisUrl = created.filter(
+    (layer) => layer.source.kind === "url" && layer.source.url === url,
+  );
+  return (fromThisUrl.length ? fromThisUrl : created).map((layer) => layer.id);
+}
+
+/**
+ * Loads a remote vector dataset and reports whether the control was available.
+ *
+ * @param app - The GeoLibre app API.
+ * @param url - An http(s) URL to a vector dataset.
+ * @param options - Display name, fitBounds, explicit format, ...
+ * @returns True when the control accepted the layer.
  */
 export async function addVectorLayerFromUrl(
   app: GeoLibreAppAPI,
   url: string,
   options: VectorLayerOptions = {},
 ): Promise<boolean> {
-  const control = await ensureVectorControl(app);
-  if (!control) return false;
-  await control.addData(url, options);
-  return true;
+  return (await addVectorLayersFromUrl(app, url, options)) !== null;
 }
 
 function getVectorControlClass(): Promise<VectorControlConstructor> {

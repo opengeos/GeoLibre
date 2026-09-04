@@ -554,6 +554,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        bounds: list[float] | None = None,
         index: int | None = None,
     ) -> dict[str, Any]:
         """Add a WMS or WMTS service layer.
@@ -570,13 +571,24 @@ def build_server(workspace: Workspace) -> MCPServer:
             transparent: Request a transparent background (WMS).
             tile_size: Tile edge in pixels.
             version: WMS protocol version, e.g. `1.1.1` or `1.3.0`.
+            bounds: The layer's extent as `[west, south, east, north]` in
+                WGS84. A service layer has no geometry to derive it from, so
+                without this "zoom to layer" cannot reach it. Read it from the
+                capabilities document: `EX_GeographicBoundingBox` for WMS,
+                `ows:WGS84BoundingBox` for WMTS. Both are already lon/lat,
+                unlike a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`.
             index: Draw-order position; appended on top when omitted.
 
         Returns:
             The new layer's id and the project's updated layer count.
+
+        Raises:
+            ValueError: If `service` is not `wms` or `wmts`, if `layers` is
+                missing for `wms`, or if `bounds` is not four finite numbers
+                with valid latitudes.
         """
         if service == "wmts":
-            layer = _project.wmts_layer(name, endpoint, tile_size=tile_size)
+            layer = _project.wmts_layer(name, endpoint, tile_size=tile_size, bounds=bounds)
         elif service == "wms":
             if not layers:
                 raise ValueError("add_ogc_layer: 'layers' is required when service='wms'")
@@ -589,6 +601,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                bounds=bounds,
             )
         else:
             raise ValueError(f"service must be 'wms' or 'wmts', got {service!r}")
