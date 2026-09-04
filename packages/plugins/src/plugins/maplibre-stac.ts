@@ -1252,7 +1252,9 @@ function buildPanel(container: HTMLElement): () => void {
         targetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
         targetSelect.title = labels.chooseTarget;
         let adding = false;
-        let signingDownload = false;
+        // Which asset's download is being signed, so switching the dropdown to
+        // another asset does not find its own button disabled.
+        let signingDownloadKey: string | null = null;
 
         const syncAsset = (): void => {
           const [key, asset] = selected();
@@ -1274,7 +1276,7 @@ function buildPanel(container: HTMLElement): () => void {
           setDisabled(add, adding || !addable);
           // A private asset is signed before it opens, so the button says so
           // by going quiet rather than looking like a dead click.
-          setDisabled(download, signingDownload);
+          setDisabled(download, signingDownloadKey === key);
           add.title = addReason(item, key, asset);
         };
 
@@ -1306,9 +1308,9 @@ function buildPanel(container: HTMLElement): () => void {
           }
         });
         download.addEventListener("click", async () => {
-          const asset = selected()[1];
+          const [key, asset] = selected();
           if (!connection) return;
-          signingDownload = true;
+          signingDownloadKey = key;
           syncAsset();
           try {
             appRef?.openExternalUrl?.(
@@ -1317,7 +1319,9 @@ function buildPanel(container: HTMLElement): () => void {
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
-            signingDownload = false;
+            // Only this asset's own sign clears the flag: the user may have
+            // moved on and started another one.
+            if (signingDownloadKey === key) signingDownloadKey = null;
             syncAsset();
           }
         });

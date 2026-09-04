@@ -99,11 +99,6 @@ type VectorControlConstructor = typeof VectorControl;
 let vectorControlClassPromise: Promise<VectorControlConstructor> | null = null;
 let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
-/**
- * Serializes addVectorLayersFromUrl so overlapping remote adds cannot claim
- * each other's layers -- see the comment in that function.
- */
-let remoteVectorAddQueue: Promise<void> = Promise.resolve();
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
 /**
@@ -743,35 +738,33 @@ export type VectorUrlSink = Pick<VectorControl, "addData" | "getLayers">;
  *
  * `addData` resolves with a single layer while a multi-layer container adds
  * several, so the created ids are read as a before/after diff of
- * `getLayers()`. Two overlapping adds would share a "before" snapshot and each
- * claim the other's layers, so they run one at a time: a caller that tags what
- * it added (the STAC panel writes an asset-access record onto every returned
- * id) must never be handed a layer that came from a different dataset.
+ * `getLayers()`. A load that overlaps another one -- two "Add" clicks in the
+ * STAC panel, a Hugging Face add while a large GeoParquet is still
+ * downloading -- would otherwise pick up the other load's layers as well, and
+ * a caller that tags what it added (the STAC panel writes an asset-access
+ * record onto every returned id) would stamp one dataset's identity onto
+ * another's layer. Only layers the control recorded against this url count as
+ * ours; the control echoes the url back on `source` verbatim.
  *
  * @param control - The vector control (or anything with `addData`/`getLayers`).
  * @param url - An http(s) URL to a vector dataset.
  * @param options - Display name, fitBounds, explicit format, ...
  * @returns The ids of the layers this call created.
  */
-export function addVectorLayersThroughControl(
+export async function addVectorLayersThroughControl(
   control: VectorUrlSink,
   url: string,
   options: VectorLayerOptions = {},
 ): Promise<string[]> {
-  const added = remoteVectorAddQueue.then(async () => {
-    const previousIds = new Set(control.getLayers().map((layer) => layer.id));
-    await control.addData(url, options);
-    return control
-      .getLayers()
-      .filter((layer) => !previousIds.has(layer.id))
-      .map((layer) => layer.id);
-  });
-  // Errors belong to the caller; the queue only needs the turn to end.
-  remoteVectorAddQueue = added.then(
-    () => undefined,
-    () => undefined,
-  );
-  return added;
+  const previousIds = new Set(control.getLayers().map((layer) => layer.id));
+  await control.addData(url, options);
+  return control
+    .getLayers()
+    .filter(
+      (layer) =>
+        !previousIds.has(layer.id) && layer.source.kind === "url" && layer.source.url === url,
+    )
+    .map((layer) => layer.id);
 }
 
 /**
