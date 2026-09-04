@@ -33,6 +33,7 @@ import type { ToolbarChrome } from "./constants";
 const ASSISTANT_DENIED_ID = "processing-menu-assistant-denied";
 const PROCESSING_DENIED_ID = "processing-menu-processing-denied";
 const SIDECAR_DENIED_ID = "processing-menu-sidecar-denied";
+const CESIUM_DENIED_ID = "processing-menu-cesium-denied";
 const ADD_REMOTE_DENIED_ID = "processing-menu-add-remote-denied";
 
 /** Convert a Whitebox subcategory label to its full i18n key. */
@@ -708,6 +709,7 @@ export function ProcessingMenu({
               {show("processing.objectDetection") && (
                 <DropdownMenuItem
                   disabled={cesiumPrimary}
+                  aria-describedby={cesiumPrimary ? CESIUM_DENIED_ID : undefined}
                   onSelect={() => setObjectDetectionOpen(true)}
                 >
                   {t("toolbar.command.objectDetection")}
@@ -718,10 +720,23 @@ export function ProcessingMenu({
               {show("processing.segmentEverything") && (
                 <DropdownMenuItem
                   disabled={cesiumPrimary}
+                  aria-describedby={cesiumPrimary ? CESIUM_DENIED_ID : undefined}
                   onSelect={() => setSegmentEverythingOpen(true)}
                 >
                   {t("toolbar.command.segmentEverything")}
                 </DropdownMenuItem>
+              )}
+              {/* A greyed-out item with no explanation reads as a bug rather
+                  than as policy (see CapabilityNotice) — and a disabled
+                  DropdownMenuItem is `pointer-events-none`, so the reason has
+                  to be a rendered line, not a `title`. */}
+              {cesiumPrimary && (
+                <DropdownMenuLabel
+                  id={CESIUM_DENIED_ID}
+                  className="pt-0 text-xs font-normal text-muted-foreground"
+                >
+                  {t("toolbar.item.mapLibreOnly")}
+                </DropdownMenuLabel>
               )}
               {!mobile && <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />}
             </DropdownMenuSubContent>

@@ -1820,82 +1820,93 @@ export function TopToolbar({
       run: panels.viewState.toggle,
     },
     // View
-    {
-      id: "view.zoom-in",
-      title: t("toolbar.command.zoomIn"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "zoom in closer magnify scale",
-      icon: ZoomIn,
-      run: () => mapControllerRef.current?.zoomIn(),
-    },
-    {
-      id: "view.zoom-out",
-      title: t("toolbar.command.zoomOut"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "zoom out farther wider scale",
-      icon: ZoomOut,
-      run: () => mapControllerRef.current?.zoomOut(),
-    },
-    {
-      id: "view.previous",
-      title: t("toolbar.command.previousView"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "back history viewport extent previous undo pan zoom",
-      icon: ArrowLeft,
-      // "[" / "]" step through viewport history (unbound by MapLibre).
-      shortcut: { key: "[" },
-      run: viewportHistory.goBack,
-    },
-    {
-      id: "view.next",
-      title: t("toolbar.command.nextView"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "forward history viewport extent next redo pan zoom",
-      icon: ArrowRight,
-      shortcut: { key: "]" },
-      run: viewportHistory.goForward,
-    },
-    {
-      id: "view.reset-north",
-      title: t("toolbar.command.resetNorth"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "north bearing rotation rotate compass orientation",
-      icon: Compass,
-      // Plain "N" (Google Earth Pro's north-up shortcut). No modifier, so it
-      // never clashes with ⌘/Ctrl+N (New project) and leaves MapLibre's own
-      // arrow/zoom keys untouched.
-      shortcut: { key: "n" },
-      run: () => mapControllerRef.current?.resetNorth(),
-    },
-    {
-      id: "view.reset-pitch",
-      title: t("toolbar.command.resetPitch"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "pitch tilt top down overhead flat level plan 2d reset",
-      icon: Grid2x2,
-      // Plain "U" resets pitch to a top-down view (Google Earth Pro's shortcut).
-      shortcut: { key: "u" },
-      run: () => mapControllerRef.current?.resetPitch(),
-    },
-    {
-      id: "view.reset-pitch-bearing",
-      title: t("toolbar.command.resetPitchBearing"),
-      group: t("toolbar.commandGroup.view"),
-      keywords: "pitch bearing tilt rotation north flat level 3d",
-      icon: Mountain,
-      // Plain "R" resets pitch and bearing (like Google Earth Pro's reset view).
-      shortcut: { key: "r" },
-      run: () => mapControllerRef.current?.resetNorthPitch(),
-    },
-    {
-      id: "view.set-view",
-      title: t("toolbar.command.setView"),
-      group: t("toolbar.commandGroup.view"),
-      keywords:
-        "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
-      icon: Crosshair,
-      run: () => setSetViewOpen(true),
-    },
+    // All eight drive the MapLibre `MapController`, which is null while the
+    // globe owns the primary map — and this array feeds the global shortcut
+    // layer and the cheat sheet as well as the palette, so leaving them in
+    // would keep "[", "]", "n", "u" and "r" firing into nothing and let
+    // Set View open a dialog that silently no-ops on submit. Dropping them
+    // matches the greyed-out ViewMenu items (#2217 review). `view.comments`
+    // below opens a panel from the store, so it stays.
+    ...(cesiumPrimary
+      ? []
+      : [
+          {
+            id: "view.zoom-in",
+            title: t("toolbar.command.zoomIn"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "zoom in closer magnify scale",
+            icon: ZoomIn,
+            run: () => mapControllerRef.current?.zoomIn(),
+          },
+          {
+            id: "view.zoom-out",
+            title: t("toolbar.command.zoomOut"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "zoom out farther wider scale",
+            icon: ZoomOut,
+            run: () => mapControllerRef.current?.zoomOut(),
+          },
+          {
+            id: "view.previous",
+            title: t("toolbar.command.previousView"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "back history viewport extent previous undo pan zoom",
+            icon: ArrowLeft,
+            // "[" / "]" step through viewport history (unbound by MapLibre).
+            shortcut: { key: "[" },
+            run: viewportHistory.goBack,
+          },
+          {
+            id: "view.next",
+            title: t("toolbar.command.nextView"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "forward history viewport extent next redo pan zoom",
+            icon: ArrowRight,
+            shortcut: { key: "]" },
+            run: viewportHistory.goForward,
+          },
+          {
+            id: "view.reset-north",
+            title: t("toolbar.command.resetNorth"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "north bearing rotation rotate compass orientation",
+            icon: Compass,
+            // Plain "N" (Google Earth Pro's north-up shortcut). No modifier, so it
+            // never clashes with ⌘/Ctrl+N (New project) and leaves MapLibre's own
+            // arrow/zoom keys untouched.
+            shortcut: { key: "n" },
+            run: () => mapControllerRef.current?.resetNorth(),
+          },
+          {
+            id: "view.reset-pitch",
+            title: t("toolbar.command.resetPitch"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "pitch tilt top down overhead flat level plan 2d reset",
+            icon: Grid2x2,
+            // Plain "U" resets pitch to a top-down view (Google Earth Pro's shortcut).
+            shortcut: { key: "u" },
+            run: () => mapControllerRef.current?.resetPitch(),
+          },
+          {
+            id: "view.reset-pitch-bearing",
+            title: t("toolbar.command.resetPitchBearing"),
+            group: t("toolbar.commandGroup.view"),
+            keywords: "pitch bearing tilt rotation north flat level 3d",
+            icon: Mountain,
+            // Plain "R" resets pitch and bearing (like Google Earth Pro's reset view).
+            shortcut: { key: "r" },
+            run: () => mapControllerRef.current?.resetNorthPitch(),
+          },
+          {
+            id: "view.set-view",
+            title: t("toolbar.command.setView"),
+            group: t("toolbar.commandGroup.view"),
+            keywords:
+              "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
+            icon: Crosshair,
+            run: () => setSetViewOpen(true),
+          },
+        ]),
     {
       id: "view.comments",
       title: t("toolbar.command.viewComments"),
