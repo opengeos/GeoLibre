@@ -1111,6 +1111,10 @@ function ClassOpacityInput({
   const [draft, setDraft] = useState(percent);
   useEffect(() => setDraft(percent), [percent]);
   const commitDraft = () => {
+    if (!draft.trim()) {
+      setDraft(percent);
+      return;
+    }
     const parsed = Number(draft);
     if (!Number.isFinite(parsed)) {
       setDraft(percent);
