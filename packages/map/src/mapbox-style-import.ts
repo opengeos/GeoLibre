@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  VECTOR_COLOR_RAMPS,
   mercatorMetersPerPixelAtZoom0,
   type LabelStyle,
   type LayerStyle,
@@ -8,6 +9,46 @@ import {
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
+
+function heatmapRampExpression(colors: readonly string[]): unknown[] {
+  const expression: unknown[] = [
+    "interpolate",
+    ["linear"],
+    ["heatmap-density"],
+    0,
+    "rgba(0,0,0,0)",
+  ];
+  colors.forEach((color, index) => expression.push((index + 1) / colors.length, color));
+  return expression;
+}
+
+function heatmapRampName(value: unknown): string | null {
+  const serialized = JSON.stringify(value);
+  return (
+    VECTOR_COLOR_RAMPS.find(
+      (ramp) => JSON.stringify(heatmapRampExpression(ramp.colors)) === serialized,
+    )?.value ?? null
+  );
+}
+
+function heatmapWeightProperty(value: unknown): string | null {
+  if (value === undefined || value === 1) return "";
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const [operator, zero, conversion] = value;
+  if (operator !== "max" || zero !== 0 || !Array.isArray(conversion)) return null;
+  const [conversionOperator, getExpression, fallback] = conversion;
+  if (
+    conversionOperator !== "to-number" ||
+    fallback !== 0 ||
+    !Array.isArray(getExpression) ||
+    getExpression.length !== 2 ||
+    getExpression[0] !== "get" ||
+    typeof getExpression[1] !== "string"
+  ) {
+    return null;
+  }
+  return getExpression[1];
+}
 
 /** The `text-anchor` values GeoLibre's {@link LabelStyle.anchor} accepts. */
 const VALID_LABEL_ANCHORS = new Set<string>([
@@ -920,6 +961,16 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const intensity = asFiniteNumber(paint["heatmap-intensity"]);
     if (intensity !== null) patch.heatmapIntensity = intensity;
     else warnUnreadableNumber(paint["heatmap-intensity"], "heatmap intensity", warnings);
+    const colorRamp = heatmapRampName(paint["heatmap-color"]);
+    if (colorRamp !== null) patch.heatmapColorRamp = colorRamp;
+    else if (paint["heatmap-color"] !== undefined) {
+      warnings.push("The heatmap color expression is not a built-in GeoLibre color ramp.");
+    }
+    const weightProperty = heatmapWeightProperty(paint["heatmap-weight"]);
+    if (weightProperty !== null) patch.heatmapWeightProperty = weightProperty;
+    else {
+      warnings.push("The heatmap weight expression is not a single GeoLibre attribute field.");
+    }
     applyZoomRange(heatmap, patch);
   }
 

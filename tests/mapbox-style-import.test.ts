@@ -356,11 +356,15 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
       pointRenderer: "heatmap",
       heatmapRadius: 42,
       heatmapIntensity: 2,
+      heatmapColorRamp: "viridis",
+      heatmapWeightProperty: "nb_ruches",
     });
     const { style: result } = roundTrip(original, points());
     assert.equal(result.pointRenderer, "heatmap");
     assert.equal(result.heatmapRadius, 42);
     assert.equal(result.heatmapIntensity, 2);
+    assert.equal(result.heatmapColorRamp, "viridis");
+    assert.equal(result.heatmapWeightProperty, "nb_ruches");
   });
 
   it("recovers 3D extrusion including height, scale, and base", () => {
