@@ -137,7 +137,6 @@ def _buffer(
     ``side``, so a negative distance is still rejected.
     """
     gdf = _load_gdf(geojson, "Input layer")
-    distance = float(parameters.get("distance", 1) or 0)
     units = str(parameters.get("units", "kilometers"))
     # Only a missing `side` defaults; an explicitly empty one falls through to
     # the unknown-side check below, the way an empty `units` reaches the unit
@@ -150,6 +149,16 @@ def _buffer(
         raise ValueError(f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}")
     if side not in _BUFFER_SIDES:
         raise ValueError(f"Unknown buffer side '{side}'. Accepted: {list(_BUFFER_SIDES)}")
+    # Parse the distance only after `units` and `side`, so a call with several
+    # bad parameters reports the same *first* error here as on the client (whose
+    # `bufferTool.run` checks them in this order). Converting earlier would let
+    # an unparseable distance pre-empt both checks above.
+    try:
+        distance = float(parameters.get("distance", 1) or 0)
+    except (TypeError, ValueError) as exc:
+        # Surface the tool's own message rather than `float`'s raw "could not
+        # convert string to float: 'abc'", which the client never produces.
+        raise ValueError("Buffer distance must be a finite number") from exc
     if not math.isfinite(distance):
         # `json.loads` accepts NaN/Infinity, so a raw request payload can carry
         # one. NaN in particular compares False against every bound below and

@@ -1,0 +1,39 @@
+{
+  "name": "buffer-point-line-both",
+  "tool": "buffer",
+  "description": "side=both on a feature with no interior to erode (a point, a line) returns the grown shape whole rather than dropping it: the band across the boundary IS the grown shape there. Both engines keep it, with the source attributes.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": { "kind": "point" },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": { "kind": "line" },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [-78.2, 35.0],
+            [-77.8, 35.1]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": 5,
+    "units": "kilometers",
+    "side": "both"
+  },
+  "expect": {
+    "featureCount": 2,
+    "geometryTypes": ["Polygon", "Polygon"],
+    "properties": [{ "kind": "point" }, { "kind": "line" }]
+  }
+}

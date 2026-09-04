@@ -231,6 +231,30 @@ def test_buffer_reports_unknown_unit_before_unknown_side() -> None:
 
 
 @requires_geopandas
+def test_buffer_reports_unknown_unit_before_unparseable_distance() -> None:
+    # The distance is parsed only after `units`/`side`, so an unparseable one
+    # cannot pre-empt either check. Before that ordering, `float("abc")` raised
+    # first and neither check was reached.
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "units": "furlongs"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_side_before_unparseable_distance() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "side": "bogus"})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", ["abc", "0x10", "   "])
+def test_buffer_rejects_unparseable_distance_with_the_tools_own_message(distance: str) -> None:
+    # Not `float`'s raw "could not convert string to float: 'abc'" — the client
+    # engine logs "buffer distance must be a finite number" for the same inputs.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
 @pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
 def test_buffer_rejects_non_finite_distance(distance: float) -> None:
     # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN

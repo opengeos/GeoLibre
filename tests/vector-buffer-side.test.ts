@@ -104,6 +104,36 @@ describe("buffer tool (client engine)", () => {
     assert.deepEqual(output?.features[0]?.properties, { name: "block", region: "east" });
   });
 
+  it("returns the grown shape whole for both on a feature with no interior", async () => {
+    // A point and a line have nothing to erode, so the eroded shape is empty and
+    // the band across the boundary IS the grown shape. Keep it rather than
+    // treating the empty inner ring as a failure — the same fallback a polygon
+    // thinner than twice the radius takes. `buffer-point-line-both.json` pins
+    // the counts and attributes across both engines; what it cannot assert is
+    // that the result is solid, so that is checked here.
+    const points: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [POINT],
+    };
+    const { output, logs } = await runBuffer(points, {
+      distance: 5,
+      units: "kilometers",
+      side: "both",
+    });
+    assert.equal(output?.features.length, 1);
+    const geometry = output?.features[0]?.geometry;
+    assert.equal(geometry?.type, "Polygon");
+    assert.equal(
+      (geometry as { coordinates: unknown[] }).coordinates.length,
+      1,
+      "no interior was eroded, so the grown disc comes back solid rather than as a ring",
+    );
+    assert.ok(
+      logs.every((m) => !m.startsWith("Dropped ")),
+      `expected nothing dropped, got ${JSON.stringify(logs)}`,
+    );
+  });
+
   it("counts features the inward buffer empties, without failing the run", async () => {
     const mixed: FeatureCollection = {
       type: "FeatureCollection",
