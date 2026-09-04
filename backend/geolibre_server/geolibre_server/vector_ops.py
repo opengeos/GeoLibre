@@ -145,6 +145,11 @@ def _buffer(
         raise ValueError(f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}")
     if side not in _BUFFER_SIDES:
         raise ValueError(f"Unknown buffer side '{side}'. Accepted: {list(_BUFFER_SIDES)}")
+    if not math.isfinite(distance):
+        # `json.loads` accepts NaN/Infinity, so a raw request payload can carry
+        # one. NaN in particular compares False against every bound below and
+        # would reach Shapely, which buffers each geometry away to nothing.
+        raise ValueError("Buffer distance must be a finite number")
     meters = distance * factor
     if meters < 0:
         # Direction belongs to `side`; keep the server consistent with the UI's

@@ -306,6 +306,14 @@ export const bufferTool: ProcessingAlgorithm = {
     const fc = requireFeatures(ctx);
     if (!fc) return;
     const distance = numberParam(ctx, "distance", 1);
+    if (distance < 0) {
+      // The dialog's `min: 0` binds the form, not a programmatic caller (Model
+      // Builder, the assistant, a replayed history entry). Reject rather than
+      // erode: direction belongs to `side`, and the Python engine already
+      // answers a negative distance this way.
+      ctx.log("Error: buffer distance must be >= 0; use the buffer side to buffer inward");
+      return;
+    }
     const units = ((ctx.parameters.units as string) || "kilometers") as BufferUnits;
     const side = (ctx.parameters.side as BufferSide) || "outside";
     if (!BUFFER_SIDES.has(side)) {

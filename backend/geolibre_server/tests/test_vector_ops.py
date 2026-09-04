@@ -199,6 +199,15 @@ def test_buffer_rejects_unknown_side() -> None:
 
 
 @requires_geopandas
+@pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
+def test_buffer_rejects_non_finite_distance(distance: float) -> None:
+    # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN
+    # compares False against the >= 0 bound rather than tripping it.
+    with pytest.raises(ValueError, match="finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;
     # this guards that path that the Pyodide engine also relies on.
