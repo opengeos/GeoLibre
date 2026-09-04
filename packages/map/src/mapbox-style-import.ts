@@ -22,21 +22,23 @@ function heatmapRampName(value: unknown): string | null {
 
 function heatmapWeightProperty(value: unknown): string | null {
   if (value === undefined || value === 1) return "";
-  if (!Array.isArray(value) || value.length !== 3) return null;
-  const [operator, zero, conversion] = value;
-  if (operator !== "max" || zero !== 0 || !Array.isArray(conversion)) return null;
-  const [conversionOperator, getExpression, fallback] = conversion;
-  if (
-    conversionOperator !== "to-number" ||
-    fallback !== 0 ||
-    !Array.isArray(getExpression) ||
-    getExpression.length !== 2 ||
-    getExpression[0] !== "get" ||
-    typeof getExpression[1] !== "string"
-  ) {
-    return null;
+  if (!Array.isArray(value)) return null;
+
+  let expression = value;
+  if (expression.length === 3 && expression[0] === "max" && expression[1] === 0) {
+    expression = expression[2];
   }
-  return getExpression[1];
+  if (
+    expression.length === 3 &&
+    expression[0] === "to-number" &&
+    expression[2] === 0 &&
+    Array.isArray(expression[1])
+  ) {
+    expression = expression[1];
+  }
+  return expression.length === 2 && expression[0] === "get" && typeof expression[1] === "string"
+    ? expression[1]
+    : null;
 }
 
 /** The `text-anchor` values GeoLibre's {@link LabelStyle.anchor} accepts. */

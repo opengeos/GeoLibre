@@ -359,12 +359,26 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
       heatmapColorRamp: "viridis",
       heatmapWeightProperty: "nb_ruches",
     });
-    const { style: result } = roundTrip(original, points());
+    const { style: result, warnings } = roundTrip(original, points());
+    assert.deepEqual(warnings, []);
     assert.equal(result.pointRenderer, "heatmap");
     assert.equal(result.heatmapRadius, 42);
     assert.equal(result.heatmapIntensity, 2);
     assert.equal(result.heatmapColorRamp, "viridis");
     assert.equal(result.heatmapWeightProperty, "nb_ruches");
+  });
+
+  it("recovers direct heatmap weight property expressions", () => {
+    for (const weight of [
+      ["get", "nb_ruches"],
+      ["to-number", ["get", "nb_ruches"], 0],
+    ]) {
+      const result = parseMapboxStyle({
+        layers: [{ id: "heat", type: "heatmap", paint: { "heatmap-weight": weight } }],
+      });
+      assert.equal(result.style.heatmapWeightProperty, "nb_ruches");
+      assert.deepEqual(result.warnings, []);
+    }
   });
 
   it("recovers 3D extrusion including height, scale, and base", () => {
