@@ -622,13 +622,13 @@ def wms_layer(
             WGS84. Take them from the service's ``EX_GeographicBoundingBox``,
             which is always lon/lat, rather than a 1.3.0 ``BoundingBox
             CRS="EPSG:4326"``, whose axis order servers often get wrong.
-
-    Raises:
-        ValueError: If ``bounds`` is given without exactly four values.
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``bounds`` is given without exactly four values.
     """
     wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
