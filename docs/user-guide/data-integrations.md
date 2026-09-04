@@ -74,7 +74,7 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen
 | --- | --- |
 | **GeoAgent** | AI-assisted geospatial analysis. |
 
-All of these are activated from the [Plugins menu](plugins.md), where you can also set their on-map position. The Web Services panels are the exception, including **Vantor Open Data** and **Planet Open Data** above: they dock beside the Layers panel instead of floating over the map, so they offer no position choice.
+The plugins under **Imagery and street-level**, **Time series and comparison**, and **AI analysis** are activated from the [Plugins menu](plugins.md), where you can also set their on-map position (the integrations further up this page are reached from the Processing and Add Data menus instead). The Web Services panels are the exception, including **Vantor Open Data** and **Planet Open Data** above: they dock beside the Layers panel instead of floating over the map, so they offer no position choice.
 
 ## Geocoding
 
