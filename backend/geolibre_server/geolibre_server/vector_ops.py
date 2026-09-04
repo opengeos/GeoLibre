@@ -139,7 +139,12 @@ def _buffer(
     gdf = _load_gdf(geojson, "Input layer")
     distance = float(parameters.get("distance", 1) or 0)
     units = str(parameters.get("units", "kilometers"))
-    side = str(parameters.get("side") or "outside")
+    # Only a missing `side` defaults; an explicitly empty one falls through to
+    # the unknown-side check below, the way an empty `units` reaches the unit
+    # lookup and is rejected there. Direction is a deliberate choice, so a
+    # caller that sends a blank one gets an error rather than a silent grow.
+    raw_side = parameters.get("side")
+    side = "outside" if raw_side is None else str(raw_side)
     factor = _DISTANCE_UNITS.get(units)
     if factor is None:
         raise ValueError(f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}")

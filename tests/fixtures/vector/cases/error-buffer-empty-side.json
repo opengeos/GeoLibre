@@ -1,0 +1,26 @@
+{
+  "name": "error-buffer-empty-side",
+  "tool": "buffer",
+  "description": "An explicitly empty side is rejected by both engines rather than silently falling back to the default; only an absent side defaults to outside.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": 5,
+    "units": "kilometers",
+    "side": ""
+  },
+  "expect": {
+    "error": true
+  }
+}

@@ -199,6 +199,21 @@ def test_buffer_rejects_unknown_side() -> None:
 
 
 @requires_geopandas
+def test_buffer_rejects_empty_side() -> None:
+    # An explicitly blank side is rejected rather than silently growing, the way
+    # a blank `units` reaches the unit lookup and is rejected there. Only an
+    # absent `side` defaults to "outside". The client engine matches.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": ""})
+
+
+@requires_geopandas
+def test_buffer_defaults_to_outside_when_side_is_absent() -> None:
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": 1})
+    assert "(outside)" in messages[0]
+
+
+@requires_geopandas
 @pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
 def test_buffer_rejects_non_finite_distance(distance: float) -> None:
     # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN

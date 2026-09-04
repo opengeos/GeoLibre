@@ -328,7 +328,12 @@ export const bufferTool: ProcessingAlgorithm = {
       return;
     }
     const units = ((ctx.parameters.units as string) || "kilometers") as BufferUnits;
-    const side = (ctx.parameters.side as BufferSide) || "outside";
+    // Only a missing `side` defaults; an explicitly empty one falls through to
+    // the check below, matching the Python engine (and the way an empty `units`
+    // reaches its own lookup there). Direction is a deliberate choice, so a
+    // caller that sends a blank one gets an error rather than a silent grow.
+    const rawSide = ctx.parameters.side;
+    const side = (rawSide == null ? "outside" : String(rawSide)) as BufferSide;
     if (!BUFFER_SIDES.has(side)) {
       // Reject rather than fall back, so the client and Python engines answer a
       // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
