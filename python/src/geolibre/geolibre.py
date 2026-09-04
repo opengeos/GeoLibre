@@ -2154,7 +2154,7 @@ class Map(anywidget.AnyWidget):
             The id of the added layer.
 
         Raises:
-            ValueError: If ``bounds`` is given without exactly four finite numbers.
+            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
         """
         return self._add_layer(
             _project.wms_layer(
@@ -2194,7 +2194,7 @@ class Map(anywidget.AnyWidget):
             The id of the added layer.
 
         Raises:
-            ValueError: If ``bounds`` is given without exactly four finite numbers.
+            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
         """
         return self._add_layer(
             _project.wmts_layer(name, url, tile_size=tile_size, bounds=bounds, **style)

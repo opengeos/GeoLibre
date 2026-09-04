@@ -587,7 +587,9 @@ def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
         The four coordinates as floats, or None when *bounds* is None.
 
     Raises:
-        ValueError: If *bounds* does not hold exactly four finite numbers.
+        ValueError: If *bounds* does not hold four finite numbers, or its
+            latitudes are inverted or outside +/-90. West > east is allowed:
+            that is how RFC 7946 writes an antimeridian-crossing box.
     """
     if bounds is None:
         return None
@@ -597,10 +599,18 @@ def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
         )
     try:
         values = [float(v) for v in bounds]
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"bounds must be four numbers; got {bounds!r}") from exc
     if not all(math.isfinite(value) for value in values):
         raise ValueError(f"bounds must contain finite numbers; got {bounds!r}")
+    _, south, _, north = values
+    if south > north:
+        raise ValueError(f"bounds has its latitudes inverted; got {bounds!r}")
+    if not (-90 <= south and north <= 90):
+        raise ValueError(f"bounds latitudes must lie within +/-90; got {bounds!r}")
+    # Longitudes are deliberately not ordered. RFC 7946 section 5.2 writes a box
+    # crossing the antimeridian with west > east - Fiji is [170, -20, -170, -10] -
+    # and authoring.fit_bounds already frames such a box rather than refusing it.
     return values
 
 
@@ -660,7 +670,7 @@ def wms_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four finite numbers.
+        ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
     """
     wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
@@ -723,7 +733,7 @@ def wmts_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is given without exactly four finite numbers.
+        ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
     """
     layer = _layer_base(name, "wmts", **style)
     source: dict[str, Any] = {

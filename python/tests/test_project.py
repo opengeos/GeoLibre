@@ -158,6 +158,29 @@ def test_ogc_layer_bounds_reject_non_numbers(builder, args):
     for bad in ([float("nan"), 38, 9, 41], [8, 38, float("inf"), 41]):
         with pytest.raises(ValueError, match="finite numbers"):
             builder(*args, bounds=bad)
+    # An int too large for a float raises OverflowError, not ValueError.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, 10**1000])
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_check_latitudes_but_not_longitudes(builder, args):
+    # A south > north box is the axis-order mixup the docstrings warn about,
+    # and latitudes have no wraparound to excuse it.
+    with pytest.raises(ValueError, match="latitudes inverted"):
+        builder(*args, bounds=[8, 41, 9, 38])
+    with pytest.raises(ValueError, match=r"within \+/-90"):
+        builder(*args, bounds=[8, -95, 9, 41])
+    # Longitudes are another matter: RFC 7946 section 5.2 writes a box crossing
+    # the antimeridian as west > east, and authoring.fit_bounds frames one.
+    fiji = builder(*args, bounds=[170, -20, -170, -10])
+    assert fiji["source"]["bounds"] == [170.0, -20.0, -170.0, -10.0]
 
 
 @pytest.mark.parametrize(
