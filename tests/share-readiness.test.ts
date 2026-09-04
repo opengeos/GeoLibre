@@ -56,8 +56,7 @@ function rejectingRangedGet(headStatus: number) {
       method: init?.method,
       range: (init?.headers as Record<string, string> | undefined)?.Range,
     });
-    if (init?.method === "HEAD")
-      return new Response(null, { status: headStatus });
+    if (init?.method === "HEAD") return new Response(null, { status: headStatus });
     throw new TypeError("Failed to fetch");
   }) as unknown as typeof fetch;
   return { fn, attempts };
@@ -111,30 +110,28 @@ describe("probeTargetFor", () => {
   it("expands a tile template to a representative route", () => {
     assert.equal(
       probeTargetFor("https://tile.example.com/data/{z}/{x}/{y}.png"),
-      "https://tile.example.com/data/0/0/0.png"
+      "https://tile.example.com/data/0/0/0.png",
     );
   });
 
   it("expands a formatted Time Slider date template to a representative route", () => {
     assert.equal(
-      probeTargetFor(
-        "https://data.example.com/json/{date:YYYYMMDD}_acdom.json"
-      ),
-      "https://data.example.com/json/20000101_acdom.json"
+      probeTargetFor("https://data.example.com/json/{date:YYYYMMDD}_acdom.json"),
+      "https://data.example.com/json/20000101_acdom.json",
     );
   });
 
   it("keeps a concrete URL intact so an expired link is still caught", () => {
     assert.equal(
       probeTargetFor("https://data.example.com/dem.tif"),
-      "https://data.example.com/dem.tif"
+      "https://data.example.com/dem.tif",
     );
   });
 
   it("does not treat arbitrary brace content as a supported template", () => {
     assert.equal(
       probeTargetFor("https://data.example.com/query/{not/a/template}"),
-      "https://data.example.com/query/%7Bnot/a/template%7D"
+      "https://data.example.com/query/%7Bnot/a/template%7D",
     );
   });
 
@@ -187,7 +184,7 @@ describe("collectShareSources", () => {
       [
         ["a", "local", "local-file", null],
         ["b", "local", "private-host", null],
-      ]
+      ],
     );
   });
 
@@ -303,7 +300,7 @@ describe("collectShareSources", () => {
     assert.equal(refs[0].reason, "ok");
     assert.equal(
       refs[0].probeUrl,
-      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/20000101_acdom.json"
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/20000101_acdom.json",
     );
   });
 
@@ -334,13 +331,13 @@ describe("collectShareSources", () => {
     });
     assert.deepEqual(
       refs.map((ref) => ref.field),
-      ["basemapStyleUrl", "plugins.manifestUrls[0]"]
+      ["basemapStyleUrl", "plugins.manifestUrls[0]"],
     );
     // Project-level rows carry no label: the dialog translates one from `field`,
     // so the check never needs the translation function.
     assert.deepEqual(
       refs.map((ref) => ref.label),
-      ["", ""]
+      ["", ""],
     );
   });
 
@@ -383,7 +380,7 @@ describe("probeShareSources", () => {
     assert.equal(result.probeCount, 2);
     assert.deepEqual(
       result.refs.map((ref) => ref.status),
-      ["reachable", "reachable"]
+      ["reachable", "reachable"],
     );
   });
 
@@ -414,16 +411,14 @@ describe("probeShareSources", () => {
       [
         ["credentialed", "auth-required"],
         ["missing", "not-found"],
-      ]
+      ],
     );
   });
 
   it("accepts a readable 404 for a representative template expansion", async () => {
     const template = "https://tiles.example.com/{z}/{x}/{y}.png";
     const refs = collectShareSources({
-      layers: [
-        layer({ id: "a", name: "A", type: "xyz", source: { url: template } }),
-      ],
+      layers: [layer({ id: "a", name: "A", type: "xyz", source: { url: template } })],
     });
     const { fn } = fakeFetch({ "https://tiles.example.com/0/0/0.png": 404 });
     const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
@@ -552,7 +547,7 @@ describe("probeShareSources", () => {
         name: `L${index}`,
         type: "cog",
         source: { url: `https://host${index}.example.com/a.tif` },
-      })
+      }),
     );
     const { fn, calls } = fakeFetch({
       "https://host0.example.com/a.tif": 200,
@@ -568,7 +563,7 @@ describe("probeShareSources", () => {
     assert.equal(result.truncated, true);
     assert.deepEqual(
       result.refs.map((ref) => ref.status),
-      ["reachable", "reachable", "unchecked", "unchecked"]
+      ["reachable", "reachable", "unchecked", "unchecked"],
     );
     assert.equal(result.refs[3].reason, "probe-budget");
   });
@@ -627,12 +622,12 @@ describe("checkShareReadiness", () => {
           }),
         ],
       },
-      { fetchImpl: fn }
+      { fetchImpl: fn },
     );
     assert.equal(report.items.length, 3);
     assert.deepEqual(
       report.problems.map((item) => item.layerId),
-      ["local", "keyed"]
+      ["local", "keyed"],
     );
   });
 

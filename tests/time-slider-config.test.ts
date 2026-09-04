@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   __resetBoundFilterScheduleForTests,
   __reconcileBoundLayersForTests,
@@ -21,20 +17,14 @@ import type { SourceSpec, TimeSliderControl } from "maplibre-gl-time-slider";
 
 // applyProjectState / getProjectState touch no app methods while no control is
 // active (the plugin is never activated here), so a bare stub satisfies the type.
-const app = {} as Parameters<
-  NonNullable<typeof maplibreTimeSliderPlugin.applyProjectState>
->[0];
+const app = {} as Parameters<NonNullable<typeof maplibreTimeSliderPlugin.applyProjectState>>[0];
 
 const apply = (state: unknown): boolean =>
   maplibreTimeSliderPlugin.applyProjectState?.(app, state) ?? false;
 const saved = (): Record<string, unknown> | undefined =>
-  maplibreTimeSliderPlugin.getProjectState?.() as
-    | Record<string, unknown>
-    | undefined;
+  maplibreTimeSliderPlugin.getProjectState?.() as Record<string, unknown> | undefined;
 
-function baseConfig(
-  overrides: Record<string, unknown> = {}
-): Record<string, unknown> {
+function baseConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     startDate: "2020-01-01T00:00:00.000Z",
     interval: 1,
@@ -90,38 +80,24 @@ describe("Time Slider bound-filter backpressure", () => {
     } as unknown as TimeSliderControl;
     const upperYear = (): number | undefined => {
       const filter = useAppStore.getState().layers[0]?.timeFilter;
-      return Array.isArray(filter)
-        ? ((filter.at(-1) as unknown[])?.at(-1) as number)
-        : undefined;
+      return Array.isArray(filter) ? ((filter.at(-1) as unknown[])?.at(-1) as number) : undefined;
     };
 
     try {
       useAppStore.setState({ layers: [layer] });
       __scheduleBoundFiltersForTests(control);
-      assert.equal(
-        upperYear(),
-        1901,
-        "the leading date should render immediately"
-      );
+      assert.equal(upperYear(), 1901, "the leading date should render immediately");
 
       currentDate = "1901-01-01T00:00:00.000Z";
       __scheduleBoundFiltersForTests(control);
       currentDate = "1902-01-01T00:00:00.000Z";
       __scheduleBoundFiltersForTests(control);
-      assert.equal(
-        upperYear(),
-        1901,
-        "intermediate worker-invalidating filters are held back"
-      );
+      assert.equal(upperYear(), 1901, "intermediate worker-invalidating filters are held back");
 
       t.mock.timers.tick(249);
       assert.equal(upperYear(), 1901);
       t.mock.timers.tick(1);
-      assert.equal(
-        upperYear(),
-        1903,
-        "the trailing apply should use only the newest date"
-      );
+      assert.equal(upperYear(), 1903, "the trailing apply should use only the newest date");
     } finally {
       __resetBoundFilterScheduleForTests();
       useAppStore.setState({ layers: previousLayers });
@@ -138,10 +114,7 @@ describe("Time Slider open-ended end date persistence", () => {
   });
 
   it("preserves an explicit endDate through a save round-trip", () => {
-    assert.equal(
-      apply(baseConfig({ endDate: "2024-12-31T00:00:00.000Z" })),
-      true
-    );
+    assert.equal(apply(baseConfig({ endDate: "2024-12-31T00:00:00.000Z" })), true);
     assert.equal(saved()?.endDate, "2024-12-31T00:00:00.000Z");
   });
 
@@ -218,9 +191,7 @@ describe("Time Slider selector display-unit restoration", () => {
 });
 
 describe("Time Slider mosaic source persistence", () => {
-  const mosaicSource = (
-    overrides: Record<string, unknown> = {}
-  ): Record<string, unknown> => ({
+  const mosaicSource = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
     type: "mosaic",
     id: "s2-mosaic",
     name: "Sentinel-2 Monthly Mosaic",
@@ -239,16 +210,14 @@ describe("Time Slider mosaic source persistence", () => {
     assert.equal(sources[0].engine, "wasm");
     assert.equal(
       sources[0].url,
-      "https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json"
+      "https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json",
     );
   });
 
   it("rejects a mosaic source whose url is not a plain http(s) URL", () => {
     assert.equal(
-      apply(
-        baseConfig({ sources: [mosaicSource({ url: "javascript:alert(1)" })] })
-      ),
-      false
+      apply(baseConfig({ sources: [mosaicSource({ url: "javascript:alert(1)" })] })),
+      false,
     );
   });
 });
@@ -280,10 +249,7 @@ describe("Time Slider ordinal dates persistence", () => {
   });
 
   it("rejects a datesUrl that is not a plain http(s) URL", () => {
-    assert.equal(
-      apply(baseConfig({ dates: DATES, datesUrl: "javascript:alert(1)" })),
-      false
-    );
+    assert.equal(apply(baseConfig({ dates: DATES, datesUrl: "javascript:alert(1)" })), false);
   });
 
   // The restore path builds a fresh control from options, so a `dates` list the
@@ -360,10 +326,7 @@ describe("Time Slider store layer identify metadata", () => {
       tiles: "https://example.com/{z}/{x}/{y}.png",
     } as unknown as SourceSpec);
 
-    assert.equal(
-      layer.metadata.originalUrl,
-      "https://example.com/{z}/{x}/{y}.png"
-    );
+    assert.equal(layer.metadata.originalUrl, "https://example.com/{z}/{x}/{y}.png");
   });
 
   it("leaves pre-rendered tile sources unidentifiable", () => {
@@ -446,10 +409,7 @@ describe("Time Slider store layer identify metadata", () => {
 });
 
 describe("isTimeSliderIdle", () => {
-  const layer = (
-    id: string,
-    metadata: Record<string, unknown>
-  ): GeoLibreLayer => ({
+  const layer = (id: string, metadata: Record<string, unknown>): GeoLibreLayer => ({
     id,
     name: id,
     type: "geojson",
@@ -474,10 +434,7 @@ describe("isTimeSliderIdle", () => {
   });
 
   it("is idle when the remaining layers carry no time state", () => {
-    withLayers([
-      layer("a", {}),
-      layer("b", { sourceKind: "maplibre-gl-vector" }),
-    ]);
+    withLayers([layer("a", {}), layer("b", { sourceKind: "maplibre-gl-vector" })]);
     assert.equal(isTimeSliderIdle(), true);
   });
 
@@ -504,9 +461,7 @@ describe("isTimeSliderIdle", () => {
   });
 
   it("is busy while a KML timespan overlay is present", () => {
-    withLayers([
-      layer("kml", { timeSpan: { begin: 1_600_000_000_000, end: null } }),
-    ]);
+    withLayers([layer("kml", { timeSpan: { begin: 1_600_000_000_000, end: null } })]);
     assert.equal(isTimeSliderIdle(), false);
   });
 
@@ -542,10 +497,7 @@ describe("isTimeSliderIdle", () => {
     it("reads back a data cube's selector binding", () => {
       // The Layers panel keys the Bind/Unbind label off this, so a cube whose
       // binding is not recognized would offer "Bind" over an already-bound layer.
-      assert.deepEqual(
-        getLayerTimeBinding(cube(selectorBinding)),
-        selectorBinding
-      );
+      assert.deepEqual(getLayerTimeBinding(cube(selectorBinding)), selectorBinding);
     });
 
     it("still reads back a vector filter binding", () => {
@@ -555,10 +507,8 @@ describe("isTimeSliderIdle", () => {
 
     it("rejects a selector binding with no usable extent", () => {
       assert.equal(
-        getLayerTimeBinding(
-          cube({ kind: "selector", dimension: "time", min: Number.NaN, max: 1 })
-        ),
-        undefined
+        getLayerTimeBinding(cube({ kind: "selector", dimension: "time", min: Number.NaN, max: 1 })),
+        undefined,
       );
     });
 

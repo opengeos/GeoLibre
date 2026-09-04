@@ -202,8 +202,7 @@ function hasCredentialField(value: unknown, depth = 0): boolean {
   // Exactly as deep as the redaction pass descends, so a credential nested
   // deeply enough to escape this scan but not that one cannot exist.
   if (depth >= MAX_REDACT_DEPTH) return false;
-  if (Array.isArray(value))
-    return value.some((item) => hasCredentialField(item, depth + 1));
+  if (Array.isArray(value)) return value.some((item) => hasCredentialField(item, depth + 1));
   if (!isPlainObject(value)) return false;
   for (const [key, nested] of Object.entries(value)) {
     if (isCredentialFieldName(key) && isPopulated(nested)) return true;
@@ -277,8 +276,7 @@ export function probeTargetFor(url: string): string | null {
     /\{([a-z0-9_-]+(?::[a-z0-9_-]+)?)\}/gi,
     (_token, raw: string) => {
       const token = raw.toLowerCase();
-      if (token === "z" || token === "x" || token === "y" || token === "-y")
-        return "0";
+      if (token === "z" || token === "x" || token === "y" || token === "-y") return "0";
       const dateFormat = /^date:(.+)$/i.exec(raw)?.[1];
       if (dateFormat) {
         return dateFormat
@@ -291,7 +289,7 @@ export function probeTargetFor(url: string): string | null {
           .replace(/ss/g, "00");
       }
       return "0";
-    }
+    },
   );
   let parsed: URL;
   try {
@@ -363,9 +361,7 @@ function classifyReference(url: string): Classification | null {
 }
 
 /** Every place a layer can hide a reference a renderer will actually fetch. */
-function layerReferences(
-  layer: GeoLibreLayer
-): { field: string; url: string }[] {
+function layerReferences(layer: GeoLibreLayer): { field: string; url: string }[] {
   const source = layer.source ?? {};
   const metadata = layer.metadata ?? {};
   const found: { field: string; url: string }[] = [];
@@ -405,10 +401,7 @@ function layerReferences(
 }
 
 /** Whether the layer's features travel inside the project file. */
-function carriesOwnData(
-  layer: GeoLibreLayer,
-  embeddedLayerIds?: ReadonlySet<string>
-): boolean {
+function carriesOwnData(layer: GeoLibreLayer, embeddedLayerIds?: ReadonlySet<string>): boolean {
   if (embeddedLayerIds?.has(layer.id)) return true;
   if (layer.geojson) return true;
   const metadata = layer.metadata ?? {};
@@ -426,9 +419,7 @@ function carriesOwnData(
  * not need the network. References left `unchecked` with a non-null `probeUrl`
  * are what {@link probeShareSources} resolves.
  */
-export function collectShareSources(
-  input: ShareReadinessInput
-): ShareSourceRef[] {
+export function collectShareSources(input: ShareReadinessInput): ShareSourceRef[] {
   const refs: ShareSourceRef[] = [];
 
   for (const layer of input.layers) {
@@ -454,8 +445,7 @@ export function collectShareSources(
       });
       continue;
     }
-    const credentialField =
-      hasCredentialField(layer.source) || hasCredentialField(layer.metadata);
+    const credentialField = hasCredentialField(layer.source) || hasCredentialField(layer.metadata);
     for (const reference of references) {
       const classified = classifyReference(reference.url);
       if (!classified) continue;
@@ -488,13 +478,10 @@ export function collectShareSources(
     }
   }
 
-  for (const [index, manifestUrl] of (
-    input.pluginManifestUrls ?? []
-  ).entries()) {
+  for (const [index, manifestUrl] of (input.pluginManifestUrls ?? []).entries()) {
     // Only absolute references: a bundled drop-in is served from the app itself
     // and resolves wherever the project is opened.
-    if (!nonEmptyString(manifestUrl) || !/^https?:\/\//i.test(manifestUrl))
-      continue;
+    if (!nonEmptyString(manifestUrl) || !/^https?:\/\//i.test(manifestUrl)) continue;
     const classified = classifyReference(manifestUrl);
     if (!classified) continue;
     refs.push({
@@ -535,7 +522,7 @@ async function probeTarget(
   target: string,
   fetchImpl: typeof fetch,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<ProbeOutcome> {
   // One deadline for the whole target rather than one per attempt, so a slow
   // host that refuses HEAD cannot spend the budget twice over.
@@ -557,8 +544,7 @@ async function probeTarget(
 
   try {
     const head = await request("HEAD");
-    if (!RETRY_WITH_RANGED_GET.has(head.status))
-      return outcomeForStatus(head.status);
+    if (!RETRY_WITH_RANGED_GET.has(head.status)) return outcomeForStatus(head.status);
     // Plenty of object stores and CDNs refuse HEAD while serving GET happily,
     // so a one-byte ranged GET decides it rather than a false "needs a login".
     try {
@@ -566,10 +552,8 @@ async function probeTarget(
       return outcomeForStatus(ranged.status);
     } catch (error) {
       const failure = classifyFetchFailure(error);
-      if (failure.kind === "abort")
-        return { status: "unchecked", reason: "aborted" };
-      if (failure.kind === "timeout")
-        return { status: "unchecked", reason: "timeout" };
+      if (failure.kind === "abort") return { status: "unchecked", reason: "aborted" };
+      if (failure.kind === "timeout") return { status: "unchecked", reason: "timeout" };
       // The HEAD already proved the host answers and lets this origin read the
       // response, so a rejection here is about the ranged request rather than
       // the host. `Range` is CORS-safelisted only for a simple byte range, and
@@ -581,15 +565,12 @@ async function probeTarget(
     }
   } catch (error) {
     const failure = classifyFetchFailure(error);
-    if (failure.kind === "abort")
-      return { status: "unchecked", reason: "aborted" };
-    if (failure.kind === "timeout")
-      return { status: "unchecked", reason: "timeout" };
+    if (failure.kind === "abort") return { status: "unchecked", reason: "aborted" };
+    if (failure.kind === "timeout") return { status: "unchecked", reason: "timeout" };
     // The browser collapses a cross-origin rejection, a TLS failure, and an
     // unreachable host into one opaque error. All three mean the recipient's
     // browser cannot read this, which is the verdict that matters here.
-    if (failure.kind === "network")
-      return { status: "blocked", reason: "cors" };
+    if (failure.kind === "network") return { status: "blocked", reason: "cors" };
     return { status: "unchecked", reason: "ok" };
   }
 }
@@ -601,7 +582,7 @@ async function probeTarget(
  */
 export async function probeShareSources(
   refs: readonly ShareSourceRef[],
-  options: ShareProbeOptions = {}
+  options: ShareProbeOptions = {},
 ): Promise<{ refs: ShareSourceRef[]; probeCount: number; truncated: boolean }> {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? SHARE_PROBE_TIMEOUT_MS;
@@ -620,9 +601,7 @@ export async function probeShareSources(
   const outcomes = new Map<string, ProbeOutcome>();
   if (typeof fetchImpl === "function") {
     const results = await Promise.all(
-      probed.map((target) =>
-        probeTarget(target, fetchImpl, timeoutMs, options.signal)
-      )
+      probed.map((target) => probeTarget(target, fetchImpl, timeoutMs, options.signal)),
     );
     probed.forEach((target, index) => outcomes.set(target, results[index]));
   }
@@ -651,9 +630,7 @@ export async function probeShareSources(
  * keeping the worst. A layer with three tile mirrors is one line in the dialog,
  * not three.
  */
-export function summarizeShareSources(
-  refs: readonly ShareSourceRef[]
-): ShareReadinessItem[] {
+export function summarizeShareSources(refs: readonly ShareSourceRef[]): ShareReadinessItem[] {
   const byOwner = new Map<string, ShareReadinessItem>();
   for (const ref of refs) {
     const key = ref.layerId ?? `${ref.field}:${ref.url}`;
@@ -666,10 +643,7 @@ export function summarizeShareSources(
       reason: ref.reason,
       url: ref.url,
     };
-    if (
-      !existing ||
-      STATUS_SEVERITY[candidate.status] > STATUS_SEVERITY[existing.status]
-    ) {
+    if (!existing || STATUS_SEVERITY[candidate.status] > STATUS_SEVERITY[existing.status]) {
       byOwner.set(key, candidate);
     }
   }
@@ -679,13 +653,10 @@ export function summarizeShareSources(
 /** Collect, probe, and summarize. What the Share dialog calls. */
 export async function checkShareReadiness(
   input: ShareReadinessInput,
-  options: ShareProbeOptions = {}
+  options: ShareProbeOptions = {},
 ): Promise<ShareReadinessReport> {
   const collected = collectShareSources(input);
-  const { refs, probeCount, truncated } = await probeShareSources(
-    collected,
-    options
-  );
+  const { refs, probeCount, truncated } = await probeShareSources(collected, options);
   const items = summarizeShareSources(refs);
   const problems = items
     .filter((item) => item.status !== "reachable")
