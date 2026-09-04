@@ -141,10 +141,17 @@ def test_ogc_layer_bounds_must_have_four_values(bad):
         project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=bad)
 
 
-def test_ogc_layer_bounds_are_coerced_to_floats():
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_are_coerced_to_floats(builder, args):
     # Ints compare equal to floats, so assert the stored types: what reaches
     # the project file has to be JSON numbers the app reads as coordinates.
-    stored = project.wms_layer("x", "https://e/wms", "a", bounds=[8, 38, 9, 41])["source"]["bounds"]
+    stored = builder(*args, bounds=[8, 38, 9, 41])["source"]["bounds"]
     assert stored == [8.0, 38.0, 9.0, 41.0]
     assert all(isinstance(v, float) for v in stored)
 
