@@ -211,6 +211,18 @@ type BufferUnits = "kilometers" | "meters" | "miles";
 const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
 
 /**
+ * Python's decimal-float grammar, which `Number()` does not share.
+ *
+ * `Number()` reads JavaScript's `0x`/`0b`/`0o` bases (`Number("0x10")` is 16)
+ * and whitespace-only input (`Number("  ")` is 0), where Python's `float()`
+ * raises on all of them — so a string distance that the sidecar rejects would
+ * otherwise buffer happily on the client. This is deliberately the narrower of
+ * the two grammars: it also rejects Python's digit separators (`float("1_000")`
+ * is 1000, `Number("1_000")` is `NaN`), which both engines then refuse.
+ */
+const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
+
+/**
  * A buffered feature, or `null` when the operation left nothing behind.
  *
  * An inward buffer erodes a polygon and can consume it entirely; on a point or
@@ -221,10 +233,27 @@ const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
  */
 function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
   const geometry = result?.geometry as Polygon | MultiPolygon | undefined;
-  if (!geometry || !Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
-    return null;
-  }
+  if (!geometry || !hasPositions(geometry.coordinates)) return null;
   return result as Feature;
+}
+
+/**
+ * Whether a GeoJSON coordinate array holds at least one real position.
+ *
+ * Zero rings is the shape jsts usually returns for an emptied geometry, but not
+ * the only one: a `Polygon` can come back with a single *empty* ring
+ * (`[[]]`), and a `MultiPolygon` with several individually degenerate parts —
+ * both of which have a non-zero `coordinates.length` while still being
+ * undrawable. Recursing to the first number catches every arity.
+ *
+ * Exported for tests: turf rejects a degenerate geometry on the way *in*
+ * ("coordinates must contain numbers"), so this guard's job is to catch one
+ * coming back *out* and cannot be reached through the tool's own parameters.
+ */
+export function hasPositions(coordinates: unknown): boolean {
+  if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+  if (typeof coordinates[0] === "number") return true;
+  return coordinates.some(hasPositions);
 }
 
 /**
@@ -337,12 +366,14 @@ export const bufferTool: ProcessingAlgorithm = {
     // `numberParam` folds a non-finite or unparseable value into its fallback,
     // which would hand a programmatic caller a silent 1-unit buffer where the
     // Python engine raises. Check the raw parameter so both engines reject it.
-    // A whitespace-only string is one of those: `Number("  ")` is 0 here while
-    // the Python engine's `float("  ")` raises. An *empty* string is not — both
-    // engines read that as 0.
-    const blankDistance =
-      typeof rawDistance === "string" && rawDistance !== "" && rawDistance.trim() === "";
-    if (rawDistance != null && (blankDistance || !Number.isFinite(Number(rawDistance)))) {
+    // A string is held to Python's grammar rather than `Number()`'s (see
+    // DECIMAL_NUMBER), so `"0x10"` and `"  "` are rejected here the way
+    // `float()` rejects them there. An *empty* string is the one case both
+    // engines already agree on — `"" or 0` is 0 in Python — so it falls
+    // through to `numberParam`.
+    const badDistanceString =
+      typeof rawDistance === "string" && rawDistance !== "" && !DECIMAL_NUMBER.test(rawDistance);
+    if (rawDistance != null && (badDistanceString || !Number.isFinite(Number(rawDistance)))) {
       ctx.log("Error: buffer distance must be a finite number");
       return;
     }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { getVectorTool, runAlgorithmCapture } from "@geolibre/processing";
+import { hasPositions } from "../packages/processing/src/vector-tools";
 import type { Feature, FeatureCollection } from "geojson";
 
 /**
@@ -150,6 +151,14 @@ describe("buffer tool (client engine)", () => {
     ["Infinity", Number.POSITIVE_INFINITY],
     ["a whitespace-only string", "   "],
     ["an unparseable string", "ten"],
+    // `Number()` reads these as 16/2/8; Python's `float()` raises on all three,
+    // so the sidecar would reject a distance the client quietly buffered by.
+    ["a hex string", "0x10"],
+    ["a binary string", "0b10"],
+    ["an octal string", "0o10"],
+    // Python accepts digit separators, JavaScript does not — both engines
+    // refuse this one, from opposite directions.
+    ["a digit-separated string", "1_000"],
   ] as const) {
     it(`rejects ${label} as a distance instead of silently buffering by 1`, async () => {
       const { output, logs } = await runBuffer(SQUARE, { distance, units: "kilometers" });
@@ -229,4 +238,64 @@ describe("buffer tool validation order (client engine)", () => {
       `expected an unknown-unit error, got ${JSON.stringify(logs)}`,
     );
   });
+});
+
+describe("buffer empty-geometry detection (client engine)", () => {
+  // `nonEmptyBuffer` drops a geometry jsts emptied. Zero rings is the usual
+  // shape, but a single empty ring and a MultiPolygon of individually
+  // degenerate parts both have a non-zero `coordinates.length` while still
+  // being undrawable, so a plain length check would let them through.
+  for (const [label, coordinates] of [
+    ["zero rings", []],
+    ["one empty ring", [[]]],
+    ["several empty rings", [[], []]],
+    ["a multipolygon of empty parts", [[[]], [[]]]],
+  ] as const) {
+    it(`treats ${label} as empty`, () => {
+      assert.equal(hasPositions(coordinates), false);
+    });
+  }
+
+  for (const [label, coordinates] of [
+    [
+      "a polygon ring",
+      [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    ],
+    [
+      "a multipolygon part",
+      [
+        [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      ],
+    ],
+    [
+      "a ring alongside an empty one",
+      [
+        [],
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    ],
+  ] as const) {
+    it(`keeps ${label}`, () => {
+      assert.equal(hasPositions(coordinates), true);
+    });
+  }
 });

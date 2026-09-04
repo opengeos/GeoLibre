@@ -1,0 +1,25 @@
+{
+  "name": "error-buffer-hex-distance",
+  "tool": "buffer",
+  "description": "A hex string distance is rejected by both engines. Python's float() raises on it; the client must hold a string to the same decimal grammar, since Number('0x10') is 16 and would otherwise buffer by 16 where the sidecar errors.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": "0x10",
+    "units": "kilometers"
+  },
+  "expect": {
+    "error": true
+  }
+}
