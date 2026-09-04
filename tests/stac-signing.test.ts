@@ -87,3 +87,40 @@ test("a saved STAC layer receives a fresh token when it is restored", async () =
     globalThis.fetch = originalFetch;
   }
 });
+
+test("layers pointing at one asset share a single signing request", async () => {
+  const asset = "https://ai4edataeuwest.blob.core.windows.net/io-lulc/shared.tif";
+  const access = createStacAssetAccess(CATALOG, "io-lulc-annual-v02", asset);
+  assert.ok(access);
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  let release = (): void => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  globalThis.fetch = (async () => {
+    requests += 1;
+    await gate;
+    return new Response(
+      JSON.stringify({
+        href: `${asset}?sp=rl&sig=fresh-token`,
+        "msft:expiry": "2099-01-01T00:00:00Z",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }) as typeof fetch;
+  try {
+    // Project restore signs every STAC-backed layer at once, before any of
+    // them can populate the settled cache.
+    const hrefs = Promise.all([
+      readableStacLayerHref(layerWithAccess(access), `${asset}?sig=expired`),
+      readableStacLayerHref(layerWithAccess(access), `${asset}?sig=expired`),
+      readableStacLayerHref(layerWithAccess(access), `${asset}?sig=expired`),
+    ]);
+    release();
+    assert.deepEqual(await hrefs, Array(3).fill(`${asset}?sp=rl&sig=fresh-token`));
+    assert.equal(requests, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -1247,6 +1247,7 @@ function buildPanel(container: HTMLElement): () => void {
         targetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
         targetSelect.title = labels.chooseTarget;
         let adding = false;
+        let signingDownload = false;
 
         const syncAsset = (): void => {
           const [key, asset] = selected();
@@ -1266,6 +1267,9 @@ function buildPanel(container: HTMLElement): () => void {
           assetSelect.title = asset.href;
           download.title = asset.href;
           setDisabled(add, adding || !addable);
+          // A private asset is signed before it opens, so the button says so
+          // by going quiet rather than looking like a dead click.
+          setDisabled(download, signingDownload);
           add.title = addReason(item, key, asset);
         };
 
@@ -1296,12 +1300,19 @@ function buildPanel(container: HTMLElement): () => void {
             syncAsset();
           }
         });
-        download.addEventListener("click", () => {
+        download.addEventListener("click", async () => {
           const asset = selected()[1];
           if (!connection) return;
-          void readableHref(connection, item, asset.href).then((href) =>
-            appRef?.openExternalUrl?.(href),
-          );
+          signingDownload = true;
+          syncAsset();
+          try {
+            appRef?.openExternalUrl?.(await readableHref(connection, item, asset.href));
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : labels.addFailed, true);
+          } finally {
+            signingDownload = false;
+            syncAsset();
+          }
         });
         syncAsset();
         actions.append(assetSelect, targetSelect, add, download);

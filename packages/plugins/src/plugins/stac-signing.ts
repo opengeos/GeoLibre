@@ -15,6 +15,9 @@ export interface StacAssetAccess {
 }
 
 const signedHrefCache = new Map<string, { href: string; expiresAt: number }>();
+const pendingSignedHrefs = new Map<string, Promise<string>>();
+/** How many signed URLs are kept before the oldest ones are dropped. */
+const SIGNED_HREF_CACHE_LIMIT = 200;
 
 function catalogHost(catalogUrl: string): string | null {
   try {
@@ -55,10 +58,48 @@ export function createStacAssetAccess(
   return { catalogUrl, collectionId, href };
 }
 
-async function planetaryComputerSignedHref(href: string): Promise<string> {
+/**
+ * Signs one asset, sharing a request with any sign of the same asset that is
+ * already in flight. Restoring a project signs every STAC-backed layer at
+ * once, so layers that point at the same asset cost one round trip, not one
+ * each -- the settled cache below only dedupes once a request has returned.
+ */
+function planetaryComputerSignedHref(href: string): Promise<string> {
   const cached = signedHrefCache.get(href);
-  if (cached && cached.expiresAt - Date.now() > SIGNING_EXPIRY_BUFFER_MS) return cached.href;
+  if (cached && cached.expiresAt - Date.now() > SIGNING_EXPIRY_BUFFER_MS) {
+    return Promise.resolve(cached.href);
+  }
+  const inFlight = pendingSignedHrefs.get(href);
+  if (inFlight) return inFlight;
 
+  const request = requestSignedHref(href).finally(() => {
+    pendingSignedHrefs.delete(href);
+  });
+  pendingSignedHrefs.set(href, request);
+  return request;
+}
+
+/**
+ * Drops entries that can no longer be served before the cache is allowed to
+ * grow, so a long session that walks a whole catalog does not retain every
+ * signed URL it ever minted.
+ */
+function rememberSignedHref(href: string, signed: string, expiresAt: number): void {
+  if (signedHrefCache.size >= SIGNED_HREF_CACHE_LIMIT) {
+    const now = Date.now();
+    for (const [key, entry] of signedHrefCache) {
+      if (entry.expiresAt - now <= SIGNING_EXPIRY_BUFFER_MS) signedHrefCache.delete(key);
+    }
+    // Still full: Map iterates in insertion order, so this drops the oldest.
+    for (const key of signedHrefCache.keys()) {
+      if (signedHrefCache.size < SIGNED_HREF_CACHE_LIMIT) break;
+      signedHrefCache.delete(key);
+    }
+  }
+  signedHrefCache.set(href, { href: signed, expiresAt });
+}
+
+async function requestSignedHref(href: string): Promise<string> {
   const endpoint = new URL(PLANETARY_COMPUTER_SIGN_URL);
   endpoint.searchParams.set("href", href);
   const response = await fetch(endpoint);
@@ -76,7 +117,7 @@ async function planetaryComputerSignedHref(href: string): Promise<string> {
   ) {
     throw new Error("Planetary Computer returned a signed URL for a different asset");
   }
-  signedHrefCache.set(href, { href: data.href, expiresAt });
+  rememberSignedHref(href, data.href, expiresAt);
   return data.href;
 }
 
