@@ -729,7 +729,8 @@ def wmts_layer(
             which use ``{z}/{x}/{y}``).
         tile_size: Tile size in pixels.
         bounds: Optional ``[west, south, east, north]`` request bounds, in
-            WGS84.
+            WGS84. WMTS capabilities carry it as ``ows:WGS84BoundingBox``
+            (``EX_GeographicBoundingBox`` is a WMS element and is absent here).
         **style: Style overrides merged into the default layer style.
 
     Returns:

@@ -77,10 +77,11 @@ add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
   `service="wmts"`, `endpoint` is a full tile URL template. `bounds` is the
   layer's extent as `[west, south, east, north]`: a service layer has no
   geometry to derive it from, so without it "zoom to layer" has nowhere to go.
-  Read it from the service's `EX_GeographicBoundingBox`, which is always
-  lon/lat, and not from a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`, whose axis
-  order servers often get wrong. Passing anything other than four values is an
-  error rather than a silently dropped extent.
+  Read it from the capabilities document: `EX_GeographicBoundingBox` for WMS,
+  `ows:WGS84BoundingBox` for WMTS, which is where the WMS element is absent.
+  Both are already lon/lat, unlike a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`,
+  whose axis order servers often get wrong. Passing anything other than four
+  values is an error rather than a silently dropped extent.
 
 ### Editing
 

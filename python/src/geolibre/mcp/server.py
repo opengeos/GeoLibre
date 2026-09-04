@@ -574,7 +574,9 @@ def build_server(workspace: Workspace) -> MCPServer:
             bounds: The layer's extent as `[west, south, east, north]` in
                 WGS84. A service layer has no geometry to derive it from, so
                 without this "zoom to layer" cannot reach it. Read it from the
-                service's `EX_GeographicBoundingBox`.
+                capabilities document: `EX_GeographicBoundingBox` for WMS,
+                `ows:WGS84BoundingBox` for WMTS. Both are already lon/lat,
+                unlike a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`.
             index: Draw-order position; appended on top when omitted.
 
         Returns:
