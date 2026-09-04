@@ -6,7 +6,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
-import { STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -320,6 +320,12 @@ export function syncRasterLayersToStoreWithOptions(
       // wipe them.
       const preserved: Record<string, unknown> = {};
       for (const key of GEOLIBRE_OWNED_METADATA_KEYS) {
+        if (key === STAC_ASSET_ACCESS_METADATA_KEY) {
+          const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+          const access = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+          if (access) preserved[key] = access;
+          continue;
+        }
         if (existing.metadata[key] !== undefined) {
           preserved[key] = existing.metadata[key];
         }

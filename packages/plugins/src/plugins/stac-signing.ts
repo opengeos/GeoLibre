@@ -57,7 +57,10 @@ export function createStacAssetAccess(
 }
 
 /** Reads and validates persisted STAC asset access metadata from a layer. */
-export function stacAssetAccessFromLayer(layer: GeoLibreLayer): StacAssetAccess | null {
+export function stacAssetAccessFromLayer(
+  layer: GeoLibreLayer,
+  currentHref?: string,
+): StacAssetAccess | null {
   const value = layer.metadata[STAC_ASSET_ACCESS_METADATA_KEY];
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Partial<StacAssetAccess>;
@@ -68,7 +71,27 @@ export function stacAssetAccessFromLayer(layer: GeoLibreLayer): StacAssetAccess 
   ) {
     return null;
   }
-  return createStacAssetAccess(candidate.catalogUrl, candidate.collectionId, candidate.href);
+  const access = createStacAssetAccess(
+    candidate.catalogUrl,
+    candidate.collectionId,
+    candidate.href,
+  );
+  if (!access || (currentHref && !sameAssetHref(currentHref, access.href))) return null;
+  return access;
+}
+
+function sameAssetHref(left: string, right: string): boolean {
+  try {
+    const leftUrl = new URL(left);
+    const rightUrl = new URL(right);
+    return (
+      leftUrl.protocol === rightUrl.protocol &&
+      leftUrl.host.toLowerCase() === rightUrl.host.toLowerCase() &&
+      leftUrl.pathname === rightUrl.pathname
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -90,5 +113,5 @@ export async function readableStacAssetHref(
 
 /** Re-signs a saved STAC-backed layer from its retained unsigned asset URL. */
 export function readableStacLayerHref(layer: GeoLibreLayer, fallbackHref: string): Promise<string> {
-  return readableStacAssetHref(stacAssetAccessFromLayer(layer), fallbackHref);
+  return readableStacAssetHref(stacAssetAccessFromLayer(layer, fallbackHref), fallbackHref);
 }

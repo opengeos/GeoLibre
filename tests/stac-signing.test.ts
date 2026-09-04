@@ -40,6 +40,19 @@ test("third-party catalogs cannot send Azure asset details to the MPC signer", (
   assert.equal(stacAssetAccessFromLayer(layerWithAccess({ collectionId: "private" })), null);
 });
 
+test("access metadata is rejected when a layer points at a different asset", () => {
+  const access = createStacAssetAccess(CATALOG, "io-lulc-annual-v02", ASSET);
+  assert.ok(access);
+  assert.equal(
+    stacAssetAccessFromLayer(
+      layerWithAccess(access),
+      "https://ai4edataeuwest.blob.core.windows.net/io-lulc/different.tif?sig=old",
+    ),
+    null,
+  );
+  assert.deepEqual(stacAssetAccessFromLayer(layerWithAccess(access), `${ASSET}?sig=old`), access);
+});
+
 test("a saved STAC layer receives a fresh token when it is restored", async () => {
   const access = createStacAssetAccess(CATALOG, "io-lulc-annual-v02", ASSET);
   assert.ok(access);

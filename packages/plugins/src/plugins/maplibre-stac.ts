@@ -43,7 +43,7 @@ import {
 } from "./stac-api";
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
-import { addVectorLayerFromUrl } from "./maplibre-vector";
+import { addVectorLayersFromUrl } from "./maplibre-vector";
 import { addZarrRasterLayer } from "./maplibre-components";
 import {
   icechunkLayerUrl,
@@ -752,15 +752,11 @@ async function visualizeAsset(
       if (!appRef) throw new Error(labels.addFailed);
       const access = assetAccess(connection, item, asset.href);
       const href = await readableStacAssetHref(access, asset.href);
-      const previousIds = new Set(useAppStore.getState().layers.map((layer) => layer.id));
-      if (!(await addVectorLayerFromUrl(appRef, href, { name }))) {
+      const layerIds = await addVectorLayersFromUrl(appRef, href, { name });
+      if (!layerIds?.length) {
         throw new Error(labels.addFailed);
       }
-      for (const layer of useAppStore.getState().layers) {
-        if (!previousIds.has(layer.id) && layer.source.url === href) {
-          rememberAssetAccess(layer.id, access);
-        }
-      }
+      for (const layerId of layerIds) rememberAssetAccess(layerId, access);
       return;
     }
     case "zarr": {

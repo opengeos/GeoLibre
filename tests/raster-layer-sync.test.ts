@@ -357,24 +357,44 @@ describe("syncRasterLayersToStore", () => {
   });
 
   it("keeps STAC access metadata across repeated syncs", () => {
-    syncRasterLayersToStore(fakeControl([rasterInfo()]).control);
     const access = {
       catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
       collectionId: "private-cog",
       href: "https://example.blob.core.windows.net/private-cog/data.tif",
     };
+    const signedSource = {
+      kind: "url" as const,
+      url: `${access.href}?sp=r&sig=old`,
+    };
+    syncRasterLayersToStore(fakeControl([rasterInfo({ source: signedSource })]).control);
     const layer = useAppStore.getState().layers[0];
     useAppStore.getState().updateLayer(layer.id, {
       metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
     });
 
     syncRasterLayersToStore(
-      fakeControl([rasterInfo({ state: rasterState({ opacity: 0.4 }) })]).control,
+      fakeControl([rasterInfo({ source: signedSource, state: rasterState({ opacity: 0.4 }) })])
+        .control,
     );
 
     assert.deepEqual(
       useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
       access,
+    );
+
+    syncRasterLayersToStore(
+      fakeControl([
+        rasterInfo({
+          source: {
+            kind: "url",
+            url: "https://example.blob.core.windows.net/private-cog/different.tif",
+          },
+        }),
+      ]).control,
+    );
+    assert.equal(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      undefined,
     );
   });
 

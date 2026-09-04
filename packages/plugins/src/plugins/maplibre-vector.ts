@@ -717,17 +717,37 @@ async function ensureVectorControl(app: GeoLibreAppAPI): Promise<VectorControl |
  * @param app - The GeoLibre app API.
  * @param url - An http(s) URL to a vector dataset.
  * @param options - Display name, fitBounds, explicit format, ...
- * @returns True when the layer was added.
+ * @returns The created layer ids, or null when the control is unavailable.
+ */
+export async function addVectorLayersFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: VectorLayerOptions = {},
+): Promise<string[] | null> {
+  const control = await ensureVectorControl(app);
+  if (!control) return null;
+  const previousIds = new Set(control.getLayers().map((layer) => layer.id));
+  await control.addData(url, options);
+  return control
+    .getLayers()
+    .filter((layer) => !previousIds.has(layer.id))
+    .map((layer) => layer.id);
+}
+
+/**
+ * Loads a remote vector dataset and reports whether the control was available.
+ *
+ * @param app - The GeoLibre app API.
+ * @param url - An http(s) URL to a vector dataset.
+ * @param options - Display name, fitBounds, explicit format, ...
+ * @returns True when the control accepted the layer.
  */
 export async function addVectorLayerFromUrl(
   app: GeoLibreAppAPI,
   url: string,
   options: VectorLayerOptions = {},
 ): Promise<boolean> {
-  const control = await ensureVectorControl(app);
-  if (!control) return false;
-  await control.addData(url, options);
-  return true;
+  return (await addVectorLayersFromUrl(app, url, options)) !== null;
 }
 
 function getVectorControlClass(): Promise<VectorControlConstructor> {

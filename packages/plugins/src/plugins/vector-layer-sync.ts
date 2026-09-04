@@ -14,7 +14,7 @@ import {
 } from "@geolibre/core";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
-import { STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
 
@@ -263,11 +263,11 @@ export function syncVectorLayersToStore(
         known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
       const visible = visibleIsEcho ? existing.visible : layer.visible;
       const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
-      const stacAssetAccess = existing.metadata[STAC_ASSET_ACCESS_METADATA_KEY];
-      const metadata =
-        stacAssetAccess === undefined
-          ? layer.metadata
-          : { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess };
+      const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+      const stacAssetAccess = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+      const metadata = stacAssetAccess
+        ? { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess }
+        : layer.metadata;
 
       if (
         existing.type !== layer.type ||

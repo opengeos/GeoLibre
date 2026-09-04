@@ -440,22 +440,43 @@ describe("syncVectorLayersToStore", () => {
   });
 
   it("keeps STAC access metadata across repeated syncs", () => {
-    syncVectorLayersToStore(fakeControl([vectorInfo()]).control);
     const access = {
       catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
       collectionId: "private-parquet",
       href: "https://example.blob.core.windows.net/private-parquet/data.parquet",
     };
+    const signedSource = {
+      kind: "url" as const,
+      url: `${access.href}?sp=r&sig=old`,
+    };
+    syncVectorLayersToStore(fakeControl([vectorInfo({ source: signedSource })]).control);
     const layer = useAppStore.getState().layers[0];
     useAppStore.getState().updateLayer(layer.id, {
       metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
     });
 
-    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.4 })]).control);
+    syncVectorLayersToStore(
+      fakeControl([vectorInfo({ source: signedSource, opacity: 0.4 })]).control,
+    );
 
     assert.deepEqual(
       useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
       access,
+    );
+
+    syncVectorLayersToStore(
+      fakeControl([
+        vectorInfo({
+          source: {
+            kind: "url",
+            url: "https://example.blob.core.windows.net/private-parquet/different.parquet",
+          },
+        }),
+      ]).control,
+    );
+    assert.equal(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      undefined,
     );
   });
 
