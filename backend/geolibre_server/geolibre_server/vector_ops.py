@@ -179,9 +179,9 @@ def _buffer(
     kept = projected[~(projected.geometry.isna() | projected.geometry.is_empty)]
     messages = [f"Buffered {len(kept)} feature(s) by {distance} {units} ({side})"]
     if len(kept) < len(projected):
-        messages.append(
-            f"Dropped {len(projected) - len(kept)} feature(s) that the inward buffer left empty"
-        )
+        # Deliberately not "the inward buffer": an outward buffer can also drop a
+        # feature when the input geometry is already empty or invalid.
+        messages.append(f"Dropped {len(projected) - len(kept)} feature(s) the buffer left empty")
     return _to_feature_collection(kept), messages
 
 

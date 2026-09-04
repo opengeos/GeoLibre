@@ -305,6 +305,14 @@ export const bufferTool: ProcessingAlgorithm = {
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
+    const rawDistance = ctx.parameters.distance;
+    if (rawDistance != null && !Number.isFinite(Number(rawDistance))) {
+      // `numberParam` folds a non-finite or unparseable value into its fallback,
+      // which would hand a programmatic caller a silent 1-unit buffer where the
+      // Python engine raises. Check the raw parameter so both engines reject it.
+      ctx.log("Error: buffer distance must be a finite number");
+      return;
+    }
     const distance = numberParam(ctx, "distance", 1);
     if (distance < 0) {
       // The dialog's `min: 0` binds the form, not a programmatic caller (Model
@@ -330,13 +338,24 @@ export const bufferTool: ProcessingAlgorithm = {
     let dropped = 0;
     for (const feature of fc.features) {
       if (!feature?.geometry) continue;
-      const buffered = bufferOneFeature(feature, radius, side, units);
+      let buffered: Feature | null = null;
+      try {
+        buffered = bufferOneFeature(feature, radius, side, units);
+      } catch {
+        // jsts can throw on a degenerate or self-intersecting geometry — the
+        // erosion step in `inside`/`both` is a new way to produce one. Count it
+        // as a drop rather than let it abort the whole batch and discard every
+        // feature already buffered.
+        buffered = null;
+      }
       if (buffered) features.push(buffered);
       else dropped += 1;
     }
     ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units} (${side})`);
     if (dropped > 0) {
-      ctx.log(`Dropped ${dropped} feature(s) that the inward buffer left empty`);
+      // Deliberately not "the inward buffer": an outward buffer can also drop a
+      // feature when the input geometry is degenerate enough to fail.
+      ctx.log(`Dropped ${dropped} feature(s) the buffer left empty`);
     }
     ctx.addResultLayer?.("Buffer", featureCollection(features));
   },
