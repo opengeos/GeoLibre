@@ -131,6 +131,24 @@ def test_wmts_layer_bounds_are_optional():
     assert "bounds" not in project.wmts_layer("x", "https://e/{z}/{y}/{x}.png")["source"]
 
 
+@pytest.mark.parametrize("bad", [[], [1, 2], [1, 2, 3, 4, 5]])
+def test_ogc_layer_bounds_must_have_four_values(bad):
+    # A short list would reach the app as an extent it cannot use, and an empty
+    # one would be dropped without a word, so both are refused here.
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wms_layer("x", "https://e/wms", "a", bounds=bad)
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=bad)
+
+
+def test_ogc_layer_bounds_are_coerced_to_floats():
+    # Ints compare equal to floats, so assert the stored types: what reaches
+    # the project file has to be JSON numbers the app reads as coordinates.
+    stored = project.wms_layer("x", "https://e/wms", "a", bounds=[8, 38, 9, 41])["source"]["bounds"]
+    assert stored == [8.0, 38.0, 9.0, 41.0]
+    assert all(isinstance(v, float) for v in stored)
+
+
 def test_wms_layer_version_1_3_0_uses_crs():
     # A 1.3.0-only server (e.g. the IGN Géoplateforme raster endpoint) rejects
     # a 1.1.1 GetMap, so the version must be honored and SRS renamed to CRS.

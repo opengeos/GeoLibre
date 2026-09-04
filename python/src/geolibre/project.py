@@ -618,10 +618,13 @@ def wms_layer(
             Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
             only one version. EPSG:3857 keeps its axis order in both, so the
             BBOX template is unchanged. None falls back to ``"1.1.1"``.
-        bounds: Optional ``[west, south, east, north]`` request bounds. Take
-            them from the service's ``EX_GeographicBoundingBox``, which is
-            always lon/lat, rather than a 1.3.0 ``BoundingBox CRS="EPSG:4326"``,
-            whose axis order servers often get wrong.
+        bounds: Optional ``[west, south, east, north]`` request bounds, in
+            WGS84. Take them from the service's ``EX_GeographicBoundingBox``,
+            which is always lon/lat, rather than a 1.3.0 ``BoundingBox
+            CRS="EPSG:4326"``, whose axis order servers often get wrong.
+
+    Raises:
+        ValueError: If ``bounds`` is given without exactly four values.
         **style: Style overrides merged into the default layer style.
 
     Returns:
@@ -656,8 +659,12 @@ def wms_layer(
         "transparent": transparent,
         "version": wms_version,
     }
-    if bounds:
-        source["bounds"] = bounds
+    if bounds is not None:
+        if len(bounds) != 4:
+            raise ValueError(
+                "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
+            )
+        source["bounds"] = [float(v) for v in bounds]
     layer["source"] = source
     layer["metadata"] = {"service": "wms"}
     return layer
@@ -679,11 +686,15 @@ def wmts_layer(
             before column — unlike XYZ templates in ``tile_layer``/``add_tile_layer``,
             which use ``{z}/{x}/{y}``).
         tile_size: Tile size in pixels.
-        bounds: Optional ``[west, south, east, north]`` request bounds.
+        bounds: Optional ``[west, south, east, north]`` request bounds, in
+            WGS84.
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``bounds`` is given without exactly four values.
     """
     layer = _layer_base(name, "wmts", **style)
     source: dict[str, Any] = {
@@ -692,8 +703,12 @@ def wmts_layer(
         "tileSize": tile_size,
         "url": url,
     }
-    if bounds:
-        source["bounds"] = bounds
+    if bounds is not None:
+        if len(bounds) != 4:
+            raise ValueError(
+                "bounds must be a [west, south, east, north] sequence with exactly 4 elements"
+            )
+        source["bounds"] = [float(v) for v in bounds]
     layer["source"] = source
     layer["metadata"] = {"service": "wmts"}
     return layer

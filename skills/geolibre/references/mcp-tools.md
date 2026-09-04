@@ -79,7 +79,8 @@ add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
   geometry to derive it from, so without it "zoom to layer" has nowhere to go.
   Read it from the service's `EX_GeographicBoundingBox`, which is always
   lon/lat, and not from a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`, whose axis
-  order servers often get wrong.
+  order servers often get wrong. Passing anything other than four values is an
+  error rather than a silently dropped extent.
 
 ### Editing
 
