@@ -597,6 +597,7 @@ def wms_layer(
     transparent: bool = True,
     tile_size: int = 256,
     version: str | None = "1.1.1",
+    bounds: list[float] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -617,6 +618,10 @@ def wms_layer(
             Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
             only one version. EPSG:3857 keeps its axis order in both, so the
             BBOX template is unchanged. None falls back to ``"1.1.1"``.
+        bounds: Optional ``[west, south, east, north]`` request bounds. Take
+            them from the service's ``EX_GeographicBoundingBox``, which is
+            always lon/lat, rather than a 1.3.0 ``BoundingBox CRS="EPSG:4326"``,
+            whose axis order servers often get wrong.
         **style: Style overrides merged into the default layer style.
 
     Returns:
@@ -640,7 +645,7 @@ def wms_layer(
         ],
     )
     layer = _layer_base(name, "wms", **style)
-    layer["source"] = {
+    source: dict[str, Any] = {
         "type": "raster",
         "tiles": [tile_url],
         "tileSize": tile_size,
@@ -651,6 +656,9 @@ def wms_layer(
         "transparent": transparent,
         "version": wms_version,
     }
+    if bounds:
+        source["bounds"] = bounds
+    layer["source"] = source
     layer["metadata"] = {"service": "wms"}
     return layer
 
@@ -660,6 +668,7 @@ def wmts_layer(
     url: str,
     *,
     tile_size: int = 256,
+    bounds: list[float] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMTS layer from a tile URL template.
@@ -670,18 +679,22 @@ def wmts_layer(
             before column — unlike XYZ templates in ``tile_layer``/``add_tile_layer``,
             which use ``{z}/{x}/{y}``).
         tile_size: Tile size in pixels.
+        bounds: Optional ``[west, south, east, north]`` request bounds.
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
     """
     layer = _layer_base(name, "wmts", **style)
-    layer["source"] = {
+    source: dict[str, Any] = {
         "type": "raster",
         "tiles": [url],
         "tileSize": tile_size,
         "url": url,
     }
+    if bounds:
+        source["bounds"] = bounds
+    layer["source"] = source
     layer["metadata"] = {"service": "wmts"}
     return layer
 

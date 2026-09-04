@@ -117,6 +117,20 @@ def test_wms_layer_shape_and_url():
     assert "WIDTH=256" in tile
 
 
+def test_wms_layer_bounds_are_optional():
+    # A service layer carries no geometry, so without bounds the app has
+    # nothing to zoom to; omitting them must leave the source as it was.
+    layer = project.wms_layer("x", "https://e/wms", "a", bounds=[8.14, 38.85, 9.83, 41.31])
+    assert layer["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+    assert "bounds" not in project.wms_layer("x", "https://e/wms", "a")["source"]
+
+
+def test_wmts_layer_bounds_are_optional():
+    layer = project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=[-10, 35, 5, 45])
+    assert layer["source"]["bounds"] == [-10, 35, 5, 45]
+    assert "bounds" not in project.wmts_layer("x", "https://e/{z}/{y}/{x}.png")["source"]
+
+
 def test_wms_layer_version_1_3_0_uses_crs():
     # A 1.3.0-only server (e.g. the IGN Géoplateforme raster endpoint) rejects
     # a 1.1.1 GetMap, so the version must be honored and SRS renamed to CRS.

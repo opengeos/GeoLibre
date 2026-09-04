@@ -581,6 +581,22 @@ def test_add_ogc_layer_requires_layers_for_wms(server, project_path):
     )
 
 
+def test_add_ogc_layer_passes_bounds_through(server, project_path, tmp_path):
+    """Without bounds a WMS layer is unreachable by zoom-to-layer."""
+    call(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="WMS",
+        service="wms",
+        endpoint="https://example.com/wms",
+        layers="topo",
+        bounds=[8.14, 38.85, 9.83, 41.31],
+    )
+    written = json.loads((tmp_path / project_path).read_text(encoding="utf-8"))
+    assert written["layers"][-1]["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+
+
 def test_add_ogc_layer_rejects_an_unknown_service(server, project_path):
     assert "wms" in call_error(
         server,
