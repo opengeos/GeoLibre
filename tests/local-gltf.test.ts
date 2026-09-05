@@ -59,6 +59,22 @@ test("rejects an external uri nested in a texture extension", () => {
     "model/gltf+json",
   );
 });
+test("validates deeply nested assets without overflowing the stack", () => {
+  const deep: { scenes: unknown } = { scenes: [] };
+  let node: unknown[] = deep.scenes as unknown[];
+  for (let i = 0; i < 5000; i += 1) {
+    const child: unknown[] = [];
+    node.push(child);
+    node = child;
+  }
+  node.push({ uri: "https://example.com/buried.bin" });
+  assert.throws(
+    () => localGltfMime(encode({ asset: { version: "2.0" }, ...deep })),
+    /externalResources/,
+  );
+  node.pop();
+  assert.equal(localGltfMime(encode({ asset: { version: "2.0" }, ...deep })), "model/gltf+json");
+});
 test("rejects a model past the inline embedding cap", async () => {
   await assert.rejects(embedLocalGltf(new ArrayBuffer(MAX_LOCAL_GLTF_BYTES + 1)), /modelTooLarge/);
 });

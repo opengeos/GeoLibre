@@ -139,8 +139,18 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const handleModelSample = (id: string) => {
     const sample = MODEL_SAMPLES.find((item) => item.id === id);
     if (!sample) {
+      // "Custom model" drops the whole placement the previous sample filled
+      // in, not just its URL: its coordinates and transform describe that
+      // model, not whatever the user is about to supply. Scale goes back to
+      // the neutral default rather than the example's magnification.
+      const [lng, lat] = deckVizDef?.example.scenegraphLocation ?? ["", ""];
       setDeckVizModelUrl("");
       setModelFileName("");
+      setDeckVizModelLng(String(lng));
+      setDeckVizModelLat(String(lat));
+      setDeckVizModelScale(String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale));
+      setDeckVizModelBearing("0");
+      setDeckVizModelAltitude("0");
       return;
     }
     setDeckVizModelUrl(sample.scenegraph.modelUrl);

@@ -39,14 +39,25 @@ export function localGltfMime(data: ArrayBuffer): string {
  * top-level `buffers`/`images` entries: texture extensions (KHR_texture_basisu,
  * MSFT_texture_dds) and vendor extensions carry their own. `extras` is
  * free-form application data, so it is skipped rather than validated.
+ *
+ * The walk keeps its own stack: a recursive one overflows on nesting that
+ * `JSON.parse` itself accepts, turning a readable file into a generic "invalid
+ * model" error.
  */
-function hasExternalUri(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(hasExternalUri);
-  if (!value || typeof value !== "object") return false;
-  for (const [key, entry] of Object.entries(value)) {
-    if (key === "extras") continue;
-    if (key === "uri" && typeof entry === "string" && !/^data:/i.test(entry)) return true;
-    if (hasExternalUri(entry)) return true;
+function hasExternalUri(root: unknown): boolean {
+  const pending: unknown[] = [root];
+  while (pending.length) {
+    const value = pending.pop();
+    if (Array.isArray(value)) {
+      for (const entry of value) pending.push(entry);
+      continue;
+    }
+    if (!value || typeof value !== "object") continue;
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "extras") continue;
+      if (key === "uri" && typeof entry === "string" && !/^data:/i.test(entry)) return true;
+      pending.push(entry);
+    }
   }
   return false;
 }
