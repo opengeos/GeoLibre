@@ -2726,7 +2726,6 @@
       "renderingEngine": "रेंडरिंग इंजन",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "3D ग्लोब पर उपलब्ध नहीं है। दृश्य → रेंडरिंग इंजन से MapLibre 2D पर वापस जाएँ।",
       "viewInGoogleMaps": "Google Maps में देखें",
       "viewInGoogleEarth": "Google Earth में देखें",
       "zoomIn": "ज़ूम इन",

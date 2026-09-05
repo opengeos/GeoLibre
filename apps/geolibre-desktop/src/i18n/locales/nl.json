@@ -2726,7 +2726,6 @@
       "renderingEngine": "Renderengine",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "Niet beschikbaar op de 3D-globe. Schakel via Beeld → Renderengine terug naar MapLibre 2D.",
       "viewInGoogleMaps": "Bekijken in Google Maps",
       "viewInGoogleEarth": "Bekijken in Google Earth",
       "zoomIn": "Inzoomen",

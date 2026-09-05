@@ -2679,7 +2679,6 @@
       "renderingEngine": "เอนจินการแสดงผล",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "ใช้ไม่ได้บนลูกโลก 3 มิติ กลับไปใช้ MapLibre 2D ที่ มุมมอง → เอนจินการแสดงผล",
       "viewInGoogleMaps": "ดูใน Google Maps",
       "viewInGoogleEarth": "ดูใน Google Earth",
       "zoomIn": "ซูมเข้า",

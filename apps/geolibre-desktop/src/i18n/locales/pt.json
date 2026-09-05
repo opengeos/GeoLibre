@@ -2726,7 +2726,6 @@
       "renderingEngine": "Motor de renderização",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "Indisponível no globo 3D. Volte para o MapLibre 2D em Exibir → Motor de renderização.",
       "viewInGoogleMaps": "Ver no Google Maps",
       "viewInGoogleEarth": "Ver no Google Earth",
       "zoomIn": "Ampliar",

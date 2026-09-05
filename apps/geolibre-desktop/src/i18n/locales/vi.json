@@ -2679,7 +2679,6 @@
       "renderingEngine": "Bộ kết xuất",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "Không khả dụng trên quả địa cầu 3D. Hãy quay lại MapLibre 2D qua Xem → Bộ kết xuất.",
       "viewInGoogleMaps": "Xem trên Google Maps",
       "viewInGoogleEarth": "Xem trong Google Earth",
       "zoomIn": "Phóng to",

@@ -2679,7 +2679,6 @@
       "renderingEngine": "Mesin render",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "Tidak tersedia pada bola dunia 3D. Kembali ke MapLibre 2D melalui Tampilan → Mesin render.",
       "viewInGoogleMaps": "Lihat di Google Maps",
       "viewInGoogleEarth": "Lihat di Google Earth",
       "zoomIn": "Perbesar",

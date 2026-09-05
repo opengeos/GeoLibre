@@ -2726,7 +2726,6 @@
       "renderingEngine": "موتور ترسیم",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "روی کرهٔ سه‌بعدی در دسترس نیست. از نما ← موتور ترسیم به MapLibre 2D بازگردید.",
       "viewInGoogleMaps": "دیدن در Google Maps",
       "viewInGoogleEarth": "دیدن در Google Earth",
       "zoomIn": "بزرگ‌نمایی",

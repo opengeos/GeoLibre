@@ -2679,7 +2679,6 @@
       "renderingEngine": "렌더링 엔진",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "3D 지구본에서는 사용할 수 없습니다. 보기 → 렌더링 엔진에서 MapLibre 2D로 되돌리세요.",
       "viewInGoogleMaps": "Google 지도에서 보기",
       "viewInGoogleEarth": "Google Earth에서 보기",
       "zoomIn": "확대",

@@ -2726,7 +2726,6 @@
       "renderingEngine": "რენდერინგის ძრავა",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "3D გლობუსზე მიუწვდომელია. დაბრუნდით MapLibre 2D-ზე ხედი → რენდერინგის ძრავა-დან.",
       "viewInGoogleMaps": "ნახვა Google Maps-ში",
       "viewInGoogleEarth": "ნახვა Google Earth-ში",
       "zoomIn": "მიახლოება",

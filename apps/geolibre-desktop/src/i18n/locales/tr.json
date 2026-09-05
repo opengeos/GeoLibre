@@ -2726,7 +2726,6 @@
       "renderingEngine": "Çizim motoru",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "3D kürede kullanılamaz. Görünüm → Çizim motoru üzerinden MapLibre 2D'ye geri dönün.",
       "viewInGoogleMaps": "Google Haritalar'da görüntüle",
       "viewInGoogleEarth": "Google Earth'te görüntüle",
       "zoomIn": "Yakınlaştır",

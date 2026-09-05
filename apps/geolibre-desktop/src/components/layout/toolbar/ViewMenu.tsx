@@ -94,8 +94,6 @@ interface ViewMenuProps {
  * camera's rotation/tilt. Hidden on narrow screens (via
  * `chrome.secondaryButtonClass`) so the menu bar stays one row.
  */
-const CESIUM_DENIED_ID = "view-menu-cesium-denied";
-
 export function ViewMenu({
   chrome,
   history,
@@ -162,16 +160,6 @@ export function ViewMenu({
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
   const showExternal = showGoogleMaps || showGoogleEarth;
-  // A disabled DropdownMenuItem is `pointer-events-none`, so a native `title`
-  // can never be hovered — the reason has to be a rendered line the items point
-  // at (the CapabilityNotice convention). One line at the menu's foot serves
-  // all of them, since they are disabled by the same thing (#2217 review).
-  // Only when one of them is actually on screen: a profile that hid them all
-  // leaves the menu showing Rendering engine alone, and `aria-describedby`
-  // must never name an id that is not mounted.
-  const showMapLibreOnlyNote =
-    noMapLibreMap && (showZoom || showNavigation || showReset || showSetView || showExternal);
-  const mapLibreOnlyNote = showMapLibreOnlyNote ? CESIUM_DENIED_ID : undefined;
   const paneCount = mapLayout.rows * mapLayout.cols;
   const gridKey = `${mapLayout.rows}x${mapLayout.cols}`;
   // A custom profile could hide every item; render nothing rather than a menu
@@ -209,21 +197,13 @@ export function ViewMenu({
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
-          <DropdownMenuItem
-            disabled={atMaxZoom || noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
-            onSelect={onZoomIn}
-          >
+          <DropdownMenuItem disabled={atMaxZoom || noMapLibreMap} onSelect={onZoomIn}>
             <ZoomIn className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomIn")}</span>
           </DropdownMenuItem>
         )}
         {show("view.zoomOut") && (
-          <DropdownMenuItem
-            disabled={atMinZoom || noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
-            onSelect={onZoomOut}
-          >
+          <DropdownMenuItem disabled={atMinZoom || noMapLibreMap} onSelect={onZoomOut}>
             <ZoomOut className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomOut")}</span>
           </DropdownMenuItem>
@@ -232,7 +212,6 @@ export function ViewMenu({
         {show("view.previousView") && (
           <DropdownMenuItem
             disabled={!history.canGoBack || noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
             onSelect={history.goBack}
           >
             <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
@@ -242,7 +221,6 @@ export function ViewMenu({
         {show("view.nextView") && (
           <DropdownMenuItem
             disabled={!history.canGoForward || noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
             onSelect={history.goForward}
           >
             <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
@@ -254,7 +232,6 @@ export function ViewMenu({
           <DropdownMenuSub>
             <DropdownMenuSubTrigger
               disabled={allResetDisabled || noMapLibreMap}
-              aria-describedby={mapLibreOnlyNote}
               className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
@@ -291,11 +268,7 @@ export function ViewMenu({
         )}
         {(showZoom || showNavigation || showReset) && showSetView && <DropdownMenuSeparator />}
         {showSetView && (
-          <DropdownMenuItem
-            disabled={noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
-            onSelect={onSetView}
-          >
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onSetView}>
             <Crosshair className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.setView")}</span>
           </DropdownMenuItem>
@@ -388,32 +361,16 @@ export function ViewMenu({
           showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
-          <DropdownMenuItem
-            disabled={noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
-            onSelect={onViewInGoogleMaps}
-          >
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleMaps}>
             <MapIcon className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleMaps")}</span>
           </DropdownMenuItem>
         )}
         {showGoogleEarth && (
-          <DropdownMenuItem
-            disabled={noMapLibreMap}
-            aria-describedby={mapLibreOnlyNote}
-            onSelect={onViewInGoogleEarth}
-          >
+          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleEarth}>
             <Earth className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleEarth")}</span>
           </DropdownMenuItem>
-        )}
-        {showMapLibreOnlyNote && (
-          <DropdownMenuLabel
-            id={CESIUM_DENIED_ID}
-            className="pt-0 text-xs font-normal text-muted-foreground"
-          >
-            {t("toolbar.item.mapLibreOnly")}
-          </DropdownMenuLabel>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

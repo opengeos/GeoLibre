@@ -2679,7 +2679,6 @@
       "renderingEngine": "渲染引擎",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "在 3D 地球上不可用。请通过“视图 → 渲染引擎”切换回 MapLibre 2D。",
       "viewInGoogleMaps": "在 Google 地图中查看",
       "viewInGoogleEarth": "在 Google Earth 中查看",
       "zoomIn": "放大",

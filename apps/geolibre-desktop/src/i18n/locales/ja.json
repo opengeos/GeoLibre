@@ -2679,7 +2679,6 @@
       "renderingEngine": "レンダリングエンジン",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "3D地球儀では利用できません。「表示 → レンダリングエンジン」からMapLibre 2Dに戻してください。",
       "viewInGoogleMaps": "Google マップで表示",
       "viewInGoogleEarth": "Google Earth で表示",
       "zoomIn": "ズームイン",

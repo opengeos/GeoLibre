@@ -2913,7 +2913,6 @@
       "renderingEngine": "محرك العرض",
       "rendererMapLibre": "MapLibre 2D",
       "rendererCesium": "Cesium 3D",
-      "mapLibreOnly": "غير متاح على الكرة الأرضية ثلاثية الأبعاد. عُد إلى MapLibre 2D من العرض ← محرك العرض.",
       "viewInGoogleMaps": "عرض في Google Maps",
       "viewInGoogleEarth": "عرض في Google Earth",
       "zoomIn": "تكبير",

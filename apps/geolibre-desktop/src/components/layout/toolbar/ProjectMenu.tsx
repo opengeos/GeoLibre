@@ -50,7 +50,6 @@ const GALLERY_UNAVAILABLE_ID = "project-menu-gallery-unavailable";
 const SAVE_DENIED_ID = "project-menu-save-denied";
 const SHARE_DENIED_ID = "project-menu-share-denied";
 const EXPORT_DATA_DENIED_ID = "project-menu-export-data-denied";
-const CESIUM_DENIED_ID = "project-menu-cesium-denied";
 const EXPORT_IMAGE_DENIED_ID = "project-menu-export-image-denied";
 
 interface ProjectMenuProps {
@@ -423,9 +422,7 @@ export function ProjectMenu({
           <DropdownMenuItem
             onSelect={onOpenOfflineBasemap}
             disabled={cesiumPrimary || !exportDataCapability.granted}
-            // The globe reason wins when both apply: it is the one the user can
-            // act on from here, and only one id can be announced.
-            aria-describedby={cesiumPrimary ? CESIUM_DENIED_ID : exportDataDeniedBy}
+            aria-describedby={exportDataDeniedBy}
           >
             <HardDriveDownload className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineBasemapEllipsis")}
@@ -445,14 +442,6 @@ export function ProjectMenu({
             of them would be orphaned when only the other is on screen. */}
         {showExportDataActions && (
           <CapabilityNotice id={EXPORT_DATA_DENIED_ID} capability={exportDataCapability} />
-        )}
-        {show("project.offlineRegion") && cesiumPrimary && (
-          <DropdownMenuLabel
-            id={CESIUM_DENIED_ID}
-            className="pt-0 text-xs font-normal text-muted-foreground"
-          >
-            {t("toolbar.item.mapLibreOnly")}
-          </DropdownMenuLabel>
         )}
         {show("project.printLayout") && (
           <CapabilityNotice id={EXPORT_IMAGE_DENIED_ID} capability={exportImageCapability} />
