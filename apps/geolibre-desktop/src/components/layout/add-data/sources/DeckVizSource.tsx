@@ -13,7 +13,7 @@ import {
 } from "@geolibre/plugins";
 import { Button, ColorField, Input, Label, Select } from "@geolibre/ui";
 import { Columns3, FileUp, Globe2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   autoDetectFieldMapping,
@@ -75,6 +75,9 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const [deckVizModelUrl, setDeckVizModelUrl] = useState(startSg?.modelUrl ?? "");
   const [modelFileName, setModelFileName] = useState("");
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  // Identifies the current local-model read so a slow one cannot apply its
+  // model (or its error) to a form the user has since changed.
+  const modelLoadToken = useRef(0);
   const [deckVizModelMode, setDeckVizModelMode] = useState<"single" | "data">("single");
   const [deckVizModelScale, setDeckVizModelScale] = useState(
     String(startSg?.sizeScale ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale),
@@ -100,6 +103,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const showDeckVizDataLoader = !(isScenegraphKind && deckVizModelMode === "single");
 
   const handleDeckVizKindChange = (nextKind: string) => {
+    // Reading a model file is asynchronous and the layer-type select stays
+    // enabled meanwhile, so retire any pending read: its result belongs to the
+    // form the user just left.
+    modelLoadToken.current += 1;
     setDeckVizKind(nextKind);
     setModelFileName("");
     setDeckVizParsed(null);
@@ -150,6 +157,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   };
 
   const handleLocalModel = async () => {
+    const token = (modelLoadToken.current += 1);
     setIsLoadingModel(true);
     source.setError(null);
     try {
@@ -160,6 +168,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       });
       if (!selected?.data) return;
       const url = await embedLocalGltf(selected.data);
+      if (modelLoadToken.current !== token) return;
       const example = deckVizDef?.example.scenegraph;
       if (example && deckVizModelUrl === example.modelUrl) {
         // Loading is asynchronous; keep scale edits made while reading the file.
@@ -172,6 +181,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       setDeckVizModelUrl(url);
       setModelFileName(selected.path.split(/[/\\]/).pop() || selected.path);
     } catch (error) {
+      if (modelLoadToken.current !== token) return;
       const reason = error instanceof Error ? error.message : "";
       source.setError(
         reason === "modelTooLarge"
