@@ -911,7 +911,15 @@
       "cellSize": "Cell size",
       "lineWidth": "Line width",
       "extrusion": "3D extrusion",
-      "modelUrlPlaceholder": "https://example.com/model.glb"
+      "modelUrlPlaceholder": "https://example.com/model.glb",
+      "chooseModelFile": "Choose local model",
+      "sampleDataset": "Sample dataset",
+      "sampleCustom": "Custom model",
+      "sampleAirplane": "Airplane — San Francisco",
+      "sampleShanghai": "Shanghai — central city",
+      "modelFileHint": "Choose a GLB or self-contained glTF file. Local models are embedded in saved projects, increasing the project size.",
+      "modelExternalResources": "This model references separate files. Export it as a GLB with embedded textures and buffers, then try again.",
+      "modelFileError": "Could not read this model. Choose a valid glTF 2.0 or GLB file."
     },
     "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again."
   },

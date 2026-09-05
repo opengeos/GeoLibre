@@ -21,10 +21,23 @@ import {
   type DeckVizParsedInput,
   detectAndParseDeckVizInput,
 } from "../../../../lib/deck-viz-input";
+import { SHANGHAI_MODEL_SAMPLE, modelSampleBounds } from "../../../../lib/model-samples";
+import { embedLocalGltf } from "../../../../lib/local-gltf";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { DECK_VIZ_SIZE_WARN_BYTES } from "../constants";
 import { errorMessage, geoJsonToPointRows } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
+
+const airplaneSample = getDeckVizLayerDef("scenegraph")!.example;
+const MODEL_SAMPLES = [
+  {
+    id: "airplane",
+    labelKey: "addData.deckViz.sampleAirplane" as const,
+    location: airplaneSample.scenegraphLocation!,
+    scenegraph: airplaneSample.scenegraph!,
+  },
+  SHANGHAI_MODEL_SAMPLE,
+];
 
 interface DeckVizSourceProps {
   /**
@@ -59,6 +72,8 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const [closeAfterDeckVizAdd, setCloseAfterDeckVizAdd] = useState(true);
   // Scenegraph (glTF 3D model) layer-specific inputs.
   const [deckVizModelUrl, setDeckVizModelUrl] = useState(startSg?.modelUrl ?? "");
+  const [modelFileName, setModelFileName] = useState("");
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [deckVizModelMode, setDeckVizModelMode] = useState<"single" | "data">("single");
   const [deckVizModelScale, setDeckVizModelScale] = useState(
     String(startSg?.sizeScale ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale),
@@ -85,6 +100,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
 
   const handleDeckVizKindChange = (nextKind: string) => {
     setDeckVizKind(nextKind);
+    setModelFileName("");
     setDeckVizParsed(null);
     setDeckVizMapping({});
     setDeckVizStatus(null);
@@ -107,6 +123,55 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       const [lng, lat] = nextDef?.example.scenegraphLocation ?? ["", ""];
       setDeckVizModelLng(String(lng));
       setDeckVizModelLat(String(lat));
+    }
+  };
+
+  const handleModelSample = (id: string) => {
+    const sample = MODEL_SAMPLES.find((item) => item.id === id);
+    if (!sample) {
+      setDeckVizModelUrl("");
+      setModelFileName("");
+      return;
+    }
+    setDeckVizModelUrl(sample.scenegraph.modelUrl);
+    setModelFileName("");
+    setDeckVizModelLng(String(sample.location[0]));
+    setDeckVizModelLat(String(sample.location[1]));
+    setDeckVizModelScale(String(sample.scenegraph.sizeScale));
+    setDeckVizModelBearing(String(sample.scenegraph.bearing));
+    setDeckVizModelAltitude(String(sample.scenegraph.altitude));
+    setDeckVizModelMode("single");
+    setDeckVizParsed(null);
+    setDeckVizMapping({});
+    setDeckVizStatus(null);
+    source.setError(null);
+    source.setLayerName(t(sample.labelKey));
+  };
+
+  const handleLocalModel = async () => {
+    setIsLoadingModel(true);
+    source.setError(null);
+    try {
+      const selected = await openLocalDataFileWithFallback({
+        filters: [{ name: "glTF / GLB", extensions: ["glb", "gltf"] }],
+        accept: ".glb,.gltf",
+        readBinary: true,
+      });
+      if (!selected?.data) return;
+      const url = await embedLocalGltf(selected.data);
+      const example = deckVizDef?.example.scenegraph;
+      if (example && deckVizModelUrl === example.modelUrl &&
+          Number(deckVizModelScale) === example.sizeScale) {
+        setDeckVizModelScale(String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale));
+      }
+      setDeckVizModelUrl(url);
+      setModelFileName(selected.path.split(/[/\\]/).pop() || selected.path);
+    } catch (error) {
+      source.setError(t(error instanceof Error && error.message === "externalResources"
+        ? "addData.deckViz.modelExternalResources"
+        : "addData.deckViz.modelFileError"));
+    } finally {
+      setIsLoadingModel(false);
     }
   };
 
@@ -175,6 +240,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     style: DeckVizStyle;
     sourcePath: string;
     scenegraph?: DeckVizScenegraphConfig;
+    bounds?: [number, number, number, number];
   }) => {
     const def = getDeckVizLayerDef(deckVizKind);
     if (!def) throw new Error(t("addData.deckViz.errorUnknownType"));
@@ -220,10 +286,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       );
     }
 
-    const bounds =
+    const bounds = params.bounds ?? (
       parsed.format === "geojson"
         ? undefined
-        : (computeDeckVizBounds(parsed.rows ?? [], mapping) ?? undefined);
+        : (computeDeckVizBounds(parsed.rows ?? [], mapping) ?? undefined));
     const layer = createDeckVizStoreLayer({
       name: source.layerName.trim() || def.label,
       config: {
@@ -353,7 +419,8 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
         },
         mapping: { lng: "lng", lat: "lat" },
         style: deckVizStyle,
-        sourcePath: scenegraph?.modelUrl ?? "",
+        bounds: scenegraph ? modelSampleBounds(scenegraph, lng, lat) : undefined,
+        sourcePath: modelFileName || scenegraph?.modelUrl || "",
         scenegraph,
       });
       return;
@@ -373,6 +440,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const submitDisabled =
     source.isSubmitting ||
     isLoadingDeckViz ||
+    isLoadingModel ||
     (isScenegraphKind && !deckVizModelUrl.trim()) ||
     (!deckVizParsed && !(isScenegraphKind && deckVizModelMode === "single"));
 
@@ -415,13 +483,49 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
         {isScenegraphKind ? (
           <div className="space-y-3 rounded-md border border-border p-3">
             <div className="space-y-1.5">
+              <Label htmlFor="deckviz-model-sample">{t("addData.deckViz.sampleDataset")}</Label>
+              <Select id="deckviz-model-sample"
+                value={MODEL_SAMPLES.find((sample) => sample.scenegraph.modelUrl === deckVizModelUrl)?.id ?? ""}
+                disabled={isLoadingModel || source.isSubmitting}
+                onChange={(event) => handleModelSample(event.target.value)}>
+                <option value="">{t("addData.deckViz.sampleCustom")}</option>
+                {MODEL_SAMPLES.map((sample) => (
+                  <option key={sample.id} value={sample.id}>{t(sample.labelKey)}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="deckviz-model-url">{t("toolbar.scenegraph.modelUrl")}</Label>
               <Input
                 id="deckviz-model-url"
                 placeholder={t("addData.deckViz.modelUrlPlaceholder")}
-                value={deckVizModelUrl}
-                onChange={(event) => setDeckVizModelUrl(event.target.value)}
+                value={modelFileName ? "" : deckVizModelUrl}
+                disabled={isLoadingModel}
+                onChange={(event) => {
+                  const nextUrl = event.target.value;
+                  const example = deckVizDef?.example.scenegraph;
+                  // The airplane demo needs magnification. Do not carry its
+                  // 3000x scale into a user-supplied meter-scale GLB. Preserve
+                  // a scale the user has already edited deliberately.
+                  if (
+                    example &&
+                    deckVizModelUrl.trim() === example.modelUrl &&
+                    nextUrl.trim() !== example.modelUrl &&
+                    Number(deckVizModelScale) === example.sizeScale
+                  ) {
+                    setDeckVizModelScale(String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale));
+                  }
+                  setDeckVizModelUrl(nextUrl);
+                  setModelFileName("");
+                }}
               />
+              <Button type="button" variant="outline" disabled={isLoadingModel || source.isSubmitting}
+                onClick={() => void handleLocalModel()}>
+                <FileUp className="mr-2 size-4" />
+                {t("addData.deckViz.chooseModelFile")}
+              </Button>
+              {modelFileName ? <p className="break-all text-xs" role="status">{modelFileName}</p> : null}
+              <p className="text-xs text-muted-foreground">{t("addData.deckViz.modelFileHint")}</p>
             </div>
 
             <div className="space-y-1.5">
