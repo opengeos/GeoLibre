@@ -534,6 +534,16 @@ export function getRasterMainVisibility(layerId: string): boolean {
   return rasterControl?.getRaster(layerId)?.state.visible ?? true;
 }
 
+/** Live header state; saved project metadata is not evidence of a completed load. */
+export function getRasterLoadState(layerId: string) {
+  const raster = rasterControl?.getRaster(layerId);
+  return {
+    loading: !raster || raster.loading,
+    error: raster?.error?.message ?? null,
+    native: rasterControl ? rendersNativeMapLibreLayer(rasterControl.getEngine()) : false,
+  };
+}
+
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
   if (restorePanelExpandTimeout !== null) {
     window.clearTimeout(restorePanelExpandTimeout);

@@ -23,6 +23,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | Parameter    | Example                                                    | Description                                                                                                                           |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`        | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                                   |
+| `loading`    | `loading=true` | Exposes screenshot readiness on the document element. Accepts a bare flag, `true`, `1`, `yes`, or `on`; disabled by default. See below. |
 | `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, Help, and any quick filters the project's layers carry, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
@@ -83,6 +84,57 @@ preselecting a tool or applying any parameters. A known id the current engine
 doesn't expose (WASM in the browser, the Python sidecar on desktop) likewise
 isn't preselected. Tool ids match the Processing menu — the same ids used across
 the [Whitebox toolbox](processing.md).
+
+## Waiting for a screenshot
+
+Add `&loading=true` to a project link to enable a machine-readable readiness
+signal without adding a visible overlay to the screenshot:
+
+```text
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/national-land-cover-database-nlcd.geolibre.json&maponly&loading=true
+```
+
+The `<html>` element exposes three attributes:
+
+| Attribute | Value |
+| --- | --- |
+| `data-geolibre-load-state` | `loading`, `ready`, or `error` |
+| `data-geolibre-load-pending` | JSON array of pending layer names (or initialization work) |
+| `data-geolibre-load-errors` | JSON array of failure messages |
+
+`ready` means the project/data URL has loaded, visible layers have attached,
+their current-viewport tiles have loaded, the camera has stopped, and browser
+fonts have loaded. These checks must remain satisfied for 500 ms across animation
+frames. Changing the view or layers returns the signal to `loading`. Hidden
+layers (including hidden groups), fully transparent layers, and layers outside
+their zoom range do not block readiness. This does not download an entire
+dataset or tiles outside the viewport.
+
+The check supports native MapLibre layers and the raster control's COG layers,
+including its shared deck.gl renderer. Custom renderers without a readiness
+probe, such as Cesium, LiDAR, Zarr, splats, and video, report an explicit error
+instead of assuming they are ready. Map/tile failures also report `error`;
+loading that does not settle within 120 seconds reports a timeout. Check the
+errors before capturing; neither the embed API's `ready` event nor a browser's
+`networkidle` state establishes this rendering readiness.
+
+For example, with Playwright:
+
+```javascript
+await page.setViewportSize({ width: 1600, height: 1000 });
+await page.goto(projectLink + "&maponly&loading=true");
+await page.waitForFunction(
+  () => ["ready", "error"].includes(document.documentElement.dataset.geolibreLoadState),
+  undefined,
+  { timeout: 150_000 },
+);
+const result = await page.evaluate(() => ({
+  state: document.documentElement.dataset.geolibreLoadState,
+  errors: JSON.parse(document.documentElement.dataset.geolibreLoadErrors || "[]"),
+}));
+if (result.state !== "ready") throw new Error(result.errors.join("; "));
+await page.screenshot({ path: "map.png" });
+```
 
 ## Embedding in a page
 

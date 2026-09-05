@@ -3,12 +3,13 @@ import { describe, it } from "node:test";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../packages/plugins/src/types";
 import {
   ensureSharedDeckOverlay,
+  getSharedDeckLoadState,
   onSharedDeckDevice,
   setSharedDeckLayers,
 } from "../packages/plugins/src/plugins/shared-deck-overlay";
 
 // A deck layer stand-in. Only identity/label matter for these assertions.
-type FakeLayer = { id: string };
+type FakeLayer = { id: string; isLoaded?: boolean; parent?: FakeLayer };
 const layer = (id: string): FakeLayer => ({ id });
 const ids = (layers: unknown): string[] => (layers as FakeLayer[]).map((l) => l.id);
 
@@ -18,8 +19,14 @@ class FakeMapboxOverlay {
   static instances: FakeMapboxOverlay[] = [];
   props: { layers?: FakeLayer[] } = {};
   onDeviceInitialized?: (device: unknown) => void;
-  constructor(props: { layers?: FakeLayer[]; onDeviceInitialized?: (device: unknown) => void }) {
+  onError?: (error: Error, layer: FakeLayer) => void;
+  constructor(props: {
+    layers?: FakeLayer[];
+    onDeviceInitialized?: (device: unknown) => void;
+    onError?: (error: Error, layer: FakeLayer) => void;
+  }) {
     this.onDeviceInitialized = props.onDeviceInitialized;
+    this.onError = props.onError;
     FakeMapboxOverlay.instances.push(this);
   }
   setProps(props: { layers?: FakeLayer[] }): void {
@@ -135,6 +142,27 @@ describe("shared-deck-overlay", () => {
 
     unsubscribe();
     unsubscribeLate();
+  });
+
+  it("keeps failed subtiles distinct from a successfully loaded parent", (context) => {
+    context.mock.method(console, "error", () => {});
+    const raster = { id: "raster-readiness", isLoaded: false };
+    setSharedDeckLayers("raster", [raster] as never);
+    assert.equal(getSharedDeckLoadState(raster.id).loading, true);
+    raster.isLoaded = true;
+    assert.deepEqual(getSharedDeckLoadState(raster.id), {
+      found: true,
+      loading: false,
+      error: null,
+    });
+    FakeMapboxOverlay.instances.at(-1)?.onError?.(new Error("Tile failed"), {
+      id: "subtile",
+      parent: raster,
+    });
+    assert.equal(getSharedDeckLoadState(raster.id).error, "Tile failed");
+    setSharedDeckLayers("raster", []);
+    assert.equal(getSharedDeckLoadState(raster.id).found, false);
+    assert.equal(getSharedDeckLoadState(raster.id).error, null);
   });
 
   it("rebinds to a fresh overlay on a new map and re-applies live layers", async () => {

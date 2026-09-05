@@ -246,6 +246,7 @@ export {
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
+  getRasterLoadState,
   readRasterPixel,
   setLocalRasterFileReader,
   setLocalRasterPicker,
@@ -256,6 +257,7 @@ export {
   type NonTiledRasterRequest,
   type PickedLocalRaster,
 } from "./plugins/maplibre-raster";
+export { getSharedDeckLoadState } from "./plugins/shared-deck-overlay";
 export {
   RASTER_MAX_CLASSES,
   RASTER_MAX_STORED_CLASSES,

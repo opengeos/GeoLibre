@@ -76,6 +76,7 @@ import { openRightPanel } from "@geolibre/plugins";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useProjectHistory } from "../../hooks/useProjectHistory";
+import { useScreenshotReadiness } from "../../hooks/useScreenshotReadiness";
 import {
   isRasterFileName,
   isGeoLibreProjectFileName,
@@ -1354,6 +1355,14 @@ export function DesktopShell({
    */
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const cesiumPrimary = primaryRenderer === "cesium";
+  useScreenshotReadiness(
+    mapControllerRef,
+    mapReadyGeneration,
+    externalPluginsReady,
+    projectUrlLoadState?.status === "loading" || dataUrlLoadState?.status === "loading",
+    projectUrlLoadState?.error ?? dataUrlLoadState?.error ?? null,
+    cesiumPrimary,
+  );
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   // Switching to the globe destroys the MapLibre map, which would otherwise
