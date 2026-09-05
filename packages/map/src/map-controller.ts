@@ -68,6 +68,12 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
+import {
+  MAPLIBRE_CAPABILITIES,
+  type BuiltInMapControl,
+  type MapEngine,
+  type MapEngineCapabilities,
+} from "./map-engine";
 
 // Before any `Map` is constructed: re-expose `map.transform` for the packages
 // we do not control that still read it (deck.gl above all). See the module for
@@ -425,18 +431,9 @@ interface GeoLibreLayerLabelWindow extends Window {
   __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
 }
 
-export type BuiltInMapControl =
-  | "navigation"
-  | "fullscreen"
-  | "compass"
-  | "geolocate"
-  | "globe"
-  | "terrain"
-  | "scale"
-  | "attribution"
-  | "logo"
-  | "maptoolkit-logo"
-  | "layer-control";
+// Moved to ./map-engine so MapEngine can reference it without importing this
+// module; re-exported here because 80-odd files import it from map-controller.
+export type { BuiltInMapControl };
 
 export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<BuiltInMapControl, boolean> = {
   navigation: false,
@@ -469,7 +466,9 @@ export const DEFAULT_BUILT_IN_CONTROL_POSITIONS: Record<
   "layer-control": "top-right",
 };
 
-export class MapController {
+export class MapController implements MapEngine {
+  readonly kind = "maplibre" as const;
+  readonly capabilities: MapEngineCapabilities = MAPLIBRE_CAPABILITIES;
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
