@@ -5,8 +5,12 @@ export function localGltfMime(data: ArrayBuffer): string {
   let json: unknown;
   let mime: string;
   if (bytes.length >= 4 && view.getUint32(0, true) === 0x46546c67) {
-    if (bytes.length < 20 || view.getUint32(4, true) !== 2 ||
-        view.getUint32(8, true) !== bytes.length || view.getUint32(16, true) !== 0x4e4f534a) {
+    if (
+      bytes.length < 20 ||
+      view.getUint32(4, true) !== 2 ||
+      view.getUint32(8, true) !== bytes.length ||
+      view.getUint32(16, true) !== 0x4e4f534a
+    ) {
       throw new Error("invalid");
     }
     const jsonLength = view.getUint32(12, true);

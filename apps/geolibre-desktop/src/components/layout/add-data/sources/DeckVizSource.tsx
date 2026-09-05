@@ -160,16 +160,23 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       if (!selected?.data) return;
       const url = await embedLocalGltf(selected.data);
       const example = deckVizDef?.example.scenegraph;
-      if (example && deckVizModelUrl === example.modelUrl &&
-          Number(deckVizModelScale) === example.sizeScale) {
+      if (
+        example &&
+        deckVizModelUrl === example.modelUrl &&
+        Number(deckVizModelScale) === example.sizeScale
+      ) {
         setDeckVizModelScale(String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale));
       }
       setDeckVizModelUrl(url);
       setModelFileName(selected.path.split(/[/\\]/).pop() || selected.path);
     } catch (error) {
-      source.setError(t(error instanceof Error && error.message === "externalResources"
-        ? "addData.deckViz.modelExternalResources"
-        : "addData.deckViz.modelFileError"));
+      source.setError(
+        t(
+          error instanceof Error && error.message === "externalResources"
+            ? "addData.deckViz.modelExternalResources"
+            : "addData.deckViz.modelFileError",
+        ),
+      );
     } finally {
       setIsLoadingModel(false);
     }
@@ -286,8 +293,9 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       );
     }
 
-    const bounds = params.bounds ?? (
-      parsed.format === "geojson"
+    const bounds =
+      params.bounds ??
+      (parsed.format === "geojson"
         ? undefined
         : (computeDeckVizBounds(parsed.rows ?? [], mapping) ?? undefined));
     const layer = createDeckVizStoreLayer({
@@ -484,13 +492,20 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
           <div className="space-y-3 rounded-md border border-border p-3">
             <div className="space-y-1.5">
               <Label htmlFor="deckviz-model-sample">{t("addData.deckViz.sampleDataset")}</Label>
-              <Select id="deckviz-model-sample"
-                value={MODEL_SAMPLES.find((sample) => sample.scenegraph.modelUrl === deckVizModelUrl)?.id ?? ""}
+              <Select
+                id="deckviz-model-sample"
+                value={
+                  MODEL_SAMPLES.find((sample) => sample.scenegraph.modelUrl === deckVizModelUrl)
+                    ?.id ?? ""
+                }
                 disabled={isLoadingModel || source.isSubmitting}
-                onChange={(event) => handleModelSample(event.target.value)}>
+                onChange={(event) => handleModelSample(event.target.value)}
+              >
                 <option value="">{t("addData.deckViz.sampleCustom")}</option>
                 {MODEL_SAMPLES.map((sample) => (
-                  <option key={sample.id} value={sample.id}>{t(sample.labelKey)}</option>
+                  <option key={sample.id} value={sample.id}>
+                    {t(sample.labelKey)}
+                  </option>
                 ))}
               </Select>
             </div>
@@ -519,12 +534,20 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                   setModelFileName("");
                 }}
               />
-              <Button type="button" variant="outline" disabled={isLoadingModel || source.isSubmitting}
-                onClick={() => void handleLocalModel()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isLoadingModel || source.isSubmitting}
+                onClick={() => void handleLocalModel()}
+              >
                 <FileUp className="mr-2 size-4" />
                 {t("addData.deckViz.chooseModelFile")}
               </Button>
-              {modelFileName ? <p className="break-all text-xs" role="status">{modelFileName}</p> : null}
+              {modelFileName ? (
+                <p className="break-all text-xs" role="status">
+                  {modelFileName}
+                </p>
+              ) : null}
               <p className="text-xs text-muted-foreground">{t("addData.deckViz.modelFileHint")}</p>
             </div>
 

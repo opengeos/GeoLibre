@@ -22,15 +22,17 @@ export const SHANGHAI_MODEL_SAMPLE: ModelSample = {
     orientationRoll: 90,
     translation: [0, 0, 0],
   },
-  bounds: [121.470, 31.220, 121.520, 31.250],
+  bounds: [121.47, 31.22, 121.52, 31.25],
 };
 
 /** Use geographic sample bounds only while its original placement is intact. */
 export function modelSampleBounds(config: DeckVizScenegraphConfig, lng: number, lat: number) {
-  return [SHANGHAI_MODEL_SAMPLE].find((sample) =>
-    sample.scenegraph.modelUrl === config.modelUrl &&
-    sample.location[0] === lng && sample.location[1] === lat &&
-    sample.scenegraph.sizeScale === config.sizeScale &&
-    sample.scenegraph.bearing === config.bearing,
+  return [SHANGHAI_MODEL_SAMPLE].find(
+    (sample) =>
+      sample.scenegraph.modelUrl === config.modelUrl &&
+      sample.location[0] === lng &&
+      sample.location[1] === lat &&
+      sample.scenegraph.sizeScale === config.sizeScale &&
+      sample.scenegraph.bearing === config.bearing,
   )?.bounds;
 }

@@ -68,7 +68,9 @@ test("imports an embedded local glTF and rejects missing companion files", async
   const choose = async (name: string, model: object) => {
     const picker = page.waitForEvent("filechooser");
     await dialog.getByRole("button", { name: "Choose local model" }).click();
-    await (await picker).setFiles({ name, mimeType: "model/gltf+json", buffer: Buffer.from(JSON.stringify(model)) });
+    await (
+      await picker
+    ).setFiles({ name, mimeType: "model/gltf+json", buffer: Buffer.from(JSON.stringify(model)) });
   };
   await choose("missing.gltf", { asset: { version: "2.0" }, buffers: [{ uri: "mesh.bin" }] });
   await expect(dialog.getByText(/This model references separate files/)).toBeVisible();
@@ -76,7 +78,9 @@ test("imports an embedded local glTF and rejects missing companion files", async
   await expect(dialog.getByRole("status")).toHaveText("local.gltf");
   await expect(dialog.getByLabel("Scale", { exact: true })).toHaveValue("1");
   await dialog.getByRole("button", { name: "Add layer" }).click();
-  await expect(page.locator('[data-testid="layer-row"][data-layer-name="3D model (glTF)"]')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="layer-row"][data-layer-name="3D model (glTF)"]'),
+  ).toBeVisible();
 });
 
 test("Shanghai sample fills the geographic origin and meter-scale placement", async ({ page }) => {
@@ -85,10 +89,14 @@ test("Shanghai sample fills the geographic origin and meter-scale placement", as
   await page.getByRole("menuitem", { name: "3D Model (glTF)" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Sample dataset").selectOption("shanghai");
-  await expect(dialog.getByLabel("glTF / GLB model URL")).toHaveValue("https://data.source.coop/giswqs/opengeos/shanghai-3d-model.glb");
+  await expect(dialog.getByLabel("glTF / GLB model URL")).toHaveValue(
+    "https://data.source.coop/giswqs/opengeos/shanghai-3d-model.glb",
+  );
   await expect(dialog.getByLabel("Longitude", { exact: true })).toHaveValue("121.495");
   await expect(dialog.getByLabel("Latitude", { exact: true })).toHaveValue("31.235");
   await expect(dialog.getByLabel("Scale", { exact: true })).toHaveValue("1");
   await dialog.getByRole("button", { name: "Add layer" }).click();
-  await expect(page.locator('[data-testid="layer-row"][data-layer-name="Shanghai — central city"]')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="layer-row"][data-layer-name="Shanghai — central city"]'),
+  ).toBeVisible();
 });
