@@ -105,8 +105,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const handleDeckVizKindChange = (nextKind: string) => {
     // Reading a model file is asynchronous and the layer-type select stays
     // enabled meanwhile, so retire any pending read: its result belongs to the
-    // form the user just left.
+    // form the user just left. Drop the loading flag with it, or the new form
+    // stays unsubmittable until a read the user abandoned settles.
     modelLoadToken.current += 1;
+    setIsLoadingModel(false);
     setDeckVizKind(nextKind);
     setModelFileName("");
     setDeckVizParsed(null);
@@ -195,7 +197,8 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             ),
       );
     } finally {
-      setIsLoadingModel(false);
+      // A retired read must not clear the flag for the one that replaced it.
+      if (modelLoadToken.current === token) setIsLoadingModel(false);
     }
   };
 
