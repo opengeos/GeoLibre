@@ -30,10 +30,18 @@ export {
   zoomToRange,
 } from "./cesium-camera";
 export {
+  MAPLIBRE_CAPABILITIES,
+  type BuiltInMapControl,
+  type FlyToCamera,
+  type IdentifiedFeature,
+  type ManualPlacementOptions,
+  type MapEngine,
+  type MapEngineCapabilities,
+} from "./map-engine";
+export {
   MapController,
   createMapController,
   defaultBlankBackgroundColor,
-  type BuiltInMapControl,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   TERRAIN_SETTINGS_EVENT,
   TERRAIN_SETTINGS_CLOSE_EVENT,
