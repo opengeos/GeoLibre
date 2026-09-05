@@ -1232,17 +1232,15 @@ export function TopToolbar({
   );
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
 
-  // Terrain is project state, unlike the other optional map chrome. Restore it
-  // after both project loads and controller/style initialization so reopening a
-  // saved project brings back the control and its active terrain surface.
+  // Terrain is project state, unlike the other optional map chrome, so applying
+  // it to the map lives in `useTerrainRestore` (DesktopShell) — this toolbar is
+  // unmounted in `?maponly` embeds and must not own the restore. Only the
+  // checkbox mirrors that state here.
   useEffect(() => {
-    const controller = mapControllerRef.current;
-    if (!controller) return;
-    controller.setBuiltInControlVisible("terrain", terrainEnabled);
     setControlsVisible((current) =>
       current.terrain === terrainEnabled ? current : { ...current, terrain: terrainEnabled },
     );
-  }, [mapControllerRef, mapReadyGeneration, projectGeneration, terrainEnabled]);
+  }, [terrainEnabled]);
   // `keyword` has no deep-link parameter — only the Browser panel's saved CSW
   // entries carry one — so it widens the parsed shape rather than joining it.
   const [initialService, setInitialService] = useState<
