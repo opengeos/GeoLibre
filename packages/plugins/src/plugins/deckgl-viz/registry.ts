@@ -94,7 +94,10 @@ export interface DeckVizScenegraphConfig {
 export const DEFAULT_DECK_VIZ_SCENEGRAPH: DeckVizScenegraphConfig = {
   modelUrl: "",
   sizeScale: 1,
-  sizeMinPixels: 0,
+  // Kept at 1 px per model unit for projects saved before the dialog wrote
+  // this field: dropping the floor for them would shrink small demo-scale
+  // models to nothing when zoomed out. New placements persist an explicit 0.
+  sizeMinPixels: 1,
   bearing: 0,
   orientationRoll: 90,
   translation: [0, 0, 0],
@@ -820,11 +823,11 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         scenegraph: sg.modelUrl,
         _lighting: "pbr",
         sizeScale: sg.sizeScale,
-        // Preserve geographic size at every zoom. This floor applies to each
-        // model unit, not the whole asset: a 1 px floor makes a 4,763 m city
-        // at least 4,763 px wide, even after zooming out. Symbol-like models
-        // can still opt into a floor explicitly.
-        sizeMinPixels: sg.sizeMinPixels ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels ?? 0,
+        // The floor applies to each model unit, not the whole asset: a 1 px
+        // floor makes a 4,763 m city at least 4,763 px wide even after zooming
+        // out, so meter-scale models place an explicit 0 to keep their
+        // geographic size. Symbol-like models can opt back into a floor.
+        sizeMinPixels: sg.sizeMinPixels ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels ?? 1,
         getPosition: (record: AnyRecord) => {
           const [lng, lat] = position(record);
           const altitude = (hasAlt ? readNumber(record, altKey) : 0) + sg.altitude;

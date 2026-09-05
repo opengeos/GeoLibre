@@ -303,7 +303,7 @@ describe("scenegraph (glTF 3D model) layer", () => {
     assert.ok(config?.scenegraph);
     assert.equal(config.scenegraph.modelUrl, "https://example.com/model.glb");
     assert.equal(config.scenegraph.sizeScale, 250);
-    assert.equal(config.scenegraph.sizeMinPixels, 0);
+    assert.equal(config.scenegraph.sizeMinPixels, 1);
     assert.equal(config.scenegraph.bearing, 45);
     assert.equal(config.scenegraph.orientationRoll, 90);
     assert.deepEqual(config.scenegraph.translation, [0, 0, 0]);
@@ -325,7 +325,8 @@ describe("scenegraph (glTF 3D model) layer", () => {
     const config = readDeckVizConfig(layer);
     assert.equal(config?.scenegraph?.sizeScale, DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale);
     assert.equal(config?.scenegraph?.sizeScale, 1);
-    assert.equal(config?.scenegraph?.sizeMinPixels, 0);
+    // Projects saved before the dialog persisted this field keep the 1 px floor.
+    assert.equal(config?.scenegraph?.sizeMinPixels, 1);
     assert.equal(config?.scenegraph?.bearing, 0);
     assert.equal(config?.scenegraph?.orientationRoll, 90);
     assert.deepEqual(config?.scenegraph?.translation, [0, 0, 0]);
@@ -404,7 +405,7 @@ describe("scenegraph (glTF 3D model) layer", () => {
       },
     });
     const props = captured.props!;
-    assert.equal(props.sizeMinPixels, 0);
+    assert.equal(props.sizeMinPixels, 1);
     const record = { lng: 1, lat: 2 };
     assert.deepEqual((props.getPosition as (r: unknown) => number[])(record), [1, 2, 12]);
     assert.deepEqual((props.getOrientation as (r: unknown) => number[])(record), [0, 30, 90]);

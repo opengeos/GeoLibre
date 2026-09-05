@@ -28,22 +28,39 @@ export function localGltfMime(data: ArrayBuffer): string {
     json = JSON.parse(new TextDecoder().decode(bytes));
     mime = "model/gltf+json";
   }
-  const asset = json as {
-    asset?: { version?: string };
-    buffers?: Array<{ uri?: string }>;
-    images?: Array<{ uri?: string }>;
-  } | null;
+  const asset = json as { asset?: { version?: string } } | null;
   if (asset?.asset?.version !== "2.0") throw new Error("invalid");
-  for (const resource of [...(asset.buffers ?? []), ...(asset.images ?? [])]) {
-    if (resource.uri !== undefined && !/^data:/i.test(resource.uri)) {
-      throw new Error("externalResources");
-    }
-  }
+  if (hasExternalUri(json)) throw new Error("externalResources");
   return mime;
 }
 
+/**
+ * Any `uri` anywhere in the asset can pull in a sidecar file, not just the
+ * top-level `buffers`/`images` entries: texture extensions (KHR_texture_basisu,
+ * MSFT_texture_dds) and vendor extensions carry their own. `extras` is
+ * free-form application data, so it is skipped rather than validated.
+ */
+function hasExternalUri(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasExternalUri);
+  if (!value || typeof value !== "object") return false;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "extras") continue;
+    if (key === "uri" && typeof entry === "string" && !/^data:/i.test(entry)) return true;
+    if (hasExternalUri(entry)) return true;
+  }
+  return false;
+}
+
+/**
+ * Matches the inline GLB cap used for KML `<Model>` imports: base64 inflates
+ * the bytes by ~4/3 in the saved project, so an uncapped pick can hang the tab
+ * and produce an unusable `.geolibre.json`.
+ */
+export const MAX_LOCAL_GLTF_BYTES = 24 * 1024 * 1024;
+
 /** Data URLs are portable across project saves, unlike session-only blob URLs. */
 export async function embedLocalGltf(data: ArrayBuffer): Promise<string> {
+  if (data.byteLength > MAX_LOCAL_GLTF_BYTES) throw new Error("modelTooLarge");
   const mime = localGltfMime(data);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

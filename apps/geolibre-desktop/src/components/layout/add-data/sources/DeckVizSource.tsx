@@ -22,7 +22,7 @@ import {
   detectAndParseDeckVizInput,
 } from "../../../../lib/deck-viz-input";
 import { SHANGHAI_MODEL_SAMPLE, modelSampleBounds } from "../../../../lib/model-samples";
-import { embedLocalGltf } from "../../../../lib/local-gltf";
+import { MAX_LOCAL_GLTF_BYTES, embedLocalGltf } from "../../../../lib/local-gltf";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { DECK_VIZ_SIZE_WARN_BYTES } from "../constants";
 import { errorMessage, geoJsonToPointRows } from "../helpers";
@@ -172,12 +172,17 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       setDeckVizModelUrl(url);
       setModelFileName(selected.path.split(/[/\\]/).pop() || selected.path);
     } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
       source.setError(
-        t(
-          error instanceof Error && error.message === "externalResources"
-            ? "addData.deckViz.modelExternalResources"
-            : "addData.deckViz.modelFileError",
-        ),
+        reason === "modelTooLarge"
+          ? t("addData.deckViz.modelTooLarge", {
+              limit: Math.round(MAX_LOCAL_GLTF_BYTES / (1024 * 1024)),
+            })
+          : t(
+              reason === "externalResources"
+                ? "addData.deckViz.modelExternalResources"
+                : "addData.deckViz.modelFileError",
+            ),
       );
     } finally {
       setIsLoadingModel(false);
@@ -197,6 +202,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     return {
       modelUrl: deckVizModelUrl.trim(),
       sizeScale: numOr(deckVizModelScale, DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale),
+      // Persisted explicitly so a meter-scale model keeps its geographic size
+      // at every zoom, without changing how projects saved before this field
+      // existed (they keep the 1 px default floor) render.
+      sizeMinPixels: 0,
       bearing: numOr(deckVizModelBearing, 0),
       altitude: numOr(deckVizModelAltitude, 0),
     };
@@ -542,7 +551,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                 disabled={isLoadingModel || source.isSubmitting}
                 onClick={() => void handleLocalModel()}
               >
-                <FileUp className="mr-2 size-4" />
+                <FileUp className="me-2 size-4" />
                 {t("addData.deckViz.chooseModelFile")}
               </Button>
               {modelFileName ? (

@@ -6,7 +6,11 @@ import {
 } from "../packages/plugins/src/plugins/deckgl-viz/store-layer";
 import { DEFAULT_DECK_VIZ_STYLE } from "../packages/plugins/src/plugins/deckgl-viz/registry";
 import { test } from "node:test";
-import { localGltfMime } from "../apps/geolibre-desktop/src/lib/local-gltf";
+import {
+  MAX_LOCAL_GLTF_BYTES,
+  embedLocalGltf,
+  localGltfMime,
+} from "../apps/geolibre-desktop/src/lib/local-gltf";
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).buffer;
 const glb = (value: unknown) => {
@@ -39,6 +43,24 @@ test("rejects sidecar resources in both glTF and GLB", () => {
       }
     }
   }
+});
+test("rejects an external uri nested in a texture extension", () => {
+  const model = {
+    asset: { version: "2.0" },
+    images: [
+      { extensions: { KHR_texture_basisu: { uri: "https://example.com/city.ktx2" } } },
+      // Free-form application data is not a resource reference.
+      { extras: { uri: "C:/exports/original.png" }, uri: "data:image/png;base64,AAAA" },
+    ],
+  };
+  assert.throws(() => localGltfMime(encode(model)), /externalResources/);
+  assert.equal(
+    localGltfMime(encode({ asset: { version: "2.0" }, images: [model.images[1]] })),
+    "model/gltf+json",
+  );
+});
+test("rejects a model past the inline embedding cap", async () => {
+  await assert.rejects(embedLocalGltf(new ArrayBuffer(MAX_LOCAL_GLTF_BYTES + 1)), /modelTooLarge/);
 });
 test("rejects wrong formats, versions and truncated containers", () => {
   for (const data of [

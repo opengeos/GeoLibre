@@ -13,14 +13,15 @@ export const SHANGHAI_MODEL_SAMPLE: ModelSample = {
   labelKey: "addData.deckViz.sampleShanghai",
   // WGS84 ground-level origin of the meter-scale, Y-up exported model.
   location: [121.495, 31.235],
+  // Only the fields the dialog prefills belong here: picking a sample copies
+  // the model URL, scale, bearing and altitude into the form, and the config
+  // that is actually submitted is rebuilt from those inputs. Anything else set
+  // here would look configurable without taking effect.
   scenegraph: {
     modelUrl: "https://data.source.coop/giswqs/opengeos/shanghai-3d-model.glb",
     sizeScale: 1,
-    sizeMinPixels: 0,
     bearing: 0,
     altitude: 0,
-    orientationRoll: 90,
-    translation: [0, 0, 0],
   },
   bounds: [121.47, 31.22, 121.52, 31.25],
 };
