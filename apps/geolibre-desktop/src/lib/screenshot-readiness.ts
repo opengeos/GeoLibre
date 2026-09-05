@@ -24,6 +24,31 @@ export interface LayerLoadProbe {
   deck: (id: string) => { found: boolean; loading: boolean; error: string | null };
 }
 
+/**
+ * Whether `nativeId` is a native layer this store layer draws under, named by
+ * deriving from its own id.
+ *
+ * Renderers that own their MapLibre layers name them `<layer id>-<suffix>` with
+ * a generated suffix — the Time Slider's client-rendered mosaics come through as
+ * `acdom-mosaic-xra0fk3`, for instance. Those ids cannot be predicted when the
+ * mirrored store layer is built, so `metadata.nativeLayerIds` still records only
+ * the store id and the exact-match checks all miss.
+ *
+ * A bare prefix test would let `acdom` claim `acdom-2`'s layers, so a candidate
+ * is rejected when another store layer's id is a longer prefix of it — that
+ * layer is the real owner.
+ */
+function ownsDerivedNativeLayer(
+  layerId: string,
+  nativeId: string,
+  layers: GeoLibreLayer[],
+): boolean {
+  if (!nativeId.startsWith(`${layerId}-`)) return false;
+  return !layers.some(
+    (other) => other.id.length > layerId.length && nativeId.startsWith(`${other.id}-`),
+  );
+}
+
 /** Never infer readiness from a saved layer entry or from a custom layer's mere presence. */
 export function inspectScreenshotLayers(
   map: MapLibreMap,
@@ -96,7 +121,10 @@ export function inspectScreenshotLayers(
     const ids = Array.isArray(layer.metadata.nativeLayerIds) ? layer.metadata.nativeLayerIds : [];
     const rendered = nativeLayers.filter(
       (item) =>
-        ids.includes(item.id) || item.id === layer.id || item.id.startsWith(`layer-${layer.id}-`),
+        ids.includes(item.id) ||
+        item.id === layer.id ||
+        item.id.startsWith(`layer-${layer.id}-`) ||
+        ownsDerivedNativeLayer(layer.id, item.id, layers),
     );
     if (rendered.length === 0) {
       pending.push(layer.name);

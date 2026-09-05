@@ -123,3 +123,65 @@ test("a deck-viz layer is probed through the shared overlay, not failed closed",
     /no deck\.gl output was built/,
   );
 });
+
+/**
+ * A Time Slider layer mirrors into the store with `nativeLayerIds: [sourceId]`,
+ * but its client-rendered mosaic is drawn by maplibre-gl-raster under a
+ * generated id (`acdom-mosaic-xra0fk3`, source `mlrcog0-src-...`) that nothing
+ * can predict when the mirror is built. Before GeoLibre#2257 no native layer
+ * matched, so `inspectScreenshotLayers` reported the layer pending forever and
+ * every share.geolibre.app thumbnail of such a project fell back to a
+ * placeholder after the 120s deadline.
+ */
+const timeSliderLayer: GeoLibreLayer = {
+  id: "acdom",
+  name: "aCDOM440",
+  type: "raster",
+  source: {},
+  visible: true,
+  opacity: 1,
+  style: DEFAULT_LAYER_STYLE,
+  metadata: { sourceKind: "time-slider", nativeLayerIds: ["acdom"], clientRenderedRaster: true },
+};
+
+function mosaicMap(sourceLoaded: boolean, layerIds = ["acdom-mosaic-xra0fk3"]): MapLibreMap {
+  return {
+    getZoom: () => 8,
+    getLayersOrder: () => layerIds,
+    getLayer: (id: string) => ({ id, type: "raster", source: `mlrcog0-src-${id}` }),
+    getSource: () => ({}),
+    isSourceLoaded: () => sourceLoaded,
+  } as unknown as MapLibreMap;
+}
+
+test("a time-slider mosaic drawn under a generated id is found, not pending forever", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(true), [timeSliderLayer], [], probe), {
+    pending: [],
+    errors: [],
+  });
+});
+
+test("a found mosaic still waits for its own source to finish loading", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(false), [timeSliderLayer], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
+
+test("a layer with no native layer at all is still pending", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(true, []), [timeSliderLayer], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
+
+test("a derived native layer belongs to the longest matching layer id", () => {
+  // `acdom` must not claim `acdom-2`'s mosaic: `acdom-2` is the real owner, so
+  // `acdom` has nothing rendered and stays pending.
+  const sibling: GeoLibreLayer = { ...timeSliderLayer, id: "acdom-2", name: "aCDOM440 v2" };
+  const map2 = mosaicMap(true, ["acdom-2-mosaic-xra0fk3"]);
+  assert.deepEqual(inspectScreenshotLayers(map2, [timeSliderLayer, sibling], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
