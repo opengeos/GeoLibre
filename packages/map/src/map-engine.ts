@@ -204,6 +204,11 @@ export interface MapEngine {
  *
  * Each flag exists because something in the app branches on it today. Adding a
  * flag without a consumer makes the set harder to reason about, not richer.
+ *
+ * The fields are `readonly` because an engine's capabilities are a fact about
+ * that engine, not a setting: a capability object is shared by every instance of
+ * an engine (see {@link MAPLIBRE_CAPABILITIES}), so one write would rewrite it
+ * for all of them.
  */
 export interface MapEngineCapabilities {
   /**
@@ -212,36 +217,44 @@ export interface MapEngineCapabilities {
    * Cesium has no analogue — it draws imagery and primitives, not a style
    * document — so these are the operations that stay MapLibre-only.
    */
-  styleSpec: boolean;
+  readonly styleSpec: boolean;
   /**
    * {@link MapEngine.getMap} returns a live MapLibre map. Gates the features
    * that read the MapLibre canvas or drive MapLibre directly: AI object
    * detection, segment-everything, and plugins written against `maplibre-gl`.
    */
-  nativeMapInstance: boolean;
+  readonly nativeMapInstance: boolean;
   /**
    * The engine hosts MapLibre `CustomLayerInterface` layers and deck.gl
    * overlays — layers whose pixels something other than the engine draws.
    */
-  customLayers: boolean;
+  readonly customLayers: boolean;
   /** 3D terrain can be enabled and exaggerated. */
-  terrain: boolean;
+  readonly terrain: boolean;
   /** {@link MapEngine.identifyFeatures} can return features. */
-  picking: boolean;
+  readonly picking: boolean;
   /**
    * The user can draw or drag on the map surface: {@link
    * MapEngine.startManualPlacement}, and the raster-subset extract box.
    */
-  onMapDrawing: boolean;
+  readonly onMapDrawing: boolean;
   /**
    * The engine can host `IControl` DOM controls, so plugin controls and the
    * built-in on-map controls have somewhere to mount.
    */
-  domControls: boolean;
+  readonly domControls: boolean;
 }
 
-/** Capabilities of the MapLibre engine: everything, by construction. */
-export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = {
+/**
+ * Capabilities of the MapLibre engine: everything, by construction.
+ *
+ * Frozen, not merely `readonly`. Every `MapController` — the primary map and
+ * each split-view pane — exposes this one object, and `readonly` is erased at
+ * runtime, so it stops a typed write but not an untyped one. External plugins
+ * load from zips and manifests as plain JavaScript and reach the engine through
+ * the plugin API, which is exactly the caller TypeScript cannot check.
+ */
+export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   styleSpec: true,
   nativeMapInstance: true,
   customLayers: true,
@@ -249,7 +262,7 @@ export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = {
   picking: true,
   onMapDrawing: true,
   domControls: true,
-};
+});
 
 /** One feature returned by {@link MapEngine.identifyFeatures}. */
 export interface IdentifiedFeature {
