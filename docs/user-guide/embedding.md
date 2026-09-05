@@ -110,11 +110,13 @@ layers (including hidden groups), fully transparent layers, and layers outside
 their zoom range do not block readiness. This does not download an entire
 dataset or tiles outside the viewport.
 
-The check supports native MapLibre layers and the raster control's COG layers,
-including its shared deck.gl renderer. Custom renderers without a readiness
-probe, such as Cesium, LiDAR, Zarr, splats, and video, report an explicit error
-instead of assuming they are ready. Map/tile failures also report `error`;
-loading that does not settle within 120 seconds reports a timeout. Check the
+The check supports native MapLibre layers, the raster control's COG layers, and
+deck.gl visualization layers, including their shared deck.gl renderer. Custom
+renderers without a readiness probe, such as Cesium, LiDAR, Zarr, splats, and
+video, report an explicit error instead of assuming they are ready. A map or
+tile failure the map recovers from does not block `ready`; one it never
+recovers from is reported alongside the timeout, as is any loading that does
+not settle within 120 seconds. Check the
 errors before capturing; neither the embed API's `ready` event nor a browser's
 `networkidle` state establishes this rendering readiness.
 

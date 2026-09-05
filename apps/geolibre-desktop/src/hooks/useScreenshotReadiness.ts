@@ -41,9 +41,13 @@ export function useScreenshotReadiness(
       if (root.dataset.geolibreLoadState === "ready") started = performance.now();
       publish("loading");
     };
+    // A map `error` is not terminal on its own: a single tile 404 during a pan
+    // is often resolved by a retry, and `error` IS terminal for consumers (the
+    // documented wait is `ready` or `error`). Record it and let `tick` decide --
+    // dropped once the map reaches a settled, fully loaded state, reported when
+    // it never does.
     const onError = (event: { error: { message: string } }) => {
       failures.add(event.error.message);
-      publish("error", [], [...failures]);
     };
     publish("loading");
     map?.on("dataloading", invalidate);
@@ -63,7 +67,7 @@ export function useScreenshotReadiness(
       // Check on painted frames, but avoid walking every layer at display FPS.
       if (performance.now() - checkedAt < 100) return;
       checkedAt = performance.now();
-      const errors = [...failures];
+      const errors: string[] = [];
       if (loadError) errors.push(loadError);
       if (cesium) errors.push("Screenshot readiness is not supported for the Cesium renderer");
       const store = useAppStore.getState();
@@ -77,7 +81,7 @@ export function useScreenshotReadiness(
       errors.push(...result.errors);
       if (errors.length) {
         settledSince = 0;
-        publish("error", result.pending, errors);
+        publish("error", result.pending, [...failures, ...errors]);
         return;
       }
       const complete =
@@ -93,9 +97,14 @@ export function useScreenshotReadiness(
       else settledSince ||= performance.now();
       // Keep the predicates true across painted frames, including raster fade
       // and asynchronous plugin/store updates after the initial map idle.
-      if (complete && performance.now() - settledSince >= 500) publish("ready");
-      else if (performance.now() - started > 120_000) {
+      if (complete && performance.now() - settledSince >= 500) {
+        // Every tile the viewport needs is loaded and the map is idle, so any
+        // `error` event recorded along the way was transient.
+        failures.clear();
+        publish("ready");
+      } else if (performance.now() - started > 120_000) {
         publish("error", result.pending, [
+          ...failures,
           "Timed out waiting for the visible map to finish loading",
         ]);
       } else publish("loading", result.pending);

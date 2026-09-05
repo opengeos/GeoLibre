@@ -78,11 +78,18 @@ export function inspectScreenshotLayers(
       pending.push(layer.name);
       continue;
     }
+    // deck-viz layers register with the shared overlay under their own layer id,
+    // so the probe above IS their readiness check. Reaching here means the
+    // overlay built no deck layer for this one, which is a broken/unsupported
+    // configuration rather than a rendered layer -- fail closed, but say so
+    // accurately.
+    if (layer.type === "deckgl-viz") {
+      errors.push(`${layer.name}: no deck.gl output was built for this layer`);
+      continue;
+    }
     // Streaming/custom renderers need their own probe. Fail closed instead of
     // returning ready for an idle basemap while a point cloud is still fetching.
-    if (
-      ["lidar", "3d-tiles", "gaussian-splat", "zarr", "deckgl-viz", "video"].includes(layer.type)
-    ) {
+    if (["lidar", "3d-tiles", "gaussian-splat", "zarr", "video"].includes(layer.type)) {
       errors.push(`${layer.name}: screenshot readiness is not supported for ${layer.type}`);
       continue;
     }

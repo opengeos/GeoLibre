@@ -106,3 +106,20 @@ test("hidden layers do not block a screenshot, unsupported visible renderers fai
     /not supported for lidar/,
   );
 });
+
+test("a deck-viz layer is probed through the shared overlay, not failed closed", () => {
+  const viz = { ...layer, type: "deckgl-viz" as const, metadata: {} };
+  assert.deepEqual(
+    inspectScreenshotLayers(map, [viz], [], {
+      ...probe,
+      deck: () => ({ found: true, loading: true, error: null }),
+    }),
+    { pending: ["NLCD"], errors: [] },
+  );
+  // Nothing was built for it, so there is no rendering to wait on -- fail
+  // closed rather than call an absent layer ready.
+  assert.match(
+    inspectScreenshotLayers(map, [viz], [], probe).errors[0],
+    /no deck\.gl output was built/,
+  );
+});
