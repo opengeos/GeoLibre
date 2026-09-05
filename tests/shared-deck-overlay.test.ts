@@ -159,7 +159,18 @@ describe("shared-deck-overlay", () => {
       id: "subtile",
       parent: raster,
     });
+    // The error survives while the layer stays loaded (a failed tile resolves as
+    // loaded but leaves a hole), and clears once the layer fetches again so a
+    // transient blip cannot pin readiness at `error` for the layer's whole life.
     assert.equal(getSharedDeckLoadState(raster.id).error, "Tile failed");
+    raster.isLoaded = false;
+    assert.deepEqual(getSharedDeckLoadState(raster.id), {
+      found: true,
+      loading: true,
+      error: null,
+    });
+    raster.isLoaded = true;
+    assert.equal(getSharedDeckLoadState(raster.id).error, null, "the retry succeeded");
     setSharedDeckLayers("raster", []);
     assert.equal(getSharedDeckLoadState(raster.id).found, false);
     assert.equal(getSharedDeckLoadState(raster.id).error, null);

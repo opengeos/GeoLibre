@@ -26,7 +26,7 @@ const map = {
   isSourceLoaded: () => true,
 } as unknown as MapLibreMap;
 const probe: LayerLoadProbe = {
-  raster: () => ({ loading: false, error: null, native: true }),
+  raster: () => ({ loading: false, error: null, native: true, deckTracked: false }),
   deck: () => ({ found: false, loading: false, error: null }),
 };
 
@@ -42,7 +42,7 @@ test("screenshot readiness is opt-in, including in map-only embeds", () => {
 test("an attached native layer cannot mask an unfinished COG header", () => {
   const result = inspectScreenshotLayers(map, [layer], [], {
     ...probe,
-    raster: () => ({ loading: true, error: null, native: true }),
+    raster: () => ({ loading: true, error: null, native: true, deckTracked: false }),
   });
   assert.deepEqual(result, { pending: ["NLCD"], errors: [] });
 });
@@ -62,6 +62,29 @@ test("a loaded COG header cannot mask unfinished deck tiles or tile failures", (
     }),
     { pending: [], errors: ["NLCD: Tile request failed"] },
   );
+});
+
+test("a deck-rendered raster waits for the shared overlay only when interleaved", () => {
+  // Interleaved (web): the shared deck overlay is the load signal, so a raster
+  // it has not registered yet is still pending.
+  const interleaved: LayerLoadProbe = {
+    ...probe,
+    raster: () => ({ loading: false, error: null, native: false, deckTracked: true }),
+  };
+  assert.deepEqual(inspectScreenshotLayers(map, [layer], [], interleaved), {
+    pending: ["NLCD"],
+    errors: [],
+  });
+  // Overlaid (Tauri): a private deck canvas the probe cannot see, so the
+  // control's own loaded header is the whole answer -- never pending forever.
+  const overlaid: LayerLoadProbe = {
+    ...probe,
+    raster: () => ({ loading: false, error: null, native: false, deckTracked: false }),
+  };
+  assert.deepEqual(inspectScreenshotLayers(map, [layer], [], overlaid), {
+    pending: [],
+    errors: [],
+  });
 });
 
 test("missing native layers and unfinished native sources remain pending", () => {

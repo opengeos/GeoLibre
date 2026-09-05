@@ -15,7 +15,12 @@ export function screenshotReadinessEnabled(search: string): boolean {
 }
 
 export interface LayerLoadProbe {
-  raster: (id: string) => { loading: boolean; error: string | null; native: boolean };
+  raster: (id: string) => {
+    loading: boolean;
+    error: string | null;
+    native: boolean;
+    deckTracked: boolean;
+  };
   deck: (id: string) => { found: boolean; loading: boolean; error: string | null };
 }
 
@@ -55,7 +60,13 @@ export function inspectScreenshotLayers(
         pending.push(layer.name);
         continue;
       }
-      requiresDeck = !raster.native;
+      // A raster is either drawn as a native MapLibre layer (checked below), or
+      // by deck.gl. Only the interleaved deck path registers with the shared
+      // overlay; the overlaid one (Tauri) owns a private deck canvas the probe
+      // cannot see, so the control's own state above is all the evidence there
+      // is -- requiring a deck entry would leave it pending forever.
+      if (!raster.native && !raster.deckTracked) continue;
+      requiresDeck = raster.deckTracked;
     }
     const deck = probe.deck(layer.id);
     if (deck.found) {
