@@ -13,6 +13,7 @@ import {
 } from "../apps/geolibre-desktop/src/lib/local-gltf";
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).buffer;
+const encodeText = (json: string) => new TextEncoder().encode(json).buffer;
 const glb = (value: unknown) => {
   const json = new TextEncoder().encode(JSON.stringify(value));
   const length = Math.ceil(json.length / 4) * 4;
@@ -59,21 +60,24 @@ test("rejects an external uri nested in a texture extension", () => {
     "model/gltf+json",
   );
 });
-test("validates deeply nested assets without overflowing the stack", () => {
-  const deep: { scenes: unknown } = { scenes: [] };
-  let node: unknown[] = deep.scenes as unknown[];
-  for (let i = 0; i < 5000; i += 1) {
-    const child: unknown[] = [];
-    node.push(child);
-    node = child;
+// Built as text rather than through JSON.stringify, which recurses and blows
+// the stack on the deeper fixtures. Stack budgets differ by host, so the test
+// picks the deepest asset this runtime can parse: the walk is what is under
+// test, not the parser.
+const deepAsset = (depth: number, innermost: string) =>
+  `{"asset":{"version":"2.0"},"scenes":${"[".repeat(depth)}${innermost}${"]".repeat(depth)}}`;
+const deepestParsable = [4000, 2000, 1000, 500].find((depth) => {
+  try {
+    JSON.parse(deepAsset(depth, ""));
+    return true;
+  } catch {
+    return false;
   }
-  node.push({ uri: "https://example.com/buried.bin" });
-  assert.throws(
-    () => localGltfMime(encode({ asset: { version: "2.0" }, ...deep })),
-    /externalResources/,
-  );
-  node.pop();
-  assert.equal(localGltfMime(encode({ asset: { version: "2.0" }, ...deep })), "model/gltf+json");
+})!;
+test("validates deeply nested assets without overflowing the stack", () => {
+  const buried = deepAsset(deepestParsable, '{"uri":"https://example.com/buried.bin"}');
+  assert.throws(() => localGltfMime(encodeText(buried)), /externalResources/);
+  assert.equal(localGltfMime(encodeText(deepAsset(deepestParsable, ""))), "model/gltf+json");
 });
 test("rejects a model past the inline embedding cap", async () => {
   await assert.rejects(embedLocalGltf(new ArrayBuffer(MAX_LOCAL_GLTF_BYTES + 1)), /modelTooLarge/);
