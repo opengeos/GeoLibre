@@ -47,6 +47,7 @@ interface DeckVizSourceProps {
   initialDeckVizKind?: string;
 }
 
+/** Add a deck.gl layer from tabular data, a model sample, or an embedded local model. */
 export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const { t } = useTranslation();
   const startKind = initialDeckVizKind || "scatterplot";
@@ -160,12 +161,13 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       if (!selected?.data) return;
       const url = await embedLocalGltf(selected.data);
       const example = deckVizDef?.example.scenegraph;
-      if (
-        example &&
-        deckVizModelUrl === example.modelUrl &&
-        Number(deckVizModelScale) === example.sizeScale
-      ) {
-        setDeckVizModelScale(String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale));
+      if (example && deckVizModelUrl === example.modelUrl) {
+        // Loading is asynchronous; keep scale edits made while reading the file.
+        setDeckVizModelScale((current) =>
+          Number(current) === example.sizeScale
+            ? String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale)
+            : current,
+        );
       }
       setDeckVizModelUrl(url);
       setModelFileName(selected.path.split(/[/\\]/).pop() || selected.path);

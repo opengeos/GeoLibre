@@ -100,3 +100,57 @@ test("Shanghai sample fills the geographic origin and meter-scale placement", as
     page.locator('[data-testid="layer-row"][data-layer-name="Shanghai — central city"]'),
   ).toBeVisible();
 });
+
+test("preserves scale edits made while a local model is being embedded", async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
+    const read = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function (blob) {
+      if (blob.type === "model/gltf+json") {
+        // Hold embedding until the test has edited the still-enabled scale input.
+        (window as unknown as { finishModelRead: () => void }).finishModelRead = () => {
+          read.call(this, blob);
+        };
+      } else {
+        read.call(this, blob);
+      }
+    };
+  });
+  await waitForMap(page);
+  await page.getByRole("button", { name: "Add Data" }).click();
+  await page.getByRole("menuitem", { name: "3D Model (glTF)" }).click();
+  const dialog = page.getByRole("dialog");
+  const picker = page.waitForEvent("filechooser");
+  await dialog.getByRole("button", { name: "Choose local model" }).click();
+  await (
+    await picker
+  ).setFiles({
+    name: "delayed.gltf",
+    mimeType: "model/gltf+json",
+    buffer: Buffer.from(
+      JSON.stringify({ asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: [] }] }),
+    ),
+  });
+  await page.waitForFunction(
+    () =>
+      typeof (window as unknown as { finishModelRead?: unknown }).finishModelRead === "function",
+  );
+  await dialog.getByLabel("Scale", { exact: true }).fill("25");
+  await page.evaluate(() =>
+    (window as unknown as { finishModelRead: () => void }).finishModelRead(),
+  );
+  await expect(dialog.getByRole("status")).toHaveText("delayed.gltf");
+  await expect(dialog.getByLabel("Scale", { exact: true })).toHaveValue("25");
+  await dialog.getByRole("button", { name: "Add layer" }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
+  const stream = await (await downloadPromise).createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const saved = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const model = saved.layers.find((layer: { type: string }) => layer.type === "deckgl-viz");
+  expect(model.metadata.vizConfig.scenegraph.sizeScale).toBe(25);
+  expect(model.metadata.vizConfig.scenegraph.modelUrl).toMatch(/^data:model\/gltf\+json;base64,/);
+});
