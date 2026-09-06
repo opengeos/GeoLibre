@@ -1,5 +1,5 @@
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { getColumnSettings } from "../lib/attribute-columns";
 import {
@@ -53,7 +53,7 @@ const EMPTY_PROFILES: QuickFilterProfiles = {
  */
 export function useQuickFilterProfiles(
   layer: GeoLibreLayer | null | undefined,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
   mapReadyGeneration = 0,
 ): QuickFilterProfiles {
   const features = layer?.geojson?.features;

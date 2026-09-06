@@ -26,6 +26,7 @@ import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 
 // aria-describedby targets for the "your role does not allow this" explanations.
 // One per privilege rather than one per item: several denied entries share a
@@ -80,7 +81,10 @@ export function ProcessingMenu({
   // Both panels read the map canvas through a `MapController`, which does not
   // exist while the globe owns the primary map — DesktopShell unmounts them
   // there, so selecting either would do nothing at all (#2217 review).
-  const cesiumPrimary = useAppStore((s) => s.primaryRenderer) === "cesium";
+  // Object detection and segment-everything read pixels off the MapLibre canvas
+  // and drive the map directly, so they need a live native map instance — not
+  // merely "not Cesium".
+  const capabilities = useMapCapabilities();
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
@@ -707,7 +711,7 @@ export function ProcessingMenu({
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.objectDetection") && (
                 <DropdownMenuItem
-                  disabled={cesiumPrimary}
+                  disabled={!capabilities.nativeMapInstance}
                   onSelect={() => setObjectDetectionOpen(true)}
                 >
                   {t("toolbar.command.objectDetection")}
@@ -717,7 +721,7 @@ export function ProcessingMenu({
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.segmentEverything") && (
                 <DropdownMenuItem
-                  disabled={cesiumPrimary}
+                  disabled={!capabilities.nativeMapInstance}
                   onSelect={() => setSegmentEverythingOpen(true)}
                 >
                   {t("toolbar.command.segmentEverything")}

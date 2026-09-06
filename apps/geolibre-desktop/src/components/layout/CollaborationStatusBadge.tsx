@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { Button, Input } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { ChevronUp, MapPin, Send, Settings2, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,7 @@ interface Announcement {
 
 interface CollaborationStatusBadgeProps {
   api: CollaborationApi;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 // How long a join/leave announcement stays on screen before auto-dismissing.

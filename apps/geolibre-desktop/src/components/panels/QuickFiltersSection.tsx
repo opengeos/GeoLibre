@@ -4,7 +4,7 @@ import {
   type GeoLibreLayer,
   type LayerQuickFilter,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -21,7 +21,7 @@ import { QuickFilterControl } from "./QuickFilterControl";
 
 interface QuickFiltersSectionProps {
   layer: GeoLibreLayer;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
   mapReadyGeneration?: number;
 }

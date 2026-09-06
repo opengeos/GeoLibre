@@ -23,7 +23,7 @@ import {
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
 import {
   Button,
@@ -370,7 +370,7 @@ function applyDraftsToDuckDBRows(
 }
 
 interface AttributeTableProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {

@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { gridPixelAt, type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
 import { Button, ColorRampSelect, Label } from "@geolibre/ui";
 import { Boxes, GripVertical, Settings2, X } from "lucide-react";
@@ -57,7 +57,7 @@ const DEFAULT_Z_SCALE = 1;
 
 interface NetcdfCubeWindowProps {
   /** The live map, for reading the view to window the cube against. */
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**
@@ -544,7 +544,7 @@ function formatBand(value: number): string {
  * @returns The window to read every band plane with.
  */
 function cubeWindow(
-  controller: MapController | null,
+  controller: MapEngine | null,
   grid: LocalNetcdfGrid,
   settings: NetcdfCubeSettings,
 ): LocalNetcdfWindow {
@@ -557,7 +557,7 @@ function cubeWindow(
 
 /** The cells under the chosen extent, or null for the whole grid. */
 function extentRect(
-  controller: MapController | null,
+  controller: MapEngine | null,
   grid: LocalNetcdfGrid,
   settings: NetcdfCubeSettings,
 ): CellRect | null {

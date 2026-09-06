@@ -2,7 +2,7 @@ import { useAppStore, type CollaborationPresence } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 
@@ -23,7 +23,7 @@ const VIEWPORT_LAYER_ID = "__geolibre_collab_viewports_line";
 export function RemoteCursorsOverlay({
   mapControllerRef,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }): null {
   const presence = useAppStore((s) => s.collaboration.presence);
   const isActive = useAppStore((s) => s.collaboration.isActive);

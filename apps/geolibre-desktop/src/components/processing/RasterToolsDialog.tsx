@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { addRasterToMap } from "@geolibre/plugins";
 import {
   RASTER_TOOLS,
@@ -119,7 +119,7 @@ function toolDefaults(tool: RasterTool): Record<string, unknown> {
 }
 
 interface RasterToolsDialogProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps): ReactElement {

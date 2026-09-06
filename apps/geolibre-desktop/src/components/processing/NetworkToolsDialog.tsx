@@ -1,5 +1,5 @@
 import { getRoutingConfig, useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
   getNetworkTool,
@@ -30,7 +30,7 @@ import {
 import { ParameterField } from "./ParameterField";
 
 interface NetworkToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

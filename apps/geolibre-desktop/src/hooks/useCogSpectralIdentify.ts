@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type * as maplibregl from "maplibre-gl";
 import { knownCogBandCount, readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
 import { useTranslation } from "react-i18next";
@@ -30,7 +30,7 @@ import { fetchRemoteArrayBuffer } from "./usePlugins";
  * Mounted once at the app shell, alongside the other identify hooks.
  */
 export function useCogSpectralIdentify(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
 ): void {
   const { t } = useTranslation();

@@ -54,6 +54,7 @@ import {
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
+import type { MapEngine } from "./map-engine";
 import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -96,7 +97,7 @@ const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
 const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 export interface MapCanvasProps {
-  controllerRef?: React.MutableRefObject<MapController | null>;
+  controllerRef?: React.MutableRefObject<MapEngine | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
   /**

@@ -1,12 +1,12 @@
 import { useEffect, type RefObject } from "react";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getRasterLoadState, getSharedDeckLoadState } from "@geolibre/plugins";
 import { inspectScreenshotLayers, screenshotReadinessEnabled } from "../lib/screenshot-readiness";
 
 /** Opt-in DOM contract for browser automation; adds no pixels to the screenshot. */
 export function useScreenshotReadiness(
-  controller: RefObject<MapController | null>,
+  controller: RefObject<MapEngine | null>,
   generation: number,
   pluginsReady: boolean,
   projectBusy: boolean,

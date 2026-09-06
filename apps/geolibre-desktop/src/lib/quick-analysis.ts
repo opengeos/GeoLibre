@@ -4,7 +4,7 @@ import {
   type GeoLibreLayer,
   type MapScaleUnit,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   getNetworkTool,
   getVectorTool,
@@ -207,7 +207,7 @@ export interface QuickAnalysisRequest {
    */
   extraLayers?: GeoLibreLayer[];
   /** Live map controller, used to frame the result. */
-  mapControllerRef: { current: MapController | null };
+  mapControllerRef: { current: MapEngine | null };
 }
 
 /** Resolve a tool id against the registries Quick analysis draws from. */

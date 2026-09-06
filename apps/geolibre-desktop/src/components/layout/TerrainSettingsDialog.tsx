@@ -5,7 +5,7 @@ import {
   TERRAIN_SETTINGS_CLOSE_EVENT,
   TERRAIN_SETTINGS_EVENT,
   type CogDemErrorCode,
-  type MapController,
+  type MapEngine,
 } from "@geolibre/map";
 import {
   Button,
@@ -43,7 +43,7 @@ const SOURCE_ERROR_KEYS = {
 } as const satisfies Record<CogDemErrorCode, string>;
 
 export interface TerrainSettingsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

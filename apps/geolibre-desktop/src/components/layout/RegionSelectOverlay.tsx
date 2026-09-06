@@ -1,9 +1,9 @@
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { useEffect, useRef, useState } from "react";
 import { MIN_REGION_SIZE, type RecordRegion } from "../../lib/map-recorder";
 
 interface RegionSelectOverlayProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   /**
    * - `select`: drag a new rectangle (crosshair, captures pointer events).
    * - `frame`: show the chosen rectangle as a fixed frame; pointer events pass

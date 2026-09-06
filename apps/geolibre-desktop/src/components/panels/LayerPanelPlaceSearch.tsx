@@ -17,7 +17,7 @@ import {
   resolveGeocoderConfig,
   useAppStore,
 } from "@geolibre/core";
-import { getPrimaryCesiumControlHost, type MapController } from "@geolibre/map";
+import { getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
 // Type-only: the Cesium engine itself is imported lazily, inside the globe
 // branch of handleSelect, so it stays off this panel's load path.
 import type { PointPrimitive, PointPrimitiveCollection, Primitive } from "@cesium/engine";
@@ -35,7 +35,7 @@ import {
 } from "../../lib/feature-search";
 
 interface LayerPanelPlaceSearchProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** Fast-UI minimum debounce before firing a forward-geocode while typing. */

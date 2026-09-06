@@ -1,6 +1,6 @@
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
@@ -35,7 +35,7 @@ import { exportVectorLayer } from "../../lib/vector-export";
 interface LoadFeaturesIntoEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   /** Store layer to preselect (set when opened from a layer's context menu). */
   initialLayerId: string | null;
 }

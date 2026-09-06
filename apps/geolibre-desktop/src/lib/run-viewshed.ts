@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   assembleTerrainDem,
   computeViewshedAsync,
@@ -32,7 +32,7 @@ export interface RunViewshedOptions {
   lng: number;
   lat: number;
   /** Frames the result after adding it, as the sibling quick actions do. */
-  mapControllerRef?: React.RefObject<MapController | null>;
+  mapControllerRef?: React.RefObject<MapEngine | null>;
   radiusMeters: number;
   observerHeightMeters?: number;
   /** Layer name; callers pass a translated string. */

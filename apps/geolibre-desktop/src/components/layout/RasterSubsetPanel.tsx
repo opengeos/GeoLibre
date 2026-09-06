@@ -1,5 +1,5 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, Input, Label, Textarea } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -59,7 +59,7 @@ interface RasterSubsetPanelProps {
   /** The layer being extracted, or `null` when the panel is closed. */
   layer: GeoLibreLayer | null;
   onClose: () => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */

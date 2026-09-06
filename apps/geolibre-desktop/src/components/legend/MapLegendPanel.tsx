@@ -17,7 +17,7 @@ import {
   type LegendCustomEntry,
   type LegendPanelPosition,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
 import { cn } from "@geolibre/ui";
 import {
@@ -174,7 +174,7 @@ export function MapLegendPanel({
   mapControllerRef,
   mapReadyGeneration,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
 }) {
   const { t, i18n } = useTranslation();

@@ -1,6 +1,6 @@
 import { clearQuickFilterValues, hasActiveQuickFilter, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup, LayerQuickFilter } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
 import { Eye, EyeOff, Folder, Layers } from "lucide-react";
 import { Fragment, useMemo, type RefObject } from "react";
@@ -12,14 +12,14 @@ import { QuickFilterControl } from "./QuickFilterControl";
 const GROUP_INDENT_REM = 0.75;
 
 interface ViewerLayerPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
   mapReadyGeneration?: number;
 }
 
 interface ViewerQuickFiltersProps {
   layer: GeoLibreLayer;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration?: number;
   indentRem: number;
 }

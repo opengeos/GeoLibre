@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -34,7 +34,7 @@ import {
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

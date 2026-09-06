@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useAppStore, type ProjectComment } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import * as maplibreGl from "maplibre-gl";
 
 interface CommentMapOverlayProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   onSelectComment?: (commentId: string) => void;
   showResolved?: boolean;
 }

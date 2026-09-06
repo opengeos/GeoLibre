@@ -1,5 +1,5 @@
 import type { ConversionToolKind, RasterToolKind, VectorToolKind } from "@geolibre/core";
-import { type BuiltInMapControl, type MapController } from "@geolibre/map";
+import { type BuiltInMapControl, type MapController, type MapEngine } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
 import type { createAppAPI } from "../../../hooks/usePlugins";
@@ -9,7 +9,7 @@ import type { AddDataKind } from "../AddDataDialog";
 export type AppApi = ReturnType<typeof createAppAPI>;
 
 /** A ref to the live MapController, shared across the toolbar pieces. */
-export type MapControllerRef = React.RefObject<MapController | null>;
+export type MapControllerRef = React.RefObject<MapEngine | null>;
 
 /** Built-in map controls that the Controls menu can toggle (all but the layer control). */
 export type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;

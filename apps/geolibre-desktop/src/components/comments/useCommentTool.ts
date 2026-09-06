@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import { useAppStore, type CommentAnchor, type ProjectComment } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { v4 as uuidv4 } from "uuid";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 import type * as maplibreGl from "maplibre-gl";
 
 interface UseCommentToolOptions {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   collaboration?: CollaborationApi;
 }
 

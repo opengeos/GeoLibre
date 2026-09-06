@@ -10,7 +10,7 @@ import {
 } from "@geolibre/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import i18n from "../i18n";
 import {
@@ -64,9 +64,7 @@ export interface CollaborationApi {
   sendCommentMutation: (action: CommentMutationAction) => boolean;
 }
 
-export function useCollaboration(
-  mapControllerRef: RefObject<MapController | null>,
-): CollaborationApi {
+export function useCollaboration(mapControllerRef: RefObject<MapEngine | null>): CollaborationApi {
   const baseUrl = useMemo(() => resolveCollabBaseUrl(), []);
   const enabled = baseUrl !== null;
 

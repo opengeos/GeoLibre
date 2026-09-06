@@ -4,7 +4,6 @@ import {
   createPMTilesStoreLayer,
   evictOfflineBasemapStyle,
   hasPMTilesArchive,
-  type MapController,
   OFFLINE_BASEMAP_SENTINEL_PREFIX,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,
@@ -12,6 +11,7 @@ import {
   registerOfflineBasemapStyle,
   registerPMTilesArchive,
   unregisterPMTilesArchive,
+  type MapEngine,
 } from "@geolibre/map";
 import { extractPmtiles, type PmtilesExtractProgress } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
@@ -111,7 +111,7 @@ const EMPTY_COORDS: CoordFields = { west: "", south: "", east: "", north: "" };
 interface BasemapExtractPanelProps {
   open: boolean;
   onClose: () => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */

@@ -17,7 +17,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useNotebookBridge } from "../../hooks/useNotebookBridge";
 import { useNotebookThemeSync } from "../../hooks/useNotebookThemeSync";
@@ -58,7 +58,7 @@ function externalClientUrl(server: JupyterServerInfo): string {
 
 interface NotebookPanelProps {
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   themeMode: ThemeMode;
 }
 

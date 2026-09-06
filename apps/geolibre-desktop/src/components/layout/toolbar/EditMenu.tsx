@@ -6,7 +6,7 @@ import {
   undo,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -44,7 +44,7 @@ import type { ToolbarChrome } from "./constants";
 
 interface EditMenuProps {
   chrome: ToolbarChrome;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

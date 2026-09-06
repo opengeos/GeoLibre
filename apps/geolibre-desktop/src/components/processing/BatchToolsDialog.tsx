@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   runAlgorithmCapture,
@@ -33,7 +33,7 @@ import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface BatchToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /** The conventional id of a tool's primary input layer parameter. */
@@ -135,7 +135,7 @@ function useFieldsByLayer(layers: GeoLibreLayer[], enabled: boolean): Map<string
 
 /** Read the current map viewport as [west, south, east, north]. */
 function viewportBoundsReader(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
 ): () => [number, number, number, number] | null {
   return () => {
     const map = mapControllerRef.current?.getMap();

@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { bandMeasure } from "../lib/netcdf-band-axis";
 import {
   displayUnits,
@@ -133,7 +133,7 @@ export function netcdfIdentifyRows(
  *   the map finished loading.
  */
 export function useNetcdfIdentify(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
 ): void {
   const { t } = useTranslation();

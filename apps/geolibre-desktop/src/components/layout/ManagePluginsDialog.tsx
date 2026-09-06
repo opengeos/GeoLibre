@@ -1,5 +1,5 @@
 import { isAllowedPluginManifestUrl } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -90,7 +90,7 @@ const ManagePluginsTrans = Trans as ComponentType<ManagePluginsTransProps>;
 interface ManagePluginsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 export function ManagePluginsDialog({

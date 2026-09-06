@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
 // The host side of the notebook scripting bridge. This is the MIRROR of
@@ -40,7 +40,7 @@ interface CommandMessage {
  */
 export function useNotebookBridge(
   iframeRef: RefObject<HTMLIFrameElement | null>,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): void {
   useEffect(() => {
     const controller = () => mapControllerRef.current;
@@ -152,7 +152,7 @@ export function useNotebookBridge(
 
     // Map click events. The controller/map appear asynchronously after the map
     // loads, so poll on animation frames until the map exists, then attach.
-    let clickMap: ReturnType<MapController["getMap"]> | null = null;
+    let clickMap: ReturnType<MapEngine["getMap"]> | null = null;
     const onMapClick = (event: maplibregl.MapMouseEvent) => {
       const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
       emit("click", {

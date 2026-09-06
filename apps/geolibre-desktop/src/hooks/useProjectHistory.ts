@@ -4,7 +4,7 @@ import {
   serializeProject,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
@@ -33,7 +33,7 @@ function currentProjectKey(): string {
   return projectPath ? `path:${projectPath}` : `unsaved:${projectName}`;
 }
 
-export function useProjectHistory(mapControllerRef: RefObject<MapController | null>) {
+export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>) {
   const { t } = useTranslation();
   const [snapshots, setSnapshots] = useState<ProjectHistorySnapshot[]>([]);
   const [recoverySnapshot, setRecoverySnapshot] = useState<ProjectHistorySnapshot | null>(null);

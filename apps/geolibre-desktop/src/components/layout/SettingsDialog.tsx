@@ -35,7 +35,7 @@ import {
   Select,
   cn,
 } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Bot,
   Braces,
@@ -197,7 +197,7 @@ interface SettingsDialogProps {
   buttonClassName?: string;
   buttonSize?: "default" | "sm" | "lg" | "icon" | null;
   iconClassName?: string;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   showLabels?: boolean;
   onOpenManagePlugins: () => void;
   /** Toggleable plugins for the Interface (UI profile) section (issue #500). */

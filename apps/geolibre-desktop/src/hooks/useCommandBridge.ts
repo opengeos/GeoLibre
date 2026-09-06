@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
@@ -37,7 +37,7 @@ interface CommandMessage {
  *   useEmbedBridge and MapCanvas share), used to read/drive the camera and query
  *   rendered features.
  */
-export function useCommandBridge(mapControllerRef: RefObject<MapController | null>): void {
+export function useCommandBridge(mapControllerRef: RefObject<MapEngine | null>): void {
   useEffect(() => {
     if (!isEmbedded()) return;
     const hostChannel = getEmbedHost();
@@ -131,7 +131,7 @@ export function useCommandBridge(mapControllerRef: RefObject<MapController | nul
     // Map click events. The controller (and its map) become available
     // asynchronously after the map loads, so poll on animation frames until the
     // map exists, then attach the listener.
-    let clickMap: ReturnType<MapController["getMap"]> | null = null;
+    let clickMap: ReturnType<MapEngine["getMap"]> | null = null;
     const onMapClick = (event: maplibregl.MapMouseEvent) => {
       const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
       emit("click", {

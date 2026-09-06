@@ -1,6 +1,19 @@
-import { CesiumCanvas } from "@geolibre/map";
+import { CesiumCanvas, type MapEngine } from "@geolibre/map";
+import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
+
+export interface PrimaryCesiumCanvasProps {
+  /**
+   * The shared engine ref the rest of the app drives the map through. The globe
+   * publishes its `CesiumEngine` into it exactly as `MapCanvas` publishes its
+   * `MapController`, so menus, panels, and shortcuts act on whichever renderer
+   * is live (issue #2260).
+   */
+  engineRef: RefObject<MapEngine | null>;
+  /** Called once the engine is live, to re-arm anything keyed to map readiness. */
+  onEngineReady: () => void;
+}
 
 /**
  * The primary map area drawn by the CesiumJS globe (issue #2217).
@@ -10,11 +23,14 @@ import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
  * basemap, layers, groups, visibility, opacity — so switching engines changes
  * only what draws the project, never the project itself.
  *
- * It renders no `MapController`, so the MapLibre-only overlays (context menu,
- * legend, comments, story map, terrain, the ML panels) are not mounted beside
- * it, and the View menu greys out the items that drive one.
+ * It publishes a `CesiumEngine` into the shared engine ref rather than a
+ * `MapController`, so camera work, terrain, and layer sync all reach the globe
+ * through the same calls the 2D map answers. The MapLibre-only overlays
+ * (context menu, legend, comments, story map, the ML panels) are still not
+ * mounted beside it, and the menus gate those on `engine.capabilities` rather
+ * than on the renderer's name.
  */
-export function PrimaryCesiumCanvas() {
+export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumCanvasProps) {
   const { t } = useTranslation();
   const ionToken = useCesiumIonToken();
 
@@ -24,7 +40,12 @@ export function PrimaryCesiumCanvas() {
           the globe: `Cesium.Ion.defaultAccessToken` is applied once at viewer
           creation, so without a remount a swapped token would never take
           effect. Mirrors the globe panes in MapGrid. */}
-      <CesiumCanvas key={ionToken} ionToken={ionToken} />
+      <CesiumCanvas
+        key={ionToken}
+        ionToken={ionToken}
+        engineRef={engineRef}
+        onEngineReady={onEngineReady}
+      />
       {/* The globe works without an Ion token — it draws the project basemap —
           so say what a token would add rather than hiding the view. Bottom-end
           keeps it clear of Cesium's own credit display (bottom-left) and of the

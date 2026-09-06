@@ -6,7 +6,7 @@ import {
   type GeoLibreProject,
 } from "@geolibre/core";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";
 import { prepareCollaborationLayers } from "./collaboration-layers";
 
@@ -27,7 +27,7 @@ import { prepareCollaborationLayers } from "./collaboration-layers";
  * @returns The serializable project snapshot.
  */
 export function buildProjectSnapshot(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
   overrides: { layers?: GeoLibreLayer[] } = {},
 ): GeoLibreProject {
   const state = useAppStore.getState();
@@ -69,14 +69,14 @@ export function buildProjectSnapshot(
  * reverting to the credential-bearing local snapshot.
  */
 export function buildProjectEgressSnapshot(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): GeoLibreProject {
   return redactCredentials(buildProjectSnapshot(mapControllerRef));
 }
 
 /** Build a self-contained public snapshot for a remote collaborator. */
 export async function buildCollaborationSnapshot(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<GeoLibreProject> {
   // Keep the plugins barrel out of this module's eager dependency graph: some
   // optional controls load browser-only SDKs at module evaluation time.

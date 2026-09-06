@@ -18,7 +18,7 @@ import {
   type StoryMap,
   type StorySlideMode,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   ColorField,
@@ -60,7 +60,7 @@ import { buildStoryMapHtml } from "../../lib/storymap-export";
 import { StoryMapHandoutDialog } from "./StoryMapHandoutDialog";
 
 interface StoryMapPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 function createId(): string {

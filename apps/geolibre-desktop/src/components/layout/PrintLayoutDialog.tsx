@@ -7,7 +7,7 @@ import {
   VECTOR_COLOR_RAMPS,
   type PrintLayoutConfig,
 } from "@geolibre/core";
-import { loadMarkerSvgImage, type MapController } from "@geolibre/map";
+import { loadMarkerSvgImage, type MapEngine } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,
@@ -119,7 +119,7 @@ import { clearAtlasFeatureMask, showAtlasFeatureMask } from "../../lib/print-atl
 interface PrintLayoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /** Common industry scale denominators offered as quick presets (GH #522). */
@@ -1414,7 +1414,7 @@ export function PrintLayoutDialog({
    * dialog and delay "idle" indefinitely (same failure mode as GH #743);
    * captureMapImage forces a redraw, so proceeding is safe. */
   const waitForAtlasSettle = useCallback(
-    (map: NonNullable<ReturnType<MapController["getMap"]>>) =>
+    (map: NonNullable<ReturnType<MapEngine["getMap"]>>) =>
       new Promise<void>((resolve) => {
         let done = false;
         let timer = 0;

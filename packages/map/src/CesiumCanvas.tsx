@@ -12,6 +12,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
 import { isSameView } from "./cesium-camera";
 import { CesiumEngine } from "./cesium-engine";
+import type { MapEngine } from "./map-engine";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
@@ -60,6 +61,18 @@ export interface CesiumCanvasProps {
    * CESIUM_TOKEN env var.
    */
   ionToken?: string;
+  /**
+   * Ref the globe publishes its {@link CesiumEngine} into, so the app can drive
+   * it the way it drives `MapController` through `MapCanvas`'s `controllerRef`
+   * (issue #2260). Set once the engine exists and nulled on unmount.
+   *
+   * Only meaningful for the primary globe: a grid pane's engine is not the one
+   * menus and panels act on, and publishing it would let the last pane to mount
+   * win the shared ref.
+   */
+  engineRef?: React.MutableRefObject<MapEngine | null>;
+  /** Called once the engine is live and the ref is set. */
+  onEngineReady?: () => void;
 }
 
 /**
@@ -97,11 +110,16 @@ function prepareCesiumEnvironment(): void {
  *   exists to make panes follow the primary camera), and draws every layer with
  *   no per-pane overrides.
  */
-export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: CesiumCanvasProps) {
+export const CesiumCanvas = memo(function CesiumCanvas({
+  viewId,
+  ionToken,
+  engineRef,
+  onEngineReady,
+}: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<CesiumWidget | null>(null);
   const cesiumRef = useRef<typeof import("@cesium/engine") | null>(null);
-  const engineRef = useRef<CesiumEngine | null>(null);
+  const engineInstanceRef = useRef<CesiumEngine | null>(null);
   const controlHostRef = useRef<CesiumControlHost | null>(null);
   // The imagery layers currently drawing the project basemap, at the bottom of
   // the stack. Tracked so a basemap change replaces exactly these and leaves
@@ -118,6 +136,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   viewIdRef.current = viewId;
   const ionTokenRef = useRef(ionToken);
   ionTokenRef.current = ionToken;
+  const engineRefProp = useRef(engineRef);
+  engineRefProp.current = engineRef;
+  const onEngineReadyRef = useRef(onEngineReady);
+  onEngineReadyRef.current = onEngineReady;
 
   // No pane id means this globe *is* the primary map area, not a pane beside it.
   const isPrimary = viewId === undefined;
@@ -222,7 +244,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // Push a store view into the camera. The engine remembers it as the expected
   // echo and re-applies it if terrain settles at a different height.
   function applyView(view: MapViewState): void {
-    engineRef.current?.applyView(view);
+    engineInstanceRef.current?.applyView(view);
   }
 
   /**
@@ -232,7 +254,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
    * scrolled since.
    */
   function isEchoOfOurOwnCamera(view: MapViewState): boolean {
-    const applied = engineRef.current?.getLastAppliedView();
+    const applied = engineInstanceRef.current?.getLastAppliedView();
     return Boolean(applied && isSameView(view, applied));
   }
 
@@ -294,7 +316,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         // constructed before the terrain await below so its listeners are armed
         // for the whole mount, exactly as the hand-rolled versions were.
         const engine = new CesiumEngine(Cesium, viewer, { viewId: viewIdRef.current });
-        engineRef.current = engine;
+        engineInstanceRef.current = engine;
 
         // With a token, add Cesium World Terrain so tilted views show relief.
         // Awaited before the camera is seeded: ground height is what turns
@@ -333,6 +355,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         applyBasemap();
         engine.syncLayers(paneLayersRef.current);
 
+        // Publish the engine only for the primary globe — see `engineRef`.
+        if (isPrimaryRef.current && engineRefProp.current) {
+          engineRefProp.current.current = engine;
+          onEngineReadyRef.current?.();
+        }
+
         if (!cancelled) setReady(true);
       } catch (err) {
         if (cancelled) return;
@@ -344,8 +372,14 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
       cancelled = true;
       // Drops the engine's listeners and its layer sync; the viewer itself is
       // destroyed below.
-      engineRef.current?.destroy();
-      engineRef.current = null;
+      engineInstanceRef.current?.destroy();
+      // Clear the published ref before the engine is torn down, so nothing can
+      // reach a destroyed engine through it. Only ours is cleared: a pane never
+      // published one.
+      if (isPrimaryRef.current && engineRefProp.current?.current === engineInstanceRef.current) {
+        engineRefProp.current.current = null;
+      }
+      engineInstanceRef.current = null;
       // The viewer's destroy() below tears the imagery down with it; just drop
       // the handles so a remount starts from an empty stack and redraws.
       baseImageryLayersRef.current = [];
@@ -387,7 +421,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // mount effect's initial sync already covers the value captured at ready time.
   useEffect(() => {
     if (!ready) return;
-    engineRef.current?.syncLayers(paneLayers);
+    engineInstanceRef.current?.syncLayers(paneLayers);
   }, [ready, paneLayers]);
 
   // Synced: follow the shared global camera. Depend on primitives so an

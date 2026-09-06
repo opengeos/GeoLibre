@@ -2,7 +2,7 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } fro
 import * as maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -34,7 +34,7 @@ interface StoryMapHandoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   story: StoryMap;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** One exportable screen: a chapter or an intro/outro slide. */

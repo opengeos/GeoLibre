@@ -17,7 +17,7 @@ import {
 import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { isTiff } from "./binary-output";
 import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
@@ -40,7 +40,7 @@ export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
 export interface ScriptingDeps {
   /** Lazily resolve the live map controller (it is created asynchronously). */
-  getController: () => MapController | null;
+  getController: () => MapEngine | null;
 }
 
 /**
@@ -58,7 +58,7 @@ export interface ScriptingDeps {
  * @returns The id of the added layer.
  */
 function addWhiteboxRasterOutput(
-  getController: () => MapController | null,
+  getController: () => MapEngine | null,
   bytes: Uint8Array,
   name: string,
   fileName: string,
@@ -69,7 +69,7 @@ function addWhiteboxRasterOutput(
     get current() {
       return getController();
     },
-  } as RefObject<MapController | null>;
+  } as RefObject<MapEngine | null>;
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
   return addRasterToMap(createAppAPI(controllerRef), file, { name });
 }
@@ -133,7 +133,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     getCenter: () => getController()?.readView().center ?? null,
     getBounds: () => getController()?.readView().bbox ?? null,
     flyTo: (params) => {
-      getController()?.flyTo(params as Parameters<MapController["flyTo"]>[0]);
+      getController()?.flyTo(params as Parameters<MapEngine["flyTo"]>[0]);
       return null;
     },
     fitBounds: (params) => {

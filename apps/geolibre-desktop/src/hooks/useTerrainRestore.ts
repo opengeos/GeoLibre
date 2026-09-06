@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { useEffect } from "react";
 
 /**
@@ -17,7 +17,7 @@ import { useEffect } from "react";
  *     projectGeneration: Bumped whenever a project is loaded.
  */
 export function useTerrainRestore(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
   projectGeneration: number,
 ): void {

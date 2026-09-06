@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngine } from "@geolibre/map";
 import { Button, Select, Textarea, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -106,7 +106,7 @@ interface Turn {
 }
 
 interface AssistantPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** Short human-readable summary of a finished tool call. */

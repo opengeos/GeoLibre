@@ -4,7 +4,7 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { ModelToolDescriptor } from "@geolibre/processing";
 import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
 import * as maplibregl from "maplibre-gl";
@@ -23,7 +23,7 @@ import { webSearch } from "./web-search";
 /** Dependencies the assistant tools need beyond the global store. */
 export interface AssistantToolDeps {
   /** Returns the live map controller, or null before the map mounts. */
-  getMapController: () => MapController | null;
+  getMapController: () => MapEngine | null;
   /**
    * Ask the user to approve executing model-generated code before it runs.
    * Resolves true to proceed, false to decline. The assistant can be steered by

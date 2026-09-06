@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   detectObjects,
   isOrtAvailable,
@@ -44,7 +44,7 @@ import {
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 interface ObjectDetectionDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 const IMAGE_EXTENSIONS = ["tif", "tiff", ...DETECTION_PHOTO_EXTENSIONS];

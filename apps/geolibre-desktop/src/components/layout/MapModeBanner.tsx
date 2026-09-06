@@ -9,7 +9,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   subscribeDirectionsState,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";
 import type { TFunction } from "i18next";
@@ -18,7 +18,7 @@ import { Button } from "@geolibre/ui";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 
 interface MapModeBannerProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 function formatDistance(meters: number, locale: string, t: TFunction): string {

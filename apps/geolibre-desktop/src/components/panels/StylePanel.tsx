@@ -57,7 +57,7 @@ import {
 import {
   layerBlendModesSupported,
   subscribeLayerBlendModeSupport,
-  type MapController,
+  type MapEngine,
 } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -183,7 +183,7 @@ function labelOverrideInvalid(
 }
 
 interface StylePanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
   mapReadyGeneration?: number;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;

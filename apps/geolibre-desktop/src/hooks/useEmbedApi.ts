@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
-import { getLayerBounds, type MapController } from "@geolibre/map";
+import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import { captureMapImage } from "../lib/print-layout-export";
 import {
   buildEmbedEvent,
@@ -55,7 +55,7 @@ const VIEW_THROTTLE_MS = 250;
  *   MapCanvas and the other bridges), used to drive and read the camera.
  */
 export function useEmbedApi(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
   mapAppAPI: ReturnType<typeof createAppAPI> | null,
 ): void {
   useEffect(() => {
@@ -369,7 +369,7 @@ export function useEmbedApi(
 
     // Camera events. The controller and its map appear asynchronously, so poll
     // animation frames until the map exists (same pattern as useCommandBridge).
-    let viewMap: ReturnType<MapController["getMap"]> | null = null;
+    let viewMap: ReturnType<MapEngine["getMap"]> | null = null;
     let lastViewAt = 0;
     let trailingTimer: number | null = null;
     const postView = () => {

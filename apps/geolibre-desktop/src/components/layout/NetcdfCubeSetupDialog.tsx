@@ -1,4 +1,4 @@
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { LocalNetcdfAxis } from "@geolibre/plugins";
 import {
   Button,
@@ -32,7 +32,7 @@ import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 
 interface NetcdfCubeSetupDialogProps {
   /** The live map, for "use the current view" and for drawing an extent. */
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

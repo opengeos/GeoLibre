@@ -1,5 +1,5 @@
 import type { MapViewState } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { MapLibreEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -54,7 +54,7 @@ export interface ViewportHistory {
  *     The current navigability flags and the back/forward actions.
  */
 export function useViewportHistory(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
   projectGeneration: number,
 ): ViewportHistory {

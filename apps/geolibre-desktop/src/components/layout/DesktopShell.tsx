@@ -1,7 +1,7 @@
 // @refresh reset
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
-import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
+import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
 import { getLayerBounds, MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
@@ -657,7 +657,7 @@ export function DesktopShell({
   // mid-drag still detaches the global listeners and restores document.body.
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
-  const mapControllerRef = useRef<MapController | null>(null);
+  const mapControllerRef = useRef<MapEngine | null>(null);
 
   // Frame layers a `?data=` deep link added. Single non-GeoJSON datasets move
   // the camera in their format-specific loader; a repeated `data` batch lists
@@ -1367,20 +1367,20 @@ export function DesktopShell({
   );
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
-  // Switching to the globe destroys the MapLibre map, which would otherwise
-  // leave `mapControllerRef` pointing at a removed map and `mapReadyGeneration`
-  // claiming one is live. Reset both to the boot state — the "no map yet" case
-  // every consumer already handles — so nothing calls into a dead map. Switching
-  // back remounts MapCanvas, which fires onControllerReady and re-arms them.
+  // Switching engines swaps which engine the shared ref points at: MapCanvas
+  // unmounts and clears it, then PrimaryCesiumCanvas publishes its CesiumEngine
+  // (and the reverse on the way back). The ref is no longer nulled wholesale
+  // here — that was necessary while only MapLibre implemented the surface, and
+  // it is what left every menu, panel, and shortcut pointing at nothing on the
+  // globe (#2260). Each canvas owns clearing its own engine on unmount, so the
+  // ref is never left aimed at a destroyed map.
   //
-  // The four MapLibre-only panels below unmount with the map, so any that were
-  // open are closed here too. Without this their open flags survive on the
+  // The MapLibre-only panels below still unmount with the 2D map, so any that
+  // were open are closed here. Without this their open flags survive on the
   // globe and the panel springs back the moment the user returns to 2D, long
   // after they meant to dismiss it (#2217 review).
   useEffect(() => {
     if (!cesiumPrimary) return;
-    mapControllerRef.current = null;
-    setMapReadyGeneration(0);
     setRasterSubsetLayer(null);
     setBasemapExtractOpen(false);
     setObjectDetectionOpen(false);
@@ -2596,7 +2596,10 @@ export function DesktopShell({
                   neutral, store-driven overlays sit outside the branch and are
                   available under either engine. */}
               {cesiumPrimary ? (
-                <PrimaryCesiumCanvas />
+                <PrimaryCesiumCanvas
+                  engineRef={mapControllerRef}
+                  onEngineReady={handleMapControllerReady}
+                />
               ) : (
                 <>
                   <MapCanvas

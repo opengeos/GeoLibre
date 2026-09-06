@@ -1,6 +1,6 @@
 import * as maplibregl from "maplibre-gl";
 import { type RefObject, useEffect, useSyncExternalStore } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { netcdfSeriesColor } from "../../lib/netcdf-profile-series";
 import {
   getNetcdfProfileSamples,
@@ -56,7 +56,7 @@ export function NetcdfSampleMarkers({
   mapControllerRef,
   mapReadyGeneration,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
 }) {
   const samples = useSyncExternalStore(

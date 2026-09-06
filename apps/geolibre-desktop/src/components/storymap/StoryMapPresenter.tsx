@@ -17,7 +17,7 @@ import {
   type StoryChapter,
   type StoryMap,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
 import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
@@ -30,7 +30,7 @@ import {
 } from "../../lib/storymap-constants";
 
 interface StoryMapPresenterProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */

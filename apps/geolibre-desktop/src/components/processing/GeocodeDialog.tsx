@@ -12,7 +12,7 @@ import {
   rowCap,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -33,7 +33,7 @@ import { sniffDelimiter } from "../../lib/deck-viz-input";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 interface GeocodeDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 interface ParsedCsv {

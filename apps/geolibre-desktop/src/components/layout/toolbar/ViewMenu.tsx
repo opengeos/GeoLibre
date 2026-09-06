@@ -150,13 +150,12 @@ export function ViewMenu({
   // profile says: this submenu is the only way back to the 2D map, and hiding
   // it there would strand a user on a renderer whose tools are all disabled.
   const showRenderingEngine = show("view.renderingEngine") || primaryRenderer === "cesium";
-  // Every item in this menu except Split View and Rendering engine drives the
-  // MapLibre `MapController` — zoom, viewport history, orientation, Set View,
-  // and the Google Maps/Earth hand-offs all read or animate that map. The globe
-  // has no controller, so they would silently do nothing; grey them out so the
-  // menu shows they are unavailable rather than failing quietly (#2217). The
-  // Rendering engine submenu below stays enabled as the way back to 2D.
-  const noMapLibreMap = primaryRenderer === "cesium";
+  // Zoom, viewport history, orientation, Set View, and the Google Maps/Earth
+  // hand-offs read or animate the camera — which every engine has. They were
+  // greyed out on the globe only because there was no engine behind the ref to
+  // answer them (#2217); `CesiumEngine` answers all of them now, so the gate is
+  // gone (#2260). Items that need a capability the engine lacks say so through
+  // `capabilities` instead of naming the renderer.
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
   const showExternal = showGoogleMaps || showGoogleEarth;
@@ -197,32 +196,26 @@ export function ViewMenu({
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
-          <DropdownMenuItem disabled={atMaxZoom || noMapLibreMap} onSelect={onZoomIn}>
+          <DropdownMenuItem disabled={atMaxZoom} onSelect={onZoomIn}>
             <ZoomIn className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomIn")}</span>
           </DropdownMenuItem>
         )}
         {show("view.zoomOut") && (
-          <DropdownMenuItem disabled={atMinZoom || noMapLibreMap} onSelect={onZoomOut}>
+          <DropdownMenuItem disabled={atMinZoom} onSelect={onZoomOut}>
             <ZoomOut className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.zoomOut")}</span>
           </DropdownMenuItem>
         )}
         {showZoom && showNavigation && <DropdownMenuSeparator />}
         {show("view.previousView") && (
-          <DropdownMenuItem
-            disabled={!history.canGoBack || noMapLibreMap}
-            onSelect={history.goBack}
-          >
+          <DropdownMenuItem disabled={!history.canGoBack} onSelect={history.goBack}>
             <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.previousView")}</span>
           </DropdownMenuItem>
         )}
         {show("view.nextView") && (
-          <DropdownMenuItem
-            disabled={!history.canGoForward || noMapLibreMap}
-            onSelect={history.goForward}
-          >
+          <DropdownMenuItem disabled={!history.canGoForward} onSelect={history.goForward}>
             <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">{t("toolbar.item.nextView")}</span>
           </DropdownMenuItem>
@@ -231,7 +224,7 @@ export function ViewMenu({
         {showReset && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger
-              disabled={allResetDisabled || noMapLibreMap}
+              disabled={allResetDisabled}
               className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
@@ -268,7 +261,7 @@ export function ViewMenu({
         )}
         {(showZoom || showNavigation || showReset) && showSetView && <DropdownMenuSeparator />}
         {showSetView && (
-          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onSetView}>
+          <DropdownMenuItem onSelect={onSetView}>
             <Crosshair className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.setView")}</span>
           </DropdownMenuItem>
@@ -361,13 +354,13 @@ export function ViewMenu({
           showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
-          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleMaps}>
+          <DropdownMenuItem onSelect={onViewInGoogleMaps}>
             <MapIcon className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleMaps")}</span>
           </DropdownMenuItem>
         )}
         {showGoogleEarth && (
-          <DropdownMenuItem disabled={noMapLibreMap} onSelect={onViewInGoogleEarth}>
+          <DropdownMenuItem onSelect={onViewInGoogleEarth}>
             <Earth className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.viewInGoogleEarth")}</span>
           </DropdownMenuItem>

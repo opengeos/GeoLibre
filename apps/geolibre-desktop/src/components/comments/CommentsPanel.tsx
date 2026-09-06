@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAppStore, type ProjectComment, type CommentReply } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, Input, ScrollArea, cn } from "@geolibre/ui";
 import {
   MessageSquare,
@@ -45,7 +45,7 @@ function saveStoredName(name: string): void {
 }
 
 interface CommentsPanelProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   collaboration?: CollaborationApi;
   onActivateCommentTool?: () => void;
   isCommentToolActive?: boolean;

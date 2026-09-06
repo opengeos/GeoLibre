@@ -1,5 +1,5 @@
 import { geojsonHasZCoordinates, styleValue, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
@@ -78,7 +78,7 @@ interface LineLayerOption {
 }
 
 interface RouteAnimationPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /**

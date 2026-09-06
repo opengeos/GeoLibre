@@ -4,7 +4,7 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { Feature, FeatureCollection } from "geojson";
 
 /**
@@ -56,7 +56,7 @@ export function clearFeatureSelection(): void {
 }
 
 /** Fit the map to the selected features (re-using the highlight overlay). */
-export function zoomToSelection(controller: MapController | null): void {
+export function zoomToSelection(controller: MapEngine | null): void {
   const store = useAppStore.getState();
   const layer = selectionHolderLayer();
   if (!layer || store.selectedFeatureIds.length === 0) return;

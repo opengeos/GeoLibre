@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import * as maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   currentEditorIdentity,
   editorTrackingFieldNames,
@@ -72,7 +72,7 @@ import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 interface FieldCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   /** Bumped by the shell whenever the map controller (re)initialises. */
   mapReadyGeneration: number;
 }
