@@ -43,6 +43,7 @@ const CONTROL_CLASS = "geolibre-cesium-ctrl";
 export interface CesiumWidgetControlLabels {
   basemap?: string;
   imagery?: string;
+  other?: string;
   terrain?: string;
   projectBasemap?: string;
   /** Tooltip for the home button. */

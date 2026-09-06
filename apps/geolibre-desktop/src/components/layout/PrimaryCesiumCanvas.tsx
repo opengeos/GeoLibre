@@ -42,6 +42,7 @@ export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumC
     () => ({
       basemap: t("renderer.basemap"),
       imagery: t("renderer.imagery"),
+      other: t("newProject.sectionOther"),
       terrain: t("toolbar.mapControl.terrain"),
       projectBasemap: t("renderer.projectBasemap"),
       home: t("renderer.resetView"),

@@ -46,6 +46,74 @@ describe("Cesium basemap choices", () => {
     );
   });
 
+  it("includes the eight Other providers without requiring an ion token", () => {
+    const other = CESIUM_BASEMAPS.filter(
+      (entry) => "category" in entry && entry.category === "Other",
+    );
+    assert.deepEqual(
+      other.map((entry) => entry.id),
+      [
+        "esri-imagery",
+        "esri-hillshade",
+        "esri-ocean",
+        "osm",
+        "stadia-watercolor",
+        "stadia-toner",
+        "stadia-smooth",
+        "stadia-dark",
+      ],
+    );
+    for (const entry of other) {
+      assert.equal(availableCesiumBasemap(entry.id, false), entry.id);
+      const project = createEmptyProject();
+      project.preferences!.map.cesiumBasemap = entry.id;
+      assert.equal(
+        parseProject(serializeProject(project)).preferences?.map.cesiumBasemap,
+        entry.id,
+      );
+    }
+  });
+
+  it("resolves public Esri services and keeps distinct services distinct", () => {
+    const imagery = basemapToCesiumImagery(undefined, "esri-imagery");
+    const hillshade = basemapToCesiumImagery(undefined, "esri-hillshade");
+    assert.deepEqual(imagery, {
+      kind: "arcgis",
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+    });
+    assert.equal(sameCesiumImagery(imagery, hillshade), false);
+    assert.equal(
+      sameCesiumImagery(imagery, basemapToCesiumImagery(undefined, "esri-imagery")),
+      true,
+    );
+  });
+
+  it("uses the correct Stadia image formats, zoom limits and attribution", () => {
+    for (const id of [
+      "stadia-watercolor",
+      "stadia-toner",
+      "stadia-smooth",
+      "stadia-dark",
+    ] as const) {
+      const imagery = basemapToCesiumImagery(undefined, id);
+      assert.equal(imagery.kind, "xyz");
+      if (imagery.kind !== "xyz") continue;
+      assert.equal(imagery.apiKeyProvider, "stadia");
+      assert.ok(imagery.template.endsWith(id === "stadia-watercolor" ? ".jpg" : ".png"));
+      assert.equal(imagery.maximumLevel, id === "stadia-watercolor" ? 16 : 20);
+      assert.match(imagery.attribution, /Stadia Maps.*OpenMapTiles.*OpenStreetMap/);
+      assert.equal(
+        imagery.attribution.includes("Stamen Design"),
+        id === "stadia-watercolor" || id === "stadia-toner",
+      );
+      assert.ok(
+        !imagery.template.includes("api_key"),
+        "credentials are supplied only at render time",
+      );
+      assert.equal(sameCesiumImagery(imagery, { ...imagery, apiKeyProvider: undefined }), false);
+    }
+  });
+
   it("does not treat different ion assets as the same background", () => {
     assert.equal(
       sameCesiumImagery({ kind: "ion", assetId: 2 }, { kind: "ion", assetId: 3 }),

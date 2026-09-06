@@ -47,7 +47,8 @@ export class CesiumBaseLayerPickerControl implements CesiumWidgetControlHandle {
           name: entry.name,
           tooltip: entry.name,
           iconUrl: buildModuleUrl(`Widgets/Images/ImageryProviders/${entry.icon}`),
-          category: "assetId" in entry ? "Cesium ion" : "GeoLibre",
+          category:
+            "category" in entry ? entry.category : "assetId" in entry ? "Cesium ion" : "GeoLibre",
           creationFunction: () => {
             if (!this.syncing) this.selectImagery(entry.id);
             return [];
@@ -179,6 +180,14 @@ export class CesiumBaseLayerPickerControl implements CesiumWidgetControlHandle {
     if (project) {
       project.name = labels.projectBasemap ?? "Project basemap";
       project.tooltip = project.name;
+    }
+    for (const title of this.container?.querySelectorAll<HTMLElement>(
+      ".cesium-baseLayerPicker-categoryTitle",
+    ) ?? []) {
+      if (title.textContent === "Other" || title.dataset.otherCategory) {
+        title.dataset.otherCategory = "true";
+        title.textContent = labels.other ?? "Other";
+      }
     }
     const titles = this.container?.querySelectorAll(".cesium-baseLayerPicker-sectionTitle");
     if (titles?.[0]) titles[0].textContent = labels.imagery ?? "Imagery";

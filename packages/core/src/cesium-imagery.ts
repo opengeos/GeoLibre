@@ -28,7 +28,6 @@ import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "./types";
 /** Stable project IDs and the corresponding Cesium bundled thumbnails / ion assets. */
 export const CESIUM_BASEMAPS = [
   { id: "project", name: "Project basemap", icon: "naturalEarthII.png" },
-  { id: "osm", name: "OpenStreetMap", icon: "openStreetMap.png" },
   { id: "natural-earth", name: "Natural Earth II", icon: "naturalEarthII.png" },
   { id: "bing-aerial", name: "Bing Maps Aerial", icon: "bingAerial.png", assetId: 2 },
   {
@@ -62,6 +61,64 @@ export const CESIUM_BASEMAPS = [
   },
   { id: "azure-aerial", name: "Azure Maps Aerial", icon: "azureAerial.png", assetId: 3891168 },
   { id: "azure-roads", name: "Azure Maps Roads", icon: "azureRoads.png", assetId: 3891169 },
+  {
+    id: "esri-imagery",
+    name: "ArcGIS World Imagery",
+    icon: "ArcGisMapServiceWorldImagery.png",
+    category: "Other",
+    service: "World_Imagery",
+  },
+  {
+    id: "esri-hillshade",
+    name: "ArcGIS World Hillshade",
+    icon: "ArcGisMapServiceWorldHillshade.png",
+    category: "Other",
+    service: "Elevation/World_Hillshade",
+  },
+  {
+    id: "esri-ocean",
+    name: "Esri World Ocean",
+    icon: "ArcGisMapServiceWorldOcean.png",
+    category: "Other",
+    service: "Ocean/World_Ocean_Base",
+  },
+  { id: "osm", name: "OpenStreetMap", icon: "openStreetMap.png", category: "Other" },
+  {
+    id: "stadia-watercolor",
+    name: "Stadia x Stamen Watercolor",
+    icon: "stamenWatercolor.png",
+    category: "Other",
+    stadiaStyle: "stamen_watercolor",
+    maximumLevel: 16,
+    extension: "jpg",
+  },
+  {
+    id: "stadia-toner",
+    name: "Stadia x Stamen Toner",
+    icon: "stamenToner.png",
+    category: "Other",
+    stadiaStyle: "stamen_toner",
+    maximumLevel: 20,
+    extension: "png",
+  },
+  {
+    id: "stadia-smooth",
+    name: "Stadia Alidade Smooth",
+    icon: "stadiaAlidadeSmooth.png",
+    category: "Other",
+    stadiaStyle: "alidade_smooth",
+    maximumLevel: 20,
+    extension: "png",
+  },
+  {
+    id: "stadia-dark",
+    name: "Stadia Alidade Smooth Dark",
+    icon: "stadiaAlidadeSmoothDark.png",
+    category: "Other",
+    stadiaStyle: "alidade_smooth_dark",
+    maximumLevel: 20,
+    extension: "png",
+  },
 ] as const;
 
 export type CesiumBasemapId = (typeof CESIUM_BASEMAPS)[number]["id"];
@@ -92,10 +149,13 @@ export type CesiumBasemapImagery =
   | { kind: "default" }
   | { kind: "ion"; assetId: number }
   | { kind: "natural-earth" }
+  | { kind: "arcgis"; url: string }
   | {
       kind: "xyz";
       /** Tile template with `{z}`/`{x}`/`{y}` placeholders. */
       template: string;
+      /** Credentials are resolved at render time, never embedded in the descriptor. */
+      apiKeyProvider?: "stadia";
       /** Credit to show on the globe, as the HTML the 2D map already uses. */
       attribution: string;
       /** Max native zoom of the source, so the globe overzooms rather than 404s. */
@@ -207,11 +267,13 @@ function toImagery(analogue: RasterAnalogue): CesiumBasemapImagery {
  */
 export function sameCesiumImagery(a: CesiumBasemapImagery, b: CesiumBasemapImagery): boolean {
   if (a.kind !== b.kind) return false;
+  if (a.kind === "arcgis" && b.kind === "arcgis") return a.url === b.url;
   if (a.kind === "ion" && b.kind === "ion") return a.assetId === b.assetId;
   // `none` and `default` carry no fields, so matching kinds is the whole test.
   if (a.kind !== "xyz" || b.kind !== "xyz") return true;
   return (
     a.template === b.template &&
+    a.apiKeyProvider === b.apiKeyProvider &&
     a.attribution === b.attribution &&
     a.maximumLevel === b.maximumLevel &&
     a.scheme === b.scheme &&
@@ -284,6 +346,27 @@ export function basemapToCesiumImagery(
   cesiumBasemap: CesiumBasemapId = "project",
 ): CesiumBasemapImagery {
   const entry = CESIUM_BASEMAPS.find((entry) => entry.id === cesiumBasemap);
+  if (entry && "service" in entry) {
+    return {
+      kind: "arcgis",
+      url: `https://services.arcgisonline.com/ArcGIS/rest/services/${entry.service}/MapServer`,
+    };
+  }
+  if (entry && "stadiaStyle" in entry) {
+    return {
+      kind: "xyz",
+      template: `https://tiles.stadiamaps.com/tiles/${entry.stadiaStyle}/{z}/{x}/{y}.${entry.extension}`,
+      maximumLevel: entry.maximumLevel,
+      apiKeyProvider: "stadia",
+      attribution:
+        '<a href="https://stadiamaps.com/">© Stadia Maps</a> ' +
+        (entry.stadiaStyle.startsWith("stamen_")
+          ? '<a href="https://stamen.com/">© Stamen Design</a> '
+          : "") +
+        '<a href="https://openmaptiles.org/">© OpenMapTiles</a> ' +
+        '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
+    };
+  }
   if (entry && "assetId" in entry) return { kind: "ion", assetId: entry.assetId };
   if (cesiumBasemap === "natural-earth") return { kind: "natural-earth" };
   if (cesiumBasemap === "osm") return toImagery(STREETS);

@@ -10,7 +10,7 @@ import {
 } from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer } from "@cesium/engine";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
+import { applyBasemapAppearance, applyBasemapImagery, getStadiaApiKey } from "./cesium-basemap";
 import { isSameView } from "./cesium-camera";
 import { CesiumEngine } from "./cesium-engine";
 import type { MapEngine } from "./map-engine";
@@ -353,6 +353,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         cesiumRef.current = Cesium;
         viewerRef.current = viewer;
 
+        // Match the pale globe and dark space used by the MapLibre view while
+        // retaining Cesium's native stars and atmospheric glow.
+        viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#cae2f8");
+        viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0c1b33");
+
         // Note for anyone reintroducing `Viewer`: it installs a double-click
         // "track entity" gesture that flies to and camera-locks a picked
         // feature, which fights the store-driven camera sync and isn't wired to
@@ -491,6 +496,25 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     applyBasemap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapImagery]);
+
+  // Stadia can authenticate through a registered domain or a runtime API key.
+  // Rebuild only its active provider when that key changes in Settings.
+  useEffect(() => {
+    if (!ready) return;
+    let key = getStadiaApiKey();
+    const refresh = () => {
+      const next = getStadiaApiKey();
+      if (next === key) return;
+      key = next;
+      const imagery = basemapImageryRef.current;
+      if (imagery.kind !== "xyz" || imagery.apiKeyProvider !== "stadia") return;
+      appliedImageryRef.current = null;
+      applyBasemap();
+    };
+    window.addEventListener("geolibre:runtime-env-change", refresh);
+    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // Terrain selection uses the same saved preference as Controls → Terrain,
   // including globe panes that do not host a toolbar.

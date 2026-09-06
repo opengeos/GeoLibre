@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CesiumBasemapImagery } from "../packages/core/src/cesium-imagery";
-import { applyBasemapAppearance, applyBasemapImagery } from "../packages/map/src/cesium-basemap";
+import {
+  applyBasemapAppearance,
+  applyBasemapImagery,
+  getStadiaApiKey,
+} from "../packages/map/src/cesium-basemap";
 
 // Verifies that the project basemap lands at the bottom of the globe's imagery
 // stack (below the data layers CesiumLayerSync appends), that a basemap change
@@ -17,6 +21,7 @@ interface FakeLayer {
 function makeFakes() {
   // The imagery stack, bottom (index 0) to top, as Cesium models it.
   const stack: FakeLayer[] = [];
+  const arcgisRequests: Array<{ url: string; options: unknown }> = [];
 
   const viewer = {
     imageryLayers: {
@@ -37,6 +42,12 @@ function makeFakes() {
   };
 
   const Cesium = {
+    ArcGisMapServerImageryProvider: {
+      fromUrl(url: string, options: unknown) {
+        arcgisRequests.push({ url, options });
+        return Promise.resolve({});
+      },
+    },
     UrlTemplateImageryProvider: class {
       url: string;
       maximumLevel?: number;
@@ -62,6 +73,7 @@ function makeFakes() {
   // The two fakes only implement the surface applyBasemapImagery touches.
   return {
     stack,
+    arcgisRequests,
     viewer: viewer as unknown as Parameters<typeof applyBasemapImagery>[1],
     Cesium: Cesium as unknown as Parameters<typeof applyBasemapImagery>[0],
   };
@@ -163,6 +175,53 @@ describe("applyBasemapImagery", () => {
 
     assert.deepEqual(added, []);
     assert.deepEqual(stack, [data], "only the data layer should remain");
+  });
+
+  it("switches to Esri without removing raster overlays or using Cesium's demo token", () => {
+    const { Cesium, viewer, stack, arcgisRequests } = makeFakes();
+    const previous = applyBasemapImagery(Cesium, viewer, [], XYZ, undefined);
+    const data = pushDataLayer(stack);
+    const url = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
+    const added = applyBasemapImagery(Cesium, viewer, previous, { kind: "arcgis", url }, undefined);
+    assert.deepEqual(arcgisRequests, [{ url, options: { enablePickFeatures: false } }]);
+    assert.deepEqual(stack, [added[0], data]);
+  });
+
+  it("adds the live Stadia key only to Stadia requests, encoding special characters", () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { __GEOLIBRE_RUNTIME_ENV__: { VITE_STADIA_API_KEY: " test&key=? " } },
+    });
+    try {
+      const { Cesium, viewer } = makeFakes();
+      const template = "https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg";
+      const added = applyBasemapImagery(
+        Cesium,
+        viewer,
+        [],
+        { ...XYZ, template, apiKeyProvider: "stadia" },
+        undefined,
+      );
+      assert.equal((added[0] as FakeLayer).provider?.url, template + "?api_key=test%26key%3D%3F");
+      const unrelated = applyBasemapImagery(Cesium, viewer, added, XYZ, undefined);
+      assert.equal(
+        (unrelated[0] as FakeLayer).provider?.url,
+        XYZ.kind === "xyz" ? XYZ.template : "",
+      );
+    } finally {
+      if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow);
+      else Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+
+  it("allows Stadia domain authentication and normalizes runtime API keys", () => {
+    assert.equal(getStadiaApiKey({}), undefined);
+    assert.equal(
+      getStadiaApiKey({ VITE_STADIA_API_KEY: " first ", STADIA_API_KEY: "second" }),
+      "first",
+    );
+    assert.equal(getStadiaApiKey({ STADIA_API_KEY: " second " }), "second");
   });
 
   it("falls back to Ion World Imagery when a token is configured", () => {

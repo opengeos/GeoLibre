@@ -1,4 +1,4 @@
-import type { CesiumBasemapImagery } from "@geolibre/core";
+import { getRuntimeEnvironment, type CesiumBasemapImagery } from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
@@ -17,6 +17,11 @@ type CesiumNs = typeof import("@cesium/engine");
 /** Keyless imagery for a basemap with no raster form when no Ion token is set. */
 const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
 
+/** Read the live key so Settings changes do not require a new project. */
+export function getStadiaApiKey(env = getRuntimeEnvironment()): string | undefined {
+  return env.VITE_STADIA_API_KEY?.trim() || env.STADIA_API_KEY?.trim() || undefined;
+}
+
 /**
  * An imagery provider for one tile template. TMS row ordering is expressed by
  * swapping `{y}` for Cesium's `{reverseY}` placeholder: Cesium has no `scheme`
@@ -26,10 +31,18 @@ const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
 function templateProvider(
   Cesium: CesiumNs,
   template: string,
-  options: { attribution?: string; maximumLevel?: number; scheme?: "tms" },
+  options: {
+    attribution?: string;
+    maximumLevel?: number;
+    scheme?: "tms";
+    apiKeyProvider?: "stadia";
+  },
 ): ImageryProvider {
+  let url = options.scheme === "tms" ? template.replace("{y}", "{reverseY}") : template;
+  const key = options.apiKeyProvider === "stadia" ? getStadiaApiKey() : undefined;
+  if (key) url += `?api_key=${encodeURIComponent(key)}`;
   return new Cesium.UrlTemplateImageryProvider({
-    url: options.scheme === "tms" ? template.replace("{y}", "{reverseY}") : template,
+    url,
     maximumLevel: options.maximumLevel,
     // Cesium shows this in its own credit display, keeping the keyless raster
     // basemaps licence-clean the way the 2D map's attribution control does.
@@ -92,6 +105,16 @@ export function applyBasemapImagery(
   // ellipsoid bare, as the 2D panes leave their canvas empty.
   if (imagery.kind === "none") return [];
 
+  if (imagery.kind === "arcgis") {
+    // Public ArcGIS services supply their own attribution and tile-level limits.
+    // Avoid Cesium's bundled evaluation token for the authenticated basemap API.
+    const layer = Cesium.ImageryLayer.fromProviderAsync(
+      Cesium.ArcGisMapServerImageryProvider.fromUrl(imagery.url, { enablePickFeatures: false }),
+    );
+    viewer.imageryLayers.add(layer, 0);
+    return [layer];
+  }
+
   if (imagery.kind === "ion" || imagery.kind === "natural-earth") {
     const provider =
       imagery.kind === "ion"
@@ -119,10 +142,10 @@ export function applyBasemapImagery(
     return [layer];
   }
 
-  const { template, attribution, maximumLevel, scheme, overlayTemplate } = imagery;
+  const { template, attribution, maximumLevel, scheme, overlayTemplate, apiKeyProvider } = imagery;
   const added = [
     viewer.imageryLayers.addImageryProvider(
-      templateProvider(Cesium, template, { attribution, maximumLevel, scheme }),
+      templateProvider(Cesium, template, { attribution, maximumLevel, scheme, apiKeyProvider }),
       0,
     ),
   ];
