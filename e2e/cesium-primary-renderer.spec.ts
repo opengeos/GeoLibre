@@ -208,23 +208,19 @@ test.describe("Cesium toolbar controls on the globe", () => {
 
     await waitForMap(page);
 
-    // Zoom the 2D map in first, so the globe seeds from a close camera rather
-    // than the default whole-Earth view. That is not incidental tidying: wheel
-    // zoom on a globe framed at the full Earth trips a `DeveloperError:
-    // normalized result is not a number` inside Cesium's own
-    // ScreenSpaceCameraController and stops the render loop. It reproduces on an
-    // unmodified build, so it predates these controls and is not what this test
-    // is here to catch — the test above avoids it the same way, by arriving on
-    // the globe already zoomed in.
-    const mapBox = await page.getByTestId("map-canvas").boundingBox();
-    expect(mapBox).not.toBeNull();
-    await page.mouse.move(mapBox!.x + mapBox!.width / 2, mapBox!.y + mapBox!.height / 2);
-    for (let tick = 0; tick < 5; tick++) {
-      await page.mouse.wheel(0, -200);
-      await page.waitForTimeout(80);
-    }
+    // Seed a known close camera through the UI. A burst of wheel events can
+    // still be queued while two identical status-bar samples appear stable on
+    // a busy CI runner. Wait for the requested endpoint before swapping engines.
+    await page.getByRole("button", { name: "View", exact: true }).click();
+    await page.getByRole("menuitem", { name: /Set View/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Set View" });
+    await dialog.locator("#set-view-longitude").fill("-97.5");
+    await dialog.locator("#set-view-latitude").fill("35.4");
+    await dialog.locator("#set-view-zoom").fill("6");
+    await dialog.getByRole("button", { name: "Go", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBe(6);
     const zoomOn2dMap = await waitForStableZoom(page);
-    expect(zoomOn2dMap).toBeGreaterThan(2);
 
     await chooseRenderer(page, "Cesium");
     const globe = page.getByTestId("primary-cesium");
