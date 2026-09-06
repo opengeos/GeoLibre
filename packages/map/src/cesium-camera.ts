@@ -71,13 +71,13 @@ export function normalizeBearing(deg: number): number {
 }
 
 /** The vertical field of view of a viewer's camera, with a safe fallback. */
-function cameraFovy(viewer: CesiumWidget): number {
+export function cameraFovy(viewer: CesiumWidget): number {
   const frustum = viewer.camera.frustum as { fovy?: number };
   return frustum.fovy && frustum.fovy > 0 ? frustum.fovy : DEFAULT_FOVY;
 }
 
 /** The viewer canvas height in CSS pixels, guarding against a 0 during layout. */
-function canvasHeight(viewer: CesiumWidget): number {
+export function canvasHeight(viewer: CesiumWidget): number {
   const canvas = viewer.scene.canvas;
   return canvas.clientHeight || canvas.height || 1;
 }

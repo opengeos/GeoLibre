@@ -18,8 +18,11 @@ export { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "./map-resize";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
+export { CESIUM_CAPABILITIES, CesiumEngine, type CesiumEngineOptions } from "./cesium-engine";
 export {
   applyMapViewToCamera,
+  cameraFovy,
+  canvasHeight,
   cesiumPitchToMapLibreDeg,
   groundResolution,
   isSameView,
