@@ -541,6 +541,29 @@ describe("CesiumEngine terrain correction", () => {
 });
 
 describe("CesiumEngine terrain", () => {
+  it("routes the Terrain menu and project restore through the terrain engine", async () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    assert.equal(engine.setBuiltInControlVisible("terrain", true), true);
+    await Promise.resolve();
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "world-terrain" });
+    assert.equal(engine.setBuiltInControlVisible("terrain", false), true);
+    assert.equal(engine.isTerrainEnabled(), false);
+    assert.notDeepEqual(fakes.viewer.terrainProvider, { kind: "world-terrain" });
+    engine.destroy();
+  });
+
+  it("does not enable world terrain without the canvas's credentials", async () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer, { worldTerrainAvailable: false });
+    assert.equal(engine.setBuiltInControlVisible("terrain", true), false);
+    await engine.enableWorldTerrain();
+    assert.equal(engine.isTerrainEnabled(), false);
+    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "initial" });
+    engine.destroy();
+  });
+
   it("swaps in world terrain and reports it enabled", async () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

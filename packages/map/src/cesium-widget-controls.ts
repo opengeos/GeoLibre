@@ -4,14 +4,9 @@ import type { CesiumWidget } from "@cesium/engine";
 // Cesium's own toolbar widgets, mounted on GeoLibre's map as regular map
 // controls (issue #2270).
 //
-// `CesiumCanvas` builds a bare `CesiumWidget` rather than a `Viewer`, precisely
-// so it does not inherit the toolbar Cesium's full app wrapper constructs —
-// base-layer picker, geocoder, home button, scene-mode picker, help button,
-// timeline, animation dial, info box — most of which duplicate something
-// GeoLibre already owns. Three of them do not: nothing else in the app returns
-// the camera to a whole-Earth view, nothing at all reaches Cesium's 2D and
-// Columbus scene modes, and MapLibre's fullscreen control is bound to a
-// `maplibregl.Map` the globe does not have.
+// `CesiumCanvas` builds a bare `CesiumWidget` and mounts the home, scene-mode,
+// basemap and fullscreen widgets individually. The basemap picker writes to
+// project preferences; CesiumCanvas remains the owner of the imagery stack.
 //
 // Each widget is constructible on its own against a container element, so none
 // needs `Viewer`. They are wrapped as `maplibregl.IControl`s so
@@ -22,6 +17,8 @@ import type { CesiumWidget } from "@cesium/engine";
 // mount effect: `@cesium/widgets` is a static import below, and a static import
 // from `CesiumCanvas` would pull the widget chrome (and Knockout) onto the 2D
 // boot path instead of leaving it in the lazily fetched `cesium` chunk.
+
+import { CesiumBaseLayerPickerControl } from "./cesium-base-layer-picker";
 
 import { FullscreenButton, HomeButton, SceneModePicker } from "@cesium/widgets";
 
@@ -44,6 +41,10 @@ const CONTROL_CLASS = "geolibre-cesium-ctrl";
  * that owns them rather than read from a hook here.
  */
 export interface CesiumWidgetControlLabels {
+  basemap?: string;
+  imagery?: string;
+  terrain?: string;
+  projectBasemap?: string;
   /** Tooltip for the home button. */
   home: string;
   /** Tooltip for the 3D globe scene mode. */
@@ -290,7 +291,7 @@ export type CesiumWidgetControlHandle = maplibregl.IControl & {
  *
  * `fullscreen` is named separately because it is the one the app already has a
  * toggle for — Controls → Fullscreen — so `CesiumEngine` needs a handle on it
- * to answer `setBuiltInControlVisible`. The other two have no such counterpart
+ * to answer `setBuiltInControlVisible`. The remaining controls have no such counterpart
  * and are simply always present.
  */
 export interface CesiumWidgetControls {
@@ -314,12 +315,14 @@ export function createCesiumWidgetControls(
   viewer: CesiumWidget,
   fullscreenElement: HTMLElement,
   labels: CesiumWidgetControlLabels = DEFAULT_CESIUM_WIDGET_CONTROL_LABELS,
+  hasIonToken = false,
 ): CesiumWidgetControls {
   const fullscreen = new CesiumFullscreenControl(viewer, labels, fullscreenElement);
   return {
     all: [
       new CesiumHomeControl(viewer, labels),
       new CesiumSceneModeControl(viewer, labels),
+      new CesiumBaseLayerPickerControl(viewer, labels, hasIonToken),
       fullscreen,
     ],
     fullscreen,

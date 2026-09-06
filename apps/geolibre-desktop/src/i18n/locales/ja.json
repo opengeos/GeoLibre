@@ -1826,6 +1826,7 @@
     "cesiumTokenHint": "地形とIon衛星画像を使うには、設定でCesium Ionトークンを追加してください"
   },
   "renderer": {
+    "projectBasemap": "プロジェクトのベースマップ",
     "layerUnsupported": "3D地球儀では描画されません",
     "resetView": "表示をリセット",
     "scene3D": "3D地球儀",

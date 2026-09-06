@@ -1871,6 +1871,7 @@
     "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
   "renderer": {
+    "projectBasemap": "Achtergrondkaart van het project",
     "layerUnsupported": "Niet weergegeven door de 3D-globe",
     "resetView": "Weergave herstellen",
     "scene3D": "3D-globe",

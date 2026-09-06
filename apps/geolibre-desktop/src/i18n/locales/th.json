@@ -1826,6 +1826,7 @@
     "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ในการตั้งค่าเพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
   },
   "renderer": {
+    "projectBasemap": "แผนที่ฐานของโครงการ",
     "layerUnsupported": "ไม่แสดงผลบนลูกโลก 3 มิติ",
     "resetView": "รีเซ็ตมุมมอง",
     "scene3D": "ลูกโลก 3 มิติ",

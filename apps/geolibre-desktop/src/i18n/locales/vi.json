@@ -1826,6 +1826,7 @@
     "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
   "renderer": {
+    "projectBasemap": "Sơ đồ cơ sở của dự án",
     "layerUnsupported": "Không được kết xuất trên quả địa cầu 3D",
     "resetView": "Đặt lại chế độ xem",
     "scene3D": "Quả địa cầu 3D",

@@ -92,6 +92,18 @@ export function applyBasemapImagery(
   // ellipsoid bare, as the 2D panes leave their canvas empty.
   if (imagery.kind === "none") return [];
 
+  if (imagery.kind === "ion" || imagery.kind === "natural-earth") {
+    const provider =
+      imagery.kind === "ion"
+        ? Cesium.IonImageryProvider.fromAssetId(imagery.assetId, { accessToken: ionToken })
+        : Cesium.TileMapServiceImageryProvider.fromUrl(
+            Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII"),
+          );
+    const layer = Cesium.ImageryLayer.fromProviderAsync(provider);
+    viewer.imageryLayers.add(layer, 0);
+    return [layer];
+  }
+
   if (imagery.kind === "default") {
     // No raster equivalent for this basemap (a provider style, a custom URL).
     // Ion World Imagery when a token is configured — the globe's historical

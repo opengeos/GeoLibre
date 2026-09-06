@@ -1871,6 +1871,7 @@
     "cesiumTokenHint": "Arazi ve Ion görüntüleri için Ayarlar'dan bir Cesium Ion belirteci ekleyin"
   },
   "renderer": {
+    "projectBasemap": "Proje altlık haritası",
     "layerUnsupported": "3D küre tarafından çizilmiyor",
     "resetView": "Görünümü Sıfırla",
     "scene3D": "3B küre",

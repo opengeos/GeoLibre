@@ -4454,3 +4454,75 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .geolibre-cesium-ctrl .cesium-sceneModePicker-hidden {
   display: none;
 }
+
+/* The native basemap gallery opens beside the Cesium toolbar and stays inside
+   the map, including short split panes and fullscreen layouts. */
+.geolibre-cesium-basemap-picker {
+  position: relative;
+  z-index: 3;
+}
+
+.geolibre-cesium-basemap-picker button.cesium-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-dropDown {
+  top: 0;
+  right: 39px;
+  margin-top: 0;
+  width: min(320px, calc(100vw - 90px));
+  max-height: min(500px, var(--cesium-picker-height, 60vh));
+  background: hsl(var(--popover) / 0.97);
+  font-family: var(--font-sans);
+  line-height: 1.35;
+  color: hsl(var(--popover-foreground));
+  border-color: hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-sectionTitle,
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-categoryTitle,
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-itemLabel {
+  color: inherit;
+  font-family: inherit;
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-choices {
+  border-color: hsl(var(--border));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-item {
+  width: 100%;
+  margin: 0;
+}
+
+.geolibre-cesium-basemap-picker
+  .cesium-baseLayerPicker-selectedItem
+  .cesium-baseLayerPicker-itemIcon {
+  border-color: hsl(var(--primary));
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-item:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.geolibre-cesium-basemap-picker .cesium-baseLayerPicker-itemIcon {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.geolibre-cesium-basemap-picker
+  .cesium-baseLayerPicker-selectedItem
+  .cesium-baseLayerPicker-itemLabel {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}

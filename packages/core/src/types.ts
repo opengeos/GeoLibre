@@ -1584,6 +1584,8 @@ export interface MapPreferences {
   showPointerElevation: boolean;
   /** Whether the built-in 3D terrain control and terrain surface are enabled. */
   terrainEnabled: boolean;
+  /** Cesium imagery override; absent follows the shared project basemap. */
+  cesiumBasemap?: import("./cesium-imagery").CesiumBasemapId;
   /**
    * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
    * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and

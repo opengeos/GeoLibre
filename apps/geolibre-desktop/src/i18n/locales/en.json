@@ -1880,6 +1880,7 @@
     "cesiumTokenHint": "Add a Cesium Ion token in Settings for terrain and Ion imagery"
   },
   "renderer": {
+    "projectBasemap": "Project basemap",
     "layerUnsupported": "Not rendered by the 3D globe",
     "resetView": "Reset view",
     "scene3D": "3D globe",

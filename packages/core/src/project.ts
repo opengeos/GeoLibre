@@ -1,3 +1,4 @@
+import { normalizeCesiumBasemap } from "./cesium-imagery";
 import { v4 as uuidv4 } from "uuid";
 import {
   DEFAULT_BASEMAP,
@@ -1219,6 +1220,9 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       showPointerElevation: normalizeBoolean(
         (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
         DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
+      ),
+      cesiumBasemap: normalizeCesiumBasemap(
+        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap,
       ),
       // Older projects omit this field and continue to open with terrain off.
       terrainEnabled: normalizeBoolean(

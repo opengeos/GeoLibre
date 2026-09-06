@@ -1,5 +1,6 @@
 import {
   applyGroupEffects,
+  availableCesiumBasemap,
   basemapToCesiumImagery,
   sameCesiumImagery,
   useAppStore,
@@ -39,7 +40,7 @@ const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
  * The Cesium stylesheets this pane actually needs, in cascade order.
  *
  * Not the full `Widgets/widgets.css` (32 KB), which also carries the chrome for
- * the base-layer picker, geocoder, timeline, animation dial and info box — none
+ * the geocoder, timeline, animation dial and info box — none
  * of which this pane creates. All of them are staged by copy-cesium-assets, so
  * narrowing the links costs nothing and keeps unused rules out of the document.
  *
@@ -60,6 +61,7 @@ const CESIUM_CSS_PATHS = [
   "/Widgets/shared.css",
   "/Widgets/SceneModePicker/SceneModePicker.css",
   "/Widgets/FullscreenButton/FullscreenButton.css",
+  "/Widgets/BaseLayerPicker/BaseLayerPicker.css",
 ] as const;
 
 export interface CesiumCanvasProps {
@@ -224,7 +226,16 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   // shares the primary map's basemap, so this is read straight from the store
   // the way `layers` is.
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
-  const basemapImagery = useMemo(() => basemapToCesiumImagery(basemapStyleUrl), [basemapStyleUrl]);
+  const cesiumBasemap = useAppStore((s) => s.preferences.map.cesiumBasemap);
+  const terrainEnabled = useAppStore((s) => s.preferences.map.terrainEnabled);
+  const basemapImagery = useMemo(
+    () =>
+      basemapToCesiumImagery(
+        basemapStyleUrl,
+        availableCesiumBasemap(cesiumBasemap, Boolean(ionToken?.trim())),
+      ),
+    [basemapStyleUrl, cesiumBasemap, ionToken],
+  );
   // Read from the mount effect's initial draw without making that
   // dependency-free effect re-run, mirroring paneLayersRef above.
   const basemapImageryRef = useRef(basemapImagery);
@@ -355,14 +366,18 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         // tracking, publishing moves back to the store, and layer sync. It is
         // constructed before the terrain await below so its listeners are armed
         // for the whole mount, exactly as the hand-rolled versions were.
-        const engine = new CesiumEngine(Cesium, viewer, { viewId: viewIdRef.current });
+        const engine = new CesiumEngine(Cesium, viewer, {
+          viewId: viewIdRef.current,
+          worldTerrainAvailable: Boolean(token),
+        });
         engineInstanceRef.current = engine;
 
-        // With a token, add Cesium World Terrain so tilted views show relief.
+        // Restore the saved terrain preference when credentials are available.
         // Awaited before the camera is seeded: ground height is what turns
         // MapLibre's zoom into a camera distance, so seeding first would place
         // the first frame against the ellipsoid.
-        if (token) await engine.enableWorldTerrain();
+        if (token && useAppStore.getState().preferences.map.terrainEnabled)
+          await engine.enableWorldTerrain();
         // The unmount cleanup may have run during the terrain await (destroying
         // the viewer); re-check before touching it, mirroring the guard after the
         // dynamic import above and CesiumLayerSync's post-await checks. Otherwise
@@ -374,7 +389,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           const host = new CesiumControlHost(viewer, container);
           controlHostRef.current = host;
           setPrimaryCesiumControlHost(host);
-          // Cesium's own home and scene-mode buttons (issue #2270). Imported
+          // Cesium's native toolbar widgets. Imported
           // here rather than at module scope so `@cesium/widgets` stays in the
           // lazily fetched `cesium` chunk instead of joining the 2D boot path.
           const { createCesiumWidgetControls } = await import("./cesium-widget-controls");
@@ -387,13 +402,14 @@ export const CesiumCanvas = memo(function CesiumCanvas({
               viewer,
               container,
               controlLabelsRef.current,
+              Boolean(token),
             );
             widgetControlsRef.current = controls;
             // Top-right, above MapLibre's navigation control on the 2D map, so
             // the toolbar reads the same whichever renderer is drawing.
             for (const control of controls.all) host.addControl(control, "top-right");
             // Hand the fullscreen button to the engine so Controls → Fullscreen
-            // governs it here as it does on the 2D map. The other two have no
+            // governs it here as it does on the 2D map. The other widgets have no
             // menu counterpart and stay unconditional.
             engine.registerBuiltInControl("fullscreen", controls.fullscreen);
           }
@@ -475,6 +491,15 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     applyBasemap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapImagery]);
+
+  // Terrain selection uses the same saved preference as Controls → Terrain,
+  // including globe panes that do not host a toolbar.
+  useEffect(() => {
+    const engine = engineInstanceRef.current;
+    if (!ready || !engine) return;
+    const enabled = terrainEnabled && Boolean(ionToken?.trim());
+    if (engine.isTerrainEnabled() !== enabled) engine.setTerrainEnabled(enabled);
+  }, [ready, terrainEnabled, ionToken]);
 
   // Hiding or fading the background is a live appearance change, so it re-styles
   // the existing layers rather than rebuilding them.

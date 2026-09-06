@@ -25,6 +25,57 @@ import { getPlanetaryBasemapByStyleUrl } from "./ellipsoids";
 import { getRegionalBasemapByStyleUrl } from "./regional-basemaps";
 import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "./types";
 
+/** Stable project IDs and the corresponding Cesium bundled thumbnails / ion assets. */
+export const CESIUM_BASEMAPS = [
+  { id: "project", name: "Project basemap", icon: "naturalEarthII.png" },
+  { id: "osm", name: "OpenStreetMap", icon: "openStreetMap.png" },
+  { id: "natural-earth", name: "Natural Earth II", icon: "naturalEarthII.png" },
+  { id: "bing-aerial", name: "Bing Maps Aerial", icon: "bingAerial.png", assetId: 2 },
+  {
+    id: "bing-labels",
+    name: "Bing Maps Aerial with Labels",
+    icon: "bingAerialLabels.png",
+    assetId: 3,
+  },
+  { id: "bing-roads", name: "Bing Maps Roads", icon: "bingRoads.png", assetId: 4 },
+  { id: "sentinel-2", name: "Sentinel-2", icon: "sentinel-2.png", assetId: 3954 },
+  { id: "blue-marble", name: "Blue Marble", icon: "blueMarble.png", assetId: 3845 },
+  { id: "earth-at-night", name: "Earth at night", icon: "earthAtNight.png", assetId: 3812 },
+  {
+    id: "google-satellite",
+    name: "Google Maps Satellite",
+    icon: "googleSatellite.png",
+    assetId: 3830182,
+  },
+  {
+    id: "google-labels",
+    name: "Google Maps Satellite with Labels",
+    icon: "googleSatelliteLabels.png",
+    assetId: 3830183,
+  },
+  { id: "google-roads", name: "Google Maps Roadmap", icon: "googleRoadmap.png", assetId: 3830184 },
+  {
+    id: "google-contour",
+    name: "Google Maps Contour",
+    icon: "googleContour.png",
+    assetId: 3830186,
+  },
+  { id: "azure-aerial", name: "Azure Maps Aerial", icon: "azureAerial.png", assetId: 3891168 },
+  { id: "azure-roads", name: "Azure Maps Roads", icon: "azureRoads.png", assetId: 3891169 },
+] as const;
+
+export type CesiumBasemapId = (typeof CESIUM_BASEMAPS)[number]["id"];
+
+export function normalizeCesiumBasemap(value: unknown): CesiumBasemapId {
+  return CESIUM_BASEMAPS.find((entry) => entry.id === value)?.id ?? "project";
+}
+
+/** Missing credentials fall back to the project background without changing the saved choice. */
+export function availableCesiumBasemap(value: unknown, hasIonToken: boolean): CesiumBasemapId {
+  const entry = CESIUM_BASEMAPS.find((entry) => entry.id === value);
+  return entry && (!("assetId" in entry) || hasIonToken) ? entry.id : "project";
+}
+
 /**
  * What the globe should draw underneath the project's data layers.
  *
@@ -39,6 +90,8 @@ import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "./types";
 export type CesiumBasemapImagery =
   | { kind: "none" }
   | { kind: "default" }
+  | { kind: "ion"; assetId: number }
+  | { kind: "natural-earth" }
   | {
       kind: "xyz";
       /** Tile template with `{z}`/`{x}`/`{y}` placeholders. */
@@ -154,6 +207,7 @@ function toImagery(analogue: RasterAnalogue): CesiumBasemapImagery {
  */
 export function sameCesiumImagery(a: CesiumBasemapImagery, b: CesiumBasemapImagery): boolean {
   if (a.kind !== b.kind) return false;
+  if (a.kind === "ion" && b.kind === "ion") return a.assetId === b.assetId;
   // `none` and `default` carry no fields, so matching kinds is the whole test.
   if (a.kind !== "xyz" || b.kind !== "xyz") return true;
   return (
@@ -225,7 +279,14 @@ function vectorStyleAnalogue(styleUrl: string): RasterAnalogue | undefined {
  * @param styleUrl - The project's `basemapStyleUrl`.
  * @returns What the globe should draw beneath the data layers.
  */
-export function basemapToCesiumImagery(styleUrl: string | undefined): CesiumBasemapImagery {
+export function basemapToCesiumImagery(
+  styleUrl: string | undefined,
+  cesiumBasemap: CesiumBasemapId = "project",
+): CesiumBasemapImagery {
+  const entry = CESIUM_BASEMAPS.find((entry) => entry.id === cesiumBasemap);
+  if (entry && "assetId" in entry) return { kind: "ion", assetId: entry.assetId };
+  if (cesiumBasemap === "natural-earth") return { kind: "natural-earth" };
+  if (cesiumBasemap === "osm") return toImagery(STREETS);
   if (styleUrl === BLANK_BASEMAP) return { kind: "none" };
   const url = styleUrl ?? DEFAULT_BASEMAP;
 

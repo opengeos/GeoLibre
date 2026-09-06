@@ -1871,6 +1871,7 @@
     "cesiumTokenHint": "Adicione um token do Cesium Ion em Configurações para terreno e imagens do Ion"
   },
   "renderer": {
+    "projectBasemap": "Mapa base do projeto",
     "layerUnsupported": "Não renderizado pelo globo 3D",
     "resetView": "Redefinir vista",
     "scene3D": "Globo 3D",
