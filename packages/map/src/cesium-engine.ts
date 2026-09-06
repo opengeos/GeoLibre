@@ -67,6 +67,15 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   domControls: false,
 });
 
+/**
+ * Coerce a preference zoom into MapLibre's [0, 24] range, falling back to
+ * `fallback` for a non-finite value. Mirrors `clampNumber` in `map-controller.ts`.
+ */
+function clampZoom(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(24, Math.max(0, value));
+}
+
 /** Seconds a menu-driven camera move takes on the globe. */
 const CAMERA_FLIGHT_SECONDS = 0.5;
 /** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
@@ -136,6 +145,21 @@ export class CesiumEngine implements MapEngine {
    * terrain correction from fighting live navigation.
    */
   private userOwnsCamera = false;
+
+  /**
+   * Zoom bounds from the project's `MapPreferences`, in MapLibre zoom levels.
+   *
+   * MapLibre enforces these for free: `setMinZoom`/`setMaxZoom` clamp every
+   * camera operation, so `MapController.zoomIn()` cannot walk past the
+   * project's `maxZoom`. Cesium has no equivalent — its
+   * `screenSpaceCameraController` distance limits govern interactive navigation
+   * only, not a programmatic `flyToBoundingSphere` — so the engine has to clamp
+   * the target zoom itself or the two renderers disagree on the same click
+   * (#2265 review). Defaults span MapLibre's full range until preferences
+   * arrive.
+   */
+  private minZoom = 0;
+  private maxZoom = 24;
 
   private terrainEnabled = false;
   private terrainExaggeration = 1;
@@ -235,7 +259,7 @@ export class CesiumEngine implements MapEngine {
 
   zoomOut(): void {
     const view = this.readView();
-    this.animateTo({ ...view, zoom: Math.max(view.zoom - 1, 0) });
+    this.animateTo({ ...view, zoom: view.zoom - 1 });
   }
 
   resetNorth(): void {
@@ -314,6 +338,12 @@ export class CesiumEngine implements MapEngine {
     const latDeg = this.Cesium.Math.toDegrees(latitude);
     const height = canvasHeight(viewer);
     const fovy = cameraFovy(viewer);
+    // Remember the bounds so programmatic moves clamp to them the way
+    // MapLibre's setMinZoom/setMaxZoom clamp its own camera API. Same coercion
+    // as MapController.applyMapPreferences, including maxZoom never falling
+    // below minZoom.
+    this.minZoom = clampZoom(preferences.minZoom, 0);
+    this.maxZoom = Math.max(this.minZoom, clampZoom(preferences.maxZoom, 24));
     const controller = viewer.scene.screenSpaceCameraController;
     if (Number.isFinite(preferences.maxZoom)) {
       controller.minimumZoomDistance = Math.max(
@@ -568,10 +598,11 @@ export class CesiumEngine implements MapEngine {
     // target's local frame — with `flyTo`'s duration doing the animating.
     const [lng, lat] = view.center;
     const ground = groundHeightAt(this.Cesium, viewer, lng, lat);
-    const range = Math.max(
-      zoomToRange(view.zoom, lat, canvasHeight(viewer), cameraFovy(viewer)),
-      1,
-    );
+    // Every programmatic camera move funnels through here, so this is where the
+    // project's zoom bounds are enforced — the counterpart to MapLibre clamping
+    // inside its own camera API.
+    const zoom = Math.min(this.maxZoom, Math.max(this.minZoom, view.zoom));
+    const range = Math.max(zoomToRange(zoom, lat, canvasHeight(viewer), cameraFovy(viewer)), 1);
     viewer.camera.flyToBoundingSphere(
       new this.Cesium.BoundingSphere(
         this.Cesium.Cartesian3.fromDegrees(lng, lat, ground),

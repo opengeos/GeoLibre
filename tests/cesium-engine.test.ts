@@ -501,6 +501,55 @@ describe("CesiumEngine terrain", () => {
   });
 });
 
+describe("CesiumEngine zoom bounds", () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      mapView: { center: [0, 0], zoom: 4, bearing: 0, pitch: 0 },
+      setMapView: (() => {}) as never,
+    } as never);
+  });
+
+  const prefs = (minZoom: number, maxZoom: number) =>
+    ({ minZoom, maxZoom, maxPitch: 85, renderWorldCopies: true }) as never;
+
+  it("does not zoom past the project's maxZoom", () => {
+    // MapLibre gets this for free: setMaxZoom clamps its whole camera API, so
+    // MapController.zoomIn() cannot walk past the preference. Cesium's
+    // screenSpaceCameraController limits govern interactive navigation only, so
+    // the engine has to clamp the target itself or the same click behaves
+    // differently per renderer (#2265 review).
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyMapPreferences(prefs(0, 6));
+    engine.applyView({ ...VIEW, zoom: 6 });
+    engine.zoomIn();
+    assert.ok(engine.readView().zoom <= 6.001, `zoom ran past maxZoom: ${engine.readView().zoom}`);
+    engine.destroy();
+  });
+
+  it("does not zoom below the project's minZoom", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyMapPreferences(prefs(3, 24));
+    engine.applyView({ ...VIEW, zoom: 3 });
+    engine.zoomOut();
+    assert.ok(
+      engine.readView().zoom >= 2.999,
+      `zoom fell below minZoom: ${engine.readView().zoom}`,
+    );
+    engine.destroy();
+  });
+
+  it("keeps MapLibre's full range until preferences arrive", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView({ ...VIEW, zoom: 4 });
+    engine.zoomIn();
+    assert.ok(engine.readView().zoom > 4.5, "an unconfigured project must still zoom");
+    engine.destroy();
+  });
+});
+
 describe("CesiumEngine framing", () => {
   beforeEach(() => {
     useAppStore.setState({
