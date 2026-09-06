@@ -742,7 +742,7 @@ export class CesiumEngine implements MapEngine {
     // The Columbus half of that is a real limitation rather than a nicety: an
     // animated move cannot tilt or rotate a Columbus-view camera, so a story
     // chapter authored with a bearing plays back flat there. The instant path
-    // (`applyView`, and the morph re-apply) does honour both, and the readback
+    // (`applyView`) does honour both, and the readback
     // reports whatever ends up on screen, so nothing desynchronizes — the
     // animation is simply less expressive than in 3D.
     viewer.camera.flyToBoundingSphere(
@@ -830,36 +830,14 @@ export class CesiumEngine implements MapEngine {
     });
   }
 
-  /**
-   * Put the camera back where it was once a 2D/3D/Columbus morph finishes.
-   *
-   * Cesium's morph preserves *its own* notion of the view, which is not the
-   * one the store holds: the modes encode scale differently (a camera distance
-   * through a perspective frustum in 3D and Columbus view, the width of an
-   * orthographic box in 2D), so a morph that Cesium considers faithful still
-   * lands at a different MapLibre zoom — and 2D drops the tilt and rotation
-   * outright. Re-applying the stored view on arrival is what makes the switch
-   * read as "the same map, drawn differently" rather than a camera jump.
-   *
-   * It re-applies the *store's* camera rather than {@link lastApplied}: the
-   * morph itself fires `moveEnd` repeatedly, and although
-   * {@link installCameraPublisher} stands down while `MORPHING`, the settle on
-   * the far side is a real move that has already overwritten `lastApplied` with
-   * the view Cesium arrived at.
-   */
+  /** Follow Cesium's native morph endpoint without a second camera move. */
   private installMorphHandling(): void {
     const viewer = this.live();
     if (!viewer) return;
     const onMorphComplete = () => {
-      const live = this.live();
-      if (!live) return;
-      const store = useAppStore.getState();
-      const view =
-        this.isPrimary || store.mapLayout.syncView
-          ? store.mapView
-          : (store.secondaryMapViews.find((pane) => pane.id === this.viewId)?.view ??
-            store.mapView);
-      this.applyView(view);
+      // The native animation owns this camera, including any terrain settling.
+      this.userOwnsCamera = true;
+      this.publishCameraView();
     };
     viewer.scene.morphComplete.addEventListener(onMorphComplete);
     this.disposers.push(() => {
@@ -875,53 +853,56 @@ export class CesiumEngine implements MapEngine {
   private installCameraPublisher(): void {
     const viewer = this.live();
     if (!viewer) return;
-    const onMoveEnd = () => {
-      const live = this.live();
-      if (!live || this.isMorphing()) return;
-      // Nothing to publish until the camera has been seeded. A fresh
-      // CesiumWidget starts on its own default camera and settles onto it, which
-      // fires moveEnd before `CesiumCanvas` has applied the project's view —
-      // with no `lastApplied` to recognize it by, that settle would look like a
-      // real move and overwrite the stored camera with Cesium's default. The
-      // listener is armed in the constructor (so it cannot miss a move) rather
-      // than after the seed, so the guard lives here.
-      if (!this.lastApplied) return;
-      const view = readMapViewFromCamera(this.Cesium, live);
-      if (isSameView(view, this.lastApplied)) return;
-      this.lastApplied = view;
-      // Only the moves that follow real user input dirty the project; an
-      // autonomous settle still syncs the camera (markDirty=false) so the panes
-      // stay in step without flipping isDirty on a freshly opened project.
-      const userDriven = this.userMoved;
-      this.userMoved = false;
-      const store = useAppStore.getState();
-      // Write only when the view actually differs from the stored camera:
-      // `setMapView` has no same-camera guard in the store, and
-      // `setSecondaryMapView`'s guard uses exact equality (which Cesium's lossy
-      // readback never hits), so both are gated here with isSameView.
-      if (this.isPrimary) {
-        // The primary globe owns `mapView` outright (there is no pane record to
-        // mirror into), so it writes regardless of the `syncView` toggle — that
-        // toggle governs the secondary panes, and the primary map is the camera
-        // they follow.
-        if (!isSameView(view, store.mapView)) store.setMapView(view, userDriven);
-        return;
-      }
-      if (store.mapLayout.syncView && !isSameView(view, store.mapView)) {
-        store.setMapView(view, userDriven);
-      }
-      const paneId = this.viewId;
-      if (paneId === undefined) return;
-      const paneView = store.secondaryMapViews.find((pane) => pane.id === paneId)?.view;
-      if (!paneView || !isSameView(view, paneView)) {
-        store.setSecondaryMapView(paneId, view, userDriven);
-      }
-    };
+    const onMoveEnd = () => this.publishCameraView();
     viewer.camera.moveEnd.addEventListener(onMoveEnd);
     this.disposers.push(() => {
       const live = this.live();
       live?.camera.moveEnd.removeEventListener(onMoveEnd);
     });
+  }
+
+  /** Publish a settled camera, shared by navigation and projection changes. */
+  private publishCameraView(): void {
+    const live = this.live();
+    if (!live || this.isMorphing()) return;
+    // Nothing to publish until the camera has been seeded. A fresh
+    // CesiumWidget starts on its own default camera and settles onto it, which
+    // fires moveEnd before `CesiumCanvas` has applied the project's view —
+    // with no `lastApplied` to recognize it by, that settle would look like a
+    // real move and overwrite the stored camera with Cesium's default. The
+    // listener is armed in the constructor (so it cannot miss a move) rather
+    // than after the seed, so the guard lives here.
+    if (!this.lastApplied) return;
+    const view = readMapViewFromCamera(this.Cesium, live);
+    if (isSameView(view, this.lastApplied)) return;
+    this.lastApplied = view;
+    // Only the moves that follow real user input dirty the project; an
+    // autonomous settle still syncs the camera (markDirty=false) so the panes
+    // stay in step without flipping isDirty on a freshly opened project.
+    const userDriven = this.userMoved;
+    this.userMoved = false;
+    const store = useAppStore.getState();
+    // Write only when the view actually differs from the stored camera:
+    // `setMapView` has no same-camera guard in the store, and
+    // `setSecondaryMapView`'s guard uses exact equality (which Cesium's lossy
+    // readback never hits), so both are gated here with isSameView.
+    if (this.isPrimary) {
+      // The primary globe owns `mapView` outright (there is no pane record to
+      // mirror into), so it writes regardless of the `syncView` toggle — that
+      // toggle governs the secondary panes, and the primary map is the camera
+      // they follow.
+      if (!isSameView(view, store.mapView)) store.setMapView(view, userDriven);
+      return;
+    }
+    if (store.mapLayout.syncView && !isSameView(view, store.mapView)) {
+      store.setMapView(view, userDriven);
+    }
+    const paneId = this.viewId;
+    if (paneId === undefined) return;
+    const paneView = store.secondaryMapViews.find((pane) => pane.id === paneId)?.view;
+    if (!paneView || !isSameView(view, paneView)) {
+      store.setSecondaryMapView(paneId, view, userDriven);
+    }
   }
 
   /**

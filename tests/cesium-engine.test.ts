@@ -754,9 +754,8 @@ describe("CesiumEngine framing", () => {
 // its duration the camera is off limits. `Camera.lookAt` and `flyTo` throw
 // outright while `scene.mode` is MORPHING, `camera.heading` returns undefined,
 // and moveEnd fires repeatedly with intermediate poses. So both halves of the
-// camera sync have to stand down until it lands — and then put the camera back,
-// because the modes encode scale differently and Cesium's own idea of a faithful
-// morph is not the store's.
+// camera sync have to stand down until it lands, then publish the native endpoint
+// without a second camera move.
 
 const MORPHING = 0;
 const SCENE2D = 2;
@@ -806,21 +805,28 @@ describe("CesiumEngine scene-mode morphs", () => {
     engine.destroy();
   });
 
-  it("re-applies the stored camera once the morph completes", () => {
+  it("publishes the native morph endpoint without snapping back to the stored camera", () => {
+    const writes: MapViewState[] = [];
+    useAppStore.setState({ setMapView: ((view: MapViewState) => writes.push(view)) as never });
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.applyView(VIEW);
-    // The morph ends with the scene in its new mode and the camera wherever
-    // Cesium left it — here, somewhere else entirely.
     fakes.setSceneMode(SCENE2D);
     fakes.nudge(45);
+    const settled = engine.readView();
     const before = fakes.placements;
     fakes.morphComplete.emit();
-    assert.equal(fakes.placements, before + 1, "the stored view must be re-applied");
+    assert.equal(fakes.placements, before, "a native morph must not end with a camera placement");
+    assert.deepEqual(writes, [settled], "the project follows Cesium's final view");
+    assert.deepEqual(
+      engine.getLastAppliedView(),
+      settled,
+      "store echo must not reapply the camera",
+    );
     engine.destroy();
   });
 
-  it("stops re-applying once destroyed", () => {
+  it("stops publishing morphs once destroyed", () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.destroy();

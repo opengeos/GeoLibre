@@ -26,13 +26,6 @@ import type { CesiumWidget } from "@cesium/engine";
 import { FullscreenButton, HomeButton, SceneModePicker } from "@cesium/widgets";
 
 /**
- * Switch projection synchronously, then let the engine restore the project
- * camera in morphComplete. Cesium's animated morph flies to a different extent
- * first, producing a fly-out followed by a snap back to the saved center.
- */
-const MORPH_SECONDS = 0;
-
-/**
  * Marks the wrapper GeoLibre's stylesheet themes the Cesium chrome through.
  *
  * The widgets carry Cesium's own dark-blue toolbar look, which sits oddly beside
@@ -189,24 +182,36 @@ class CesiumHomeControl extends CesiumWidgetControl<HomeButton> {
  *
  * The morph is animated, and Cesium refuses camera reads and writes while one
  * runs, so `CesiumEngine` stands its camera sync down for the duration and
- * re-applies the stored view on `morphComplete`.
+ * publishes the native final view on `morphComplete`.
  */
 class CesiumSceneModeControl extends CesiumWidgetControl<SceneModePicker> {
-  /**
-   * Marks this control as the one whose drop-down escapes its own box.
-   *
-   * The picker expands into a column of buttons that overflow the wrapper, so
-   * in a vertical toolbar they land on top of whichever control sits below —
-   * painting *behind* it, because later siblings win, and leaving the entries
-   * unclickable. `index.css` raises this one control so the drop-down covers
-   * its neighbours instead of hiding under them.
-   */
+  private stopWatching: (() => void) | null = null;
+
+  /** Keep the sideways picker above adjacent map controls. */
   protected extraClass(): string {
     return "geolibre-cesium-ctrl-expands";
   }
 
   protected create(container: HTMLElement): SceneModePicker {
-    return new SceneModePicker(container, this.viewer.scene, MORPH_SECONDS);
+    // Use Cesium's default duration and easing, just like Viewer/Sandcastle.
+    const widget = new SceneModePicker(container, this.viewer.scene);
+    const start = () => container.setAttribute("aria-busy", "true");
+    const complete = () => container.setAttribute("aria-busy", "false");
+    complete();
+    const scene = this.viewer.scene;
+    scene.morphStart.addEventListener(start);
+    scene.morphComplete.addEventListener(complete);
+    this.stopWatching = () => {
+      scene.morphStart.removeEventListener(start);
+      scene.morphComplete.removeEventListener(complete);
+    };
+    return widget;
+  }
+
+  onRemove(): void {
+    this.stopWatching?.();
+    this.stopWatching = null;
+    super.onRemove();
   }
 
   protected applyLabels(widget: SceneModePicker): void {

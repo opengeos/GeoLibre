@@ -177,10 +177,8 @@ test.describe("Cesium as the primary rendering engine", () => {
  * The unit tests cover the camera maths and the morph guards against a fake
  * Cesium, which by construction cannot catch what matters here — that the
  * widgets actually mount and bind (they are Knockout-driven DOM built outside
- * React), that a real morph runs to completion, and that the scale the store
- * carries survives it. That last one is the whole point: 2D swaps the frustum
- * for an orthographic box, so a zoom Cesium considers preserved is not the one
- * the rest of the app holds unless the engine re-derives it.
+ * React), that animated morphs run to completion, and that the shared camera
+ * follows the native endpoint instead of resetting to the pre-morph view.
  *
  * Keyless like the specs above, and asserts nothing about tiles.
  */
@@ -195,15 +193,17 @@ test.describe("Cesium toolbar controls on the globe", () => {
     // drop-down entry of the same name; `sceneMode` matches only the entries.
     await page.locator(".cesium-sceneModePicker-wrapper button").first().click();
     await sceneMode(page, title).click();
-    // Projection switches are synchronous so the camera never flies out to
-    // Cesium's intermediate extent before restoring the project view.
+    const picker = page.locator(".geolibre-cesium-ctrl-expands");
+    // This must enter a real animation, then finish before camera assertions.
+    await expect(picker).toHaveAttribute("aria-busy", "true");
+    await expect(picker).toHaveAttribute("aria-busy", "false", { timeout: 15_000 });
     await expect(page.locator(".cesium-sceneModePicker-wrapper button").first()).toHaveAttribute(
       "title",
       title,
     );
   }
 
-  test("switches scene mode and resets the view without losing the camera", async ({ page }) => {
+  test("animates scene changes and publishes the settled camera", async ({ page }) => {
     test.setTimeout(180_000);
 
     await waitForMap(page);
@@ -259,10 +259,11 @@ test.describe("Cesium toolbar controls on the globe", () => {
     const zoomOn3d = await waitForStableZoom(page);
     expectSameZoom(zoomOn3d, zoomOn2dMap);
 
-    // 2D keeps that scale. The orthographic frustum has no camera distance, so
-    // an engine that kept deriving the zoom from one would report a constant.
+    // Cesium animates out to its native 2D world extent. The store must follow
+    // that new scale rather than snap back to the zoomed-in 3D view.
     await chooseSceneMode(page, "2D map");
-    expectSameZoom(await waitForStableZoom(page), zoomOn3d);
+    const native2dZoom = await waitForStableZoom(page);
+    expect(native2dZoom).toBeLessThan(zoomOn3d - 0.5);
     // 2D is north-up and untilted, and says so. Sub-degree rather than exactly
     // zero, and signed: `isSameView`'s 0.1° tolerance is what suppresses the
     // camera echo, so a residual tenth of a degree can survive the morph
@@ -281,24 +282,26 @@ test.describe("Cesium toolbar controls on the globe", () => {
       await page.mouse.wheel(0, -200);
       await page.waitForTimeout(100);
     }
-    await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBeGreaterThan(zoomOn3d + 0.3);
-    const zoomOn2d = await waitForStableZoom(page);
+    await expect
+      .poll(() => readZoom(page), { timeout: 30_000 })
+      .toBeGreaterThan(native2dZoom + 0.3);
+    await waitForStableZoom(page);
 
-    // Columbus uses the same projected scale as 2D, despite its perspective
-    // camera. A latitude correction here would change the visible zoom.
+    // Columbus and 3D choose their own native endpoints too. They must remain
+    // navigable and publish a finite camera after each animation.
     await chooseSceneMode(page, "Columbus view");
-    expectSameZoom(await waitForStableZoom(page), zoomOn2d);
+    expect(Number.isFinite(await waitForStableZoom(page))).toBe(true);
 
-    // Back to 3D, carrying the zoom the user reached in 2D.
+    // Back to the native 3D endpoint.
     await chooseSceneMode(page, "3D globe");
-    expectSameZoom(await waitForStableZoom(page), zoomOn2d);
+    expect(Number.isFinite(await waitForStableZoom(page))).toBe(true);
 
-    // Home flies out to a view of the whole Earth, and the store follows it
-    // there — the button drives Cesium's own `camera.flyHome`, so this also
-    // asserts that such a move still reaches `mapView` through the engine's
-    // camera publisher rather than moving the globe behind the store's back.
+    // Home returns to its whole-Earth view. Cesium's native 3D morph may
+    // finish even farther out, so Home need not be a zoom-out from that pose.
+    const beforeHome = await waitForStableZoom(page);
     await page.locator(".cesium-home-button").click();
-    await expect.poll(() => readZoom(page), { timeout: 60_000 }).toBeLessThan(zoomOn2d - 1);
+    await expect.poll(() => readZoom(page), { timeout: 60_000 }).not.toBe(beforeHome);
+    expect(await waitForStableZoom(page)).toBeLessThan(zoomOn3d - 1);
   });
 
   test("lets Controls -> Fullscreen govern the globe's fullscreen button", async ({ page }) => {
