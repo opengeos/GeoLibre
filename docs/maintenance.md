@@ -309,7 +309,14 @@ After a bump, check all five — none of these fail the build:
   `.cesium-sceneModePicker-wrapper`). A renamed observable leaves the English
   default in place; a renamed class leaves Cesium's dark-blue chrome on a
   GeoLibre toolbar. Neither fails the build, and only the tooltips are asserted
-  (`e2e/cesium-primary-renderer.spec.ts`).
+  (`e2e/cesium-primary-renderer.spec.ts`). The fullscreen button is the fragile
+  one: its tooltip is a read-only computed, so the translated string is written
+  onto the element from a `fullscreenchange` listener and survives only because
+  DOM listeners fire in registration order. If a bump makes the widget update
+  its own title differently — batched on a microtask, or bound to another
+  target — the label reverts to English *after the first toggle*, which is why
+  the spec toggles fullscreen and re-reads the title rather than checking it
+  once at mount.
 - **PWA globs.** `**/cesium-*` / `**/Cesium-*` in `vite.config.ts` keep the
   chunk out of the app-shell precache and CacheFirst-cache it instead. A chunk
   renamed out of that pattern would be precached, adding megabytes to first load.

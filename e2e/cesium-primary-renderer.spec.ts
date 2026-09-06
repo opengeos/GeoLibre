@@ -322,4 +322,27 @@ test.describe("Cesium toolbar controls on the globe", () => {
     await toggleFullscreen();
     await expect(page.locator(".cesium-fullscreenButton")).toBeVisible();
   });
+
+  test("keeps the fullscreen tooltip translated across a state change", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await waitForMap(page);
+    await chooseRenderer(page, "Cesium");
+    const button = page.locator(".cesium-fullscreenButton");
+    await expect(button).toBeVisible({ timeout: 60_000 });
+    await expect(button).toHaveAttribute("title", "Enter fullscreen");
+
+    // The label is not pushed through a view model like the other two: Cesium
+    // derives this tooltip from the fullscreen state as a read-only computed and
+    // rewrites the attribute on every `fullscreenchange`. The translated string
+    // is written back from a listener on the same event, which survives only
+    // because DOM listeners fire in registration order and the widget registers
+    // its own at construction. That is an implementation detail of
+    // `@cesium/widgets` rather than a contract (#2270 review), so the assertion
+    // that matters is this one — after a real toggle, not just at mount.
+    await button.click();
+    await expect(button).toHaveAttribute("title", "Exit fullscreen");
+    await button.click();
+    await expect(button).toHaveAttribute("title", "Enter fullscreen");
+  });
 });

@@ -4437,13 +4437,25 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 }
 
 /* Those drop-down buttons overflow the wrapper's box, so in a vertical toolbar
-   they land over the control below — and paint *behind* it, since a later
-   sibling wins by default, which leaves the entries visible-but-unclickable
-   under the fullscreen button. Raising the picker puts the open drop-down on
-   top of its neighbours, as a drop-down should be, whatever order the controls
-   were mounted in (toggling Controls → Fullscreen re-adds that button at the
-   end of the corner). */
+   they land over whichever control sits below. Two separate problems follow,
+   and both need fixing.
+ *
+ * Open: the entries paint *behind* the control below, because a later sibling
+ * wins by default, leaving them visible but unclickable. Raising the picker
+ * puts the open drop-down on top of its neighbours, as a drop-down should be,
+ * whatever order the controls were mounted in (toggling Controls → Fullscreen
+ * re-adds that button at the end of the corner).
+ *
+ * Closed: Cesium collapses the entries with `visibility: hidden`, which keeps
+ * their boxes in layout — and with the picker raised, that dead footprint sits
+ * over the fullscreen button and swallows its clicks, with nothing visible to
+ * explain why. Collapsing them out of layout instead costs only the quarter-
+ * second fade-out, which a vertical toolbar reads better without anyway. */
 .geolibre-cesium-ctrl-expands {
   position: relative;
   z-index: 1;
+}
+
+.geolibre-cesium-ctrl .cesium-sceneModePicker-hidden {
+  display: none;
 }
