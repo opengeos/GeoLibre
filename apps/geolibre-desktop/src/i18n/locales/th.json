@@ -634,7 +634,7 @@
       "errorRetrieveColumns": "ไม่สามารถดึงชื่อคอลัมน์ได้",
       "url": "URL ของข้อความคั่นด้วยตัวแบ่ง",
       "file": "ไฟล์ข้อความคั่นด้วยตัวแบ่ง",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "กำลังดึงข้อมูล...",
       "retrieveColumns": "ดึงรายการคอลัมน์",

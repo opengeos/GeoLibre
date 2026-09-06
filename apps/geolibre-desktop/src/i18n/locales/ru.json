@@ -661,7 +661,7 @@
       "errorRetrieveColumns": "Не удалось получить имена столбцов.",
       "url": "URL файла с разделителями",
       "file": "Файл с разделителями",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Получение...",
       "retrieveColumns": "Получить столбцы",

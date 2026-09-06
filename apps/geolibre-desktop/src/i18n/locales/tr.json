@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "Sütun adları alınamadı.",
       "url": "Sınırlayıcılı metin URL'si",
       "file": "Sınırlayıcılı metin dosyası",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Alınıyor...",
       "retrieveColumns": "Sütunları getir",

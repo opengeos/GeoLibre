@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "Could not retrieve column names.",
       "url": "Delimited text URL",
       "file": "Delimited text file",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Retrieving...",
       "retrieveColumns": "Retrieve columns",

@@ -634,7 +634,7 @@
       "errorRetrieveColumns": "Tidak dapat mengambil nama kolom.",
       "url": "URL teks berpembatas",
       "file": "File teks berpembatas",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Mengambil...",
       "retrieveColumns": "Ambil kolom",

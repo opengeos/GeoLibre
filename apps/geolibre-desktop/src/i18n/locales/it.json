@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "Impossibile recuperare i nomi delle colonne.",
       "url": "URL del testo delimitato",
       "file": "File di testo delimitato",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Recupero in corso...",
       "retrieveColumns": "Recupera colonne",

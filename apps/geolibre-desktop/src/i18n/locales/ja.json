@@ -634,7 +634,7 @@
       "errorRetrieveColumns": "列名を取得できませんでした。",
       "url": "区切りテキストのURL",
       "file": "区切りテキストファイル",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "取得中...",
       "retrieveColumns": "列を取得",

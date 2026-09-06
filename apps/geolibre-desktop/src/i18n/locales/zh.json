@@ -634,7 +634,7 @@
       "errorRetrieveColumns": "无法获取字段名称。",
       "url": "分隔文本 URL",
       "file": "分隔文本文件",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "正在获取...",
       "retrieveColumns": "获取字段",

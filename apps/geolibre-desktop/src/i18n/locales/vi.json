@@ -635,7 +635,7 @@
       "errorRetrieveColumns": "Đường ống",
       "url": "URL văn bản được phân cách",
       "file": "__PH0__ ảnh đã bị bỏ qua (không có vị trí GPS).",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Đang truy xuất...",
       "retrieveColumns": "Truy xuất cột",

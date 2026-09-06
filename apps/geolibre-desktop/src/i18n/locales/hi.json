@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "कॉलम नाम प्राप्त नहीं किए जा सके।",
       "url": "डिलिमिटेड टेक्स्ट URL",
       "file": "डिलिमिटेड टेक्स्ट फ़ाइल",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "प्राप्त किया जा रहा है...",
       "retrieveColumns": "कॉलम प्राप्त करें",

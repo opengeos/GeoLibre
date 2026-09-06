@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "Kan kolomnamen niet ophalen.",
       "url": "URL naar tekstbestand met scheidingstekens",
       "file": "Tekstbestand met scheidingstekens",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Bezig met ophalen...",
       "retrieveColumns": "Kolommen ophalen",

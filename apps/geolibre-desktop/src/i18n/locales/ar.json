@@ -679,7 +679,7 @@
       "errorRetrieveColumns": "تعذر جلب أسماء الأعمدة.",
       "url": "عنوان URL للنص المفصول",
       "file": "ملف نص مفصول",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "جارٍ الجلب...",
       "retrieveColumns": "جلب الأعمدة",

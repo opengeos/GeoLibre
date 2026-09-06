@@ -634,7 +634,7 @@
       "errorRetrieveColumns": "열 이름을 조회할 수 없습니다.",
       "url": "구분 텍스트 URL",
       "file": "구분 텍스트 파일",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "조회하는 중...",
       "retrieveColumns": "열 조회",

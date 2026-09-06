@@ -643,7 +643,7 @@
       "errorRetrieveColumns": "სვეტების სახელების მიღება ვერ მოხერხდა.",
       "url": "გამყოფებით დაყოფილი ტექსტის URL",
       "file": "გამყოფებით დაყოფილი ტექსტური ფაილი",
-      "fileFilter": "CSV / Excel",
+      "fileFilter": "CSV / TSV / TXT / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "მიმდინარეობს მიღება...",
       "retrieveColumns": "სვეტების მიღება",
