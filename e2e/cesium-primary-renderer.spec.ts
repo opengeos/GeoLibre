@@ -172,7 +172,7 @@ test.describe("Cesium as the primary rendering engine", () => {
 
 /**
  * Cesium's own toolbar buttons on the globe (issue #2270): the home button, the
- * scene-mode picker, and the fullscreen button.
+ * scene-mode picker, basemap picker, and the fullscreen button.
  *
  * The unit tests cover the camera maths and the morph guards against a fake
  * Cesium, which by construction cannot catch what matters here — that the
@@ -231,10 +231,11 @@ test.describe("Cesium toolbar controls on the globe", () => {
     await expect(globe).toBeVisible({ timeout: 60_000 });
     await expect(globe.locator("canvas")).toBeVisible({ timeout: 60_000 });
 
-    // All three controls mount into the globe's control host.
+    // All four controls mount into the globe's control host.
     await expect(page.locator(".cesium-home-button")).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".cesium-sceneModePicker-wrapper")).toBeVisible();
     await expect(page.locator(".cesium-fullscreenButton")).toBeVisible();
+    await expect(page.locator(".geolibre-cesium-basemap-picker button")).toBeVisible();
     // Tooltips come from the app's catalogs, not the widgets' English defaults.
     // The fullscreen one is the interesting case: Cesium derives it from the
     // fullscreen state as a read-only computed, so it is written onto the button
@@ -252,7 +253,7 @@ test.describe("Cesium toolbar controls on the globe", () => {
     const edges = await page
       .locator(".geolibre-cesium-ctrl button:visible")
       .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().right));
-    expect(edges).toHaveLength(3);
+    expect(edges).toHaveLength(4);
     for (const edge of edges) expect(edge).toBeCloseTo(edges[0], 0);
 
     // The globe seeded from the 2D camera, so this is the scale to preserve.
@@ -322,7 +323,7 @@ test.describe("Cesium toolbar controls on the globe", () => {
 
     await toggleFullscreen();
     await expect(page.locator(".cesium-fullscreenButton")).toHaveCount(0);
-    // The other two have no menu counterpart and are unaffected.
+    // The other controls have no menu counterpart and are unaffected.
     await expect(page.locator(".cesium-home-button")).toBeVisible();
 
     await toggleFullscreen();
