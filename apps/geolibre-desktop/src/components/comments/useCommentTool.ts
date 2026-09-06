@@ -132,10 +132,15 @@ export function useCommentTool({
     const map = mapControllerRef.current?.getMap();
     if (!isActive) return;
     if (!map) {
-      // The engine that just published cannot place comments. Disarm rather than
-      // leave the tool looking active over a map that will never receive its
-      // click.
-      if (mapControllerRef.current) setIsActive(false);
+      // Armed with no map to click: disarm rather than leave the tool looking
+      // active. Unconditional, including when the ref is momentarily null — the
+      // hand-off bumps the generation before the incoming engine publishes, and
+      // waiting for a non-null ref left the tool stuck armed if that engine
+      // never arrived (a Cesium or WebGL failure means no second bump) (#2268
+      // review). There is no initial-mount case to protect: `canPlaceComments`
+      // requires `nativeMapInstance === true`, so `isActive` cannot be true
+      // before an engine has published.
+      setIsActive(false);
       return;
     }
 
