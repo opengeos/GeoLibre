@@ -1032,3 +1032,159 @@ describe("CesiumEngine camera reads during a morph", () => {
     engine.destroy();
   });
 });
+
+describe("Cesium feature picking", () => {
+  async function setup() {
+    // Real Cesium entities/properties exercise cloning and material restoration.
+    // Only loading and the GPU pick pass are replaced.
+    const C = await import("@cesium/engine");
+    const f = makeViewer();
+    const sources: import("@cesium/engine").CustomDataSource[] = [];
+    let picks: unknown[] = [];
+    let projected: { x: number; y: number } | undefined = { x: 400, y: 300 };
+    Object.assign(f.viewer, {
+      clock: { currentTime: C.JulianDate.now() },
+      dataSources: {
+        add: async (ds: import("@cesium/engine").CustomDataSource) => {
+          sources.push(ds);
+          return ds;
+        },
+        remove: (ds: import("@cesium/engine").CustomDataSource) => {
+          sources.splice(sources.indexOf(ds), 1);
+        },
+      },
+    });
+    Object.assign((f.viewer as import("@cesium/engine").CesiumWidget).scene, {
+      drillPick: () => picks,
+      requestRender: () => {},
+    });
+    const ns = {
+      ...makeCesium(),
+      Color: C.Color,
+      ColorMaterialProperty: C.ColorMaterialProperty,
+      ConstantProperty: C.ConstantProperty,
+      SceneTransforms: { worldToWindowCoordinates: () => projected },
+      GeoJsonDataSource: {
+        load: async (data: import("geojson").FeatureCollection) => {
+          const ds = new C.CustomDataSource();
+          for (const feature of data.features) {
+            // Two render entities per feature models a multipart geometry.
+            for (let part = 0; part < 2; part++)
+              ds.entities.add(
+                new C.Entity({
+                  id: `${feature.id}-${part}`,
+                  properties: feature.properties ?? {},
+                  polygon: { material: C.Color.BLUE },
+                }),
+              );
+          }
+          return ds;
+        },
+      },
+    };
+    const engine = new CesiumEngine(ns as never, f.viewer);
+    const layer: import("../packages/core/src/types").GeoLibreLayer = {
+      id: "cities",
+      name: "Cities",
+      type: "geojson",
+      source: {},
+      metadata: {},
+      visible: true,
+      opacity: 1,
+      style: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 0,
+            properties: { name: "Zero", __geolibre_cesium_feature_index: "user value" },
+            geometry: {
+              type: "MultiPoint",
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { name: "No id" },
+            geometry: { type: "Point", coordinates: [2, 2] },
+          },
+        ],
+      },
+    };
+    engine.syncLayers([layer]);
+    await new Promise((resolve) => setImmediate(resolve));
+    return {
+      engine,
+      layer,
+      sources,
+      C,
+      f,
+      pick: (value: unknown[]) => {
+        picks = value;
+      },
+      project: (value: typeof projected) => {
+        projected = value;
+      },
+    };
+  }
+
+  it("returns original geometry and properties, deduplicates multipart picks and preserves zero/index ids", async () => {
+    const { engine, sources, layer, pick, project } = await setup();
+    const entities = sources[0].entities.values;
+    pick([
+      { id: entities[0] },
+      { id: entities[1] },
+      { primitive: { id: entities[2] } },
+      { id: {} },
+    ]);
+    const hits = engine.identifyFeatures([0, 0]);
+    assert.deepEqual(
+      hits.map((hit) => hit.featureId),
+      ["0", "1"],
+    );
+    assert.equal(hits[0].geometry, layer.geojson!.features[0].geometry);
+    assert.equal(hits[0].properties.__geolibre_cesium_feature_index, "user value");
+    assert.deepEqual(engine.identifyFeatures([0, 0], "other"), []);
+    project(undefined);
+    assert.deepEqual(engine.identifyFeatures([0, 0]), []);
+    assert.deepEqual(engine.identifyAtScreen({ x: -1, y: 1 } as never), []);
+    engine.destroy();
+    assert.deepEqual(engine.identifyFeatures([0, 0]), []);
+  });
+
+  it("rejects hidden, removed and replaced entities", async () => {
+    const { engine, layer, sources, pick } = await setup();
+    pick([{ id: sources[0].entities.values[0] }]);
+    engine.syncLayers([{ ...layer, visible: false }]);
+    assert.deepEqual(engine.identifyFeatures([0, 0]), []);
+    engine.syncLayers([
+      { ...layer, geojson: { ...layer.geojson!, features: [...layer.geojson!.features] } },
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(engine.identifyFeatures([0, 0]), []);
+    engine.syncLayers([]);
+    assert.deepEqual(engine.identifyFeatures([0, 0]), []);
+    engine.destroy();
+  });
+
+  it("restores exact styles, keeps selection through opacity changes and fits selected features", async () => {
+    const { engine, layer, sources, C, f } = await setup();
+    const entity = sources[0].entities.values[0];
+    const original = entity.polygon;
+    engine.highlightFeature(layer, ["0"], { fit: true });
+    assert.notEqual(entity.polygon, original);
+    assert.equal(f.flights.length, 1);
+    engine.clearFeatureHighlight();
+    assert.equal(entity.polygon, original);
+    engine.highlightFeature(layer, "0");
+    engine.syncLayers([{ ...layer, opacity: 0.25 }]);
+    engine.clearFeatureHighlight();
+    const material = entity.polygon!.material as import("@cesium/engine").ColorMaterialProperty;
+    assert.equal(material.color!.getValue(C.JulianDate.now()).alpha, 0.6 * 0.25);
+    engine.destroy();
+  });
+});

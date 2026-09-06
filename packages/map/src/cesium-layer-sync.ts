@@ -3,6 +3,7 @@ import type {
   Cesium3DTileset,
   CesiumWidget,
   DataSource,
+  Entity,
   ImageryLayer,
   ImageryProvider,
   Resource,
@@ -356,6 +357,81 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
 }
 
 export class CesiumLayerSync {
+  private readonly featureRefs = new WeakMap<object, { layerId: string; index: number }>();
+  private readonly imageryRefs = new WeakMap<object, string>();
+  private selection: { layerId: string; ids: Set<string> } | null = null;
+  private highlightRestorers: Array<() => void> = [];
+
+  /** Only live, visible entities owned by this synchronizer can identify a feature. */
+  resolveFeature(entity: object) {
+    const ref = this.featureRefs.get(entity);
+    if (!ref) return null;
+    const entry = this.entries.get(ref.layerId);
+    if (
+      !entry ||
+      entry.cancelled ||
+      !entry.layer.visible ||
+      entry.layer.opacity <= 0 ||
+      entry.kind !== "geojson" ||
+      !(entry.handle as DataSource | null)?.entities.contains(entity as Entity)
+    )
+      return null;
+    const feature = entry.layer.geojson?.features[ref.index];
+    return feature
+      ? {
+          layerId: ref.layerId,
+          featureId: String(feature.id ?? ref.index),
+          properties: feature.properties ?? {},
+          geometry: feature.geometry,
+        }
+      : null;
+  }
+
+  /** Imagery has a layer identity, but no synchronous GeoJSON feature identity. */
+  imageryLayerId(imagery: object): string | undefined {
+    return this.imageryRefs.get(imagery);
+  }
+
+  highlight(layerId: string | undefined, ids: string[]): void {
+    this.restoreHighlight();
+    this.selection = layerId && ids.length ? { layerId, ids: new Set(ids) } : null;
+    this.applyHighlight();
+    this.viewer.scene.requestRender();
+  }
+
+  private restoreHighlight(): void {
+    for (const restore of this.highlightRestorers.splice(0)) restore();
+  }
+
+  private applyHighlight(): void {
+    const selected = this.selection;
+    const entry = selected && this.entries.get(selected.layerId);
+    if (!selected || !entry || entry.kind !== "geojson" || !entry.handle) return;
+    const C = this.Cesium;
+    const color = C.Color.fromCssColorString("#facc15");
+    for (const entity of (entry.handle as DataSource).entities.values) {
+      const ref = this.featureRefs.get(entity);
+      const feature = ref && entry.layer.geojson?.features[ref.index];
+      if (!feature || !selected.ids.has(String(feature.id ?? ref?.index))) continue;
+      for (const key of ["polygon", "polyline", "billboard", "point"] as const) {
+        const original = entity[key];
+        if (!original) continue;
+        const highlighted = original.clone();
+        if (key === "polygon" || key === "polyline") {
+          (highlighted as NonNullable<Entity["polygon"]>).material = new C.ColorMaterialProperty(
+            color,
+          );
+        } else {
+          (highlighted as NonNullable<Entity["point"]>).color = new C.ConstantProperty(color);
+        }
+        // Keep the actual Property objects, including time-varying styles, intact.
+        Object.assign(entity, { [key]: highlighted });
+        this.highlightRestorers.push(() => Object.assign(entity, { [key]: original }));
+      }
+    }
+    this.viewer.scene.requestRender();
+  }
+
   private readonly entries = new Map<string, LayerEntry>();
   /** Imagery id order last asserted on the globe, to skip redundant reorders. */
   private lastImageryOrder = "";
@@ -369,6 +445,7 @@ export class CesiumLayerSync {
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
   sync(layers: GeoLibreLayer[]): void {
+    this.restoreHighlight();
     this.currentLayers = layers;
     const nextIds = new Set(layers.map((l) => l.id));
     for (const [id, entry] of this.entries) {
@@ -425,9 +502,12 @@ export class CesiumLayerSync {
       this.reorderImagery();
       this.lastImageryOrder = imageryOrder;
     }
+    this.applyHighlight();
   }
 
   destroy(): void {
+    this.restoreHighlight();
+    this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
   }
@@ -600,6 +680,7 @@ export class CesiumLayerSync {
         viewer.imageryLayers.remove(imageryLayer, true);
         return;
       }
+      this.imageryRefs.set(imageryLayer, layer.id);
       entry.handle = imageryLayer;
       this.applyAppearance(entry);
       if (isAsync) {
@@ -641,7 +722,18 @@ export class CesiumLayerSync {
     // (applyGeoJsonStyle) rather than reloading the whole data source.
     const fillAlpha = (style.fillOpacity ?? 0.6) * layer.opacity;
     try {
-      const dataSource = await Cesium.GeoJsonDataSource.load(layer.geojson, {
+      // Cesium splits multipart geometries into several entities. A private
+      // property survives that split; feature ids alone do not (Cesium suffixes them).
+      const indexKey = "__geolibre_cesium_feature_index";
+      const data = {
+        ...layer.geojson,
+        features: layer.geojson.features.map((feature, index) => ({
+          ...feature,
+          id: JSON.stringify([layer.id, index]),
+          properties: { ...feature.properties, [indexKey]: index },
+        })),
+      };
+      const dataSource = await Cesium.GeoJsonDataSource.load(data, {
         stroke,
         strokeWidth: style.strokeWidth ?? 2,
         fill: fill.withAlpha(fillAlpha),
@@ -654,11 +746,17 @@ export class CesiumLayerSync {
         viewer.dataSources.remove(dataSource, true);
         return;
       }
+      for (const entity of dataSource.entities.values) {
+        const index = entity.properties?.[indexKey]?.getValue(viewer.clock.currentTime);
+        if (Number.isInteger(index)) this.featureRefs.set(entity, { layerId: layer.id, index });
+      }
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
       // stroke, marker) by the layer opacity right after load, so points/lines
       // match the 2D map instead of rendering fully opaque.
       this.applyAppearance(entry);
+      this.restoreHighlight();
+      this.applyHighlight();
     } catch {
       // A malformed FeatureCollection should not break the whole sync.
     }

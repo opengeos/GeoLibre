@@ -206,7 +206,8 @@ describe("CesiumLayerSync", () => {
     sync.sync([mkLayer({ type: "geojson", geojson: fc as never, visible: true })]);
     await f.flush();
     assert.equal(f.calls.geojsonLoads.length, 1);
-    assert.equal(f.calls.geojsonLoads[0].data, fc);
+    assert.notEqual(f.calls.geojsonLoads[0].data, fc);
+    assert.deepEqual(fc, { type: "FeatureCollection", features: [{}] });
     assert.equal(f.calls.geojsonLoads[0].options.clampToGround, true);
     assert.equal(f.calls.dataSourcesAdded.length, 1);
   });

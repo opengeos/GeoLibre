@@ -7,7 +7,7 @@ import {
   type StoryChapterAnimation,
   type StoryChapterLocation,
 } from "@geolibre/core";
-import type { CesiumWidget } from "@cesium/engine";
+import type { Cartesian2, CesiumWidget } from "@cesium/engine";
 import type { FeatureCollection } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import {
@@ -39,7 +39,7 @@ type CesiumNs = typeof import("@cesium/engine");
 /**
  * What the globe can do (issue #2260).
  *
- * The four `false` flags are not "not yet wired" — they are the operations
+ * The `false` flags are not "not yet wired" — they are the operations
  * Cesium has no equivalent for, or that this engine deliberately does not claim:
  *
  * - `styleSpec` / `nativeMapInstance`: Cesium draws imagery layers and
@@ -48,12 +48,7 @@ type CesiumNs = typeof import("@cesium/engine");
  *   canvas stays 2D-only.
  * - `customLayers`: a MapLibre `CustomLayerInterface` is a callback into
  *   MapLibre's own WebGL pass; deck.gl's MapLibre interop is the same shape.
- * - `picking`: `identifyFeatures` needs `scene.drillPick` plus a mapping from a
- *   picked primitive back to a `GeoLibreLayer` id and feature id, which
- *   `CesiumLayerSync` does not record today. Claiming it before that exists
- *   would make Identify report "no features here" instead of "not available".
- * - `onMapDrawing` / `domControls`: no manual-placement pin and nowhere to host
- *   an `IControl`. The control host is issue #2263.
+ * - `onMapDrawing`: no manual-placement pin.
  *
  * `terrain: true` is the flag worth noting in the other direction — terrain is
  * native on the globe, and the old `primaryRenderer === "cesium"` gates disabled
@@ -64,7 +59,7 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   nativeMapInstance: false,
   customLayers: false,
   terrain: true,
-  picking: false,
+  picking: true,
   onMapDrawing: false,
   domControls: true,
 });
@@ -522,18 +517,69 @@ export class CesiumEngine implements MapEngine {
 
   // ------------------------------------------------------------------ picking
 
-  /** Empty until the globe can map a picked primitive back to a feature id. */
-  identifyFeatures(_lngLat: [number, number], _layerId?: string): IdentifiedFeature[] {
-    return [];
+  identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
+    const viewer = this.live();
+    if (!viewer || this.isMorphing() || !lngLat.every(Number.isFinite)) return [];
+    const world = this.Cesium.Cartesian3.fromDegrees(
+      lngLat[0],
+      lngLat[1],
+      groundHeightAt(this.Cesium, viewer, lngLat[0], lngLat[1]),
+    );
+    const point = this.Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, world);
+    return point ? this.identifyAtScreen(point, layerId) : [];
+  }
+
+  /** Use the actual pointer position for hover/click, including elevated geometry. */
+  identifyAtScreen(point: Cartesian2, layerId?: string): IdentifiedFeature[] {
+    const viewer = this.live();
+    if (
+      !viewer ||
+      this.isMorphing() ||
+      !Number.isFinite(point.x) ||
+      !Number.isFinite(point.y) ||
+      point.x < 0 ||
+      point.y < 0 ||
+      point.x > viewer.canvas.clientWidth ||
+      point.y > viewer.canvas.clientHeight
+    )
+      return [];
+    const results: IdentifiedFeature[] = [];
+    const seen = new Set<string>();
+    for (const picked of viewer.scene.drillPick(point)) {
+      const entity = picked?.id ?? picked?.primitive?.id;
+      if (!entity || typeof entity !== "object") continue;
+      const feature = this.layerSync.resolveFeature(entity);
+      if (!feature || (layerId !== undefined && feature.layerId !== layerId)) continue;
+      const key = JSON.stringify([feature.layerId, feature.featureId]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push(feature);
+    }
+    return results;
   }
 
   highlightFeature(
-    _layer: GeoLibreLayer | undefined,
-    _featureId: string | string[] | null,
-    _options: { fit?: boolean } = {},
-  ): void {}
+    layer: GeoLibreLayer | undefined,
+    featureId: string | string[] | null,
+    options: { fit?: boolean } = {},
+  ): void {
+    if (!this.live()) return;
+    const ids = featureId === null ? [] : Array.isArray(featureId) ? featureId : [featureId];
+    this.layerSync.highlight(layer?.id, ids);
+    if (!options.fit || !layer?.geojson || !ids.length) return;
+    const selected = new Set(ids);
+    const features = layer.geojson.features.filter((feature, index) =>
+      selected.has(String(feature.id ?? index)),
+    );
+    const bounds = getLayerBounds({ ...layer, geojson: { type: "FeatureCollection", features } });
+    if (features.length && bounds) this.fitBounds(bounds);
+  }
 
-  clearFeatureHighlight(): void {}
+  clearFeatureHighlight(): void {
+    if (!this.live()) return;
+    this.layerSync.highlight(undefined, []);
+    this.live()?.scene.requestRender();
+  }
 
   /** Places nothing and returns a no-op teardown; see `onMapDrawing`. */
   startManualPlacement(_lngLat: [number, number], _options: ManualPlacementOptions): () => void {
