@@ -13,6 +13,7 @@ export function installCesiumInteractions(
   C: typeof import("@cesium/engine"),
   viewer: CesiumWidget,
   engine: CesiumEngine,
+  closeLabel: () => string = () => "Close",
 ): () => void {
   const handler = new C.ScreenSpaceEventHandler(viewer.canvas);
   const host = viewer.canvas.parentElement!;
@@ -48,6 +49,16 @@ export function installCesiumInteractions(
       boxShadow: "0 2px 12px #0005",
       pointerEvents: isHover ? "none" : "auto",
     });
+    if (!isHover) {
+      const close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "×";
+      close.setAttribute("aria-label", closeLabel());
+      close.className =
+        "absolute end-1 top-1 rounded px-1 text-lg hover:bg-muted focus-visible:outline";
+      close.addEventListener("click", clearPopup);
+      box.append(close);
+    }
     box.append(content);
     host.append(box);
     box.style.left = `${Math.max(0, Math.min(point.x + 12, host.clientWidth - box.offsetWidth))}px`;
@@ -85,11 +96,13 @@ export function installCesiumInteractions(
     clearPopup();
     const state = useAppStore.getState();
     const target = state.identifyLayerId;
+    if (!target) return;
     const hits = engine.identifyAtScreen(
       event.position,
       target && target !== IDENTIFY_ALL_LAYERS_ID ? target : undefined,
     );
     const content = document.createElement("div");
+    let selected = false;
     for (const hit of hits) {
       const layer = state.layers.find((item) => item.id === hit.layerId);
       if (!layer || !isPopupClickEnabled(layer.popup)) continue;
@@ -103,7 +116,8 @@ export function installCesiumInteractions(
           zoom: engine.readView().zoom,
         }),
       );
-      if (hit === hits[0]) {
+      if (!selected) {
+        selected = true;
         state.selectLayer(layer.id);
         state.selectFeature(hit.featureId);
       }

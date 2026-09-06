@@ -106,6 +106,8 @@ export interface CesiumCanvasProps {
    * Only the primary globe hosts controls, so this is ignored on a grid pane.
    */
   controlLabels?: CesiumWidgetControlLabels;
+  /** Translated accessible label for the Identify popup close button. */
+  popupCloseLabel?: string;
 }
 
 /**
@@ -151,6 +153,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   engineRef,
   onEngineReady,
   controlLabels,
+  popupCloseLabel,
 }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<CesiumWidget | null>(null);
@@ -180,6 +183,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   engineRefProp.current = engineRef;
   const onEngineReadyRef = useRef(onEngineReady);
   onEngineReadyRef.current = onEngineReady;
+  const popupCloseLabelRef = useRef(popupCloseLabel);
+  popupCloseLabelRef.current = popupCloseLabel;
   const controlLabelsRef = useRef(controlLabels);
   controlLabelsRef.current = controlLabels;
 
@@ -422,6 +427,9 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           }
         }
 
+        // Widget imports can finish after unmount has already destroyed this viewer.
+        if (cancelled || viewer.isDestroyed()) return;
+
         // Seed the camera from the shared store camera before the first frame.
         // The primary globe always seeds from `mapView`, which is what carries
         // the camera across a renderer switch: MapLibre wrote the view the user
@@ -442,7 +450,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         applyBasemap();
         engine.syncLayers(paneLayersRef.current);
         if (isPrimaryRef.current)
-          interactionCleanup.current = installCesiumInteractions(Cesium, viewer, engine);
+          interactionCleanup.current = installCesiumInteractions(
+            Cesium,
+            viewer,
+            engine,
+            () => popupCloseLabelRef.current ?? "Close",
+          );
 
         // Publish the engine only for the primary globe — see `engineRef`.
         if (isPrimaryRef.current && engineRefProp.current) {

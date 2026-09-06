@@ -68,6 +68,7 @@ export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumC
         engineRef={engineRef}
         onEngineReady={onEngineReady}
         controlLabels={controlLabels}
+        popupCloseLabel={t("common.close")}
       />
       {/* The globe works without an Ion token — it draws the project basemap —
           so say what a token would add rather than hiding the view. Bottom-end

@@ -387,7 +387,10 @@ export class CesiumLayerSync {
       : null;
   }
 
-  /** Imagery has a layer identity, but no synchronous GeoJSON feature identity. */
+  /**
+   * Retained for future asynchronous imagery feature queries, as requested in #2274.
+   * Imagery has a layer identity, but no synchronous GeoJSON feature identity.
+   */
   imageryLayerId(imagery: object): string | undefined {
     return this.imageryRefs.get(imagery);
   }

@@ -1060,6 +1060,12 @@ describe("Cesium feature picking", () => {
     });
     const ns = {
       ...makeCesium(),
+      Cartesian3: Object.assign(makeCesium().Cartesian3, {
+        subtract: C.Cartesian3.subtract,
+        magnitude: C.Cartesian3.magnitude,
+      }),
+      Ray: C.Ray,
+      IntersectionTests: { rayEllipsoid: () => undefined },
       Color: C.Color,
       ColorMaterialProperty: C.ColorMaterialProperty,
       ConstantProperty: C.ConstantProperty,
@@ -1187,4 +1193,43 @@ describe("Cesium feature picking", () => {
     assert.equal(material.color!.getValue(C.JulianDate.now()).alpha, 0.6 * 0.25);
     engine.destroy();
   });
+});
+
+it("rejects far-side coordinates before GPU picking, including below-sea-level terrain", async () => {
+  const C = await import("@cesium/engine");
+  const f = makeViewer();
+  const viewer = f.viewer as import("@cesium/engine").CesiumWidget;
+  let picks = 0;
+  Object.defineProperty(viewer.camera, "positionWC", {
+    get: () => C.Cartesian3.fromDegrees(0, 0, 1000000),
+  });
+  viewer.scene.globe.ellipsoid = C.Ellipsoid.WGS84;
+  Object.assign(viewer.scene, {
+    drillPick: () => {
+      picks++;
+      return [];
+    },
+  });
+  const engine = new CesiumEngine(
+    {
+      ...makeCesium(),
+      Cartesian3: C.Cartesian3,
+      Ray: C.Ray,
+      IntersectionTests: C.IntersectionTests,
+      SceneTransforms: { worldToWindowCoordinates: () => new C.Cartesian2(400, 300) },
+    } as never,
+    f.viewer,
+  );
+  for (const height of [0, -400]) {
+    f.setGroundHeight(height);
+    const before = picks;
+    engine.identifyFeatures([180, 0]);
+    assert.equal(picks, before, "far side must never query the visible features");
+    engine.identifyFeatures([0, 0]);
+    assert.equal(picks, before + 1, "near side remains pickable");
+  }
+  f.setSceneMode(C.SceneMode.SCENE2D);
+  engine.identifyFeatures([180, 0]);
+  assert.equal(picks, 3, "flat views must not use 3D occlusion");
+  engine.destroy();
 });

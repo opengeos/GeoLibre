@@ -520,11 +520,29 @@ export class CesiumEngine implements MapEngine {
   identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
     const viewer = this.live();
     if (!viewer || this.isMorphing() || !lngLat.every(Number.isFinite)) return [];
-    const world = this.Cesium.Cartesian3.fromDegrees(
-      lngLat[0],
-      lngLat[1],
-      groundHeightAt(this.Cesium, viewer, lngLat[0], lngLat[1]),
-    );
+    const height = groundHeightAt(this.Cesium, viewer, lngLat[0], lngLat[1]);
+    const world = this.Cesium.Cartesian3.fromDegrees(lngLat[0], lngLat[1], height);
+    if (viewer.scene.mode === this.Cesium.SceneMode.SCENE3D) {
+      // Projection alone also maps the far hemisphere onto the visible globe.
+      // Use the public ray/ellipsoid API (EllipsoidalOccluder is private).
+      const origin = viewer.camera.positionWC;
+      // Below-sea-level terrain must not be rejected merely for lying inside the ellipsoid.
+      const target =
+        height < 0 ? this.Cesium.Cartesian3.fromDegrees(lngLat[0], lngLat[1], 0) : world;
+      const direction = this.Cesium.Cartesian3.subtract(
+        target,
+        origin,
+        new this.Cesium.Cartesian3(),
+      );
+      const distance = this.Cesium.Cartesian3.magnitude(direction);
+      if (distance === 0) return [];
+      const intersection = this.Cesium.IntersectionTests.rayEllipsoid(
+        new this.Cesium.Ray(origin, direction),
+        viewer.scene.globe.ellipsoid,
+      );
+      // Allow rounding at the surface; only intersections before the target occlude it.
+      if (intersection && intersection.start > 0 && intersection.start < distance - 1) return [];
+    }
     const point = this.Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, world);
     return point ? this.identifyAtScreen(point, layerId) : [];
   }
