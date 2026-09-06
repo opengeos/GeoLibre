@@ -87,10 +87,22 @@ export function useViewportHistory(
     // on ride along as that event's `eventData`. Giving the globe a history
     // needs an engine-neutral camera-change subscription on `MapEngine`, which
     // is a follow-up rather than something to fake here (#2268 review). Until
-    // then Previous/Next View stay disabled on the globe, which is honest: there
-    // is nothing in the stack to go back to.
+    // then Previous/Next View stay disabled on the globe.
     const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
+    if (!map) {
+      // Report "nowhere to go" while there is no native map, rather than leaving
+      // the last 2D answer standing. Panning on the 2D map and *then* switching
+      // to the globe used to leave `canGoBack` true, and this PR removed the
+      // menu's renderer-name override that had been masking it — so the items
+      // would have rendered enabled on the globe and done nothing (#2268
+      // review). The stack itself is kept: switching back re-runs this effect
+      // and `syncNav` restores the real answer, so a round trip through the
+      // globe no longer costs the user their history.
+      setNav((prev) =>
+        prev.canGoBack || prev.canGoForward ? { canGoBack: false, canGoForward: false } : prev,
+      );
+      return;
+    }
     const controller = mapControllerRef.current;
 
     // Loading a different project clears the stack so navigation can't cross
