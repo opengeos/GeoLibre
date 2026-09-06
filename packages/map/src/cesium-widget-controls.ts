@@ -164,6 +164,12 @@ abstract class CesiumWidgetControl<T extends DestroyableWidget> implements mapli
  */
 class CesiumHomeControl extends CesiumWidgetControl<HomeButton> {
   protected create(container: HTMLElement): HomeButton {
+    // No duration argument, so the flight keeps Cesium's own distance-derived
+    // one rather than the 0.8 s the rest of the app animates in (#2270 review).
+    // That is the right default here and not an oversight: this button always
+    // travels from wherever the user is to the whole Earth, and forcing a
+    // street-level-to-orbit flight into 0.8 s reads as a jump cut. Cesium scales
+    // the duration with the distance and caps it at 3 s.
     return new HomeButton(container, this.viewer.scene);
   }
 

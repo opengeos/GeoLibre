@@ -447,6 +447,26 @@ describe("readMapViewFromCamera across scene modes", () => {
     assert.ok(Math.abs(readMapViewFromCamera(Cesium, viewer).zoom - 10) < 1e-6);
   });
 
+  it("round-trips a Columbus-view zoom at high latitude", () => {
+    // The latitude correction is the part of the 3D formula Columbus view
+    // inherits, and 60°+ is where `cos(lat)` diverges most from 1 (#2270
+    // review) — so if the apply and read sides disagreed about whether it
+    // belongs, the drift would show here first and nowhere at the equator.
+    for (const lat of [0, 60, -75]) {
+      const applied = makeCameraFakes(0, SCENE_MODE.COLUMBUS_VIEW);
+      const original: MapViewState = { center: [0, lat], zoom: 11, bearing: 0, pitch: 0 };
+      applyMapViewToCamera(applied.Cesium, applied.viewer, original);
+      const { Cesium, viewer } = makeReadbackFakes({
+        mode: SCENE_MODE.COLUMBUS_VIEW,
+        height: applied.calls.range,
+        pitch: -Math.PI / 2,
+        lat,
+      });
+      const back = readMapViewFromCamera(Cesium, viewer);
+      assert.ok(Math.abs(back.zoom - 11) < 1e-6, `lat ${lat} round-tripped to ${back.zoom}`);
+    }
+  });
+
   it("falls back to the camera altitude near the horizon in Columbus view", () => {
     // Dividing by sin(pitch) blows up as the camera levels off, so below the
     // guard the altitude is used instead of a range several times too large.

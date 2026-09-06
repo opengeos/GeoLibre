@@ -730,6 +730,21 @@ export class CesiumEngine implements MapEngine {
     // the orthographic box in 2D. `flyToBoundingSphere` reinterprets the offset
     // range exactly as `lookAt` does, so both paths agree on what a zoom means.
     const range = zoomToSceneRange(this.Cesium, viewer, { ...view, zoom });
+    // The heading and pitch below are *not* flattened for 2D the way
+    // `applyMapViewToCamera` flattens them (#2270 review). They do not need to
+    // be: `lookAt` honours an offset's orientation in 2D — which is why the
+    // instant path has to force it flat, or the map would sit visibly rotated
+    // under a status bar reporting bearing 0 — but `flyToBoundingSphere` reads
+    // the offset's orientation only when the scene is 3D, and passes no
+    // direction/up at all in 2D *and Columbus view*. Mirroring the guard here
+    // would be dead code.
+    //
+    // The Columbus half of that is a real limitation rather than a nicety: an
+    // animated move cannot tilt or rotate a Columbus-view camera, so a story
+    // chapter authored with a bearing plays back flat there. The instant path
+    // (`applyView`, and the morph re-apply) does honour both, and the readback
+    // reports whatever ends up on screen, so nothing desynchronizes — the
+    // animation is simply less expressive than in 3D.
     viewer.camera.flyToBoundingSphere(
       new this.Cesium.BoundingSphere(
         this.Cesium.Cartesian3.fromDegrees(lng, lat, ground),

@@ -180,6 +180,16 @@ export function zoomToSceneRange(
   viewer: CesiumWidget,
   view: MapViewState,
 ): number {
+  // Columbus view takes the 3D branch, latitude correction and all, which is
+  // right for the projection Cesium actually draws it in (#2270 review). The
+  // `cos(lat)` in `groundResolution` converts a projected pixel width into true
+  // ground metres, so it only belongs where the camera measures ground metres —
+  // and Columbus view, on `CesiumWidget`'s default `GeographicProjection`, does:
+  // a metre on its vertical axis is `a·Δlat`, a true meridian metre, not a
+  // Mercator-stretched one. `zoomToRange` matches the *vertical* extent, so that
+  // is the axis that has to line up. It is 2D that drops the correction, and for
+  // a different reason: MapLibre's zoom is defined on the horizontal projected
+  // span, which is a full circumference in either projection.
   const range =
     viewer.scene.mode === Cesium.SceneMode.SCENE2D
       ? zoomToOrthoWidth(view.zoom, canvasWidth(viewer))

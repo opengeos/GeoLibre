@@ -4401,6 +4401,17 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   outline: none;
 }
 
+/* Keyboard focus keeps a ring, and it is MapLibre's own — its control buttons
+   draw `0 0 2px 2px #0096ff` on `:focus-visible` — so tabbing through the map
+   toolbar looks the same whichever renderer drew the button. The rule above
+   clears the ring for a *pointer* focus on purpose, mirroring MapLibre's
+   `:focus:not(:focus-visible) { box-shadow: none }`; without this rule after it,
+   that clearing would swallow the keyboard indicator too and leave only the
+   hover background, which is far too subtle to locate focus by. */
+.geolibre-cesium-ctrl button.cesium-button:not(:disabled):focus-visible {
+  box-shadow: 0 0 2px 2px #0096ff;
+}
+
 .geolibre-cesium-ctrl button.cesium-button:not(:disabled):active {
   background: #e6e6e6;
   box-shadow: none;
