@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Spaltennamen konnten nicht abgerufen werden.",
       "url": "URL für trennzeichengetrennten Text",
       "file": "Trennzeichengetrennte Textdatei",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Wird abgerufen …",
       "retrieveColumns": "Spalten abrufen",
@@ -6483,7 +6484,6 @@
       "remove": "Verknüpfung entfernen",
       "enabledTitle": "Diese Verknüpfung anwenden",
       "missingLayer": "Verknüpfungslayer nicht gefunden",
-      "noCandidates": "Kein anderer Layer hat eine Attributtabelle zum Verknüpfen",
       "statsMatched": "{{matched}} von {{total}} Objekten zugeordnet",
       "statsUnmatchedJoin_one": "{{count}} Tabellenzeile ohne Treffer",
       "statsUnmatchedJoin_other": "{{count}} Tabellenzeilen ohne Treffer"

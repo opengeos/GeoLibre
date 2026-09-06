@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Kan kolomnamen niet ophalen.",
       "url": "URL naar tekstbestand met scheidingstekens",
       "file": "Tekstbestand met scheidingstekens",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Bezig met ophalen...",
       "retrieveColumns": "Kolommen ophalen",
@@ -6483,7 +6484,6 @@
       "remove": "Koppeling verwijderen",
       "enabledTitle": "Deze koppeling toepassen",
       "missingLayer": "Koppelingslaag niet gevonden",
-      "noCandidates": "Geen andere laag heeft een attributentabel om te koppelen",
       "statsMatched": "{{matched}} van {{total}} objecten gematcht",
       "statsUnmatchedJoin_one": "{{count}} tabelrij zonder match",
       "statsUnmatchedJoin_other": "{{count}} tabelrijen zonder match"

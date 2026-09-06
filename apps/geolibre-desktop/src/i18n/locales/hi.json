@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "कॉलम नाम प्राप्त नहीं किए जा सके।",
       "url": "डिलिमिटेड टेक्स्ट URL",
       "file": "डिलिमिटेड टेक्स्ट फ़ाइल",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "प्राप्त किया जा रहा है...",
       "retrieveColumns": "कॉलम प्राप्त करें",
@@ -6483,7 +6484,6 @@
       "remove": "जॉइन हटाएँ",
       "enabledTitle": "यह जॉइन लागू करें",
       "missingLayer": "जॉइन लेयर नहीं मिली",
-      "noCandidates": "किसी अन्य लेयर में जोड़ने के लिए विशेषता तालिका नहीं है",
       "statsMatched": "{{total}} में से {{matched}} फ़ीचर मेल खाए",
       "statsUnmatchedJoin_one": "{{count}} तालिका पंक्ति बिना मेल",
       "statsUnmatchedJoin_other": "{{count}} तालिका पंक्तियाँ बिना मेल"

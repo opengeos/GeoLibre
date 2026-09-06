@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Impossibile recuperare i nomi delle colonne.",
       "url": "URL del testo delimitato",
       "file": "File di testo delimitato",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Recupero in corso...",
       "retrieveColumns": "Recupera colonne",
@@ -6483,7 +6484,6 @@
       "remove": "Rimuovi join",
       "enabledTitle": "Applica questo join",
       "missingLayer": "Layer di join non trovato",
-      "noCandidates": "Nessun altro layer ha una tabella degli attributi da unire",
       "statsMatched": "{{matched}} di {{total}} elementi corrispondenti",
       "statsUnmatchedJoin_one": "{{count}} riga della tabella senza corrispondenza",
       "statsUnmatchedJoin_other": "{{count}} righe della tabella senza corrispondenza"

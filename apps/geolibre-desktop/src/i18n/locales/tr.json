@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Sütun adları alınamadı.",
       "url": "Sınırlayıcılı metin URL'si",
       "file": "Sınırlayıcılı metin dosyası",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Alınıyor...",
       "retrieveColumns": "Sütunları getir",
@@ -6483,7 +6484,6 @@
       "remove": "Birleştirmeyi kaldır",
       "enabledTitle": "Bu birleştirmeyi uygula",
       "missingLayer": "Birleştirme katmanı bulunamadı",
-      "noCandidates": "Birleştirilecek öznitelik tablosu olan başka katman yok",
       "statsMatched": "{{total}} öğeden {{matched}} tanesi eşleşti",
       "statsUnmatchedJoin_one": "Eşleşmeyen {{count}} tablo satırı",
       "statsUnmatchedJoin_other": "Eşleşmeyen {{count}} tablo satırı"

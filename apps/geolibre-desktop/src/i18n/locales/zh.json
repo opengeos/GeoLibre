@@ -634,6 +634,7 @@
       "errorRetrieveColumns": "无法获取字段名称。",
       "url": "分隔文本 URL",
       "file": "分隔文本文件",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "正在获取...",
       "retrieveColumns": "获取字段",
@@ -6406,7 +6407,6 @@
       "remove": "移除连接",
       "enabledTitle": "应用此连接",
       "missingLayer": "未找到连接图层",
-      "noCandidates": "没有其他图层具有可连接的属性表",
       "statsMatched": "{{total}} 个要素中有 {{matched}} 个匹配",
       "statsUnmatchedJoin_other": "{{count}} 个表格行未匹配"
     },

@@ -635,6 +635,7 @@
       "errorRetrieveColumns": "Đường ống",
       "url": "URL văn bản được phân cách",
       "file": "__PH0__ ảnh đã bị bỏ qua (không có vị trí GPS).",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Đang truy xuất...",
       "retrieveColumns": "Truy xuất cột",
@@ -6407,7 +6408,6 @@
       "remove": "Xóa tham gia",
       "enabledTitle": "Áp dụng sự tham gia này",
       "missingLayer": "__PH0__ trường",
-      "noCandidates": "Không có lớp nào khác có bảng thuộc tính để tham gia",
       "statsMatched": "{{matched}} trong số {{total}} tính năng phù hợp"
     },
     "virtualFields": {

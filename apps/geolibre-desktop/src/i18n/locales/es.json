@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "No se pudieron recuperar los nombres de las columnas.",
       "url": "URL de texto delimitado",
       "file": "Archivo de texto delimitado",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Recuperando...",
       "retrieveColumns": "Recuperar columnas",
@@ -6483,7 +6484,6 @@
       "remove": "Eliminar unión",
       "enabledTitle": "Aplicar esta unión",
       "missingLayer": "Capa de unión no encontrada",
-      "noCandidates": "Ninguna otra capa tiene una tabla de atributos para unir",
       "statsMatched": "{{matched}} de {{total}} entidades coincidentes",
       "statsUnmatchedJoin_one": "{{count}} fila de la tabla sin coincidencia",
       "statsUnmatchedJoin_other": "{{count}} filas de la tabla sin coincidencia"

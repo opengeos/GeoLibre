@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "دریافت نام ستون‌ها ممکن نشد.",
       "url": "نشانی متن جداشده",
       "file": "فایل متن جداشده",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "در حال دریافت...",
       "retrieveColumns": "دریافت ستون‌ها",
@@ -6483,7 +6484,6 @@
       "remove": "حذف پیوند",
       "enabledTitle": "اعمال این پیوند",
       "missingLayer": "لایهٔ پیوند یافت نشد",
-      "noCandidates": "هیچ لایهٔ دیگری جدول صفات برای پیوند ندارد",
       "statsMatched": "{{matched}} از {{total}} عارضه هم‌خوان شد",
       "statsUnmatchedJoin_one": "{{count}} سطر پیوند هم‌خوان نشد",
       "statsUnmatchedJoin_other": "{{count}} سطر پیوند هم‌خوان نشد"

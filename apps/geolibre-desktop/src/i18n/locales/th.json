@@ -634,6 +634,7 @@
       "errorRetrieveColumns": "ไม่สามารถดึงชื่อคอลัมน์ได้",
       "url": "URL ของข้อความคั่นด้วยตัวแบ่ง",
       "file": "ไฟล์ข้อความคั่นด้วยตัวแบ่ง",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "กำลังดึงข้อมูล...",
       "retrieveColumns": "ดึงรายการคอลัมน์",
@@ -6406,7 +6407,6 @@
       "remove": "นำการเชื่อมข้อมูลออก",
       "enabledTitle": "ใช้การเชื่อมข้อมูลนี้",
       "missingLayer": "ไม่พบเลเยอร์ที่จะเชื่อม",
-      "noCandidates": "ไม่มีเลเยอร์อื่นที่มีตารางแอตทริบิวต์ให้เชื่อมข้อมูล",
       "statsMatched": "ตรงกัน {{matched}} จาก {{total}} ฟีเจอร์",
       "statsUnmatchedJoin_other": "มีแถวของเลเยอร์ที่เชื่อม {{count}} แถวที่ไม่ตรงกัน"
     },

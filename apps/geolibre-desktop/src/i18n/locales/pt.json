@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Não foi possível recuperar os nomes das colunas.",
       "url": "URL de texto delimitado",
       "file": "Arquivo de texto delimitado",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Recuperando...",
       "retrieveColumns": "Recuperar colunas",
@@ -6483,7 +6484,6 @@
       "remove": "Remover junção",
       "enabledTitle": "Aplicar esta junção",
       "missingLayer": "Camada de junção não encontrada",
-      "noCandidates": "Nenhuma outra camada tem tabela de atributos para unir",
       "statsMatched": "{{matched}} de {{total}} feições correspondidas",
       "statsUnmatchedJoin_one": "{{count}} linha da tabela sem correspondência",
       "statsUnmatchedJoin_other": "{{count}} linhas da tabela sem correspondência"

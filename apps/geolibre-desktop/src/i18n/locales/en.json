@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Could not retrieve column names.",
       "url": "Delimited text URL",
       "file": "Delimited text file",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Retrieving...",
       "retrieveColumns": "Retrieve columns",
@@ -6556,7 +6557,6 @@
       "remove": "Remove join",
       "enabledTitle": "Apply this join",
       "missingLayer": "Join layer not found",
-      "noCandidates": "No other layer has an attribute table to join",
       "statsMatched": "{{matched}} of {{total}} features matched",
       "statsUnmatchedJoin_one": "{{count}} join row unmatched",
       "statsUnmatchedJoin_other": "{{count}} join rows unmatched"

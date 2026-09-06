@@ -643,6 +643,7 @@
       "errorRetrieveColumns": "Impossible de récupérer les noms de colonnes.",
       "url": "URL du texte délimité",
       "file": "Fichier de texte délimité",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Récupération...",
       "retrieveColumns": "Récupérer les colonnes",
@@ -6483,7 +6484,6 @@
       "remove": "Supprimer la jointure",
       "enabledTitle": "Appliquer cette jointure",
       "missingLayer": "Couche de jointure introuvable",
-      "noCandidates": "Aucune autre couche n'a de table attributaire à joindre",
       "statsMatched": "{{matched}} entités sur {{total}} appariées",
       "statsUnmatchedJoin_one": "{{count}} ligne de la table sans correspondance",
       "statsUnmatchedJoin_other": "{{count}} lignes de la table sans correspondance"

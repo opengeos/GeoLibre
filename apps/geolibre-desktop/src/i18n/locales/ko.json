@@ -634,6 +634,7 @@
       "errorRetrieveColumns": "열 이름을 조회할 수 없습니다.",
       "url": "구분 텍스트 URL",
       "file": "구분 텍스트 파일",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "조회하는 중...",
       "retrieveColumns": "열 조회",
@@ -6406,7 +6407,6 @@
       "remove": "조인 제거",
       "enabledTitle": "이 조인 적용",
       "missingLayer": "조인 레이어를 찾을 수 없음",
-      "noCandidates": "조인할 속성 테이블이 있는 다른 레이어가 없습니다",
       "statsMatched": "{{total}}개 중 {{matched}}개 피처 일치",
       "statsUnmatchedJoin_other": "일치하지 않은 테이블 행 {{count}}개"
     },

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { parseDelimitedTextLayer } from "../../lib/delimited-text";
 import { type ExcelWorksheet, isExcelFile, readExcelWorksheets } from "../../lib/excel-workbook";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import { createBaseLayer } from "../layout/add-data/helpers";
 
 interface JoinTableFileInputProps {
   targetLayerId: string;
@@ -39,7 +40,7 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
       const result = await openLocalDataFileWithFallback({
         filters: [
           {
-            name: "CSV / Excel",
+            name: t("addData.delimitedText.fileFilter"),
             extensions: ["csv", "tsv", "txt", "xls", "xlsx"],
           },
         ],
@@ -84,19 +85,29 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
       const store = useAppStore.getState();
       if (!store.layers.some((layer) => layer.id === targetLayerId)) return;
       const name = (file.path.split(/[\\/]/).pop() ?? file.path).replace(/\.[^.]+$/, "");
-      // Embed the imported rows in the project; a local file path is not a
-      // reloadable GeoJSON source (especially for a selected Excel sheet).
-      const id = store.addGeoJsonLayer(file.worksheets ? `${name} — ${sheet}` : name, result.data);
-      store.updateLayer(id, {
-        metadata: {
-          isTable: true,
-          fields: result.fields,
-          featureCount: result.totalRows,
-        },
-      });
+      // Built with no vector styling data on purpose: a non-spatial attribute
+      // table draws nothing, so it stays on the flat defaults rather than
+      // reserving a palette color no map ever shows — the same choice the
+      // Delimited Text source makes for a table.
+      const layer = {
+        ...createBaseLayer(
+          file.worksheets ? `${name} — ${sheet}` : name,
+          "geojson",
+          { type: "geojson" },
+          {
+            isTable: true,
+            fields: result.fields,
+            featureCount: result.totalRows,
+          },
+        ),
+        // Embed the imported rows in the project; a local file path is not a
+        // reloadable GeoJSON source (especially for a selected Excel sheet).
+        geojson: result.data,
+      };
+      store.addLayer(layer);
       // Adding a layer selects it; keep the join draft on its original target.
       store.selectLayer(targetLayerId);
-      onImport(id);
+      onImport(layer.id);
       setFile(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("addData.delimitedText.readError"));
@@ -109,7 +120,9 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
         <FileUp className="h-3.5 w-3.5" />
         {t("addData.common.chooseFile")}
       </Button>
-      <span className="ms-2 text-xs text-muted-foreground">CSV / Excel</span>
+      <span className="ms-2 text-xs text-muted-foreground">
+        {t("addData.delimitedText.fileFilter")}
+      </span>
       {file && (
         <>
           <p className="break-all text-xs">{file.path.split(/[\\/]/).pop()}</p>

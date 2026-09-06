@@ -634,6 +634,7 @@
       "errorRetrieveColumns": "Tidak dapat mengambil nama kolom.",
       "url": "URL teks berpembatas",
       "file": "File teks berpembatas",
+      "fileFilter": "CSV / Excel",
       "urlPlaceholder": "https://example.com/data.csv",
       "retrieving": "Mengambil...",
       "retrieveColumns": "Ambil kolom",
@@ -6406,7 +6407,6 @@
       "remove": "Hapus gabungan",
       "enabledTitle": "Terapkan gabungan ini",
       "missingLayer": "Layer gabungan tidak ditemukan",
-      "noCandidates": "Tidak ada layer lain dengan tabel atribut untuk digabungkan",
       "statsMatched": "{{matched}} dari {{total}} fitur cocok",
       "statsUnmatchedJoin_other": "{{count}} baris tabel tanpa kecocokan"
     },
