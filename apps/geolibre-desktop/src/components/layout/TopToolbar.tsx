@@ -2166,15 +2166,23 @@ export function TopToolbar({
           // `animateTo`. Reading them off the MapLibre map would report `null`
           // on the globe and leave Zoom In/Out never showing as "at limit".
           getCamera={() => {
-            const view = mapControllerRef.current?.readView();
+            const engine = mapControllerRef.current;
+            const view = engine?.readView();
             if (!view) return null;
+            // Prefer the limits the engine actually enforces: MapLibre's
+            // effective minZoom is raised above the raw preference when
+            // `restrictBounds` is set, so reading the preference alone would
+            // leave Zoom Out enabled at the true floor (#2268 review). The
+            // preference is the fallback for an engine with no native map,
+            // which clamps to it directly.
+            const map = engine?.getMap();
             const { map: mapPreferences } = useAppStore.getState().preferences;
             return {
               zoom: view.zoom,
               bearing: view.bearing,
               pitch: view.pitch,
-              minZoom: mapPreferences.minZoom,
-              maxZoom: mapPreferences.maxZoom,
+              minZoom: map ? map.getMinZoom() : mapPreferences.minZoom,
+              maxZoom: map ? map.getMaxZoom() : mapPreferences.maxZoom,
             };
           }}
           onResetNorth={() => mapControllerRef.current?.resetNorth()}

@@ -25,10 +25,21 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   const addComment = useAppStore((s) => s.addComment);
   const collab = useAppStore((s) => s.collaboration);
 
+  /**
+   * Whether the current engine can host the tool at all. Placing a comment needs
+   * a map click and feature picking, both MapLibre-only today, so an engine
+   * without a native map must not let the tool arm (#2268 review).
+   */
+  const canPlaceComments = useCallback(
+    () => mapControllerRef.current?.capabilities.nativeMapInstance !== false,
+    [mapControllerRef],
+  );
+
   const activateTool = useCallback(() => {
+    if (!canPlaceComments()) return;
     setIsActive(true);
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const deactivateTool = useCallback(() => {
     setIsActive(false);
@@ -36,9 +47,9 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   const toggleTool = useCallback(() => {
-    setIsActive((prev) => !prev);
+    setIsActive((prev) => (prev ? false : canPlaceComments()));
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const submitComment = useCallback(
     (body: string, authorName?: string) => {

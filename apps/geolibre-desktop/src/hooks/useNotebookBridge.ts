@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import type { MapEngine } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
@@ -48,6 +48,8 @@ export function useNotebookBridge(
    */
   mapReadyGeneration: number,
 ): void {
+  // Survives the effect re-running on an engine hand-off; see `connected` below.
+  const connectedRef = useRef(false);
   useEffect(() => {
     const controller = () => mapControllerRef.current;
     const handlers = createScriptingHandlers({ getController: controller });
@@ -69,7 +71,12 @@ export function useNotebookBridge(
     // not broadcast; refined to the actual origin once a message is accepted.
     let frameOrigin = expectedOrigin() ?? window.location.origin;
     // Whether the notebook client has announced itself; gates outbound events.
-    let connected = false;
+    // Held in a ref, not a local, because this effect now re-runs on an engine
+    // hand-off (`mapReadyGeneration`) while `NotebookPanel` keeps the iframe
+    // mounted — a fresh `connected = false` would silently drop every selection,
+    // layer, and click event until the notebook happened to re-announce itself,
+    // which it has no reason to do (#2268 review).
+    const connected = connectedRef;
 
     const frameWindow = (): Window | null => iframeRef.current?.contentWindow ?? null;
 
@@ -112,7 +119,7 @@ export function useNotebookBridge(
       const data = event.data as { type?: string; requestId?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:notebook-ready") {
-        connected = true;
+        connected.current = true;
         return;
       }
       if (data.type === "geolibre:command" && typeof data.requestId === "string") {
@@ -121,7 +128,7 @@ export function useNotebookBridge(
     };
 
     const emit = (eventName: string, payload: unknown) => {
-      if (!connected) return;
+      if (!connected.current) return;
       const win = frameWindow();
       if (!win) return;
       win.postMessage({ type: "geolibre:event", event: eventName, payload }, frameOrigin);

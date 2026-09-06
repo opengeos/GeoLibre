@@ -57,6 +57,11 @@ const VIEW_THROTTLE_MS = 250;
 export function useEmbedApi(
   mapControllerRef: RefObject<MapEngine | null>,
   mapAppAPI: ReturnType<typeof createAppAPI> | null,
+  /**
+   * Bumped whenever a canvas publishes an engine, so the view-listener attach
+   * re-arms on a hand-off — the ref itself is stable (#2268 review).
+   */
+  mapReadyGeneration: number,
 ): void {
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -404,7 +409,14 @@ export function useEmbedApi(
     };
     let rafId: number | null = null;
     const attach = () => {
-      const map = controller()?.getMap();
+      const engine = controller();
+      // Same guard as useCommandBridge/useNotebookBridge: the loop was written to
+      // wait out MapCanvas's mount, when a null ref meant "not ready yet". The
+      // ref can now hold a `CesiumEngine`, whose `getMap()` is null forever — so
+      // without this it would schedule a frame every frame for the life of an
+      // embedded globe session (#2268 review).
+      if (engine && !engine.capabilities.nativeMapInstance) return;
+      const map = engine?.getMap();
       if (!map) {
         rafId = requestAnimationFrame(attach);
         return;
@@ -429,5 +441,5 @@ export function useEmbedApi(
       viewMap?.off("move", onMapMove);
       viewMap?.off("moveend", onMapMove);
     };
-  }, [mapControllerRef, mapAppAPI]);
+  }, [mapControllerRef, mapAppAPI, mapReadyGeneration]);
 }

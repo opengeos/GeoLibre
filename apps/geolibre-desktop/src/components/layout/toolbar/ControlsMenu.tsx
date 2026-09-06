@@ -376,7 +376,13 @@ export function ControlsMenu({
             </DropdownMenuItem>
           )}
           {show("controls.recordVideo") && (
-            <DropdownMenuItem onSelect={onOpenRecordVideo}>
+            // Same MapLibre-canvas dependency as Record Tour above:
+            // RecordVideoDialog builds its recording canvas from `getMap()` /
+            // `getContainer()` (#2268 review).
+            <DropdownMenuItem
+              onSelect={onOpenRecordVideo}
+              disabled={!capabilities.nativeMapInstance}
+            >
               <Clapperboard className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.recordVideo")}
             </DropdownMenuItem>
