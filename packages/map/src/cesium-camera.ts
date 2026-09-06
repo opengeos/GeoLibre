@@ -164,6 +164,18 @@ function pickGlobe(
   );
 }
 
+/** Columbus uses projected distances when the flat scene is Web Mercator. */
+function isMercatorColumbus(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+): boolean {
+  return (
+    viewer.scene.mode === Cesium.SceneMode.COLUMBUS_VIEW &&
+    !!viewer.scene.mapProjection &&
+    viewer.scene.mapProjection instanceof Cesium.WebMercatorProjection
+  );
+}
+
 /**
  * The camera-to-ground distance that encodes `view.zoom` in the scene mode the
  * viewer is currently drawing in.
@@ -180,20 +192,13 @@ export function zoomToSceneRange(
   viewer: CesiumWidget,
   view: MapViewState,
 ): number {
-  // Columbus view takes the 3D branch, latitude correction and all, which is
-  // right for the projection Cesium actually draws it in (#2270 review). The
-  // `cos(lat)` in `groundResolution` converts a projected pixel width into true
-  // ground metres, so it only belongs where the camera measures ground metres —
-  // and Columbus view, on `CesiumWidget`'s default `GeographicProjection`, does:
-  // a metre on its vertical axis is `a·Δlat`, a true meridian metre, not a
-  // Mercator-stretched one. `zoomToRange` matches the *vertical* extent, so that
-  // is the axis that has to line up. It is 2D that drops the correction, and for
-  // a different reason: MapLibre's zoom is defined on the horizontal projected
-  // span, which is a full circumference in either projection.
+  // Mercator Columbus view measures projected metres. The latitude correction
+  // belongs only to the globe (or the legacy geographic flat projection).
+  const scaleLatitude = isMercatorColumbus(Cesium, viewer) ? 0 : view.center[1];
   const range =
     viewer.scene.mode === Cesium.SceneMode.SCENE2D
       ? zoomToOrthoWidth(view.zoom, canvasWidth(viewer))
-      : zoomToRange(view.zoom, view.center[1], canvasHeight(viewer), cameraFovy(viewer));
+      : zoomToRange(view.zoom, scaleLatitude, canvasHeight(viewer), cameraFovy(viewer));
   return Math.max(range, 1);
 }
 
@@ -272,7 +277,8 @@ export function readMapViewFromCamera(
     range = carto.height;
   }
 
-  const zoom = clamp(rangeToZoom(range, lat, height, cameraFovy(viewer)), 0, 24);
+  const scaleLatitude = isMercatorColumbus(Cesium, viewer) ? 0 : lat;
+  const zoom = clamp(rangeToZoom(range, scaleLatitude, height, cameraFovy(viewer)), 0, 24);
   return {
     center: [lng, lat],
     zoom,

@@ -308,8 +308,9 @@ After a bump, check all five — none of these fail the build:
   class names (`.cesium-button`, `.cesium-toolbar-button`,
   `.cesium-sceneModePicker-wrapper`). A renamed observable leaves the English
   default in place; a renamed class leaves Cesium's dark-blue chrome on a
-  GeoLibre toolbar. Neither fails the build, and only the tooltips are asserted
-  (`e2e/cesium-primary-renderer.spec.ts`). The fullscreen button is the fragile
+  GeoLibre toolbar. Neither fails the build. Tooltip assertions live in
+  `e2e/cesium-primary-renderer.spec.ts`, alongside control mounting and alignment
+  checks. The fullscreen button is the fragile
   one: its tooltip is a read-only computed, so the translated string is written
   onto the element from a `fullscreenchange` listener and survives only because
   DOM listeners fire in registration order. If a bump makes the widget update

@@ -1232,6 +1232,12 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
+  // A renderer swap replaces the engine and its controls while this toolbar
+  // keeps its checkbox state. Replay fullscreen once the new engine is ready.
+  useEffect(() => {
+    mapControllerRef.current?.setBuiltInControlVisible("fullscreen", controlsVisible.fullscreen);
+  }, [mapControllerRef, mapReadyGeneration, controlsVisible.fullscreen]);
+
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
 
   // Terrain is project state, unlike the other optional map chrome, so applying

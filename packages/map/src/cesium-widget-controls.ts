@@ -26,11 +26,11 @@ import type { CesiumWidget } from "@cesium/engine";
 import { FullscreenButton, HomeButton, SceneModePicker } from "@cesium/widgets";
 
 /**
- * Scene-morph duration, in seconds. Cesium defaults to 2 s, which reads as a
- * stall on a map the rest of the app animates in well under one; this matches
- * `MapController.flyTo`'s 800 ms, the longest camera animation GeoLibre runs.
+ * Switch projection synchronously, then let the engine restore the project
+ * camera in morphComplete. Cesium's animated morph flies to a different extent
+ * first, producing a fly-out followed by a snap back to the saved center.
  */
-const MORPH_SECONDS = 0.8;
+const MORPH_SECONDS = 0;
 
 /**
  * Marks the wrapper GeoLibre's stylesheet themes the Cesium chrome through.

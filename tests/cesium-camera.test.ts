@@ -501,3 +501,33 @@ describe("applyMapViewToCamera in 2D", () => {
     assert.ok(Math.abs(calls.pitch - (mapLibrePitchToCesiumDeg(60) * Math.PI) / 180) < 1e-12);
   });
 });
+
+// Flat Web Mercator scenes measure projected metres, not ground metres.
+class WebMercatorProjection {}
+function useMercator({ Cesium, viewer }: ReturnType<typeof makeCameraFakes>) {
+  Object.assign(Cesium, { WebMercatorProjection });
+  Object.assign(viewer.scene, { mapProjection: new WebMercatorProjection() });
+}
+
+describe("Web Mercator Columbus camera", () => {
+  it("matches the projected map scale at high latitude", () => {
+    const fakes = makeCameraFakes(0, SCENE_MODE.COLUMBUS_VIEW);
+    useMercator(fakes);
+    const view: MapViewState = { center: [12, 60], zoom: 2, bearing: 0, pitch: 0 };
+    assert.equal(
+      zoomToSceneRange(fakes.Cesium, fakes.viewer, view),
+      zoomToRange(2, 0, HEIGHT, FOVY),
+    );
+  });
+
+  it("reads projected scale without a latitude-dependent zoom jump", () => {
+    const fakes = makeReadbackFakes({
+      mode: SCENE_MODE.COLUMBUS_VIEW,
+      height: zoomToRange(2, 0, HEIGHT, FOVY),
+      lat: 60,
+    });
+    Object.assign(fakes.Cesium, { WebMercatorProjection });
+    Object.assign(fakes.viewer.scene, { mapProjection: new WebMercatorProjection() });
+    assert.ok(Math.abs(readMapViewFromCamera(fakes.Cesium, fakes.viewer).zoom - 2) < 1e-6);
+  });
+});

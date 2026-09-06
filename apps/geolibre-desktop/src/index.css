@@ -4392,30 +4392,31 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
  * night-side globe or dark imagery leaves a dark icon on a near-black square.
  * Matching MapLibre's selector shape (`button` + `:not(:disabled)`) and adding
  * the scoping class outranks it without reaching for `!important`. */
-.geolibre-cesium-ctrl button.cesium-button:not(:disabled):hover,
+/* Cesium's focused icon is white; keep it legible after pointer clicks. */
 .geolibre-cesium-ctrl button.cesium-button:not(:disabled):focus {
-  background: #f2f2f2;
+  background: #fff;
   border: none;
   box-shadow: none;
-  fill: #000;
+  fill: #333;
   outline: none;
 }
 
-/* Keyboard focus keeps a ring, and it is MapLibre's own — its control buttons
-   draw `0 0 2px 2px #0096ff` on `:focus-visible` — so tabbing through the map
-   toolbar looks the same whichever renderer drew the button. The rule above
-   clears the ring for a *pointer* focus on purpose, mirroring MapLibre's
-   `:focus:not(:focus-visible) { box-shadow: none }`; without this rule after it,
-   that clearing would swallow the keyboard indicator too and leave only the
-   hover background, which is far too subtle to locate focus by. */
+.geolibre-cesium-ctrl button.cesium-button:not(:disabled):hover {
+  background: #dbeafe;
+  border: none;
+  box-shadow: inset 0 0 0 2px #60a5fa;
+  fill: #1e40af;
+}
+
 .geolibre-cesium-ctrl button.cesium-button:not(:disabled):focus-visible {
-  box-shadow: 0 0 2px 2px #0096ff;
+  outline: 2px solid #0096ff;
+  outline-offset: 2px;
 }
 
 .geolibre-cesium-ctrl button.cesium-button:not(:disabled):active {
-  background: #e6e6e6;
-  box-shadow: none;
-  fill: #000;
+  background: #bfdbfe;
+  box-shadow: inset 0 0 0 2px #2563eb;
+  fill: #1e3a8a;
 }
 
 /* A disabled Cesium button (the fullscreen one, where the browser forbids
@@ -4427,30 +4428,24 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   fill: #b0b0b0;
 }
 
-/* The scene-mode picker's drop-down is a stack of buttons below the trigger.
-   Cesium spaces them with its own margins and leaves them borderless once the
-   rules above land; give each the same outline the trigger has so the three
-   modes read as separate targets rather than one tall button. */
-.geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper .cesium-button {
-  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
-  margin-bottom: 4px;
+/* Expand left into the map instead of down over the fullscreen button.
+   Keep the wrapper one button wide so opening it never shifts the toolbar.
+   Flex lays out only the visible alternatives, regardless of the selected mode. */
+.geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 6px;
 }
 
-/* Those drop-down buttons overflow the wrapper's box, so in a vertical toolbar
-   they land over whichever control sits below. Two separate problems follow,
-   and both need fixing.
- *
- * Open: the entries paint *behind* the control below, because a later sibling
- * wins by default, leaving them visible but unclickable. Raising the picker
- * puts the open drop-down on top of its neighbours, as a drop-down should be,
- * whatever order the controls were mounted in (toggling Controls → Fullscreen
- * re-adds that button at the end of the corner).
- *
- * Closed: Cesium collapses the entries with `visibility: hidden`, which keeps
- * their boxes in layout — and with the picker raised, that dead footprint sits
- * over the fullscreen button and swallows its clicks, with nothing visible to
- * explain why. Collapsing them out of layout instead costs only the quarter-
- * second fade-out, which a vertical toolbar reads better without anyway. */
+.geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper .cesium-button {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.geolibre-cesium-ctrl .cesium-sceneModePicker-dropDown-icon {
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
+}
+
 .geolibre-cesium-ctrl-expands {
   position: relative;
   z-index: 1;
