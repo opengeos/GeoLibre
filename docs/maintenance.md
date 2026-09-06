@@ -318,6 +318,13 @@ After a bump, check all five — none of these fail the build:
   target — the label reverts to English *after the first toggle*, which is why
   the spec toggles fullscreen and re-reads the title rather than checking it
   once at mount.
+
+  **Scene-mode lifetime:** the 2D/3D/Columbus picker controls the current
+  `CesiumWidget` only. Recreating the widget, including switching to MapLibre
+  and back or reopening a project, starts in 3D. The project retains its
+  rendering engine and camera, but does not serialize the Cesium scene mode.
+  Scene-mode persistence is outside the toolbar integration's scope; adding it
+  requires an explicit project/store field and restoration for each Cesium pane.
 - **PWA globs.** `**/cesium-*` / `**/Cesium-*` in `vite.config.ts` keep the
   chunk out of the app-shell precache and CacheFirst-cache it instead. A chunk
   renamed out of that pattern would be precached, adding megabytes to first load.
