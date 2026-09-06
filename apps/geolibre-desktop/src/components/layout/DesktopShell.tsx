@@ -933,7 +933,7 @@ export function DesktopShell({
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef);
-  const commentTool = useCommentTool({ mapControllerRef, collaboration });
+  const commentTool = useCommentTool({ mapControllerRef, collaboration, mapReadyGeneration });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);

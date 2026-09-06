@@ -18,6 +18,7 @@ import {
   type EmbedEventType,
 } from "../lib/embed-api";
 import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
+import { shouldAwaitNativeMap } from "../lib/native-map-attach";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
 import { loadDataUrl } from "./useDataUrlLoader";
@@ -420,12 +421,8 @@ export function useEmbedApi(
     let rafId: number | null = null;
     const attach = () => {
       const engine = controller();
-      // Same guard as useCommandBridge/useNotebookBridge: the loop was written to
-      // wait out MapCanvas's mount, when a null ref meant "not ready yet". The
-      // ref can now hold a `CesiumEngine`, whose `getMap()` is null forever — so
-      // without this it would schedule a frame every frame for the life of an
-      // embedded globe session (#2268 review).
-      if (engine && !engine.capabilities.nativeMapInstance) return;
+      // Stops the poll once a map can no longer arrive; see the helper.
+      if (!shouldAwaitNativeMap(engine)) return;
       const map = engine?.getMap();
       if (!map) {
         rafId = requestAnimationFrame(attach);

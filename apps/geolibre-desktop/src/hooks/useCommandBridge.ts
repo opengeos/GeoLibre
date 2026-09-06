@@ -4,6 +4,7 @@ import { type RefObject, useEffect } from "react";
 import type { MapEngine } from "@geolibre/map";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
+import { shouldAwaitNativeMap } from "../lib/native-map-attach";
 
 // Request/reply + event channel that backs the Python scripting API. Where
 // useEmbedBridge syncs the whole project, this handles the things the project
@@ -150,13 +151,8 @@ export function useCommandBridge(
     let rafId: number | null = null;
     const attachClick = () => {
       const engine = controller();
-      // Stop polling for a map that will never arrive. The loop existed to wait
-      // out MapCanvas's mount, when a null ref meant "not ready yet"; the ref can
-      // now hold a `CesiumEngine`, whose `getMap()` is null forever — so without
-      // this the loop would schedule a frame every frame for the life of the
-      // globe (#2268 review). A later switch back to 2D re-runs this effect
-      // through `mapReadyGeneration`, which re-arms the attach.
-      if (engine && !engine.capabilities.nativeMapInstance) return;
+      // Stops the poll once a map can no longer arrive; see the helper.
+      if (!shouldAwaitNativeMap(engine)) return;
       const map = engine?.getMap();
       if (map) {
         clickMap = map;

@@ -10,6 +10,12 @@ import type * as maplibreGl from "maplibre-gl";
 interface UseCommentToolOptions {
   mapControllerRef: React.RefObject<MapEngine | null>;
   collaboration?: CollaborationApi;
+  /**
+   * Bumped whenever a canvas publishes an engine, and on an engine hand-off.
+   * The ref has stable identity, so this is what re-runs the click-listener
+   * effect when the map underneath changes (#2268 review).
+   */
+  mapReadyGeneration: number;
 }
 
 export interface PendingCommentState {
@@ -17,7 +23,11 @@ export interface PendingCommentState {
   point: { x: number; y: number };
 }
 
-export function useCommentTool({ mapControllerRef, collaboration }: UseCommentToolOptions) {
+export function useCommentTool({
+  mapControllerRef,
+  collaboration,
+  mapReadyGeneration,
+}: UseCommentToolOptions) {
   const { t } = useTranslation();
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
@@ -120,7 +130,14 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
     // without saying so the tool could read as armed while no click ever lands
     // (#2268 review). `activateTool`/`toggleTool` refuse to arm without it.
     const map = mapControllerRef.current?.getMap();
-    if (!map || !isActive) return;
+    if (!isActive) return;
+    if (!map) {
+      // The engine that just published cannot place comments. Disarm rather than
+      // leave the tool looking active over a map that will never receive its
+      // click.
+      if (mapControllerRef.current) setIsActive(false);
+      return;
+    }
 
     map.getCanvas().style.cursor = "crosshair";
 
@@ -179,7 +196,11 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
       map.getCanvas().style.cursor = "";
       map.off("click", handleMapClick);
     };
-  }, [isActive, mapControllerRef]);
+    // `mapReadyGeneration` is what makes this re-run on an engine hand-off: the
+    // ref has stable identity, so without it a tool armed on the 2D map would
+    // stay armed across a switch and never attach to the replacement map
+    // (#2268 review).
+  }, [isActive, mapControllerRef, mapReadyGeneration]);
 
   return {
     isActive,

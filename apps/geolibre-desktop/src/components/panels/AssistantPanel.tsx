@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController, MapEngine } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, Select, Textarea, cn } from "@geolibre/ui";
 import {
   AlertCircle,
