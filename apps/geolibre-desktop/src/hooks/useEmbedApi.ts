@@ -288,7 +288,17 @@ export function useEmbedApi(
         case "exportImage": {
           if (!useAppStore.getState().deploymentCapabilities.has("export:data"))
             throw new Error("Missing export:data capability");
-          const map = controller()?.getMap();
+          const engine = controller();
+          // Same distinction scriptingApi's `toImage` makes: "not ready yet" is
+          // a state that resolves, "not supported by this engine" never does —
+          // and an embedding host has no way to tell them apart otherwise
+          // (#2268 review).
+          if (engine && !engine.capabilities.nativeMapInstance) {
+            throw new Error(
+              "Capturing the map image is not supported by the current rendering engine",
+            );
+          }
+          const map = engine?.getMap();
           if (!map) throw new Error("The map is not ready yet");
           return captureMapImage(map).image.toDataURL("image/png");
         }

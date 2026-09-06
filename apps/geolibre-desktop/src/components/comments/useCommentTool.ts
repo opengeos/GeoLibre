@@ -31,7 +31,12 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
    * without a native map must not let the tool arm (#2268 review).
    */
   const canPlaceComments = useCallback(
-    () => mapControllerRef.current?.capabilities.nativeMapInstance !== false,
+    // `=== true`, not `!== false`: a null ref (no engine published yet) must not
+    // arm the tool either. The effect below only attaches its click listener
+    // when `isActive` flips, and mutating the ref does not re-run it — so a tool
+    // armed before the map was ready would stay armed and dead until the user
+    // toggled it off and on again (#2268 review).
+    () => mapControllerRef.current?.capabilities.nativeMapInstance === true,
     [mapControllerRef],
   );
 

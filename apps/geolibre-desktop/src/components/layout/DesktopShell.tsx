@@ -1388,6 +1388,16 @@ export function DesktopShell({
   // after they meant to dismiss it (#2217 review).
   useEffect(() => {
     if (!cesiumPrimary) return;
+    // Bump the readiness generation on the hand-off. It is no longer *reset*
+    // (that is what left every consumer pointing at nothing on the globe), but
+    // the reset did do one useful thing: it forced the generation-gated effects
+    // — viewport history, the embed/notebook/command bridges — to re-run and
+    // detach their listeners from the outgoing MapLibre map. Without a bump
+    // they would not re-run until a new engine published, so a globe that never
+    // becomes ready would leave those closures holding a destroyed map for the
+    // session (#2268 review). Incrementing keeps that cleanup timing while the
+    // ref itself stays live.
+    setMapReadyGeneration((generation) => generation + 1);
     setRasterSubsetLayer(null);
     setBasemapExtractOpen(false);
     setObjectDetectionOpen(false);
