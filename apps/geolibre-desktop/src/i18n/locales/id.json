@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "Tambahkan token Cesium Ion di Pengaturan untuk medan dan citra Ion"
   },
   "renderer": {
-    "layerUnsupported": "Tidak dirender oleh bola dunia 3D"
+    "layerUnsupported": "Tidak dirender oleh bola dunia 3D",
+    "resetView": "Atur Ulang Tampilan",
+    "scene3D": "Bola dunia 3D",
+    "scene2D": "Peta 2D",
+    "sceneColumbus": "Tampilan Columbus"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Salin koordinat ke papan klip",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "Grid 3 × 3",
       "splitViewSync": "Sinkronkan tampilan",
       "renderingEngine": "Mesin render",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Lihat di Google Maps",
       "viewInGoogleEarth": "Lihat di Google Earth",
       "zoomIn": "Perbesar",

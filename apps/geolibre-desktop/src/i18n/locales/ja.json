@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "地形とIon衛星画像を使うには、設定でCesium Ionトークンを追加してください"
   },
   "renderer": {
-    "layerUnsupported": "3D地球儀では描画されません"
+    "layerUnsupported": "3D地球儀では描画されません",
+    "resetView": "表示をリセット",
+    "scene3D": "3D地球儀",
+    "scene2D": "2D地図",
+    "sceneColumbus": "コロンバスビュー"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "座標をクリップボードにコピー",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "3 × 3 グリッド",
       "splitViewSync": "ビューを同期",
       "renderingEngine": "レンダリングエンジン",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google マップで表示",
       "viewInGoogleEarth": "Google Earth で表示",
       "zoomIn": "ズームイン",

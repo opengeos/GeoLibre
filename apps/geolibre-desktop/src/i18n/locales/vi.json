@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
   "renderer": {
-    "layerUnsupported": "Không được kết xuất trên quả địa cầu 3D"
+    "layerUnsupported": "Không được kết xuất trên quả địa cầu 3D",
+    "resetView": "Đặt lại chế độ xem",
+    "scene3D": "Quả địa cầu 3D",
+    "scene2D": "Bản đồ 2D",
+    "sceneColumbus": "Chế độ xem Columbus"
   },
   "mapContextMenu": {
     "zoomInHere": "Phóng to ở đây",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "Lưới 3 × 3",
       "splitViewSync": "Đồng bộ hóa lượt xem",
       "renderingEngine": "Bộ kết xuất",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Xem trên Google Maps",
       "viewInGoogleEarth": "Xem trong Google Earth",
       "zoomIn": "Phóng to",

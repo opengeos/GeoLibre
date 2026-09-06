@@ -1871,7 +1871,11 @@
     "cesiumTokenHint": "Añada un token de Cesium Ion en Configuración para el terreno y las imágenes de Ion"
   },
   "renderer": {
-    "layerUnsupported": "No se representa en el globo 3D"
+    "layerUnsupported": "No se representa en el globo 3D",
+    "resetView": "Restablecer vista",
+    "scene3D": "Globo 3D",
+    "scene2D": "Mapa 2D",
+    "sceneColumbus": "Vista Columbus"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copiar coordenadas al portapapeles",
@@ -2725,8 +2729,8 @@
       "splitViewGrid3x3": "Cuadrícula 3 × 3",
       "splitViewSync": "Sincronizar vistas",
       "renderingEngine": "Motor de representación",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Ver en Google Maps",
       "viewInGoogleEarth": "Ver en Google Earth",
       "zoomIn": "Acercar",

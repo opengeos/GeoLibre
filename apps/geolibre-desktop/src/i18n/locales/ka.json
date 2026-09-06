@@ -1871,7 +1871,11 @@
     "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token პარამეტრებში"
   },
   "renderer": {
-    "layerUnsupported": "3D გლობუსზე არ ისახება"
+    "layerUnsupported": "3D გლობუსზე არ ისახება",
+    "resetView": "ხედის საწყისზე დაბრუნება",
+    "scene3D": "3D გლობუსი",
+    "scene2D": "2D რუკა",
+    "sceneColumbus": "კოლუმბუსის ხედი"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "კოორდინატების კოპირება ბუფერში",
@@ -2725,8 +2729,8 @@
       "splitViewGrid3x3": "3 × 3 ბადე",
       "splitViewSync": "ხედების სინქრონიზაცია",
       "renderingEngine": "რენდერინგის ძრავა",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "ნახვა Google Maps-ში",
       "viewInGoogleEarth": "ნახვა Google Earth-ში",
       "zoomIn": "მიახლოება",

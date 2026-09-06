@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ในการตั้งค่าเพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
   },
   "renderer": {
-    "layerUnsupported": "ไม่แสดงผลบนลูกโลก 3 มิติ"
+    "layerUnsupported": "ไม่แสดงผลบนลูกโลก 3 มิติ",
+    "resetView": "รีเซ็ตมุมมอง",
+    "scene3D": "ลูกโลก 3 มิติ",
+    "scene2D": "แผนที่ 2 มิติ",
+    "sceneColumbus": "มุมมองโคลัมบัส"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "คัดลอกพิกัดไปยังคลิปบอร์ด",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "กริด 3 × 3",
       "splitViewSync": "ซิงค์มุมมอง",
       "renderingEngine": "เอนจินการแสดงผล",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "ดูใน Google Maps",
       "viewInGoogleEarth": "ดูใน Google Earth",
       "zoomIn": "ซูมเข้า",

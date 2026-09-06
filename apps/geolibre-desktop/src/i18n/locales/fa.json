@@ -1871,7 +1871,11 @@
     "cesiumTokenHint": "برای زمین و تصاویر Ion، یک توکن Cesium Ion در تنظیمات بیفزایید"
   },
   "renderer": {
-    "layerUnsupported": "روی کرهٔ سه‌بعدی ترسیم نمی‌شود"
+    "layerUnsupported": "روی کرهٔ سه‌بعدی ترسیم نمی‌شود",
+    "resetView": "بازنشانی نما",
+    "scene3D": "کرهٔ سه‌بعدی",
+    "scene2D": "نقشهٔ دوبعدی",
+    "sceneColumbus": "نمای کلمبوس"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "رونوشت مختصات در بریده‌دان",
@@ -2725,8 +2729,8 @@
       "splitViewGrid3x3": "شبکهٔ ۳ × ۳",
       "splitViewSync": "هم‌گام‌سازی نماها",
       "renderingEngine": "موتور ترسیم",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "دیدن در Google Maps",
       "viewInGoogleEarth": "دیدن در Google Earth",
       "zoomIn": "بزرگ‌نمایی",

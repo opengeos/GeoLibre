@@ -1961,7 +1961,11 @@
     "cesiumTokenHint": "Добавьте токен Cesium Ion в настройках, чтобы получить рельеф и снимки Ion"
   },
   "renderer": {
-    "layerUnsupported": "Не отображается на 3D-глобусе"
+    "layerUnsupported": "Не отображается на 3D-глобусе",
+    "resetView": "Сбросить вид",
+    "scene3D": "3D-глобус",
+    "scene2D": "2D-карта",
+    "sceneColumbus": "Вид Колумба"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Копировать координаты в буфер обмена",
@@ -2819,8 +2823,8 @@
       "splitViewGrid3x3": "Сетка 3 × 3",
       "splitViewSync": "Синхронизировать виды",
       "renderingEngine": "Механизм отрисовки",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Открыть в Google Maps",
       "viewInGoogleEarth": "Открыть в Google Earth",
       "zoomIn": "Приблизить",

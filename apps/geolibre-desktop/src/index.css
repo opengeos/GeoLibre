@@ -4325,3 +4325,64 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .geolibre-legend-panel.maplibregl-ctrl textarea::placeholder {
   color: hsl(var(--muted-foreground)) !important;
 }
+
+/* ---------------------------------------------------------------------------
+ * Cesium's toolbar widgets on the globe (`cesium-widget-controls.ts`): the
+ * home button and the scene-mode picker.
+ *
+ * Cesium ships them in its own dark-blue toolbar look — `#303336` on a `#444`
+ * border, a `#48b` hover with a white glow — which reads as a foreign control
+ * next to MapLibre's white buttons, and does so in both themes (GeoLibre keeps
+ * the map chrome white in dark mode too, see the graticule control above).
+ * These rules restyle the chrome to MapLibre's while leaving the widgets'
+ * own SVG icons and expand/collapse behaviour alone.
+ *
+ * Everything is scoped under `.geolibre-cesium-ctrl`, the wrapper the controls
+ * add, so Cesium's other DOM — the credit display, the render-error panel — is
+ * untouched. `29px` and the shadow are MapLibre's own control-button metrics.
+ * ------------------------------------------------------------------------- */
+.geolibre-cesium-ctrl {
+  /* MapLibre's control shadow, so the buttons sit on the map like their
+     neighbours rather than floating flat. */
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
+  border-radius: 4px;
+}
+
+.geolibre-cesium-ctrl .cesium-button {
+  background: #fff;
+  border: none;
+  border-radius: 4px;
+  /* `fill`, not `color`: the widgets draw their icons as SVG paths. */
+  fill: #333;
+  margin: 0;
+  padding: 0;
+}
+
+.geolibre-cesium-ctrl .cesium-toolbar-button {
+  width: 29px;
+  height: 29px;
+}
+
+.geolibre-cesium-ctrl .cesium-button:hover,
+.geolibre-cesium-ctrl .cesium-button:focus {
+  background: #f2f2f2;
+  border: none;
+  box-shadow: none;
+  fill: #000;
+  outline: none;
+}
+
+.geolibre-cesium-ctrl .cesium-button:active {
+  background: #e6e6e6;
+  box-shadow: none;
+  fill: #000;
+}
+
+/* The scene-mode picker's drop-down is a stack of buttons below the trigger.
+   Cesium spaces them with its own margins and leaves them borderless once the
+   rules above land; re-add a small gap so the three modes read as separate
+   targets rather than one tall button. */
+.geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper .cesium-button {
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
+  margin-bottom: 4px;
+}

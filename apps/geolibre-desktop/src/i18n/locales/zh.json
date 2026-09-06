@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "在设置中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
   },
   "renderer": {
-    "layerUnsupported": "3D 地球不渲染此图层"
+    "layerUnsupported": "3D 地球不渲染此图层",
+    "resetView": "重置视图",
+    "scene3D": "3D 地球",
+    "scene2D": "2D 地图",
+    "sceneColumbus": "哥伦布视图"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "复制坐标到剪贴板",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "3 × 3 网格",
       "splitViewSync": "同步视图",
       "renderingEngine": "渲染引擎",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "在 Google 地图中查看",
       "viewInGoogleEarth": "在 Google Earth 中查看",
       "zoomIn": "放大",

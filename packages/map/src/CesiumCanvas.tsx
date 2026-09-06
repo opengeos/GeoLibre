@@ -14,6 +14,10 @@ import { isSameView } from "./cesium-camera";
 import { CesiumEngine } from "./cesium-engine";
 import type { MapEngine } from "./map-engine";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
+import type {
+  CesiumWidgetControlHandle,
+  CesiumWidgetControlLabels,
+} from "./cesium-widget-controls";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
 // build, token, and split-pane mount; M2 synced the camera with the shared store
@@ -35,13 +39,29 @@ const CESIUM_BASE_URL = `${APP_BASE_URL}cesium`;
 /** id for the one-time <link> to Cesium's widget stylesheet (served from base). */
 const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
 /**
- * Just the `CesiumWidget` styles — the canvas sizing, the credit container, and
- * the render-error panel. The full `Widgets/widgets.css` (32 KB) also carries
- * the chrome for the base-layer picker, geocoder, timeline, animation dial and
- * info box, none of which this pane creates. Both are staged by
- * copy-cesium-assets, so narrowing the link costs nothing.
+ * The Cesium stylesheets this pane actually needs, in cascade order.
+ *
+ * Not the full `Widgets/widgets.css` (32 KB), which also carries the chrome for
+ * the base-layer picker, geocoder, timeline, animation dial and info box — none
+ * of which this pane creates. All of them are staged by copy-cesium-assets, so
+ * narrowing the links costs nothing and keeps unused rules out of the document.
+ *
+ * - `CesiumWidget.css` — canvas sizing, the credit container, the render-error
+ *   panel. Always needed.
+ * - `shared.css` — the `.cesium-button` / `.cesium-toolbar-button` base both
+ *   toolbar widgets are built from. The home button has no stylesheet of its
+ *   own; this is all it needs.
+ * - `SceneModePicker.css` — the expanding drop-down that widget adds on top.
+ *
+ * The last two are only meaningful on the primary globe, the one pane that
+ * hosts controls, but are linked unconditionally: the links are document-level
+ * and a pane can become the primary map without a reload.
  */
-const CESIUM_CSS_PATH = "/Widgets/CesiumWidget/CesiumWidget.css";
+const CESIUM_CSS_PATHS = [
+  "/Widgets/CesiumWidget/CesiumWidget.css",
+  "/Widgets/shared.css",
+  "/Widgets/SceneModePicker/SceneModePicker.css",
+] as const;
 
 export interface CesiumCanvasProps {
   /**
@@ -73,6 +93,17 @@ export interface CesiumCanvasProps {
   engineRef?: React.RefObject<MapEngine | null>;
   /** Called once the engine is live and the ref is set. */
   onEngineReady?: () => void;
+  /**
+   * Translated tooltips for the Cesium toolbar controls (home, scene mode).
+   *
+   * The controls are Cesium widgets rendered outside React, so their labels are
+   * pushed in the way `MapController`'s compass and terrain labels are, rather
+   * than read from a hook here — `@geolibre/map` has no i18n of its own. Omit
+   * them and the widgets keep their English defaults.
+   *
+   * Only the primary globe hosts controls, so this is ignored on a grid pane.
+   */
+  controlLabels?: CesiumWidgetControlLabels;
 }
 
 /**
@@ -84,13 +115,15 @@ export interface CesiumCanvasProps {
 function prepareCesiumEnvironment(): void {
   const globalWindow = window as typeof window & { CESIUM_BASE_URL?: string };
   globalWindow.CESIUM_BASE_URL ??= CESIUM_BASE_URL;
-  if (!document.getElementById(CESIUM_CSS_LINK_ID)) {
+  CESIUM_CSS_PATHS.forEach((path, index) => {
+    const id = `${CESIUM_CSS_LINK_ID}-${index}`;
+    if (document.getElementById(id)) return;
     const link = document.createElement("link");
-    link.id = CESIUM_CSS_LINK_ID;
+    link.id = id;
     link.rel = "stylesheet";
-    link.href = `${CESIUM_BASE_URL}${CESIUM_CSS_PATH}`;
+    link.href = `${CESIUM_BASE_URL}${path}`;
     document.head.appendChild(link);
-  }
+  });
 }
 
 /**
@@ -115,12 +148,16 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   ionToken,
   engineRef,
   onEngineReady,
+  controlLabels,
 }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<CesiumWidget | null>(null);
   const cesiumRef = useRef<typeof import("@cesium/engine") | null>(null);
   const engineInstanceRef = useRef<CesiumEngine | null>(null);
   const controlHostRef = useRef<CesiumControlHost | null>(null);
+  // The Cesium toolbar widgets mounted on the primary globe, kept so the label
+  // effect can retranslate them and the unmount can remove them.
+  const widgetControlsRef = useRef<CesiumWidgetControlHandle[]>([]);
   // The imagery layers currently drawing the project basemap, at the bottom of
   // the stack. Tracked so a basemap change replaces exactly these and leaves
   // the data layers above them alone.
@@ -140,6 +177,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   engineRefProp.current = engineRef;
   const onEngineReadyRef = useRef(onEngineReady);
   onEngineReadyRef.current = onEngineReady;
+  const controlLabelsRef = useRef(controlLabels);
+  controlLabelsRef.current = controlLabels;
 
   // No pane id means this globe *is* the primary map area, not a pane beside it.
   const isPrimary = viewId === undefined;
@@ -331,8 +370,22 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         if (cancelled || viewer.isDestroyed()) return;
 
         if (viewId === undefined) {
-          controlHostRef.current = new CesiumControlHost(viewer, container);
-          setPrimaryCesiumControlHost(controlHostRef.current);
+          const host = new CesiumControlHost(viewer, container);
+          controlHostRef.current = host;
+          setPrimaryCesiumControlHost(host);
+          // Cesium's own home and scene-mode buttons (issue #2270). Imported
+          // here rather than at module scope so `@cesium/widgets` stays in the
+          // lazily fetched `cesium` chunk instead of joining the 2D boot path.
+          const { createCesiumWidgetControls } = await import("./cesium-widget-controls");
+          if (!cancelled && !viewer.isDestroyed()) {
+            widgetControlsRef.current = createCesiumWidgetControls(
+              viewer,
+              controlLabelsRef.current,
+            );
+            // Top-right, above MapLibre's navigation control on the 2D map, so
+            // the pair reads as one toolbar whichever renderer is drawing.
+            for (const control of widgetControlsRef.current) host.addControl(control, "top-right");
+          }
         }
 
         // Seed the camera from the shared store camera before the first frame.
@@ -385,6 +438,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({
       baseImageryLayersRef.current = [];
       appliedImageryRef.current = null;
       if (viewId === undefined) {
+        // The host's own destroy() removes every control it holds, these
+        // included; dropping the handles here is what stops the label effect
+        // from writing to a destroyed widget's view model afterwards.
+        widgetControlsRef.current = [];
         if (controlHostRef.current) {
           controlHostRef.current.destroy();
           controlHostRef.current = null;
@@ -415,6 +472,14 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     applyBasemapLook();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapVisible, basemapOpacity]);
+
+  // Retranslate the Cesium toolbar tooltips when the UI language changes. The
+  // widgets expose them as observables, so this updates the live DOM without
+  // rebuilding the controls or touching the camera.
+  useEffect(() => {
+    if (!ready || !controlLabels) return;
+    for (const control of widgetControlsRef.current) control.setLabels(controlLabels);
+  }, [ready, controlLabels]);
 
   // Reconcile the store layers (with this pane's overrides) onto the globe
   // whenever they change. `ready` re-runs this once the viewer exists; the

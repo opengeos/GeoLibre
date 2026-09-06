@@ -1871,7 +1871,11 @@
     "cesiumTokenHint": "Arazi ve Ion görüntüleri için Ayarlar'dan bir Cesium Ion belirteci ekleyin"
   },
   "renderer": {
-    "layerUnsupported": "3D küre tarafından çizilmiyor"
+    "layerUnsupported": "3D küre tarafından çizilmiyor",
+    "resetView": "Görünümü Sıfırla",
+    "scene3D": "3B küre",
+    "scene2D": "2B harita",
+    "sceneColumbus": "Columbus görünümü"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Koordinatları panoya kopyala",
@@ -2725,8 +2729,8 @@
       "splitViewGrid3x3": "3 × 3 ızgara",
       "splitViewSync": "Görünümleri eşzamanla",
       "renderingEngine": "Çizim motoru",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google Haritalar'da görüntüle",
       "viewInGoogleEarth": "Google Earth'te görüntüle",
       "zoomIn": "Yakınlaştır",

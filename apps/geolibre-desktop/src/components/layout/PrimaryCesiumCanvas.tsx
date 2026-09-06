@@ -1,5 +1,5 @@
-import { CesiumCanvas, type MapEngine } from "@geolibre/map";
-import type { RefObject } from "react";
+import { CesiumCanvas, type CesiumWidgetControlLabels, type MapEngine } from "@geolibre/map";
+import { useMemo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
 
@@ -33,6 +33,20 @@ export interface PrimaryCesiumCanvasProps {
 export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumCanvasProps) {
   const { t } = useTranslation();
   const ionToken = useCesiumIonToken();
+  // Cesium's toolbar widgets render outside React and hardcode English, so the
+  // translated tooltips are handed to the canvas the way `MapController`'s
+  // compass and terrain labels are pushed in. Memoized on the language rather
+  // than rebuilt every render: the canvas re-pushes them whenever this object's
+  // identity changes.
+  const controlLabels = useMemo<CesiumWidgetControlLabels>(
+    () => ({
+      home: t("renderer.resetView"),
+      sceneMode3D: t("renderer.scene3D"),
+      sceneMode2D: t("renderer.scene2D"),
+      sceneModeColumbus: t("renderer.sceneColumbus"),
+    }),
+    [t],
+  );
 
   return (
     <div className="absolute inset-0" data-testid="primary-cesium">
@@ -45,6 +59,7 @@ export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumC
         ionToken={ionToken}
         engineRef={engineRef}
         onEngineReady={onEngineReady}
+        controlLabels={controlLabels}
       />
       {/* The globe works without an Ion token — it draws the project basemap —
           so say what a token would add rather than hiding the view. Bottom-end

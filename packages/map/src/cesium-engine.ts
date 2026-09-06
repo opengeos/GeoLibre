@@ -20,6 +20,7 @@ import {
   isSameView,
   readMapViewFromCamera,
   zoomToRange,
+  zoomToSceneRange,
 } from "./cesium-camera";
 import { getPrimaryCesiumControlHost } from "./cesium-control-host";
 import { CesiumLayerSync } from "./cesium-layer-sync";
@@ -212,6 +213,7 @@ export class CesiumEngine implements MapEngine {
     this.installInputTracking();
     this.installTerrainCorrection();
     this.installCameraPublisher();
+    this.installMorphHandling();
   }
 
   /** Whether this globe is the primary map area rather than a grid pane. */
@@ -223,6 +225,20 @@ export class CesiumEngine implements MapEngine {
   private live(): CesiumWidget | null {
     const viewer = this.viewer;
     return viewer && !viewer.isDestroyed() ? viewer : null;
+  }
+
+  /**
+   * Whether the scene is mid-flight between 2D, 3D and Columbus view.
+   *
+   * A morph is the one window where the camera cannot be read or written.
+   * Cesium throws outright from `lookAt` and `flyTo` while morphing, and
+   * `camera.heading` returns `undefined` — so both halves of the camera sync
+   * have to stand down and let the morph finish. {@link installMorphHandling}
+   * re-applies the stored view once it does.
+   */
+  private isMorphing(): boolean {
+    const viewer = this.live();
+    return viewer?.scene.mode === this.Cesium.SceneMode.MORPHING;
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -239,7 +255,7 @@ export class CesiumEngine implements MapEngine {
 
   applyView(view: MapViewState): void {
     const viewer = this.live();
-    if (!viewer) return;
+    if (!viewer || this.isMorphing()) return;
     this.lastApplied = view;
     // This placement is ours, so the terrain correction may adjust it.
     this.userOwnsCamera = false;
@@ -657,7 +673,7 @@ export class CesiumEngine implements MapEngine {
    */
   private animateTo(view: MapViewState, seconds?: number): void {
     const viewer = this.live();
-    if (!viewer) return;
+    if (!viewer || this.isMorphing()) return;
     // Cesium has no "ease to a MapLibre view" primitive, so the flight is
     // expressed the same way applyView expresses a placement — a lookAt in the
     // target's local frame — with `flyTo`'s duration doing the animating.
@@ -667,7 +683,10 @@ export class CesiumEngine implements MapEngine {
     // project's zoom bounds are enforced — the counterpart to MapLibre clamping
     // inside its own camera API.
     const zoom = Math.min(this.maxZoom, Math.max(this.minZoom, view.zoom));
-    const range = Math.max(zoomToRange(zoom, lat, canvasHeight(viewer), cameraFovy(viewer)), 1);
+    // Per scene mode: a camera distance in 3D and Columbus view, the width of
+    // the orthographic box in 2D. `flyToBoundingSphere` reinterprets the offset
+    // range exactly as `lookAt` does, so both paths agree on what a zoom means.
+    const range = zoomToSceneRange(this.Cesium, viewer, { ...view, zoom });
     viewer.camera.flyToBoundingSphere(
       new this.Cesium.BoundingSphere(
         this.Cesium.Cartesian3.fromDegrees(lng, lat, ground),
@@ -754,6 +773,44 @@ export class CesiumEngine implements MapEngine {
   }
 
   /**
+   * Put the camera back where it was once a 2D/3D/Columbus morph finishes.
+   *
+   * Cesium's morph preserves *its own* notion of the view, which is not the
+   * one the store holds: the modes encode scale differently (a camera distance
+   * through a perspective frustum in 3D and Columbus view, the width of an
+   * orthographic box in 2D), so a morph that Cesium considers faithful still
+   * lands at a different MapLibre zoom — and 2D drops the tilt and rotation
+   * outright. Re-applying the stored view on arrival is what makes the switch
+   * read as "the same map, drawn differently" rather than a camera jump.
+   *
+   * It re-applies the *store's* camera rather than {@link lastApplied}: the
+   * morph itself fires `moveEnd` repeatedly, and although
+   * {@link installCameraPublisher} stands down while `MORPHING`, the settle on
+   * the far side is a real move that has already overwritten `lastApplied` with
+   * the view Cesium arrived at.
+   */
+  private installMorphHandling(): void {
+    const viewer = this.live();
+    if (!viewer) return;
+    const onMorphComplete = () => {
+      const live = this.live();
+      if (!live) return;
+      const store = useAppStore.getState();
+      const view =
+        this.isPrimary || store.mapLayout.syncView
+          ? store.mapView
+          : (store.secondaryMapViews.find((pane) => pane.id === this.viewId)?.view ??
+            store.mapView);
+      this.applyView(view);
+    };
+    viewer.scene.morphComplete.addEventListener(onMorphComplete);
+    this.disposers.push(() => {
+      const live = this.live();
+      live?.scene.morphComplete.removeEventListener(onMorphComplete);
+    });
+  }
+
+  /**
    * Mirror the globe's camera back into the shared store. Echoes of our own
    * {@link applyView} are filtered by the `isSameView` guard.
    */
@@ -762,7 +819,7 @@ export class CesiumEngine implements MapEngine {
     if (!viewer) return;
     const onMoveEnd = () => {
       const live = this.live();
-      if (!live) return;
+      if (!live || this.isMorphing()) return;
       // Nothing to publish until the camera has been seeded. A fresh
       // CesiumWidget starts on its own default camera and settles onto it, which
       // fires moveEnd before `CesiumCanvas` has applied the project's view —

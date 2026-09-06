@@ -1826,7 +1826,11 @@
     "cesiumTokenHint": "지형과 Ion 영상을 사용하려면 설정에서 Cesium Ion 토큰을 추가하세요"
   },
   "renderer": {
-    "layerUnsupported": "3D 지구본에서는 렌더링되지 않음"
+    "layerUnsupported": "3D 지구본에서는 렌더링되지 않음",
+    "resetView": "보기 재설정",
+    "scene3D": "3D 지구본",
+    "scene2D": "2D 지도",
+    "sceneColumbus": "콜럼버스 뷰"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "좌표를 클립보드에 복사",
@@ -2678,8 +2682,8 @@
       "splitViewGrid3x3": "3 × 3 격자",
       "splitViewSync": "보기 동기화",
       "renderingEngine": "렌더링 엔진",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google 지도에서 보기",
       "viewInGoogleEarth": "Google Earth에서 보기",
       "zoomIn": "확대",

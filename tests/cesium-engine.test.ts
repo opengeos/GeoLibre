@@ -84,6 +84,8 @@ function makeCesium() {
     EllipsoidTerrainProvider: class {
       readonly kind = "ellipsoid";
     },
+    // Cesium's own numbering, which the engine compares `scene.mode` against.
+    SceneMode: { MORPHING: 0, COLUMBUS_VIEW: 1, SCENE2D: 2, SCENE3D: 3 },
     Math: {
       toRadians: toRad,
       toDegrees: (rad: number) => (rad * 180) / Math.PI,
@@ -120,6 +122,7 @@ function makeViewer(groundHeight = 0) {
   let height = groundHeight;
   const moveEnd = makeEvent();
   const tileLoadProgressEvent = makeEvent();
+  const morphComplete = makeEvent();
   const canvasListeners = new Map<string, Set<(event: unknown) => void>>();
   const canvas = {
     clientWidth: 800,
@@ -183,6 +186,10 @@ function makeViewer(groundHeight = 0) {
     },
     scene: {
       canvas,
+      // SCENE3D, matching the fake namespace above. Mutable so a test can put
+      // the scene mid-morph (or in 2D) the way the scene-mode picker does.
+      mode: 3,
+      morphComplete,
       verticalExaggeration: 1,
       screenSpaceCameraController: {
         minimumZoomDistance: 0,
@@ -215,6 +222,11 @@ function makeViewer(groundHeight = 0) {
     viewer: viewer as never,
     moveEnd,
     tileLoadProgressEvent,
+    morphComplete,
+    /** Put the scene in a scene mode, as the scene-mode picker's morph does. */
+    setSceneMode(mode: number) {
+      viewer.scene.mode = mode;
+    },
     flights,
     canvasListeners,
     /** Nudge the camera as if the user had navigated there. */
@@ -717,5 +729,88 @@ describe("CesiumEngine framing", () => {
     } as never);
     assert.equal(fakes.flights.length, 1);
     engine.destroy();
+  });
+});
+
+// --- scene-mode morphs -------------------------------------------------------
+// Cesium's scene-mode picker (the globe's 2D/3D/Columbus button, added in
+// #2270) does not swap the mode instantly: it runs an animated morph, and for
+// its duration the camera is off limits. `Camera.lookAt` and `flyTo` throw
+// outright while `scene.mode` is MORPHING, `camera.heading` returns undefined,
+// and moveEnd fires repeatedly with intermediate poses. So both halves of the
+// camera sync have to stand down until it lands — and then put the camera back,
+// because the modes encode scale differently and Cesium's own idea of a faithful
+// morph is not the store's.
+
+const MORPHING = 0;
+const SCENE2D = 2;
+
+describe("CesiumEngine scene-mode morphs", () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      mapView: { center: [0, 0], zoom: 4, bearing: 0, pitch: 0 },
+      setMapView: (() => {}) as never,
+    } as never);
+  });
+
+  it("does not place the camera while the scene is morphing", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    const before = fakes.placements;
+    fakes.setSceneMode(MORPHING);
+    engine.applyView({ center: [10, 20], zoom: 8, bearing: 0, pitch: 0 });
+    assert.equal(fakes.placements, before, "lookAt throws mid-morph; it must not be called");
+    engine.destroy();
+  });
+
+  it("does not animate the camera while the scene is morphing", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    fakes.setSceneMode(MORPHING);
+    engine.zoomIn();
+    assert.equal(fakes.flights.length, 0, "flyTo throws mid-morph; it must not be called");
+    engine.destroy();
+  });
+
+  it("does not publish the intermediate poses a morph fires", () => {
+    // A morph raises moveEnd repeatedly on its way between modes. Publishing
+    // those would walk the stored camera through a series of half-projected
+    // poses, and each pane following mapView would jump with it.
+    const writes: MapViewState[] = [];
+    useAppStore.setState({
+      setMapView: ((view: MapViewState) => writes.push(view)) as never,
+    } as never);
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    fakes.setSceneMode(MORPHING);
+    fakes.nudge(30);
+    fakes.moveEnd.emit();
+    assert.deepEqual(writes, []);
+    engine.destroy();
+  });
+
+  it("re-applies the stored camera once the morph completes", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    // The morph ends with the scene in its new mode and the camera wherever
+    // Cesium left it — here, somewhere else entirely.
+    fakes.setSceneMode(SCENE2D);
+    fakes.nudge(45);
+    const before = fakes.placements;
+    fakes.morphComplete.emit();
+    assert.equal(fakes.placements, before + 1, "the stored view must be re-applied");
+    engine.destroy();
+  });
+
+  it("stops re-applying once destroyed", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.destroy();
+    const before = fakes.placements;
+    fakes.morphComplete.emit();
+    assert.equal(fakes.placements, before);
+    assert.equal(fakes.morphComplete.size, 0, "the listener must be removed on destroy");
   });
 });

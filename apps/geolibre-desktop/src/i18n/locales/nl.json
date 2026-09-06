@@ -1871,7 +1871,11 @@
     "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
   "renderer": {
-    "layerUnsupported": "Niet weergegeven door de 3D-globe"
+    "layerUnsupported": "Niet weergegeven door de 3D-globe",
+    "resetView": "Weergave herstellen",
+    "scene3D": "3D-globe",
+    "scene2D": "2D-kaart",
+    "sceneColumbus": "Columbus-weergave"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Coördinaten naar klembord kopiëren",
@@ -2725,8 +2729,8 @@
       "splitViewGrid3x3": "3 × 3-raster",
       "splitViewSync": "Weergaven synchroniseren",
       "renderingEngine": "Renderengine",
-      "rendererMapLibre": "MapLibre 2D",
-      "rendererCesium": "Cesium 3D",
+      "rendererMapLibre": "MapLibre",
+      "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Bekijken in Google Maps",
       "viewInGoogleEarth": "Bekijken in Google Earth",
       "zoomIn": "Inzoomen",

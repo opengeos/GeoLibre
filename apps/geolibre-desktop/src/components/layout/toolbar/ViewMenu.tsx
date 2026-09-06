@@ -275,8 +275,11 @@ export function ViewMenu({
               <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.splitView")}</span>
             </DropdownMenuSubTrigger>
-            {/* `style`, not `min-w-48` — see the Reset Orientation submenu above. */}
-            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
+            {/* No `minWidth` override: these labels ("2 × 2", "Single map") are
+                short, and a 12rem floor left most of the submenu empty. The
+                shared 8rem floor plus the content's own width is enough, and it
+                still yields to the available-width cap on a narrow screen. */}
+            <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 value={gridKey}
                 onValueChange={(value: string) => {
@@ -328,8 +331,10 @@ export function ViewMenu({
               <Box className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.renderingEngine")}</span>
             </DropdownMenuSubTrigger>
-            {/* `style`, not `min-w-48` — see the Reset Orientation submenu above. */}
-            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
+            {/* No `minWidth` override — see the Split View submenu above. Two
+                one-word engine names sized to a 12rem floor read as a mostly
+                empty box. */}
+            <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 value={primaryRenderer}
                 onValueChange={(value: string) =>

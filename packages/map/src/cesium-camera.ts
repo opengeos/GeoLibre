@@ -82,6 +82,39 @@ export function canvasHeight(viewer: CesiumWidget): number {
   return canvas.clientHeight || canvas.height || 1;
 }
 
+/** The viewer canvas width in CSS pixels. See {@link canvasHeight}. */
+export function canvasWidth(viewer: CesiumWidget): number {
+  const canvas = viewer.scene.canvas;
+  return canvas.clientWidth || canvas.width || 1;
+}
+
+/**
+ * Horizontal extent, in projected metres, that a 2D scene must span across a
+ * `widthPx`-wide canvas to show the same ground as MapLibre at `zoom`.
+ *
+ * The globe's 3D camera encodes zoom as a *distance* ({@link zoomToRange}),
+ * which only works against a perspective frustum. Cesium's 2D scene mode swaps
+ * that for an orthographic one, where there is no meaningful camera distance —
+ * the view is defined by the width of the frustum box instead, and Cesium's own
+ * camera API (`lookAt`'s range, `flyToBoundingSphere`'s offset range, a
+ * `setView` destination's height) all resolve to exactly that width in 2D.
+ *
+ * So this is the 2D counterpart of `zoomToRange`, and it is *simpler* than its
+ * 3D sibling: MapLibre's zoom is defined on the projected plane (the world is
+ * `TILE_SIZE * 2**zoom` pixels wide), and both projections Cesium can draw a 2D
+ * scene in — geographic and Web Mercator — span the same full circumference
+ * across x. Latitude and field of view, which the 3D conversion has to correct
+ * for, drop out entirely.
+ */
+export function zoomToOrthoWidth(zoom: number, widthPx: number): number {
+  return (widthPx * EARTH_CIRCUMFERENCE) / (TILE_SIZE * 2 ** zoom);
+}
+
+/** Inverse of {@link zoomToOrthoWidth}: the MapLibre zoom a 2D view is showing. */
+export function orthoWidthToZoom(width: number, widthPx: number): number {
+  return Math.log2((widthPx * EARTH_CIRCUMFERENCE) / (TILE_SIZE * width));
+}
+
 /**
  * Height (metres) of the rendered ground at a position — the terrain surface
  * when terrain is on and its tiles have loaded, otherwise 0 (the ellipsoid).
@@ -132,6 +165,29 @@ function pickGlobe(
 }
 
 /**
+ * The camera-to-ground distance that encodes `view.zoom` in the scene mode the
+ * viewer is currently drawing in.
+ *
+ * Every programmatic camera move — `lookAt` in {@link applyMapViewToCamera},
+ * `flyToBoundingSphere` in the engine's animated moves — takes a "range", and
+ * Cesium quietly reinterprets that number per scene mode: a true distance
+ * through a perspective frustum in 3D and Columbus view, and the *width* of the
+ * orthographic box in 2D. Funnelling both through here is what keeps one stored
+ * `zoom` meaning the same thing on screen in all three.
+ */
+export function zoomToSceneRange(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+  view: MapViewState,
+): number {
+  const range =
+    viewer.scene.mode === Cesium.SceneMode.SCENE2D
+      ? zoomToOrthoWidth(view.zoom, canvasWidth(viewer))
+      : zoomToRange(view.zoom, view.center[1], canvasHeight(viewer), cameraFovy(viewer));
+  return Math.max(range, 1);
+}
+
+/**
  * Point a viewer's camera at the map center described by `view`, matching
  * MapLibre's scale, bearing, and pitch. Requires the Cesium namespace so this
  * module stays free of a runtime Cesium import.
@@ -142,9 +198,16 @@ export function applyMapViewToCamera(
   view: MapViewState,
 ): void {
   const [lng, lat] = view.center;
-  const range = Math.max(zoomToRange(view.zoom, lat, canvasHeight(viewer), cameraFovy(viewer)), 1);
-  const heading = Cesium.Math.toRadians(normalizeBearing(view.bearing));
-  const pitch = Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(view.pitch));
+  const range = zoomToSceneRange(Cesium, viewer, view);
+  // 2D is north-up and untilted, and must be *applied* that way and not merely
+  // read that way. `lookAt` still rotates the orthographic view to a heading it
+  // is given, but `readMapViewFromCamera` reports 2D as bearing 0 (Cesium's
+  // heading getter is meaningless once the world is the flattened map) — so
+  // carrying a bearing in would leave a visibly rotated map under a status bar
+  // insisting it is north-up.
+  const flat = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
+  const heading = flat ? 0 : Cesium.Math.toRadians(normalizeBearing(view.bearing));
+  const pitch = Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(flat ? 0 : view.pitch));
   // Aim at the ground, not the ellipsoid beneath it: `range` is the distance
   // that encodes MapLibre's zoom, so on a terrain globe the target has to sit on
   // the terrain or the pane renders far more zoomed in than its 2D twin.
@@ -171,6 +234,8 @@ export function readMapViewFromCamera(
   const height = canvas.clientHeight || canvas.height || 1;
   const ellipsoid = scene.globe?.ellipsoid ?? Cesium.Ellipsoid.WGS84;
 
+  if (scene.mode === Cesium.SceneMode.SCENE2D) return read2DMapView(Cesium, viewer, width);
+
   const centerPx = new Cesium.Cartesian2(width / 2, height / 2);
   // Pick the terrain, not the ellipsoid, so the range read back is the same
   // ground distance applyMapViewToCamera set — otherwise a terrain globe reads
@@ -184,7 +249,10 @@ export function readMapViewFromCamera(
     const carto = Cesium.Cartographic.fromCartesian(groundPoint, ellipsoid);
     lng = Cesium.Math.toDegrees(carto.longitude);
     lat = Cesium.Math.toDegrees(carto.latitude);
-    range = Cesium.Cartesian3.distance(camera.positionWC, groundPoint);
+    range =
+      scene.mode === Cesium.SceneMode.SCENE3D
+        ? Cesium.Cartesian3.distance(camera.positionWC, groundPoint)
+        : columbusRange(Cesium, viewer, carto.height);
   } else {
     // Horizon in view. The camera is thousands of kilometres out here, so the
     // ellipsoid height is close enough and terrain is not worth sampling.
@@ -200,6 +268,76 @@ export function readMapViewFromCamera(
     zoom,
     bearing: normalizeBearing(Cesium.Math.toDegrees(camera.heading)),
     pitch: cesiumPitchToMapLibreDeg(Cesium.Math.toDegrees(camera.pitch)),
+  };
+}
+
+/**
+ * Camera-to-ground distance in Columbus view, derived from heights rather than
+ * from a point-to-point measurement.
+ *
+ * The direct measurement the 3D branch uses is unavailable here: `Globe.pick`
+ * returns an Earth-centred point in every scene mode, while `camera.positionWC`
+ * is in the *scene's* frame — the two coincide on the globe and are unrelated
+ * once the world is the flattened map, so their distance is meaningless in
+ * Columbus view. (Cesium has an internal pick that stays in world coordinates,
+ * but it is absent from the published typings, so it is not something to build
+ * on.)
+ *
+ * Heights are well defined in both frames, though, and Columbus view is flat by
+ * construction: a ray leaving the camera at pitch `p` drops `range · sin|p|` for
+ * every `range` it travels, so the camera's height above the ground divides
+ * straight back out. Near the horizon that divisor collapses, and the camera's
+ * own altitude is the better answer there — the same fallback the 3D branch
+ * makes when the pick misses the globe entirely.
+ */
+function columbusRange(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+  groundHeight: number,
+): number {
+  const { camera } = viewer;
+  const cameraHeight = camera.positionCartographic.height;
+  const drop = cameraHeight - groundHeight;
+  const sinPitch = Math.abs(Math.sin(camera.pitch));
+  // ~6° off the horizon; below that the division amplifies the pitch's own
+  // rounding into a range several times too large.
+  if (!(sinPitch > 0.1) || !(drop > 0)) return cameraHeight;
+  return drop / sinPitch;
+}
+
+/**
+ * Read a 2D scene's camera back into a `MapViewState`.
+ *
+ * Nothing the 3D readback does survives the switch to an orthographic frustum:
+ * there is no camera distance to measure (Cesium parks the 2D camera at a fixed
+ * ~12,700 km and expresses the view through the frustum box instead), and
+ * `camera.heading` is derived by treating `positionWC` as an Earth-centred
+ * point — true in 3D, meaningless once the world is the flattened map.
+ *
+ * What is available is simpler and exact. The 2D camera looks straight down at
+ * its own position, so unprojecting it gives the map centre outright with no
+ * picking; and Cesium keeps `positionCartographic.height` equal to the frustum
+ * width in this mode, which {@link orthoWidthToZoom} turns back into a zoom.
+ * Bearing and pitch are reported as zero because 2D is north-up and untilted —
+ * Cesium's default `mapMode2D` does not even offer rotation.
+ */
+function read2DMapView(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+  widthPx: number,
+): MapViewState {
+  const { camera } = viewer;
+  const carto = camera.positionCartographic;
+  const frustum = camera.frustum as { left?: number; right?: number };
+  const orthoWidth =
+    frustum.right !== undefined && frustum.left !== undefined
+      ? frustum.right - frustum.left
+      : carto.height;
+  return {
+    center: [Cesium.Math.toDegrees(carto.longitude), Cesium.Math.toDegrees(carto.latitude)],
+    zoom: clamp(orthoWidthToZoom(Math.max(orthoWidth, 1), widthPx), 0, 24),
+    bearing: 0,
+    pitch: 0,
   };
 }
 
