@@ -195,6 +195,6 @@ export function useNotebookBridge(
       if (rafId !== null) cancelAnimationFrame(rafId);
       clickMap?.off("click", onMapClick);
     };
-    // Mount-only: both refs are stable and read lazily inside the closures.
+    // Re-runs on each engine hand-off; both refs are stable and read lazily.
   }, [iframeRef, mapControllerRef, mapReadyGeneration]);
 }

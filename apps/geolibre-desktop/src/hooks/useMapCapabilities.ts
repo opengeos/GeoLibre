@@ -28,8 +28,14 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
  */
 export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngineCapabilities {
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
-  return (
-    mapControllerRef?.current?.capabilities ??
-    (primaryRenderer === "cesium" ? CESIUM_CAPABILITIES : MAPLIBRE_CAPABILITIES)
-  );
+  const fallback = primaryRenderer === "cesium" ? CESIUM_CAPABILITIES : MAPLIBRE_CAPABILITIES;
+  const engine = mapControllerRef?.current;
+  // Trust the ref only while it agrees with the store about which renderer is
+  // live. The store flips `primaryRenderer` during render; the canvases publish
+  // and clear the ref from passive effects, which run after — so for the render
+  // in between, the ref still holds the *outgoing* engine and would report the
+  // capabilities of a renderer that is already gone (#2268 review). `kind` is
+  // read here as an identity check on the ref, not to infer behaviour: what is
+  // returned is still the engine's own capability object.
+  return engine && engine.kind === primaryRenderer ? engine.capabilities : fallback;
 }
