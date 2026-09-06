@@ -1830,7 +1830,10 @@
     "resetView": "Atur Ulang Tampilan",
     "scene3D": "Bola dunia 3D",
     "scene2D": "Peta 2D",
-    "sceneColumbus": "Tampilan Columbus"
+    "sceneColumbus": "Tampilan Columbus",
+    "fullscreenEnter": "Layar penuh",
+    "fullscreenExit": "Keluar dari layar penuh",
+    "fullscreenUnavailable": "Layar penuh tidak tersedia"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Salin koordinat ke papan klip",

@@ -1875,7 +1875,10 @@
     "resetView": "بازنشانی نما",
     "scene3D": "کرهٔ سه‌بعدی",
     "scene2D": "نقشهٔ دوبعدی",
-    "sceneColumbus": "نمای کلمبوس"
+    "sceneColumbus": "نمای کلمبوس",
+    "fullscreenEnter": "تمام‌صفحه",
+    "fullscreenExit": "خروج از تمام‌صفحه",
+    "fullscreenUnavailable": "تمام‌صفحه در دسترس نیست"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "رونوشت مختصات در بریده‌دان",

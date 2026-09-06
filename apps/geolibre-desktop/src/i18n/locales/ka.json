@@ -1875,7 +1875,10 @@
     "resetView": "ხედის საწყისზე დაბრუნება",
     "scene3D": "3D გლობუსი",
     "scene2D": "2D რუკა",
-    "sceneColumbus": "კოლუმბუსის ხედი"
+    "sceneColumbus": "კოლუმბუსის ხედი",
+    "fullscreenEnter": "სრულ ეკრანზე",
+    "fullscreenExit": "სრული ეკრანიდან გასვლა",
+    "fullscreenUnavailable": "სრული ეკრანი მიუწვდომელია"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "კოორდინატების კოპირება ბუფერში",

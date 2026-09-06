@@ -171,8 +171,8 @@ test.describe("Cesium as the primary rendering engine", () => {
 });
 
 /**
- * Cesium's own toolbar buttons on the globe (issue #2270): the home button and
- * the scene-mode picker.
+ * Cesium's own toolbar buttons on the globe (issue #2270): the home button, the
+ * scene-mode picker, and the fullscreen button.
  *
  * The unit tests cover the camera maths and the morph guards against a fake
  * Cesium, which by construction cannot catch what matters here — that the
@@ -185,17 +185,24 @@ test.describe("Cesium as the primary rendering engine", () => {
  * Keyless like the specs above, and asserts nothing about tiles.
  */
 test.describe("Cesium toolbar controls on the globe", () => {
-  /** One of the scene-mode picker's buttons, addressed by its tooltip. */
+  /** One of the scene-mode picker's *drop-down* entries, by its tooltip. */
   const sceneMode = (page: Page, title: string) =>
-    page.locator(`.cesium-sceneModePicker-wrapper button[title="${title}"]`);
+    page.locator(`.cesium-sceneModePicker-dropDown-icon[title="${title}"]`);
 
   /** Open the picker's drop-down and choose a mode, then wait out the morph. */
   async function chooseSceneMode(page: Page, title: string): Promise<void> {
+    // The trigger carries the *selected* mode's tooltip, so it collides with the
+    // drop-down entry of the same name; `sceneMode` matches only the entries.
     await page.locator(".cesium-sceneModePicker-wrapper button").first().click();
-    await sceneMode(page, title).last().click();
-    // The morph is animated, and the engine deliberately publishes nothing
-    // while it runs, so the readout only settles on the far side of it.
-    await page.waitForTimeout(2_000);
+    await sceneMode(page, title).click();
+    // A 3D↔2D morph is two animations back to back — Cesium flies the camera out
+    // before it morphs — and the whole time the engine refuses camera reads and
+    // writes, because Cesium throws from them mid-morph. There is no DOM signal
+    // for "the morph landed", and the zoom readout is no help either: it is
+    // *frozen* at the last applied view for the duration, so it looks stable the
+    // instant the morph begins. Hence a plain wait, generous enough to cover both
+    // animations on a software renderer.
+    await page.waitForTimeout(6_000);
   }
 
   test("switches scene mode and resets the view without losing the camera", async ({ page }) => {
@@ -207,10 +214,10 @@ test.describe("Cesium toolbar controls on the globe", () => {
     // than the default whole-Earth view. That is not incidental tidying: wheel
     // zoom on a globe framed at the full Earth trips a `DeveloperError:
     // normalized result is not a number` inside Cesium's own
-    // ScreenSpaceCameraController and stops the render loop. It reproduces on
-    // an unmodified build, so it predates these controls and is not what this
-    // test is here to catch — the test above avoids it the same way, by
-    // arriving on the globe already zoomed in.
+    // ScreenSpaceCameraController and stops the render loop. It reproduces on an
+    // unmodified build, so it predates these controls and is not what this test
+    // is here to catch — the test above avoids it the same way, by arriving on
+    // the globe already zoomed in.
     const mapBox = await page.getByTestId("map-canvas").boundingBox();
     expect(mapBox).not.toBeNull();
     await page.mouse.move(mapBox!.x + mapBox!.width / 2, mapBox!.y + mapBox!.height / 2);
@@ -218,56 +225,65 @@ test.describe("Cesium toolbar controls on the globe", () => {
       await page.mouse.wheel(0, -200);
       await page.waitForTimeout(80);
     }
-    await waitForStableZoom(page);
+    const zoomOn2dMap = await waitForStableZoom(page);
+    expect(zoomOn2dMap).toBeGreaterThan(2);
 
     await chooseRenderer(page, "Cesium");
     const globe = page.getByTestId("primary-cesium");
     await expect(globe).toBeVisible({ timeout: 60_000 });
     await expect(globe.locator("canvas")).toBeVisible({ timeout: 60_000 });
 
-    // Both controls mount into the globe's control host.
+    // All three controls mount into the globe's control host.
     await expect(page.locator(".cesium-home-button")).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".cesium-sceneModePicker-wrapper")).toBeVisible();
+    await expect(page.locator(".cesium-fullscreenButton")).toBeVisible();
     // Tooltips come from the app's catalogs, not the widgets' English defaults.
+    // The fullscreen one is the interesting case: Cesium derives it from the
+    // fullscreen state as a read-only computed, so it is written onto the button
+    // rather than pushed through a view model.
     await expect(page.locator(".cesium-home-button")).toHaveAttribute("title", "Reset view");
+    await expect(page.locator(".cesium-fullscreenButton")).toHaveAttribute(
+      "title",
+      "Enter fullscreen",
+    );
 
-    // Move off the seeded camera, so "the zoom survived" means something. Same
-    // burst-and-poll shape as the test above: one wheel tick can land while the
-    // globe is still settling and be swallowed.
-    const globeBox = await globe.locator("canvas").boundingBox();
-    expect(globeBox).not.toBeNull();
-    await page.mouse.move(globeBox!.x + globeBox!.width / 2, globeBox!.y + globeBox!.height / 2);
-    let previous = await waitForStableZoom(page);
-    for (let burst = 0; burst < 2; burst++) {
-      const settled = previous;
-      for (let tick = 0; tick < 3; tick++) {
-        await page.mouse.wheel(0, -200);
-        await page.waitForTimeout(80);
-      }
-      await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBeGreaterThan(settled + 0.1);
-      previous = await waitForStableZoom(page);
-    }
-    const zoomOn3d = previous;
+    // They line up. Cesium gives the scene-mode picker's wrapper a 3px side
+    // margin and leaves the fullscreen button to inherit a size from a `Viewer`
+    // layout that does not exist here, so both drifted out of the column before
+    // `index.css` pinned them.
+    const edges = await page
+      .locator(".geolibre-cesium-ctrl button:visible")
+      .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().right));
+    expect(edges).toHaveLength(3);
+    for (const edge of edges) expect(edge).toBeCloseTo(edges[0], 0);
 
-    // 2D keeps the scale: the orthographic frustum has no camera distance, so
-    // an engine that did not re-derive the zoom would report a constant here.
+    // The globe seeded from the 2D camera, so this is the scale to preserve.
+    const zoomOn3d = await waitForStableZoom(page);
+    expectSameZoom(zoomOn3d, zoomOn2dMap);
+
+    // 2D keeps that scale. The orthographic frustum has no camera distance, so
+    // an engine that kept deriving the zoom from one would report a constant.
     await chooseSceneMode(page, "2D map");
     expectSameZoom(await waitForStableZoom(page), zoomOn3d);
     // 2D is north-up and untilted, and says so. Sub-degree rather than exactly
-    // zero: `isSameView`'s 0.1° tolerance is what suppresses the camera echo,
-    // so a residual tenth of a degree from the 3D camera can survive the morph
-    // unpublished. Anything a user could see would be far larger.
-    await expect(page.getByText(/^Pitch:/)).toHaveText(/^Pitch: 0\.\d°$/);
-    await expect(page.getByText(/^Bearing:/)).toHaveText(/^Bearing: 0\.\d°$/);
+    // zero, and signed: `isSameView`'s 0.1° tolerance is what suppresses the
+    // camera echo, so a residual tenth of a degree can survive the morph
+    // unpublished (and reads as "-0.0" once formatted). Anything a user could
+    // see would be far larger.
+    await expect(page.getByText(/^Pitch:/)).toHaveText(/^Pitch: -?0\.\d°$/);
+    await expect(page.getByText(/^Bearing:/)).toHaveText(/^Bearing: -?0\.\d°$/);
 
-    // Wheel zoom in 2D still reaches the shared store — the assertion that the
-    // 2D-specific readback is wired up at all, not just the morph.
+    // Navigating in 2D still reaches the shared store. Nothing in the 3D
+    // readback survives the switch — there is no camera distance to measure —
+    // so this is what says the 2D-specific path is actually wired up.
+    const globeBox = await globe.locator("canvas").boundingBox();
+    expect(globeBox).not.toBeNull();
     await page.mouse.move(globeBox!.x + globeBox!.width / 2, globeBox!.y + globeBox!.height / 2);
-    for (let tick = 0; tick < 3; tick++) {
+    for (let tick = 0; tick < 4; tick++) {
       await page.mouse.wheel(0, -200);
-      await page.waitForTimeout(80);
+      await page.waitForTimeout(100);
     }
-    await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBeGreaterThan(zoomOn3d + 0.1);
+    await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBeGreaterThan(zoomOn3d + 0.3);
     const zoomOn2d = await waitForStableZoom(page);
 
     // Back to 3D, carrying the zoom the user reached in 2D.
@@ -280,5 +296,30 @@ test.describe("Cesium toolbar controls on the globe", () => {
     // camera publisher rather than moving the globe behind the store's back.
     await page.locator(".cesium-home-button").click();
     await expect.poll(() => readZoom(page), { timeout: 60_000 }).toBeLessThan(zoomOn2d - 1);
+  });
+
+  test("lets Controls -> Fullscreen govern the globe's fullscreen button", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await waitForMap(page);
+    await chooseRenderer(page, "Cesium");
+    await expect(page.locator(".cesium-fullscreenButton")).toBeVisible({ timeout: 60_000 });
+
+    // The menu row exists for every renderer, but the globe used to refuse every
+    // built-in control outright, so toggling it did nothing and the checkmark
+    // would not even move. The engine now answers for this one id.
+    const toggleFullscreen = async () => {
+      await page.getByRole("button", { name: "Controls", exact: true }).click();
+      await page.getByRole("menuitem", { name: /^Fullscreen/ }).click();
+      await page.keyboard.press("Escape");
+    };
+
+    await toggleFullscreen();
+    await expect(page.locator(".cesium-fullscreenButton")).toHaveCount(0);
+    // The other two have no menu counterpart and are unaffected.
+    await expect(page.locator(".cesium-home-button")).toBeVisible();
+
+    await toggleFullscreen();
+    await expect(page.locator(".cesium-fullscreenButton")).toBeVisible();
   });
 });

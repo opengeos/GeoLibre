@@ -1875,7 +1875,10 @@
     "resetView": "Görünümü Sıfırla",
     "scene3D": "3B küre",
     "scene2D": "2B harita",
-    "sceneColumbus": "Columbus görünümü"
+    "sceneColumbus": "Columbus görünümü",
+    "fullscreenEnter": "Tam ekran",
+    "fullscreenExit": "Tam ekrandan çık",
+    "fullscreenUnavailable": "Tam ekran kullanılamıyor"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Koordinatları panoya kopyala",

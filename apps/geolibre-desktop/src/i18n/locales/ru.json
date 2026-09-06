@@ -1965,7 +1965,10 @@
     "resetView": "Сбросить вид",
     "scene3D": "3D-глобус",
     "scene2D": "2D-карта",
-    "sceneColumbus": "Вид Колумба"
+    "sceneColumbus": "Вид Колумба",
+    "fullscreenEnter": "Полный экран",
+    "fullscreenExit": "Выйти из полного экрана",
+    "fullscreenUnavailable": "Полный экран недоступен"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Копировать координаты в буфер обмена",

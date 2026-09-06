@@ -44,6 +44,9 @@ export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumC
       sceneMode3D: t("renderer.scene3D"),
       sceneMode2D: t("renderer.scene2D"),
       sceneModeColumbus: t("renderer.sceneColumbus"),
+      fullscreenEnter: t("renderer.fullscreenEnter"),
+      fullscreenExit: t("renderer.fullscreenExit"),
+      fullscreenUnavailable: t("renderer.fullscreenUnavailable"),
     }),
     [t],
   );

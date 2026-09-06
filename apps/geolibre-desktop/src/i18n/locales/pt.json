@@ -1875,7 +1875,10 @@
     "resetView": "Redefinir vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mapa 2D",
-    "sceneColumbus": "Vista Columbus"
+    "sceneColumbus": "Vista Columbus",
+    "fullscreenEnter": "Tela cheia",
+    "fullscreenExit": "Sair da tela cheia",
+    "fullscreenUnavailable": "Tela cheia indisponível"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copiar coordenadas para a área de transferência",

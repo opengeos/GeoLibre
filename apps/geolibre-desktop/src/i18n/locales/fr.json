@@ -1875,7 +1875,10 @@
     "resetView": "Réinitialiser la vue",
     "scene3D": "Globe 3D",
     "scene2D": "Carte 2D",
-    "sceneColumbus": "Vue Columbus"
+    "sceneColumbus": "Vue Columbus",
+    "fullscreenEnter": "Plein écran",
+    "fullscreenExit": "Quitter le plein écran",
+    "fullscreenUnavailable": "Plein écran indisponible"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copier les coordonnées dans le presse-papiers",

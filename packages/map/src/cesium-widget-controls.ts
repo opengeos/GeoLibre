@@ -8,12 +8,13 @@ import type { CesiumWidget } from "@cesium/engine";
 // so it does not inherit the toolbar Cesium's full app wrapper constructs —
 // base-layer picker, geocoder, home button, scene-mode picker, help button,
 // timeline, animation dial, info box — most of which duplicate something
-// GeoLibre already owns. Two of them do not: nothing else in the app returns the
-// camera to a whole-Earth view, and nothing at all reaches Cesium's 2D and
-// Columbus scene modes.
+// GeoLibre already owns. Three of them do not: nothing else in the app returns
+// the camera to a whole-Earth view, nothing at all reaches Cesium's 2D and
+// Columbus scene modes, and MapLibre's fullscreen control is bound to a
+// `maplibregl.Map` the globe does not have.
 //
-// Each widget is constructible on its own against a container element, so
-// neither needs `Viewer`. They are wrapped as `maplibregl.IControl`s so
+// Each widget is constructible on its own against a container element, so none
+// needs `Viewer`. They are wrapped as `maplibregl.IControl`s so
 // `CesiumControlHost` positions and tears them down exactly like every other
 // control on the map.
 //
@@ -22,7 +23,7 @@ import type { CesiumWidget } from "@cesium/engine";
 // from `CesiumCanvas` would pull the widget chrome (and Knockout) onto the 2D
 // boot path instead of leaving it in the lazily fetched `cesium` chunk.
 
-import { HomeButton, SceneModePicker } from "@cesium/widgets";
+import { FullscreenButton, HomeButton, SceneModePicker } from "@cesium/widgets";
 
 /**
  * Scene-morph duration, in seconds. Cesium defaults to 2 s, which reads as a
@@ -58,6 +59,12 @@ export interface CesiumWidgetControlLabels {
   sceneMode2D: string;
   /** Tooltip for Columbus view (the 2.5D projected map). */
   sceneModeColumbus: string;
+  /** Tooltip for the fullscreen button while the map is windowed. */
+  fullscreenEnter: string;
+  /** Tooltip for the fullscreen button while the map fills the screen. */
+  fullscreenExit: string;
+  /** Tooltip for the fullscreen button when the browser forbids fullscreen. */
+  fullscreenUnavailable: string;
 }
 
 /** English fallbacks, used until the app pushes translated labels in. */
@@ -66,6 +73,9 @@ export const DEFAULT_CESIUM_WIDGET_CONTROL_LABELS: CesiumWidgetControlLabels = O
   sceneMode3D: "3D globe",
   sceneMode2D: "2D map",
   sceneModeColumbus: "Columbus view",
+  fullscreenEnter: "Enter fullscreen",
+  fullscreenExit: "Exit fullscreen",
+  fullscreenUnavailable: "Fullscreen unavailable",
 });
 
 /** The subset of a Cesium widget's lifecycle these wrappers depend on. */
@@ -102,13 +112,18 @@ abstract class CesiumWidgetControl<T extends DestroyableWidget> implements mapli
   /** Push {@link labels} onto an existing widget's view model. */
   protected abstract applyLabels(widget: T): void;
 
+  /** An extra class on the wrapper, for a control `index.css` treats specially. */
+  protected extraClass(): string {
+    return "";
+  }
+
   onAdd(): HTMLElement {
     const container = document.createElement("div");
     // `maplibregl-ctrl` supplies the corner stacking and margins every control
     // in the container shares. `maplibregl-ctrl-group` is deliberately absent:
     // it draws MapLibre's own white button chrome, which would show as a frame
     // around the Cesium button sitting inside it.
-    container.className = `maplibregl-ctrl ${CONTROL_CLASS}`;
+    container.className = `maplibregl-ctrl ${CONTROL_CLASS} ${this.extraClass()}`.trim();
     this.container = container;
     if (!this.viewer.isDestroyed()) {
       this.widget = this.create(container);
@@ -171,6 +186,19 @@ class CesiumHomeControl extends CesiumWidgetControl<HomeButton> {
  * re-applies the stored view on `morphComplete`.
  */
 class CesiumSceneModeControl extends CesiumWidgetControl<SceneModePicker> {
+  /**
+   * Marks this control as the one whose drop-down escapes its own box.
+   *
+   * The picker expands into a column of buttons that overflow the wrapper, so
+   * in a vertical toolbar they land on top of whichever control sits below —
+   * painting *behind* it, because later siblings win, and leaving the entries
+   * unclickable. `index.css` raises this one control so the drop-down covers
+   * its neighbours instead of hiding under them.
+   */
+  protected extraClass(): string {
+    return "geolibre-cesium-ctrl-expands";
+  }
+
   protected create(container: HTMLElement): SceneModePicker {
     return new SceneModePicker(container, this.viewer.scene, MORPH_SECONDS);
   }
@@ -182,10 +210,83 @@ class CesiumSceneModeControl extends CesiumWidgetControl<SceneModePicker> {
   }
 }
 
+/**
+ * Cesium's fullscreen button, taking the globe's own container full-screen.
+ *
+ * The 2D map's fullscreen control is MapLibre's, and it cannot be reused here:
+ * it reads `map.getContainer()`, `map.cooperativeGestures` and
+ * `map._getUIString()` off a real `maplibregl.Map`, and `CesiumControlHost`'s
+ * facade is not one. Cesium's widget needs nothing but a container and the
+ * element to expand, so it stands alone.
+ *
+ * Its tooltip is the one this module cannot set through a view model: Cesium
+ * derives it from the fullscreen state as a read-only computed. It is instead
+ * written onto the button after every state change — see {@link applyLabels}.
+ */
+class CesiumFullscreenControl extends CesiumWidgetControl<FullscreenButton> {
+  /** Removes the `fullscreenchange` listener the label shim installs. */
+  private stopWatching: (() => void) | null = null;
+
+  constructor(
+    viewer: CesiumWidget,
+    labels: CesiumWidgetControlLabels,
+    /** The element to expand — the globe's container, not the whole page. */
+    private readonly fullscreenElement: HTMLElement,
+  ) {
+    super(viewer, labels);
+  }
+
+  protected create(container: HTMLElement): FullscreenButton {
+    return new FullscreenButton(container, this.fullscreenElement);
+  }
+
+  protected applyLabels(widget: FullscreenButton): void {
+    const element = widget.container.querySelector("button");
+    if (!element) return;
+    const retitle = () => {
+      element.title = !widget.viewModel.isFullscreenEnabled
+        ? this.labels.fullscreenUnavailable
+        : widget.viewModel.isFullscreen
+          ? this.labels.fullscreenExit
+          : this.labels.fullscreenEnter;
+    };
+    retitle();
+    // Cesium binds `title` to a computed it recomputes when the document enters
+    // or leaves fullscreen, which would put the English string back. Listening
+    // for the same event and rewriting afterwards is enough: DOM listeners fire
+    // in registration order and the widget registered its own at construction,
+    // so this one always runs second. Re-registered on every label change, with
+    // the previous listener dropped, so a language switch cannot stack them.
+    this.stopWatching?.();
+    document.addEventListener("fullscreenchange", retitle);
+    this.stopWatching = () => document.removeEventListener("fullscreenchange", retitle);
+  }
+
+  onRemove(): void {
+    this.stopWatching?.();
+    this.stopWatching = null;
+    super.onRemove();
+  }
+}
+
 /** A control built by {@link createCesiumWidgetControls}. */
 export type CesiumWidgetControlHandle = maplibregl.IControl & {
   setLabels(labels: CesiumWidgetControlLabels): void;
 };
+
+/**
+ * The Cesium toolbar controls for one globe, in the order they are stacked.
+ *
+ * `fullscreen` is named separately because it is the one the app already has a
+ * toggle for — Controls → Fullscreen — so `CesiumEngine` needs a handle on it
+ * to answer `setBuiltInControlVisible`. The other two have no such counterpart
+ * and are simply always present.
+ */
+export interface CesiumWidgetControls {
+  /** Every control, in stacking order. */
+  all: CesiumWidgetControlHandle[];
+  fullscreen: CesiumWidgetControlHandle;
+}
 
 /**
  * Build the Cesium toolbar controls for a globe.
@@ -193,10 +294,23 @@ export type CesiumWidgetControlHandle = maplibregl.IControl & {
  * Returned rather than mounted so the caller decides placement and keeps the
  * handles it needs to retranslate and remove them; `CesiumCanvas` adds them to
  * the primary globe's control host and drops them on unmount.
+ *
+ * @param viewer - The globe the controls act on.
+ * @param fullscreenElement - The element the fullscreen button expands.
+ * @param labels - Translated tooltips; English defaults when omitted.
  */
 export function createCesiumWidgetControls(
   viewer: CesiumWidget,
+  fullscreenElement: HTMLElement,
   labels: CesiumWidgetControlLabels = DEFAULT_CESIUM_WIDGET_CONTROL_LABELS,
-): CesiumWidgetControlHandle[] {
-  return [new CesiumHomeControl(viewer, labels), new CesiumSceneModeControl(viewer, labels)];
+): CesiumWidgetControls {
+  const fullscreen = new CesiumFullscreenControl(viewer, labels, fullscreenElement);
+  return {
+    all: [
+      new CesiumHomeControl(viewer, labels),
+      new CesiumSceneModeControl(viewer, labels),
+      fullscreen,
+    ],
+    fullscreen,
+  };
 }

@@ -1830,7 +1830,10 @@
     "resetView": "รีเซ็ตมุมมอง",
     "scene3D": "ลูกโลก 3 มิติ",
     "scene2D": "แผนที่ 2 มิติ",
-    "sceneColumbus": "มุมมองโคลัมบัส"
+    "sceneColumbus": "มุมมองโคลัมบัส",
+    "fullscreenEnter": "เต็มหน้าจอ",
+    "fullscreenExit": "ออกจากเต็มหน้าจอ",
+    "fullscreenUnavailable": "ไม่รองรับเต็มหน้าจอ"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "คัดลอกพิกัดไปยังคลิปบอร์ด",

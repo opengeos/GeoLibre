@@ -14,10 +14,7 @@ import { isSameView } from "./cesium-camera";
 import { CesiumEngine } from "./cesium-engine";
 import type { MapEngine } from "./map-engine";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
-import type {
-  CesiumWidgetControlHandle,
-  CesiumWidgetControlLabels,
-} from "./cesium-widget-controls";
+import type { CesiumWidgetControls, CesiumWidgetControlLabels } from "./cesium-widget-controls";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
 // build, token, and split-pane mount; M2 synced the camera with the shared store
@@ -52,8 +49,9 @@ const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
  *   toolbar widgets are built from. The home button has no stylesheet of its
  *   own; this is all it needs.
  * - `SceneModePicker.css` — the expanding drop-down that widget adds on top.
+ * - `FullscreenButton.css` — the fullscreen button's own sizing.
  *
- * The last two are only meaningful on the primary globe, the one pane that
+ * The widget sheets are only meaningful on the primary globe, the one pane that
  * hosts controls, but are linked unconditionally: the links are document-level
  * and a pane can become the primary map without a reload.
  */
@@ -61,6 +59,7 @@ const CESIUM_CSS_PATHS = [
   "/Widgets/CesiumWidget/CesiumWidget.css",
   "/Widgets/shared.css",
   "/Widgets/SceneModePicker/SceneModePicker.css",
+  "/Widgets/FullscreenButton/FullscreenButton.css",
 ] as const;
 
 export interface CesiumCanvasProps {
@@ -157,7 +156,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   const controlHostRef = useRef<CesiumControlHost | null>(null);
   // The Cesium toolbar widgets mounted on the primary globe, kept so the label
   // effect can retranslate them and the unmount can remove them.
-  const widgetControlsRef = useRef<CesiumWidgetControlHandle[]>([]);
+  const widgetControlsRef = useRef<CesiumWidgetControls | null>(null);
   // The imagery layers currently drawing the project basemap, at the bottom of
   // the stack. Tracked so a basemap change replaces exactly these and leaves
   // the data layers above them alone.
@@ -378,13 +377,23 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           // lazily fetched `cesium` chunk instead of joining the 2D boot path.
           const { createCesiumWidgetControls } = await import("./cesium-widget-controls");
           if (!cancelled && !viewer.isDestroyed()) {
-            widgetControlsRef.current = createCesiumWidgetControls(
+            // Fullscreen expands the globe's own container, matching what
+            // MapLibre's fullscreen control does with the 2D map's — the app
+            // chrome around it goes away, the map fills the screen, and the
+            // control host inside it comes along so the buttons stay reachable.
+            const controls = createCesiumWidgetControls(
               viewer,
+              container,
               controlLabelsRef.current,
             );
+            widgetControlsRef.current = controls;
             // Top-right, above MapLibre's navigation control on the 2D map, so
-            // the pair reads as one toolbar whichever renderer is drawing.
-            for (const control of widgetControlsRef.current) host.addControl(control, "top-right");
+            // the toolbar reads the same whichever renderer is drawing.
+            for (const control of controls.all) host.addControl(control, "top-right");
+            // Hand the fullscreen button to the engine so Controls → Fullscreen
+            // governs it here as it does on the 2D map. The other two have no
+            // menu counterpart and stay unconditional.
+            engine.registerBuiltInControl("fullscreen", controls.fullscreen);
           }
         }
 
@@ -441,7 +450,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         // The host's own destroy() removes every control it holds, these
         // included; dropping the handles here is what stops the label effect
         // from writing to a destroyed widget's view model afterwards.
-        widgetControlsRef.current = [];
+        widgetControlsRef.current = null;
         if (controlHostRef.current) {
           controlHostRef.current.destroy();
           controlHostRef.current = null;
@@ -478,7 +487,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   // rebuilding the controls or touching the camera.
   useEffect(() => {
     if (!ready || !controlLabels) return;
-    for (const control of widgetControlsRef.current) control.setLabels(controlLabels);
+    for (const control of widgetControlsRef.current?.all ?? []) control.setLabels(controlLabels);
   }, [ready, controlLabels]);
 
   // Reconcile the store layers (with this pane's overrides) onto the globe

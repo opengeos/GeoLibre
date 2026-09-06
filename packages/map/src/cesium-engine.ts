@@ -201,6 +201,11 @@ export class CesiumEngine implements MapEngine {
   private terrainEnabled = false;
   private terrainExaggeration = 1;
   private disposers: Array<() => void> = [];
+  /**
+   * Controls `CesiumCanvas` built and handed over under a built-in control id.
+   * See {@link registerBuiltInControl}.
+   */
+  private builtInControls = new Map<BuiltInMapControl, maplibregl.IControl>();
 
   constructor(Cesium: CesiumNs, viewer: CesiumWidget, options: CesiumEngineOptions = {}) {
     this.Cesium = Cesium;
@@ -246,6 +251,9 @@ export class CesiumEngine implements MapEngine {
   destroy(): void {
     for (const dispose of this.disposers.splice(0)) dispose();
     this.layerSync.destroy();
+    // The control host tears the controls themselves down; drop the references
+    // so a late setBuiltInControlVisible cannot re-add one to a dead globe.
+    this.builtInControls.clear();
     // The widget itself belongs to CesiumCanvas, which destroys it; dropping the
     // handle here is what stops a late listener from touching a dead viewer.
     this.viewer = null;
@@ -265,7 +273,16 @@ export class CesiumEngine implements MapEngine {
 
   readView(): MapViewState {
     const viewer = this.live();
-    if (!viewer) {
+    // A morph is as unreadable as a destroyed viewer, and for a sharper reason:
+    // `camera.heading` returns `undefined` while `scene.mode` is MORPHING, and
+    // Cesium's `Math.toDegrees` *throws* on that rather than returning NaN. So a
+    // read that lands mid-morph does not merely report a half-projected camera,
+    // it takes its caller down — and the callers are ordinary background work
+    // (the autosave snapshot, the View menu's limit check, the status bar),
+    // none of which expects reading the camera to be fallible. The last applied
+    // view is the honest answer: the morph is on its way to it, and
+    // `installMorphHandling` re-applies it on arrival.
+    if (!viewer || this.isMorphing()) {
       return this.lastApplied ?? useAppStore.getState().mapView;
     }
     return readMapViewFromCamera(this.Cesium, viewer);
@@ -376,7 +393,10 @@ export class CesiumEngine implements MapEngine {
 
   readCameraAltitude(): number | null {
     const viewer = this.live();
-    if (!viewer) return null;
+    // Unreadable mid-morph, the same way {@link readView} is: the camera is
+    // between two frames of reference and its cartographic height means nothing
+    // in either. `null` is the value callers already handle for "no altitude".
+    if (!viewer || this.isMorphing()) return null;
     const carto = this.Cesium.Cartographic.fromCartesian(viewer.camera.positionWC);
     if (!carto || !Number.isFinite(carto.height)) return null;
     const ground = groundHeightAt(
@@ -541,8 +561,31 @@ export class CesiumEngine implements MapEngine {
     getPrimaryCesiumControlHost()?.removeControl(control);
   }
 
-  setBuiltInControlVisible(_control: BuiltInMapControl, _visible: boolean): boolean {
-    return false;
+  /**
+   * Put a control the canvas built under a built-in control id, so the app's
+   * existing Controls menu can govern it (issue #2270).
+   *
+   * Only the fullscreen button uses this today. The globe's other two Cesium
+   * widgets — home and scene mode — have no entry in that menu and stay
+   * unconditional; the rest of the built-in controls are MapLibre's own and
+   * have no globe counterpart at all, which is why
+   * {@link setBuiltInControlVisible} still answers `false` for them.
+   */
+  registerBuiltInControl(control: BuiltInMapControl, instance: maplibregl.IControl): void {
+    this.builtInControls.set(control, instance);
+  }
+
+  setBuiltInControlVisible(control: BuiltInMapControl, visible: boolean): boolean {
+    const instance = this.builtInControls.get(control);
+    if (!instance || !this.isPrimary) return false;
+    const host = getPrimaryCesiumControlHost();
+    if (!host) return false;
+    // `addControl` is a no-op for a control already mounted and `removeControl`
+    // for one already gone, so repeated calls (project restore replays every
+    // control's visibility) settle rather than stacking duplicates.
+    if (visible) host.addControl(instance, "top-right");
+    else host.removeControl(instance);
+    return true;
   }
 
   getBuiltInControlPosition(_control: BuiltInMapControl): maplibregl.ControlPosition {

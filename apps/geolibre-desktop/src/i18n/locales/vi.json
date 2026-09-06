@@ -1830,7 +1830,10 @@
     "resetView": "Đặt lại chế độ xem",
     "scene3D": "Quả địa cầu 3D",
     "scene2D": "Bản đồ 2D",
-    "sceneColumbus": "Chế độ xem Columbus"
+    "sceneColumbus": "Chế độ xem Columbus",
+    "fullscreenEnter": "Toàn màn hình",
+    "fullscreenExit": "Thoát toàn màn hình",
+    "fullscreenUnavailable": "Không hỗ trợ toàn màn hình"
   },
   "mapContextMenu": {
     "zoomInHere": "Phóng to ở đây",

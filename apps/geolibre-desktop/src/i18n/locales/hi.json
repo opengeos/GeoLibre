@@ -1875,7 +1875,10 @@
     "resetView": "दृश्य रीसेट करें",
     "scene3D": "3D ग्लोब",
     "scene2D": "2D मानचित्र",
-    "sceneColumbus": "कोलंबस दृश्य"
+    "sceneColumbus": "कोलंबस दृश्य",
+    "fullscreenEnter": "पूर्ण स्क्रीन",
+    "fullscreenExit": "पूर्ण स्क्रीन से बाहर निकलें",
+    "fullscreenUnavailable": "पूर्ण स्क्रीन उपलब्ध नहीं"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "निर्देशांक क्लिपबोर्ड पर कॉपी करें",

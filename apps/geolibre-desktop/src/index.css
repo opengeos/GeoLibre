@@ -4328,14 +4328,14 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 
 /* ---------------------------------------------------------------------------
  * Cesium's toolbar widgets on the globe (`cesium-widget-controls.ts`): the
- * home button and the scene-mode picker.
+ * home button, the scene-mode picker, and the fullscreen button.
  *
  * Cesium ships them in its own dark-blue toolbar look — `#303336` on a `#444`
  * border, a `#48b` hover with a white glow — which reads as a foreign control
  * next to MapLibre's white buttons, and does so in both themes (GeoLibre keeps
  * the map chrome white in dark mode too, see the graticule control above).
- * These rules restyle the chrome to MapLibre's while leaving the widgets'
- * own SVG icons and expand/collapse behaviour alone.
+ * These rules restyle the chrome to MapLibre's while leaving the widgets' own
+ * SVG icons and expand/collapse behaviour alone.
  *
  * Everything is scoped under `.geolibre-cesium-ctrl`, the wrapper the controls
  * add, so Cesium's other DOM — the credit display, the render-error panel — is
@@ -4358,13 +4358,42 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   padding: 0;
 }
 
-.geolibre-cesium-ctrl .cesium-toolbar-button {
+/* Two selectors because the widgets do not agree on a class. The home button
+   and the scene-mode picker are `cesium-toolbar-button`s, which Cesium leaves
+   unsized for a toolbar to place; the fullscreen button is not one, and
+   FullscreenButton.css sizes it to `100%` of a parent it expects `Viewer` to
+   have given a height. Sizing every button here covers both, and the wrapper
+   `<span>` the scene-mode picker nests its button in needs it too — it is not a
+   `<button>`, so the element-qualified selector alone would miss it. */
+.geolibre-cesium-ctrl .cesium-toolbar-button,
+.geolibre-cesium-ctrl button.cesium-button {
   width: 29px;
   height: 29px;
 }
 
-.geolibre-cesium-ctrl .cesium-button:hover,
-.geolibre-cesium-ctrl .cesium-button:focus {
+/* The scene-mode picker nests its button inside a wrapper `<span>` that
+   SceneModePicker.css gives `margin: 0 3px`. The controls are stacked in a
+   right-aligned corner, so that padding makes the picker's wrapper 6px wider
+   than the home button's and shifts the button itself 3px left of the one above
+   it — a visible misalignment in a vertical toolbar. The buttons are spaced by
+   the `.maplibregl-ctrl` margins already; this padding is pure offset. */
+.geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper {
+  margin: 0;
+}
+
+/* Hover and focus.
+ *
+ * The specificity here is load-bearing, not decoration. MapLibre's own
+ * `.maplibregl-ctrl button:not(:disabled):hover` scores higher than a plain
+ * `.geolibre-cesium-ctrl .cesium-button:hover` (an extra element selector), so
+ * it wins and replaces the white background with its `rgba(0, 0, 0, .05)`.
+ * That colour is *translucent*: on the light 2D map it reads as a faint grey,
+ * but here it lets the globe show straight through the button, which over a
+ * night-side globe or dark imagery leaves a dark icon on a near-black square.
+ * Matching MapLibre's selector shape (`button` + `:not(:disabled)`) and adding
+ * the scoping class outranks it without reaching for `!important`. */
+.geolibre-cesium-ctrl button.cesium-button:not(:disabled):hover,
+.geolibre-cesium-ctrl button.cesium-button:not(:disabled):focus {
   background: #f2f2f2;
   border: none;
   box-shadow: none;
@@ -4372,17 +4401,38 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   outline: none;
 }
 
-.geolibre-cesium-ctrl .cesium-button:active {
+.geolibre-cesium-ctrl button.cesium-button:not(:disabled):active {
   background: #e6e6e6;
   box-shadow: none;
   fill: #000;
 }
 
+/* A disabled Cesium button (the fullscreen one, where the browser forbids
+   fullscreen) keeps Cesium's dark palette otherwise. */
+.geolibre-cesium-ctrl button.cesium-button:disabled {
+  background: #fff;
+  border: none;
+  box-shadow: none;
+  fill: #b0b0b0;
+}
+
 /* The scene-mode picker's drop-down is a stack of buttons below the trigger.
    Cesium spaces them with its own margins and leaves them borderless once the
-   rules above land; re-add a small gap so the three modes read as separate
-   targets rather than one tall button. */
+   rules above land; give each the same outline the trigger has so the three
+   modes read as separate targets rather than one tall button. */
 .geolibre-cesium-ctrl .cesium-sceneModePicker-wrapper .cesium-button {
   box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
   margin-bottom: 4px;
+}
+
+/* Those drop-down buttons overflow the wrapper's box, so in a vertical toolbar
+   they land over the control below — and paint *behind* it, since a later
+   sibling wins by default, which leaves the entries visible-but-unclickable
+   under the fullscreen button. Raising the picker puts the open drop-down on
+   top of its neighbours, as a drop-down should be, whatever order the controls
+   were mounted in (toggling Controls → Fullscreen re-adds that button at the
+   end of the corner). */
+.geolibre-cesium-ctrl-expands {
+  position: relative;
+  z-index: 1;
 }

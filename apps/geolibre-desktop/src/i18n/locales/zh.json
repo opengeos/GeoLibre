@@ -1830,7 +1830,10 @@
     "resetView": "重置视图",
     "scene3D": "3D 地球",
     "scene2D": "2D 地图",
-    "sceneColumbus": "哥伦布视图"
+    "sceneColumbus": "哥伦布视图",
+    "fullscreenEnter": "全屏",
+    "fullscreenExit": "退出全屏",
+    "fullscreenUnavailable": "全屏不可用"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "复制坐标到剪贴板",

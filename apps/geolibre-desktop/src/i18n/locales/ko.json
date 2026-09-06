@@ -1830,7 +1830,10 @@
     "resetView": "보기 재설정",
     "scene3D": "3D 지구본",
     "scene2D": "2D 지도",
-    "sceneColumbus": "콜럼버스 뷰"
+    "sceneColumbus": "콜럼버스 뷰",
+    "fullscreenEnter": "전체 화면",
+    "fullscreenExit": "전체 화면 종료",
+    "fullscreenUnavailable": "전체 화면을 사용할 수 없음"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "좌표를 클립보드에 복사",

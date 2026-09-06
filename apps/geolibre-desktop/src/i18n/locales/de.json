@@ -1875,7 +1875,10 @@
     "resetView": "Ansicht zurücksetzen",
     "scene3D": "3D-Globus",
     "scene2D": "2D-Karte",
-    "sceneColumbus": "Columbus-Ansicht"
+    "sceneColumbus": "Columbus-Ansicht",
+    "fullscreenEnter": "Vollbild",
+    "fullscreenExit": "Vollbild beenden",
+    "fullscreenUnavailable": "Vollbild nicht verfügbar"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Koordinaten in die Zwischenablage kopieren",

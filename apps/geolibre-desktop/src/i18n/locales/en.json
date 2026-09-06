@@ -1884,7 +1884,10 @@
     "resetView": "Reset view",
     "scene3D": "3D globe",
     "scene2D": "2D map",
-    "sceneColumbus": "Columbus view"
+    "sceneColumbus": "Columbus view",
+    "fullscreenEnter": "Enter fullscreen",
+    "fullscreenExit": "Exit fullscreen",
+    "fullscreenUnavailable": "Fullscreen unavailable"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copy coordinates to clipboard",

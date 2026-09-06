@@ -1830,7 +1830,10 @@
     "resetView": "表示をリセット",
     "scene3D": "3D地球儀",
     "scene2D": "2D地図",
-    "sceneColumbus": "コロンバスビュー"
+    "sceneColumbus": "コロンバスビュー",
+    "fullscreenEnter": "全画面表示",
+    "fullscreenExit": "全画面表示を終了",
+    "fullscreenUnavailable": "全画面表示は利用できません"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "座標をクリップボードにコピー",

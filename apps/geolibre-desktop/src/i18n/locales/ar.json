@@ -2054,7 +2054,10 @@
     "resetView": "إعادة تعيين العرض",
     "scene3D": "كرة أرضية ثلاثية الأبعاد",
     "scene2D": "خريطة ثنائية الأبعاد",
-    "sceneColumbus": "عرض كولومبوس"
+    "sceneColumbus": "عرض كولومبوس",
+    "fullscreenEnter": "ملء الشاشة",
+    "fullscreenExit": "إنهاء ملء الشاشة",
+    "fullscreenUnavailable": "ملء الشاشة غير متاح"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "نسخ الإحداثيات إلى الحافظة",

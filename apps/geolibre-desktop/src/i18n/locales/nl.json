@@ -1875,7 +1875,10 @@
     "resetView": "Weergave herstellen",
     "scene3D": "3D-globe",
     "scene2D": "2D-kaart",
-    "sceneColumbus": "Columbus-weergave"
+    "sceneColumbus": "Columbus-weergave",
+    "fullscreenEnter": "Volledig scherm",
+    "fullscreenExit": "Volledig scherm verlaten",
+    "fullscreenUnavailable": "Volledig scherm niet beschikbaar"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Coördinaten naar klembord kopiëren",
