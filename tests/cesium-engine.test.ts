@@ -550,6 +550,54 @@ describe("CesiumEngine zoom bounds", () => {
   });
 });
 
+describe("CesiumEngine animation durations", () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      mapView: { center: [0, 0], zoom: 4, bearing: 0, pitch: 0 },
+      setMapView: (() => {}) as never,
+    } as never);
+  });
+
+  const durationOf = (flight: unknown) => (flight as { duration?: number }).duration;
+
+  it("matches the 2D map's 1s orientation resets", () => {
+    // MapLibre's resetNorth/resetNorthPitch animate over 1s and
+    // MapController.resetPitch sets 1000ms explicitly to match them. A 500ms
+    // globe would run the same click at double speed (#2265 review).
+    for (const reset of ["resetNorth", "resetNorthPitch", "resetPitch"] as const) {
+      const fakes = makeViewer();
+      const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+      engine[reset]();
+      assert.equal(durationOf(fakes.flights[0]), 1, `${reset} must animate over 1s`);
+      engine.destroy();
+    }
+  });
+
+  it("matches MapController.flyTo's 800ms default when no duration is given", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.flyTo({ center: [10, 20] });
+    assert.equal(durationOf(fakes.flights[0]), 0.8);
+    engine.destroy();
+  });
+
+  it("honours an explicit duration, converting ms to seconds", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.flyTo({ center: [10, 20], duration: 2500 });
+    assert.equal(durationOf(fakes.flights[0]), 2.5);
+    engine.destroy();
+  });
+
+  it("uses MapLibre's 500ms easeTo default for zoom steps", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.zoomIn();
+    assert.equal(durationOf(fakes.flights[0]), 0.5);
+    engine.destroy();
+  });
+});
+
 describe("CesiumEngine framing", () => {
   beforeEach(() => {
     useAppStore.setState({

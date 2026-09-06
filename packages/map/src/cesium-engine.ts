@@ -76,8 +76,22 @@ function clampZoom(value: number, fallback: number): number {
   return Math.min(24, Math.max(0, value));
 }
 
-/** Seconds a menu-driven camera move takes on the globe. */
-const CAMERA_FLIGHT_SECONDS = 0.5;
+/**
+ * Animation lengths, in seconds, matched to the 2D map's.
+ *
+ * The same click must not visibly run at a different speed depending on which
+ * renderer is drawing, so each of these is pinned to what `MapController` does
+ * rather than to one house default (#2265 review).
+ */
+/** MapLibre's `easeTo` default (500 ms), which backs `zoomIn`/`zoomOut`/`easeToView`. */
+const EASE_SECONDS = 0.5;
+/**
+ * MapLibre's `resetNorth`/`resetNorthPitch` animate over 1 s, and
+ * `MapController.resetPitch` sets 1000 ms explicitly to match its siblings.
+ */
+const RESET_SECONDS = 1;
+/** `MapController.flyTo` and `MapController.fitBounds` both use 800 ms. */
+const FLY_SECONDS = 0.8;
 /** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
 const POINT_FIT_ZOOM = 14;
 
@@ -217,12 +231,24 @@ export class CesiumEngine implements MapEngine {
     return readMapViewFromCamera(this.Cesium, viewer);
   }
 
+  /**
+   * Animate to `view` with a linear ease, matching `map.easeTo`'s 500 ms.
+   *
+   * Note the globe cannot reproduce MapLibre's *shape* distinction: `easeTo`
+   * interpolates the camera directly while `flyTo` traces a curved
+   * zoom-out-then-in arc, whereas Cesium exposes one flight primitive that both
+   * {@link easeToView} and {@link flyToView} necessarily share. Only the
+   * durations differ here. If a caller ever depends on the arc — a story
+   * transition that reads as "travelling" rather than "sliding" — it needs a
+   * real Cesium implementation, not a duration tweak.
+   */
   easeToView(view: MapViewState): void {
-    this.animateTo(view);
+    this.animateTo(view, EASE_SECONDS);
   }
 
+  /** Animate to a story-chapter location. See {@link easeToView} on the arc. */
   flyToView(location: StoryChapterLocation): void {
-    this.animateTo(location);
+    this.animateTo(location, FLY_SECONDS);
   }
 
   applyStoryChapterCamera(
@@ -236,7 +262,7 @@ export class CesiumEngine implements MapEngine {
       this.applyView(location);
       return;
     }
-    this.animateTo(location);
+    this.animateTo(location, animation === "easeTo" ? EASE_SECONDS : FLY_SECONDS);
   }
 
   flyTo(camera: FlyToCamera): void {
@@ -248,7 +274,7 @@ export class CesiumEngine implements MapEngine {
         bearing: camera.bearing ?? current.bearing,
         pitch: camera.pitch ?? current.pitch,
       },
-      camera.duration === undefined ? undefined : camera.duration / 1000,
+      camera.duration === undefined ? FLY_SECONDS : camera.duration / 1000,
     );
   }
 
@@ -263,15 +289,15 @@ export class CesiumEngine implements MapEngine {
   }
 
   resetNorth(): void {
-    this.animateTo({ ...this.readView(), bearing: 0 });
+    this.animateTo({ ...this.readView(), bearing: 0 }, RESET_SECONDS);
   }
 
   resetNorthPitch(): void {
-    this.animateTo({ ...this.readView(), bearing: 0, pitch: 0 });
+    this.animateTo({ ...this.readView(), bearing: 0, pitch: 0 }, RESET_SECONDS);
   }
 
   resetPitch(): void {
-    this.animateTo({ ...this.readView(), pitch: 0 });
+    this.animateTo({ ...this.readView(), pitch: 0 }, RESET_SECONDS);
   }
 
   fitBounds(bounds: [number, number, number, number]): void {
@@ -286,17 +312,20 @@ export class CesiumEngine implements MapEngine {
     // including its zoom floor, so a single marker frames the same on both
     // engines.
     if (west === east && south === north) {
-      this.animateTo({
-        center: [west, south],
-        zoom: Math.max(this.readView().zoom, POINT_FIT_ZOOM),
-        bearing: 0,
-        pitch: 0,
-      });
+      this.animateTo(
+        {
+          center: [west, south],
+          zoom: Math.max(this.readView().zoom, POINT_FIT_ZOOM),
+          bearing: 0,
+          pitch: 0,
+        },
+        FLY_SECONDS,
+      );
       return;
     }
     viewer.camera.flyTo({
       destination: this.Cesium.Rectangle.fromDegrees(west, south, east, north),
-      duration: CAMERA_FLIGHT_SECONDS,
+      duration: FLY_SECONDS,
     });
   }
 
@@ -618,7 +647,7 @@ export class CesiumEngine implements MapEngine {
           this.Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(view.pitch)),
           range,
         ),
-        duration: seconds ?? CAMERA_FLIGHT_SECONDS,
+        duration: seconds ?? EASE_SECONDS,
       },
     );
   }
