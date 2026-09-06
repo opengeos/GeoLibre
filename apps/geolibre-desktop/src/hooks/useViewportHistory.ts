@@ -70,15 +70,35 @@ export function useViewportHistory(
   const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
 
+  /**
+   * Whether history is usable right now.
+   *
+   * The stack is only fed by MapLibre's `moveend` (see the effect below), so on
+   * an engine without a native map it holds views from a renderer that is no
+   * longer drawing. Every entry point checks this — not just the effect — because
+   * the keyboard shortcuts reach `goBack`/`goForward` directly: `useGlobalShortcuts`
+   * runs a command on a key match without consulting the View menu's disabled
+   * state, so gating the menu alone left `[` and `]` able to ease the globe's
+   * camera through stale 2D history (#2268 review).
+   */
+  const canNavigateHistory = useCallback(
+    () => Boolean(mapControllerRef.current?.getMap()),
+    [mapControllerRef],
+  );
+
   const syncNav = useCallback(() => {
-    const canGoBack = indexRef.current > 0;
-    const canGoForward = indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
+    // Report "nowhere to go" whenever history cannot be used, so a `restore()`
+    // that raced a hand-off cannot leave the menu items looking enabled.
+    const usable = canNavigateHistory();
+    const canGoBack = usable && indexRef.current > 0;
+    const canGoForward =
+      usable && indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
     setNav((prev) =>
       prev.canGoBack === canGoBack && prev.canGoForward === canGoForward
         ? prev
         : { canGoBack, canGoForward },
     );
-  }, []);
+  }, [canNavigateHistory]);
 
   useEffect(() => {
     // MapLibre-only for now, and deliberately so. Recording is already
@@ -90,17 +110,13 @@ export function useViewportHistory(
     // then Previous/Next View stay disabled on the globe.
     const map = mapControllerRef.current?.getMap() ?? null;
     if (!map) {
-      // Report "nowhere to go" while there is no native map, rather than leaving
-      // the last 2D answer standing. Panning on the 2D map and *then* switching
-      // to the globe used to leave `canGoBack` true, and this PR removed the
-      // menu's renderer-name override that had been masking it — so the items
-      // would have rendered enabled on the globe and done nothing (#2268
-      // review). The stack itself is kept: switching back re-runs this effect
-      // and `syncNav` restores the real answer, so a round trip through the
-      // globe no longer costs the user their history.
-      setNav((prev) =>
-        prev.canGoBack || prev.canGoForward ? { canGoBack: false, canGoForward: false } : prev,
-      );
+      // Re-report on the hand-off: `syncNav` answers "nowhere to go" without a
+      // usable map, so panning on the 2D map and then switching to the globe no
+      // longer leaves the last 2D answer standing. The stack itself is kept —
+      // switching back re-runs this effect and `syncNav` restores the real
+      // answer, so a round trip through the globe does not cost the user their
+      // history.
+      syncNav();
       return;
     }
     const controller = mapControllerRef.current;
@@ -185,14 +201,18 @@ export function useViewportHistory(
       const controller = mapControllerRef.current;
       // Bail before touching the flag if there's no map to drive — otherwise it
       // would stay `true` (no `moveend` to clear it) and swallow the next pan.
-      if (!controller) return;
+      // `canNavigateHistory`, not just `!controller`: the ref now holds a live
+      // engine on the globe, so the old null check no longer covers the "no
+      // MapLibre map" case and a shortcut could animate the globe from stale 2D
+      // history (#2268 review).
+      if (!controller || !canNavigateHistory()) return;
       indexRef.current = nextIndex;
       restoringCountRef.current++;
       // Animate (easeTo) rather than jump, matching the browser-style framing.
       controller.easeToView(view);
       syncNav();
     },
-    [mapControllerRef, syncNav],
+    [canNavigateHistory, mapControllerRef, syncNav],
   );
 
   const goBack = useCallback(() => {
