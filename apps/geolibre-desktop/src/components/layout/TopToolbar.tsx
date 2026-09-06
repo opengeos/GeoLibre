@@ -1508,13 +1508,20 @@ export function TopToolbar({
           },
         ]
       : []),
-    {
-      id: "project.print-layout",
-      title: t("toolbar.item.printLayoutEllipsis"),
-      group: t("toolbar.commandGroup.project"),
-      icon: Printer,
-      run: () => setPrintLayoutOpen(true),
-    },
+    // Print layout renders from the MapLibre canvas; the palette has no disabled
+    // state, so drop the command rather than offer one that opens a dialog which
+    // cannot produce a preview (#2268 review).
+    ...(capabilities.nativeMapInstance
+      ? [
+          {
+            id: "project.print-layout",
+            title: t("toolbar.item.printLayoutEllipsis"),
+            group: t("toolbar.commandGroup.project"),
+            icon: Printer,
+            run: () => setPrintLayoutOpen(true),
+          },
+        ]
+      : []),
     // Add Data
     {
       id: "add.vector",
@@ -2153,32 +2160,40 @@ export function TopToolbar({
         <ViewMenu
           chrome={chrome}
           history={viewportHistory}
+          // Engine-neutral: the camera comes from `readView()`, and the zoom
+          // limits from the project preferences both engines apply — MapLibre
+          // through `setMinZoom`/`setMaxZoom`, the globe by clamping in
+          // `animateTo`. Reading them off the MapLibre map would report `null`
+          // on the globe and leave Zoom In/Out never showing as "at limit".
           getCamera={() => {
-            const map = mapControllerRef.current?.getMap();
-            if (!map) return null;
+            const view = mapControllerRef.current?.readView();
+            if (!view) return null;
+            const { map: mapPreferences } = useAppStore.getState().preferences;
             return {
-              zoom: map.getZoom(),
-              bearing: map.getBearing(),
-              pitch: map.getPitch(),
-              minZoom: map.getMinZoom(),
-              maxZoom: map.getMaxZoom(),
+              zoom: view.zoom,
+              bearing: view.bearing,
+              pitch: view.pitch,
+              minZoom: mapPreferences.minZoom,
+              maxZoom: mapPreferences.maxZoom,
             };
           }}
           onResetNorth={() => mapControllerRef.current?.resetNorth()}
           onResetPitch={() => mapControllerRef.current?.resetPitch()}
           onResetPitchBearing={() => mapControllerRef.current?.resetNorthPitch()}
           onSetView={() => setSetViewOpen(true)}
+          // `readView()`, not `getMap()`: both hand-offs only need a camera, which
+          // every engine reports, and the MapLibre escape hatch is `null` on the
+          // globe — which would have made these silently do nothing now that the
+          // menu no longer greys them out (#2268 review).
           onViewInGoogleEarth={() => {
-            const map = mapControllerRef.current?.getMap();
-            if (!map) return;
-            const center = map.getCenter();
-            void openExternalLink(googleEarthUrl(center.lat, center.lng, map.getZoom()));
+            const view = mapControllerRef.current?.readView();
+            if (!view) return;
+            void openExternalLink(googleEarthUrl(view.center[1], view.center[0], view.zoom));
           }}
           onViewInGoogleMaps={() => {
-            const map = mapControllerRef.current?.getMap();
-            if (!map) return;
-            const center = map.getCenter();
-            void openExternalLink(googleMapsUrl(center.lat, center.lng, map.getZoom()));
+            const view = mapControllerRef.current?.readView();
+            if (!view) return;
+            void openExternalLink(googleMapsUrl(view.center[1], view.center[0], view.zoom));
           }}
           onZoomIn={() => mapControllerRef.current?.zoomIn()}
           onZoomOut={() => mapControllerRef.current?.zoomOut()}

@@ -98,6 +98,11 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   useEffect(() => {
+    // Placing a comment needs a map click plus feature picking, so it is
+    // MapLibre-only for now. The guard used to be implicit — the ref was null on
+    // the globe — but it now holds a `CesiumEngine` whose `getMap()` is null, so
+    // without saying so the tool could read as armed while no click ever lands
+    // (#2268 review). `activateTool`/`toggleTool` refuse to arm without it.
     const map = mapControllerRef.current?.getMap();
     if (!map || !isActive) return;
 

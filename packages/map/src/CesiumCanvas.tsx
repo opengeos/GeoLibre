@@ -70,7 +70,7 @@ export interface CesiumCanvasProps {
    * menus and panels act on, and publishing it would let the last pane to mount
    * win the shared ref.
    */
-  engineRef?: React.MutableRefObject<MapEngine | null>;
+  engineRef?: React.RefObject<MapEngine | null>;
   /** Called once the engine is live and the ref is set. */
   onEngineReady?: () => void;
 }

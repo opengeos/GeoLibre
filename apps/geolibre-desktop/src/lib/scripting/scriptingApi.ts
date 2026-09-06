@@ -306,10 +306,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           },
           duckdb: createDuckDbCapability(),
           viewportBounds: () => {
-            const map = getController()?.getMap();
-            if (!map) return null;
-            const b = map.getBounds();
-            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            // `readView().bbox`, not `map.getBounds()`: the extent is a camera
+            // fact every engine reports, and the MapLibre escape hatch is null
+            // on the globe — which would have made every bounds-aware algorithm
+            // silently see "no viewport" there (#2268 review).
+            const view = getController()?.readView();
+            return view?.bbox ?? null;
           },
         };
         await algo.run(ctx);
@@ -516,7 +518,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
 
     // -- export -------------------------------------------------------------
     toImage: () => {
-      const map = getController()?.getMap();
+      const engine = getController();
+      // Say which of the two it is. `getMap()` is null both while the map is
+      // still mounting and, permanently, on an engine with no MapLibre canvas —
+      // reporting "not ready yet" for the second would have a script waiting
+      // forever for a map that is never coming (#2268 review).
+      if (engine && !engine.capabilities.nativeMapInstance) {
+        throw new Error("Capturing the map image is not supported by the current rendering engine");
+      }
+      const map = engine?.getMap();
       if (!map) throw new Error("The map is not ready yet");
       // toDataURL is a synchronous PNG encode (100-400ms on a large/high-DPI
       // viewport). In the in-app console (main thread) this briefly freezes the

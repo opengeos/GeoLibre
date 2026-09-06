@@ -78,9 +78,6 @@ export function ProcessingMenu({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
-  // Both panels read the map canvas through a `MapController`, which does not
-  // exist while the globe owns the primary map — DesktopShell unmounts them
-  // there, so selecting either would do nothing at all (#2217 review).
   // Object detection and segment-everything read pixels off the MapLibre canvas
   // and drive the map directly, so they need a live native map instance — not
   // merely "not Cesium".

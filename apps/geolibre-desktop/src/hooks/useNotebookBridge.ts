@@ -41,6 +41,12 @@ interface CommandMessage {
 export function useNotebookBridge(
   iframeRef: RefObject<HTMLIFrameElement | null>,
   mapControllerRef: RefObject<MapEngine | null>,
+  /**
+   * Bumped whenever a canvas publishes an engine. The ref itself is stable, so
+   * without this the effect would never re-run on an engine hand-off and the
+   * click listener would stay bound to the old map (#2268 review).
+   */
+  mapReadyGeneration: number,
 ): void {
   useEffect(() => {
     const controller = () => mapControllerRef.current;
@@ -162,7 +168,15 @@ export function useNotebookBridge(
     };
     let rafId: number | null = null;
     const attachClick = () => {
-      const map = controller()?.getMap();
+      const engine = controller();
+      // Stop polling for a map that will never arrive. The loop existed to wait
+      // out MapCanvas's mount, when a null ref meant "not ready yet"; the ref can
+      // now hold a `CesiumEngine`, whose `getMap()` is null forever — so without
+      // this the loop would schedule a frame every frame for the life of the
+      // globe (#2268 review). A later switch back to 2D re-runs this effect
+      // through `mapReadyGeneration`, which re-arms the attach.
+      if (engine && !engine.capabilities.nativeMapInstance) return;
+      const map = engine?.getMap();
       if (map) {
         clickMap = map;
         map.on("click", onMapClick);
@@ -179,5 +193,5 @@ export function useNotebookBridge(
       clickMap?.off("click", onMapClick);
     };
     // Mount-only: both refs are stable and read lazily inside the closures.
-  }, [iframeRef, mapControllerRef]);
+  }, [iframeRef, mapControllerRef, mapReadyGeneration]);
 }

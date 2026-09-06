@@ -227,12 +227,16 @@ export function CommentsPanel({
   };
 
   const handleZoomTo = (comment: ProjectComment) => {
-    const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
-    const coords = resolveCommentCoordinates(comment, map);
-    if (coords) {
-      map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 15), duration: 800 });
-    }
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    // The map is only needed to resolve a *feature*-anchored comment, and
+    // `resolveCommentCoordinates` already answers a direct `lngLat` without one
+    // — so a comment with its own coordinates zooms on any engine. The flight
+    // goes through `engine.flyTo`, which the globe implements too; using
+    // `map.flyTo` would have made this silently do nothing there (#2268 review).
+    const coords = resolveCommentCoordinates(comment, engine.getMap());
+    if (!coords) return;
+    engine.flyTo({ center: coords, zoom: Math.max(engine.readView().zoom, 15), duration: 800 });
   };
 
   const unresolvedComments = comments.filter((c) => !c.resolved);

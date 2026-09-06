@@ -81,6 +81,14 @@ export function useViewportHistory(
   }, []);
 
   useEffect(() => {
+    // MapLibre-only for now, and deliberately so. Recording is already
+    // engine-neutral (`record` reads through `controller.readView()`), but the
+    // *trigger* is MapLibre's `moveend` — and the story/flight tokens it filters
+    // on ride along as that event's `eventData`. Giving the globe a history
+    // needs an engine-neutral camera-change subscription on `MapEngine`, which
+    // is a follow-up rather than something to fake here (#2268 review). Until
+    // then Previous/Next View stay disabled on the globe, which is honest: there
+    // is nothing in the stack to go back to.
     const map = mapControllerRef.current?.getMap() ?? null;
     if (!map) return;
     const controller = mapControllerRef.current;

@@ -49,6 +49,7 @@ import {
   type ToolbarChrome,
   type ToolbarMapControl,
 } from "./constants";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 
 /**
  * Controls-menu entries that write to the project rather than only changing
@@ -116,6 +117,7 @@ export function ControlsMenu({
   onOpenRecordVideo,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
+  const capabilities = useMapCapabilities();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) =>
     viewer && AUTHORING_CONTROL_ITEMS.includes(id) ? false : isMenuItemVisible(uiProfile, id);
@@ -362,7 +364,13 @@ export function ControlsMenu({
             </DropdownMenuItem>
           )}
           {show("controls.recordTour") && (
-            <DropdownMenuItem onSelect={onOpenRecordTour}>
+            // Tour recording captures frames from the MapLibre canvas, so without
+            // a native map the Record button would look enabled and do nothing
+            // (#2268 review).
+            <DropdownMenuItem
+              onSelect={onOpenRecordTour}
+              disabled={!capabilities.nativeMapInstance}
+            >
               <Video className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.recordTour")}
             </DropdownMenuItem>

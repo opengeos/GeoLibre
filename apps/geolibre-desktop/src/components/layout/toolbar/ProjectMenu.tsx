@@ -107,9 +107,6 @@ export function ProjectMenu({
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
-  // The offline-region panel traces the extract area on the MapLibre canvas via
-  // a `MapController`. The globe has none and DesktopShell unmounts the panel
-  // there, so the entry would open nothing at all (#2217 review).
   // The offline-region export walks the basemap's style document to collect the
   // tiles it needs, so it depends on the Style Spec rather than on the renderer.
   const capabilities = useMapCapabilities();
@@ -414,7 +411,10 @@ export function ProjectMenu({
         {show("project.printLayout") && (
           <DropdownMenuItem
             onSelect={onPrintLayout}
-            disabled={!exportImageCapability.granted}
+            // Print layout composes its preview and export from the MapLibre
+            // canvas, so it needs a native map instance rather than merely a
+            // camera (#2268 review).
+            disabled={!capabilities.nativeMapInstance || !exportImageCapability.granted}
             aria-describedby={exportImageDeniedBy}
           >
             <Printer className="me-2 h-3.5 w-3.5" />
