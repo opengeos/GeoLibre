@@ -110,6 +110,10 @@ function makeEvent() {
  * wheel, and touch input the engine listens for.
  */
 function makeViewer(groundHeight = 0) {
+  // Mutable so a test can make terrain *arrive* — a fixed height means the
+  // correction's own guard exits before re-applying and the assertion passes
+  // whether or not it ran.
+  let height = groundHeight;
   const moveEnd = makeEvent();
   const tileLoadProgressEvent = makeEvent();
   const canvasListeners = new Map<string, Set<(event: unknown) => void>>();
@@ -127,6 +131,7 @@ function makeViewer(groundHeight = 0) {
     },
   };
   const state = { lng: 0, lat: 0, range: 1000, heading: 0, pitch: -Math.PI / 2 };
+  const lookAtCount = { n: 0 };
   const viewer = {
     isDestroyed: () => false,
     canvas,
@@ -148,6 +153,7 @@ function makeViewer(groundHeight = 0) {
       moveEnd,
       // applyMapViewToCamera drives these; the fake records the resulting view.
       lookAt: (target: { x: number; y: number; z: number }, hpr: HprLike) => {
+        lookAtCount.n++;
         state.lng = target.x;
         state.lat = target.y;
         state.range = hpr.range;
@@ -181,7 +187,7 @@ function makeViewer(groundHeight = 0) {
       globe: {
         ellipsoid: { name: "wgs84" },
         tileLoadProgressEvent,
-        getHeight: () => groundHeight,
+        getHeight: () => height,
         pick: () => ({ x: state.lng, y: state.lat, z: 0 }),
       },
     },
@@ -213,6 +219,14 @@ function makeViewer(groundHeight = 0) {
     },
     fireCanvas(type: string, event: unknown = {}) {
       for (const fn of canvasListeners.get(type) ?? []) fn(event);
+    },
+    /** Simulate terrain tiles arriving and raising the ground. */
+    setGroundHeight(next: number) {
+      height = next;
+    },
+    /** How many times the camera has been placed by applyMapViewToCamera. */
+    get placements() {
+      return lookAtCount.n;
     },
   };
 }
@@ -321,18 +335,18 @@ describe("CesiumEngine camera publishing", () => {
     engine.destroy();
   });
 
-  it("marks a menu-driven camera move dirty, like the user's own scroll", () => {
-    // The reason the state machine had to move out of the component: a caller
-    // driving the camera through the engine *is* the user, so View → Zoom in has
-    // to dirty the project. Before the extraction there was no way to say so and
-    // the move would have synced but left the project clean.
+  it("syncs a menu-driven camera move without dirtying, matching the 2D map", () => {
+    // MapController drives MapLibre's own camera API with no `eventData`, so the
+    // resulting moveend has no `originalEvent` and MapCanvas publishes it with
+    // markDirty=false. The globe has to agree: identical clicks must not behave
+    // differently depending on which renderer is drawing (#2265 review).
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.applyView(VIEW);
     engine.zoomIn();
     fakes.moveEnd.emit();
-    assert.equal(writes.length, 1);
-    assert.equal(writes[0]?.markDirty, true);
+    assert.equal(writes.length, 1, "the camera still syncs");
+    assert.equal(writes[0]?.markDirty, false, "but it must not flag unsaved changes");
     engine.destroy();
   });
 
@@ -398,26 +412,32 @@ describe("CesiumEngine terrain correction", () => {
   it("re-applies the placement once terrain settles at a different height", () => {
     // The camera was placed against the ellipsoid because terrain had not
     // loaded; when it does, the same view has to be re-applied against the real
-    // ground or the globe renders too close.
-    const fakes = makeViewer(1200);
+    // ground or the globe renders too close. The ground must actually *change*
+    // for this to mean anything — with a fixed height the correction's own guard
+    // exits first and the test passes vacuously (#2265 review).
+    const fakes = makeViewer(0);
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.applyView({ ...VIEW, center: [10, 20] });
-    const before = engine.getLastAppliedView();
+    const placementsAfterSeed = fakes.placements;
+    const seeded = engine.getLastAppliedView();
+    // Terrain tiles arrive and raise the ground under the view.
+    fakes.setGroundHeight(1200);
     fakes.nudge(40);
     // queued === 0: the tile queue has drained.
     fakes.tileLoadProgressEvent.emit(0);
-    assert.deepEqual(engine.getLastAppliedView(), before, "must re-apply the same view");
+    assert.equal(fakes.placements, placementsAfterSeed + 1, "the camera must be re-placed");
+    assert.deepEqual(engine.getLastAppliedView(), seeded, "re-applied as the same view");
     engine.destroy();
   });
 
   it("leaves the camera alone while tiles are still loading", () => {
-    const fakes = makeViewer(1200);
+    const fakes = makeViewer(0);
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.applyView(VIEW);
-    fakes.nudge(40);
-    const moved = engine.readView();
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
     fakes.tileLoadProgressEvent.emit(7);
-    assert.deepEqual(engine.readView(), moved, "a non-empty queue must not re-apply");
+    assert.equal(fakes.placements, placements, "a non-empty queue must not re-apply");
     engine.destroy();
   });
 
@@ -425,14 +445,15 @@ describe("CesiumEngine terrain correction", () => {
     // A wheel zoom over terrain loads finer tiles mid-gesture. Re-applying the
     // last settled view there would snap the camera back to where the gesture
     // started, and the store would never see the move.
-    const fakes = makeViewer(1200);
+    const fakes = makeViewer(0);
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.applyView(VIEW);
+    const placements = fakes.placements;
     fakes.fireCanvas("wheel");
+    fakes.setGroundHeight(1200);
     fakes.nudge(40);
-    const userView = engine.readView();
     fakes.tileLoadProgressEvent.emit(0);
-    assert.deepEqual(engine.readView(), userView, "the user's camera is authoritative");
+    assert.equal(fakes.placements, placements, "the user's camera is authoritative");
     engine.destroy();
   });
 
@@ -507,6 +528,24 @@ describe("CesiumEngine framing", () => {
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
     engine.fitBounds([Number.NaN, 0, 10, 5]);
     assert.equal(fakes.flights.length, 0);
+    engine.destroy();
+  });
+
+  it("flies to the point for a degenerate, point-sized extent", () => {
+    // getLayerBounds on a single-point layer returns a zero-area box. Handing
+    // that to Cesium as a Rectangle has no "zoom to fit" and yields a
+    // nonsensical camera distance, so it takes the point path instead — the same
+    // workaround MapController.fitBounds uses (#2265 review).
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.fitBounds([12, 34, 12, 34]);
+    assert.equal(fakes.flights.length, 1);
+    const flight = fakes.flights[0] as {
+      destination?: unknown;
+      sphere?: { center: { x: number } };
+    };
+    assert.equal(flight.destination, undefined, "must not fly to a zero-area rectangle");
+    assert.equal(flight.sphere?.center.x, 12, "flies to the point itself");
     engine.destroy();
   });
 

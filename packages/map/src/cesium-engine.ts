@@ -69,6 +69,8 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
 
 /** Seconds a menu-driven camera move takes on the globe. */
 const CAMERA_FLIGHT_SECONDS = 0.5;
+/** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
+const POINT_FIT_ZOOM = 14;
 
 export interface CesiumEngineOptions {
   /**
@@ -204,15 +206,13 @@ export class CesiumEngine implements MapEngine {
     animation: StoryChapterAnimation = "flyTo",
     _rotate = false,
   ): void {
-    // A story camera is scripted, not user input, so it must not dirty the
-    // project — hence animateTo(..., { userDriven: false }). Auto-rotation is
-    // MapLibre-only for now: it drives a per-frame bearing tick against the 2D
-    // map, and the globe has no equivalent hook yet.
+    // Auto-rotation is MapLibre-only for now: it drives a per-frame bearing tick
+    // against the 2D map, and the globe has no equivalent hook yet.
     if (animation === "jumpTo") {
       this.applyView(location);
       return;
     }
-    this.animateTo(location, { userDriven: false });
+    this.animateTo(location);
   }
 
   flyTo(camera: FlyToCamera): void {
@@ -224,7 +224,7 @@ export class CesiumEngine implements MapEngine {
         bearing: camera.bearing ?? current.bearing,
         pitch: camera.pitch ?? current.pitch,
       },
-      { seconds: camera.duration === undefined ? undefined : camera.duration / 1000 },
+      camera.duration === undefined ? undefined : camera.duration / 1000,
     );
   }
 
@@ -255,7 +255,21 @@ export class CesiumEngine implements MapEngine {
     if (!viewer) return;
     const [west, south, east, north] = bounds;
     if (![west, south, east, north].every((value) => Number.isFinite(value))) return;
-    this.markUserDriven();
+    // A degenerate point-sized box cannot be fit; fly to the point instead.
+    // `fitLayer` on a single-point layer produces exactly this box, and a
+    // zero-area Rectangle has no "zoom to fit" — Cesium would derive a
+    // nonsensical camera distance from it. Mirrors MapController.fitBounds,
+    // including its zoom floor, so a single marker frames the same on both
+    // engines.
+    if (west === east && south === north) {
+      this.animateTo({
+        center: [west, south],
+        zoom: Math.max(this.readView().zoom, POINT_FIT_ZOOM),
+        bearing: 0,
+        pitch: 0,
+      });
+      return;
+    }
     viewer.camera.flyTo({
       destination: this.Cesium.Rectangle.fromDegrees(west, south, east, north),
       duration: CAMERA_FLIGHT_SECONDS,
@@ -524,26 +538,31 @@ export class CesiumEngine implements MapEngine {
    * Flag the camera move that follows as user-driven, so the `moveEnd` handler
    * marks the project dirty.
    *
-   * Cesium's `moveEnd` cannot tell a menu click from a terrain settle, and the
-   * only signal the canvas ever had was raw pointer/wheel/touch input. A caller
-   * that drives the camera through this engine — View → Zoom in, a shortcut, a
-   * panel's "fly to" — *is* the user, so it has to raise the same flag their
-   * scroll wheel would. Without this, menu-driven camera changes would sync to
-   * the store but silently leave the project clean.
+   * Raw input only. Cesium's `moveEnd` carries no user-driven flag, so this
+   * stands in for MapLibre's `moveend.originalEvent` — and, like it, is set by
+   * the user's own gesture and nothing else. A programmatic move does *not*
+   * raise it: see {@link animateTo}.
    */
   private markUserDriven(): void {
     this.userMoved = true;
     this.userOwnsCamera = true;
   }
 
-  /** Animate the camera to `view`, defaulting to a user-driven, dirtying move. */
-  private animateTo(
-    view: MapViewState,
-    options: { userDriven?: boolean; seconds?: number } = {},
-  ): void {
+  /**
+   * Animate the camera to `view`. Never marks the project dirty.
+   *
+   * This matches the 2D map exactly, and the match is the point. `MapController`
+   * drives MapLibre's own camera API with no `eventData`, so the resulting
+   * `moveend` has no `originalEvent` and `MapCanvas` publishes it with
+   * `markDirty=false` — clicking View → Zoom in, resetting the bearing, or
+   * previewing a story chapter syncs the camera without flagging unsaved
+   * changes. An engine that dirtied on the same actions would make identical
+   * clicks behave differently depending on which renderer is drawing, which is
+   * precisely what #2260 exists to prevent.
+   */
+  private animateTo(view: MapViewState, seconds?: number): void {
     const viewer = this.live();
     if (!viewer) return;
-    if (options.userDriven ?? true) this.markUserDriven();
     // Cesium has no "ease to a MapLibre view" primitive, so the flight is
     // expressed the same way applyView expresses a placement — a lookAt in the
     // target's local frame — with `flyTo`'s duration doing the animating.
@@ -568,7 +587,7 @@ export class CesiumEngine implements MapEngine {
           this.Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(view.pitch)),
           range,
         ),
-        duration: options.seconds ?? CAMERA_FLIGHT_SECONDS,
+        duration: seconds ?? CAMERA_FLIGHT_SECONDS,
       },
     );
   }
