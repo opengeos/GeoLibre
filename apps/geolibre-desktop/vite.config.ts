@@ -1151,6 +1151,18 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Bind the IPv4 loopback explicitly. Vite's default (`localhost`) resolves
+    // through the OS, which on a dual-stack Linux box binds `[::1]` only — so a
+    // reverse proxy dialing `127.0.0.1:5173` (e.g. `tailscale serve`, which
+    // targets IPv4 loopback by default) gets connection-refused and returns
+    // 502. Still loopback-only: this does not expose the dev server on the LAN.
+    host: "127.0.0.1",
+    // Vite rejects requests whose Host header it does not recognise. Reaching
+    // the dev server over Tailscale (`tailscale serve --bg 5173`) forwards the
+    // original `<machine>.<tailnet>.ts.net` Host, which would otherwise be
+    // answered with "Blocked request". `.ts.net` names are only resolvable
+    // inside the tailnet, so allowing them does not widen public exposure.
+    allowedHosts: [".ts.net"],
     watch: {
       // Never watch the Rust side. `tauri dev` runs this dev server as its
       // `beforeDevCommand` and then starts cargo in the same tree, so the
