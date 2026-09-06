@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { parseDelimitedTextLayer } from "../../lib/delimited-text";
 import { type ExcelWorksheet, isExcelFile, readExcelWorksheets } from "../../lib/excel-workbook";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
-import { createBaseLayer } from "../layout/add-data/helpers";
+import { createBaseLayer, fileNameFromPath, layerNameFromPath } from "../layout/add-data/helpers";
 
 interface JoinTableFileInputProps {
   targetLayerId: string;
@@ -84,7 +84,7 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
       });
       const store = useAppStore.getState();
       if (!store.layers.some((layer) => layer.id === targetLayerId)) return;
-      const name = (file.path.split(/[\\/]/).pop() ?? file.path).replace(/\.[^.]+$/, "");
+      const name = layerNameFromPath(file.path, t("addData.delimitedText.defaultName"));
       // Built with no vector styling data on purpose: a non-spatial attribute
       // table draws nothing, so it stays on the flat defaults rather than
       // reserving a palette color no map ever shows — the same choice the
@@ -104,9 +104,15 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
         // reloadable GeoJSON source (especially for a selected Excel sheet).
         geojson: result.data,
       };
+      const { selectedFeatureId, selectedFeatureIds } = store;
       store.addLayer(layer);
       // Adding a layer selects it; keep the join draft on its original target.
       store.selectLayer(targetLayerId);
+      // `selectLayer` also clears the feature selection, but the target layer
+      // itself never changed, so put back whatever was selected before.
+      if (selectedFeatureIds.length > 0) {
+        store.selectFeatures(selectedFeatureIds, selectedFeatureId);
+      }
       onImport(layer.id);
       setFile(null);
     } catch (err) {
@@ -125,7 +131,7 @@ export function JoinTableFileInput({ targetLayerId, onImport }: JoinTableFileInp
       </span>
       {file && (
         <>
-          <p className="break-all text-xs">{file.path.split(/[\\/]/).pop()}</p>
+          <p className="break-all text-xs">{fileNameFromPath(file.path)}</p>
           {file.worksheets ? (
             <div className="space-y-1">
               <Label htmlFor={`join-sheet-${targetLayerId}`}>
