@@ -1961,6 +1961,8 @@
     "cesiumTokenHint": "Добавьте токен Cesium Ion в настройках, чтобы получить рельеф и снимки Ion"
   },
   "renderer": {
+    "basemap": "Базовая карта",
+    "imagery": "Изображения",
     "projectBasemap": "Базовая карта проекта",
     "layerUnsupported": "Не отображается на 3D-глобусе",
     "resetView": "Сбросить вид",

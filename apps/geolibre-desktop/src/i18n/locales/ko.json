@@ -1826,6 +1826,8 @@
     "cesiumTokenHint": "지형과 Ion 영상을 사용하려면 설정에서 Cesium Ion 토큰을 추가하세요"
   },
   "renderer": {
+    "basemap": "배경지도",
+    "imagery": "영상",
     "projectBasemap": "프로젝트 배경지도",
     "layerUnsupported": "3D 지구본에서는 렌더링되지 않음",
     "resetView": "보기 재설정",

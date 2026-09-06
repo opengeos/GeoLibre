@@ -2050,6 +2050,8 @@
     "cesiumTokenHint": "أضف رمز Cesium Ion من الإعدادات للحصول على التضاريس وصور Ion"
   },
   "renderer": {
+    "basemap": "خريطة الأساس",
+    "imagery": "الصور",
     "projectBasemap": "خريطة أساس المشروع",
     "layerUnsupported": "لا تُعرَض على الكرة الأرضية ثلاثية الأبعاد",
     "resetView": "إعادة تعيين العرض",

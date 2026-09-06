@@ -1871,6 +1871,8 @@
     "cesiumTokenHint": "برای زمین و تصاویر Ion، یک توکن Cesium Ion در تنظیمات بیفزایید"
   },
   "renderer": {
+    "basemap": "نقشهٔ پایه",
+    "imagery": "تصاویر",
     "projectBasemap": "نقشهٔ پایهٔ پروژه",
     "layerUnsupported": "روی کرهٔ سه‌بعدی ترسیم نمی‌شود",
     "resetView": "بازنشانی نما",

@@ -1871,6 +1871,8 @@
     "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token პარამეტრებში"
   },
   "renderer": {
+    "basemap": "საბაზისო რუკა",
+    "imagery": "სურათები",
     "projectBasemap": "პროექტის საბაზისო რუკა",
     "layerUnsupported": "3D გლობუსზე არ ისახება",
     "resetView": "ხედის საწყისზე დაბრუნება",

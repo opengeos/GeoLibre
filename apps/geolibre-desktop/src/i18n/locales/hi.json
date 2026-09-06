@@ -1871,6 +1871,8 @@
     "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए सेटिंग्स में Cesium Ion टोकन जोड़ें"
   },
   "renderer": {
+    "basemap": "बेसमैप",
+    "imagery": "इमेजरी",
     "projectBasemap": "प्रोजेक्ट बेसमैप",
     "layerUnsupported": "3D ग्लोब द्वारा रेंडर नहीं किया गया",
     "resetView": "दृश्य रीसेट करें",

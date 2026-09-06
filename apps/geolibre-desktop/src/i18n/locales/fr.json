@@ -1871,6 +1871,8 @@
     "cesiumTokenHint": "Ajoutez un jeton Cesium Ion dans les Paramètres pour le relief et l'imagerie Ion"
   },
   "renderer": {
+    "basemap": "Fond de carte",
+    "imagery": "Imagerie",
     "projectBasemap": "Fond de carte du projet",
     "layerUnsupported": "Non rendu par le globe 3D",
     "resetView": "Réinitialiser la vue",

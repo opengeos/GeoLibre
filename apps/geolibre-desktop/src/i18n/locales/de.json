@@ -1871,6 +1871,8 @@
     "cesiumTokenHint": "Fügen Sie in den Einstellungen ein Cesium-Ion-Token für Gelände und Ion-Bilder hinzu"
   },
   "renderer": {
+    "basemap": "Hintergrundkarte",
+    "imagery": "Bilddaten",
     "projectBasemap": "Hintergrundkarte des Projekts",
     "layerUnsupported": "Wird vom 3D-Globus nicht dargestellt",
     "resetView": "Ansicht zurücksetzen",

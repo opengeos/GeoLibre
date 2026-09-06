@@ -1826,6 +1826,8 @@
     "cesiumTokenHint": "在设置中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
   },
   "renderer": {
+    "basemap": "底图",
+    "imagery": "影像",
     "projectBasemap": "项目底图",
     "layerUnsupported": "3D 地球不渲染此图层",
     "resetView": "重置视图",

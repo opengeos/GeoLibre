@@ -202,6 +202,7 @@ export class CesiumEngine implements MapEngine {
 
   private readonly worldTerrainAvailable: boolean;
   private terrainEnabled = false;
+  private terrainRequest = 0;
   private terrainExaggeration = 1;
   private disposers: Array<() => void> = [];
   /**
@@ -631,6 +632,7 @@ export class CesiumEngine implements MapEngine {
     if (this.terrainEnabled === enabled) return true;
     if (!enabled) {
       this.terrainEnabled = false;
+      this.terrainRequest++;
       viewer.terrainProvider = new this.Cesium.EllipsoidTerrainProvider();
       return true;
     }
@@ -651,15 +653,19 @@ export class CesiumEngine implements MapEngine {
   async enableWorldTerrain(): Promise<void> {
     if (!this.worldTerrainAvailable) return;
     this.terrainEnabled = true;
+    const request = ++this.terrainRequest;
     try {
       const provider = await this.Cesium.createWorldTerrainAsync();
       const viewer = this.live();
       // The toggle may have been reversed, or the viewer destroyed, while the
       // provider loaded; applying it then would resurrect terrain the user just
       // turned off.
-      if (viewer && this.terrainEnabled) viewer.terrainProvider = provider;
+      if (viewer && this.terrainEnabled && request === this.terrainRequest) {
+        viewer.terrainProvider = provider;
+      }
     } catch {
-      // Terrain is best-effort; the globe still renders without it.
+      // Allow a subsequent enable to retry, without resetting a newer request.
+      if (request === this.terrainRequest) this.terrainEnabled = false;
     }
   }
 

@@ -564,6 +564,45 @@ describe("CesiumEngine terrain", () => {
     engine.destroy();
   });
 
+  it("retries terrain after a failed load", async () => {
+    const fakes = makeViewer();
+    const cesium = makeCesium();
+    let attempts = 0;
+    cesium.createWorldTerrainAsync = async () => {
+      if (++attempts === 1) throw new Error("temporary network failure");
+      return { kind: "world-terrain" } as never;
+    };
+    const engine = new CesiumEngine(cesium, fakes.viewer);
+    await engine.enableWorldTerrain();
+    assert.equal(engine.isTerrainEnabled(), false);
+    assert.equal(engine.setTerrainEnabled(true), true);
+    await Promise.resolve();
+    assert.equal(attempts, 2);
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "world-terrain" });
+    engine.destroy();
+  });
+
+  it("ignores an old failure after a newer terrain request succeeds", async () => {
+    const fakes = makeViewer();
+    const cesium = makeCesium();
+    let rejectFirst!: (error: Error) => void;
+    cesium.createWorldTerrainAsync = () =>
+      new Promise((_, reject) => {
+        rejectFirst = reject;
+      });
+    const engine = new CesiumEngine(cesium, fakes.viewer);
+    const first = engine.enableWorldTerrain();
+    engine.setTerrainEnabled(false);
+    cesium.createWorldTerrainAsync = async () => ({ kind: "world-terrain" }) as never;
+    await engine.enableWorldTerrain();
+    rejectFirst(new Error("stale failure"));
+    await first;
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "world-terrain" });
+    engine.destroy();
+  });
+
   it("swaps in world terrain and reports it enabled", async () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);
