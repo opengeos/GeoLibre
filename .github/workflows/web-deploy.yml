@@ -107,6 +107,16 @@ jobs:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
+          # Cesium Ion access token, baked into the client bundle so the 3D
+          # globe gets Cesium World Terrain and Ion World Imagery without every
+          # visitor pasting their own token into Settings. Ion tokens are meant
+          # to ship in client code, so this is public by design -- scope the
+          # token to just the assets the demo needs. A user's own token, entered
+          # in Settings -> Environment Variables, still overrides it at runtime.
+          # Prefer the VITE_-prefixed secret; the bare name is bridged into it by
+          # vite.config.ts, the same shape as the Google Maps key above.
+          VITE_CESIUM_TOKEN: ${{ secrets.VITE_CESIUM_TOKEN }}
+          CESIUM_TOKEN: ${{ secrets.CESIUM_TOKEN }}
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
           # Google Analytics measurement ID, baked into the client bundle by the
           # resolve step above. See analytics.ts.

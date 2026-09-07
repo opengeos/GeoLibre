@@ -45,7 +45,8 @@ name: PR preview
 #
 # Optional build-time values, baked into the client bundle, same as pages.yml:
 #   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY,
-#   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY, VITE_MAPILLARY_ACCESS_TOKEN
+#   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY, VITE_MAPILLARY_ACCESS_TOKEN,
+#   VITE_CESIUM_TOKEN or CESIUM_TOKEN
 # Empty on fork runs, per the note above.
 #
 # The deploy secrets that used to live here (PREVIEW_DEPLOY_TOKEN,
@@ -131,6 +132,16 @@ jobs:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
+          # Cesium Ion access token, baked into the client bundle so the 3D
+          # globe gets Cesium World Terrain and Ion World Imagery without every
+          # visitor pasting their own token into Settings. Ion tokens are meant
+          # to ship in client code, so this is public by design -- scope the
+          # token to just the assets the demo needs. A user's own token, entered
+          # in Settings -> Environment Variables, still overrides it at runtime.
+          # Prefer the VITE_-prefixed secret; the bare name is bridged into it by
+          # vite.config.ts, the same shape as the Google Maps key above.
+          VITE_CESIUM_TOKEN: ${{ secrets.VITE_CESIUM_TOKEN }}
+          CESIUM_TOKEN: ${{ secrets.CESIUM_TOKEN }}
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 
       - name: Build documentation
