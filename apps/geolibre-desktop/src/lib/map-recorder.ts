@@ -1,5 +1,7 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { isFullViewportMapCanvas } from "@geolibre/map";
+// The subpath keeps this module loadable outside the browser (the package
+// barrel pulls in MapLibre's stylesheet), which the recorder tests rely on.
+import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
 
 /**
  * Records the live map to a video file by capturing the MapLibre canvas.

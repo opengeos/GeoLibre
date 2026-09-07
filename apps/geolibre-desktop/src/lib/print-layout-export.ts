@@ -8,7 +8,8 @@
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
 import { jsPDF } from "jspdf";
-import { isFullViewportMapCanvas, type MapEngine } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
+import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
