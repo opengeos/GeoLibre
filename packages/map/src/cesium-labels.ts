@@ -1,5 +1,5 @@
 import { compileFeatureExpression, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
-import type { Entity, CesiumWidget } from "@cesium/engine";
+import type { CesiumWidget, DistanceDisplayCondition, Entity } from "@cesium/engine";
 import { cameraFovy, canvasHeight, zoomToRange } from "./cesium-camera";
 
 /** Apply label graphics after Cesium has split multipart features into entities. */
@@ -77,13 +77,21 @@ export function createCesiumLabeler(
       pixelOffset: new C.Cartesian2(labels.offsetX * labels.size, labels.offsetY * labels.size),
       heightReference: C.HeightReference.CLAMP_TO_GROUND,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      distanceDisplayCondition: new C.DistanceDisplayCondition(
-        maxZoom >= 24
-          ? 0
-          : zoomToRange(maxZoom, latitude, canvasHeight(viewer), cameraFovy(viewer)),
-        minZoom <= 0
-          ? Number.POSITIVE_INFINITY
-          : zoomToRange(minZoom, latitude, canvasHeight(viewer), cameraFovy(viewer)),
+      // Near/far are metre distances, and the distance a zoom level maps to
+      // depends on the canvas height, so evaluate them per frame rather than
+      // baking in the size at load time: a pane resize would otherwise leave the
+      // label switching at the wrong zoom until the next style-triggered rebuild.
+      distanceDisplayCondition: new C.CallbackProperty(
+        (_time, result?: DistanceDisplayCondition) => {
+          const height = canvasHeight(viewer);
+          const fovy = cameraFovy(viewer);
+          const condition = result ?? new C.DistanceDisplayCondition();
+          condition.near = maxZoom >= 24 ? 0 : zoomToRange(maxZoom, latitude, height, fovy);
+          condition.far =
+            minZoom <= 0 ? Number.POSITIVE_INFINITY : zoomToRange(minZoom, latitude, height, fovy);
+          return condition;
+        },
+        false,
       ),
     });
   };

@@ -48,6 +48,16 @@ it("uses label settings, expressions, halos and a ground anchor with distance li
   assert.equal(condition.near, 0);
   assert.ok(Number.isFinite(condition.far) && condition.far > 0);
 });
+it("tracks the canvas height so a pane resize keeps zoom limits honest", () => {
+  const canvas = { clientHeight: 600 };
+  const resizable = { ...viewer, scene: { ...viewer.scene, canvas } } as C.CesiumWidget;
+  const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, resizable, layer())(entity, 0);
+  const before = entity.label!.distanceDisplayCondition!.getValue(time).far;
+  canvas.clientHeight = 1200;
+  const after = entity.label!.distanceDisplayCondition!.getValue(time).far;
+  assert.ok(Math.abs(after / before - 2) < 1e-9);
+});
 it("anchors polygons on the ellipsoid and lines halfway along their length", () => {
   const l = layer();
   const polygon = new C.Entity({
