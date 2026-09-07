@@ -112,3 +112,32 @@ it("labels a multipart feature once, on its largest polygon or longest line", ()
   assert.equal(pickLabelPart(C, viewer, [point, islet]), islet);
   assert.equal(pickLabelPart(C, viewer, [point]), point);
 });
+it("re-evaluates a zoom-dependent expression as the camera zoom changes", () => {
+  const l = layer();
+  l.style.labels.expression = '["step", ["zoom"], "", 6, ["get", "name"], 10, "KNX"]';
+  let zoom = 3;
+  const camera = {
+    frustum: { fovy: Math.PI / 3 },
+    positionWC: new C.Cartesian3(1, 2, 3),
+    directionWC: new C.Cartesian3(0, 0, -1),
+  };
+  const live = { ...viewer, camera } as unknown as C.CesiumWidget;
+  const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, live, l, () => zoom)(entity, 0);
+  // Empty at this zoom, but the label stays so a later zoom can fill it in.
+  assert.equal(entity.label?.text?.getValue(time), "");
+  // The reader is memoised on the camera pose: a zoom change with the camera
+  // still is not seen until the camera moves.
+  zoom = 8;
+  assert.equal(entity.label?.text?.getValue(time), "");
+  camera.positionWC = new C.Cartesian3(1, 2, 4);
+  assert.equal(entity.label?.text?.getValue(time), "Knoxville");
+  zoom = 12;
+  camera.directionWC = new C.Cartesian3(0, 1, 0);
+  assert.equal(entity.label?.text?.getValue(time), "KNX");
+  // A static expression still drops an empty label outright.
+  l.style.labels.expression = '["get", "absent"]';
+  const empty = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, live, l, () => zoom)(empty, 0);
+  assert.equal(empty.label, undefined);
+});

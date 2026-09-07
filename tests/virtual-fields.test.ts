@@ -53,6 +53,14 @@ describe("compileFeatureExpression", () => {
     assert.equal(compiled.evaluate(states().features[1]), 2);
   });
 
+  it("evaluates against the compiled zoom unless a call overrides it", () => {
+    const source = '["step", ["zoom"], "far", 10, "near"]';
+    const compiled = compileFeatureExpression(source, { zoom: 12 });
+    assert.equal(compiled.evaluate!(states().features[0]), "near");
+    assert.equal(compiled.evaluate!(states().features[0], 3), "far");
+    assert.equal(compileFeatureExpression(source).evaluate!(states().features[0]), "far");
+  });
+
   it("reports compile failures without an evaluator", () => {
     const bad = compileFeatureExpression('["nope", 1]');
     assert.equal(bad.ok, false);

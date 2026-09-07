@@ -1,31 +1,76 @@
 import { compileFeatureExpression, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import type { Feature } from "geojson";
 import type { Cartesian3, CesiumWidget, DistanceDisplayCondition, Entity } from "@cesium/engine";
-import { zoomToDisplayDistance } from "./cesium-camera";
+import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
 
-/** Apply label graphics after Cesium has split multipart features into entities. */
+/** Whether a label expression reads `["zoom"]`, so its text changes with the camera. */
+const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
+
+/**
+ * Apply label graphics after Cesium has split multipart features into entities.
+ *
+ * `readZoom` supplies the camera's MapLibre zoom for zoom-dependent label
+ * expressions; it defaults to reading the live camera and is injectable for
+ * tests.
+ */
 export function createCesiumLabeler(
   C: typeof import("@cesium/engine"),
   viewer: CesiumWidget,
   layer: GeoLibreLayer,
+  readZoom: () => number = () => readMapViewFromCamera(C, viewer).zoom,
 ): (entity: Entity, index: number) => void {
   const labels = { ...DEFAULT_LAYER_STYLE.labels, ...layer.style?.labels };
   if (!labels.enabled) return () => {};
   const expression = compileFeatureExpression(labels.expression);
-  return (entity, index) => {
-    const feature = layer.geojson?.features[index];
-    if (!feature) return;
+  // MapLibre's style engine evaluates a `["zoom"]` text expression live; here
+  // the text is a per-frame property instead, re-evaluated when the camera
+  // pose changes. Reading the zoom picks the globe, so it is memoised on the
+  // pose and shared by every label of the layer.
+  const zoomDependent = Boolean(expression.evaluate) && ZOOM_OPERAND.test(labels.expression);
+  const pose = { position: new C.Cartesian3(), direction: new C.Cartesian3(), width: NaN };
+  let cachedZoom = NaN;
+  const currentZoom = () => {
+    const { camera } = viewer;
+    const frustum = camera.frustum as { left?: number; right?: number };
+    const width =
+      frustum.left !== undefined && frustum.right !== undefined
+        ? frustum.right - frustum.left
+        : NaN;
+    if (
+      !Number.isNaN(cachedZoom) &&
+      C.Cartesian3.equals(camera.positionWC, pose.position) &&
+      C.Cartesian3.equals(camera.directionWC, pose.direction) &&
+      Object.is(width, pose.width)
+    )
+      return cachedZoom;
+    C.Cartesian3.clone(camera.positionWC, pose.position);
+    C.Cartesian3.clone(camera.directionWC, pose.direction);
+    pose.width = width;
+    cachedZoom = readZoom();
+    return cachedZoom;
+  };
+  const readText = (feature: Feature, zoom: number): string => {
     let value: unknown = feature.properties?.[labels.field];
     if (expression.evaluate) {
       try {
-        value = expression.evaluate(feature);
+        value = expression.evaluate(feature, zoom);
       } catch {
         value = undefined;
       }
     }
-    if (value === undefined || value === null || value === "") return;
+    if (value === undefined || value === null || value === "") return "";
     let text = String(value);
     if (labels.transform === "uppercase") text = text.toUpperCase();
     if (labels.transform === "lowercase") text = text.toLowerCase();
+    return text;
+  };
+  return (entity, index) => {
+    const feature = layer.geojson?.features[index];
+    if (!feature) return;
+    const text = readText(feature, zoomDependent ? currentZoom() : 0);
+    // A zoom-dependent label may be empty now and non-empty at another zoom,
+    // so it keeps its entity; a static empty label has nothing to show.
+    if (!text && !zoomDependent) return;
     const time = viewer.clock.currentTime;
     let position = entity.position?.getValue(time);
     if (!position && entity.polygon) {
@@ -68,8 +113,19 @@ export function createCesiumLabeler(
     const minZoom = Math.max(labels.minZoom, layer.style?.minZoom ?? 0);
     const maxZoom = Math.min(labels.maxZoom, layer.style?.maxZoom ?? 24);
     if (minZoom >= maxZoom) return;
+    let lastZoom = NaN;
+    let lastText = text;
     entity.label = new C.LabelGraphics({
-      text,
+      text: zoomDependent
+        ? new C.CallbackProperty(() => {
+            const zoom = currentZoom();
+            if (zoom !== lastZoom) {
+              lastZoom = zoom;
+              lastText = readText(feature, zoom);
+            }
+            return lastText;
+          }, false)
+        : text,
       font: `${labels.size}px sans-serif`,
       fillColor: C.Color.fromCssColorString(labels.color),
       outlineColor: C.Color.fromCssColorString(labels.haloColor),
