@@ -762,21 +762,26 @@ export class CesiumLayerSync {
         viewer.dataSources.remove(dataSource, true);
         return;
       }
-      const labelEntity = createCesiumLabeler(Cesium, viewer, layer);
       // A multipart feature arrives as several entities sharing one index; it
       // gets one label, on its largest part (pickLabelPart), not one per part.
+      // The grouping (and pickLabelPart's geometry math) is skipped outright
+      // when the layer has no labels, so an unlabelled boundary set pays nothing.
+      const labelsEnabled = Boolean({ ...DEFAULT_LAYER_STYLE.labels, ...style.labels }.enabled);
+      const labelEntity = labelsEnabled ? createCesiumLabeler(Cesium, viewer, layer) : null;
       const parts = new Map<number, Entity[]>();
       for (const entity of dataSource.entities.values) {
         const index = entity.properties?.[indexKey]?.getValue(viewer.clock.currentTime);
         if (Number.isInteger(index)) {
           this.featureRefs.set(entity, { layerId: layer.id, index });
+          if (!labelEntity) continue;
           const group = parts.get(index);
           if (group) group.push(entity);
           else parts.set(index, [entity]);
         }
       }
-      for (const [index, entities] of parts)
-        labelEntity(pickLabelPart(Cesium, viewer, entities), index);
+      if (labelEntity)
+        for (const [index, entities] of parts)
+          labelEntity(pickLabelPart(Cesium, viewer, entities), index);
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
       // stroke, marker) by the layer opacity right after load, so points/lines

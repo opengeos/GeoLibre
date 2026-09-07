@@ -29,6 +29,10 @@ export function createCesiumLabeler(
     const time = viewer.clock.currentTime;
     let position = entity.position?.getValue(time);
     if (!position && entity.polygon) {
+      // The bounding-sphere centre dropped onto the ellipsoid: cheap, and inside
+      // any convex shape, but it can land outside a concave one (a crescent, a
+      // horseshoe). A pole-of-inaccessibility anchor, as MapLibre uses, is a
+      // follow-up for the label-appearance work.
       const vertices = entity.polygon.hierarchy?.getValue(time)?.positions;
       if (vertices?.length) {
         position = viewer.scene.globe.ellipsoid.scaleToGeodeticSurface(
