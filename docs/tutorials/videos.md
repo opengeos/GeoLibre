@@ -235,6 +235,106 @@ Related: [Processing Tools](../user-guide/processing.md) ·
     - 17:32 Customizing AI-generated models
     - 18:25 Conclusion
 
+## Mapping the 2026 Nepal Floods with Free High-Resolution Satellite Imagery
+
+<div class="video-embed">
+  <iframe src="https://www.youtube-nocookie.com/embed/UDO1BCwOAAc" title="Mapping the 2026 Nepal Floods with Free High-Resolution Satellite Imagery" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+</div>
+
+**23:14 · August 2026 · [Watch on YouTube](https://youtu.be/UDO1BCwOAAc)**
+
+A full disaster-response workflow on the Nepal–China border flood: find, view,
+compare, and download open imagery from Vantor Open Data, Planet Crisis
+Response, and OpenAerialMap. Builds a before-and-after swipe map, explores the
+valley in 3D terrain, pulls building footprints from Overture Maps, and exports
+the result for damage assessment.
+
+Try it yourself with the
+[live sample project](https://share.geolibre.app/giswqs/nepal-flash-floods).
+
+Related: [Plugins & Marketplace](../user-guide/plugins.md) ·
+[Data Integrations](../user-guide/data-integrations.md) ·
+[Map Controls](../user-guide/map-controls.md)
+
+??? note "Chapters"
+
+    As with the 1.0 tour, the last few chapter timestamps in the video
+    description run past the recording's 23:14 length.
+
+    - 00:00 Nepal–China border flood seen from space
+    - 02:02 Building the before-and-after map
+    - 03:05 Finding the affected location
+    - 06:09 Searching Vantor Open Data
+    - 08:40 Exploring the terrain in 3D
+    - 12:08 Adding post-event satellite imagery
+    - 14:53 Comparing damage with Layer Swipe
+    - 18:39 Sharing the interactive GeoLibre map
+    - 20:06 Exploring Planet Crisis Response imagery
+    - 22:52 Finding imagery with OpenAerialMap
+    - 25:14 Extracting buildings from Overture Maps
+    - 27:20 Exporting data for damage assessment
+    - 28:30 Conclusion
+
+## Building Cloud-Native GIS Workflows with GeoLibre
+
+<div class="video-embed">
+  <iframe src="https://www.youtube-nocookie.com/embed/RgNoKsvZ5Hk" title="Building Cloud-Native GIS Workflows with GeoLibre" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+</div>
+
+**1:07:28 · September 2026 · [Watch on YouTube](https://youtu.be/RgNoKsvZ5Hk)**
+
+A recorded webinar, and the longest single overview of the project. Covers how
+GeoLibre uses COG, GeoParquet, PMTiles, DuckDB, and WebAssembly to work with
+large vector, raster, and LiDAR datasets directly in the browser, then walks the
+plugin ecosystem, the cross-platform builds (browser, desktop, mobile, Jupyter,
+R), and the emerging GeoAI integration.
+
+Slides: [geolibre-slides-en.html](https://assets.geolibre.app/slides/geolibre-slides-en.html)
+
+Related: [Cloud-Native Data](cloud-native-data.md) ·
+[Architecture](../architecture.md) ·
+[Python API](../python.md) · [R Package](../r.md)
+
+## Image Georeferencing Using GeoLibre in the Browser
+
+<div class="video-embed">
+  <iframe src="https://www.youtube-nocookie.com/embed/lbioujkDSG0" title="Image Georeferencing Using GeoLibre in the Browser" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+</div>
+
+**15:35 · September 2026 · [Watch on YouTube](https://youtu.be/lbioujkDSG0)**
+
+Georeferences a scanned University of Tennessee campus map with no desktop GIS:
+place ground control points, pick a transformation, read the per-GCP and RMS
+residuals, and align the image to a basemap. Then exports a GeoTIFF, reloads it,
+handles NoData transparency, compares it against the basemap with the swipe
+tool, and shares the finished map.
+
+Sample data:
+[UTK campus map](https://assets.geolibre.app/data/utk-parking-map.jpg) ·
+[control points](https://assets.geolibre.app/data/utk-parking-map-gcps.csv)
+
+Related: [Processing Tools](../user-guide/processing.md) ·
+[Adding Data](../user-guide/adding-data.md) ·
+[Sharing & Embedding](sharing-embedding.md)
+
+??? note "Chapters"
+
+    - 00:00 Introduction to image georeferencing
+    - 01:44 Launching GeoLibre and choosing a basemap
+    - 02:44 Opening the Georeferencing tool
+    - 03:20 Loading an image
+    - 03:50 Choosing a transformation method
+    - 04:55 Selecting ground control points
+    - 08:34 Checking coordinates and residuals
+    - 11:17 Evaluating georeferencing accuracy
+    - 11:30 Exporting control points and a GeoTIFF
+    - 12:26 Adding the georeferenced image to the map
+    - 12:59 Comparing layers with the swipe tool
+    - 13:35 Loading the exported GeoTIFF
+    - 14:07 Handling NoData and transparency
+    - 14:42 Sharing the georeferenced map
+    - 15:29 Conclusion
+
 ## More videos
 
 The channel also covers GeoAI, DuckDB, and geospatial Python more broadly:
