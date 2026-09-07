@@ -112,16 +112,12 @@ interface BasemapExtractPanelProps {
   open: boolean;
   onClose: () => void;
   mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */
 function fmtCoord(value: number): string {
   return Number(value.toFixed(6)).toString();
-}
-
-/** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
@@ -258,7 +254,12 @@ function baseNameFromUrl(url: string): string {
  * is non-modal so the map stays interactive for drawing, mirroring the Raster
  * Subset panel.
  */
-export function BasemapExtractPanel({ open, onClose, mapControllerRef }: BasemapExtractPanelProps) {
+export function BasemapExtractPanel({
+  open,
+  onClose,
+  mapControllerRef,
+  mapReadyGeneration,
+}: BasemapExtractPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((state) => state.addLayer);
   const setBasemapStyleUrl = useAppStore((state) => state.setBasemapStyleUrl);
@@ -338,10 +339,8 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const seedFromView = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
-    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
+    const bounds = mapControllerRef.current?.getViewBounds();
+    if (bounds) setCoords(coordsFromBbox(bounds));
   }, [mapControllerRef]);
 
   // Reset every field whenever the panel opens (seeding the bbox from the
@@ -434,76 +433,34 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
       map.off("move", reproject);
       map.off("resize", reproject);
     };
-  }, [open, mapControllerRef]);
+  }, [open, mapControllerRef, mapReadyGeneration]);
 
   useEffect(() => {
     reprojectRef.current();
   }, [bbox]);
 
-  // Rubber-band draw mode: drag a rectangle on the map. Mirrors the Raster
-  // Subset panel and lib/print-extent.ts: draw starts on a canvas mousedown,
-  // then tracking is driven by window mousemove/mouseup so a drag leaving the
-  // canvas still commits. dragPan/boxZoom are suspended for the duration.
+  // Both renderers share the pointer lifecycle; the globe draws a native rectangle.
   useEffect(() => {
     if (!drawing) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const engine = mapControllerRef.current;
+    if (!engine) {
       setDrawing(false);
       return;
     }
-    const canvas = map.getCanvas();
-    const prevCursor = canvas.style.cursor;
-    canvas.style.cursor = "crosshair";
-    const panWasEnabled = map.dragPan.isEnabled();
-    const boxZoomWasEnabled = map.boxZoom.isEnabled();
-    map.dragPan.disable();
-    map.boxZoom.disable();
+    return engine.drawExtent({
+      onChange: (extent) => {
+        setCoords(coordsFromBbox(extent));
+        clearStatus();
+      },
+      onDone: () => setDrawing(false),
+      onCancel: () => setDrawing(false),
+    });
+  }, [drawing, mapControllerRef, clearStatus, mapReadyGeneration]);
 
-    const toLngLat = (clientX: number, clientY: number): [number, number] => {
-      const rect = canvas.getBoundingClientRect();
-      const ll = map.unproject([clientX - rect.left, clientY - rect.top]);
-      return [ll.lng, ll.lat];
-    };
-
-    let start: [number, number] | null = null;
-    const onDown = (e: {
-      lngLat: { lng: number; lat: number };
-      originalEvent?: { button?: number };
-    }) => {
-      if (e.originalEvent && e.originalEvent.button !== 0) return;
-      start = [e.lngLat.lng, e.lngLat.lat];
-    };
-    const onWindowMove = (e: MouseEvent) => {
-      if (!start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      clearStatus();
-    };
-    const onWindowUp = (e: MouseEvent) => {
-      if (e.button !== 0 || !start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      start = null;
-      setDrawing(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) setDrawing(false);
-    };
-    const onBlur = () => setDrawing(false);
-    map.on("mousedown", onDown);
-    window.addEventListener("mousemove", onWindowMove);
-    window.addEventListener("mouseup", onWindowUp);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      map.off("mousedown", onDown);
-      window.removeEventListener("mousemove", onWindowMove);
-      window.removeEventListener("mouseup", onWindowUp);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", onBlur);
-      canvas.style.cursor = prevCursor;
-      if (panWasEnabled) map.dragPan.enable();
-      if (boxZoomWasEnabled) map.boxZoom.enable();
-    };
-  }, [drawing, mapControllerRef, clearStatus]);
+  useEffect(() => {
+    if (!open || !bbox) return;
+    return mapControllerRef.current?.showExtent(bbox);
+  }, [open, bbox, mapControllerRef, mapReadyGeneration]);
 
   const handleUseView = useCallback(() => {
     seedFromView();

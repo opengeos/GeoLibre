@@ -33,6 +33,8 @@ export interface Command {
   shortcut?: Shortcut;
   /** Optional icon shown beside the command in the palette. */
   icon?: LucideIcon;
+  /** Visible explanation for an action unavailable in the current context. */
+  disabledReason?: string;
   /** Invoked when the command is selected or its shortcut is pressed. */
   run: () => void;
 }

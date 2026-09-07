@@ -24,6 +24,11 @@ import {
   zoomToSceneRange,
 } from "./cesium-camera";
 import { getPrimaryCesiumControlHost } from "./cesium-control-host";
+import { pickDrawingLocation, placeCesiumPin, suspendCesiumNavigation } from "./cesium-drawing";
+import { drawExtentOnCanvas } from "./extent-drawing";
+import { captureEngineImage } from "./map-capture";
+import type { MapRenderSurface } from "./map-engine";
+import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
 import { CesiumLayerSync } from "./cesium-layer-sync";
 import { getLayerBounds } from "./geojson-loader";
 import type {
@@ -49,7 +54,6 @@ type CesiumNs = typeof import("@cesium/engine");
  *   canvas stays 2D-only.
  * - `customLayers`: a MapLibre `CustomLayerInterface` is a callback into
  *   MapLibre's own WebGL pass; deck.gl's MapLibre interop is the same shape.
- * - `onMapDrawing`: no manual-placement pin.
  *
  * `terrain: true` is the flag worth noting in the other direction — terrain is
  * native on the globe, and the old `primaryRenderer === "cesium"` gates disabled
@@ -61,7 +65,7 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   customLayers: false,
   terrain: true,
   picking: true,
-  onMapDrawing: false,
+  onMapDrawing: true,
   domControls: true,
 });
 
@@ -294,6 +298,9 @@ export class CesiumEngine implements MapEngine {
   // ---------------------------------------------------------------- lifecycle
 
   destroy(): void {
+    this.drawingDispose?.();
+    this.drawingDispose = null;
+    for (const dispose of this.extentDisposers) dispose();
     for (const dispose of this.disposers.splice(0)) dispose();
     this.layerSync.destroy();
     // The control host tears the controls themselves down; drop the references
@@ -692,9 +699,143 @@ export class CesiumEngine implements MapEngine {
     this.live()?.scene.requestRender();
   }
 
-  /** Places nothing and returns a no-op teardown; see `onMapDrawing`. */
-  startManualPlacement(_lngLat: [number, number], _options: ManualPlacementOptions): () => void {
-    return () => {};
+  private drawingDispose: (() => void) | null = null;
+  private extentDisposers = new Set<() => void>();
+  private renderSurface: MapRenderSurface | null = null;
+  private cameraMoving = false;
+
+  getRenderSurface(): MapRenderSurface | null {
+    const viewer = this.live();
+    if (!viewer) return null;
+    const C = this.Cesium;
+    this.renderSurface ??= {
+      getCanvas: () => viewer.canvas,
+      getContainer: () => viewer.container as HTMLElement,
+      getBearing: () => this.readView().bearing,
+      redraw: () => viewer.render(),
+      project: ([lng, lat]) => {
+        const ground = groundHeightAt(C, viewer, lng, lat);
+        const point = C.SceneTransforms.worldToWindowCoordinates(
+          viewer.scene,
+          C.Cartesian3.fromDegrees(lng, lat, ground),
+        );
+        if (!point) throw new Error("The requested extent is outside the globe view");
+        return point;
+      },
+      unproject: ([x, y]) => {
+        const location = pickDrawingLocation(C, viewer, { x, y });
+        if (!location) throw new Error("The requested point is outside the globe");
+        return { lng: location[0], lat: location[1] };
+      },
+    };
+    return this.renderSurface;
+  }
+
+  getRenderStatus(): { pending: string[]; errors: string[] } {
+    const viewer = this.live();
+    if (!viewer) return { pending: [], errors: ["The globe is not available"] };
+    const status = this.layerSync.getRenderStatus();
+    if (!viewer.scene.globe.tilesLoaded) status.pending.push("Globe tiles");
+    if (this.isMorphing()) status.pending.push("Globe projection");
+    if (this.cameraMoving) status.pending.push("Globe camera");
+    if (!viewer.dataSourceDisplay.ready) status.pending.push("Globe features");
+    return status;
+  }
+
+  captureImage(): Promise<Blob> {
+    return captureEngineImage(this);
+  }
+
+  onCameraIdle(listener: () => void): () => void {
+    return this.live()?.camera.moveEnd.addEventListener(listener) ?? (() => {});
+  }
+  stopCamera(): void {
+    this.live()?.camera.cancelFlight();
+  }
+  suspendNavigation(): () => void {
+    const viewer = this.live();
+    return viewer ? suspendCesiumNavigation(viewer) : () => {};
+  }
+
+  startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void {
+    this.drawingDispose?.();
+    const viewer = this.live();
+    if (!viewer) return () => {};
+    this.drawingDispose = placeCesiumPin(this.Cesium, viewer, lngLat, options, (element) => {
+      const control = { onAdd: () => element, onRemove: () => element.remove() };
+      if (this.addControl(control, "top-left")) return () => this.removeControl(control);
+      viewer.container.append(element);
+      return () => element.remove();
+    });
+    return this.drawingDispose;
+  }
+
+  drawExtent(options: ExtentDrawingOptions): () => void {
+    this.drawingDispose?.();
+    const viewer = this.live();
+    if (!viewer) return () => {};
+    this.drawingDispose = drawExtentOnCanvas(
+      viewer.canvas,
+      (point) => pickDrawingLocation(this.Cesium, viewer, point),
+      () => suspendCesiumNavigation(viewer),
+      options,
+    );
+    return this.drawingDispose;
+  }
+
+  getViewBounds(): MapExtent | null {
+    const viewer = this.live();
+    if (!viewer || this.isMorphing()) return null;
+    const rectangle = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+    if (!rectangle) return null;
+    const degrees = this.Cesium.Math.toDegrees;
+    return [
+      degrees(rectangle.west),
+      degrees(rectangle.south),
+      degrees(rectangle.east),
+      degrees(rectangle.north),
+    ];
+  }
+
+  showExtent(extent: MapExtent): () => void {
+    const viewer = this.live();
+    if (!viewer) return () => {};
+    const C = this.Cesium;
+    const [west, south, east, north] = extent;
+    const entity = viewer.entities.add({
+      rectangle: {
+        coordinates: C.Rectangle.fromDegrees(...extent),
+        material: C.Color.fromCssColorString("#38bdf8").withAlpha(0.2),
+      },
+      polyline: {
+        positions: C.Cartesian3.fromDegreesArray([
+          west,
+          south,
+          east,
+          south,
+          east,
+          north,
+          west,
+          north,
+          west,
+          south,
+        ]),
+        width: 2,
+        material: C.Color.fromCssColorString("#38bdf8"),
+        clampToGround: true,
+        arcType: C.ArcType.RHUMB,
+      },
+    });
+    const dispose = () => {
+      if (!this.extentDisposers.delete(dispose)) return;
+      if (!viewer.isDestroyed()) {
+        viewer.entities.remove(entity);
+        viewer.scene.requestRender();
+      }
+    };
+    this.extentDisposers.add(dispose);
+    viewer.scene.requestRender();
+    return dispose;
   }
 
   // ----------------------------------------------------------------- controls
@@ -965,7 +1106,8 @@ export class CesiumEngine implements MapEngine {
     const canvas = viewer.canvas;
     const markMove = () => this.markUserDriven();
     const markDrag = (event: PointerEvent) => {
-      if (event.buttons !== 0) this.markUserDriven();
+      if (event.buttons !== 0 && viewer.scene.screenSpaceCameraController?.enableInputs !== false)
+        this.markUserDriven();
     };
     const opts: AddEventListenerOptions = { passive: true };
     canvas.addEventListener("pointermove", markDrag, opts);
@@ -1038,10 +1180,18 @@ export class CesiumEngine implements MapEngine {
   private installCameraPublisher(): void {
     const viewer = this.live();
     if (!viewer) return;
-    const onMoveEnd = () => this.publishCameraView();
+    const onMoveStart = () => {
+      this.cameraMoving = true;
+    };
+    const onMoveEnd = () => {
+      this.cameraMoving = false;
+      this.publishCameraView();
+    };
+    viewer.camera.moveStart.addEventListener(onMoveStart);
     viewer.camera.moveEnd.addEventListener(onMoveEnd);
     this.disposers.push(() => {
       const live = this.live();
+      live?.camera.moveStart.removeEventListener(onMoveStart);
       live?.camera.moveEnd.removeEventListener(onMoveEnd);
     });
   }

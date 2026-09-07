@@ -53,9 +53,13 @@ export {
   type FlyToCamera,
   type IdentifiedFeature,
   type ManualPlacementOptions,
+  type ExtentDrawingOptions,
+  type MapExtent,
+  type MapRenderSurface,
   type MapEngine,
   type MapEngineCapabilities,
 } from "./map-engine";
+export { imageBlobToDataUrl, isFullViewportMapCanvas } from "./map-capture";
 export {
   MapController,
   createMapController,

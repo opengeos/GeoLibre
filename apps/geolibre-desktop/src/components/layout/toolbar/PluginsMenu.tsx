@@ -91,6 +91,11 @@ export function PluginsMenu({
         >
           {pluginName}
           {isActive(p.id) ? " ✓" : ""}
+          {!canToggle ? (
+            <span className="ms-auto text-xs text-muted-foreground">
+              {t(primaryRenderer === "cesium" ? "mapGrid.only2d" : "toolbar.item.rendererCesium")}
+            </span>
+          ) : null}
         </DropdownMenuItem>
       );
     }
@@ -100,6 +105,11 @@ export function PluginsMenu({
         <DropdownMenuSubTrigger disabled={!canToggle}>
           {pluginName}
           {isActive(p.id) ? " ✓" : ""}
+          {!canToggle ? (
+            <span className="ms-auto text-xs text-muted-foreground">
+              {t(primaryRenderer === "cesium" ? "mapGrid.only2d" : "toolbar.item.rendererCesium")}
+            </span>
+          ) : null}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
           <DropdownMenuItem

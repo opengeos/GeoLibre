@@ -71,20 +71,20 @@ export function RegionSelectOverlay({
       return;
     }
     const map = mapControllerRef.current?.getMap();
-    const canvas = map?.getCanvas();
-    if (!canvas || !map) return;
+    const canvas = mapControllerRef.current?.getRenderSurface()?.getCanvas();
+    if (!canvas) return;
     const update = () => setCanvasBox(canvas.getBoundingClientRect());
     update();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     observer?.observe(canvas);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
-    map.on("resize", update);
+    map?.on("resize", update);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
-      map.off("resize", update);
+      map?.off("resize", update);
     };
   }, [mode, mapControllerRef]);
 

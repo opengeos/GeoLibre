@@ -1,3 +1,4 @@
+import type { MapEngine, FlyToCamera } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Geometry, Position } from "geojson";
 
@@ -551,7 +552,7 @@ export function isTourRecordingSupported(): boolean {
 }
 
 export interface RecordTourOptions {
-  map: MapLibreMap;
+  map: MapLibreMap | MapEngine;
   keyframes: TourKeyframe[];
   /** Frames per second sampled from the canvas. */
   fps: number;
@@ -559,6 +560,56 @@ export interface RecordTourOptions {
   signal?: AbortSignal;
   /** Reports progress in `[0, 1]` as each segment completes. */
   onProgress?: (fraction: number) => void;
+}
+
+interface TourMap {
+  getCanvas(): HTMLCanvasElement;
+  flyTo(camera: FlyToCamera & { essential?: boolean }): void;
+  jumpTo(camera: FlyToCamera): void;
+  stop(): void;
+  triggerRepaint(): void;
+  onMoveEnd(listener: () => void): () => void;
+  suspendNavigation(): () => void;
+}
+
+function tourMap(input: MapLibreMap | MapEngine): TourMap {
+  if ("getRenderSurface" in input) {
+    const surface = input.getRenderSurface();
+    if (!surface) throw new Error("The map is not ready yet");
+    return {
+      getCanvas: () => surface.getCanvas(),
+      flyTo: (camera) => input.flyTo(camera),
+      jumpTo: (camera) => input.applyView({ ...input.readView(), ...camera }),
+      stop: () => input.stopCamera(),
+      triggerRepaint: () => {
+        if (input.getRenderSurface()) surface.redraw();
+      },
+      onMoveEnd: (listener) => input.onCameraIdle(listener),
+      suspendNavigation: () => input.suspendNavigation(),
+    };
+  }
+  return {
+    getCanvas: () => input.getCanvas(),
+    flyTo: (camera) => {
+      input.flyTo(camera);
+    },
+    jumpTo: (camera) => {
+      input.jumpTo(camera);
+    },
+    stop: () => {
+      input.stop();
+    },
+    triggerRepaint: () => {
+      input.triggerRepaint();
+    },
+    onMoveEnd: (listener) => {
+      input.on("moveend", listener);
+      return () => {
+        input.off("moveend", listener);
+      };
+    },
+    suspendNavigation: () => freezeMapInteractions(input),
+  };
 }
 
 /** Resolve after `ms`, but immediately if the signal is already aborted. */
@@ -588,7 +639,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * caller rather than read off the target keyframe.
  */
 function flyToKeyframe(
-  map: MapLibreMap,
+  map: TourMap,
   kf: TourKeyframe,
   durationMs: number,
   signal?: AbortSignal,
@@ -605,7 +656,7 @@ function flyToKeyframe(
     const finish = () => {
       if (settled) return;
       settled = true;
-      map.off("moveend", finish);
+      unsubscribe();
       clearTimeout(timer);
       signal?.removeEventListener("abort", finish);
       resolve();
@@ -616,7 +667,7 @@ function flyToKeyframe(
     // the fallback before moveend fires (which would blend two animations).
     const duration = Math.max(0, durationMs);
     const timer = setTimeout(finish, duration + Math.max(500, duration * 0.25));
-    map.once("moveend", finish);
+    const unsubscribe = map.onMoveEnd(finish);
     signal?.addEventListener("abort", finish, { once: true });
     map.flyTo({
       center: kf.center,
@@ -666,12 +717,13 @@ function freezeMapInteractions(map: MapLibreMap): () => void {
  * the canvas, or a plain `Error` when fewer than two keyframes are supplied.
  */
 export async function recordTour({
-  map,
+  map: inputMap,
   keyframes,
   fps,
   signal,
   onProgress,
 }: RecordTourOptions): Promise<Blob> {
+  const map = tourMap(inputMap);
   if (keyframes.length < 2) {
     throw new Error("A tour needs at least two keyframes.");
   }
@@ -764,7 +816,7 @@ export async function recordTour({
   // camera). Restored in the finally below.
   let restoreInteractions = () => {};
   try {
-    restoreInteractions = freezeMapInteractions(map);
+    restoreInteractions = map.suspendNavigation();
     // Park on the first keyframe before the recorder starts so the opening
     // frame is the intended view, not wherever the user left the map.
     const first = keyframes[0];

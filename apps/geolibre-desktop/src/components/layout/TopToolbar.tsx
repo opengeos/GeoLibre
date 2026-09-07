@@ -13,6 +13,7 @@ import {
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import {
   closeDuckDBLayerPanel,
+  isPluginEngineSupported,
   closeEarthEnginePanel,
   closeMaplibreComponentControls,
   closePlanetaryComputerPanel,
@@ -2036,6 +2037,11 @@ export function TopToolbar({
         }),
         group: t("toolbar.commandGroup.plugins"),
         keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
+        disabledReason:
+          !isActive(plugin.id) &&
+          !isPluginEngineSupported(plugin, cesiumPrimary ? "cesium" : "maplibre")
+            ? t(cesiumPrimary ? "mapGrid.only2d" : "toolbar.item.rendererCesium")
+            : undefined,
         run: () => toggle(plugin.id, appApi),
       })),
     // Settings

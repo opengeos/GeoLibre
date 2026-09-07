@@ -1,3 +1,4 @@
+import type { MapEngine } from "@geolibre/map";
 /**
  * Interactive "Draw print extent" tool for the Print Layout dialog (GH #523).
  *
@@ -403,5 +404,39 @@ export function drawPrintExtent(
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
     options.signal?.addEventListener("abort", onAbort);
+  });
+}
+
+/** Globe extent drawing with cancellation and a disposable native preview. */
+export function drawEnginePrintExtent(
+  engine: MapEngine,
+  signal: AbortSignal,
+): Promise<PrintExtent | null> {
+  return new Promise((resolve) => {
+    let preview: (() => void) | undefined;
+    let dispose: (() => void) | undefined;
+    let settled = false;
+    const finish = (extent: PrintExtent | null) => {
+      if (settled) return;
+      settled = true;
+      preview?.();
+      dispose?.();
+      signal.removeEventListener("abort", cancel);
+      resolve(extent);
+    };
+    const cancel = () => finish(null);
+    if (signal.aborted) {
+      finish(null);
+      return;
+    }
+    dispose = engine.drawExtent({
+      onChange: (extent) => {
+        preview?.();
+        preview = engine.showExtent(extent);
+      },
+      onDone: finish,
+      onCancel: cancel,
+    });
+    signal.addEventListener("abort", cancel, { once: true });
   });
 }

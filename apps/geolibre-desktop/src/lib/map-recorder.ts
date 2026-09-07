@@ -565,7 +565,7 @@ export async function rasterizeDomOverlays(
 }
 
 export interface RecordMapOptions {
-  map: MapLibreMap;
+  map: Pick<MapLibreMap, "getCanvas" | "getContainer">;
   /** Screen rectangle to capture, or null/omitted for the whole viewport. */
   region?: RecordRegion | null;
   /**

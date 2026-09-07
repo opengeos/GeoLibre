@@ -52,6 +52,9 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
+import { drawExtentOnCanvas } from "./extent-drawing";
+import { captureEngineImage } from "./map-capture";
+import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
 import {
   blendModeSignature,
   installLayerBlendModes,
@@ -1013,6 +1016,7 @@ export class MapController implements MapEngine {
   }
 
   destroy(): void {
+    this.extentDrawingDispose?.();
     this.removeNavigationControl();
     this.removeFullscreenControl();
     this.removeCompassControl();
@@ -1571,6 +1575,101 @@ export class MapController implements MapEngine {
         ...(maxZoom === null ? {} : { maxZoom }),
       },
     );
+  }
+
+  private extentDrawingDispose: (() => void) | null = null;
+
+  getRenderSurface() {
+    return this.map;
+  }
+
+  getRenderStatus(): { pending: string[]; errors: string[] } {
+    const map = this.map;
+    if (!map) return { pending: [], errors: ["The map is not available"] };
+    return {
+      pending:
+        map.loaded() && map.areTilesLoaded() && !map.isMoving() ? [] : ["Map tiles and camera"],
+      errors: [],
+    };
+  }
+
+  captureImage(): Promise<Blob> {
+    return captureEngineImage(this);
+  }
+
+  onCameraIdle(listener: () => void): () => void {
+    const map = this.map;
+    map?.on("moveend", listener);
+    return () => {
+      map?.off("moveend", listener);
+    };
+  }
+  stopCamera(): void {
+    this.map?.stop();
+  }
+  suspendNavigation(): () => void {
+    const map = this.map;
+    if (!map) return () => {};
+    const handlers = [
+      map.dragPan,
+      map.boxZoom,
+      map.dragRotate,
+      map.scrollZoom,
+      map.touchZoomRotate,
+      map.touchPitch,
+      map.doubleClickZoom,
+      map.keyboard,
+    ];
+    const enabled = handlers.map((handler) => handler.isEnabled());
+    handlers.forEach((handler) => handler.disable());
+    return () =>
+      handlers.forEach((handler, index) => {
+        if (enabled[index]) handler.enable();
+      });
+  }
+
+  getViewBounds(): MapExtent | null {
+    const bounds = this.map?.getBounds();
+    return bounds
+      ? [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+      : null;
+  }
+
+  showExtent(_extent: MapExtent): () => void {
+    // The extraction panels draw their MapLibre overlay above custom layers.
+    return () => {};
+  }
+
+  drawExtent(options: ExtentDrawingOptions): () => void {
+    this.extentDrawingDispose?.();
+    const map = this.map;
+    if (!map) return () => {};
+    this.extentDrawingDispose = drawExtentOnCanvas(
+      map.getCanvas(),
+      (point) => {
+        const location = map.unproject([point.x, point.y]);
+        return [location.lng, location.lat];
+      },
+      () => {
+        const handlers = [
+          map.dragPan,
+          map.boxZoom,
+          map.dragRotate,
+          map.scrollZoom,
+          map.touchZoomRotate,
+          map.doubleClickZoom,
+          map.keyboard,
+        ];
+        const enabled = handlers.map((handler) => handler.isEnabled());
+        handlers.forEach((handler) => handler.disable());
+        return () =>
+          handlers.forEach((handler, index) => {
+            if (enabled[index]) handler.enable();
+          });
+      },
+      options,
+    );
+    return this.extentDrawingDispose;
   }
 
   /**

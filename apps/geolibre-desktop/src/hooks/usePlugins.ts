@@ -1055,6 +1055,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
+    getMapRenderer: () => useAppStore.getState().primaryRenderer,
     getProjectSnapshot: () => buildProjectEgressSnapshot(mapControllerRef ?? { current: null }),
     openExternalUrl: (url: string) => void openExternalLink(url),
     pickLocalDirectoryFiles,

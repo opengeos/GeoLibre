@@ -575,6 +575,8 @@ export interface GeoLibreAppAPI {
   removeLayerGroup?: (id: string) => void;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
+  /** Active primary renderer, including while its canvas is being replaced. */
+  getMapRenderer?: () => MapRendererKind;
   /**
    * Open an http(s) URL in the system browser. Needed because the Tauri
    * desktop webview ignores `window.open`/`target="_blank"` and would open the

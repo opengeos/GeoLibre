@@ -354,6 +354,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           // choice and fail without an Ion token (Ion's default imagery needs
           // one), which is what used to keep the globe off the keyless path.
           baseLayer: false,
+          contextOptions: { webgl: { preserveDrawingBuffer: true } },
           // Match the project map in flat modes, including its vertical extent.
           mapProjection: new Cesium.WebMercatorProjection(),
         });

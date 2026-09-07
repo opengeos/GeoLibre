@@ -97,6 +97,7 @@ interface LayerEntry {
   handle: ImageryLayer | DataSource | Cesium3DTileset | null;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
+  loadError?: string;
   /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
   appliedAlpha?: string;
   /** Last filter expression key applied in place (skips redundant filter evaluations). */
@@ -544,6 +545,30 @@ export class CesiumLayerSync {
   }
 
   private readonly entries = new Map<string, LayerEntry>();
+
+  getRenderStatus(): { pending: string[]; errors: string[] } {
+    const pending: string[] = [];
+    const errors: string[] = [];
+    for (const layer of this.currentLayers) {
+      if (!layer.visible || layer.opacity === 0) continue;
+      if (hasGeoJsonCollection(layer) && !layer.geojson?.features.length) continue;
+      if (!isCesiumSupportedLayerType(layer)) {
+        errors.push(`${layer.name}: this layer cannot render on the globe`);
+        continue;
+      }
+      const entry = this.entries.get(layer.id);
+      if (entry?.handle?.show === false) continue;
+      if (entry?.loadError) errors.push(`${layer.name}: ${entry.loadError}`);
+      else if (!entry?.handle) pending.push(layer.name);
+      else if (entry.kind === "3dtiles" && !(entry.handle as Cesium3DTileset).allTilesLoaded)
+        pending.push(layer.name);
+      else if (entry.kind === "geojson" && (entry.handle as DataSource).isLoading)
+        pending.push(layer.name);
+      else if (entry.kind === "imagery" && !(entry.handle as ImageryLayer).ready)
+        pending.push(layer.name);
+    }
+    return { pending, errors };
+  }
   /** Imagery id order last asserted on the globe, to skip redundant reorders. */
   private lastImageryOrder = "";
   /** Active layer list from the current/latest sync pass. */
@@ -878,8 +903,9 @@ export class CesiumLayerSync {
         // reorder if that stops being true.
         this.reorderImagery();
       }
-    } catch {
+    } catch (error) {
       // A provider that throws synchronously (e.g. malformed params) or rejects
+      entry.loadError = error instanceof Error ? error.message : String(error);
       // should not abort the sync pass; mirror createGeoJson/createTileset's best-effort.
       // The entry stays registered with a null handle rather than being deleted:
       // sync() re-runs on every unrelated store change (an opacity drag, a
@@ -1147,8 +1173,9 @@ export class CesiumLayerSync {
 
       this.restoreHighlight();
       this.applyHighlight();
-    } catch {
+    } catch (error) {
       // A malformed FeatureCollection should not break the whole sync.
+      entry.loadError = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -1176,8 +1203,9 @@ export class CesiumLayerSync {
       this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
       entry.handle = tileset;
       this.applyAppearance(entry);
-    } catch {
+    } catch (error) {
       // A tileset that fails to load should not break the whole sync.
+      entry.loadError = error instanceof Error ? error.message : String(error);
     }
   }
 

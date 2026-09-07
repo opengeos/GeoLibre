@@ -170,6 +170,7 @@ function makeViewer(groundHeight = 0) {
       },
       frustum: { fovy: Math.PI / 3 },
       moveEnd,
+      moveStart: makeEvent(),
       // applyMapViewToCamera drives these; the fake records the resulting view.
       lookAt: (target: { x: number; y: number; z: number }, hpr: HprLike) => {
         lookAtCount.n++;

@@ -1097,3 +1097,10 @@ plugins, whose registrations no cleanup path would reach.
 The assistant refreshes its tools before the next prompt while retaining its
 conversation history. Plugin callbacks execute plugin-authored code, like a
 panel button; they should use the app API to update layers and other app state.
+
+The host exposes `app.getMapRenderer()` to read the current primary renderer.
+Engine declarations are enforced by the plugin manager for activation, URL
+parameters, project restoration, and delayed control registration, as well as
+by the Plugins menu and command palette. Renderer changes suspend unsupported
+plugins and retain their saved settings and activation for the return trip.
+Compatible plugins remount their controls on the replacement renderer.

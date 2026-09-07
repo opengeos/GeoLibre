@@ -1255,20 +1255,20 @@ export function DesktopShell({
     // or the map is reinitialised (mapReadyGeneration), not on every
     // incremental plugin write-back. projectPlugins is read from the store
     // snapshot at call time so it is always current without being a dependency.
-    // Every restore below re-binds a MapLibre control or source, so they need a
-    // native map. This used to be implied: the ref was null on the globe, so the
-    // effect never ran there. Now it holds a `CesiumEngine`, and the guard has to
-    // be stated (#2268 review). Making these restores engine-neutral is
-    // follow-up work, not a silent behaviour change here.
+    // Restore compatible plugins for either renderer. Native MapLibre layer
+    // producers remain below their own capability gate.
     const engine = mapControllerRef.current;
     if (!externalPluginsReady || !mapReadyGeneration || !engine) return;
-    if (!engine.capabilities.nativeMapInstance) return;
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
     pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();
+    if (!engine.capabilities.nativeMapInstance) {
+      void restoreLocalFileLayers();
+      return;
+    }
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
@@ -2674,16 +2674,6 @@ export function DesktopShell({
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}
                   />
-                  <RasterSubsetPanel
-                    layer={rasterSubsetLayer}
-                    onClose={() => setRasterSubsetLayer(null)}
-                    mapControllerRef={mapControllerRef}
-                  />
-                  <BasemapExtractPanel
-                    open={basemapExtractOpen}
-                    onClose={() => setBasemapExtractOpen(false)}
-                    mapControllerRef={mapControllerRef}
-                  />
                   <Suspense fallback={null}>
                     <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
                   </Suspense>
@@ -2696,6 +2686,18 @@ export function DesktopShell({
               )}
               {/* Renderer-neutral: these read the store rather than a
                   `MapController`, so they stay available on the 3D globe. */}
+              <RasterSubsetPanel
+                layer={rasterSubsetLayer}
+                onClose={() => setRasterSubsetLayer(null)}
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
+              <BasemapExtractPanel
+                open={basemapExtractOpen}
+                onClose={() => setBasemapExtractOpen(false)}
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <BoundsRestrictionIndicator />
               <QuickAnalysisBanner />
               <NetcdfProfileWindow />

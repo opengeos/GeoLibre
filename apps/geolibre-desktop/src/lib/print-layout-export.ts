@@ -1,3 +1,4 @@
+import type { MapEngine } from "@geolibre/map";
 /**
  * Print layout capture, legend building, and export (PNG / PDF).
  *
@@ -106,6 +107,29 @@ function cropCaptureToClip(
   return cropped;
 }
 
+/** Capture either engine while retaining the print scale and geographic crop. */
+export async function captureEngineMapImage(
+  engine: MapEngine,
+  clip?: CaptureClip | null,
+): Promise<CapturedMap> {
+  const surface = engine.getRenderSurface();
+  if (!surface) throw new Error("The map is not ready yet");
+  const bitmap = await createImageBitmap(await engine.captureImage());
+  try {
+    if (engine.getRenderSurface() !== surface)
+      throw new Error("The map was destroyed during capture");
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not create the print canvas");
+    context.drawImage(bitmap, 0, 0);
+    return captureMapImage(surface, clip, canvas);
+  } finally {
+    bitmap.close();
+  }
+}
+
 /**
  * Capture the current map view as a single composited canvas. All `<canvas>`
  * elements inside the map container (the MapLibre base canvas plus any deck.gl
@@ -117,7 +141,11 @@ function cropCaptureToClip(
  * @returns The composited image plus the ground scale and bearing needed to
  *   render a scale bar and north arrow.
  */
-export function captureMapImage(map: MapLike, clip?: CaptureClip | null): CapturedMap {
+export function captureMapImage(
+  map: MapLike,
+  clip?: CaptureClip | null,
+  captured?: HTMLCanvasElement,
+): CapturedMap {
   // Force a synchronous render first. MapLibre only paints on demand, so when
   // the Print Layout modal opens without any recent camera movement the
   // preserved drawing buffer can be stale or cleared -- which surfaced as a
@@ -139,7 +167,7 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   if (!ctx) {
     throw new Error("Could not acquire a 2D canvas context for map capture");
   }
-  const canvases = map.getContainer().querySelectorAll("canvas");
+  const canvases = captured ? [captured] : map.getContainer().querySelectorAll("canvas");
   canvases.forEach((c) => {
     // Skip the decorative effects overlay (the effects plugin's space /
     // starfield / atmosphere canvases). They are full-viewport but sit *behind*
@@ -152,7 +180,7 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
     // container -- the raster colorbar/colormap previews, the lidar profile
     // chart -- and stretching one of those over the page would overwrite the
     // map with, for example, a horizontal colormap ramp.
-    if (!isFullViewportMapCanvas(c, base)) return;
+    if (!captured && !isFullViewportMapCanvas(c, base)) return;
     try {
       ctx.drawImage(c, 0, 0, out.width, out.height);
     } catch (err) {

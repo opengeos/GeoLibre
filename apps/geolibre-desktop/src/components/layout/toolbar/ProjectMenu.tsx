@@ -411,10 +411,7 @@ export function ProjectMenu({
         {show("project.printLayout") && (
           <DropdownMenuItem
             onSelect={onPrintLayout}
-            // Print layout composes its preview and export from the MapLibre
-            // canvas, so it needs a native map instance rather than merely a
-            // camera (#2268 review).
-            disabled={!capabilities.nativeMapInstance || !exportImageCapability.granted}
+            disabled={!exportImageCapability.granted}
             aria-describedby={exportImageDeniedBy}
           >
             <Printer className="me-2 h-3.5 w-3.5" />

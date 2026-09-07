@@ -2517,7 +2517,8 @@ body,
 
 /* The draggable photo-placement pin's hint popup (manual placement of a
    non-geotagged photo). Themed to match the app's popover surface. */
-.geolibre-placement-popup-root .maplibregl-popup-content {
+.geolibre-placement-popup-root .maplibregl-popup-content,
+.maplibregl-ctrl.geolibre-placement-popup {
   background: hsl(var(--popover));
   border: 1px solid hsl(var(--border));
   border-radius: 0.5rem;

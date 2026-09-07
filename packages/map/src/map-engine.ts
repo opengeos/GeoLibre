@@ -151,6 +151,19 @@ export interface MapEngine {
    * without it return a no-op teardown and place nothing.
    */
   startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void;
+  /** Draw a two-corner extent; dispose cancels without calling callbacks. */
+  drawExtent(options: ExtentDrawingOptions): () => void;
+  /** Current visible geographic extent, or null when the view is unavailable. */
+  getViewBounds(): MapExtent | null;
+  /** Globe-native overlay; MapLibre panels keep their existing SVG overlay. */
+  showExtent(extent: MapExtent): () => void;
+  /** Rendered pixels and geometry for capture without requiring a MapLibre map. */
+  getRenderSurface(): MapRenderSurface | null;
+  getRenderStatus(): { pending: string[]; errors: string[] };
+  captureImage(): Promise<Blob>;
+  onCameraIdle(listener: () => void): () => void;
+  stopCamera(): void;
+  suspendNavigation(): () => void;
 
   // ----------------------------------------------------------------- controls
 
@@ -291,6 +304,23 @@ export interface ManualPlacementOptions {
   onMove: (lngLat: [number, number]) => void;
   /** Called once when the user clicks the "Done" button. */
   onDone?: () => void;
+}
+
+export type MapExtent = [west: number, south: number, east: number, north: number];
+
+export interface MapRenderSurface {
+  getCanvas(): HTMLCanvasElement;
+  getContainer(): HTMLElement;
+  getBearing(): number;
+  project(location: [number, number]): { x: number; y: number };
+  unproject(point: [number, number]): { lng: number; lat: number };
+  redraw(): void;
+}
+
+export interface ExtentDrawingOptions {
+  onChange: (extent: MapExtent) => void;
+  onDone?: (extent: MapExtent) => void;
+  onCancel?: () => void;
 }
 
 /**

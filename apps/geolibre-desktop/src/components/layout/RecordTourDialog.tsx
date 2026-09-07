@@ -17,7 +17,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFileNamePrompt } from "../../hooks/useFileNamePrompt";
 import {
@@ -130,6 +130,10 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const abortRef = useRef<AbortController | null>(null);
+  const renderer = useAppStore((state) => state.primaryRenderer);
+  useEffect(() => {
+    abortRef.current?.abort();
+  }, [renderer]);
   // Guards against a second handleSave landing before the "saving" state has
   // re-rendered (fast double-click / keyboard repeat on Enter), which would
   // otherwise fire two save dialogs or two downloads.
@@ -457,7 +461,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     });
 
   const handleRecord = async () => {
-    const map = mapControllerRef.current?.getMap();
+    const map = mapControllerRef.current;
     if (!map || keyframes.length < 2) return;
     setError(null);
     setSavedName(null);

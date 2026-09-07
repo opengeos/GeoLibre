@@ -76,6 +76,7 @@ import {
 import {
   clearPrintExtent,
   drawPrintExtent,
+  drawEnginePrintExtent,
   setPrintExtentVisible,
   showPrintExtent,
   type PrintExtent,
@@ -84,6 +85,7 @@ import {
   applyLegendConfig,
   buildLegend,
   captureMapImage,
+  captureEngineMapImage,
   copyLayoutToClipboard,
   exportAtlasPdf,
   exportAtlasPngZip,
@@ -345,7 +347,9 @@ export function PrintLayoutDialog({
   const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(initialLayout.extentBbox);
   const [drawingExtent, setDrawingExtent] = useState(false);
   // Atlas / map series: one page per coverage-layer feature (GH #1291).
-  const [atlasEnabled, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
+  const renderer = useAppStore((state) => state.primaryRenderer);
+  const [atlasEnabledSetting, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
+  const atlasEnabled = atlasEnabledSetting && renderer === "maplibre";
   const [atlasLayerId, setAtlasLayerId] = useState(initialLayout.atlasLayerId);
   // Coverage strategy: one page per feature, or pages tiling the layer's line
   // features in fixed-length stretches (GH #1291 follow-up).
@@ -609,10 +613,13 @@ export function PrintLayoutDialog({
     [legendConfig, entryIdsInOrder, setLegendConfig],
   );
 
+  const captureRequest = useRef(0);
   const recapture = useCallback(
-    (clipOverride?: PrintExtent | null) => {
-      const map = mapControllerRef.current?.getMap();
-      if (!map) {
+    async (clipOverride?: PrintExtent | null) => {
+      const request = ++captureRequest.current;
+      const engine = mapControllerRef.current;
+      const map = engine?.getMap();
+      if (!engine?.getRenderSurface()) {
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
@@ -621,7 +628,7 @@ export function PrintLayoutDialog({
       // it, so it must not fire later and overwrite the result (e.g. a viewport
       // recapture clobbering an extent the user drew while tiles were loading).
       if (idleRecaptureRef.current) {
-        map.off("idle", idleRecaptureRef.current);
+        map?.off("idle", idleRecaptureRef.current);
         idleRecaptureRef.current = null;
       }
       if (idleFallbackRef.current !== null) {
@@ -634,18 +641,21 @@ export function PrintLayoutDialog({
         clipOverride !== undefined ? clipOverride : captureMode === "extent" ? extentBbox : null;
       // An active graticule draws coordinate labels at the map edges; fit the
       // captured map with "contain" so the page crop does not trim them.
-      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
+      setMapFit(map?.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
       // Hide the extent box while reading the drawing buffer so its outline is
       // never baked into the captured image.
-      setPrintExtentVisible(map, false);
+      if (map) setPrintExtentVisible(map, false);
       try {
-        setCaptured(captureMapImage(map, clip));
+        const image = await captureEngineMapImage(engine, clip);
+        if (request !== captureRequest.current) return;
+        setCaptured(image);
         setError(null);
       } catch {
+        if (request !== captureRequest.current) return;
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
       } finally {
-        setPrintExtentVisible(map, true);
+        if (map && engine.getMap() === map) setPrintExtentVisible(map, true);
       }
     },
     [mapControllerRef, t, captureMode, extentBbox],
@@ -678,9 +688,10 @@ export function PrintLayoutDialog({
       // incorrect preview first.
       if (!atlasActiveRef.current) recapture();
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
+      captureRequest.current++;
       // Closing for good (not to draw): take the extent box off the map.
       if (map) {
-        clearPrintExtent(map);
+        if (map) clearPrintExtent(map);
         clearAtlasFeatureMask(map);
       }
     }
@@ -794,7 +805,7 @@ export function PrintLayoutDialog({
       revision,
       captureMode,
       extentBbox,
-      atlasEnabled,
+      atlasEnabled: atlasEnabledSetting,
       atlasLayerId,
       atlasCoverage,
       atlasSegmentKm,
@@ -875,7 +886,7 @@ export function PrintLayoutDialog({
       revision,
       captureMode,
       extentBbox,
-      atlasEnabled,
+      atlasEnabledSetting,
       atlasLayerId,
       atlasCoverage,
       atlasSegmentKm,
@@ -1702,7 +1713,16 @@ export function PrintLayoutDialog({
   const scaleEditable = Boolean(captured) && captureMode !== "extent";
   const applyScale = useCallback(
     (targetRatio: number) => {
-      const map = mapControllerRef.current?.getMap();
+      const engine = mapControllerRef.current;
+      const map = engine?.getMap();
+      if (engine && !map && captureMode !== "extent" && targetRatio > 0 && currentRatio > 0) {
+        engine.flyTo({
+          zoom: engine.readView().zoom + Math.log2(currentRatio / targetRatio),
+          duration: 0,
+        });
+        void recapture(null);
+        return;
+      }
       if (captureMode === "extent" || !map || !(targetRatio > 0) || !(currentRatio > 0)) {
         return;
       }
@@ -1772,8 +1792,9 @@ export function PrintLayoutDialog({
   // Hide the dialog so the map is interactive, let the user drag an extent box,
   // then reopen with the new extent active.
   const handleDrawExtent = useCallback(async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    const map = engine.getMap();
     const page = resolvePageSize(options);
     const aspect = page.width / page.height;
     const controller = new AbortController();
@@ -1782,10 +1803,9 @@ export function PrintLayoutDialog({
     setDrawingExtent(true);
     onOpenChange(false);
     try {
-      const extent = await drawPrintExtent(map, {
-        aspect,
-        signal: controller.signal,
-      });
+      const extent = map
+        ? await drawPrintExtent(map, { aspect, signal: controller.signal })
+        : await drawEnginePrintExtent(engine, controller.signal);
       // Aborted means the dialog unmounted mid-draw: do not touch state.
       if (controller.signal.aborted) return;
       if (extent) {
@@ -1794,9 +1814,9 @@ export function PrintLayoutDialog({
         recapture(extent);
       } else if (extentBbox) {
         // Cancelled drag: drop the half-drawn preview back to the prior extent.
-        showPrintExtent(map, extentBbox);
+        if (map) showPrintExtent(map, extentBbox);
       } else {
-        clearPrintExtent(map);
+        if (map) clearPrintExtent(map);
       }
     } finally {
       if (drawAbortRef.current === controller) drawAbortRef.current = null;
@@ -2355,7 +2375,9 @@ export function PrintLayoutDialog({
                   </Button>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">{t("printLayout.extent.hint")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t(renderer === "cesium" ? "rasterSubset.drawHint" : "printLayout.extent.hint")}
+              </p>
             </div>
 
             <Separator />
@@ -2367,7 +2389,7 @@ export function PrintLayoutDialog({
                 id="atlas-enabled"
                 label={t("printLayout.atlas.enable")}
                 checked={atlasEnabled}
-                disabled={atlasBusy}
+                disabled={atlasBusy || renderer !== "maplibre"}
                 onChange={(next) => {
                   setAtlasEnabled(next);
                   // Start the series from its first page on (re-)enable.

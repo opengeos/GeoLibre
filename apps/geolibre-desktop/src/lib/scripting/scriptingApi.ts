@@ -20,7 +20,7 @@ import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
 import { isTiff } from "./binary-output";
 import { beginProcessingRun } from "../processing-history";
-import { captureMapImage } from "../print-layout-export";
+import { imageBlobToDataUrl } from "@geolibre/map";
 import { styleParamPatch } from "./style-params";
 import { parameterKind } from "../whitebox-param-kind";
 import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
@@ -517,22 +517,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     },
 
     // -- export -------------------------------------------------------------
-    toImage: () => {
+    toImage: async () => {
       const engine = getController();
-      // Say which of the two it is. `getMap()` is null both while the map is
-      // still mounting and, permanently, on an engine with no MapLibre canvas —
-      // reporting "not ready yet" for the second would have a script waiting
-      // forever for a map that is never coming (#2268 review).
-      if (engine && !engine.capabilities.nativeMapInstance) {
-        throw new Error("Capturing the map image is not supported by the current rendering engine");
-      }
-      const map = engine?.getMap();
-      if (!map) throw new Error("The map is not ready yet");
-      // toDataURL is a synchronous PNG encode (100-400ms on a large/high-DPI
-      // viewport). In the in-app console (main thread) this briefly freezes the
-      // UI, so callers should avoid it in tight loops; the notebook path hides
-      // this behind the postMessage round-trip.
-      return captureMapImage(map).image.toDataURL("image/png");
+      if (!engine) throw new Error("The map is not ready yet");
+      return imageBlobToDataUrl(await engine.captureImage());
     },
   };
   return handlers;

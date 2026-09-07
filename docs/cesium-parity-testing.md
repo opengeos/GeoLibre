@@ -28,18 +28,18 @@ here; #2291 describes it as a possible follow-up.
 
 | Issues | Next work | Required evidence |
 | --- | --- | --- |
-| #2276 | Manual placement and shared extent drawing | Real pointer drag, cancellation, camera-input restoration, antimeridian extent, and raster-subset workflow |
-| #2277 | Engine-neutral capture, readiness, printing, and recording | Nonblank exported pixels, tile/tileset readiness, print output, recorded frames, and renderer teardown during capture |
+| #2276 | Implemented manual placement and shared extent drawing | Real pin drag and Done, rectangle drawing and Escape in both themes, renderer swaps, and Esri World Imagery extraction to a 22×12 EPSG:4326 GeoTIFF with nonconstant pixels; unit coverage includes antimeridian extents, pointer ownership, sky release, blur, and cancellation |
+| #2277 | Engine-neutral capture, readiness, viewport/extent printing, video and tour recording | Nonblank 872×648 PNG; real print PNG; 11.6 s H.264 recording at 872×648; two-stop VP9 WebM tour; failed-layer and renderer-destruction capture tests. Atlas masks and map-series camera fitting retain their MapLibre gate. |
 | #2278 | Shared per-feature style evaluation | Classified/rule/expression examples compared with MapLibre; invalid-expression fallback; live changes |
-| #2280 | Filters, shared timeline, story opacity | Composed filters narrow together; clearing restores features; fades restore latest styles without mutating the project |
-| #2281 | Extrusion and Z geometry | Known-height buildings and elevation profiles; scale/base/offset checks and terrain interactions |
+| #2280 (merged in #2298) | Filters, shared timeline, story opacity | Composed filters narrow together; clearing restores features; fades restore latest styles without mutating the project |
+| #2281 (merged in #2299) | Extrusion and Z geometry | Known-height buildings and elevation profiles; scale/base/offset checks and terrain interactions |
 | #2282 | Clustering and large-vector primitives | Cluster counts and zoom thresholds, feature picking, mixed geometry, removal, and measured performance on 50k+ features |
 | #2283 | Raster protocol bridge | Actual COG, DEM, raster PMTiles, and MBTiles; cancellation, errors, bounds, tile levels, and symbology |
 | #2284 | Hybrid native/drape vector-tile path | Real MVT/PMTiles/ArcGIS tiles, adjacent-tile seams, picking, style changes, cancellation, and bounded rendering resources |
 | #2285 | Native I3S, point clouds, splats; deck.gl gating | Real public sources for each supported format, resource disposal, picking, and accurate unsupported-layer badges |
 | #2286 | Keyless and COG terrain | Known elevations, tile boundaries, source replacement, exaggeration, missing tiles, and keyless browser checks |
 | #2287 | Native environment plugins | Sun/time changes, atmosphere, spin stop/start, cloud cleanup, and flight input/teardown in both themes |
-| #2288, #2262 | Audit remaining plugin compatibility requirements against merged engine declarations | Activation and renderer swaps must not leave orphan controls; command palette and menus must agree |
+| #2288, #2262 | Enforce declared support in activation, URL dispatch, project restore, delayed controls, and command palette | Tests cover unsupported callbacks, renderer round trips, saved settings, and compatible-control remounting. The wider control facade and native plugin implementations remain separate work. |
 | #2289 | Python/MCP/embed renderer authoring | Project round trips, renderer events, pane kinds, invalid inputs, and docs examples |
 | #2290 | Cesium-native authoring features | Separate real-data verification for Ion, tileset styling, clipping, KML/CZML, and terrain sampling |
 | #2261, #2259 | Update umbrella completion only after child requirements are verified | Accurate supported-layer predicates and an explicit record of remaining gaps |
@@ -54,3 +54,9 @@ here; #2291 describes it as a possible follow-up.
 4. Run relevant existing suites, the production build, lint, and formatting hooks.
 5. Keep tracking issues open until all child requirements are complete. Do not
    advertise a new capability or supported layer kind before its workflow works.
+
+Catalog audit: Source Coop, Open Data Catalogs, and ArcGIS Hub already declare
+both engines. STAC explicitly retains MapLibre dependencies for footprint
+picking. Planetary Computer and NASA Earthdata read their controls’ map;
+Hugging Face delegates file loading to the vector/raster controls. These are
+not automatically safe to ungate based on their catalog UI alone.

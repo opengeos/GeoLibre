@@ -55,6 +55,7 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
   }, [activeIndex, filtered]);
 
   const runCommand = (command: Command) => {
+    if (command.disabledReason) return;
     onOpenChange(false);
     command.run();
   };
@@ -137,15 +138,21 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
                     id={optionId(command)}
                     role="option"
                     aria-selected={isActive}
+                    aria-disabled={Boolean(command.disabledReason)}
                     data-active={isActive}
                     className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm ${
                       isActive ? "bg-accent text-accent-foreground" : "text-foreground"
-                    }`}
+                    } ${command.disabledReason ? "opacity-50" : ""}`}
                     onMouseMove={() => setActiveIndex(index)}
                     onClick={() => runCommand(command)}
                   >
                     {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
                     <span className="min-w-0 flex-1 truncate">{command.title}</span>
+                    {command.disabledReason ? (
+                      <span className="text-xs text-muted-foreground">
+                        {command.disabledReason}
+                      </span>
+                    ) : null}
                     {command.shortcut ? (
                       <kbd className="shrink-0 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                         {formatShortcut(command.shortcut, isMac)}
