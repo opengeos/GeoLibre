@@ -1,4 +1,3 @@
-import type { MapEngine } from "@geolibre/map";
 /**
  * Print layout capture, legend building, and export (PNG / PDF).
  *
@@ -9,7 +8,7 @@ import type { MapEngine } from "@geolibre/map";
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
 import { jsPDF } from "jspdf";
-import { isFullViewportMapCanvas } from "./print-capture";
+import { isFullViewportMapCanvas, type MapEngine } from "@geolibre/map";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";

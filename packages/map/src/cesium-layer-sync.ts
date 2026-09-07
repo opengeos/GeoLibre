@@ -552,10 +552,11 @@ export class CesiumLayerSync {
     for (const layer of this.currentLayers) {
       if (!layer.visible || layer.opacity === 0) continue;
       if (hasGeoJsonCollection(layer) && !layer.geojson?.features.length) continue;
-      if (!isCesiumSupportedLayerType(layer)) {
-        errors.push(`${layer.name}: this layer cannot render on the globe`);
-        continue;
-      }
+      // "2D only" kinds (PMTiles, Zarr, LiDAR, deck.gl-viz, ...) are skipped on
+      // the globe by design and flagged as such in the layer list, so they are
+      // not load failures: reporting them in `errors` would make every capture
+      // throw for an ordinary mixed project.
+      if (!isCesiumSupportedLayerType(layer)) continue;
       const entry = this.entries.get(layer.id);
       if (entry?.handle?.show === false) continue;
       if (entry?.loadError) errors.push(`${layer.name}: ${entry.loadError}`);

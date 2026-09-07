@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { isFullViewportMapCanvas } from "./print-capture";
+import { isFullViewportMapCanvas } from "@geolibre/map";
 
 /**
  * Records the live map to a video file by capturing the MapLibre canvas.

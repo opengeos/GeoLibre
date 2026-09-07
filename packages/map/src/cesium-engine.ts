@@ -724,11 +724,30 @@ export class CesiumEngine implements MapEngine {
       getBearing: () => this.readView().bearing,
       redraw: () => viewer.render(),
       project: ([lng, lat]) => {
-        const ground = groundHeightAt(C, viewer, lng, lat);
-        const point = C.SceneTransforms.worldToWindowCoordinates(
-          viewer.scene,
-          C.Cartesian3.fromDegrees(lng, lat, ground),
-        );
+        const toWindow = (lon: number, la: number) =>
+          C.SceneTransforms.worldToWindowCoordinates(
+            viewer.scene,
+            C.Cartesian3.fromDegrees(lon, la, groundHeightAt(C, viewer, lon, la)),
+          );
+        let point = toWindow(lng, lat);
+        if (!point) {
+          // Behind the camera (the user panned or tilted after drawing an
+          // extent): clamp into the visible rectangle so the caller clips to
+          // the canvas edge, the way MapLibre's off-screen pixel degrades,
+          // instead of failing the whole capture.
+          const view = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+          if (view) {
+            const degrees = C.Math.toDegrees;
+            const west = degrees(view.west);
+            let east = degrees(view.east);
+            if (east < west) east += 360;
+            let lon = lng < west ? lng + 360 : lng;
+            if (lon > east) lon = lon - 360 >= west ? lon - 360 : east;
+            lon = Math.min(east, Math.max(west, lon));
+            const la = Math.min(degrees(view.north), Math.max(degrees(view.south), lat));
+            point = toWindow(lon, la);
+          }
+        }
         if (!point) throw new Error("The requested extent is outside the globe view");
         return point;
       },

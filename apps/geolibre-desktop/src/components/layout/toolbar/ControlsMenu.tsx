@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import { TERRAIN_SETTINGS_EVENT } from "@geolibre/map";
 import {
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
@@ -211,9 +212,7 @@ export function ControlsMenu({
           ))}
           {show("controls.mapControl.terrain") && (
             <DropdownMenuItem
-              onClick={() =>
-                window.dispatchEvent(new CustomEvent("geolibre:terrain-settings-open"))
-              }
+              onClick={() => window.dispatchEvent(new CustomEvent(TERRAIN_SETTINGS_EVENT))}
             >
               {t("terrainSettings.title")}
             </DropdownMenuItem>
