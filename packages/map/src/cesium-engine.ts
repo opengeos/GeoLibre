@@ -205,6 +205,7 @@ export class CesiumEngine implements MapEngine {
    * See {@link registerBuiltInControl}.
    */
   private builtInControls = new Map<BuiltInMapControl, maplibregl.IControl>();
+  private builtInPositions = new Map<BuiltInMapControl, maplibregl.ControlPosition>();
 
   constructor(Cesium: CesiumNs, viewer: CesiumWidget, options: CesiumEngineOptions = {}) {
     this.Cesium = Cesium;
@@ -254,6 +255,7 @@ export class CesiumEngine implements MapEngine {
     // The control host tears the controls themselves down; drop the references
     // so a late setBuiltInControlVisible cannot re-add one to a dead globe.
     this.builtInControls.clear();
+    this.builtInPositions.clear();
     // The widget itself belongs to CesiumCanvas, which destroys it; dropping the
     // handle here is what stops a late listener from touching a dead viewer.
     this.viewer = null;
@@ -408,9 +410,12 @@ export class CesiumEngine implements MapEngine {
     return carto.height - ground;
   }
 
-  /** Always `"globe"`: Cesium draws an ellipsoid, never a flat projection. */
+  /** Both flat scene modes use the projected map instead of the 3D ellipsoid. */
   readProjection(): MapProjection {
-    return "globe";
+    const mode = this.live()?.scene.mode;
+    return mode === this.Cesium.SceneMode.SCENE2D || mode === this.Cesium.SceneMode.COLUMBUS_VIEW
+      ? "mercator"
+      : "globe";
   }
 
   applyMapPreferences(preferences: MapPreferences): void {
@@ -516,6 +521,32 @@ export class CesiumEngine implements MapEngine {
   restoreLayerStyles(): void {}
 
   // ------------------------------------------------------------------ picking
+
+  /** Ground coordinates under the cursor; an ellipsoid fallback has no terrain height. */
+  readPointerAtScreen(point: Cartesian2): {
+    coordinates: [number, number];
+    elevation: number | null;
+  } | null {
+    const viewer = this.live();
+    if (!viewer || this.isMorphing() || !Number.isFinite(point.x) || !Number.isFinite(point.y))
+      return null;
+    const { camera, scene } = viewer;
+    const ray = camera.getPickRay(point);
+    const ground = ray ? scene.globe.pick(ray, scene) : undefined;
+    const hit = ground ?? camera.pickEllipsoid(point, scene.globe.ellipsoid);
+    if (!hit) return null;
+    const position = scene.globe.ellipsoid.cartesianToCartographic(hit);
+    if (!position) return null;
+    const coordinates: [number, number] = [
+      this.Cesium.Math.toDegrees(position.longitude),
+      this.Cesium.Math.toDegrees(position.latitude),
+    ];
+    if (!coordinates.every(Number.isFinite)) return null;
+    return {
+      coordinates,
+      elevation: ground && Number.isFinite(position.height) ? position.height : null,
+    };
+  }
 
   identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
     const viewer = this.live();
@@ -634,11 +665,8 @@ export class CesiumEngine implements MapEngine {
    * Put a control the canvas built under a built-in control id, so the app's
    * existing Controls menu can govern it (issue #2270).
    *
-   * Only the fullscreen button uses this today. The globe's other two Cesium
-   * widgets — home and scene mode — have no entry in that menu and stay
-   * unconditional; the rest of the built-in controls are MapLibre's own and
-   * have no globe counterpart at all, which is why
-   * {@link setBuiltInControlVisible} still answers `false` for them.
+   * Home maps to navigation, the scene-mode picker to globe, and fullscreen
+   * keeps its shared id. Controls without a globe counterpart are refused.
    */
   registerBuiltInControl(control: BuiltInMapControl, instance: maplibregl.IControl): void {
     this.builtInControls.set(control, instance);
@@ -655,20 +683,25 @@ export class CesiumEngine implements MapEngine {
     // `addControl` is a no-op for a control already mounted and `removeControl`
     // for one already gone, so repeated calls (project restore replays every
     // control's visibility) settle rather than stacking duplicates.
-    if (visible) host.addControl(instance, "top-right");
+    if (visible) host.addControl(instance, this.getBuiltInControlPosition(control));
     else host.removeControl(instance);
     return true;
   }
 
-  getBuiltInControlPosition(_control: BuiltInMapControl): maplibregl.ControlPosition {
-    return "top-right";
+  getBuiltInControlPosition(control: BuiltInMapControl): maplibregl.ControlPosition {
+    return this.builtInPositions.get(control) ?? "top-right";
   }
 
   setBuiltInControlPosition(
-    _control: BuiltInMapControl,
-    _position: maplibregl.ControlPosition,
+    control: BuiltInMapControl,
+    position: maplibregl.ControlPosition,
   ): boolean {
-    return false;
+    const instance = this.builtInControls.get(control);
+    if (!instance || !this.isPrimary) return false;
+    const host = getPrimaryCesiumControlHost();
+    if (!host?.setControlPosition(instance, position)) return false;
+    this.builtInPositions.set(control, position);
+    return true;
   }
 
   setCompassLabel(_label: string): void {}

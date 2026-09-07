@@ -386,3 +386,26 @@ test.describe("Cesium toolbar controls on the globe", () => {
     });
   }
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`globe cursor coordinates update and clear on exit (${theme})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await waitForMap(page, `/?theme=${theme}`);
+    await chooseRenderer(page, "Cesium");
+    const canvas = page.getByTestId("primary-cesium").locator("canvas");
+    await expect(canvas).toBeVisible({ timeout: 60_000 });
+    const box = (await canvas.boundingBox())!;
+    const readout = page.locator("footer").getByRole("button", { name: /^Coords:/ });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(readout).not.toHaveText("Coords: —");
+    const first = await readout.innerText();
+    await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2);
+    await expect(readout).not.toHaveText(first);
+    await expect(readout).not.toHaveText("Coords: —");
+    await page.mouse.move(1, 1);
+    await expect(readout).toHaveText("Coords: —");
+    await chooseRenderer(page, "MapLibre");
+    await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+    await expect(readout).toHaveText("Coords: —");
+  });
+}

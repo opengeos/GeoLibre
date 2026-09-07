@@ -126,6 +126,8 @@ function makeViewer(groundHeight = 0) {
   // correction's own guard exits before re-applying and the assertion passes
   // whether or not it ran.
   let height = groundHeight;
+  let groundPick = true;
+  let ellipsoidPick = true;
   const moveEnd = makeEvent();
   const tileLoadProgressEvent = makeEvent();
   const morphComplete = makeEvent();
@@ -188,7 +190,7 @@ function makeViewer(groundHeight = 0) {
         state.pitch = options.offset.pitch;
       },
       getPickRay: () => ({ ray: true }),
-      pickEllipsoid: () => ({ x: state.lng, y: state.lat, z: 0 }),
+      pickEllipsoid: () => (ellipsoidPick ? { x: state.lng, y: state.lat, z: 0 } : undefined),
     },
     scene: {
       canvas,
@@ -202,10 +204,13 @@ function makeViewer(groundHeight = 0) {
         maximumZoomDistance: Infinity,
       },
       globe: {
-        ellipsoid: { name: "wgs84" },
+        ellipsoid: {
+          name: "wgs84",
+          cartesianToCartographic: makeCesium().Cartographic.fromCartesian,
+        },
         tileLoadProgressEvent,
         getHeight: () => height,
-        pick: () => ({ x: state.lng, y: state.lat, z: 0 }),
+        pick: () => (groundPick ? { x: state.lng, y: state.lat, z: height } : undefined),
       },
     },
   };
@@ -226,6 +231,10 @@ function makeViewer(groundHeight = 0) {
   }
   return {
     viewer: viewer as never,
+    setPickHits(ground: boolean, ellipsoid: boolean) {
+      groundPick = ground;
+      ellipsoidPick = ellipsoid;
+    },
     moveEnd,
     tileLoadProgressEvent,
     morphComplete,
@@ -1232,4 +1241,71 @@ it("rejects far-side coordinates before GPU picking, including below-sea-level t
   engine.identifyFeatures([180, 0]);
   assert.equal(picks, 3, "flat views must not use 3D occlusion");
   engine.destroy();
+});
+
+describe("Cesium cursor ground picking", () => {
+  it("keeps signed terrain elevation, falls back to the ellipsoid, and clears sky/morph hits", () => {
+    const C = makeCesium();
+    const f = makeViewer(-42);
+    const engine = new CesiumEngine(C, f.viewer);
+    const point = new C.Cartesian2(400, 300);
+    assert.deepEqual(engine.readPointerAtScreen(point), { coordinates: [0, 0], elevation: -42 });
+    f.setPickHits(false, true);
+    assert.deepEqual(engine.readPointerAtScreen(point), { coordinates: [0, 0], elevation: null });
+    f.setPickHits(false, false);
+    assert.equal(engine.readPointerAtScreen(point), null);
+    f.setPickHits(true, true);
+    f.setSceneMode(C.SceneMode.MORPHING);
+    assert.equal(engine.readPointerAtScreen(point), null);
+    f.setSceneMode(C.SceneMode.SCENE3D);
+    assert.equal(engine.readPointerAtScreen(new C.Cartesian2(NaN, 0)), null);
+    engine.destroy();
+    assert.equal(engine.readPointerAtScreen(point), null);
+  });
+});
+
+it("reports the projected scene modes and the 3D globe", () => {
+  const C = makeCesium();
+  const f = makeViewer();
+  const engine = new CesiumEngine(C, f.viewer);
+  for (const mode of [C.SceneMode.SCENE2D, C.SceneMode.COLUMBUS_VIEW]) {
+    f.setSceneMode(mode);
+    assert.equal(engine.readProjection(), "mercator");
+  }
+  f.setSceneMode(C.SceneMode.SCENE3D);
+  assert.equal(engine.readProjection(), "globe");
+  engine.destroy();
+});
+
+it("remembers a hidden control's corner and refuses unregistered/pane controls", () => {
+  const positions: string[] = [];
+  setPrimaryCesiumControlHost({
+    setControlPosition: (_control: unknown, position: string) => {
+      positions.push(position);
+      return true;
+    },
+    addControl: (_control: unknown, position: string) => {
+      positions.push(position);
+      return true;
+    },
+    removeControl: () => {},
+  } as unknown as CesiumControlHost);
+  const engine = new CesiumEngine(makeCesium(), makeViewer().viewer);
+  const pane = new CesiumEngine(makeCesium(), makeViewer().viewer, { viewId: "pane" });
+  try {
+    const control = {} as never;
+    engine.registerBuiltInControl("fullscreen", control);
+    pane.registerBuiltInControl("fullscreen", control);
+    assert.equal(engine.setBuiltInControlPosition("compass", "top-left"), false);
+    assert.equal(pane.setBuiltInControlPosition("fullscreen", "top-left"), false);
+    engine.setBuiltInControlVisible("fullscreen", false);
+    assert.equal(engine.setBuiltInControlPosition("fullscreen", "bottom-left"), true);
+    assert.equal(engine.getBuiltInControlPosition("fullscreen"), "bottom-left");
+    engine.setBuiltInControlVisible("fullscreen", true);
+    assert.deepEqual(positions, ["bottom-left", "bottom-left"]);
+  } finally {
+    engine.destroy();
+    pane.destroy();
+    setPrimaryCesiumControlHost(null);
+  }
 });

@@ -1,4 +1,5 @@
 import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
+import { createCesiumLabeler } from "./cesium-labels";
 import type {
   Cesium3DTileset,
   CesiumWidget,
@@ -294,7 +295,15 @@ function entryKind(layer: GeoLibreLayer): EntryKind {
 // alpha instead of reloading the whole GeoJsonDataSource on every tick.
 function styleSignature(layer: GeoLibreLayer): string {
   const style = layer.style ?? {};
-  return [style.fillColor, style.strokeColor, style.strokeWidth, style.markerColor].join("|");
+  return JSON.stringify([
+    style.fillColor,
+    style.strokeColor,
+    style.strokeWidth,
+    style.markerColor,
+    style.labels,
+    style.minZoom,
+    style.maxZoom,
+  ]);
 }
 
 /**
@@ -749,9 +758,13 @@ export class CesiumLayerSync {
         viewer.dataSources.remove(dataSource, true);
         return;
       }
+      const labelEntity = createCesiumLabeler(Cesium, viewer, layer);
       for (const entity of dataSource.entities.values) {
         const index = entity.properties?.[indexKey]?.getValue(viewer.clock.currentTime);
-        if (Number.isInteger(index)) this.featureRefs.set(entity, { layerId: layer.id, index });
+        if (Number.isInteger(index)) {
+          this.featureRefs.set(entity, { layerId: layer.id, index });
+          labelEntity(entity, index);
+        }
       }
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
@@ -857,6 +870,15 @@ export class CesiumLayerSync {
       }
       if (feature.billboard) {
         feature.billboard.color = new Cesium.ConstantProperty(marker);
+      }
+      if (feature.label) {
+        const labels = style.labels;
+        feature.label.fillColor = new Cesium.ConstantProperty(
+          Cesium.Color.fromCssColorString(labels?.color ?? "#111827").withAlpha(opacity),
+        );
+        feature.label.outlineColor = new Cesium.ConstantProperty(
+          Cesium.Color.fromCssColorString(labels?.haloColor ?? "#ffffff").withAlpha(opacity),
+        );
       }
     }
   }

@@ -420,10 +420,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({
             // Top-right, above MapLibre's navigation control on the 2D map, so
             // the toolbar reads the same whichever renderer is drawing.
             for (const control of controls.all) host.addControl(control, "top-right");
-            // Hand the fullscreen button to the engine so Controls → Fullscreen
-            // governs it here as it does on the 2D map. The other widgets have no
-            // menu counterpart and stay unconditional.
+            // Register native counterparts for shared visibility and positioning.
             engine.registerBuiltInControl("fullscreen", controls.fullscreen);
+            engine.registerBuiltInControl("navigation", controls.home);
+            engine.registerBuiltInControl("globe", controls.sceneMode);
           }
         }
 

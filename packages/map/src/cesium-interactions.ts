@@ -72,6 +72,11 @@ export function installCesiumInteractions(
       frame = 0;
       const point = pending;
       const state = useAppStore.getState();
+      const pointer = point ? engine.readPointerAtScreen(point) : null;
+      state.setPointerCoords(pointer?.coordinates ?? null);
+      state.setPointerElevation(
+        state.preferences.map.showPointerElevation ? (pointer?.elevation ?? null) : null,
+      );
       hover?.remove();
       hover = null;
       if (!point || moving || state.identifyLayerId) return;
@@ -133,6 +138,13 @@ export function installCesiumInteractions(
     );
   };
   const unsubscribe = useAppStore.subscribe((state, prev) => {
+    if (state.preferences.map.showPointerElevation !== prev.preferences.map.showPointerElevation) {
+      state.setPointerElevation(
+        state.preferences.map.showPointerElevation && pending
+          ? (engine.readPointerAtScreen(pending)?.elevation ?? null)
+          : null,
+      );
+    }
     if (
       state.selectedLayerId !== prev.selectedLayerId ||
       state.selectedFeatureIds !== prev.selectedFeatureIds ||
@@ -154,12 +166,17 @@ export function installCesiumInteractions(
       clearPopup();
     }
   };
-  viewer.canvas.addEventListener("mouseleave", clearHover);
+  const leave = () => {
+    clearHover();
+    useAppStore.getState().setPointerCoords(null);
+  };
+  viewer.canvas.addEventListener("mouseleave", leave);
   window.addEventListener("keydown", escape);
   const moveStart = () => {
     moving = true;
     clearHover();
     clearPopup();
+    useAppStore.getState().setPointerCoords(null);
   };
   const moveEnd = () => {
     moving = false;
@@ -171,9 +188,9 @@ export function installCesiumInteractions(
   return () => {
     unsubscribe();
     handler.destroy();
-    clearHover();
+    leave();
     clearPopup();
-    viewer.canvas.removeEventListener("mouseleave", clearHover);
+    viewer.canvas.removeEventListener("mouseleave", leave);
     window.removeEventListener("keydown", escape);
     viewer.camera.moveStart.removeEventListener(moveStart);
     viewer.camera.moveEnd.removeEventListener(moveEnd);

@@ -173,6 +173,14 @@ export class CesiumControlHost {
     return this.container;
   }
 
+  /** Move the existing DOM without destroying a widget or its event bindings. */
+  setControlPosition(control: maplibregl.IControl, position: maplibregl.ControlPosition): boolean {
+    if (!Object.hasOwn(this.corners, position)) return false;
+    const element = this.controls.get(control);
+    if (element) this.corners[position].appendChild(element);
+    return true;
+  }
+
   /**
    * Mounts a MapLibre control onto the Cesium viewer container in the requested corner.
    *

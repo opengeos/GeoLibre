@@ -51,6 +51,30 @@ describe("CesiumControlHost", () => {
     } as never);
   });
 
+  it("moves a control without remounting its widget and rejects invalid corners", () => {
+    const host = new CesiumControlHost(viewer as never, parent);
+    const element = doc.createElement("button");
+    let mounts = 0;
+    let removals = 0;
+    const control = {
+      onAdd: () => {
+        mounts++;
+        return element;
+      },
+      onRemove: () => {
+        removals++;
+      },
+    };
+    host.addControl(control);
+    assert.equal(host.setControlPosition(control, "bottom-left"), true);
+    assert.equal(element.parentElement?.className, "maplibregl-ctrl-bottom-left");
+    assert.equal(mounts, 1);
+    assert.equal(removals, 0);
+    assert.equal(host.setControlPosition(control, "constructor" as never), false);
+    host.destroy();
+    assert.equal(removals, 1);
+  });
+
   it("creates corner containers with pointer-events: none over the parent", () => {
     const host = new CesiumControlHost(viewer as never, parent);
     const container = host.getContainer();

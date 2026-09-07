@@ -290,14 +290,14 @@ export type CesiumWidgetControlHandle = maplibregl.IControl & {
 /**
  * The Cesium toolbar controls for one globe, in the order they are stacked.
  *
- * `fullscreen` is named separately because it is the one the app already has a
- * toggle for — Controls → Fullscreen — so `CesiumEngine` needs a handle on it
- * to answer `setBuiltInControlVisible`. The remaining controls have no such counterpart
- * and are simply always present.
+ * Named handles let the engine route shared control visibility and position
+ * changes to home (navigation), scene mode (globe), and fullscreen.
  */
 export interface CesiumWidgetControls {
   /** Every control, in stacking order. */
   all: CesiumWidgetControlHandle[];
+  home: CesiumWidgetControlHandle;
+  sceneMode: CesiumWidgetControlHandle;
   fullscreen: CesiumWidgetControlHandle;
 }
 
@@ -319,13 +319,17 @@ export function createCesiumWidgetControls(
   hasIonToken = false,
 ): CesiumWidgetControls {
   const fullscreen = new CesiumFullscreenControl(viewer, labels, fullscreenElement);
+  const home = new CesiumHomeControl(viewer, labels);
+  const sceneMode = new CesiumSceneModeControl(viewer, labels);
   return {
     all: [
-      new CesiumHomeControl(viewer, labels),
-      new CesiumSceneModeControl(viewer, labels),
+      home,
+      sceneMode,
       new CesiumBaseLayerPickerControl(viewer, labels, hasIonToken),
       fullscreen,
     ],
     fullscreen,
+    home,
+    sceneMode,
   };
 }

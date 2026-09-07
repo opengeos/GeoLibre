@@ -36,6 +36,10 @@ function setup() {
   let destroyed = false;
   let queries = 0;
   let highlights = 0;
+  let pointer: { coordinates: [number, number]; elevation: number | null } | null = {
+    coordinates: [-83.9, 35.9],
+    elevation: -12,
+  };
   const layers = [false, true, true].map(
     (click, index): GeoLibreLayer => ({
       id: String(index),
@@ -86,6 +90,7 @@ function setup() {
         highlights++;
       },
       readView: () => ({ zoom: 3 }),
+      readPointerAtScreen: () => pointer,
     } as never,
     () => "Fermer",
   );
@@ -93,6 +98,14 @@ function setup() {
     document,
     camera,
     frames,
+    setPointer: (value: typeof pointer) => {
+      pointer = value;
+    },
+    flush: () => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      for (const callback of callbacks) callback(0);
+    },
     click: () =>
       actions.get(ScreenSpaceEventType.LEFT_CLICK)?.({ position: new Cartesian2(10, 10) }),
     hover: () =>
@@ -120,6 +133,43 @@ it("selects the first eligible hit, even when a disabled popup is topmost", () =
   assert.equal(button.getAttribute("type"), "button");
   button.click();
   assert.equal(f.document.querySelector(".geolibre-identify-popup"), null);
+});
+
+it("publishes cursor coordinates even with Identify active and honours elevation preferences", () => {
+  const f = setup();
+  const preferences = useAppStore.getState().preferences;
+  useAppStore.setState({
+    preferences: { ...preferences, map: { ...preferences.map, showPointerElevation: true } },
+  });
+  f.hover();
+  f.flush();
+  assert.deepEqual(useAppStore.getState().pointerCoords, [-83.9, 35.9]);
+  assert.equal(useAppStore.getState().pointerElevation, -12);
+  assert.equal(f.queries, 0);
+  useAppStore.setState({
+    preferences: { ...preferences, map: { ...preferences.map, showPointerElevation: false } },
+  });
+  assert.equal(useAppStore.getState().pointerElevation, null);
+  f.setPointer(null);
+  f.hover();
+  f.flush();
+  assert.equal(useAppStore.getState().pointerCoords, null);
+});
+
+it("clears cursor state and queued movement on pointer exit and renderer teardown", () => {
+  const f = setup();
+  f.hover();
+  f.flush();
+  f.hover();
+  f.document.querySelector("canvas")!.dispatchEvent(new window.Event("mouseleave"));
+  assert.equal(f.frames.size, 0);
+  assert.equal(useAppStore.getState().pointerCoords, null);
+  f.hover();
+  f.flush();
+  cleanup!();
+  cleanup = undefined;
+  assert.equal(useAppStore.getState().pointerCoords, null);
+  assert.equal(useAppStore.getState().pointerElevation, null);
 });
 
 it("does not query or select on a click when Identify is off", () => {
