@@ -436,3 +436,201 @@ def test_load_featurecollection_geo_interface():
 def test_load_featurecollection_invalid():
     with pytest.raises(ValueError):
         project.load_featurecollection(42)
+
+
+# -- popups, tooltips, and marker symbology ------------------------------------
+
+
+def test_popup_field_builds_format_block():
+    config = project.popup_field(
+        "pop", label="Population", kind="number", decimals=1, thousands=True, suffix=" people"
+    )
+    assert config == {
+        "field": "pop",
+        "label": "Population",
+        "kind": "number",
+        "format": {"decimals": 1, "thousands": True, "suffix": " people"},
+    }
+
+
+def test_popup_field_omits_the_default_kind_and_empty_format():
+    assert project.popup_field("name") == {"field": "name"}
+
+
+def test_popup_field_rejects_an_unknown_kind():
+    with pytest.raises(ValueError, match="kind must be one of"):
+        project.popup_field("name", kind="markdown")
+
+
+def test_popup_field_rejects_an_unknown_date_format():
+    with pytest.raises(ValueError, match="date_format must be one of"):
+        project.popup_field("when", kind="date", date_format="rfc2822")
+
+
+def test_popup_field_rejects_decimals_out_of_intl_range():
+    # Intl.NumberFormat throws past 20, taking the whole popup render with it.
+    with pytest.raises(ValueError, match="decimals must be between 0 and 20"):
+        project.popup_field("pop", kind="number", decimals=25)
+
+
+def test_popup_field_rejects_a_blank_name():
+    with pytest.raises(ValueError, match="non-empty string"):
+        project.popup_field("   ")
+
+
+def test_normalize_popup_returns_none_when_nothing_is_configured():
+    assert project.normalize_popup() is None
+
+
+def test_normalize_popup_accepts_a_single_field_name():
+    assert project.normalize_popup("name") == {"fields": [{"field": "name"}]}
+
+
+def test_normalize_popup_false_suppresses_the_click_popup():
+    assert project.normalize_popup(False) == {"click": False}
+
+
+def test_normalize_popup_accepts_names_and_mappings_together():
+    config = project.normalize_popup(["name", {"field": "photo", "kind": "image"}])
+    assert config["fields"] == [{"field": "name"}, {"field": "photo", "kind": "image"}]
+
+
+def test_normalize_popup_accepts_camel_and_snake_config_keys():
+    snake = project.normalize_popup({"title_field": "name", "show_feature_id": False})
+    camel = project.normalize_popup({"titleField": "name", "showFeatureId": False})
+    assert snake == camel == {"titleField": "name", "showFeatureId": False}
+
+
+def test_normalize_popup_rejects_an_unknown_config_key():
+    with pytest.raises(ValueError, match="unknown popup key 'titel'"):
+        project.normalize_popup({"titel": "name"})
+
+
+def test_normalize_popup_rejects_an_unknown_field_key():
+    with pytest.raises(ValueError, match="unknown popup field key 'kinde'"):
+        project.normalize_popup([{"field": "name", "kinde": "text"}])
+
+
+def test_normalize_popup_accepts_a_nested_format_block():
+    config = project.normalize_popup(
+        [{"field": "pop", "kind": "number", "format": {"decimals": 0, "thousands": True}}]
+    )
+    assert config["fields"][0]["format"] == {"decimals": 0, "thousands": True}
+
+
+def test_tooltip_flags_the_named_field_and_turns_hover_on():
+    config = project.normalize_popup(["name", "pop"], tooltip="name")
+    assert config["hover"] is True
+    assert config["fields"] == [{"field": "name", "hover": True}, {"field": "pop"}]
+
+
+def test_tooltip_adds_a_field_the_popup_did_not_list():
+    # The hover subset is drawn from `fields`, so a tooltip-only property still
+    # has to appear there or the tip would come up empty.
+    config = project.normalize_popup(["name"], tooltip=["elev"])
+    assert config["fields"][-1] == {"field": "elev", "hover": True}
+
+
+def test_tooltip_true_flags_every_configured_field():
+    config = project.normalize_popup(["name", "pop"], tooltip=True)
+    assert [entry["hover"] for entry in config["fields"]] == [True, True]
+
+
+def test_tooltip_true_without_anything_to_show_is_rejected():
+    # createHoverTooltipElement returns null for this, so the tooltip would
+    # silently never appear.
+    with pytest.raises(ValueError, match="tooltip=True needs popup fields"):
+        project.normalize_popup(tooltip=True)
+
+
+def test_tooltip_true_is_allowed_when_a_title_carries_the_tip():
+    config = project.normalize_popup({"title": "name"}, tooltip=True)
+    assert config == {"titleField": "name", "hover": True}
+
+
+def test_tooltip_false_turns_hover_off():
+    assert project.normalize_popup("name", tooltip=False)["hover"] is False
+
+
+def test_popup_can_be_spelled_inside_the_config_mapping():
+    assert project.normalize_popup({"fields": ["name"], "tooltip": "name"}) == {
+        "fields": [{"field": "name", "hover": True}],
+        "hover": True,
+    }
+
+
+def test_layer_builders_put_the_popup_beside_the_style_not_in_it():
+    layer = project.geojson_layer("Sites", POINT_FC, popup=["name"], tooltip="name")
+    assert layer["popup"] == {"fields": [{"field": "name", "hover": True}], "hover": True}
+    assert "popup" not in layer["style"]
+    assert "tooltip" not in layer["style"]
+
+
+def test_layer_builders_omit_the_popup_key_when_none_is_asked_for():
+    assert "popup" not in project.geojson_layer("Sites", POINT_FC)
+
+
+def test_normalize_hex_color_expands_shorthand_and_rejects_names():
+    assert project.normalize_hex_color("f00") == "#ff0000"
+    assert project.normalize_hex_color("#F00") == "#ff0000"
+    assert project.normalize_hex_color("red") is None
+
+
+def test_marker_style_keeps_circle_rendering_by_default():
+    style = project.marker_style(color="#e11d48", radius=8, opacity=0.5)
+    assert style["circleRadius"] == 8
+    assert "markerEnabled" not in style
+
+
+def test_marker_style_switches_to_a_sprite_for_a_shape():
+    style = project.marker_style(shape="pin", color="#e11d48", size=32)
+    assert style["markerEnabled"] is True
+    assert style["markerShape"] == "pin"
+    assert style["markerColor"] == "#e11d48"
+    assert style["markerSize"] == 32
+
+
+def test_marker_style_size_alone_enables_the_sprite():
+    assert project.marker_style(size=24)["markerEnabled"] is True
+
+
+def test_marker_style_icon_implies_a_custom_shape():
+    style = project.marker_style(icon="<svg/>")
+    assert style["markerShape"] == "custom"
+    assert style["markerSvg"] == "<svg/>"
+
+
+def test_marker_style_custom_shape_needs_an_icon():
+    with pytest.raises(ValueError, match='shape="custom" needs icon='):
+        project.marker_style(shape="custom")
+
+
+def test_marker_style_rejects_a_named_color_for_a_sprite():
+    # The sprite baker runs markerColor through normalizeHexColor and falls
+    # back to blue, so a CSS name would draw the wrong marker in silence.
+    with pytest.raises(ValueError, match="marker sprites need a hex color"):
+        project.marker_style(shape="pin", color="red")
+
+
+def test_marker_style_allows_a_named_color_for_a_circle():
+    style = project.marker_style(color="red")
+    assert style["fillColor"] == "red"
+    assert "markerColor" not in style
+
+
+def test_marker_style_rejects_an_unknown_shape():
+    with pytest.raises(ValueError, match="shape must be one of"):
+        project.marker_style(shape="hexagon")
+
+
+def test_marker_style_rejects_out_of_range_numbers():
+    with pytest.raises(ValueError, match="opacity must be between 0 and 1"):
+        project.marker_style(opacity=1.5)
+    with pytest.raises(ValueError, match="radius must be a finite number"):
+        project.marker_style(radius=0)
+    with pytest.raises(ValueError, match="size must be a finite number"):
+        project.marker_style(size=float("nan"))
+
+
+def test_marker_style_is_empty_when_nothing_is_passed():
+    assert project.marker_style() == {}

@@ -272,8 +272,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv(data, x="longitude", y="latitude", name=, **style)` / `add_xy_data(...)` | Add points from a CSV path, URL, text, DataFrame, or row mappings. |
-| `add_marker(lng, lat, name=, properties=, **style)` | Add a single point marker (shown as a circle; `properties` appear on click). |
-| `add_markers(points, name=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
+| `add_marker(lng, lat, name=, properties=, color=, opacity=, radius=, stroke_color=, stroke_width=, shape=, size=, icon=, **style)` | Add a single point marker (`properties` appear on click). |
+| `add_markers(points, name=, color=, opacity=, radius=, stroke_color=, stroke_width=, shape=, size=, icon=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
 | `add_circle_markers(points, name=, radius=, **style)` | Add circle markers with an explicit `radius`. |
 | `add_marker_cluster(points, name=, cluster_radius=, cluster_max_zoom=, **style)` | Add clustered point markers. |
 | `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add point data using the density heatmap renderer, optionally weighted by a numeric field. |
@@ -308,12 +308,102 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `rename_layer(layer, name)` / `move_layer(layer, index)` / `duplicate_layer(layer, name=)` / `show_layer(layer)` / `hide_layer(layer)` | Manage layers by id, name, or `Layer` handle. |
 | `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
+| `set_popup(layer, fields=None, click=, hover=, title=, title_expression=, body_expression=, show_feature_id=, tooltip=, merge=False)` | Choose what a click popup shows for a layer, and how each value is formatted. |
+| `set_tooltip(layer, fields=True)` / `clear_popup(layer)` | Turn a hover tooltip on (or off), or drop the popup config and restore the default popup. |
 | `to_project(keep_credentials=False)` | Return the current project as a dict, credentials redacted unless `keep_credentials=True`. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |
 | `save_project(path, keep_credentials=False)` | Write the current project to a `.geolibre.json` file, credentials redacted unless `keep_credentials=True`. |
 
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
+
+### Marker symbology
+
+`add_marker` and `add_markers` take the common point-symbology settings as named
+arguments, so you do not have to know the underlying style keys:
+
+```python
+m.add_markers(points, color="#e11d48", radius=8, stroke_color="#ffffff", stroke_width=2)
+m.add_markers(points, shape="pin", color="#e11d48", size=32)
+m.add_markers(points, icon='<svg viewBox="0 0 24 24">…</svg>', size=28)
+```
+
+A point layer draws two ways. By default it is a MapLibre circle sized by
+`radius`. Passing `shape`, `size`, or `icon` switches it to a **marker sprite**:
+one of `circle`, `square`, `triangle`, `diamond`, `star`, `cross`, `pin`, or
+`custom` (which needs `icon`, raw SVG markup or a data URL). A sprite is sized by
+`size` rather than `radius`, and its `color` must be a hex color — the sprite
+baker accepts nothing else, so a CSS color name is rejected rather than silently
+drawn in the default blue.
+
+### Popups and tooltips
+
+Without any configuration, clicking a feature shows the layer name and every
+visible property, and there is no hover tooltip. Every `add_*` method takes
+`popup=` and `tooltip=` to change that, and `set_popup` / `set_tooltip` /
+`clear_popup` change it on a layer that already exists.
+
+```python
+m.add_markers(
+    points,
+    popup={
+        "title": "name",                 # heading, instead of the layer name
+        "fields": [
+            {"field": "name", "label": "Site"},
+            {"field": "photo", "kind": "image", "label": "Photo"},
+            {"field": "url", "kind": "link", "link_label": "Read more"},
+            {"field": "pop", "kind": "number", "thousands": True, "suffix": " people"},
+            {"field": "surveyed", "kind": "date", "date_format": "datetime"},
+        ],
+    },
+    tooltip="name",
+)
+
+m.set_popup("Sites", ["name", "pop"], title="name")   # replace the config
+m.set_tooltip("Sites", ["name"])                       # add a hover tip
+m.set_popup("Sites", click=False)                      # no popup on click
+m.clear_popup("Sites")                                 # back to the default
+```
+
+`popup=` also accepts shorter forms: a single property name (`popup="name"`), a
+list of names (`popup=["name", "pop"]`), a list of field mappings, or `False` to
+suppress the click popup. The full mapping form above takes the same keys as
+`set_popup` — `fields`, `click`, `hover`, `title`, `title_expression`,
+`body_expression`, `show_feature_id`, `tooltip` — and rejects a key it does not
+know, so a misspelling is an error rather than a setting that quietly does
+nothing. Those keys belong *inside* `popup=`; passed to `add_markers` directly
+they would be taken for style keys. `tooltip=` takes a property name, a list
+of names, `True` to put every configured popup field in the tip, or `False` to
+turn it off.
+
+A field's `kind` decides how the value renders:
+
+| `kind` | Renders as |
+| --- | --- |
+| `auto` (default) | Text, except an inline base64 raster data URL, which becomes a thumbnail. |
+| `text` | Text, with `prefix`/`suffix` applied. |
+| `number` | A localized number; `decimals`, `thousands`, `prefix`, `suffix`. |
+| `date` | A localized date; `date_format` is `date`, `datetime`, `time`, `iso`, or `year`. |
+| `link` | An `http(s)` value becomes a link, labelled `link_label`. |
+| `image` | An `http(s)` value or inline base64 raster data URL becomes a thumbnail. |
+
+Two rules worth knowing before you port a popup from another library:
+
+- **Raw HTML in a property is not rendered as markup.** A popup value that
+  arrives from a GeoJSON file is untrusted, so it is written as text rather
+  than parsed. Use `kind="image"` and `kind="link"` for pictures and links, and
+  `body_expression` (a [MapLibre expression](https://maplibre.org/maplibre-style-spec/expressions/),
+  as JSON text) when you want a composed sentence instead of a table:
+  `body_expression='["concat", ["get", "name"], " — ", ["get", "county"], " County"]'`.
+  The one exception is a KML `description` property, whose known markup is
+  sanitized and rendered, so a converted KML keeps its description card.
+- **A tooltip needs fields flagged for hover.** `tooltip=` does that flagging
+  for you, and a tooltip that could never show anything is an error rather than
+  a tip that silently never appears. A field named only in `tooltip=` is added
+  to the popup's field list, so it appears in the click popup too; to keep a
+  field out of the click popup, hide it on the layer instead. Image fields are
+  skipped in tooltips (they would print a data URL); the click popup shows the
+  picture.
 
 ## Use in marimo
 

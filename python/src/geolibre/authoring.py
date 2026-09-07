@@ -551,6 +551,92 @@ def apply_style(project: dict[str, Any], ref: str, style: dict[str, Any]) -> dic
     return merged
 
 
+def set_popup(
+    project: dict[str, Any],
+    ref: str,
+    fields: Any = None,
+    *,
+    click: bool | None = None,
+    hover: bool | None = None,
+    title: str | None = None,
+    title_expression: str | None = None,
+    body_expression: str | None = None,
+    show_feature_id: bool | None = None,
+    tooltip: Any = None,
+    merge: bool = False,
+) -> dict[str, Any]:
+    """Configure what a layer shows when a feature is clicked or hovered.
+
+    A layer with no popup config keeps the app's default: the layer name as the
+    heading, then every visible property as a key/value row, and no hover
+    tooltip. Configuring one narrows and formats that -- see
+    :func:`geolibre.project.popup_config` for the field vocabulary.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        fields: The fields to show and their order; property names and/or
+            :func:`geolibre.project.popup_field` mappings.
+        click: ``False`` suppresses the click popup.
+        hover: ``True`` shows a hover tooltip built from the ``hover`` fields.
+        title: Property whose value titles the popup.
+        title_expression: MapLibre expression source producing the title.
+        body_expression: MapLibre expression source producing the popup body.
+        show_feature_id: ``False`` drops the synthetic ``id`` row.
+        tooltip: Hover shorthand -- a property name, a sequence of names,
+            ``True`` to flag every configured field, or ``False`` to turn the
+            tooltip off.
+        merge: Merge into the layer's existing popup config instead of
+            replacing it, so a tooltip can be added without restating the
+            fields.
+
+    Returns:
+        The layer's popup config after the change.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, or
+            the popup specification is unusable.
+    """
+    layer = find_layer(project, ref)
+    config = _project.popup_config(
+        fields,
+        click=click,
+        hover=hover,
+        title=title,
+        title_expression=title_expression,
+        body_expression=body_expression,
+        show_feature_id=show_feature_id,
+    )
+    if merge:
+        current = layer.get("popup")
+        if isinstance(current, dict):
+            config = {**copy.deepcopy(current), **config}
+    # Apply the tooltip shorthand after the merge so `merge=True` can flag a
+    # field the existing config already carries rather than appending a
+    # duplicate entry for it.
+    config = _project.apply_tooltip(config, tooltip)
+    layer["popup"] = config
+    return config
+
+
+def clear_popup(project: dict[str, Any], ref: str) -> dict[str, Any]:
+    """Drop a layer's popup config, restoring the app's default popup.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+
+    Returns:
+        A summary of the updated layer.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer.
+    """
+    layer = find_layer(project, ref)
+    layer.pop("popup", None)
+    return layer_summary(layer)
+
+
 def build_choropleth_style(
     values: list[Any],
     column: str,

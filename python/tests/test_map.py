@@ -1275,3 +1275,115 @@ def test_malformed_secondary_map_views_raise_value_error(m):
         m.get_renderer(pane_id="p")
     with pytest.raises(ValueError):
         m.set_map_layout(1, 3)
+
+# -- marker symbology, popups, and tooltips ------------------------------------
+
+
+def test_add_markers_named_style_args_reach_the_layer_style(m):
+    m.add_markers([(-100, 40)], color="#e11d48", radius=9, stroke_width=1)
+    style = _last_layer(m)["style"]
+    assert style["fillColor"] == "#e11d48"
+    assert style["circleRadius"] == 9
+    assert style["strokeWidth"] == 1
+
+
+def test_add_markers_shape_switches_to_a_marker_sprite(m):
+    m.add_markers([(-100, 40)], shape="pin", color="#e11d48", size=32)
+    style = _last_layer(m)["style"]
+    assert style["markerEnabled"] is True
+    assert style["markerShape"] == "pin"
+    assert style["markerSize"] == 32
+
+
+def test_add_markers_custom_icon(m):
+    m.add_markers([(-100, 40)], icon="<svg viewBox='0 0 1 1'/>")
+    style = _last_layer(m)["style"]
+    assert style["markerShape"] == "custom"
+    assert style["markerSvg"] == "<svg viewBox='0 0 1 1'/>"
+
+
+def test_add_markers_rejects_a_named_color_for_a_sprite(m):
+    with pytest.raises(ValueError, match="marker sprites need a hex color"):
+        m.add_markers([(-100, 40)], shape="star", color="crimson")
+
+
+def test_add_marker_takes_the_same_style_args(m):
+    m.add_marker(-100, 40, shape="star", color="#22c55e", size=20)
+    assert _last_layer(m)["style"]["markerShape"] == "star"
+
+
+def test_add_circle_markers_still_sets_the_radius(m):
+    m.add_circle_markers([(-100, 40)], radius=12)
+    assert _last_layer(m)["style"]["circleRadius"] == 12
+
+
+def test_add_markers_popup_and_tooltip_land_on_the_layer(m):
+    m.add_markers(
+        [{"lon": -100, "lat": 40, "name": "A", "photo": "https://example.org/a.jpg"}],
+        popup=["name", {"field": "photo", "kind": "image", "label": "Photo"}],
+        tooltip="name",
+    )
+    layer = _last_layer(m)
+    assert layer["popup"] == {
+        "fields": [
+            {"field": "name", "hover": True},
+            {"field": "photo", "label": "Photo", "kind": "image"},
+        ],
+        "hover": True,
+    }
+    # The popup config is a layer key, not a style key; left in the style the
+    # app would never read it.
+    assert "popup" not in layer["style"]
+
+
+def test_add_geojson_also_accepts_a_popup(m):
+    m.add_geojson({"type": "FeatureCollection", "features": []}, popup="name")
+    assert _last_layer(m)["popup"] == {"fields": [{"field": "name"}]}
+
+
+def test_set_popup_replaces_the_config(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a", "b"])
+    m.set_popup(layer_id, ["c"], title="c")
+    assert m.get_layer(layer_id).popup == {"titleField": "c", "fields": [{"field": "c"}]}
+
+
+def test_set_popup_merge_keeps_what_it_does_not_mention(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"])
+    m.set_popup(layer_id, title="a", merge=True)
+    popup = m.get_layer(layer_id).popup
+    assert popup["titleField"] == "a"
+    assert popup["fields"] == [{"field": "a"}]
+
+
+def test_set_tooltip_flags_an_existing_field_rather_than_duplicating_it(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a", "b"])
+    m.set_tooltip(layer_id, "a")
+    popup = m.get_layer(layer_id).popup
+    assert popup["hover"] is True
+    assert popup["fields"] == [{"field": "a", "hover": True}, {"field": "b"}]
+
+
+def test_set_tooltip_false_turns_the_tooltip_off(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"], tooltip="a")
+    m.set_tooltip(layer_id, False)
+    assert m.get_layer(layer_id).popup["hover"] is False
+
+
+def test_clear_popup_restores_the_default(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"])
+    m.clear_popup(layer_id)
+    assert m.get_layer(layer_id).popup == {}
+    assert "popup" not in _last_layer(m)
+
+
+def test_layer_popup_property_is_a_copy(m):
+    layer = m.get_layer(m.add_markers([(-100, 40)], popup=["a"]))
+    layer.popup["fields"].clear()
+    assert layer.popup["fields"] == [{"field": "a"}]
+
+
+def test_layer_set_popup_bumps_the_sync_sequence(m):
+    layer = m.get_layer(m.add_markers([(-100, 40)]))
+    seq = m._seq
+    layer.set_popup(["a"])
+    assert m._seq > seq

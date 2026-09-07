@@ -574,3 +574,51 @@ def test_remove_layer_drops_a_derived_style_layer_id_of_any_shape(proj):
 def test_add_swipe_rejects_a_bad_orientation(proj):
     with pytest.raises(ValueError, match="orientation must be one of"):
         authoring.add_swipe(proj, left_layers=[], right_layers=[], orientation="diagonal")
+
+
+# -- popups and tooltips -------------------------------------------------------
+
+
+def test_set_popup_writes_the_config_onto_the_layer(proj):
+    config = authoring.set_popup(proj, "Cities", ["name", "pop"], title="name")
+    assert config == {"titleField": "name", "fields": [{"field": "name"}, {"field": "pop"}]}
+    assert authoring.find_layer(proj, "Cities")["popup"] == config
+
+
+def test_set_popup_replaces_by_default(proj):
+    authoring.set_popup(proj, "Cities", ["name"], title="name")
+    config = authoring.set_popup(proj, "Cities", ["pop"])
+    assert config == {"fields": [{"field": "pop"}]}
+
+
+def test_set_popup_merge_keeps_the_existing_fields(proj):
+    authoring.set_popup(proj, "Cities", ["name"])
+    config = authoring.set_popup(proj, "Cities", title="name", merge=True)
+    assert config == {"titleField": "name", "fields": [{"field": "name"}]}
+
+
+def test_set_popup_merge_flags_an_existing_field_for_hover(proj):
+    authoring.set_popup(proj, "Cities", ["name", "pop"])
+    config = authoring.set_popup(proj, "Cities", tooltip="name", merge=True)
+    assert config["hover"] is True
+    assert config["fields"] == [{"field": "name", "hover": True}, {"field": "pop"}]
+
+
+def test_set_popup_click_false_suppresses_the_popup(proj):
+    assert authoring.set_popup(proj, "Cities", click=False) == {"click": False}
+
+
+def test_set_popup_rejects_an_unknown_layer(proj):
+    with pytest.raises(ValueError):
+        authoring.set_popup(proj, "Nowhere", ["name"])
+
+
+def test_clear_popup_removes_the_config(proj):
+    authoring.set_popup(proj, "Cities", ["name"])
+    authoring.clear_popup(proj, "Cities")
+    assert "popup" not in authoring.find_layer(proj, "Cities")
+
+
+def test_clear_popup_is_a_no_op_without_a_config(proj):
+    summary = authoring.clear_popup(proj, "Cities")
+    assert summary["name"] == "Cities"

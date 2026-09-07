@@ -497,6 +497,75 @@ def test_style_layer_merges_into_the_existing_style(server, project_path):
     assert result["style"]["strokeWidth"] == 4
 
 
+def test_set_layer_popup_writes_fields_labels_and_kinds(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(
+        server,
+        "set_layer_popup",
+        path=project_path,
+        layer="Cities",
+        fields=[
+            "name",
+            {"field": "pop", "label": "Population", "kind": "number", "thousands": True},
+        ],
+        title="name",
+    )
+    assert result["popup"] == {
+        "titleField": "name",
+        "fields": [
+            {"field": "name"},
+            {
+                "field": "pop",
+                "label": "Population",
+                "kind": "number",
+                "format": {"thousands": True},
+            },
+        ],
+    }
+
+
+def test_set_layer_popup_tooltip_flags_the_named_fields(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(
+        server,
+        "set_layer_popup",
+        path=project_path,
+        layer="Cities",
+        fields=["name", "pop"],
+        tooltip=["name"],
+    )
+    assert result["popup"]["hover"] is True
+    assert result["popup"]["fields"][0]["hover"] is True
+
+
+def test_set_layer_popup_empty_tooltip_turns_hover_off(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    call(
+        server,
+        "set_layer_popup",
+        path=project_path,
+        layer="Cities",
+        fields=["name"],
+        tooltip=["name"],
+    )
+    result = call(
+        server, "set_layer_popup", path=project_path, layer="Cities", tooltip=[], merge=True
+    )
+    assert result["popup"]["hover"] is False
+
+
+def test_set_layer_popup_reports_an_unusable_field(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    message = call_error(
+        server,
+        "set_layer_popup",
+        path=project_path,
+        layer="Cities",
+        fields=[{"field": "pop", "kind": "markdown"}],
+    )
+    assert "kind must be one of" in message
+
+
 def test_remove_layer_drops_it(server, project_path):
     call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
     result = call(server, "remove_layer", path=project_path, layer="Cities")

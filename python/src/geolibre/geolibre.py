@@ -1100,6 +1100,99 @@ class Map(anywidget.AnyWidget):
         """Set a layer's opacity in ``[0, 1]``."""
         self._resolve_layer(layer).opacity = opacity
 
+    def set_popup(
+        self,
+        layer: str | Layer,
+        fields: Any = None,
+        *,
+        click: bool | None = None,
+        hover: bool | None = None,
+        title: str | None = None,
+        title_expression: str | None = None,
+        body_expression: str | None = None,
+        show_feature_id: bool | None = None,
+        tooltip: Any = None,
+        merge: bool = False,
+    ) -> dict[str, Any]:
+        """Configure a layer's click popup (and, with ``tooltip``, its hover tip).
+
+        Without a config a layer shows its name and every visible property; a
+        config narrows, orders, relabels and formats those rows.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            fields: Property names and/or field mappings, in display order. A
+                mapping takes ``field`` plus any of ``label``, ``kind``
+                (``"auto"``, ``"text"``, ``"number"``, ``"date"``, ``"link"``,
+                ``"image"``), ``hover``, ``decimals``, ``thousands``,
+                ``date_format``, ``prefix``, ``suffix``, and ``link_label``.
+            click: ``False`` suppresses the click popup.
+            hover: ``True`` shows a hover tooltip built from the ``hover`` fields.
+            title: Property whose value titles the popup.
+            title_expression: MapLibre expression source producing the title.
+            body_expression: MapLibre expression source producing the body text.
+            show_feature_id: ``False`` drops the synthetic ``id`` row.
+            tooltip: Hover shorthand -- a property name, a sequence of names,
+                ``True`` to flag every configured field, or ``False`` to turn
+                the tooltip off.
+            merge: Merge into the layer's existing popup config rather than
+                replacing it.
+
+        Returns:
+            The layer's popup config after the change.
+
+        Example:
+            >>> m.set_popup(
+            ...     "Sites",
+            ...     [
+            ...         {"field": "name", "label": "Site"},
+            ...         {"field": "photo", "kind": "image", "label": "Photo"},
+            ...         {"field": "url", "kind": "link", "link_label": "Details"},
+            ...         {"field": "pop", "kind": "number", "thousands": True},
+            ...     ],
+            ...     title="name",
+            ...     tooltip="name",
+            ... )
+        """
+        handle = self._resolve_layer(layer)
+        config = _project.popup_config(
+            fields,
+            click=click,
+            hover=hover,
+            title=title,
+            title_expression=title_expression,
+            body_expression=body_expression,
+            show_feature_id=show_feature_id,
+        )
+
+        def _apply(target: dict[str, Any]) -> None:
+            merged = config
+            if merge and isinstance(target.get("popup"), dict):
+                merged = {**copy.deepcopy(target["popup"]), **config}
+            target["popup"] = _project.apply_tooltip(copy.deepcopy(merged), tooltip)
+
+        self._mutate_layer(handle.id, _apply)
+        return handle.popup
+
+    def set_tooltip(self, layer: str | Layer, fields: Any = True) -> dict[str, Any]:
+        """Show a hover tooltip on a layer, built from ``fields``.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            fields: A property name, a sequence of names, ``True`` to use every
+                field the layer's popup already configures, or ``False`` to
+                turn the tooltip off.
+
+        Returns:
+            The layer's popup config after the change.
+        """
+        return self.set_popup(layer, tooltip=fields, merge=True)
+
+    def clear_popup(self, layer: str | Layer) -> None:
+        """Drop a layer's popup config, restoring the default popup."""
+        handle = self._resolve_layer(layer)
+        self._mutate_layer(handle.id, lambda target: target.pop("popup", None))
+
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.
 
@@ -1373,24 +1466,53 @@ class Map(anywidget.AnyWidget):
         name: str = "Marker",
         *,
         properties: dict[str, Any] | None = None,
+        color: str | None = None,
+        opacity: float | None = None,
+        radius: float | None = None,
+        stroke_color: str | None = None,
+        stroke_width: float | None = None,
+        shape: str | None = None,
+        size: float | None = None,
+        icon: str | None = None,
         **style: Any,
     ) -> str:
         """Add a single point marker at ``[lng, lat]``.
 
-        The marker is a GeoJSON point layer (rendered as a circle); its
-        ``properties`` are shown when the point is clicked. Style overrides such
-        as ``fillColor`` and ``circleRadius`` control its appearance.
+        The marker is a GeoJSON point layer; its ``properties`` are shown when
+        the point is clicked. See :meth:`add_markers` for the symbology and
+        popup arguments, which behave identically here.
 
         Args:
             lng: Marker longitude.
             lat: Marker latitude.
             name: Layer display name.
             properties: Optional feature properties (shown on click).
-            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+            color: Marker color.
+            opacity: Fill opacity in ``[0, 1]``.
+            radius: Circle radius in pixels.
+            stroke_color: Outline color.
+            stroke_width: Outline width in pixels.
+            shape: Marker shape; switches to sprite rendering.
+            size: Sprite size in pixels; switches to sprite rendering.
+            icon: SVG markup or data URL for a custom sprite.
+            **style: Further style overrides, plus ``popup=``/``tooltip=``
+                (see :meth:`add_markers`).
 
         Returns:
             The id of the added layer.
         """
+        style.update(
+            _project.marker_style(
+                color=color,
+                opacity=opacity,
+                radius=radius,
+                stroke_color=stroke_color,
+                stroke_width=stroke_width,
+                shape=shape,
+                size=size,
+                icon=icon,
+            )
+        )
         fc = {
             "type": "FeatureCollection",
             "features": [self._point_feature(lng, lat, properties)],
@@ -1401,9 +1523,24 @@ class Map(anywidget.AnyWidget):
         self,
         points: Any,
         name: str = "Markers",
+        *,
+        color: str | None = None,
+        opacity: float | None = None,
+        radius: float | None = None,
+        stroke_color: str | None = None,
+        stroke_width: float | None = None,
+        shape: str | None = None,
+        size: float | None = None,
+        icon: str | None = None,
         **style: Any,
     ) -> str:
         """Add point markers from a collection of points.
+
+        Markers draw as MapLibre circles by default, sized by ``radius``.
+        Passing ``shape``, ``size`` or ``icon`` switches the layer to a marker
+        sprite instead, sized by ``size``; ``radius`` no longer applies to it,
+        and ``color`` must then be a hex color because that is all the sprite
+        baker accepts.
 
         Args:
             points: A sequence of ``(lng, lat)`` pairs or
@@ -1411,11 +1548,46 @@ class Map(anywidget.AnyWidget):
                 point FeatureCollection/Feature/geometry, a GeoJSON string, or a
                 ``__geo_interface__`` object (e.g. a point GeoDataFrame).
             name: Layer display name.
-            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+            color: Marker color, e.g. ``"#e11d48"``.
+            opacity: Fill opacity in ``[0, 1]``.
+            radius: Circle radius in pixels (circle rendering only).
+            stroke_color: Outline color.
+            stroke_width: Outline width in pixels.
+            shape: One of ``"circle"``, ``"square"``, ``"triangle"``,
+                ``"diamond"``, ``"star"``, ``"cross"``, ``"pin"``, or
+                ``"custom"`` (which needs ``icon``).
+            size: Sprite size in pixels.
+            icon: Raw SVG markup or a data URL drawn as a custom sprite.
+            **style: Further style overrides, plus ``popup=`` and ``tooltip=``
+                to configure what a click and a hover show. ``popup`` takes a
+                property name, a list of names or field mappings, or a config
+                mapping; see :meth:`set_popup`.
 
         Returns:
             The id of the added layer.
+
+        Example:
+            >>> m.add_markers(
+            ...     [{"lon": -122.9, "lat": 47.0, "name": "Olympia", "photo": url}],
+            ...     shape="pin",
+            ...     color="#e11d48",
+            ...     size=32,
+            ...     popup=["name", {"field": "photo", "kind": "image"}],
+            ...     tooltip="name",
+            ... )
         """
+        style.update(
+            _project.marker_style(
+                color=color,
+                opacity=opacity,
+                radius=radius,
+                stroke_color=stroke_color,
+                stroke_width=stroke_width,
+                shape=shape,
+                size=size,
+                icon=icon,
+            )
+        )
         fc = self._points_to_featurecollection(points)
         return self._add_layer(_project.geojson_layer(name, fc, **style))
 
@@ -1441,9 +1613,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        if radius is not None:
-            style.setdefault("circleRadius", float(radius))
-        return self.add_markers(points, name=name, **style)
+        return self.add_markers(points, name=name, radius=radius, **style)
 
     def add_marker_cluster(
         self,
@@ -3095,6 +3265,24 @@ class Layer:
             layer.setdefault("style", {}).update(style)
 
         self._map._mutate_layer(self._id, _apply)
+
+    @property
+    def popup(self) -> dict[str, Any]:
+        """This layer's popup/tooltip config, or ``{}`` when it has none."""
+        config = self._layer().get("popup")
+        return copy.deepcopy(config) if isinstance(config, dict) else {}
+
+    def set_popup(self, fields: Any = None, **kwargs: Any) -> dict[str, Any]:
+        """Configure this layer's popup (see :meth:`Map.set_popup`)."""
+        return self._map.set_popup(self, fields, **kwargs)
+
+    def set_tooltip(self, fields: Any = True) -> dict[str, Any]:
+        """Show a hover tooltip on this layer (see :meth:`Map.set_tooltip`)."""
+        return self._map.set_tooltip(self, fields)
+
+    def clear_popup(self) -> None:
+        """Drop this layer's popup config, restoring the default popup."""
+        self._map.clear_popup(self)
 
     def get_features(self, *, timeout: float = 10.0) -> list[Feature]:
         """Return this layer's features (see :meth:`Map.get_features`)."""

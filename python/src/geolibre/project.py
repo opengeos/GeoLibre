@@ -410,12 +410,483 @@ def build_empty_project(
     }
 
 
+# -- popups, tooltips, and marker symbology ------------------------------
+#
+# Mirrors LayerPopupConfig / PopupFieldConfig in packages/core/src/types.ts and
+# the resolution rules in packages/core/src/popup.ts. The stored JSON is
+# camelCase because the app reads it straight off the layer; the builders below
+# take snake_case Python arguments and translate, so a notebook never has to
+# hand-write the camelCase shape.
+
+#: How a popup value renders. ``"auto"`` stringifies (and draws an inline
+#: base64 image or sanitized KML description markup as itself).
+POPUP_FIELD_KINDS = frozenset({"auto", "text", "number", "date", "link", "image"})
+
+#: Rendering choices for a ``"date"`` field.
+POPUP_DATE_FORMATS = frozenset({"date", "datetime", "time", "iso", "year"})
+
+#: Built-in marker shapes, plus ``"custom"`` for a caller-supplied SVG.
+MARKER_SHAPES = frozenset(
+    {"circle", "square", "triangle", "diamond", "star", "cross", "pin", "custom"}
+)
+
+# Popup config keys accepted from a caller's dict, keyed by the normalized
+# spelling (lowercased, underscores dropped) so ``title_field``, ``titleField``
+# and ``titlefield`` are one key. "tooltip" is sugar handled by normalize_popup.
+_POPUP_CONFIG_KEYS = {
+    "click": "click",
+    "hover": "hover",
+    "fields": "fields",
+    "title": "titleField",
+    "titlefield": "titleField",
+    "titleexpression": "titleExpression",
+    "bodyexpression": "bodyExpression",
+    "showfeatureid": "showFeatureId",
+    "tooltip": "tooltip",
+}
+
+# Popup *field* keys accepted from a caller's dict, same normalization. The
+# format parts are accepted flat (``decimals=2``) as well as nested under
+# ``format``, because flat is what a notebook reaches for first.
+_POPUP_FIELD_KEYS = {
+    "field": "field",
+    "label": "label",
+    "kind": "kind",
+    "hover": "hover",
+    "format": "format",
+    "decimals": "decimals",
+    "thousands": "thousands",
+    "dateformat": "date_format",
+    "prefix": "prefix",
+    "suffix": "suffix",
+    "linklabel": "link_label",
+}
+
+
+def _normalize_key(key: Any) -> str:
+    """Fold a mapping key's spelling: lowercased, ``-``/``_`` removed."""
+    return str(key).lower().replace("-", "").replace("_", "")
+
+
+def normalize_hex_color(value: str) -> str | None:
+    """Return ``value`` as ``#rrggbb``, or ``None`` if it is not a hex color.
+
+    Mirrors ``normalizeHexColor`` in ``packages/core/src/color-ramp.ts``, which
+    is what the marker sprite baker runs a ``markerColor`` through: a value it
+    rejects silently draws the default blue.
+
+    Args:
+        value: A color token such as ``"#f00"``, ``"FF0000"``, or ``"red"``.
+
+    Returns:
+        The canonical ``#rrggbb`` form, or ``None`` for a non-hex token.
+    """
+    token = str(value).strip().lower()
+    if not token:
+        return None
+    if not token.startswith("#"):
+        token = f"#{token}"
+    if re.fullmatch(r"#[0-9a-f]{3}", token):
+        token = "#" + "".join(channel * 2 for channel in token[1:])
+    return token if re.fullmatch(r"#[0-9a-f]{6}", token) else None
+
+
+def popup_field(
+    field: str,
+    *,
+    label: str | None = None,
+    kind: str = "auto",
+    hover: bool | None = None,
+    decimals: int | None = None,
+    thousands: bool | None = None,
+    date_format: str | None = None,
+    prefix: str | None = None,
+    suffix: str | None = None,
+    link_label: str | None = None,
+) -> dict[str, Any]:
+    """Build one entry of a layer popup's field list.
+
+    Args:
+        field: The feature property key to show.
+        label: Heading printed instead of the raw property name.
+        kind: How the value renders: ``"auto"``, ``"text"``, ``"number"``,
+            ``"date"``, ``"link"`` (an ``http(s)`` URL becomes an anchor), or
+            ``"image"`` (an ``http(s)`` URL or inline base64 raster data URL
+            becomes a thumbnail).
+        hover: Include this field in the hover tooltip's short subset.
+        decimals: Fixed decimal places for a ``"number"`` field.
+        thousands: Group thousands for a ``"number"`` field.
+        date_format: One of :data:`POPUP_DATE_FORMATS` for a ``"date"`` field.
+        prefix: Text placed before the formatted value.
+        suffix: Text placed after the formatted value, e.g. a unit.
+        link_label: Anchor text for a ``"link"`` field; defaults to the value.
+
+    Returns:
+        A ``PopupFieldConfig`` dict.
+
+    Raises:
+        ValueError: If ``field`` is blank, or ``kind``/``date_format``/
+            ``decimals`` is outside the range the app understands.
+    """
+    name = str(field).strip()
+    if not name:
+        raise ValueError("popup field name must be a non-empty string")
+    if kind not in POPUP_FIELD_KINDS:
+        raise ValueError(f"kind must be one of {sorted(POPUP_FIELD_KINDS)}, got {kind!r}")
+    if date_format is not None and date_format not in POPUP_DATE_FORMATS:
+        raise ValueError(
+            f"date_format must be one of {sorted(POPUP_DATE_FORMATS)}, got {date_format!r}"
+        )
+
+    config: dict[str, Any] = {"field": name}
+    if label is not None:
+        config["label"] = str(label)
+    if kind != "auto":
+        config["kind"] = kind
+    if hover is not None:
+        config["hover"] = bool(hover)
+
+    fmt: dict[str, Any] = {}
+    if decimals is not None:
+        digits = int(decimals)
+        # Intl.NumberFormat throws outside 0-20, which would take the whole
+        # popup render down rather than mis-format one cell.
+        if not 0 <= digits <= 20:
+            raise ValueError(f"decimals must be between 0 and 20, got {decimals!r}")
+        fmt["decimals"] = digits
+    if thousands is not None:
+        fmt["thousands"] = bool(thousands)
+    if date_format is not None:
+        fmt["dateFormat"] = date_format
+    if prefix is not None:
+        fmt["prefix"] = str(prefix)
+    if suffix is not None:
+        fmt["suffix"] = str(suffix)
+    if link_label is not None:
+        fmt["linkLabel"] = str(link_label)
+    if fmt:
+        config["format"] = fmt
+    return config
+
+
+def _coerce_popup_field(entry: Any) -> dict[str, Any]:
+    """Coerce one popup field entry (a name or a mapping) to a field config."""
+    if isinstance(entry, str):
+        return popup_field(entry)
+    if not isinstance(entry, dict):
+        raise ValueError(
+            f"each popup field must be a property name or a mapping, got {type(entry).__name__}"
+        )
+
+    kwargs: dict[str, Any] = {}
+    name: Any = None
+    for key, value in entry.items():
+        mapped = _POPUP_FIELD_KEYS.get(_normalize_key(key))
+        if mapped is None:
+            raise ValueError(
+                f"unknown popup field key {key!r}; expected one of "
+                f"{sorted(set(_POPUP_FIELD_KEYS.values()))}"
+            )
+        if mapped == "field":
+            name = value
+        elif mapped == "format":
+            # A nested `format` block, as the stored JSON carries it. Flat keys
+            # given alongside it win, so `{"format": {...}, "decimals": 2}`
+            # behaves the way the later, more specific spelling reads.
+            if not isinstance(value, dict):
+                raise ValueError("popup field 'format' must be a mapping")
+            for fmt_key, fmt_value in value.items():
+                fmt_mapped = _POPUP_FIELD_KEYS.get(_normalize_key(fmt_key))
+                if fmt_mapped is None or fmt_mapped in ("field", "label", "kind", "format"):
+                    raise ValueError(f"unknown popup field format key {fmt_key!r}")
+                kwargs.setdefault(fmt_mapped, fmt_value)
+        else:
+            kwargs[mapped] = value
+    if name is None:
+        raise ValueError(f"popup field mapping needs a 'field' key; got {sorted(entry)}")
+    return popup_field(name, **kwargs)
+
+
+def popup_config(
+    fields: Any = None,
+    *,
+    click: bool | None = None,
+    hover: bool | None = None,
+    title: str | None = None,
+    title_expression: str | None = None,
+    body_expression: str | None = None,
+    show_feature_id: bool | None = None,
+) -> dict[str, Any]:
+    """Build a layer's ``LayerPopupConfig``.
+
+    Args:
+        fields: The fields to show and their order: a single property name, or
+            a sequence of property names and/or :func:`popup_field` mappings.
+            ``None`` keeps the default, which shows every visible property in
+            the feature's own key order.
+        click: ``False`` suppresses the click popup entirely.
+        hover: ``True`` shows a hover tooltip built from the fields flagged
+            ``hover``.
+        title: Property whose value titles the popup instead of the layer name.
+        title_expression: MapLibre expression source (JSON text) producing the
+            title; wins over ``title`` and falls back to it when it fails.
+        body_expression: MapLibre expression source producing the whole popup
+            body as one block of text instead of the field rows.
+        show_feature_id: ``False`` drops the synthetic ``id`` row.
+
+    Returns:
+        A ``LayerPopupConfig`` dict, empty when nothing was configured.
+
+    Raises:
+        ValueError: If a field entry is not a name or a valid field mapping.
+    """
+    config: dict[str, Any] = {}
+    if click is not None:
+        config["click"] = bool(click)
+    if hover is not None:
+        config["hover"] = bool(hover)
+    if title is not None:
+        config["titleField"] = str(title)
+    if title_expression is not None:
+        config["titleExpression"] = str(title_expression)
+    if body_expression is not None:
+        config["bodyExpression"] = str(body_expression)
+    if show_feature_id is not None:
+        config["showFeatureId"] = bool(show_feature_id)
+    if fields is not None:
+        entries = [fields] if isinstance(fields, (str, dict)) else list(fields)
+        config["fields"] = [_coerce_popup_field(entry) for entry in entries]
+    return config
+
+
+def apply_tooltip(config: dict[str, Any], tooltip: Any) -> dict[str, Any]:
+    """Fold a ``tooltip=`` shorthand into a popup config, in place.
+
+    The app's hover tooltip needs two things: ``hover`` on the config, and at
+    least one field flagged ``hover`` (or a configured title) to put in it --
+    ``createHoverTooltipElement`` returns nothing otherwise. This raises the
+    field flags rather than leaving the caller with a tooltip that silently
+    never appears.
+
+    Args:
+        config: The popup config being built (mutated in place).
+        tooltip: ``True``/``False`` to flag every configured field or turn the
+            tooltip off, or a property name or sequence of names to flag.
+
+    Returns:
+        The same ``config``.
+
+    Raises:
+        ValueError: If ``tooltip=True`` is asked for on a popup that has no
+            fields and no title, so no tooltip could ever render.
+    """
+    if tooltip is None:
+        return config
+    if tooltip is False:
+        config["hover"] = False
+        return config
+
+    fields: list[dict[str, Any]] = list(config.get("fields") or [])
+    if tooltip is not True:
+        names = [tooltip] if isinstance(tooltip, str) else list(tooltip)
+        for name in names:
+            key = str(name).strip()
+            if not key:
+                raise ValueError("tooltip field name must be a non-empty string")
+            existing = next((entry for entry in fields if entry.get("field") == key), None)
+            if existing is None:
+                # A tooltip-only field still has to appear in `fields`: the
+                # hover subset is drawn from that list, not from the feature.
+                fields.append(popup_field(key, hover=True))
+            else:
+                existing["hover"] = True
+    else:
+        for entry in fields:
+            entry["hover"] = True
+        if not fields and not (config.get("titleField") or config.get("titleExpression")):
+            raise ValueError(
+                "tooltip=True needs popup fields or a title to show; pass the field "
+                "names instead, e.g. tooltip=['name']"
+            )
+
+    config["hover"] = True
+    if fields:
+        config["fields"] = fields
+    return config
+
+
+def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | None:
+    """Coerce the ``popup=``/``tooltip=`` arguments to a ``LayerPopupConfig``.
+
+    ``popup`` accepts, in rising order of control: ``True``/``False`` to turn
+    the click popup on or off, a property name, a sequence of property names
+    and/or :func:`popup_field` mappings, or a full config mapping whose keys
+    are the arguments of :func:`popup_config` (``fields``, ``click``,
+    ``hover``, ``title``, ``title_expression``, ``body_expression``,
+    ``show_feature_id``, ``tooltip``) in either snake_case or camelCase.
+
+    Args:
+        popup: The popup specification, or ``None`` for no popup config.
+        tooltip: Hover-tooltip shorthand; see :func:`apply_tooltip`. Wins over
+            a ``tooltip`` key inside ``popup``.
+
+    Returns:
+        A ``LayerPopupConfig`` dict, or ``None`` when neither argument
+        configured anything.
+
+    Raises:
+        ValueError: If the specification carries an unknown key or an
+            unusable field entry.
+    """
+    if popup is None and tooltip is None:
+        return None
+
+    inline_tooltip: Any = None
+    if popup is None or popup is True:
+        config = popup_config()
+    elif popup is False:
+        config = popup_config(click=False)
+    elif isinstance(popup, str):
+        config = popup_config(popup)
+    elif isinstance(popup, dict):
+        kwargs: dict[str, Any] = {}
+        for key, value in popup.items():
+            mapped = _POPUP_CONFIG_KEYS.get(_normalize_key(key))
+            if mapped is None:
+                raise ValueError(
+                    f"unknown popup key {key!r}; expected one of "
+                    "['body_expression', 'click', 'fields', 'hover', 'show_feature_id', "
+                    "'title', 'title_expression', 'tooltip']"
+                )
+            if mapped == "tooltip":
+                inline_tooltip = value
+            elif mapped == "titleField":
+                kwargs["title"] = value
+            elif mapped == "titleExpression":
+                kwargs["title_expression"] = value
+            elif mapped == "bodyExpression":
+                kwargs["body_expression"] = value
+            elif mapped == "showFeatureId":
+                kwargs["show_feature_id"] = value
+            else:
+                kwargs[mapped] = value
+        config = popup_config(**kwargs)
+    else:
+        config = popup_config(popup)
+
+    return apply_tooltip(config, tooltip if tooltip is not None else inline_tooltip)
+
+
+def marker_style(
+    *,
+    color: str | None = None,
+    opacity: float | None = None,
+    radius: float | None = None,
+    stroke_color: str | None = None,
+    stroke_width: float | None = None,
+    shape: str | None = None,
+    size: float | None = None,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Translate friendly marker arguments into layer style keys.
+
+    A point layer draws one of two ways. By default it is a MapLibre circle
+    sized by ``radius`` and filled with ``color``. Passing ``shape``, ``size``
+    or ``icon`` switches it to a baked marker sprite instead, sized by ``size``
+    and colored by ``color``; ``radius`` no longer applies to it.
+
+    Args:
+        color: Marker color. Applied to both the circle fill and the sprite, so
+            it takes effect either way.
+        opacity: Circle fill opacity in ``[0, 1]``.
+        radius: Circle radius in pixels (circle rendering only).
+        stroke_color: Outline color.
+        stroke_width: Outline width in pixels.
+        shape: One of :data:`MARKER_SHAPES`. Switches to sprite rendering.
+        size: Sprite size in pixels. Switches to sprite rendering.
+        icon: Raw SVG markup (or a data URL) for a ``"custom"`` sprite.
+            Switches to sprite rendering and implies ``shape="custom"``.
+
+    Returns:
+        A dict of camelCase layer style keys, empty when nothing was passed.
+
+    Raises:
+        ValueError: If ``shape`` is not a known shape, a numeric argument is
+            out of range, ``shape="custom"`` is asked for without ``icon``, or
+            sprite rendering is requested with a non-hex ``color``.
+    """
+    style: dict[str, Any] = {}
+    if shape is not None and shape not in MARKER_SHAPES:
+        raise ValueError(f"shape must be one of {sorted(MARKER_SHAPES)}, got {shape!r}")
+    if icon is not None and not str(icon).strip():
+        raise ValueError("icon must be non-empty SVG markup or a data URL")
+    if shape == "custom" and icon is None:
+        raise ValueError('shape="custom" needs icon= with the SVG markup to draw')
+
+    # Any of these three means "render a marker sprite, not a plain circle".
+    sprite = shape is not None or size is not None or icon is not None
+
+    if color is not None:
+        style["fillColor"] = str(color)
+        if sprite:
+            # The sprite baker runs markerColor through normalizeHexColor and
+            # falls back to blue on anything it rejects, so a CSS color name
+            # would silently draw the wrong marker. Fail loudly instead.
+            hex_color = normalize_hex_color(str(color))
+            if hex_color is None:
+                raise ValueError(
+                    f"marker sprites need a hex color such as '#e11d48'; got {color!r}"
+                )
+            style["markerColor"] = hex_color
+        else:
+            # Only mirror onto markerColor when the app could actually use it:
+            # the sprite baker takes hex only, and writing "red" there would
+            # leave a value that draws the default blue the moment someone
+            # switches this layer to a marker shape in the UI.
+            hex_color = normalize_hex_color(str(color))
+            if hex_color is not None:
+                style["markerColor"] = hex_color
+    if opacity is not None:
+        value = float(opacity)
+        if not math.isfinite(value) or not 0 <= value <= 1:
+            raise ValueError(f"opacity must be between 0 and 1, got {opacity!r}")
+        style["fillOpacity"] = value
+    if radius is not None:
+        value = float(radius)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("radius must be a finite number greater than zero")
+        style["circleRadius"] = value
+    if stroke_color is not None:
+        style["strokeColor"] = str(stroke_color)
+    if stroke_width is not None:
+        value = float(stroke_width)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("stroke_width must be a finite non-negative number")
+        style["strokeWidth"] = value
+    if size is not None:
+        value = float(size)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("size must be a finite number greater than zero")
+        style["markerSize"] = value
+    if icon is not None:
+        style["markerSvg"] = str(icon)
+    if sprite:
+        style["markerEnabled"] = True
+        style["markerShape"] = "custom" if icon is not None else (shape or "circle")
+    return style
+
+
 def _layer_base(name: str, layer_type: str, **style: Any) -> dict[str, Any]:
+    # `popup` and `tooltip` ride in with the style overrides so every add_*
+    # builder accepts them without threading two more arguments through each
+    # signature, but the popup config is a top-level layer key -- left in
+    # `style` it would land somewhere the app never reads.
+    popup = normalize_popup(style.pop("popup", None), style.pop("tooltip", None))
     # Deep-copy the defaults so nested values (e.g. the vectorStyleStops list)
     # are not shared with the module constant; a caller mutating a returned
     # layer's style must not corrupt DEFAULT_LAYER_STYLE for later layers.
     merged_style = {**copy.deepcopy(DEFAULT_LAYER_STYLE), **style}
-    return {
+    layer: dict[str, Any] = {
         "id": str(uuid.uuid4()),
         "name": name,
         "type": layer_type,
@@ -424,6 +895,9 @@ def _layer_base(name: str, layer_type: str, **style: Any) -> dict[str, Any]:
         "style": merged_style,
         "metadata": {},
     }
+    if popup is not None:
+        layer["popup"] = popup
+    return layer
 
 
 def geojson_layer(

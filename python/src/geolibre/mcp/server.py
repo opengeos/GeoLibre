@@ -749,6 +749,65 @@ def build_server(workspace: Workspace) -> MCPServer:
         return _summarize(file, project, style=merged)
 
     @tool()
+    def set_layer_popup(
+        path: str,
+        layer: str,
+        fields: list[Any] | None = None,
+        click: bool | None = None,
+        title: str | None = None,
+        title_expression: str | None = None,
+        body_expression: str | None = None,
+        show_feature_id: bool | None = None,
+        tooltip: list[str] | None = None,
+        merge: bool = False,
+    ) -> dict[str, Any]:
+        """Choose what a layer shows when a feature is clicked or hovered.
+
+        Without a popup config a layer shows its name and every visible
+        property. A config narrows that to the fields you list, in your order,
+        under your labels and formats.
+
+        Each entry of `fields` is either a property name or an object with
+        `field` plus any of: `label`, `kind` (`auto`, `text`, `number`, `date`,
+        `link`, or `image` — `link` renders an http(s) URL as an anchor and
+        `image` renders one as a thumbnail), `hover`, `decimals`, `thousands`,
+        `date_format` (`date`, `datetime`, `time`, `iso`, `year`), `prefix`,
+        `suffix`, and `link_label`.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            fields: The fields to show, in display order.
+            click: False suppresses the click popup for this layer.
+            title: Property whose value titles the popup instead of the name.
+            title_expression: MapLibre expression source producing the title.
+            body_expression: MapLibre expression source producing the body as
+                one block of text instead of the field rows.
+            show_feature_id: False drops the synthetic `id` row.
+            tooltip: Property names to show in a hover tooltip. An empty list
+                turns the tooltip off.
+            merge: Merge into the layer's existing popup config instead of
+                replacing it.
+
+        Returns:
+            The layer's popup config after the change.
+        """
+        with edit(path) as (file, project):
+            config = authoring.set_popup(
+                project,
+                layer,
+                fields,
+                click=click,
+                title=title,
+                title_expression=title_expression,
+                body_expression=body_expression,
+                show_feature_id=show_feature_id,
+                tooltip=(False if tooltip == [] else tooltip),
+                merge=merge,
+            )
+        return _summarize(file, project, popup=config)
+
+    @tool()
     def classify_layer(
         path: str,
         layer: str,

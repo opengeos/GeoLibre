@@ -89,6 +89,38 @@ m.add_heatmap(points, radius=35, intensity=1, color_ramp="turbo", weight_field="
 m.add_polyline(...)
 ```
 
+Marker symbology is named arguments on `add_marker`/`add_markers`: `color`,
+`opacity`, `radius`, `stroke_color`, `stroke_width` for the default circle, and
+`shape` (`circle`, `square`, `triangle`, `diamond`, `star`, `cross`, `pin`,
+`custom`), `size`, `icon` (SVG markup) to switch to a marker sprite. A sprite is
+sized by `size`, not `radius`, and its `color` must be a hex color.
+
+### Popups and tooltips
+
+Every `add_*` takes `popup=` and `tooltip=`; `m.set_popup(...)` /
+`m.set_tooltip(...)` / `m.clear_popup(...)` change one later. Without a config a
+layer shows its name plus every visible property on click, and no hover tip.
+
+```python
+m.add_markers(
+    points,
+    popup=[
+        {"field": "name", "label": "Site"},
+        {"field": "photo", "kind": "image"},          # http(s) URL → thumbnail
+        {"field": "url", "kind": "link", "link_label": "Details"},
+        {"field": "pop", "kind": "number", "thousands": True, "suffix": " people"},
+    ],
+    tooltip="name",                                    # hover tip
+)
+m.set_popup(layer, ["name"], title="name", body_expression='["get", "blurb"]')
+m.set_popup(layer, click=False)                        # no popup on click
+```
+
+A field `kind` is `auto`, `text`, `number`, `date`, `link`, or `image`. Raw HTML
+in a property is **not** rendered as markup (an untrusted GeoJSON must not be
+able to inject it); use `kind="image"`/`"link"` for pictures and links, or
+`body_expression` for composed text.
+
 ### In-memory xarray rasters
 
 `add_raster` also accepts an `xarray.DataArray` or `xarray.Dataset`, which needs
@@ -164,8 +196,9 @@ m.describe()
 
 A `Layer` object mirrors the same operations as attributes:
 `layer.name`, `layer.visible`, `layer.opacity`, `layer.style`,
-`layer.set_style(...)`, `layer.get_features()`, `layer.zoom_to()`,
-`layer.move(i)`, `layer.duplicate()`, `layer.remove()`.
+`layer.set_style(...)`, `layer.popup`, `layer.set_popup(...)`,
+`layer.set_tooltip(...)`, `layer.clear_popup()`, `layer.get_features()`,
+`layer.zoom_to()`, `layer.move(i)`, `layer.duplicate()`, `layer.remove()`.
 
 ## Map controls
 

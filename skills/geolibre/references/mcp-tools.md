@@ -89,6 +89,9 @@ add_3d_tiles_layer(path, name, url, altitude_offset=0, index=None)
 update_layer(path, layer, name=None, visible=None, opacity=None, index=None)
 remove_layer(path, layer)
 style_layer(path, layer, style)
+set_layer_popup(path, layer, fields=None, click=None, title=None,
+                title_expression=None, body_expression=None,
+                show_feature_id=None, tooltip=None, merge=False)
 classify_layer(path, layer, column, class_count=5, colormap="viridis",
                scheme="equal-interval")
 list_layer_properties(path, layer)
@@ -101,6 +104,17 @@ it. Common keys: `fillColor`, `fillOpacity`, `strokeColor`, `strokeWidth`,
 `circleRadius`, `minZoom`, `maxZoom`, and for rasters `rasterBrightnessMin` /
 `rasterBrightnessMax` / `rasterSaturation` / `rasterContrast` /
 `rasterHueRotate`. Colors are CSS strings (`"#3b82f6"`).
+
+`set_layer_popup` chooses what a click (and, with `tooltip`, a hover) shows.
+Without it a layer shows its name plus every visible property. Each `fields`
+entry is a property name or an object with `field` plus any of `label`, `kind`,
+`hover`, `decimals`, `thousands`, `date_format`, `prefix`, `suffix`,
+`link_label`. `kind` is `auto`, `text`, `number`, `date`, `link` (an http(s) URL
+becomes an anchor) or `image` (an http(s) URL or inline base64 raster data URL
+becomes a thumbnail). `tooltip` takes the property names to put in the hover
+tip; `[]` turns the tip off. `merge=True` edits the existing config in place, so
+a tooltip can be added without restating the fields. Run
+`list_layer_properties` first to get the real column names.
 
 `classify_layer` clamps `class_count` to 2–12. `scheme` is `equal-interval`
 (even value ranges) or `quantile` (even feature counts per class). It needs an
