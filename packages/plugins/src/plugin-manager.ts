@@ -1,3 +1,7 @@
+import {
+  getAssistantToolOwnerGeneration,
+  unregisterAssistantToolsByOwner,
+} from "./assistant-tool-registry";
 import type { ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
@@ -82,6 +86,7 @@ export class PluginManager {
       }
       this.active.delete(id);
     }
+    unregisterAssistantToolsByOwner(id);
     this.plugins.delete(id);
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
@@ -175,12 +180,14 @@ export class PluginManager {
     try {
       activated = plugin.activate(scopedApp);
     } catch (error) {
+      unregisterAssistantToolsByOwner(id);
       restoreDisplaced();
       throw error;
     } finally {
       this.activating.delete(id);
     }
     if (activated === false) {
+      unregisterAssistantToolsByOwner(id);
       restoreDisplaced();
       return false;
     }
@@ -267,6 +274,7 @@ export class PluginManager {
         console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
+    unregisterAssistantToolsByOwner(id);
     this.notify();
     return true;
   }
@@ -281,10 +289,14 @@ export class PluginManager {
   deactivate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.active.has(id)) return;
-    plugin.deactivate(scopeAppToPlugin(app, id));
-    this.active.delete(id);
-    this.activationResults.delete(id);
-    this.notify();
+    try {
+      plugin.deactivate(scopeAppToPlugin(app, id));
+    } finally {
+      unregisterAssistantToolsByOwner(id);
+      this.active.delete(id);
+      this.activationResults.delete(id);
+      this.notify();
+    }
   }
 
   /** Deactivate and return active siblings that conflict with `plugin`. */
@@ -495,9 +507,7 @@ export class PluginManager {
       if (targetActive.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
-      plugin.deactivate(scopeAppToPlugin(app, id));
-      this.active.delete(id);
-      this.activationResults.delete(id);
+      this.deactivate(id, app);
       changed = true;
     }
 
@@ -539,10 +549,16 @@ export class PluginManager {
       let activated: ReturnType<GeoLibrePlugin["activate"]>;
       try {
         activated = plugin.activate(scopedApp);
+      } catch (error) {
+        unregisterAssistantToolsByOwner(id);
+        throw error;
       } finally {
         this.activating.delete(id);
       }
-      if (activated === false) continue;
+      if (activated === false) {
+        unregisterAssistantToolsByOwner(id);
+        continue;
+      }
       const generation = this.nextActivationGeneration(id);
       this.active.add(id);
       changed = true;
@@ -606,10 +622,30 @@ function scopeAppToPlugin(
   const registerRightPanel = app.registerRightPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
-  if (!register && !onControlAdded && !onRightPanelOpened && !activatePlugin && !deactivatePlugin)
+  if (
+    !app.registerAssistantTool &&
+    !app.registerAssistantToolSpec &&
+    !register &&
+    !onControlAdded &&
+    !onRightPanelOpened &&
+    !activatePlugin &&
+    !deactivatePlugin
+  )
     return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
+  const toolGeneration = getAssistantToolOwnerGeneration(pluginId);
+  const canRegisterTools = () => toolGeneration === getAssistantToolOwnerGeneration(pluginId);
+  if (app.registerAssistantTool) {
+    const registerTool = app.registerAssistantTool;
+    scoped.registerAssistantTool = (tool) =>
+      canRegisterTools() ? registerTool(tool, pluginId) : () => {};
+  }
+  if (app.registerAssistantToolSpec) {
+    const registerSpec = app.registerAssistantToolSpec;
+    scoped.registerAssistantToolSpec = (spec) =>
+      canRegisterTools() ? registerSpec(spec, pluginId) : () => {};
+  }
 
   if (register) {
     // The public `registerToolbarMenu` is single-arg; the host's concrete impl

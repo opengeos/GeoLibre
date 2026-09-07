@@ -1,3 +1,4 @@
+import type { JSONSchema, Tool } from "@strands-agents/sdk";
 import type {
   ExternalNativePaintBridge,
   ExternalNativePaintMode,
@@ -358,7 +359,28 @@ export interface GeoLibreSelection {
   features: Feature<Geometry | null>[];
 }
 
+/** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
+ * JSON Schema describes input to the model but does NOT validate it at runtime.
+ * The callback must validate its own input. Return JSON-serializable data;
+ * undefined is converted to null and thrown errors become tool error results.
+ */
+export interface AssistantToolSpec {
+  name: string;
+  description: string;
+  inputSchema?: JSONSchema;
+  callback: (input: unknown) => unknown | Promise<unknown>;
+}
+
 export interface GeoLibreAppAPI {
+  /** Register an SDK Tool. The host scopes ownership to the calling plugin.
+   * Returns a disposer; the host also removes tools on plugin deactivation.
+   */
+  registerAssistantTool?: (tool: Tool, ownerPluginId?: string) => () => void;
+  /** Register a plain JSON Schema tool without importing the agent SDK.
+   * See AssistantToolSpec for input validation and return-value requirements.
+   */
+  registerAssistantToolSpec?: (spec: AssistantToolSpec, ownerPluginId?: string) => () => void;
+
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
   listLayers?: () => GeoLibreLayerSummary[];

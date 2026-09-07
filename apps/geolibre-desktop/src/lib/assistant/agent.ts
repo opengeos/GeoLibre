@@ -1,3 +1,4 @@
+import { getAssistantToolsVersion } from "@geolibre/plugins";
 import { useAppStore } from "@geolibre/core";
 import { Agent } from "@strands-agents/sdk";
 import { configForProvider, createModel, resolveProviderConfig } from "./provider";
@@ -41,6 +42,7 @@ export type AssistantStreamEvent =
  */
 export class AssistantSession {
   private agent: Agent | null = null;
+  private toolsVersion = -1;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
   private selection: AssistantProviderSelection | null = null;
   /**
@@ -108,7 +110,16 @@ export class AssistantSession {
   }
 
   private async ensureAgent(): Promise<Agent> {
-    if (this.agent) return this.agent;
+    if (this.agent) {
+      if (this.toolsVersion !== getAssistantToolsVersion()) {
+        // Refresh between prompts, retaining the agent and its conversation.
+        const tools = createAssistantTools(this.deps);
+        this.agent.toolRegistry.clear();
+        this.agent.toolRegistry.add(tools);
+        this.toolsVersion = getAssistantToolsVersion();
+      }
+      return this.agent;
+    }
 
     // Profile-based: resolve credentials directly from the profile's own
     // fieldValues, bypassing the shared runtime env. This prevents all-
@@ -133,6 +144,7 @@ export class AssistantSession {
       tools: createAssistantTools(this.deps),
       systemPrompt: SYSTEM_PROMPT,
     });
+    this.toolsVersion = getAssistantToolsVersion();
     return this.agent;
   }
 

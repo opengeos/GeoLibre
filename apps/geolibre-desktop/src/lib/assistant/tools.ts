@@ -1,3 +1,4 @@
+import { listAssistantTools } from "@geolibre/plugins";
 import {
   DEFAULT_LAYER_STYLE,
   OPENFREEMAP_BASEMAPS,
@@ -6,7 +7,7 @@ import {
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type { ModelToolDescriptor } from "@geolibre/processing";
-import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
+import type { Tool, JSONValue } from "@strands-agents/sdk";
 import * as maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
@@ -305,7 +306,7 @@ function asFeatureCollection(data: unknown): FeatureCollection {
  * @param deps Map-controller accessor for camera tools.
  * @returns The tools to register on the agent.
  */
-export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unknown, unknown>[] {
+export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
   const store = () => useAppStore.getState();
   // Tool results are serialized to the model; the data we return is JSON-safe by
   // construction, so this asserts the shape against Strands' strict JSONValue.
@@ -1055,6 +1056,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   });
 
   return [
+    ...listAssistantTools(),
     listLayers,
     runSql,
     addLayerFromUrl,
@@ -1076,5 +1078,5 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     applySymbology,
     runMaplibreJs,
     runPython,
-  ] as InvokableTool<unknown, unknown>[];
+  ] as Tool[];
 }

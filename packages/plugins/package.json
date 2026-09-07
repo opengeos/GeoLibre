@@ -35,6 +35,7 @@
     "@loaders.gl/i3s": "^4.4.5",
     "@mapbox/vector-tile": "^3.0.0",
     "@maplibre/maplibre-gl-directions": "^0.9.1",
+    "@strands-agents/sdk": "^1.15.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@turf/union": "^7.4.0",

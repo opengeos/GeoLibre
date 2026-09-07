@@ -1020,3 +1020,74 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by de
 `id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so a plugin hosted alongside the registry (e.g. `sample/plugin.json`) can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. Curate the registry and host plugin bundles in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo, which ships a `sample/` template.
 
 Uninstalling prompts for confirmation, then unregisters the plugin at runtime (deactivating any active map control) so the Plugins menu updates without a reload. When a registry entry advertises a newer `version` than the loaded plugin, the marketplace shows an Update action that re-fetches the manifest URL and re-registers the published version in place; the new version is fetched and validated before the old one is removed, so a failed update leaves the installed plugin intact.
+
+## Assistant tools
+
+Plugins can expose the same action to their panel and the AI Assistant. External
+plugins can use `app.registerAssistantToolSpec` with a plain JSON Schema and a
+callback, without importing or bundling `@strands-agents/sdk` or zod:
+
+```js
+let disposeTool;
+
+export default {
+  id: "city-loader",
+  name: "City loader",
+  version: "1.0.0",
+  activate(app) {
+    // Share this function with the panel's Add button.
+    async function addCities(input) {
+      if (!input || typeof input !== "object" || typeof input.name !== "string") {
+        throw new Error("name must be a string");
+      }
+      const response = await fetch(
+        "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/us_cities.geojson",
+      );
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+      const data = await response.json();
+      const layerId = app.addGeoJsonLayer(input.name, data);
+      return { layerId, featureCount: data.features.length };
+    }
+    disposeTool = app.registerAssistantToolSpec?.({
+      name: "add_cities",
+      description: "Add US cities to the map as a GeoJSON layer",
+      inputSchema: {
+        type: "object",
+        properties: { name: { type: "string" } },
+        required: ["name"],
+        additionalProperties: false,
+      },
+      callback: addCities,
+    });
+  },
+  deactivate() {
+    disposeTool?.();
+    disposeTool = undefined;
+  },
+};
+```
+
+**JSON Schema input is not automatically validated.** The callback must validate
+model-supplied input before performing an action. Return JSON-serializable data
+or a promise of it; a callback returning `undefined` produces `null`. Thrown
+errors become assistant tool error results. Omitting `inputSchema` describes an
+empty object with no additional properties.
+
+Built-in plugins that already import the SDK can instead call
+`app.registerAssistantTool(tool({ name, description, inputSchema, callback }))`,
+using the SDK's `tool()` factory with a zod schema for automatic validation. Both
+entry points use one registry and return an unregister function. External
+plugins should feature-detect these optional methods for older hosts.
+
+The host injects the plugin owner, ignoring any owner argument supplied by a
+plugin. Model-facing names are `plugin_<owner-length>_<plugin-id>_<tool-name>`.
+Names and plugin IDs use letters, digits, underscores, or hyphens, and the full
+name must fit within 64 characters. Names that differ only in case or
+underscore/hyphen spelling are rejected if they collide. Registering the same
+name for the same owner replaces it; an older disposer cannot remove the
+replacement. Tools are removed on deactivation, failed activation, and plugin
+removal, and stale asynchronous registrations after teardown are ignored.
+
+The assistant refreshes its tools before the next prompt while retaining its
+conversation history. Plugin callbacks execute plugin-authored code, like a
+panel button; they should use the app API to update layers and other app state.

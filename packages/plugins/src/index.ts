@@ -1,3 +1,10 @@
+export {
+  registerAssistantTool,
+  registerAssistantToolSpec,
+  listAssistantTools,
+  getAssistantToolsVersion,
+  unregisterAssistantToolsByOwner,
+} from "./assistant-tool-registry";
 export * from "./types";
 export { PluginManager } from "./plugin-manager";
 export {
