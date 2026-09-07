@@ -187,3 +187,51 @@ describe("SwipeRasterMirror", () => {
     assert.deepEqual(rec.calls, ["add:a=>m1"]);
   });
 });
+
+describe("comparison screenshot readiness", () => {
+  it("waits for the mirrored raster, its deck tiles, and its map; exposes errors", async () => {
+    let headerLoading = false;
+    let tileLoaded = false;
+    let mapLoaded = true;
+    let error: Error | undefined;
+    const deckLayer = {
+      get isLoaded() {
+        return tileLoaded;
+      },
+    };
+    const control = {
+      getRaster: () => ({ loading: headerLoading, error }),
+      _layerManager: {
+        _overlay: {
+          _deck: { isInitialized: true },
+          _props: { layers: [deckLayer] },
+        },
+      },
+    } as unknown as RasterControl;
+    const map = {
+      loaded: () => mapLoaded,
+      areTilesLoaded: () => mapLoaded,
+      isMoving: () => false,
+    } as unknown as MapLibreMap;
+    const rec = makeDeps();
+    const mirror = new SwipeRasterMirror(map, {
+      ...rec.deps,
+      createControl: async () => control,
+    });
+    assert.equal(mirror.getLoadState("a").loading, true);
+    await mirror.sync([raster("a")]);
+    assert.equal(mirror.getLoadState("a").loading, true);
+    tileLoaded = true;
+    assert.deepEqual(mirror.getLoadState("a"), { loading: false, error: null });
+    headerLoading = true;
+    assert.equal(mirror.getLoadState("a").loading, true);
+    headerLoading = false;
+    mapLoaded = false;
+    assert.equal(mirror.getLoadState("a").loading, true);
+    mapLoaded = true;
+    error = new Error("Tile failed");
+    assert.equal(mirror.getLoadState("a").error, "Tile failed");
+    mirror.destroy();
+    assert.equal(mirror.getLoadState("a").loading, true);
+  });
+});

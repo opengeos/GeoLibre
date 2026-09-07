@@ -15,6 +15,7 @@ export function screenshotReadinessEnabled(search: string): boolean {
 }
 
 export interface LayerLoadProbe {
+  swipe?: (id: string) => { loading: boolean; error: string | null; mainVisible: boolean } | null;
   raster: (id: string) => {
     loading: boolean;
     error: string | null;
@@ -72,6 +73,19 @@ export function inspectScreenshotLayers(
     if (typeof layer.metadata.error === "string") {
       errors.push(`${layer.name}: ${layer.metadata.error}`);
       continue;
+    }
+    const swipe = probe.swipe?.(layer.id);
+    if (swipe) {
+      if (swipe.error) {
+        errors.push(`${layer.name}: ${swipe.error}`);
+        continue;
+      }
+      if (swipe.loading) {
+        pending.push(layer.name);
+        continue;
+      }
+      // Right-only rasters are intentionally absent from the main renderer.
+      if (!swipe.mainVisible) continue;
     }
     const isRaster = layer.metadata.sourceKind === "maplibre-gl-raster";
     let requiresDeck = false;

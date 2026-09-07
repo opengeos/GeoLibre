@@ -76,6 +76,38 @@ export class SwipeRasterMirror {
     return this.map;
   }
 
+  /** Probe the private comparison overlay, never the main-map shared Deck. */
+  getLoadState(layerId: string): { loading: boolean; error: string | null } {
+    const entry = this.applied.get(layerId);
+    const raster = entry && this.control?.getRaster(entry.mirrorId);
+    // RasterControl has no public tile-readiness API. This is the same manager
+    // seam used by patchWebRasterOverlayFactory, verified against 0.14.11.
+    // Missing internals fail closed after a dependency upgrade.
+    const overlay = (
+      this.control as unknown as {
+        _layerManager?: {
+          _overlay?: {
+            _deck?: { isInitialized: boolean };
+            _props?: { layers?: { isLoaded: boolean }[] };
+          };
+        };
+      } | null
+    )?._layerManager?._overlay;
+    const layers = overlay?._props?.layers;
+    return {
+      loading:
+        !raster ||
+        raster.loading ||
+        !overlay?._deck?.isInitialized ||
+        !layers?.length ||
+        layers.some((layer) => !layer.isLoaded) ||
+        !this.map.loaded() ||
+        !this.map.areTilesLoaded() ||
+        this.map.isMoving(),
+      error: raster?.error?.message ?? null,
+    };
+  }
+
   sync(desired: SwipeRasterSnapshot[]): Promise<void> {
     this.syncChain = this.syncChain.catch(() => {}).then(() => this.reconcile(desired));
     return this.syncChain;

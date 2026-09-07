@@ -66,6 +66,20 @@ let cogPendingComparisonMap: MapLibreMap | undefined;
 let cogReconcileScheduled = false;
 let unsubscribeCogRasterChanges: (() => void) | null = null;
 
+/** Read comparison rasters under the mirror's generated ids. */
+export function getSwipeRasterLoadState(layerId: string) {
+  const forced = cogMainForced.get(layerId);
+  if (!forced || forced.kind !== "raster") return null;
+  const state = swipeControl?.getState();
+  // Left-only rasters are not mirrored. Unassigned and both-side rasters are.
+  if (state?.leftLayers.includes(layerId) && !state.rightLayers.includes(layerId)) return null;
+  const result = rasterMirror?.getLoadState(layerId) ?? {
+    loading: true,
+    error: null,
+  };
+  return { ...result, mainVisible: forced.visible };
+}
+
 const cogSwipeProvider: SwipeLayerProvider = {
   getLayers: () =>
     [...getSwipeCogRasters(), ...getSwipeMaplibreRasters()].map((raster) => ({
