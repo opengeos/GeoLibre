@@ -648,7 +648,7 @@ def classify_layer(
 
 
 def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return ``secondaryMapViews`` validated as a list of panes with an ``id``.
+    """Return ``secondaryMapViews`` validated as a list of renderable panes.
 
     Args:
         project: The project dict.
@@ -658,13 +658,21 @@ def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
 
     Raises:
         ValueError: If the field is not a list of pane objects carrying a
-            string ``id``, e.g. from a hand-edited project file.
+            string ``id`` and, when present, a ``maplibre``/``cesium``
+            ``viewKind`` (an omitted ``viewKind`` means ``maplibre``), e.g.
+            from a hand-edited project file.
     """
     panes = project.get("secondaryMapViews", [])
     if not isinstance(panes, list) or any(
-        not isinstance(p, dict) or not isinstance(p.get("id"), str) for p in panes
+        not isinstance(p, dict)
+        or not isinstance(p.get("id"), str)
+        or p.get("viewKind", "maplibre") not in {"maplibre", "cesium"}
+        for p in panes
     ):
-        raise ValueError("secondaryMapViews must be a list of pane objects with an id")
+        raise ValueError(
+            "secondaryMapViews must be a list of pane objects with an id "
+            "and a maplibre or cesium viewKind"
+        )
     return panes
 
 

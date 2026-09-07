@@ -1257,3 +1257,12 @@ def test_malformed_secondary_map_views_raise_value_error(m):
         m.set_map_layout(1, 2)
     with pytest.raises(ValueError):
         m.get_renderer(pane_id="x")
+    # An omitted viewKind is MapLibre; a present one must name a renderer.
+    m.load_project({**m.project, "secondaryMapViews": [{"id": "p"}]})
+    assert m.get_renderer(pane_id="p") == "maplibre"
+    for bad in (None, "webgl"):
+        m.load_project({**m.project, "secondaryMapViews": [{"id": "p", "viewKind": bad}]})
+        with pytest.raises(ValueError):
+            m.get_renderer(pane_id="p")
+        with pytest.raises(ValueError):
+            m.set_map_layout(1, 2)
