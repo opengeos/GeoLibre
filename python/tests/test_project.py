@@ -663,6 +663,20 @@ def test_marker_style_rejects_out_of_range_numbers():
         project.marker_style(size=float("nan"))
 
 
+def test_marker_style_rejects_circle_only_settings_on_a_sprite():
+    # layer-sync removes the circle layer when a sprite is active, and the
+    # sprite draws its own white halo, so these would never render.
+    with pytest.raises(ValueError, match="only applies to circle markers"):
+        project.marker_style(shape="pin", radius=8)
+    with pytest.raises(ValueError, match="opacity, stroke_width"):
+        project.marker_style(size=20, opacity=0.5, stroke_width=2)
+
+
+def test_marker_style_still_takes_color_on_a_sprite():
+    style = project.marker_style(shape="star", color="#22c55e", size=20)
+    assert style["markerColor"] == "#22c55e"
+
+
 def test_marker_style_is_empty_when_nothing_is_passed():
     assert project.marker_style() == {}
 

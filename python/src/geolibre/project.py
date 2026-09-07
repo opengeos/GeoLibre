@@ -885,6 +885,26 @@ def marker_style(
     # Any of these three means "render a marker sprite, not a plain circle".
     sprite = shape is not None or size is not None or icon is not None
 
+    if sprite:
+        # A sprite layer replaces the circle layer outright (layer-sync removes
+        # it), and the sprite's own outline is a fixed white halo drawn by
+        # drawBuiltinMarker. So the circle-only settings are not merely
+        # overridden here, they are unreachable -- writing them would leave the
+        # caller looking at a marker that ignored what they asked for.
+        inert = {
+            "opacity": opacity,
+            "radius": radius,
+            "stroke_color": stroke_color,
+            "stroke_width": stroke_width,
+        }
+        given = sorted(name for name, value in inert.items() if value is not None)
+        if given:
+            applies = "applies" if len(given) == 1 else "apply"
+            raise ValueError(
+                f"{', '.join(given)} only {applies} to circle markers, but shape/size/icon "
+                "selected a marker sprite; use size= for the sprite's size and drop the rest"
+            )
+
     if color is not None:
         style["fillColor"] = str(color)
         if sprite:

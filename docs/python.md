@@ -331,10 +331,19 @@ m.add_markers(points, icon='<svg viewBox="0 0 24 24">…</svg>', size=28)
 A point layer draws two ways. By default it is a MapLibre circle sized by
 `radius`. Passing `shape`, `size`, or `icon` switches it to a **marker sprite**:
 one of `circle`, `square`, `triangle`, `diamond`, `star`, `cross`, `pin`, or
-`custom` (which needs `icon`, raw SVG markup or a data URL). A sprite is sized by
-`size` rather than `radius`, and its `color` must be a hex color — the sprite
-baker accepts nothing else, so a CSS color name is rejected rather than silently
-drawn in the default blue.
+`custom` (which needs `icon`, raw SVG markup or a data URL).
+
+The two modes take different settings, and mixing them is an error rather than a
+silent no-op. A sprite layer replaces the circle layer outright and draws its own
+white halo, so `opacity`, `radius`, `stroke_color`, and `stroke_width` are
+circle-only and are rejected when `shape`/`size`/`icon` is also given — use
+`size` for a sprite's size. A sprite's `color` must be a hex color, because the
+sprite baker accepts nothing else and would otherwise fall back to the default
+blue in silence.
+
+Where a named argument and its underlying style key are both passed
+(`add_markers(pts, radius=8, circleRadius=20)`), the raw style key wins — it is
+the low-level escape hatch.
 
 ### Popups and tooltips
 

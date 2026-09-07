@@ -1318,6 +1318,23 @@ def test_add_circle_markers_still_sets_the_radius(m):
     assert _last_layer(m)["style"]["circleRadius"] == 12
 
 
+def test_an_explicit_style_key_wins_over_the_named_argument(m):
+    # The raw style key is the escape hatch; this is also the precedence
+    # add_circle_markers had before the named arguments existed.
+    m.add_markers([(-100, 40)], color="#ffffff", fillColor="#000000")
+    assert _last_layer(m)["style"]["fillColor"] == "#000000"
+
+
+def test_add_circle_markers_keeps_an_explicit_circle_radius(m):
+    m.add_circle_markers([(-100, 40)], radius=8, circleRadius=20)
+    assert _last_layer(m)["style"]["circleRadius"] == 20
+
+
+def test_add_markers_rejects_circle_only_settings_on_a_sprite(m):
+    with pytest.raises(ValueError, match="only applies to circle markers"):
+        m.add_markers([(-100, 40)], shape="pin", radius=9)
+
+
 def test_add_markers_popup_and_tooltip_land_on_the_layer(m):
     m.add_markers(
         [{"lon": -100, "lat": 40, "name": "A", "photo": "https://example.org/a.jpg"}],

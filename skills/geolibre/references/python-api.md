@@ -93,13 +93,16 @@ Marker symbology is named arguments on `add_marker`/`add_markers`: `color`,
 `opacity`, `radius`, `stroke_color`, `stroke_width` for the default circle, and
 `shape` (`circle`, `square`, `triangle`, `diamond`, `star`, `cross`, `pin`,
 `custom`), `size`, `icon` (SVG markup) to switch to a marker sprite. A sprite is
-sized by `size`, not `radius`, and its `color` must be a hex color.
+sized by `size`, its `color` must be a hex color, and it draws its own white
+halo — so the circle-only arguments (`opacity`, `radius`, `stroke_color`,
+`stroke_width`) are rejected rather than silently ignored. A raw style key
+passed alongside a named argument wins.
 
 ### Popups and tooltips
 
 Every `add_*` that takes style overrides accepts `popup=` and `tooltip=`
-(`add_ee_layer` does not); `m.set_popup(...)` / `m.set_tooltip(...)` /
-`m.clear_popup(...)` change one later. Without a config a
+(`add_ee_layer` does not). To change a layer's popup after it was added, use
+`m.set_popup(...)` / `m.set_tooltip(...)` / `m.clear_popup(...)`. Without a config a
 layer shows its name plus every visible property on click, and no hover tip.
 
 ```python

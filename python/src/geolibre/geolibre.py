@@ -1501,18 +1501,21 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        style.update(
-            _project.marker_style(
-                color=color,
-                opacity=opacity,
-                radius=radius,
-                stroke_color=stroke_color,
-                stroke_width=stroke_width,
-                shape=shape,
-                size=size,
-                icon=icon,
-            )
-        )
+        # setdefault, not update: a raw style key passed alongside the named
+        # argument is the low-level escape hatch and keeps winning, which is
+        # also the precedence add_circle_markers had before these arguments
+        # existed.
+        for key, value in _project.marker_style(
+            color=color,
+            opacity=opacity,
+            radius=radius,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            shape=shape,
+            size=size,
+            icon=icon,
+        ).items():
+            style.setdefault(key, value)
         fc = {
             "type": "FeatureCollection",
             "features": [self._point_feature(lng, lat, properties)],
@@ -1576,18 +1579,21 @@ class Map(anywidget.AnyWidget):
             ...     tooltip="name",
             ... )
         """
-        style.update(
-            _project.marker_style(
-                color=color,
-                opacity=opacity,
-                radius=radius,
-                stroke_color=stroke_color,
-                stroke_width=stroke_width,
-                shape=shape,
-                size=size,
-                icon=icon,
-            )
-        )
+        # setdefault, not update: a raw style key passed alongside the named
+        # argument is the low-level escape hatch and keeps winning, which is
+        # also the precedence add_circle_markers had before these arguments
+        # existed.
+        for key, value in _project.marker_style(
+            color=color,
+            opacity=opacity,
+            radius=radius,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            shape=shape,
+            size=size,
+            icon=icon,
+        ).items():
+            style.setdefault(key, value)
         fc = self._points_to_featurecollection(points)
         return self._add_layer(_project.geojson_layer(name, fc, **style))
 
