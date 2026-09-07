@@ -407,11 +407,16 @@ export function drawPrintExtent(
   });
 }
 
-/** Globe extent drawing with cancellation and a disposable native preview. */
+/**
+ * Globe extent drawing with cancellation and a native preview. A completed
+ * draw keeps its final preview on the globe (as {@link showPrintExtent} leaves
+ * the MapLibre box in place) and hands back its disposer; cancel and abort
+ * remove it.
+ */
 export function drawEnginePrintExtent(
   engine: MapEngine,
   signal: AbortSignal,
-): Promise<PrintExtent | null> {
+): Promise<{ extent: PrintExtent; dispose: () => void } | null> {
   return new Promise((resolve) => {
     let preview: (() => void) | undefined;
     let dispose: (() => void) | undefined;
@@ -419,10 +424,14 @@ export function drawEnginePrintExtent(
     const finish = (extent: PrintExtent | null) => {
       if (settled) return;
       settled = true;
-      preview?.();
       dispose?.();
       signal.removeEventListener("abort", cancel);
-      resolve(extent);
+      if (!extent) {
+        preview?.();
+        resolve(null);
+        return;
+      }
+      resolve({ extent, dispose: preview ?? engine.showExtent(extent) });
     };
     const cancel = () => finish(null);
     if (signal.aborted) {

@@ -8,10 +8,11 @@ afterEach(() => {
   globalThis.window = originalWindow;
 });
 
-test("extent corners preserve the short arc across the antimeridian in either direction", () => {
-  assert.deepEqual(extentFromCorners([179, 10], [-179, -10]), [179, -10, -179, 10]);
-  assert.deepEqual(extentFromCorners([-179, -10], [179, 10]), [179, -10, -179, 10]);
+test("extent corners unwrap the short arc across the antimeridian in either direction", () => {
+  assert.deepEqual(extentFromCorners([179, 10], [-179, -10]), [179, -10, 181, 10]);
+  assert.deepEqual(extentFromCorners([-179, -10], [179, 10]), [179, -10, 181, 10]);
   assert.deepEqual(extentFromCorners([190, 4], [200, 8]), [-170, 4, -160, 8]);
+  assert.deepEqual(extentFromCorners([-10, 4], [10, 8]), [-10, 4, 10, 8]);
 });
 
 function setup() {

@@ -306,6 +306,11 @@ export interface ManualPlacementOptions {
   onDone?: () => void;
 }
 
+/**
+ * Geographic bounds in degrees, unwrapped the way MapLibre's `getBounds()`
+ * reports them: `west < east` always, and a span across the antimeridian
+ * carries `east > 180` instead of inverting the pair.
+ */
 export type MapExtent = [west: number, south: number, east: number, north: number];
 
 export interface MapRenderSurface {

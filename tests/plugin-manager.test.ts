@@ -1421,6 +1421,42 @@ describe("PluginManager renderer compatibility", () => {
     manager.restoreProjectState(state, api);
     assert.equal(mounts, 2);
   });
+  it("blocks UI registration from a retained state scope once the plugin deactivates", () => {
+    const manager = new PluginManager();
+    let scoped: GeoLibreAppAPI | undefined;
+    let registered = 0;
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        registered++;
+        return true;
+      },
+      registerToolbarMenu: () => {
+        registered++;
+        return () => undefined;
+      },
+      registerRightPanel: () => {
+        registered++;
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        applyProjectState: (value) => {
+          scoped = value;
+        },
+      }),
+    );
+    manager.activate("url-loader", api);
+    manager.applyPluginState("url-loader", api, {});
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scoped!.addMapControl(control), true);
+    manager.deactivate("url-loader", api);
+    assert.equal(scoped!.addMapControl(control), false);
+    scoped!.registerToolbarMenu?.({ id: "stale", label: "Stale", items: [] });
+    scoped!.registerRightPanel?.({ id: "stale-panel", title: "Stale", render: () => undefined });
+    assert.equal(registered, 1);
+  });
   it("rejects controls from an activation replaced by a renderer switch", () => {
     const manager = new PluginManager();
     let renderer: "maplibre" | "cesium" = "maplibre";

@@ -614,6 +614,20 @@ export function PrintLayoutDialog({
   );
 
   const captureRequest = useRef(0);
+  // The globe keeps the drawn extent as a native entity (MapLibre's box lives
+  // in the print-extent source/layers), so one retained disposer mirrors that
+  // box's show / hide-for-capture / clear lifecycle. No-op on MapLibre.
+  const enginePreviewRef = useRef<(() => void) | null>(null);
+  const showEnginePreview = useCallback(
+    (extent: PrintExtent | null) => {
+      enginePreviewRef.current?.();
+      enginePreviewRef.current = null;
+      const engine = mapControllerRef.current;
+      if (!extent || !engine || engine.getMap()) return;
+      enginePreviewRef.current = engine.showExtent(extent);
+    },
+    [mapControllerRef],
+  );
   const recapture = useCallback(
     async (clipOverride?: PrintExtent | null) => {
       const request = ++captureRequest.current;
@@ -645,6 +659,7 @@ export function PrintLayoutDialog({
       // Hide the extent box while reading the drawing buffer so its outline is
       // never baked into the captured image.
       if (map) setPrintExtentVisible(map, false);
+      else showEnginePreview(null);
       try {
         const image = await captureEngineMapImage(engine, clip);
         if (request !== captureRequest.current) return;
@@ -655,10 +670,16 @@ export function PrintLayoutDialog({
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
       } finally {
-        if (map && engine.getMap() === map) setPrintExtentVisible(map, true);
+        // Only the live request restores the box: a superseded capture's
+        // restore would otherwise land mid-way through the newer one and bake
+        // the outline into its image.
+        if (request === captureRequest.current) {
+          if (map && engine.getMap() === map) setPrintExtentVisible(map, true);
+          else if (!map) showEnginePreview(clipOverride !== undefined ? clipOverride : extentBbox);
+        }
       }
     },
-    [mapControllerRef, t, captureMode, extentBbox],
+    [mapControllerRef, t, captureMode, extentBbox, showEnginePreview],
   );
 
   // Capture the map only on the closed -> open transition, so a background
@@ -682,6 +703,7 @@ export function PrintLayoutDialog({
       setCopied(false);
       // Re-show a previously drawn extent box while composing.
       if (map && extentBbox) showPrintExtent(map, extentBbox);
+      else if (!map && extentBbox) showEnginePreview(extentBbox);
       // With an active atlas persisting from a prior session, skip the plain
       // viewport capture: the atlas auto-drive effect recaptures the current
       // page on this same transition, and the extra capture would flash an
@@ -690,13 +712,14 @@ export function PrintLayoutDialog({
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
       captureRequest.current++;
       // Closing for good (not to draw): take the extent box off the map.
+      showEnginePreview(null);
       if (map) {
-        if (map) clearPrintExtent(map);
+        clearPrintExtent(map);
         clearAtlasFeatureMask(map);
       }
     }
     wasOpenRef.current = open;
-  }, [open, recapture, mapControllerRef, extentBbox]);
+  }, [open, recapture, mapControllerRef, extentBbox, showEnginePreview]);
 
   // Clean up if the dialog unmounts: abort an in-progress draw (so its window
   // listeners are torn down and it does not setState on an unmounted component)
@@ -714,6 +737,8 @@ export function PrintLayoutDialog({
         window.clearTimeout(copiedTimeoutRef.current);
         copiedTimeoutRef.current = null;
       }
+      enginePreviewRef.current?.();
+      enginePreviewRef.current = null;
       const map = mapControllerRef.current?.getMap();
       if (map) {
         if (idleRecaptureRef.current) {
@@ -1803,9 +1828,20 @@ export function PrintLayoutDialog({
     setDrawingExtent(true);
     onOpenChange(false);
     try {
-      const extent = map
-        ? await drawPrintExtent(map, { aspect, signal: controller.signal })
-        : await drawEnginePrintExtent(engine, controller.signal);
+      let extent: PrintExtent | null = null;
+      if (map) {
+        extent = await drawPrintExtent(map, { aspect, signal: controller.signal });
+      } else {
+        // Take the prior globe box down first so the drag is not painted over
+        // it (drawPrintExtent replaces the MapLibre box's data the same way).
+        showEnginePreview(null);
+        const drawn = await drawEnginePrintExtent(engine, controller.signal);
+        if (drawn && controller.signal.aborted) drawn.dispose();
+        else if (drawn) {
+          extent = drawn.extent;
+          enginePreviewRef.current = drawn.dispose;
+        }
+      }
       // Aborted means the dialog unmounted mid-draw: do not touch state.
       if (controller.signal.aborted) return;
       if (extent) {
@@ -1815,6 +1851,7 @@ export function PrintLayoutDialog({
       } else if (extentBbox) {
         // Cancelled drag: drop the half-drawn preview back to the prior extent.
         if (map) showPrintExtent(map, extentBbox);
+        else showEnginePreview(extentBbox);
       } else {
         if (map) clearPrintExtent(map);
       }
@@ -1826,15 +1863,16 @@ export function PrintLayoutDialog({
         onOpenChange(true);
       }
     }
-  }, [mapControllerRef, options, onOpenChange, recapture, extentBbox]);
+  }, [mapControllerRef, options, onOpenChange, recapture, extentBbox, showEnginePreview]);
 
   const handleClearExtent = useCallback(() => {
     const map = mapControllerRef.current?.getMap();
     if (map) clearPrintExtent(map);
+    showEnginePreview(null);
     setExtentBbox(null);
     setCaptureMode("viewport");
     recapture(null);
-  }, [mapControllerRef, recapture]);
+  }, [mapControllerRef, recapture, showEnginePreview]);
 
   const setMode = useCallback(
     (mode: "viewport" | "extent") => {

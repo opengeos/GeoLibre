@@ -1,11 +1,15 @@
 import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
 
-/** Use the shorter longitude arc, preserving a crossing as west > east. */
+/**
+ * Order two corners into a {@link MapExtent} along the shorter longitude arc.
+ * A span across the antimeridian is unwrapped (`east > 180`) rather than
+ * inverted, so `west < east` holds for every consumer.
+ */
 export function extentFromCorners(a: [number, number], b: [number, number]): MapExtent {
   const wrap = (value: number) => ((((value + 180) % 360) + 360) % 360) - 180;
   let west = Math.min(wrap(a[0]), wrap(b[0]));
   let east = Math.max(wrap(a[0]), wrap(b[0]));
-  if (east - west > 180) [west, east] = [east, west];
+  if (east - west > 180) [west, east] = [east, west + 360];
   return [west, Math.min(a[1], b[1]), east, Math.max(a[1], b[1])];
 }
 

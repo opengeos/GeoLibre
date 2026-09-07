@@ -27,13 +27,20 @@ export class PluginManager {
     options: ScopeAppOptions = {},
   ): GeoLibreAppAPI {
     const generation = this.activationGenerations.get(id);
+    // Settings and restore callbacks may register UI synchronously before
+    // activation. Retained callbacks need a live activation after this turn.
+    let synchronous = true;
+    queueMicrotask(() => {
+      synchronous = false;
+    });
     return scopeAppToPlugin(app, id, {
       ...options,
       canAddControl: () =>
         this.supportsEngine(id, app) &&
-        (!options.assistantTools ||
-          (this.activationGenerations.get(id) === generation &&
-            (this.activating.has(id) || this.active.has(id)))),
+        this.activationGenerations.get(id) === generation &&
+        (this.activating.has(id) ||
+          this.active.has(id) ||
+          (!options.assistantTools && synchronous)),
     });
   }
 
@@ -329,6 +336,7 @@ export class PluginManager {
     } finally {
       unregisterAssistantToolsByOwner(id);
       this.active.delete(id);
+      this.nextActivationGeneration(id);
       this.activationResults.delete(id);
       this.notify();
     }
@@ -730,22 +738,24 @@ function scopeAppToPlugin(
       canAddControl?.() === false ? () => {} : registerWithOwner(menu, pluginId);
   }
 
-  if (registerRightPanel && deactivatePlugin) {
+  if (registerRightPanel) {
     scoped.registerRightPanel = (panel) =>
-      registerRightPanel(
-        panel.deactivatePluginOnClose
-          ? {
-              ...panel,
-              onExplicitClose: () => {
-                try {
-                  panel.onExplicitClose?.();
-                } finally {
-                  setTimeout(() => deactivatePlugin(pluginId), 0);
+      canAddControl?.() === false
+        ? () => {}
+        : registerRightPanel(
+            panel.deactivatePluginOnClose
+              ? {
+                  ...panel,
+                  onExplicitClose: () => {
+                    try {
+                      panel.onExplicitClose?.();
+                    } finally {
+                      if (deactivatePlugin) setTimeout(() => deactivatePlugin(pluginId), 0);
+                    }
+                  },
                 }
-              },
-            }
-          : panel,
-      );
+              : panel,
+          );
   }
 
   if (app.addMapControl && (onControlAdded || canAddControl)) {

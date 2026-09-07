@@ -1650,23 +1650,7 @@ export class MapController implements MapEngine {
         const location = map.unproject([point.x, point.y]);
         return [location.lng, location.lat];
       },
-      () => {
-        const handlers = [
-          map.dragPan,
-          map.boxZoom,
-          map.dragRotate,
-          map.scrollZoom,
-          map.touchZoomRotate,
-          map.doubleClickZoom,
-          map.keyboard,
-        ];
-        const enabled = handlers.map((handler) => handler.isEnabled());
-        handlers.forEach((handler) => handler.disable());
-        return () =>
-          handlers.forEach((handler, index) => {
-            if (enabled[index]) handler.enable();
-          });
-      },
+      () => this.suspendNavigation(),
       options,
     );
     return this.extentDrawingDispose;

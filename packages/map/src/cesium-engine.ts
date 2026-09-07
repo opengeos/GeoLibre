@@ -799,10 +799,13 @@ export class CesiumEngine implements MapEngine {
     const rectangle = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
     if (!rectangle) return null;
     const degrees = this.Cesium.Math.toDegrees;
+    const west = degrees(rectangle.west);
+    const east = degrees(rectangle.east);
+    // Cesium inverts the pair across the antimeridian; MapExtent unwraps it.
     return [
-      degrees(rectangle.west),
+      west,
       degrees(rectangle.south),
-      degrees(rectangle.east),
+      east < west ? east + 360 : east,
       degrees(rectangle.north),
     ];
   }
@@ -811,10 +814,13 @@ export class CesiumEngine implements MapEngine {
     const viewer = this.live();
     if (!viewer) return () => {};
     const C = this.Cesium;
-    const [west, south, east, north] = extent;
+    const [west, south, north] = [extent[0], extent[1], extent[3]];
+    // Rectangle geometry requires east <= 180; an unwrapped crossing is handed
+    // to Cesium in its own inverted (west > east) form.
+    const east = extent[2] > 180 ? extent[2] - 360 : extent[2];
     const entity = viewer.entities.add({
       rectangle: {
-        coordinates: C.Rectangle.fromDegrees(...extent),
+        coordinates: C.Rectangle.fromDegrees(west, south, east, north),
         material: C.Color.fromCssColorString("#38bdf8").withAlpha(0.2),
       },
       polyline: {

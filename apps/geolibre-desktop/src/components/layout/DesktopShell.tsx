@@ -1265,6 +1265,16 @@ export function DesktopShell({
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();
+    const search = window.location.search;
+    void pluginManager
+      .handleUrlParameters(new URLSearchParams(search), appAPI, `${projectGeneration}:${search}`)
+      // `handleUrlParameters` activates plugins asynchronously, so it can land
+      // after the synchronous pass above. No blocked plugin registers a URL
+      // handler today, but "every activation path is covered" is the whole
+      // point of the guard, so re-assert it once this settles rather than
+      // leaving the next one to notice.
+      .catch(console.error)
+      .finally(enforceViewerPlugins);
     if (!engine.capabilities.nativeMapInstance) {
       void restoreLocalFileLayers();
       return;
@@ -1332,16 +1342,6 @@ export function DesktopShell({
     // Same contract for the deck.gl overlay: re-attach it to the current map
     // and re-render any deckgl-viz layers a restored project carries.
     restoreDeckViz(appAPI, pluginManager.isActive(DECK_VIZ_PLUGIN_ID));
-    const search = window.location.search;
-    void pluginManager
-      .handleUrlParameters(new URLSearchParams(search), appAPI, `${projectGeneration}:${search}`)
-      // `handleUrlParameters` activates plugins asynchronously, so it can land
-      // after the synchronous pass above. No blocked plugin registers a URL
-      // handler today, but "every activation path is covered" is the whole
-      // point of the guard, so re-assert it once this settles rather than
-      // leaving the next one to notice.
-      .catch(console.error)
-      .finally(enforceViewerPlugins);
   }, [enforceViewerPlugins, externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {

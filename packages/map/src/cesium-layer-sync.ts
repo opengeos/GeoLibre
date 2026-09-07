@@ -559,8 +559,14 @@ export class CesiumLayerSync {
       const entry = this.entries.get(layer.id);
       if (entry?.handle?.show === false) continue;
       if (entry?.loadError) errors.push(`${layer.name}: ${entry.loadError}`);
+      // sync() registers no entry for a kind the globe supports whose source is
+      // unusable (no tile template, no image bounds), so without this it would
+      // read as pending forever. A bare "geojson" layer is still loading.
+      else if (!entry && layer.type !== "geojson" && !isSupported(layer))
+        errors.push(`${layer.name}: missing or unsupported source configuration`);
       else if (!entry?.handle) pending.push(layer.name);
-      else if (entry.kind === "3dtiles" && !(entry.handle as Cesium3DTileset).allTilesLoaded)
+      // `allTilesLoaded` is an Event (always truthy); `tilesLoaded` is the flag.
+      else if (entry.kind === "3dtiles" && !(entry.handle as Cesium3DTileset).tilesLoaded)
         pending.push(layer.name);
       else if (entry.kind === "geojson" && (entry.handle as DataSource).isLoading)
         pending.push(layer.name);
@@ -807,7 +813,7 @@ export class CesiumLayerSync {
         isAsync = true;
         const url = String(layer.source.url);
         const bounds = imageBounds(layer);
-        if (!bounds) return;
+        if (!bounds) throw new Error("the image layer has no usable bounds");
         const resource = makeResource(url);
         const rectangle = Cesium.Rectangle.fromDegrees(bounds[0], bounds[1], bounds[2], bounds[3]);
         const options = { rectangle };
@@ -849,7 +855,7 @@ export class CesiumLayerSync {
             console.warn(
               `[GeoLibre] skipping "${layer.name}" on the globe: unsupported WMTS tiling scheme "${schemeId}"`,
             );
-            return;
+            throw new Error(`unsupported WMTS tiling scheme "${schemeId}"`);
           }
         }
         const labels = layer.source.tileMatrixLabels;
@@ -872,7 +878,7 @@ export class CesiumLayerSync {
         });
       } else {
         const url = firstTile(layer);
-        if (!url) return;
+        if (!url) throw new Error("no tile URL template");
         const resource = makeResource(url);
         const maxLevel = Number(layer.source.maxzoom);
         const minLevel = Number(layer.source.minzoom);
