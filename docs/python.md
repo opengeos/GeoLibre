@@ -339,9 +339,10 @@ drawn in the default blue.
 ### Popups and tooltips
 
 Without any configuration, clicking a feature shows the layer name and every
-visible property, and there is no hover tooltip. Every `add_*` method takes
-`popup=` and `tooltip=` to change that, and `set_popup` / `set_tooltip` /
-`clear_popup` change it on a layer that already exists.
+visible property, and there is no hover tooltip. Every `add_*` method that
+takes style overrides accepts `popup=` and `tooltip=` to change that (the
+exception is `add_ee_layer`, which has a fixed signature), and `set_popup` /
+`set_tooltip` / `clear_popup` change it on a layer that already exists.
 
 ```python
 m.add_markers(

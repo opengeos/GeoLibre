@@ -463,6 +463,19 @@ _POPUP_FIELD_KEYS = {
 }
 
 
+# The snake_case spellings a popup mapping accepts, derived from the table above
+# so an added or removed key cannot leave the error message behind.
+_POPUP_CONFIG_ARGUMENTS = sorted(
+    {
+        "titleField": "title",
+        "titleExpression": "title_expression",
+        "bodyExpression": "body_expression",
+        "showFeatureId": "show_feature_id",
+    }.get(value, value)
+    for value in set(_POPUP_CONFIG_KEYS.values())
+)
+
+
 def _normalize_key(key: Any) -> str:
     """Fold a mapping key's spelling: lowercased, ``-``/``_`` removed."""
     return str(key).lower().replace("-", "").replace("_", "")
@@ -670,59 +683,91 @@ def popup_config(
     return config
 
 
+def _assert_tooltip_can_render(config: dict[str, Any]) -> None:
+    """Reject a hover tooltip that is switched on but could never show anything.
+
+    ``createHoverTooltipElement`` draws the fields flagged ``hover`` under a
+    configured title, and returns nothing when it has neither -- so a config
+    with ``hover`` and no such field is a tooltip that silently never appears.
+    Checked on the finished config rather than at each entry point, because
+    ``hover`` can arrive through ``tooltip=``, through the ``hover=`` argument,
+    or from a merge with what the layer already carried.
+
+    Args:
+        config: The finished popup config.
+
+    Raises:
+        ValueError: If ``hover`` is on with no hover field and no title.
+    """
+    if config.get("hover") is not True:
+        return
+    fields = config.get("fields") or []
+    if any(isinstance(entry, dict) and entry.get("hover") is True for entry in fields):
+        return
+    if config.get("titleField") or config.get("titleExpression"):
+        return
+    raise ValueError(
+        "the hover tooltip is on but nothing would render in it: name the fields to "
+        "show (tooltip=['name']), set a popup title, or turn it off (tooltip=False)"
+    )
+
+
 def apply_tooltip(config: dict[str, Any], tooltip: Any) -> dict[str, Any]:
     """Fold a ``tooltip=`` shorthand into a popup config, in place.
 
     The app's hover tooltip needs two things: ``hover`` on the config, and at
     least one field flagged ``hover`` (or a configured title) to put in it --
     ``createHoverTooltipElement`` returns nothing otherwise. This raises the
-    field flags rather than leaving the caller with a tooltip that silently
-    never appears.
+    field flags, then checks the finished config through
+    :func:`_assert_tooltip_can_render` so a tooltip that could never appear is
+    an error however ``hover`` was switched on.
 
     Args:
         config: The popup config being built (mutated in place).
         tooltip: ``True``/``False`` to flag every configured field or turn the
-            tooltip off, or a property name or sequence of names to flag.
+            tooltip off, or a property name or sequence of names to flag. An
+            empty sequence means the same as ``False``.
 
     Returns:
         The same ``config``.
 
     Raises:
-        ValueError: If ``tooltip=True`` is asked for on a popup that has no
-            fields and no title, so no tooltip could ever render.
+        ValueError: If a tooltip field name is blank, or the finished config
+            leaves the tooltip on with nothing to show.
     """
-    if tooltip is None:
-        return config
     if tooltip is False:
         config["hover"] = False
         return config
 
-    fields: list[dict[str, Any]] = list(config.get("fields") or [])
-    if tooltip is not True:
-        names = [tooltip] if isinstance(tooltip, str) else list(tooltip)
-        for name in names:
-            key = str(name).strip()
-            if not key:
-                raise ValueError("tooltip field name must be a non-empty string")
-            existing = next((entry for entry in fields if entry.get("field") == key), None)
-            if existing is None:
-                # A tooltip-only field still has to appear in `fields`: the
-                # hover subset is drawn from that list, not from the feature.
-                fields.append(popup_field(key, hover=True))
-            else:
-                existing["hover"] = True
-    else:
-        for entry in fields:
-            entry["hover"] = True
-        if not fields and not (config.get("titleField") or config.get("titleExpression")):
-            raise ValueError(
-                "tooltip=True needs popup fields or a title to show; pass the field "
-                "names instead, e.g. tooltip=['name']"
-            )
+    if tooltip is not None:
+        fields: list[dict[str, Any]] = list(config.get("fields") or [])
+        if tooltip is not True:
+            names = [tooltip] if isinstance(tooltip, str) else list(tooltip)
+            if not names:
+                # An empty selection is "no tooltip", which is what the MCP
+                # tool's `tooltip=[]` means too.
+                config["hover"] = False
+                return config
+            for name in names:
+                key = str(name).strip()
+                if not key:
+                    raise ValueError("tooltip field name must be a non-empty string")
+                existing = next((entry for entry in fields if entry.get("field") == key), None)
+                if existing is None:
+                    # A tooltip-only field still has to appear in `fields`: the
+                    # hover subset is drawn from that list, not from the feature.
+                    fields.append(popup_field(key, hover=True))
+                else:
+                    existing["hover"] = True
+        else:
+            for entry in fields:
+                entry["hover"] = True
 
-    config["hover"] = True
-    if fields:
-        config["fields"] = fields
+        config["hover"] = True
+        if fields:
+            config["fields"] = fields
+
+    _assert_tooltip_can_render(config)
     return config
 
 
@@ -765,9 +810,7 @@ def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | 
             mapped = _POPUP_CONFIG_KEYS.get(_normalize_key(key))
             if mapped is None:
                 raise ValueError(
-                    f"unknown popup key {key!r}; expected one of "
-                    "['body_expression', 'click', 'fields', 'hover', 'show_feature_id', "
-                    "'title', 'title_expression', 'tooltip']"
+                    f"unknown popup key {key!r}; expected one of {_POPUP_CONFIG_ARGUMENTS}"
                 )
             if mapped == "tooltip":
                 inline_tooltip = value
@@ -833,6 +876,11 @@ def marker_style(
         raise ValueError("icon must be non-empty SVG markup or a data URL")
     if shape == "custom" and icon is None:
         raise ValueError('shape="custom" needs icon= with the SVG markup to draw')
+    if icon is not None and shape not in (None, "custom"):
+        # The app reads markerSvg only for markerShape "custom", so an icon can
+        # only render as a custom sprite. Honoring the icon would silently
+        # discard the shape the caller asked for; say so instead.
+        raise ValueError(f'icon= implies shape="custom", but shape={shape!r} was given too')
 
     # Any of these three means "render a marker sprite, not a plain circle".
     sprite = shape is not None or size is not None or icon is not None

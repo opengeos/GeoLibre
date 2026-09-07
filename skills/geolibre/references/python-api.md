@@ -97,8 +97,9 @@ sized by `size`, not `radius`, and its `color` must be a hex color.
 
 ### Popups and tooltips
 
-Every `add_*` takes `popup=` and `tooltip=`; `m.set_popup(...)` /
-`m.set_tooltip(...)` / `m.clear_popup(...)` change one later. Without a config a
+Every `add_*` that takes style overrides accepts `popup=` and `tooltip=`
+(`add_ee_layer` does not); `m.set_popup(...)` / `m.set_tooltip(...)` /
+`m.clear_popup(...)` change one later. Without a config a
 layer shows its name plus every visible property on click, and no hover tip.
 
 ```python

@@ -539,8 +539,28 @@ def test_tooltip_true_flags_every_configured_field():
 def test_tooltip_true_without_anything_to_show_is_rejected():
     # createHoverTooltipElement returns null for this, so the tooltip would
     # silently never appear.
-    with pytest.raises(ValueError, match="tooltip=True needs popup fields"):
+    with pytest.raises(ValueError, match="nothing would render in it"):
         project.normalize_popup(tooltip=True)
+
+
+def test_hover_true_without_anything_to_show_is_rejected_too():
+    # The same dead tooltip, reached through the lower-level `hover` argument
+    # rather than the tooltip shorthand.
+    with pytest.raises(ValueError, match="nothing would render in it"):
+        project.normalize_popup({"hover": True})
+
+
+def test_hover_true_is_fine_once_a_field_carries_it():
+    config = project.normalize_popup({"hover": True, "fields": ["name"]}, tooltip="name")
+    assert config["hover"] is True
+
+
+def test_empty_tooltip_sequence_turns_the_tooltip_off():
+    # `tooltip=[]` selects no fields, which is what `tooltip=False` means; the
+    # MCP tool maps its empty list the same way.
+    config = project.normalize_popup(["a"], tooltip=[])
+    assert config["hover"] is False
+    assert config["fields"] == [{"field": "a"}]
 
 
 def test_tooltip_true_is_allowed_when_a_title_carries_the_tip():
@@ -603,6 +623,17 @@ def test_marker_style_icon_implies_a_custom_shape():
 def test_marker_style_custom_shape_needs_an_icon():
     with pytest.raises(ValueError, match='shape="custom" needs icon='):
         project.marker_style(shape="custom")
+
+
+def test_marker_style_rejects_an_icon_alongside_another_shape():
+    # markerSvg is only read for markerShape "custom", so honoring the icon
+    # would quietly throw away the shape the caller asked for.
+    with pytest.raises(ValueError, match='icon= implies shape="custom"'):
+        project.marker_style(shape="pin", icon="<svg/>")
+
+
+def test_marker_style_allows_icon_with_an_explicit_custom_shape():
+    assert project.marker_style(shape="custom", icon="<svg/>")["markerShape"] == "custom"
 
 
 def test_marker_style_rejects_a_named_color_for_a_sprite():

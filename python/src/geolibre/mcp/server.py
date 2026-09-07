@@ -802,7 +802,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 title_expression=title_expression,
                 body_expression=body_expression,
                 show_feature_id=show_feature_id,
-                tooltip=(False if tooltip == [] else tooltip),
+                tooltip=tooltip,
                 merge=merge,
             )
         return _summarize(file, project, popup=config)
