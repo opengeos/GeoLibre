@@ -85,6 +85,12 @@ export function createCesiumLabeler(
     // A zoom-dependent label may be empty now and non-empty at another zoom,
     // so it keeps its entity; a static empty label has nothing to show.
     if (!text && !zoomDependent) return;
+    // Decided before the anchor work below: an entity that gets no label must
+    // be left exactly as it was, and the anchor gives a polygon or line a
+    // `position` it would not otherwise have.
+    const minZoom = Math.max(labels.minZoom, layer.style?.minZoom ?? 0);
+    const maxZoom = Math.min(labels.maxZoom, layer.style?.maxZoom ?? 24);
+    if (minZoom >= maxZoom) return;
     const time = viewer.clock.currentTime;
     let position = entity.position?.getValue(time);
     if (!position && entity.polygon) {
@@ -124,9 +130,6 @@ export function createCesiumLabeler(
     const cartographic = viewer.scene.globe.ellipsoid.cartesianToCartographic(position);
     if (!cartographic) return;
     const latitude = C.Math.toDegrees(cartographic.latitude);
-    const minZoom = Math.max(labels.minZoom, layer.style?.minZoom ?? 0);
-    const maxZoom = Math.min(labels.maxZoom, layer.style?.maxZoom ?? 24);
-    if (minZoom >= maxZoom) return;
     let lastZoom = NaN;
     let lastText = text;
     let conditionKey = "";

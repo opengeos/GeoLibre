@@ -72,6 +72,15 @@ it("anchors polygons on the ellipsoid and lines halfway along their length", () 
   createCesiumLabeler(C, viewer, l)(line, 0);
   const midpoint = C.Cartographic.fromCartesian(line.position!.getValue(time)!);
   assert.ok(Math.abs(C.Math.toDegrees(midpoint.longitude) - 1.5) < 0.01);
+  // An empty zoom range yields no label, and then the polygon must not be
+  // given an anchor position it did not have.
+  l.style.labels.maxZoom = l.style.labels.minZoom;
+  const unlabeled = new C.Entity({
+    polygon: { hierarchy: C.Cartesian3.fromDegreesArray([-1, -1, 1, -1, 1, 1, -1, 1]) },
+  });
+  createCesiumLabeler(C, viewer, l)(unlabeled, 0);
+  assert.equal(unlabeled.label, undefined);
+  assert.equal(unlabeled.position, undefined);
 });
 it("skips disabled, missing and invalid expression labels without breaking the layer", () => {
   const l = layer();
