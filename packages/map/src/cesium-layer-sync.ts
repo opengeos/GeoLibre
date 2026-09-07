@@ -880,6 +880,14 @@ export class CesiumLayerSync {
     // Point pins keep their baked-in colour; multiplying by white+alpha only
     // fades them.
     const marker = Cesium.Color.WHITE.withAlpha(opacity);
+    // Scale the label colour's own alpha (an rgba()/#rrggbbaa label colour) by
+    // the layer opacity, as text-opacity does on the 2D map, rather than
+    // replacing it. Computed once: this runs on every opacity-slider drag.
+    const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+    const labelColor = Cesium.Color.fromCssColorString(labels.color);
+    const labelFill = labelColor.withAlpha(labelColor.alpha * opacity);
+    const halo = Cesium.Color.fromCssColorString(labels.haloColor);
+    const labelOutline = halo.withAlpha(halo.alpha * opacity);
     for (const feature of dataSource.entities.values) {
       if (feature.polygon) {
         feature.polygon.material = new Cesium.ColorMaterialProperty(fill);
@@ -891,18 +899,8 @@ export class CesiumLayerSync {
         feature.billboard.color = new Cesium.ConstantProperty(marker);
       }
       if (feature.label) {
-        const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
-        // Scale the colour's own alpha (an rgba()/#rrggbbaa label colour) by the
-        // layer opacity, as text-opacity does on the 2D map, rather than
-        // replacing it.
-        const color = Cesium.Color.fromCssColorString(labels.color);
-        const halo = Cesium.Color.fromCssColorString(labels.haloColor);
-        feature.label.fillColor = new Cesium.ConstantProperty(
-          color.withAlpha(color.alpha * opacity),
-        );
-        feature.label.outlineColor = new Cesium.ConstantProperty(
-          halo.withAlpha(halo.alpha * opacity),
-        );
+        feature.label.fillColor = new Cesium.ConstantProperty(labelFill);
+        feature.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
       }
     }
   }
