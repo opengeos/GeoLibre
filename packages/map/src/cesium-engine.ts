@@ -165,7 +165,16 @@ function rememberPrimaryBuiltInControl(
   });
 }
 
-/** Forget every remembered control state. For tests, which share the module. */
+/**
+ * Forget every remembered control state, so the next globe mounts its
+ * controls visible at top-right.
+ *
+ * A new project resets the built-in controls through whichever engine is
+ * live, which never reaches this record while MapLibre is the primary
+ * renderer; the app calls this alongside that reset so a corner from the
+ * previous project cannot follow the user into the new one. Tests, which
+ * share the module, call it between cases.
+ */
 export function resetPrimaryCesiumBuiltInControlState(): void {
   primaryBuiltInControlState.clear();
 }

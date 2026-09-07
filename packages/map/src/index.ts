@@ -28,6 +28,7 @@ export {
   CESIUM_PANE_CAPABILITIES,
   CesiumEngine,
   type CesiumEngineOptions,
+  resetPrimaryCesiumBuiltInControlState,
 } from "./cesium-engine";
 export {
   applyMapViewToCamera,

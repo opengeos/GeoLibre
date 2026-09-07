@@ -5,7 +5,11 @@ import {
   serializeProject,
   useAppStore,
 } from "@geolibre/core";
-import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapEngine } from "@geolibre/map";
+import {
+  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  resetPrimaryCesiumBuiltInControlState,
+  type MapEngine,
+} from "@geolibre/map";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import {
   closeDuckDBLayerPanel,
@@ -1368,6 +1372,11 @@ export function TopToolbar({
       resetMissingSettings: true,
     });
 
+    // The loops below reach only the live engine. The globe remembers its
+    // controls' corners across mounts, so clear that too, or a corner moved in
+    // the old project while Cesium was primary would come back the next time
+    // the globe mounts in this one.
+    resetPrimaryCesiumBuiltInControlState();
     for (const control of ALL_BUILT_IN_CONTROL_IDS) {
       mapControllerRef.current?.setBuiltInControlPosition(control, "top-right");
     }
