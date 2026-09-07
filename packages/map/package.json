@@ -84,7 +84,6 @@
     "@turf/helpers": "^7.4.0",
     "@turf/mask": "^7.4.0",
     "cesium": "^1.144.0",
-    "cog-tiler-wasm": "^0.3.5",
     "fast-xml-parser": "^5.11.1",
     "geotiff": "^3.0.5",
     "maplibre-gl": "^6.6.0",
@@ -101,7 +100,7 @@
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }
