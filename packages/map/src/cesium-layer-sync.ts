@@ -1,4 +1,8 @@
-import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  resolveThreeDTilesRequestHeaders,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import type {
   Cesium3DTileset,
@@ -879,12 +883,12 @@ export class CesiumLayerSync {
         feature.billboard.color = new Cesium.ConstantProperty(marker);
       }
       if (feature.label) {
-        const labels = style.labels;
+        const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
         feature.label.fillColor = new Cesium.ConstantProperty(
-          Cesium.Color.fromCssColorString(labels?.color ?? "#111827").withAlpha(opacity),
+          Cesium.Color.fromCssColorString(labels.color).withAlpha(opacity),
         );
         feature.label.outlineColor = new Cesium.ConstantProperty(
-          Cesium.Color.fromCssColorString(labels?.haloColor ?? "#ffffff").withAlpha(opacity),
+          Cesium.Color.fromCssColorString(labels.haloColor).withAlpha(opacity),
         );
       }
     }

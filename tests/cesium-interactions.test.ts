@@ -172,6 +172,20 @@ it("clears cursor state and queued movement on pointer exit and renderer teardow
   assert.equal(useAppStore.getState().pointerElevation, null);
 });
 
+it("blanks the readout while the camera moves and restores it where the cursor rests", () => {
+  const f = setup();
+  f.hover();
+  f.flush();
+  f.camera.moveStart.raiseEvent();
+  assert.equal(useAppStore.getState().pointerCoords, null);
+  f.camera.moveEnd.raiseEvent();
+  assert.deepEqual(useAppStore.getState().pointerCoords, [-83.9, 35.9]);
+  // Once the pointer has left the canvas there is nothing to restore.
+  f.document.querySelector("canvas")!.dispatchEvent(new window.Event("mouseleave"));
+  f.camera.moveEnd.raiseEvent();
+  assert.equal(useAppStore.getState().pointerCoords, null);
+});
+
 it("does not query or select on a click when Identify is off", () => {
   const f = setup();
   useAppStore.setState({ identifyLayerId: null });
