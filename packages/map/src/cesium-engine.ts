@@ -27,6 +27,8 @@ import { getPrimaryCesiumControlHost } from "./cesium-control-host";
 import { pickDrawingLocation, placeCesiumPin, suspendCesiumNavigation } from "./cesium-drawing";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { captureEngineImage } from "./map-capture";
+import { TerrariumTerrainProvider } from "./cesium-terrarium";
+import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import type { MapRenderSurface } from "./map-engine";
 import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
 import { CesiumLayerSync } from "./cesium-layer-sync";
@@ -248,6 +250,10 @@ export class CesiumEngine implements MapEngine {
   private terrainEnabled = false;
   private terrainRequest = 0;
   private terrainExaggeration = 1;
+  private terrainProvider: TerrariumTerrainProvider | null = null;
+  private cogTerrain: CogDemSourceRegistration | null = null;
+  private cogTerrainUrl: string | null = null;
+  private cogTerrainRequest = 0;
   private disposers: Array<() => void> = [];
   /**
    * Controls `CesiumCanvas` built and handed over under a built-in control id.
@@ -298,6 +304,10 @@ export class CesiumEngine implements MapEngine {
   // ---------------------------------------------------------------- lifecycle
 
   destroy(): void {
+    this.terrainRequest++;
+    this.cogTerrainRequest++;
+    this.terrainProvider?.destroy();
+    this.cogTerrain?.dispose();
     this.drawingDispose?.();
     this.drawingDispose = null;
     for (const dispose of this.extentDisposers) dispose();
@@ -929,7 +939,7 @@ export class CesiumEngine implements MapEngine {
   }
 
   /**
-   * Toggle Cesium World Terrain. Unlike MapLibre — where terrain is a raster-DEM
+   * Toggle native terrain (COG, World Terrain, or keyless Terrarium). Unlike MapLibre — where terrain is a raster-DEM
    * source added to the style — this swaps the globe's terrain provider, so the
    * relief is real geometry rather than a displacement of the basemap.
    *
@@ -939,7 +949,7 @@ export class CesiumEngine implements MapEngine {
    */
   setTerrainEnabled(enabled: boolean): boolean {
     const viewer = this.live();
-    if (!viewer || (enabled && !this.worldTerrainAvailable)) return false;
+    if (!viewer) return false;
     if (this.terrainEnabled === enabled) return true;
     if (!enabled) {
       this.terrainEnabled = false;
@@ -954,7 +964,7 @@ export class CesiumEngine implements MapEngine {
   /**
    * Await-able form of `setTerrainEnabled(true)`, for the mount path.
    *
-   * `CesiumCanvas` adds world terrain *before* it seeds the camera, because
+   * `CesiumCanvas` adds terrain *before* it seeds the camera, because
    * ground height is what turns MapLibre's zoom into a camera distance — seeding
    * first would place the first frame against the ellipsoid and rely on the
    * terrain correction to fix it. The interface form cannot express that (it
@@ -962,11 +972,17 @@ export class CesiumEngine implements MapEngine {
    * to it fire-and-forget.
    */
   async enableWorldTerrain(): Promise<void> {
-    if (!this.worldTerrainAvailable) return;
     this.terrainEnabled = true;
     const request = ++this.terrainRequest;
     try {
-      const provider = await this.Cesium.createWorldTerrainAsync();
+      const provider =
+        this.cogTerrain || !this.worldTerrainAvailable
+          ? (this.terrainProvider ??= new TerrariumTerrainProvider(
+              this.Cesium,
+              this.cogTerrain?.renderTile,
+              this.cogTerrain ? 22 : 15,
+            ))
+          : await this.Cesium.createWorldTerrainAsync();
       const viewer = this.live();
       // The toggle may have been reversed, or the viewer destroyed, while the
       // provider loaded; applying it then would resurrect terrain the user just
@@ -990,17 +1006,39 @@ export class CesiumEngine implements MapEngine {
     if (viewer) viewer.scene.verticalExaggeration = exaggeration;
   }
 
-  /** Cesium World Terrain is the only source the globe offers today. */
   getTerrainCogSource(): string | null {
-    return null;
+    return this.cogTerrainUrl;
   }
 
   hasCustomTerrainSource(): boolean {
-    return false;
+    return this.cogTerrain !== null;
   }
 
-  setTerrainCogSource(_source: string | Blob | null, _band = 1): Promise<boolean> {
-    return Promise.resolve(false);
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+    if (!this.live()) return false;
+    const normalized = typeof source === "string" ? source.trim() || null : source;
+    const request = ++this.cogTerrainRequest;
+    let registration: CogDemSourceRegistration | null;
+    try {
+      registration = normalized ? await registerCogDemSource(normalized, band) : null;
+    } catch (error) {
+      if (request !== this.cogTerrainRequest || !this.live()) return false;
+      throw error;
+    }
+    if (request !== this.cogTerrainRequest || !this.live()) {
+      registration?.dispose();
+      return false;
+    }
+    this.terrainRequest++;
+    const previousProvider = this.terrainProvider;
+    const previousSource = this.cogTerrain;
+    this.terrainProvider = null;
+    this.cogTerrain = registration;
+    this.cogTerrainUrl = typeof normalized === "string" ? normalized : null;
+    if (this.terrainEnabled) await this.enableWorldTerrain();
+    previousProvider?.destroy();
+    previousSource?.dispose();
+    return true;
   }
 
   setTerrainLabel(_label: string): void {}

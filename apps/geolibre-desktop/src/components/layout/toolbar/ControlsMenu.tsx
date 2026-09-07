@@ -209,6 +209,15 @@ export function ControlsMenu({
               {controlsVisible[control.id] ? " ✓" : ""}
             </DropdownMenuItem>
           ))}
+          {show("controls.mapControl.terrain") && (
+            <DropdownMenuItem
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("geolibre:terrain-settings-open"))
+              }
+            >
+              {t("terrainSettings.title")}
+            </DropdownMenuItem>
+          )}
           {(show("controls.mapControl.logo") || show("controls.mapControl.maptoolkit-logo")) && (
             <LogosSubmenu
               controlsVisible={controlsVisible}

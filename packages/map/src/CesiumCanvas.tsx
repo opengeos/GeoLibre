@@ -389,11 +389,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         });
         engineInstanceRef.current = engine;
 
-        // Restore the saved terrain preference when credentials are available.
+        // Restore terrain, using keyless Terrarium when Ion is unavailable.
         // Awaited before the camera is seeded: ground height is what turns
         // MapLibre's zoom into a camera distance, so seeding first would place
         // the first frame against the ellipsoid.
-        if (token && useAppStore.getState().preferences.map.terrainEnabled)
+        if (useAppStore.getState().preferences.map.terrainEnabled)
           await engine.enableWorldTerrain();
         // The unmount cleanup may have run during the terrain await (destroying
         // the viewer); re-check before touching it, mirroring the guard after the
@@ -560,7 +560,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   useEffect(() => {
     const engine = engineInstanceRef.current;
     if (!ready || !engine) return;
-    const enabled = terrainEnabled && Boolean(ionToken?.trim());
+    const enabled = terrainEnabled;
     if (engine.isTerrainEnabled() !== enabled) engine.setTerrainEnabled(enabled);
   }, [ready, terrainEnabled, ionToken]);
 

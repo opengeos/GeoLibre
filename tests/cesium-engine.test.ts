@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import {
+  WebMercatorTilingScheme,
+  Event,
+  Credit,
+  TileAvailability,
+  TerrainProvider,
+} from "@cesium/engine";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "../packages/core/src/store";
 import type { MapViewState } from "../packages/core/src/types";
@@ -569,13 +576,24 @@ describe("CesiumEngine terrain", () => {
     engine.destroy();
   });
 
-  it("does not enable world terrain without the canvas's credentials", async () => {
+  it("enables keyless heightmap terrain without Ion credentials", async () => {
     const fakes = makeViewer();
-    const engine = new CesiumEngine(makeCesium(), fakes.viewer, { worldTerrainAvailable: false });
-    assert.equal(engine.setBuiltInControlVisible("terrain", true), false);
+    const cesium = makeCesium();
+    Object.assign(cesium, {
+      WebMercatorTilingScheme,
+      Event,
+      Credit,
+      TileAvailability,
+      TerrainProvider,
+    });
+    const engine = new CesiumEngine(cesium, fakes.viewer, { worldTerrainAvailable: false });
+    assert.equal(engine.setBuiltInControlVisible("terrain", true), true);
     await engine.enableWorldTerrain();
-    assert.equal(engine.isTerrainEnabled(), false);
-    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "initial" });
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.equal(
+      fakes.viewer.terrainProvider.tilingScheme instanceof WebMercatorTilingScheme,
+      true,
+    );
     engine.destroy();
   });
 

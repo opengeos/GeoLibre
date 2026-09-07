@@ -57,8 +57,11 @@ export class CesiumBaseLayerPickerControl implements CesiumWidgetControlHandle {
       );
     }
     for (const enabled of [false, true]) {
-      if (enabled && !this.hasIonToken) continue;
-      const name = enabled ? "Cesium World Terrain" : "WGS84 Ellipsoid";
+      const name = enabled
+        ? this.hasIonToken
+          ? "Cesium World Terrain"
+          : "Mapzen Terrarium"
+        : "WGS84 Ellipsoid";
       const model = new ProviderViewModel({
         name,
         tooltip: name,
@@ -156,7 +159,7 @@ export class CesiumBaseLayerPickerControl implements CesiumWidgetControlHandle {
       const imagery = this.imagery.get(
         availableCesiumBasemap(map.cesiumBasemap, this.hasIonToken),
       )!;
-      const terrain = this.terrain.get(map.terrainEnabled && this.hasIonToken)!;
+      const terrain = this.terrain.get(map.terrainEnabled)!;
       if (vm.selectedImagery !== imagery) vm.selectedImagery = imagery;
       if (vm.selectedTerrain !== terrain) vm.selectedTerrain = terrain;
     } finally {

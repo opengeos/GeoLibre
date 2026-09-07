@@ -37,7 +37,7 @@ here; #2291 describes it as a possible follow-up.
 | #2283 | Raster protocol bridge | Actual COG, DEM, raster PMTiles, and MBTiles; cancellation, errors, bounds, tile levels, and symbology |
 | #2284 | Hybrid native/drape vector-tile path | Real MVT/PMTiles/ArcGIS tiles, adjacent-tile seams, picking, style changes, cancellation, and bounded rendering resources |
 | #2285 | Native I3S, point clouds, splats; deck.gl gating | Real public sources for each supported format, resource disposal, picking, and accurate unsupported-layer badges |
-| #2286 | Keyless and COG terrain | Known elevations, tile boundaries, source replacement, exaggeration, missing tiles, and keyless browser checks |
+| #2286 (implemented) | Keyless and COG terrain | Real Mount Rainier Terrarium relief (~4,315 m), local DEM sample (835 m versus 839 m source pixel after grid resampling), shared tile edges, source replacement, and both themes |
 | #2287 | Native environment plugins | Sun/time changes, atmosphere, spin stop/start, cloud cleanup, and flight input/teardown in both themes |
 | #2288, #2262 | Enforce declared support in activation, URL dispatch, project restore, delayed controls, and command palette | Tests cover unsupported callbacks, renderer round trips, saved settings, and compatible-control remounting. The wider control facade and native plugin implementations remain separate work. |
 | #2289 | Python/MCP/embed renderer authoring | Project round trips, renderer events, pane kinds, invalid inputs, and docs examples |
@@ -60,3 +60,5 @@ both engines. STAC explicitly retains MapLibre dependencies for footprint
 picking. Planetary Computer and NASA Earthdata read their controls’ map;
 Hugging Face delegates file loading to the vector/raster controls. These are
 not automatically safe to ungate based on their catalog UI alone.
+
+Keyless globes now use Mapzen Terrarium heightmaps; an Ion token selects World Terrain. Controls → Terrain exaggeration accepts local and HTTP COG DEMs on either renderer. Shared edge samples avoid cracks between heightmap tiles; requests and tile caches are bounded and disposed with the source.

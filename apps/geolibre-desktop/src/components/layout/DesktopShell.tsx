@@ -2680,12 +2680,12 @@ export function DesktopShell({
                   <Suspense fallback={null}>
                     <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
                   </Suspense>
-                  <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
                   <StoryMapComposeBar mapControllerRef={mapControllerRef} />
                 </>
               )}
               {/* Renderer-neutral: these read the store rather than a
                   `MapController`, so they stay available on the 3D globe. */}
+              <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}
                 onClose={() => setRasterSubsetLayer(null)}
