@@ -11,7 +11,7 @@ plugin engine declarations and menu gating have also landed.
 | --- | --- | --- |
 | [#2275](https://github.com/opengeos/GeoLibre/issues/2275) | Ground cursor coordinates, optional elevation, ellipsoid fallback, and cleanup | Engine tests cover signed height, sky, fallback, morphing, and destruction; interaction tests cover store updates, preference changes, exit, and queued events; browser checks cover both themes and renderer swaps |
 | [#2279](https://github.com/opengeos/GeoLibre/issues/2279) | Field/expression labels, text size and color, halos, line/polygon anchors, zoom limits, opacity | Real Cesium graphics tests and a real US cities GeoJSON layer in the running app |
-| [#2291](https://github.com/opengeos/GeoLibre/issues/2291) | Projection follows the scene mode; native controls move between host corners | Scene-mode tests, DOM lifecycle tests, hidden-control position restoration, and browser fullscreen checks after moving the control |
+| [#2291](https://github.com/opengeos/GeoLibre/issues/2291) | Projection follows the scene mode; native controls move between host corners, and a remount restores each control's last visibility and corner | Scene-mode tests, DOM lifecycle tests, hidden-control position restoration, remount tests, and browser fullscreen checks after moving the control |
 
 The baseline browser reproduction of #2275 left the status bar at `Coords: —`
 while pointing at the globe. The corrected browser reports longitude/latitude

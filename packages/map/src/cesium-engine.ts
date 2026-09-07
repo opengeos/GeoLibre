@@ -135,6 +135,41 @@ export interface CesiumEngineOptions {
  * engines legitimately do differently, which is why `MapEngine` does not declare
  * it.
  */
+/**
+ * The visibility and corner each of the primary globe's built-in controls
+ * was last given, kept outside the engine because the engine does not
+ * outlive the globe: a renderer swap away from Cesium and back destroys the
+ * viewer, the control host, and the engine with them, while the Controls menu
+ * and any plugin that moved a control keep their state. The next mount reads
+ * this in {@link CesiumEngine.registerBuiltInControl} so a hidden control is
+ * never mounted and a moved one lands in its corner, without waiting for the
+ * menu to replay its checkboxes.
+ *
+ * A best-effort seed, not the authority: the menu still replays visibility
+ * once the engine is ready, so a state that went stale while MapLibre was the
+ * primary renderer (a new project resets the menu's checkboxes through
+ * whichever engine is live) is corrected on that replay.
+ */
+const primaryBuiltInControlState = new Map<
+  BuiltInMapControl,
+  { visible?: boolean; position?: maplibregl.ControlPosition }
+>();
+
+function rememberPrimaryBuiltInControl(
+  control: BuiltInMapControl,
+  state: { visible?: boolean; position?: maplibregl.ControlPosition },
+): void {
+  primaryBuiltInControlState.set(control, {
+    ...primaryBuiltInControlState.get(control),
+    ...state,
+  });
+}
+
+/** Forget every remembered control state. For tests, which share the module. */
+export function resetPrimaryCesiumBuiltInControlState(): void {
+  primaryBuiltInControlState.clear();
+}
+
 export class CesiumEngine implements MapEngine {
   readonly kind = "cesium" as const;
   /**
@@ -206,7 +241,6 @@ export class CesiumEngine implements MapEngine {
    * See {@link registerBuiltInControl}.
    */
   private builtInControls = new Map<BuiltInMapControl, maplibregl.IControl>();
-  private builtInPositions = new Map<BuiltInMapControl, maplibregl.ControlPosition>();
 
   constructor(Cesium: CesiumNs, viewer: CesiumWidget, options: CesiumEngineOptions = {}) {
     this.Cesium = Cesium;
@@ -254,9 +288,10 @@ export class CesiumEngine implements MapEngine {
     for (const dispose of this.disposers.splice(0)) dispose();
     this.layerSync.destroy();
     // The control host tears the controls themselves down; drop the references
-    // so a late setBuiltInControlVisible cannot re-add one to a dead globe.
+    // so a late setBuiltInControlVisible cannot re-add one to a dead globe. The
+    // visibility and corner each control was last given stay in
+    // `primaryBuiltInControlState`, which is what the next mount reads.
     this.builtInControls.clear();
-    this.builtInPositions.clear();
     // The widget itself belongs to CesiumCanvas, which destroys it; dropping the
     // handle here is what stops a late listener from touching a dead viewer.
     this.viewer = null;
@@ -671,6 +706,15 @@ export class CesiumEngine implements MapEngine {
    */
   registerBuiltInControl(control: BuiltInMapControl, instance: maplibregl.IControl): void {
     this.builtInControls.set(control, instance);
+    // Mount it here, in the state it was last given, rather than leaving the
+    // canvas to mount every control visible at top-right and the Controls
+    // menu to correct that a frame later: a control the user hid would flash
+    // on every remount, and one a plugin moved would snap back to the default
+    // corner (#2295 review). A pane has no host to mount on; see `addControl`.
+    if (!this.isPrimary) return;
+    const state = primaryBuiltInControlState.get(control);
+    if (state?.visible === false) return;
+    getPrimaryCesiumControlHost()?.addControl(instance, this.getBuiltInControlPosition(control));
   }
 
   setBuiltInControlVisible(control: BuiltInMapControl, visible: boolean): boolean {
@@ -686,11 +730,13 @@ export class CesiumEngine implements MapEngine {
     // control's visibility) settle rather than stacking duplicates.
     if (visible) host.addControl(instance, this.getBuiltInControlPosition(control));
     else host.removeControl(instance);
+    rememberPrimaryBuiltInControl(control, { visible });
     return true;
   }
 
   getBuiltInControlPosition(control: BuiltInMapControl): maplibregl.ControlPosition {
-    return this.builtInPositions.get(control) ?? "top-right";
+    if (!this.isPrimary) return "top-right";
+    return primaryBuiltInControlState.get(control)?.position ?? "top-right";
   }
 
   setBuiltInControlPosition(
@@ -701,7 +747,7 @@ export class CesiumEngine implements MapEngine {
     if (!instance || !this.isPrimary) return false;
     const host = getPrimaryCesiumControlHost();
     if (!host?.setControlPosition(instance, position)) return false;
-    this.builtInPositions.set(control, position);
+    rememberPrimaryBuiltInControl(control, { position });
     return true;
   }
 

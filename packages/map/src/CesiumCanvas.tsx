@@ -14,9 +14,13 @@ import { applyBasemapAppearance, applyBasemapImagery, getStadiaApiKey } from "./
 import { isSameView } from "./cesium-camera";
 import { installCesiumInteractions } from "./cesium-interactions";
 import { CesiumEngine } from "./cesium-engine";
-import type { MapEngine } from "./map-engine";
+import type { BuiltInMapControl, MapEngine } from "./map-engine";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
-import type { CesiumWidgetControls, CesiumWidgetControlLabels } from "./cesium-widget-controls";
+import type {
+  CesiumWidgetControlHandle,
+  CesiumWidgetControls,
+  CesiumWidgetControlLabels,
+} from "./cesium-widget-controls";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
 // build, token, and split-pane mount; M2 synced the camera with the shared store
@@ -417,17 +421,28 @@ export const CesiumCanvas = memo(function CesiumCanvas({
               Boolean(token),
             );
             widgetControlsRef.current = controls;
-            // Top-right, above MapLibre's navigation control on the 2D map, so
-            // the toolbar reads the same whichever renderer is drawing.
-            for (const control of controls.all) host.addControl(control, "top-right");
-            // Register native counterparts for shared visibility and positioning.
-            // Home sits under "compass": the 2D map's compass is itself a
+            // Home, the scene-mode picker and fullscreen mount through the
+            // engine under a built-in control id, so the Controls menu governs
+            // them and a remount restores the visibility and corner each was
+            // last given (a hidden control is not mounted at all). Home sits
+            // under "compass": the 2D map's compass is itself a
             // reset-pitch-and-bearing button, and unlike "navigation" it is
             // visible by default, so the Controls menu checkbox matches the
-            // button the globe mounts here.
-            engine.registerBuiltInControl("fullscreen", controls.fullscreen);
-            engine.registerBuiltInControl("compass", controls.home);
-            engine.registerBuiltInControl("globe", controls.sceneMode);
+            // button the globe mounts here. The base-layer picker has no 2D
+            // counterpart and mounts directly. Iterating `all` keeps the
+            // stacking order either way; top-right by default, above
+            // MapLibre's navigation control on the 2D map, so the toolbar
+            // reads the same whichever renderer is drawing.
+            const builtInIds = new Map<CesiumWidgetControlHandle, BuiltInMapControl>([
+              [controls.home, "compass"],
+              [controls.sceneMode, "globe"],
+              [controls.fullscreen, "fullscreen"],
+            ]);
+            for (const control of controls.all) {
+              const id = builtInIds.get(control);
+              if (id) engine.registerBuiltInControl(id, control);
+              else host.addControl(control, "top-right");
+            }
           }
         }
 
