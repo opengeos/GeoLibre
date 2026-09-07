@@ -647,6 +647,27 @@ def classify_layer(
 # -- camera and basemap -------------------------------------------------------
 
 
+def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return ``secondaryMapViews`` validated as a list of panes with an ``id``.
+
+    Args:
+        project: The project dict.
+
+    Returns:
+        The pane list (empty when the project has none).
+
+    Raises:
+        ValueError: If the field is not a list of pane objects carrying a
+            string ``id``, e.g. from a hand-edited project file.
+    """
+    panes = project.get("secondaryMapViews", [])
+    if not isinstance(panes, list) or any(
+        not isinstance(p, dict) or not isinstance(p.get("id"), str) for p in panes
+    ):
+        raise ValueError("secondaryMapViews must be a list of pane objects with an id")
+    return panes
+
+
 def set_renderer(project: dict[str, Any], renderer: str, *, pane_id: str | None = None) -> str:
     """Select ``maplibre`` or ``cesium`` for the primary map or a secondary pane."""
     if renderer not in {"maplibre", "cesium"}:
@@ -654,7 +675,7 @@ def set_renderer(project: dict[str, Any], renderer: str, *, pane_id: str | None 
     if pane_id is None:
         project["primaryRenderer"] = renderer
     else:
-        pane = next((p for p in project.get("secondaryMapViews", []) if p["id"] == pane_id), None)
+        pane = next((p for p in secondary_panes(project) if p["id"] == pane_id), None)
         if pane is None:
             raise ValueError(f"Unknown pane: {pane_id}")
         pane["viewKind"] = renderer
@@ -677,7 +698,7 @@ def set_map_layout(
         len(view_kinds) != count or any(k not in {"maplibre", "cesium"} for k in view_kinds)
     ):
         raise ValueError("view_kinds must contain one maplibre or cesium renderer per pane")
-    panes = copy.deepcopy(project.get("secondaryMapViews", [])[: count - 1])
+    panes = copy.deepcopy(secondary_panes(project)[: count - 1])
     while len(panes) < count - 1:
         panes.append(
             {

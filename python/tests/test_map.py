@@ -1242,3 +1242,18 @@ def test_renderer_and_mixed_layout_roundtrip(m, tmp_path):
     with pytest.raises(ValueError):
         m.set_renderer("cesium", pane_id="missing")
     assert m.to_project() == before
+
+
+def test_malformed_secondary_map_views_raise_value_error(m):
+    # A hand-edited file can carry panes without ids or a non-list value; the
+    # renderer/layout API must reject those as ValueError, never KeyError.
+    m.load_project({**m.project, "secondaryMapViews": [{}]})
+    with pytest.raises(ValueError):
+        m.set_renderer("cesium", pane_id="x")
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="x")
+    m.load_project({**m.project, "secondaryMapViews": "panes"})
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2)
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="x")

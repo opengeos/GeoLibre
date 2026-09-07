@@ -2569,7 +2569,7 @@ class Map(anywidget.AnyWidget):
         """Read the primary renderer or a secondary pane's ``viewKind``."""
         if pane_id is None:
             return self.project.get("primaryRenderer", "maplibre")
-        for pane in self.project.get("secondaryMapViews", []):
+        for pane in _authoring.secondary_panes(self.project):
             if pane["id"] == pane_id:
                 return pane.get("viewKind", "maplibre")
         raise ValueError(f"Unknown pane: {pane_id}")

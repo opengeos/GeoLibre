@@ -434,7 +434,15 @@ export function useEmbedApi(
     };
     rafId = requestAnimationFrame(attach);
 
-    emit("ready", { version: __GEOLIBRE_VERSION__ });
+    // A renderer hand-off bumps the generation before the destination engine
+    // has published, so this effect re-runs while the ref is still empty (or
+    // aimed at the outgoing engine). `ready` promises every command is usable:
+    // hold it until the engine for the current renderer is live, and the
+    // publish bump re-runs this effect to emit it then.
+    const engine = controller();
+    if (engine && engine.kind === useAppStore.getState().primaryRenderer) {
+      emit("ready", { version: __GEOLIBRE_VERSION__ });
+    }
 
     return () => {
       disposed = true;
