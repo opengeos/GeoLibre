@@ -884,11 +884,16 @@ export class CesiumLayerSync {
       }
       if (feature.label) {
         const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+        // Scale the colour's own alpha (an rgba()/#rrggbbaa label colour) by the
+        // layer opacity, as text-opacity does on the 2D map, rather than
+        // replacing it.
+        const color = Cesium.Color.fromCssColorString(labels.color);
+        const halo = Cesium.Color.fromCssColorString(labels.haloColor);
         feature.label.fillColor = new Cesium.ConstantProperty(
-          Cesium.Color.fromCssColorString(labels.color).withAlpha(opacity),
+          color.withAlpha(color.alpha * opacity),
         );
         feature.label.outlineColor = new Cesium.ConstantProperty(
-          Cesium.Color.fromCssColorString(labels.haloColor).withAlpha(opacity),
+          halo.withAlpha(halo.alpha * opacity),
         );
       }
     }
