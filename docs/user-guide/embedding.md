@@ -540,3 +540,17 @@ compatible.
 The browser build supports map navigation, browser-selected and URL-based data, styling, the SQL Workspace, and most plugins. Desktop-only features (local file dialogs, local MBTiles and raster reads, project save/open, and the Python sidecar tools) are not available in an embed. See [Getting Started](../getting-started.md).
 
 See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md) for a full walkthrough.
+
+## Switching renderers
+
+```javascript
+client.on("rendererchange", ({ renderer }) => console.log(renderer));
+await client.setRenderer("cesium");
+const renderer = await client.getRenderer();
+```
+
+Both methods accept or return `"maplibre"` or `"cesium"`. The change event reports
+the selected renderer. `setRenderer` acknowledges the selection; the new canvas
+mounts asynchronously. Wait for the next `ready` event before issuing camera or
+capture commands. `exportImage()` supports either renderer and waits for its
+visible layers to settle before returning a PNG data URL.

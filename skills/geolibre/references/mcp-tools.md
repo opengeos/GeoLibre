@@ -110,6 +110,8 @@ name and a sense of the values.
 ### Framing and decoration
 
 ```text
+set_renderer(path, renderer, pane_id=None)
+set_map_layout(path, rows, cols, view_kinds=None, sync_view=True)
 set_view(path, center=None, zoom=None, bearing=None, pitch=None, bbox=None)
 set_basemap(path, basemap)
 add_legend(path, title=None, legend_dict=None, labels=None, colors=None,
@@ -120,6 +122,8 @@ add_swipe(path, left_layers, right_layers, orientation="vertical",
           position=50, control_position="top-right")
 ```
 
+- `set_renderer`: use `"maplibre"` or `"cesium"`; omit `pane_id` for the primary map.
+- `set_map_layout`: rows/cols are integers 1–4. `view_kinds` lists every pane renderer, primary first. Read secondary IDs from the returned `secondaryMapViews` before changing a named pane.
 - `set_view`: `zoom` is clamped to 0–24. `bbox` is `[west, south, east, north]`
   and is resolved to a camera approximately — see the SKILL's gotcha list.
 - `set_basemap` takes a named basemap or a MapLibre style JSON URL. An XYZ

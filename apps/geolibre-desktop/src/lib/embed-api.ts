@@ -146,6 +146,8 @@ export type EmbedCommand =
   | { type: "setLayerVisibility"; layerId: string; visible: boolean }
   | { type: "listLayers" }
   | { type: "setFilter"; layerId: string; expression: unknown[] | null }
+  | { type: "getRenderer" }
+  | { type: "setRenderer"; renderer: "maplibre" | "cesium" }
   | { type: "getViewport" }
   | { type: "addLayer"; spec: AddLayerSpec }
   | { type: "addData"; url: string; styleUrl: string | null; fit: boolean }
@@ -164,6 +166,7 @@ export type EmbedEventType =
   | "ack"
   | "projectLoaded"
   | "selectionChanged"
+  | "rendererchange"
   | "viewChanged"
   | "toolCompleted"
   | "serverFileWritten";
@@ -502,6 +505,12 @@ export function parseEmbedRequest(
       }
       return { command: { type: "loadProject", url: payload.url }, requestId };
     }
+    case "getRenderer":
+      return { command: { type: "getRenderer" }, requestId };
+    case "setRenderer":
+      if (payload.renderer !== "maplibre" && payload.renderer !== "cesium")
+        return fail("setRenderer: renderer must be maplibre or cesium");
+      return { command: { type: "setRenderer", renderer: payload.renderer }, requestId };
     case "setView": {
       const target = parseSetView(payload);
       if (!target) return fail("setView: expected a bbox or a center/zoom camera");

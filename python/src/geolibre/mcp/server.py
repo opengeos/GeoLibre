@@ -818,6 +818,24 @@ def build_server(workspace: Workspace) -> MCPServer:
     # -- camera, basemap, and controls ---------------------------------------
 
     @tool()
+    def set_renderer(path: str, renderer: str, pane_id: str | None = None) -> dict[str, Any]:
+        """Select maplibre or cesium for the primary map or a secondary pane ID."""
+        with edit(path) as (file, project):
+            authoring.set_renderer(project, renderer, pane_id=pane_id)
+        return _summarize(file, project, renderer=renderer, paneId=pane_id)
+
+    @tool()
+    def set_map_layout(
+        path: str, rows: int, cols: int, view_kinds: list[str] | None = None, sync_view: bool = True
+    ) -> dict[str, Any]:
+        """Set a 1–4 row/column grid; view_kinds lists each pane renderer, primary first."""
+        with edit(path) as (file, project):
+            panes = authoring.set_map_layout(
+                project, rows, cols, view_kinds=view_kinds, sync_view=sync_view
+            )
+        return _summarize(file, project, secondaryMapViews=panes)
+
+    @tool()
     def set_view(
         path: str,
         center: list[float] | None = None,

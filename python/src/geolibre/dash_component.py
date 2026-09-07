@@ -65,6 +65,7 @@ if Component is not None:
             zoom: float | None = None,
             *,
             basemap: str | None = None,
+            renderer: str = "maplibre",
             height: str = "800px",
             layout: str = "embed",
             theme: str = "light",
@@ -83,6 +84,7 @@ if Component is not None:
                 center=center,
                 zoom=zoom,
                 basemap_url=resolve_basemap(basemap) if basemap else None,
+                renderer=renderer,
             )
             super().__init__(
                 # Dash's component-object callback syntax needs an id. Generate

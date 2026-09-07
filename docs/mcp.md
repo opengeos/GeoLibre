@@ -182,3 +182,11 @@ operations on project dicts (add/remove/restyle a layer, move the camera,
 compose the map controls). `geolibre.Map` delegates to the same module, so the
 notebook widget and the MCP server cannot drift apart in how they build a
 project.
+
+## Renderer and pane authoring
+
+Use `set_renderer(path, "cesium")` to open a project on the globe.
+`set_map_layout(path, 1, 2, view_kinds=["cesium", "maplibre"])` creates a mixed
+grid and returns the secondary pane IDs. Pass one as `pane_id` to `set_renderer`
+to change only that pane. Camera tools continue to use longitude/latitude and
+the shared zoom, bearing, and pitch convention.

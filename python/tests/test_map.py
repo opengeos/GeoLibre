@@ -1217,3 +1217,28 @@ def test_legend_and_colorbar_coexist(m):
     # Adding a colorbar must not drop the existing legend, and vice versa.
     assert "legend" in components
     assert "colorbar" in components
+
+
+def test_renderer_and_mixed_layout_roundtrip(m, tmp_path):
+    m.set_map_layout(1, 2, view_kinds=["cesium", "maplibre"])
+    assert m.get_renderer() == "cesium"
+    pane = m.project["secondaryMapViews"][0]
+    m.set_renderer("cesium", pane_id=pane["id"])
+    m.set_map_layout(2, 2)
+    assert m.project["secondaryMapViews"][0]["id"] == pane["id"]
+    assert m.get_renderer(pane_id=pane["id"]) == "cesium"
+    path = tmp_path / "globe.geolibre.json"
+    m.save_project(path)
+    import json
+
+    saved = json.loads(path.read_text())
+    assert saved["primaryRenderer"] == "cesium"
+    assert saved["secondaryMapViews"][0]["viewKind"] == "cesium"
+    before = m.to_project()
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2, view_kinds=["cesium"])
+    with pytest.raises(ValueError):
+        m.set_renderer("invalid")
+    with pytest.raises(ValueError):
+        m.set_renderer("cesium", pane_id="missing")
+    assert m.to_project() == before

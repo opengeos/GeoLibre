@@ -372,6 +372,7 @@ def build_empty_project(
     center: list[float] | tuple[float, float] | None = None,
     zoom: float | None = None,
     basemap_url: str | None = None,
+    renderer: str = "maplibre",
 ) -> dict[str, Any]:
     """Build an empty GeoLibre project dict.
 
@@ -380,10 +381,13 @@ def build_empty_project(
         center: Optional ``[lng, lat]`` map center.
         zoom: Optional initial zoom level.
         basemap_url: Optional MapLibre style URL; defaults to the app default.
+        renderer: ``"maplibre"`` (default) or ``"cesium"``.
 
     Returns:
         A project dict ready to be assigned to the widget's ``project`` trait.
     """
+    if renderer not in {"maplibre", "cesium"}:
+        raise ValueError("renderer must be maplibre or cesium")
     map_view = default_map_view()
     if center is not None:
         if len(center) != 2:
@@ -393,6 +397,7 @@ def build_empty_project(
         map_view["zoom"] = float(zoom)
     return {
         "version": PROJECT_VERSION,
+        **({"primaryRenderer": renderer} if renderer != "maplibre" else {}),
         "name": name,
         "mapView": map_view,
         "basemapStyleUrl": basemap_url or DEFAULT_BASEMAP,

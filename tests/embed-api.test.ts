@@ -772,3 +772,20 @@ describe("buildEmbedEvent", () => {
     });
   });
 });
+
+it("validates renderer selection commands", () => {
+  assert.deepEqual(
+    parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "cesium" } }),
+    {
+      command: { type: "setRenderer", renderer: "cesium" },
+      requestId: null,
+    },
+  );
+  assert.ok(
+    "error" in parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "unknown" } })!,
+  );
+  assert.deepEqual(parseEmbedRequest({ v: 2, type: "getRenderer" }), {
+    command: { type: "getRenderer" },
+    requestId: null,
+  });
+});

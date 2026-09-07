@@ -221,6 +221,11 @@ export function useEmbedApi(
             throw new Error("Missing project:edit capability");
           await loadProjectFromUrl(command.url);
           return;
+        case "getRenderer":
+          return useAppStore.getState().primaryRenderer;
+        case "setRenderer":
+          useAppStore.getState().setPrimaryRenderer(command.renderer);
+          return;
         case "setView":
           applySetView(command);
           return;
@@ -329,12 +334,17 @@ export function useEmbedApi(
     // -- events --------------------------------------------------------------
 
     const store = useAppStore.getState();
+    let prevRenderer = store.primaryRenderer;
     let prevGeneration = store.projectGeneration;
     let prevSelectedLayer = store.selectedLayerId;
     let prevSelection = store.selectedFeatureIds.join(" ");
     const emittedRuns = new Set(store.processingHistory.map((run) => run.id));
 
     const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.primaryRenderer !== prevRenderer) {
+        prevRenderer = state.primaryRenderer;
+        emit("rendererchange", { renderer: prevRenderer });
+      }
       if (state.projectGeneration !== prevGeneration) {
         prevGeneration = state.projectGeneration;
         emit("projectLoaded", {

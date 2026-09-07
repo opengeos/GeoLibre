@@ -2,6 +2,8 @@
 export const EMBED_API_VERSION = 2 as const;
 export const EMBED_API_SOURCE = "geolibre" as const;
 
+export type MapRenderer = "maplibre" | "cesium";
+
 export interface Viewport {
   bbox?: [number, number, number, number] | null;
   center: [number, number];
@@ -57,6 +59,7 @@ export type EmbedEventMap = {
   ack: { requestId: string; ok: boolean; error?: string; result?: unknown };
   projectLoaded: { url: string | null; name: string; layerIds: string[] };
   selectionChanged: { layerId: string | null; featureIds: string[] };
+  rendererchange: { renderer: MapRenderer };
   viewChanged: Viewport;
   toolCompleted: Record<string, unknown>;
   serverFileWritten: { path: string; toolId: string };
@@ -88,6 +91,8 @@ export interface GeoLibreEmbedClient {
   setLayerVisibility(layerId: string, visible: boolean): Promise<void>;
   listLayers(): Promise<LayerSummary[]>;
   setFilter(layerId: string, expression: unknown[] | null): Promise<void>;
+  setRenderer(renderer: MapRenderer): Promise<void>;
+  getRenderer(): Promise<MapRenderer>;
   getViewport(): Promise<Viewport>;
   addLayer(spec: AddLayerSpec): Promise<string>;
   addData(url: string, options?: AddDataOptions): Promise<string[]>;
@@ -169,6 +174,8 @@ export function connect(
     setLayerVisibility: (layerId, visible) => send("setLayerVisibility", { layerId, visible }),
     listLayers: () => send<LayerSummary[]>("listLayers"),
     setFilter: (layerId, expression) => send("setFilter", { layerId, expression }),
+    setRenderer: (renderer) => send("setRenderer", { renderer }),
+    getRenderer: () => send<MapRenderer>("getRenderer"),
     getViewport: () => send<Viewport>("getViewport"),
     addLayer: (spec) => send<string>("addLayer", { spec }),
     addData: (url, options = {}) => send<string[]>("addData", { url, ...options }),

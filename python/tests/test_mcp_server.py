@@ -719,3 +719,17 @@ def test_export_html_refuses_a_non_html_destination(server, project_path):
     assert "Refusing to write" in call_error(
         server, "export_html", path=project_path, out_path="map.json"
     )
+
+
+def test_renderer_tools_persist_pane_kinds(server, tmp_path):
+    path = str(tmp_path / "globe.geolibre.json")
+    call(server, "create_project", path=path)
+    call(server, "set_renderer", path=path, renderer="cesium")
+    result = call(
+        server, "set_map_layout", path=path, rows=1, cols=2, view_kinds=["cesium", "maplibre"]
+    )
+    pane_id = result["secondaryMapViews"][0]["id"]
+    call(server, "set_renderer", path=path, renderer="cesium", pane_id=pane_id)
+    saved = json.loads(Path(path).read_text())
+    assert saved["primaryRenderer"] == "cesium"
+    assert saved["secondaryMapViews"][0]["viewKind"] == "cesium"

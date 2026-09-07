@@ -18,6 +18,7 @@ import math
 import os
 import stat
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -644,6 +645,54 @@ def classify_layer(
 
 
 # -- camera and basemap -------------------------------------------------------
+
+
+def set_renderer(project: dict[str, Any], renderer: str, *, pane_id: str | None = None) -> str:
+    """Select ``maplibre`` or ``cesium`` for the primary map or a secondary pane."""
+    if renderer not in {"maplibre", "cesium"}:
+        raise ValueError("renderer must be maplibre or cesium")
+    if pane_id is None:
+        project["primaryRenderer"] = renderer
+    else:
+        pane = next((p for p in project.get("secondaryMapViews", []) if p["id"] == pane_id), None)
+        if pane is None:
+            raise ValueError(f"Unknown pane: {pane_id}")
+        pane["viewKind"] = renderer
+    return renderer
+
+
+def set_map_layout(
+    project: dict[str, Any],
+    rows: int,
+    cols: int,
+    *,
+    view_kinds: list[str] | None = None,
+    sync_view: bool = True,
+) -> list[dict[str, Any]]:
+    """Set a 1–4 row/column grid. ``view_kinds`` lists every pane, primary first."""
+    if any(isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 4 for v in (rows, cols)):
+        raise ValueError("rows and cols must be integers between 1 and 4")
+    count = rows * cols
+    if view_kinds is not None and (
+        len(view_kinds) != count or any(k not in {"maplibre", "cesium"} for k in view_kinds)
+    ):
+        raise ValueError("view_kinds must contain one maplibre or cesium renderer per pane")
+    panes = copy.deepcopy(project.get("secondaryMapViews", [])[: count - 1])
+    while len(panes) < count - 1:
+        panes.append(
+            {
+                "id": str(uuid.uuid4()),
+                "view": copy.deepcopy(project.get("mapView", _project.default_map_view())),
+                "layerVisibility": {},
+            }
+        )
+    if view_kinds is not None:
+        set_renderer(project, view_kinds[0])
+        for pane, kind in zip(panes, view_kinds[1:]):
+            pane["viewKind"] = kind
+    project["mapLayout"] = {"rows": rows, "cols": cols, "syncView": bool(sync_view)}
+    project["secondaryMapViews"] = panes
+    return panes
 
 
 def set_view(

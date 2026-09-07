@@ -351,6 +351,7 @@ class Map(anywidget.AnyWidget):
         zoom: float | None = None,
         *,
         basemap: str | None = None,
+        renderer: str = "maplibre",
         height: str = "800px",
         layout: str = "embed",
         theme: str = "light",
@@ -363,6 +364,7 @@ class Map(anywidget.AnyWidget):
             center: Initial ``[lng, lat]`` map center.
             zoom: Initial zoom level.
             basemap: A basemap name or MapLibre style URL for the background.
+            renderer: ``"maplibre"`` (default) or ``"cesium"``.
             height: CSS height of the widget (e.g. ``"800px"``).
             layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
                 ``"maponly"`` (map without chrome).
@@ -402,6 +404,7 @@ class Map(anywidget.AnyWidget):
             center=center,
             zoom=zoom,
             basemap_url=resolve_basemap(basemap) if basemap else None,
+            renderer=renderer,
         )
         # Scripting RPC state. Command/result and event traffic ride anywidget's
         # custom message channel (self.send / on_msg), kept off the project trait
@@ -2557,6 +2560,29 @@ class Map(anywidget.AnyWidget):
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
+
+    def set_renderer(self, renderer: str, *, pane_id: str | None = None) -> None:
+        """Select ``maplibre`` or ``cesium`` for the primary map or a named pane."""
+        self._update_project(lambda p: _authoring.set_renderer(p, renderer, pane_id=pane_id))
+
+    def get_renderer(self, *, pane_id: str | None = None) -> str:
+        """Read the primary renderer or a secondary pane's ``viewKind``."""
+        if pane_id is None:
+            return self.project.get("primaryRenderer", "maplibre")
+        for pane in self.project.get("secondaryMapViews", []):
+            if pane["id"] == pane_id:
+                return pane.get("viewKind", "maplibre")
+        raise ValueError(f"Unknown pane: {pane_id}")
+
+    def set_map_layout(
+        self, rows: int, cols: int, *, view_kinds: list[str] | None = None, sync_view: bool = True
+    ) -> None:
+        """Configure a grid; ``view_kinds`` lists all pane renderers, primary first."""
+        self._update_project(
+            lambda p: _authoring.set_map_layout(
+                p, rows, cols, view_kinds=view_kinds, sync_view=sync_view
+            )
+        )
 
     def set_zoom(self, zoom: float) -> None:
         """Set the map zoom while preserving the other camera fields."""

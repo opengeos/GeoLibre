@@ -212,3 +212,20 @@ as a validator for a project you wrote by hand.
 - **MCP**: `geolibre.authoring` is the widget-free module both `Map` and the MCP
   tools delegate to. Import it directly if you want project operations without
   constructing a `Map`.
+
+## Cesium and mixed pane layouts
+
+```python
+m = Map(renderer="cesium", center=(-100, 40), zoom=4)
+m.set_map_layout(1, 2, view_kinds=["cesium", "maplibre"], sync_view=True)
+pane_id = m.project["secondaryMapViews"][0]["id"]
+m.set_renderer("cesium", pane_id=pane_id)
+assert m.get_renderer() == "cesium"
+```
+
+Renderer choices are `"maplibre"` and `"cesium"`. Omitting `pane_id` targets the
+primary map. Grid dimensions are 1–4; `view_kinds` contains one renderer per
+pane, primary first. Existing pane IDs, cameras, and visibility overrides survive
+layout resizing. Save the project normally to preserve `primaryRenderer` and
+each secondary pane's `viewKind`. `DashMap(renderer="cesium")` selects the same
+initial renderer; Dash callbacks can update these fields through `project`.
