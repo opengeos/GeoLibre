@@ -1234,17 +1234,17 @@ export function TopToolbar({
   );
   // A renderer swap replaces the engine and its controls while this toolbar
   // keeps its checkbox state. Replay the controls the globe mounts on its own
-  // (fullscreen, Home under navigation, the scene-mode picker under globe) once
+  // (fullscreen, Home under compass, the scene-mode picker under globe) once
   // the new engine is ready, so a control hidden from the Controls menu stays
   // hidden instead of reappearing with its checkbox still unticked.
   useEffect(() => {
-    for (const control of ["fullscreen", "navigation", "globe"] as const)
+    for (const control of ["fullscreen", "compass", "globe"] as const)
       mapControllerRef.current?.setBuiltInControlVisible(control, controlsVisible[control]);
   }, [
     mapControllerRef,
     mapReadyGeneration,
     controlsVisible.fullscreen,
-    controlsVisible.navigation,
+    controlsVisible.compass,
     controlsVisible.globe,
   ]);
 

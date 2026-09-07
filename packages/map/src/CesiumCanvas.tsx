@@ -421,8 +421,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({
             // the toolbar reads the same whichever renderer is drawing.
             for (const control of controls.all) host.addControl(control, "top-right");
             // Register native counterparts for shared visibility and positioning.
+            // Home sits under "compass": the 2D map's compass is itself a
+            // reset-pitch-and-bearing button, and unlike "navigation" it is
+            // visible by default, so the Controls menu checkbox matches the
+            // button the globe mounts here.
             engine.registerBuiltInControl("fullscreen", controls.fullscreen);
-            engine.registerBuiltInControl("navigation", controls.home);
+            engine.registerBuiltInControl("compass", controls.home);
             engine.registerBuiltInControl("globe", controls.sceneMode);
           }
         }

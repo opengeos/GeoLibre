@@ -665,7 +665,7 @@ export class CesiumEngine implements MapEngine {
    * Put a control the canvas built under a built-in control id, so the app's
    * existing Controls menu can govern it (issue #2270).
    *
-   * Home maps to navigation, the scene-mode picker to globe, and fullscreen
+   * Home maps to compass, the scene-mode picker to globe, and fullscreen
    * keeps its shared id. Controls without a globe counterpart are refused.
    */
   registerBuiltInControl(control: BuiltInMapControl, instance: maplibregl.IControl): void {
