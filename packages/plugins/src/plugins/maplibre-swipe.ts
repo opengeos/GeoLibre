@@ -69,6 +69,11 @@ let unsubscribeCogRasterChanges: (() => void) | null = null;
 /** Read comparison rasters under the mirror's generated ids. */
 export function getSwipeRasterLoadState(layerId: string) {
   const forced = cogMainForced.get(layerId);
+  // This probe covers maplibre-gl-raster, including the Nepal flood project.
+  // Legacy CogLayerControl (kind "cog", sourceKind "cog-url") uses a separate
+  // private overlay in SwipeCogMirror with no tile-readiness probe. Leave it
+  // on the inspector's existing fail-closed path; opacity-based main-map
+  // visibility is not evidence that the comparison tiles have finished.
   if (!forced || forced.kind !== "raster") return null;
   const state = swipeControl?.getState();
   // Left-only rasters are not mirrored. Unassigned and both-side rasters are.

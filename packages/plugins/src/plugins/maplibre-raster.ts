@@ -119,7 +119,7 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
-type RasterControlInternals = {
+export type RasterControlInternals = {
   _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
 };
@@ -137,6 +137,12 @@ type MapControlHost = {
 };
 type MapboxOverlayConstructor = new (props: Record<string, unknown>) => OverlayLike;
 type RasterLayerManagerInternals = {
+  // Comparison-mirror readiness reads the real MapboxOverlay. The main-map
+  // shared-overlay proxy need not expose these fields. Verified with 0.14.11.
+  _overlay?: {
+    _deck?: { isInitialized: boolean };
+    _props?: { layers?: { isLoaded: boolean }[] };
+  };
   /** The currently selected raster id (read to restore it after inspect). */
   selectedId?: string | null;
   _device?: unknown;

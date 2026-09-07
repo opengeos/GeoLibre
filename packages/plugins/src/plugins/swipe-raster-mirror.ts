@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { RasterControl, RasterLayerState } from "maplibre-gl-raster";
+import type { RasterControlInternals } from "./maplibre-raster";
 
 export interface SwipeRasterSnapshot {
   id: string;
@@ -83,16 +84,8 @@ export class SwipeRasterMirror {
     // RasterControl has no public tile-readiness API. This is the same manager
     // seam used by patchWebRasterOverlayFactory, verified against 0.14.11.
     // Missing internals fail closed after a dependency upgrade.
-    const overlay = (
-      this.control as unknown as {
-        _layerManager?: {
-          _overlay?: {
-            _deck?: { isInitialized: boolean };
-            _props?: { layers?: { isLoaded: boolean }[] };
-          };
-        };
-      } | null
-    )?._layerManager?._overlay;
+    const overlay = (this.control as unknown as RasterControlInternals | null)?._layerManager
+      ?._overlay;
     const layers = overlay?._props?.layers;
     return {
       loading:
