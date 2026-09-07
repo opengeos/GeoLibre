@@ -1,5 +1,5 @@
 import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
-import { createCesiumLabeler } from "./cesium-labels";
+import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import type {
   Cesium3DTileset,
   CesiumWidget,
@@ -759,13 +759,20 @@ export class CesiumLayerSync {
         return;
       }
       const labelEntity = createCesiumLabeler(Cesium, viewer, layer);
+      // A multipart feature arrives as several entities sharing one index; it
+      // gets one label, on its largest part (pickLabelPart), not one per part.
+      const parts = new Map<number, Entity[]>();
       for (const entity of dataSource.entities.values) {
         const index = entity.properties?.[indexKey]?.getValue(viewer.clock.currentTime);
         if (Number.isInteger(index)) {
           this.featureRefs.set(entity, { layerId: layer.id, index });
-          labelEntity(entity, index);
+          const group = parts.get(index);
+          if (group) group.push(entity);
+          else parts.set(index, [entity]);
         }
       }
+      for (const [index, entities] of parts)
+        labelEntity(pickLabelPart(Cesium, viewer, entities), index);
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
       // stroke, marker) by the layer opacity right after load, so points/lines

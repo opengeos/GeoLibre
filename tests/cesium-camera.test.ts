@@ -14,6 +14,7 @@ import {
   readMapViewFromCamera,
   zoomToOrthoWidth,
   zoomToRange,
+  zoomToDisplayDistance,
   zoomToSceneRange,
 } from "../packages/map/src/cesium-camera";
 
@@ -300,6 +301,30 @@ describe("zoomToOrthoWidth / orthoWidthToZoom", () => {
       const back = orthoWidthToZoom(zoomToOrthoWidth(zoom, WIDTH), WIDTH);
       assert.ok(Math.abs(back - zoom) < 1e-9, `zoom ${zoom} round-tripped to ${back}`);
     }
+  });
+});
+
+describe("zoomToDisplayDistance", () => {
+  it("is the perspective camera distance on the 3D globe", () => {
+    const { Cesium, viewer } = makeCameraFakes(0, SCENE_MODE.SCENE3D);
+    assert.equal(zoomToDisplayDistance(Cesium, viewer, 8, 45), zoomToRange(8, 45, HEIGHT, FOVY));
+  });
+
+  it("is half the orthographic frustum width in 2D", () => {
+    // Cesium's billboard/label shaders compare a DistanceDisplayCondition
+    // against czm_eyeHeight2D — half the frustum width — in SCENE2D.
+    const { Cesium, viewer } = makeCameraFakes(0, SCENE_MODE.SCENE2D);
+    assert.equal(zoomToDisplayDistance(Cesium, viewer, 8, 45), zoomToOrthoWidth(8, WIDTH) / 2);
+  });
+
+  it("drops the latitude correction in Mercator Columbus view", () => {
+    const fakes = makeCameraFakes(0, SCENE_MODE.COLUMBUS_VIEW);
+    Object.assign(fakes.Cesium, { WebMercatorProjection });
+    Object.assign(fakes.viewer.scene, { mapProjection: new WebMercatorProjection() });
+    assert.equal(
+      zoomToDisplayDistance(fakes.Cesium, fakes.viewer, 8, 45),
+      zoomToRange(8, 0, HEIGHT, FOVY),
+    );
   });
 });
 

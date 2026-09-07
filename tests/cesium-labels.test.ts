@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import * as C from "@cesium/engine";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
-import { createCesiumLabeler } from "../packages/map/src/cesium-labels";
+import { createCesiumLabeler, pickLabelPart } from "../packages/map/src/cesium-labels";
+import { zoomToOrthoWidth } from "../packages/map/src/cesium-camera";
 
 const time = C.JulianDate.now();
 const viewer = {
@@ -87,4 +88,27 @@ it("skips disabled, missing and invalid expression labels without breaking the l
   l.style.labels.expression = '["to-number", ["get", "name"]]';
   createCesiumLabeler(C, viewer, l)(entity, 0);
   assert.equal(entity.label, undefined);
+});
+it("measures the 2D scene against half the orthographic frustum width", () => {
+  const scene = { ...viewer.scene, mode: C.SceneMode.SCENE2D, canvas: { clientWidth: 800 } };
+  const flat = { ...viewer, scene } as C.CesiumWidget;
+  const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, flat, layer())(entity, 0);
+  const far = entity.label!.distanceDisplayCondition!.getValue(time).far;
+  assert.ok(Math.abs(far - zoomToOrthoWidth(4, 800) / 2) < 1e-6);
+});
+it("labels a multipart feature once, on its largest polygon or longest line", () => {
+  const polygon = (coords: number[]) =>
+    new C.Entity({ polygon: { hierarchy: C.Cartesian3.fromDegreesArray(coords) } });
+  const islet = polygon([10, 10, 10.01, 10, 10.01, 10.01, 10, 10.01]);
+  const mainland = polygon([0, 0, 2, 0, 2, 2, 0, 2]);
+  assert.equal(pickLabelPart(C, viewer, [islet, mainland]), mainland);
+  const line = (coords: number[]) =>
+    new C.Entity({ polyline: { positions: C.Cartesian3.fromDegreesArray(coords) } });
+  const stub = line([0, 0, 0.1, 0]);
+  const trunk = line([0, 0, 5, 0]);
+  assert.equal(pickLabelPart(C, viewer, [trunk, stub]), trunk);
+  const point = new C.Entity({ position: C.Cartesian3.fromDegrees(0, 0) });
+  assert.equal(pickLabelPart(C, viewer, [point, islet]), islet);
+  assert.equal(pickLabelPart(C, viewer, [point]), point);
 });

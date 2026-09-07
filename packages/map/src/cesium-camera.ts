@@ -203,6 +203,29 @@ export function zoomToSceneRange(
 }
 
 /**
+ * The distance a `DistanceDisplayCondition` is compared against, at a MapLibre
+ * `zoom` over `latDeg`, in the viewer's current scene mode.
+ *
+ * Billboards and labels measure their distance to the camera in eye space in
+ * 3D and Columbus view, so this is {@link zoomToRange} (with the latitude
+ * correction dropped in Mercator Columbus view, like {@link zoomToSceneRange}).
+ * The 2D scene is orthographic and has no camera distance: Cesium's shaders
+ * substitute half the frustum width (`czm_eyeHeight2D`), so a zoom resolves to
+ * half of {@link zoomToOrthoWidth} there.
+ */
+export function zoomToDisplayDistance(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+  zoom: number,
+  latDeg: number,
+): number {
+  if (viewer.scene.mode === Cesium.SceneMode.SCENE2D)
+    return zoomToOrthoWidth(zoom, canvasWidth(viewer)) / 2;
+  const scaleLatitude = isMercatorColumbus(Cesium, viewer) ? 0 : latDeg;
+  return zoomToRange(zoom, scaleLatitude, canvasHeight(viewer), cameraFovy(viewer));
+}
+
+/**
  * Point a viewer's camera at the map center described by `view`, matching
  * MapLibre's scale, bearing, and pitch. Requires the Cesium namespace so this
  * module stays free of a runtime Cesium import.
