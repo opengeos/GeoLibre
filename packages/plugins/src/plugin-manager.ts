@@ -1,5 +1,5 @@
 import {
-  getAssistantToolOwnerGeneration,
+  getAssistantToolOwnerScope,
   unregisterAssistantToolsByOwner,
 } from "./assistant-tool-registry";
 import type { ProjectPluginState } from "@geolibre/core";
@@ -634,17 +634,16 @@ function scopeAppToPlugin(
     return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
-  const toolGeneration = getAssistantToolOwnerGeneration(pluginId);
-  const canRegisterTools = () => toolGeneration === getAssistantToolOwnerGeneration(pluginId);
+  const toolScope = getAssistantToolOwnerScope(pluginId);
   if (app.registerAssistantTool) {
     const registerTool = app.registerAssistantTool;
     scoped.registerAssistantTool = (tool) =>
-      canRegisterTools() ? registerTool(tool, pluginId) : () => {};
+      toolScope.active ? registerTool(tool, pluginId) : () => {};
   }
   if (app.registerAssistantToolSpec) {
     const registerSpec = app.registerAssistantToolSpec;
     scoped.registerAssistantToolSpec = (spec) =>
-      canRegisterTools() ? registerSpec(spec, pluginId) : () => {};
+      toolScope.active ? registerSpec(spec, pluginId) : () => {};
   }
 
   if (register) {

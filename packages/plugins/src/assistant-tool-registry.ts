@@ -7,11 +7,16 @@ interface Entry {
 }
 const registry = new Map<string, Entry>();
 let version = 0;
-const ownerGenerations = new Map<string, number>();
+const ownerScopes = new Map<string, { active: boolean }>();
 
-/** Internal lifecycle token: stale async plugin callbacks cannot resurrect tools. */
-export function getAssistantToolOwnerGeneration(owner: string): number {
-  return ownerGenerations.get(owner) ?? 0;
+/** Internal lifecycle token: invalidated scopes remain stale after an owner is reused. */
+export function getAssistantToolOwnerScope(owner: string): { readonly active: boolean } {
+  let scope = ownerScopes.get(owner);
+  if (!scope) {
+    scope = { active: true };
+    ownerScopes.set(owner, scope);
+  }
+  return scope;
 }
 
 /** Register an SDK tool in the same registry used by JSON Schema specs.
@@ -76,8 +81,9 @@ export function registerAssistantToolSpec(
       inputSchema: spec.inputSchema,
       callback: async (input): Promise<JSONValue> => {
         const result = await spec.callback(input);
-        // Normalize to the SDK's JSON return contract, including void callbacks.
-        return result === undefined ? null : JSON.parse(JSON.stringify(result));
+        // The SDK wraps and copies callback results. Avoid serializing twice;
+        // plugins are responsible for the documented JSON return contract.
+        return (result === undefined ? null : result) as JSONValue;
       },
     }),
     ownerPluginId,
@@ -94,7 +100,9 @@ export function getAssistantToolsVersion(): number {
 
 /** Host lifecycle cleanup, including failed activation and plugin removal. */
 export function unregisterAssistantToolsByOwner(ownerPluginId: string): void {
-  ownerGenerations.set(ownerPluginId, getAssistantToolOwnerGeneration(ownerPluginId) + 1);
+  const scope = ownerScopes.get(ownerPluginId);
+  if (scope) scope.active = false;
+  ownerScopes.delete(ownerPluginId);
   for (const [name, entry] of registry) {
     if (entry.ownerPluginId === ownerPluginId) {
       registry.delete(name);

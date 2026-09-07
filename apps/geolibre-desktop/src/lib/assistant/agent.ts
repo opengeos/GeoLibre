@@ -43,6 +43,7 @@ export type AssistantStreamEvent =
 export class AssistantSession {
   private agent: Agent | null = null;
   private toolsVersion = -1;
+  private streaming = false;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
   private selection: AssistantProviderSelection | null = null;
   /**
@@ -157,40 +158,47 @@ export class AssistantSession {
    * @yields {@link AssistantStreamEvent} updates as the model and tools run.
    */
   async *stream(prompt: string): AsyncGenerator<AssistantStreamEvent> {
-    const agent = await this.ensureAgent();
-    // Only prepend the layer context when it changed since the last message, so
-    // long conversations don't re-send the full layer list on every turn.
-    const context = describeLayers(useAppStore.getState().layers);
-    const message =
-      context === this.lastContext
-        ? prompt
-        : `Current layers:\n${context}\n\nUser request: ${prompt}`;
-    this.lastContext = context;
+    // Guard before ensureAgent can refresh tools, including callers outside the UI.
+    if (this.streaming) throw new Error("An assistant response is already in progress.");
+    this.streaming = true;
+    try {
+      const agent = await this.ensureAgent();
+      // Only prepend the layer context when it changed since the last message, so
+      // long conversations don't re-send the full layer list on every turn.
+      const context = describeLayers(useAppStore.getState().layers);
+      const message =
+        context === this.lastContext
+          ? prompt
+          : `Current layers:\n${context}\n\nUser request: ${prompt}`;
+      this.lastContext = context;
 
-    for await (const event of agent.stream(message)) {
-      // Text deltas as the model writes its reply. `event.event` is the SDK's
-      // normalized ModelStreamEvent (provider-agnostic), so we narrow on its
-      // public discriminants rather than casting to an ad-hoc shape.
-      if (event.type === "modelStreamUpdateEvent") {
-        const inner = event.event;
-        if (
-          inner.type === "modelContentBlockDeltaEvent" &&
-          inner.delta.type === "textDelta" &&
-          inner.delta.text
-        ) {
-          yield { type: "text", text: inner.delta.text };
+      for await (const event of agent.stream(message)) {
+        // Text deltas as the model writes its reply. `event.event` is the SDK's
+        // normalized ModelStreamEvent (provider-agnostic), so we narrow on its
+        // public discriminants rather than casting to an ad-hoc shape.
+        if (event.type === "modelStreamUpdateEvent") {
+          const inner = event.event;
+          if (
+            inner.type === "modelContentBlockDeltaEvent" &&
+            inner.delta.type === "textDelta" &&
+            inner.delta.text
+          ) {
+            yield { type: "text", text: inner.delta.text };
+          }
+          continue;
         }
-        continue;
+        // A tool finished — surface it (with any error) in the transcript.
+        if (event.type === "afterToolCallEvent") {
+          yield {
+            type: "tool",
+            name: event.toolUse.name,
+            input: event.toolUse.input,
+            error: event.error?.message,
+          };
+        }
       }
-      // A tool finished — surface it (with any error) in the transcript.
-      if (event.type === "afterToolCallEvent") {
-        yield {
-          type: "tool",
-          name: event.toolUse.name,
-          input: event.toolUse.input,
-          error: event.error?.message,
-        };
-      }
+    } finally {
+      this.streaming = false;
     }
   }
 }
