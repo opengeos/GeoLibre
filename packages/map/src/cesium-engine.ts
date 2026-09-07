@@ -531,10 +531,12 @@ export class CesiumEngine implements MapEngine {
     const viewer = this.live();
     if (!viewer || this.isMorphing() || !Number.isFinite(point.x) || !Number.isFinite(point.y))
       return null;
-    const { scene } = viewer;
     const hit = pickGlobeHit(this.Cesium, viewer, point);
     if (!hit) return null;
-    const position = scene.globe.ellipsoid.cartesianToCartographic(hit.position);
+    // The same ellipsoid pickGlobeHit fell back to, so a globe-less scene
+    // degrades to "no hit" rather than throwing on every pointer move.
+    const ellipsoid = viewer.scene.globe?.ellipsoid ?? this.Cesium.Ellipsoid.WGS84;
+    const position = ellipsoid.cartesianToCartographic(hit.position);
     if (!position) return null;
     const coordinates: [number, number] = [
       this.Cesium.Math.toDegrees(position.longitude),

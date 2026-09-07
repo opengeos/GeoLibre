@@ -17,8 +17,12 @@ The baseline browser reproduction of #2275 left the status bar at `Coords: —`
 while pointing at the globe. The corrected browser reports longitude/latitude
 and clears the readout on exit. The real US cities dataset produces 109 entities
 and 109 labels. Label collision avoidance and the advanced label data-defined
-appearance fields are outside this batch. Scene-mode persistence is also not
-added here; #2291 describes it as a possible follow-up.
+appearance fields are outside this batch, and so are the `LabelStyle` placement
+fields the globe does not read yet: `anchor`, `rotation`, `placement` (line
+placement along a path), `maxWidth`, and `allowOverlap`. A label styled with
+them on the 2D map renders centred and unrotated on the globe; #2279 is not
+complete until they are honoured. Scene-mode persistence is also not added
+here; #2291 describes it as a possible follow-up.
 
 ## Remaining work and ordering
 

@@ -299,14 +299,17 @@ function entryKind(layer: GeoLibreLayer): EntryKind {
 // alpha instead of reloading the whole GeoJsonDataSource on every tick.
 function styleSignature(layer: GeoLibreLayer): string {
   const style = layer.style ?? {};
+  // The layer zoom range only reaches the globe through the labels' distance
+  // limits, so it forces a reload only while labels are on; dragging the range
+  // on an unlabelled layer must not re-parse every feature.
+  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
   return JSON.stringify([
     style.fillColor,
     style.strokeColor,
     style.strokeWidth,
     style.markerColor,
     style.labels,
-    style.minZoom,
-    style.maxZoom,
+    ...(labels.enabled ? [style.minZoom, style.maxZoom] : []),
   ]);
 }
 
