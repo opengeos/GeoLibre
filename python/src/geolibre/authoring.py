@@ -647,6 +647,14 @@ def classify_layer(
 # -- camera and basemap -------------------------------------------------------
 
 
+_RENDERERS = frozenset({"maplibre", "cesium"})
+
+
+def _is_renderer(value: Any) -> bool:
+    """Whether ``value`` names a supported renderer (a non-string is never one)."""
+    return isinstance(value, str) and value in _RENDERERS
+
+
 def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Return ``secondaryMapViews`` validated as a list of renderable panes.
 
@@ -658,7 +666,7 @@ def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
 
     Raises:
         ValueError: If the field is not a list of pane objects carrying a
-            string ``id`` and, when present, a ``maplibre``/``cesium``
+            unique string ``id`` and, when present, a ``maplibre``/``cesium``
             ``viewKind`` (an omitted ``viewKind`` means ``maplibre``), e.g.
             from a hand-edited project file.
     """
@@ -666,19 +674,21 @@ def secondary_panes(project: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(panes, list) or any(
         not isinstance(p, dict)
         or not isinstance(p.get("id"), str)
-        or p.get("viewKind", "maplibre") not in {"maplibre", "cesium"}
+        or not _is_renderer(p.get("viewKind", "maplibre"))
         for p in panes
     ):
         raise ValueError(
             "secondaryMapViews must be a list of pane objects with an id "
             "and a maplibre or cesium viewKind"
         )
+    if len({p["id"] for p in panes}) != len(panes):
+        raise ValueError("secondaryMapViews pane ids must be unique")
     return panes
 
 
 def set_renderer(project: dict[str, Any], renderer: str, *, pane_id: str | None = None) -> str:
     """Select ``maplibre`` or ``cesium`` for the primary map or a secondary pane."""
-    if renderer not in {"maplibre", "cesium"}:
+    if not _is_renderer(renderer):
         raise ValueError("renderer must be maplibre or cesium")
     if pane_id is None:
         project["primaryRenderer"] = renderer
@@ -703,7 +713,7 @@ def set_map_layout(
         raise ValueError("rows and cols must be integers between 1 and 4")
     count = rows * cols
     if view_kinds is not None and (
-        len(view_kinds) != count or any(k not in {"maplibre", "cesium"} for k in view_kinds)
+        len(view_kinds) != count or not all(_is_renderer(k) for k in view_kinds)
     ):
         raise ValueError("view_kinds must contain one maplibre or cesium renderer per pane")
     panes = copy.deepcopy(secondary_panes(project)[: count - 1])

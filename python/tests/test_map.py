@@ -1260,9 +1260,18 @@ def test_malformed_secondary_map_views_raise_value_error(m):
     # An omitted viewKind is MapLibre; a present one must name a renderer.
     m.load_project({**m.project, "secondaryMapViews": [{"id": "p"}]})
     assert m.get_renderer(pane_id="p") == "maplibre"
-    for bad in (None, "webgl"):
+    # Unhashable JSON values must surface as ValueError too, not TypeError.
+    for bad in (None, "webgl", ["cesium"], {"kind": "cesium"}):
         m.load_project({**m.project, "secondaryMapViews": [{"id": "p", "viewKind": bad}]})
         with pytest.raises(ValueError):
             m.get_renderer(pane_id="p")
         with pytest.raises(ValueError):
             m.set_map_layout(1, 2)
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2, view_kinds=["maplibre", ["cesium"]])
+    # Duplicate ids would make pane lookups silently pick the first match.
+    m.load_project({**m.project, "secondaryMapViews": [{"id": "p"}, {"id": "p"}]})
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="p")
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 3)
