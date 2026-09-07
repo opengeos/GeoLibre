@@ -174,7 +174,7 @@ export class PluginManager {
     const restoreDisplaced = () => {
       for (const displacedId of displaced) this.activate(displacedId, app);
     };
-    const scopedApp = scopeAppToPlugin(app, id);
+    const scopedApp = scopeAppToPlugin(app, id, { assistantTools: true });
     this.activating.add(id);
     let activated: ReturnType<GeoLibrePlugin["activate"]>;
     try {
@@ -492,10 +492,11 @@ export class PluginManager {
     // project already says whether its panel should be open, and collapsing it
     // here would both override that and (since collapse() mutates the control)
     // write the collapsed state back on the next save.
-    const scopeForRestore = (id: string): GeoLibreAppAPI =>
+    const scopeForRestore = (id: string, assistantTools = false): GeoLibreAppAPI =>
       this.plugins.get(id)?.restoresPanelCollapseState
-        ? scopeAppToPlugin(app, id)
+        ? scopeAppToPlugin(app, id, { assistantTools })
         : scopeAppToPlugin(app, id, {
+            assistantTools,
             onControlAdded: collapseRestoredPanel,
             onRightPanelOpened: collapseRestoredRightPanel,
           });
@@ -544,7 +545,7 @@ export class PluginManager {
       if (this.active.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin || this.activating.has(id)) continue;
-      const scopedApp = scopeForRestore(id);
+      const scopedApp = scopeForRestore(id, true);
       this.activating.add(id);
       let activated: ReturnType<GeoLibrePlugin["activate"]>;
       try {
@@ -610,6 +611,16 @@ interface ScopeAppOptions {
   onControlAdded?: (control: IControl) => void;
   /** Called when a plugin opens a native right panel during project restore. */
   onRightPanelOpened?: (panelId: string) => void;
+  /**
+   * Expose assistant tool registration. Only activation scopes set this: a
+   * tool lives for exactly one activation, and the manager only tears down
+   * registrations when a plugin it activated goes away. The other lifecycle
+   * callbacks (`applyProjectState`, `setMapControlPosition`,
+   * `handleUrlParameters`, `deactivate`) run for inactive plugins too, so a
+   * registration from one of those would outlive every cleanup path and stay
+   * callable by the assistant until the plugin is unregistered.
+   */
+  assistantTools?: boolean;
 }
 
 function scopeAppToPlugin(
@@ -617,14 +628,16 @@ function scopeAppToPlugin(
   pluginId: string,
   options: ScopeAppOptions = {},
 ): GeoLibreAppAPI {
-  const { onControlAdded, onRightPanelOpened } = options;
+  const { onControlAdded, onRightPanelOpened, assistantTools = false } = options;
   const register = app.registerToolbarMenu;
   const registerRightPanel = app.registerRightPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
+  const hasAssistantRegistration = Boolean(
+    app.registerAssistantTool || app.registerAssistantToolSpec,
+  );
   if (
-    !app.registerAssistantTool &&
-    !app.registerAssistantToolSpec &&
+    !hasAssistantRegistration &&
     !register &&
     !onControlAdded &&
     !onRightPanelOpened &&
@@ -634,16 +647,23 @@ function scopeAppToPlugin(
     return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
-  const toolScope = getAssistantToolOwnerScope(pluginId);
-  if (app.registerAssistantTool) {
-    const registerTool = app.registerAssistantTool;
-    scoped.registerAssistantTool = (tool) =>
-      toolScope.active ? registerTool(tool, pluginId) : () => {};
-  }
-  if (app.registerAssistantToolSpec) {
-    const registerSpec = app.registerAssistantToolSpec;
-    scoped.registerAssistantToolSpec = (spec) =>
-      toolScope.active ? registerSpec(spec, pluginId) : () => {};
+  if (!assistantTools) {
+    // Registration is activation-only, so a non-activation scope does not carry
+    // it at all rather than handing back the host's unscoped implementation.
+    delete scoped.registerAssistantTool;
+    delete scoped.registerAssistantToolSpec;
+  } else {
+    const toolScope = getAssistantToolOwnerScope(pluginId);
+    if (app.registerAssistantTool) {
+      const registerTool = app.registerAssistantTool;
+      scoped.registerAssistantTool = (tool) =>
+        toolScope.active ? registerTool(tool, pluginId) : () => {};
+    }
+    if (app.registerAssistantToolSpec) {
+      const registerSpec = app.registerAssistantToolSpec;
+      scoped.registerAssistantToolSpec = (spec) =>
+        toolScope.active ? registerSpec(spec, pluginId) : () => {};
+    }
   }
 
   if (register) {

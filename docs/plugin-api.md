@@ -1088,6 +1088,12 @@ name for the same owner replaces it; an older disposer cannot remove the
 replacement. Tools are removed on deactivation, failed activation, and plugin
 removal, and stale asynchronous registrations after teardown are ignored.
 
+Register from `activate` (or from the app it hands you, including
+asynchronously). A tool lives for exactly one activation, so the app passed to
+the other lifecycle callbacks — `applyProjectState`, `setMapControlPosition`,
+`handleUrlParameters`, `deactivate` — omits both methods: those run for inactive
+plugins, whose registrations no cleanup path would reach.
+
 The assistant refreshes its tools before the next prompt while retaining its
 conversation history. Plugin callbacks execute plugin-authored code, like a
 panel button; they should use the app API to update layers and other app state.

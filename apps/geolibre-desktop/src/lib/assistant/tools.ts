@@ -1,4 +1,4 @@
-import { listAssistantTools } from "@geolibre/plugins";
+import { listAssistantTools } from "@geolibre/plugins/assistant-tool-registry";
 import {
   DEFAULT_LAYER_STYLE,
   OPENFREEMAP_BASEMAPS,

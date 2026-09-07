@@ -133,6 +133,31 @@ test("sync and async activation failures remove tools", async () => {
   }
 });
 
+test("registration is activation-only: an inactive plugin cannot add a tool", () => {
+  const manager = new PluginManager();
+  const seen: Array<GeoLibreAppAPI["registerAssistantToolSpec"]> = [];
+  manager.register({
+    id: "test",
+    name: "Test",
+    version: "1.0.0",
+    activate: () => {},
+    deactivate: () => {},
+    // Runs for inactive plugins too, on both the direct call and a project
+    // restore, so the app it receives must not carry the registration methods.
+    applyProjectState: (api) => {
+      seen.push(api.registerAssistantToolSpec);
+      api.registerAssistantToolSpec?.(spec());
+    },
+  });
+  manager.applyPluginState("test", app, { any: "state" });
+  manager.restoreProjectState(
+    { activePluginIds: [], mapControlPositions: {}, settings: { test: { any: "state" } } },
+    app,
+  );
+  assert.deepEqual(seen, [undefined, undefined]);
+  assert.equal(listAssistantTools().length, 0);
+});
+
 test("late async registration cannot survive deactivation or replace a new activation", async () => {
   const manager = new PluginManager();
   let stale: GeoLibreAppAPI;

@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./assistant-tool-registry": "./src/assistant-tool-registry.ts",
     "./cog-spectral-profile": "./src/plugins/cog-spectral-profile.ts",
     "./geo-editor-geometry": "./src/plugins/geo-editor-geometry.ts",
     "./local-netcdf": "./src/plugins/local-netcdf.ts",

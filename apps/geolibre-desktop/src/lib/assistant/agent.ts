@@ -1,4 +1,4 @@
-import { getAssistantToolsVersion } from "@geolibre/plugins";
+import { getAssistantToolsVersion } from "@geolibre/plugins/assistant-tool-registry";
 import { useAppStore } from "@geolibre/core";
 import { Agent } from "@strands-agents/sdk";
 import { configForProvider, createModel, resolveProviderConfig } from "./provider";
