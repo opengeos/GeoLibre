@@ -31,14 +31,24 @@ export function createCesiumLabeler(
   // still camera shows), so that is part of the key alongside the camera pose.
   const pose = { position: new C.Cartesian3(), direction: new C.Cartesian3(), key: "" };
   let cachedZoom = NaN;
+  /** The orthographic frustum width in 2D; NaN for a perspective frustum. */
+  const frustumWidth = () => {
+    const frustum = viewer.camera.frustum as { left?: number; right?: number };
+    return frustum.left !== undefined && frustum.right !== undefined
+      ? frustum.right - frustum.left
+      : NaN;
+  };
+  // Everything a zoom-to-distance conversion depends on besides the label's own
+  // latitude, so per-label distance conditions only recompute when this changes.
+  const displayKey = () => {
+    const { scene, camera } = viewer;
+    const fovy = (camera.frustum as { fovy?: number }).fovy ?? "";
+    return `${scene.mode}|${scene.canvas.clientWidth}|${scene.canvas.clientHeight}|${fovy}|${frustumWidth()}`;
+  };
   const currentZoom = () => {
     const { camera } = viewer;
     const canvas = viewer.scene.canvas;
-    const frustum = camera.frustum as { left?: number; right?: number };
-    const width =
-      frustum.left !== undefined && frustum.right !== undefined
-        ? frustum.right - frustum.left
-        : NaN;
+    const width = frustumWidth();
     const key = `${width}|${canvas.clientWidth}|${canvas.clientHeight}`;
     if (
       !Number.isNaN(cachedZoom) &&
@@ -119,6 +129,9 @@ export function createCesiumLabeler(
     if (minZoom >= maxZoom) return;
     let lastZoom = NaN;
     let lastText = text;
+    let conditionKey = "";
+    let near = 0;
+    let far = Number.POSITIVE_INFINITY;
     entity.label = new C.LabelGraphics({
       text: zoomDependent
         ? new C.CallbackProperty(() => {
@@ -143,15 +156,22 @@ export function createCesiumLabeler(
       // orthographic frustum, not a camera distance), so evaluate them per frame
       // rather than baking them in at load time: a pane resize or a scene-mode
       // switch would otherwise leave the label switching at the wrong zoom until
-      // the next style-triggered rebuild.
+      // the next style-triggered rebuild. Memoised on `displayKey`, so a frame
+      // with an unchanged view costs a string compare per label.
       distanceDisplayCondition: new C.CallbackProperty(
         (_time, result?: DistanceDisplayCondition) => {
+          const key = displayKey();
+          if (key !== conditionKey) {
+            conditionKey = key;
+            near = maxZoom >= 24 ? 0 : zoomToDisplayDistance(C, viewer, maxZoom, latitude);
+            far =
+              minZoom <= 0
+                ? Number.POSITIVE_INFINITY
+                : zoomToDisplayDistance(C, viewer, minZoom, latitude);
+          }
           const condition = result ?? new C.DistanceDisplayCondition();
-          condition.near = maxZoom >= 24 ? 0 : zoomToDisplayDistance(C, viewer, maxZoom, latitude);
-          condition.far =
-            minZoom <= 0
-              ? Number.POSITIVE_INFINITY
-              : zoomToDisplayDistance(C, viewer, minZoom, latitude);
+          condition.near = near;
+          condition.far = far;
           return condition;
         },
         false,

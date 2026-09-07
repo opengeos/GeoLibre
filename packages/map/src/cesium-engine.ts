@@ -18,6 +18,7 @@ import {
   canvasHeight,
   groundHeightAt,
   isSameView,
+  pickGlobeHit,
   readMapViewFromCamera,
   zoomToRange,
   zoomToSceneRange,
@@ -530,12 +531,10 @@ export class CesiumEngine implements MapEngine {
     const viewer = this.live();
     if (!viewer || this.isMorphing() || !Number.isFinite(point.x) || !Number.isFinite(point.y))
       return null;
-    const { camera, scene } = viewer;
-    const ray = camera.getPickRay(point);
-    const ground = ray ? scene.globe.pick(ray, scene) : undefined;
-    const hit = ground ?? camera.pickEllipsoid(point, scene.globe.ellipsoid);
+    const { scene } = viewer;
+    const hit = pickGlobeHit(this.Cesium, viewer, point);
     if (!hit) return null;
-    const position = scene.globe.ellipsoid.cartesianToCartographic(hit);
+    const position = scene.globe.ellipsoid.cartesianToCartographic(hit.position);
     if (!position) return null;
     const coordinates: [number, number] = [
       this.Cesium.Math.toDegrees(position.longitude),
@@ -544,7 +543,7 @@ export class CesiumEngine implements MapEngine {
     if (!coordinates.every(Number.isFinite)) return null;
     return {
       coordinates,
-      elevation: ground && Number.isFinite(position.height) ? position.height : null,
+      elevation: hit.terrain && Number.isFinite(position.height) ? position.height : null,
     };
   }
 

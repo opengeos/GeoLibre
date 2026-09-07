@@ -1,5 +1,5 @@
 import type { MapViewState } from "@geolibre/core";
-import type { CesiumWidget } from "@cesium/engine";
+import type { Cartesian3, CesiumWidget } from "@cesium/engine";
 
 // Camera conversion between MapLibre's `MapViewState` (Web-Mercator zoom + a
 // nadir-referenced pitch) and Cesium's camera (a metric range + a
@@ -154,14 +154,28 @@ function pickGlobe(
   viewer: CesiumWidget,
   position: { x: number; y: number },
 ) {
+  return pickGlobeHit(Cesium, viewer, position)?.position;
+}
+
+/**
+ * {@link pickGlobe}, also reporting whether the hit is on loaded terrain (so a
+ * caller can tell a real ground height from the ellipsoid's zero). Shared by
+ * the camera readback and the engine's cursor readout.
+ */
+export function pickGlobeHit(
+  Cesium: typeof import("@cesium/engine"),
+  viewer: CesiumWidget,
+  position: { x: number; y: number },
+): { position: Cartesian3; terrain: boolean } | undefined {
   const { scene, camera } = viewer;
   const ray = camera.getPickRay(position as Parameters<typeof camera.getPickRay>[0]);
   const onTerrain = ray && scene.globe ? scene.globe.pick(ray, scene) : undefined;
-  if (onTerrain) return onTerrain;
-  return camera.pickEllipsoid(
+  if (onTerrain) return { position: onTerrain, terrain: true };
+  const onEllipsoid = camera.pickEllipsoid(
     position as Parameters<typeof camera.pickEllipsoid>[0],
     scene.globe?.ellipsoid ?? Cesium.Ellipsoid.WGS84,
   );
+  return onEllipsoid ? { position: onEllipsoid, terrain: false } : undefined;
 }
 
 /** Columbus uses projected distances when the flat scene is Web Mercator. */
