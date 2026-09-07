@@ -634,3 +634,8 @@ def test_marker_style_rejects_out_of_range_numbers():
 
 def test_marker_style_is_empty_when_nothing_is_passed():
     assert project.marker_style() == {}
+
+
+def test_normalize_popup_rejects_a_value_that_is_not_a_field_spec():
+    with pytest.raises(ValueError, match="popup fields must be a property name"):
+        project.normalize_popup(42)

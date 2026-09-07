@@ -654,7 +654,18 @@ def popup_config(
     if show_feature_id is not None:
         config["showFeatureId"] = bool(show_feature_id)
     if fields is not None:
-        entries = [fields] if isinstance(fields, (str, dict)) else list(fields)
+        if isinstance(fields, (str, dict)):
+            entries = [fields]
+        else:
+            try:
+                entries = list(fields)
+            except TypeError:
+                # Reached by `popup=1` and friends. Say what a popup accepts
+                # rather than letting "'int' object is not iterable" out.
+                raise ValueError(
+                    "popup fields must be a property name, a mapping, or a sequence of "
+                    f"them; got {type(fields).__name__}"
+                ) from None
         config["fields"] = [_coerce_popup_field(entry) for entry in entries]
     return config
 

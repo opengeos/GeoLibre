@@ -1276,6 +1276,7 @@ def test_malformed_secondary_map_views_raise_value_error(m):
     with pytest.raises(ValueError):
         m.set_map_layout(1, 3)
 
+
 # -- marker symbology, popups, and tooltips ------------------------------------
 
 
