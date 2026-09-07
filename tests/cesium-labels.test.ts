@@ -121,7 +121,12 @@ it("re-evaluates a zoom-dependent expression as the camera zoom changes", () => 
     positionWC: new C.Cartesian3(1, 2, 3),
     directionWC: new C.Cartesian3(0, 0, -1),
   };
-  const live = { ...viewer, camera } as unknown as C.CesiumWidget;
+  const canvas = { clientWidth: 800, clientHeight: 600 };
+  const live = {
+    ...viewer,
+    camera,
+    scene: { ...viewer.scene, canvas },
+  } as unknown as C.CesiumWidget;
   const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
   createCesiumLabeler(C, live, l, () => zoom)(entity, 0);
   // Empty at this zoom, but the label stays so a later zoom can fill it in.
@@ -135,6 +140,10 @@ it("re-evaluates a zoom-dependent expression as the camera zoom changes", () => 
   zoom = 12;
   camera.directionWC = new C.Cartesian3(0, 1, 0);
   assert.equal(entity.label?.text?.getValue(time), "KNX");
+  // A pane resize changes the zoom a still camera shows, so it re-reads too.
+  zoom = 8;
+  canvas.clientHeight = 300;
+  assert.equal(entity.label?.text?.getValue(time), "Knoxville");
   // A static expression still drops an empty label outright.
   l.style.labels.expression = '["get", "absent"]';
   const empty = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });

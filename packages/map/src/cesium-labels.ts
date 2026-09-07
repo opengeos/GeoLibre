@@ -27,25 +27,29 @@ export function createCesiumLabeler(
   // pose changes. Reading the zoom picks the globe, so it is memoised on the
   // pose and shared by every label of the layer.
   const zoomDependent = Boolean(expression.evaluate) && ZOOM_OPERAND.test(labels.expression);
-  const pose = { position: new C.Cartesian3(), direction: new C.Cartesian3(), width: NaN };
+  // The zoom also depends on the canvas size (a pane resize changes the zoom a
+  // still camera shows), so that is part of the key alongside the camera pose.
+  const pose = { position: new C.Cartesian3(), direction: new C.Cartesian3(), key: "" };
   let cachedZoom = NaN;
   const currentZoom = () => {
     const { camera } = viewer;
+    const canvas = viewer.scene.canvas;
     const frustum = camera.frustum as { left?: number; right?: number };
     const width =
       frustum.left !== undefined && frustum.right !== undefined
         ? frustum.right - frustum.left
         : NaN;
+    const key = `${width}|${canvas.clientWidth}|${canvas.clientHeight}`;
     if (
       !Number.isNaN(cachedZoom) &&
+      key === pose.key &&
       C.Cartesian3.equals(camera.positionWC, pose.position) &&
-      C.Cartesian3.equals(camera.directionWC, pose.direction) &&
-      Object.is(width, pose.width)
+      C.Cartesian3.equals(camera.directionWC, pose.direction)
     )
       return cachedZoom;
     C.Cartesian3.clone(camera.positionWC, pose.position);
     C.Cartesian3.clone(camera.directionWC, pose.direction);
-    pose.width = width;
+    pose.key = key;
     cachedZoom = readZoom();
     return cachedZoom;
   };
