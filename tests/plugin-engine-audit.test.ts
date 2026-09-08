@@ -95,7 +95,11 @@ function importClosure(entry: string): string[] {
     if (seen.has(file)) continue;
     seen.add(file);
     const source = blankComments(readFileSync(file, "utf8"));
-    for (const match of source.matchAll(/from\s+"(\.[^"]*)"/g)) {
+    // `from "./x"`, the side-effect form `import "./x"`, and the dynamic
+    // `import("./x")` a plugin uses to defer a heavy helper — all three reach
+    // code that would otherwise sit outside the audit. Either quote style, so
+    // a file that escapes the formatter is still followed.
+    for (const match of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["'](\.[^"']*)["']/g)) {
       const resolved = resolveImport(file, match[1]);
       if (resolved) pending.push(resolved);
     }
