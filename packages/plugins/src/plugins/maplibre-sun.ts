@@ -1,3 +1,4 @@
+import type { CesiumSceneHandle } from "@geolibre/map";
 import type { CanvasSource, LightSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
@@ -17,6 +18,12 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * The astronomy (subsolar point, terminator latitude, solar altitude/azimuth)
  * is a compact port of the low-precision NOAA solar-position equations, the
  * same ones used by the well-known Leaflet.Terminator plugin.
+ *
+ * On the Cesium globe (issue #2287) the same clock drives Cesium's own sun:
+ * the scene light becomes a `SunLight`, globe lighting is switched on, and
+ * `clock.currentTime` follows the simulated instant, so the terminator, the
+ * day-side atmosphere, and the lighting of 3D Tiles all come from Cesium's
+ * ephemeris rather than a painted mask. See {@link CesiumSunEngine}.
  */
 
 export const SUN_PLUGIN_ID = "geolibre-sun";
@@ -222,9 +229,6 @@ class SunEngine {
   private lastMaskLng = 0;
   private lastMaskLat = 0;
   private lastMaskShade = -1;
-  private rafId: number | null = null;
-  // Wall-clock timestamp of the previous animation frame; null while paused.
-  private lastFrame: number | null = null;
   private destroyed = false;
 
   constructor(map: MapLibreMap, settings: SunSettings) {
@@ -245,7 +249,6 @@ class SunEngine {
     });
 
     this.handleStyleData = this.handleStyleData.bind(this);
-    this.tick = this.tick.bind(this);
     map.on("styledata", this.handleStyleData);
 
     this.ensureLayers();
@@ -253,8 +256,9 @@ class SunEngine {
     if (settings.playing) this.play();
   }
 
-  getMapInstance(): MapLibreMap {
-    return this.map;
+  /** Whether this engine drives `map`, so a reattach can skip an unchanged one. */
+  drives(map: unknown): boolean {
+    return map === this.map;
   }
 
   applySettings(settings: SunSettings): void {
@@ -438,7 +442,38 @@ class SunEngine {
   }
 
   play(): void {
-    if (this.destroyed || this.rafId !== null) return;
+    if (this.destroyed) return;
+    this.playback.play();
+  }
+
+  pause(): void {
+    this.playback.pause();
+  }
+
+  private readonly playback = new SunPlayback(
+    () => !this.destroyed && this.settings.playing,
+    () => this.settings.speed,
+  );
+}
+
+/**
+ * The playback clock both engines share: one animation frame per tick,
+ * advancing the simulated instant by `speed` minutes per real second.
+ */
+class SunPlayback {
+  private rafId: number | null = null;
+  // Wall-clock timestamp of the previous animation frame; null while paused.
+  private lastFrame: number | null = null;
+
+  constructor(
+    private readonly isPlaying: () => boolean,
+    private readonly speed: () => number,
+  ) {
+    this.tick = this.tick.bind(this);
+  }
+
+  play(): void {
+    if (this.rafId !== null) return;
     this.lastFrame = null;
     this.rafId = window.requestAnimationFrame(this.tick);
   }
@@ -453,14 +488,144 @@ class SunEngine {
 
   private tick(now: number): void {
     this.rafId = null;
-    if (this.destroyed || !this.settings.playing) return;
+    if (!this.isPlaying()) return;
     if (this.lastFrame !== null) {
       const elapsedSec = (now - this.lastFrame) / 1000;
-      const advancedMs = elapsedSec * this.settings.speed * MS_PER_MINUTE;
-      advanceSunClock(advancedMs);
+      advanceSunClock(elapsedSec * this.speed() * MS_PER_MINUTE);
     }
     this.lastFrame = now;
     this.rafId = window.requestAnimationFrame(this.tick);
+  }
+}
+
+/**
+ * Cesium's globe shader lights each fragment by `lambert * multiplier +
+ * vertexShadowDarkness`, clamped to [0, 1], so `vertexShadowDarkness` is the
+ * brightness floor of the night side. The panel's shade opacity (0 = no
+ * shading, 0.85 = deepest night) maps onto that floor inversely; a floor of
+ * exactly 0 would render the night hemisphere as a black hole, so it is kept
+ * just above.
+ */
+export function cesiumNightFloor(shadeOpacity: number): number {
+  const shade = Math.min(SUN_SHADE_MAX, Math.max(SUN_SHADE_MIN, shadeOpacity));
+  return Math.max(0.05, 1 - shade);
+}
+
+/** The scene state the globe engine overwrites, captured for restoration. */
+interface SavedGlobeLighting {
+  light: unknown;
+  enableLighting: boolean;
+  dynamicAtmosphereLighting: boolean;
+  dynamicAtmosphereLightingFromSun: boolean;
+  vertexShadowDarkness: number;
+  currentTime: unknown;
+  shouldAnimate: boolean;
+}
+
+/**
+ * The globe engine: drives Cesium's native sun from the simulated clock.
+ *
+ * Unlike the 2D engine there is nothing to paint — Cesium computes the sun
+ * direction from `clock.currentTime` itself, and `globe.enableLighting` draws
+ * the terminator from that. The engine only keeps the clock, the light, and
+ * the night-side depth ({@link cesiumNightFloor}) in step with the settings,
+ * and restores what it changed on teardown so a closed panel leaves the
+ * globe exactly as it found it.
+ */
+class CesiumSunEngine {
+  private settings: SunSettings;
+  private readonly saved: SavedGlobeLighting;
+  private destroyed = false;
+  private readonly playback = new SunPlayback(
+    () => !this.destroyed && this.settings.playing,
+    () => this.settings.speed,
+  );
+
+  constructor(
+    private readonly globe: CesiumSceneHandle,
+    settings: SunSettings,
+  ) {
+    this.settings = settings;
+    const { Cesium, scene, clock } = globe;
+    const g = scene.globe;
+    this.saved = {
+      light: scene.light,
+      enableLighting: g?.enableLighting ?? false,
+      dynamicAtmosphereLighting: g?.dynamicAtmosphereLighting ?? true,
+      dynamicAtmosphereLightingFromSun: g?.dynamicAtmosphereLightingFromSun ?? false,
+      vertexShadowDarkness: g?.vertexShadowDarkness ?? 0.3,
+      currentTime: Cesium.JulianDate.clone(clock.currentTime),
+      shouldAnimate: clock.shouldAnimate,
+    };
+    scene.light = new Cesium.SunLight();
+    if (g) {
+      g.enableLighting = true;
+      // Light the sky's day side from the same sun, so dawn and dusk tint the
+      // atmosphere rather than only the ground.
+      g.dynamicAtmosphereLighting = true;
+      g.dynamicAtmosphereLightingFromSun = true;
+    }
+    // The widget's clock ticks on its own when animating; the simulation owns
+    // the instant, so hold it still and write it explicitly.
+    clock.shouldAnimate = false;
+    this.render();
+    if (settings.playing) this.play();
+  }
+
+  /** Whether this engine drives `viewer`, so a reattach can skip an unchanged one. */
+  drives(viewer: unknown): boolean {
+    return viewer === this.globe.viewer;
+  }
+
+  private live(): boolean {
+    return !this.destroyed && !this.globe.viewer.isDestroyed();
+  }
+
+  applySettings(settings: SunSettings): void {
+    const wasPlaying = this.settings.playing;
+    this.settings = settings;
+    this.render();
+    if (settings.playing && !wasPlaying) this.play();
+    else if (!settings.playing && wasPlaying) this.pause();
+  }
+
+  /** Push the simulated instant and shading depth into the scene. */
+  render(): void {
+    if (!this.live()) return;
+    const { Cesium, scene, clock } = this.globe;
+    clock.currentTime = Cesium.JulianDate.fromDate(new Date(this.settings.dateMs));
+    const g = scene.globe;
+    if (g) g.vertexShadowDarkness = cesiumNightFloor(this.settings.shadeOpacity);
+    this.globe.requestRender();
+  }
+
+  play(): void {
+    if (this.destroyed) return;
+    this.playback.play();
+  }
+
+  pause(): void {
+    this.playback.pause();
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.pause();
+    if (this.globe.viewer.isDestroyed()) return;
+    const { scene, clock } = this.globe;
+    const { saved } = this;
+    scene.light = saved.light as typeof scene.light;
+    const g = scene.globe;
+    if (g) {
+      g.enableLighting = saved.enableLighting;
+      g.dynamicAtmosphereLighting = saved.dynamicAtmosphereLighting;
+      g.dynamicAtmosphereLightingFromSun = saved.dynamicAtmosphereLightingFromSun;
+      g.vertexShadowDarkness = saved.vertexShadowDarkness;
+    }
+    clock.currentTime = saved.currentTime as typeof clock.currentTime;
+    clock.shouldAnimate = saved.shouldAnimate;
+    this.globe.requestRender();
   }
 }
 
@@ -468,7 +633,7 @@ class SunEngine {
 // Module store: single source of truth shared by the engine and the React panel.
 // ---------------------------------------------------------------------------
 
-let engine: SunEngine | null = null;
+let engine: SunEngine | CesiumSunEngine | null = null;
 let panelVisible = false;
 let settings: SunSettings = { ...DEFAULT_SUN_SETTINGS };
 
@@ -483,10 +648,14 @@ function notifyState(): void {
 }
 
 function attachEngine(app: GeoLibreAppAPI): boolean {
-  const map = app.getMap?.();
-  if (!map) return false;
-  if (engine && engine.getMapInstance() !== map) detachEngine();
-  if (!engine) engine = new SunEngine(map, settings);
+  const map = app.getMap?.() ?? null;
+  const globe = map ? null : (app.getCesiumScene?.() ?? null);
+  // Grid panes keep their own cameras but share the primary map's environment;
+  // the simulation binds to the primary map area only, on either renderer.
+  const target = map ?? (globe?.primary ? globe.viewer : null);
+  if (!target) return false;
+  if (engine && !engine.drives(target)) detachEngine();
+  if (!engine) engine = map ? new SunEngine(map, settings) : new CesiumSunEngine(globe!, settings);
   return true;
 }
 
@@ -623,8 +792,9 @@ export function reattachSun(app: GeoLibreAppAPI): void {
 export const maplibreSunPlugin: GeoLibrePlugin = {
   id: SUN_PLUGIN_ID,
   name: "Sun Simulation",
-  version: "1.0.0",
+  version: "1.1.0",
   activeByDefault: false,
+  engines: ["maplibre", "cesium"],
   activate: (app: GeoLibreAppAPI) => openSunPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeSunPanel(app),
   // Persist the panel-open flag plus settings so a saved project reopens with

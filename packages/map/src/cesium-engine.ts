@@ -112,6 +112,48 @@ const FLY_SECONDS = 0.8;
 /** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
 const POINT_FIT_ZOOM = 14;
 
+/**
+ * The globe's native scene, for the handful of plugins that drive Cesium
+ * directly (issue #2287): the Sun simulation lights the globe, Atmospheric
+ * Effects toggles the sky box and atmosphere, the Flight Simulator places the
+ * camera every frame.
+ *
+ * This is the globe's counterpart to `MapEngine.getMap()` — an escape hatch
+ * behind a typed accessor rather than a second untyped `getMap()`. It hands out
+ * the namespace alongside the widget because Cesium classes (`SunLight`,
+ * `JulianDate`, `Cartesian3`) are constructed from the namespace, and the
+ * engine is the only thing that holds it: the plugin package never imports
+ * `@cesium/engine` at runtime, which is what keeps the ~4.8 MB engine off the
+ * 2D boot path.
+ */
+export interface CesiumSceneHandle {
+  /** The `@cesium/engine` namespace the globe was built from. */
+  readonly Cesium: CesiumNs;
+  /** The live widget. Callers must not destroy it. */
+  readonly viewer: CesiumWidget;
+  /** Convenience for `viewer.scene`. */
+  readonly scene: CesiumWidget["scene"];
+  /** Convenience for `viewer.camera`. */
+  readonly camera: CesiumWidget["camera"];
+  /** Convenience for `viewer.clock`. */
+  readonly clock: CesiumWidget["clock"];
+  /** The WebGL canvas. */
+  readonly canvas: HTMLCanvasElement;
+  /**
+   * Whether this globe is the primary map area rather than a grid pane. The
+   * environment plugins bind to the primary globe only, the way they bind to
+   * the primary MapLibre map and not to a secondary pane.
+   */
+  readonly primary: boolean;
+  /** Ask the scene to draw a frame (a no-op outside request-render mode). */
+  requestRender(): void;
+  /**
+   * The camera in the store's engine-neutral shape (`MapEngine.readView`), so
+   * a plugin can seed from the current view without the camera maths.
+   */
+  readView(): MapViewState;
+}
+
 export interface CesiumEngineOptions {
   /** Whether this canvas has credentials for Cesium World Terrain. */
   worldTerrainAvailable?: boolean;
@@ -1073,6 +1115,28 @@ export class CesiumEngine implements MapEngine {
   /** Always `null`: there is no MapLibre map behind the globe. */
   getMap(): maplibregl.Map | null {
     return null;
+  }
+
+  /**
+   * The native scene, or `null` once the widget is gone. See
+   * {@link CesiumSceneHandle} for who this is for.
+   */
+  getCesiumScene(): CesiumSceneHandle | null {
+    const viewer = this.live();
+    if (!viewer) return null;
+    return {
+      Cesium: this.Cesium,
+      viewer,
+      scene: viewer.scene,
+      camera: viewer.camera,
+      clock: viewer.clock,
+      canvas: viewer.canvas,
+      primary: this.isPrimary,
+      requestRender: () => {
+        if (!viewer.isDestroyed()) viewer.scene.requestRender();
+      },
+      readView: () => this.readView(),
+    };
   }
 
   // ------------------------------------------------------------------ internal

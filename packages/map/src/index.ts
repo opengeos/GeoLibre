@@ -28,6 +28,7 @@ export {
   CESIUM_PANE_CAPABILITIES,
   CesiumEngine,
   type CesiumEngineOptions,
+  type CesiumSceneHandle,
   resetPrimaryCesiumBuiltInControlState,
 } from "./cesium-engine";
 export {

@@ -1,3 +1,4 @@
+import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getActiveEllipsoid } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -20,6 +21,11 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * GeoLibre's plugin lifecycle (background canvases behind the MapLibre canvas
  * so the effects show through the globe projection's transparent space without
  * masking the map).
+ *
+ * On the Cesium globe (issue #2287) nothing is painted: Cesium has a sky box
+ * (the stars), a sky atmosphere (the halo), and a background colour (deep
+ * space) of its own, and the plugin drives those instead — see
+ * {@link CesiumEffectsEngine} and {@link cesiumAtmosphereShifts}.
  */
 
 export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
@@ -157,6 +163,66 @@ function shadeRgb({ r, g, b }: Rgb, shade: number): Rgb {
 
 function rgba({ r, g, b }: Rgb, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Hue (degrees, [0, 360)) and saturation ([0, 1]) of an RGB colour. */
+function hueSaturation({ r, g, b }: Rgb): { hue: number; saturation: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  if (delta === 0) return { hue: 0, saturation: 0 };
+  let hue: number;
+  if (max === rn) hue = ((gn - bn) / delta) % 6;
+  else if (max === gn) hue = (bn - rn) / delta + 2;
+  else hue = (rn - gn) / delta + 4;
+  hue = (hue * 60 + 360) % 360;
+  const lightness = (max + min) / 2;
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+  return { hue, saturation };
+}
+
+/** What the Cesium branch sets on `scene.skyAtmosphere` for one settings object. */
+export interface CesiumAtmosphereShifts {
+  /** Whether the atmosphere draws at all (`haloOpacity` of 0 hides it). */
+  show: boolean;
+  /** `SkyAtmosphere.hueShift`: a fraction of the colour wheel, in [−0.5, 0.5]. */
+  hueShift: number;
+  /** `SkyAtmosphere.saturationShift`, in [−1, 1]. */
+  saturationShift: number;
+  /** `SkyAtmosphere.brightnessShift`, in [−1, 0]; 0 is Cesium's stock brightness. */
+  brightnessShift: number;
+}
+
+/**
+ * Translate the halo settings into Cesium's atmosphere controls.
+ *
+ * Cesium's atmosphere is a physically-based Rayleigh blue rather than a
+ * gradient the plugin paints, so the halo colour cannot be applied directly;
+ * it is expressed as *shifts* from the stock look. The default halo colour is
+ * taken as the reference, so a project with default settings gets Cesium's
+ * stock atmosphere (all shifts 0) and a re-tinted halo shifts the hue and
+ * saturation by the same amount it differs from that default. The halo
+ * opacity dims the atmosphere (a `brightnessShift` toward −1) and hides it
+ * entirely at 0. `haloExtent` has no analogue — the extent of Cesium's
+ * atmosphere is set by the scattering model — and is ignored on the globe.
+ */
+export function cesiumAtmosphereShifts(settings: EffectsSettings): CesiumAtmosphereShifts {
+  const reference = hueSaturation(parseHex(DEFAULT_EFFECTS_SETTINGS.haloColor));
+  const halo = hueSaturation(parseHex(settings.haloColor));
+  // Shortest way round the wheel, as a fraction of a full turn.
+  let hueDelta = (halo.hue - reference.hue) / 360;
+  if (hueDelta > 0.5) hueDelta -= 1;
+  if (hueDelta < -0.5) hueDelta += 1;
+  const opacity = Math.min(1, Math.max(0, settings.haloOpacity));
+  return {
+    show: opacity > 0,
+    hueShift: halo.saturation === 0 ? 0 : hueDelta,
+    saturationShift: halo.saturation - reference.saturation,
+    brightnessShift: opacity - 1,
+  };
 }
 
 /** Clamp `value` into `[min, max]`, falling back to `fallback` if non-finite. */
@@ -512,9 +578,9 @@ class EffectsEngine {
     this.start();
   }
 
-  /** The map this engine is bound to (used to detect a map re-init). */
-  getMapInstance(): MapLibreMap {
-    return this.map;
+  /** Whether this engine drives `map` (used to detect a map re-init). */
+  drives(map: unknown): boolean {
+    return map === this.map;
   }
 
   /**
@@ -858,20 +924,129 @@ class EffectsEngine {
  * manager via the project's `activePluginIds`, so no per-plugin project state
  * is needed here. On by default.
  */
-let engine: EffectsEngine | null = null;
+/** The scene state the globe engine overwrites, captured for restoration. */
+interface SavedSkyState {
+  skyBoxShow: boolean | undefined;
+  atmosphereShow: boolean | undefined;
+  hueShift: number;
+  saturationShift: number;
+  brightnessShift: number;
+  backgroundColor: unknown;
+}
+
+/**
+ * The globe engine: Cesium's own stars, atmosphere, and space backdrop, driven
+ * from the same settings as the 2D canvases. Nothing is painted, so there is
+ * no animation loop; {@link applySettings} writes the scene state and the
+ * globe draws it. {@link destroy} restores what it changed.
+ */
+class CesiumEffectsEngine {
+  private readonly saved: SavedSkyState;
+  private destroyed = false;
+
+  constructor(
+    private readonly globe: CesiumSceneHandle,
+    settings: EffectsSettings,
+  ) {
+    const { Cesium, scene } = globe;
+    this.saved = {
+      skyBoxShow: scene.skyBox?.show,
+      atmosphereShow: scene.skyAtmosphere?.show,
+      hueShift: scene.skyAtmosphere?.hueShift ?? 0,
+      saturationShift: scene.skyAtmosphere?.saturationShift ?? 0,
+      brightnessShift: scene.skyAtmosphere?.brightnessShift ?? 0,
+      backgroundColor: Cesium.Color.clone(scene.backgroundColor),
+    };
+    this.applySettings(settings);
+  }
+
+  /** Whether this engine drives `viewer`, so a reattach can skip an unchanged one. */
+  drives(viewer: unknown): boolean {
+    return viewer === this.globe.viewer;
+  }
+
+  private live(): boolean {
+    return !this.destroyed && !this.globe.viewer.isDestroyed();
+  }
+
+  applySettings(settings: EffectsSettings): void {
+    if (!this.live()) return;
+    const { Cesium, scene } = this.globe;
+    const shifts = cesiumAtmosphereShifts(settings);
+    if (scene.skyBox) scene.skyBox.show = true;
+    if (scene.skyAtmosphere) {
+      scene.skyAtmosphere.show = shifts.show;
+      scene.skyAtmosphere.hueShift = shifts.hueShift;
+      scene.skyAtmosphere.saturationShift = shifts.saturationShift;
+      scene.skyAtmosphere.brightnessShift = shifts.brightnessShift;
+    }
+    scene.backgroundColor = Cesium.Color.fromCssColorString(settings.spaceColor);
+    this.globe.requestRender();
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    if (this.globe.viewer.isDestroyed()) return;
+    const { scene } = this.globe;
+    const { saved } = this;
+    if (scene.skyBox && saved.skyBoxShow !== undefined) scene.skyBox.show = saved.skyBoxShow;
+    if (scene.skyAtmosphere) {
+      if (saved.atmosphereShow !== undefined) scene.skyAtmosphere.show = saved.atmosphereShow;
+      scene.skyAtmosphere.hueShift = saved.hueShift;
+      scene.skyAtmosphere.saturationShift = saved.saturationShift;
+      scene.skyAtmosphere.brightnessShift = saved.brightnessShift;
+    }
+    scene.backgroundColor = saved.backgroundColor as typeof scene.backgroundColor;
+    this.globe.requestRender();
+  }
+}
+
+/**
+ * The globe with the effects switched off: no stars, no atmosphere, a flat
+ * dark backdrop — the same bare look the 2D map has without the plugin.
+ *
+ * Cesium draws its sky box and atmosphere by default, so an *inactive* plugin
+ * has to switch them off explicitly or "off" would look identical to the
+ * default "on"; and because both engines are rebuilt on a renderer swap, this
+ * is applied whenever the host restores an inactive plugin, not only when the
+ * user toggles it off.
+ */
+function applyCesiumEffectsOff(globe: CesiumSceneHandle): void {
+  if (globe.viewer.isDestroyed()) return;
+  const { Cesium, scene } = globe;
+  if (scene.skyBox) scene.skyBox.show = false;
+  if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+  scene.backgroundColor = Cesium.Color.fromCssColorString(DEFAULT_EFFECTS_SETTINGS.spaceColor);
+  globe.requestRender();
+}
+
+let engine: EffectsEngine | CesiumEffectsEngine | null = null;
 // Live appearance settings, shared by the engine and the Controls-menu UI.
 // Kept at module scope so they survive the engine being torn down and rebuilt
 // (map re-init, toggle off/on) and so applyProjectState can stage them before
 // the engine exists.
 let currentSettings: EffectsSettings = { ...DEFAULT_EFFECTS_SETTINGS };
 
+/** The primary globe, when the primary map is a Cesium globe. */
+function primaryGlobe(app: GeoLibreAppAPI): CesiumSceneHandle | null {
+  const globe = app.getCesiumScene?.() ?? null;
+  return globe?.primary ? globe : null;
+}
+
 function attachEngine(app: GeoLibreAppAPI): boolean {
-  const map = app.getMap?.();
-  if (!map) return false;
+  const map = app.getMap?.() ?? null;
+  const globe = map ? null : primaryGlobe(app);
+  const target = map ?? globe?.viewer ?? null;
+  if (!target) return false;
   // A map re-init hands back a different MapLibreMap instance; tear down the
   // engine bound to the old map (its canvases/listeners) before rebinding.
-  if (engine && engine.getMapInstance() !== map) detachEngine();
-  if (!engine) engine = new EffectsEngine(map, currentSettings);
+  if (engine && !engine.drives(target)) detachEngine();
+  if (!engine) {
+    engine = map
+      ? new EffectsEngine(map, currentSettings)
+      : new CesiumEffectsEngine(globe!, currentSettings);
+  }
   return true;
 }
 
@@ -896,9 +1071,13 @@ export function setEffectsSettings(next: Partial<EffectsSettings>): boolean {
   return true;
 }
 
-function detachEngine(): void {
+function detachEngine(app?: GeoLibreAppAPI): void {
   engine?.destroy();
   engine = null;
+  // On the globe "off" is a state to apply, not merely the absence of the
+  // engine (see applyCesiumEffectsOff).
+  const globe = app && !app.getMap?.() ? primaryGlobe(app) : null;
+  if (globe) applyCesiumEffectsOff(globe);
 }
 
 /**
@@ -922,16 +1101,17 @@ export function restoreEffects(app: GeoLibreAppAPI, active: boolean, settings?: 
     engine?.applySettings(currentSettings);
   }
   if (active) attachEngine(app);
-  else detachEngine();
+  else detachEngine(app);
 }
 
 export const maplibreEffectsPlugin: GeoLibrePlugin = {
   id: EFFECTS_PLUGIN_ID,
   name: "Atmospheric Effects",
-  version: "1.0.0",
+  version: "1.1.0",
   activeByDefault: true,
+  engines: ["maplibre", "cesium"],
   activate: (app: GeoLibreAppAPI) => attachEngine(app),
-  deactivate: (_app: GeoLibreAppAPI) => detachEngine(),
+  deactivate: (app: GeoLibreAppAPI) => detachEngine(app),
   // Persist the appearance only when it differs from the defaults, so untouched
   // projects don't carry an effects settings blob.
   getProjectState: () =>

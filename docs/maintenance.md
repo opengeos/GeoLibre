@@ -86,6 +86,16 @@ color checks). The cast hides any contract change from the compiler, so run the
 frontend suite — the "enforces an expected result type" test in
 `tests/expressions.test.ts` fails if the shape stops being honored.
 
+`cssColor` (`packages/map/src/cesium-feature-style.ts`) turns the `Color`
+object a compiled colour expression evaluates to into CSS by reading its
+`toString()` and accepting an `rgba(` or `#` prefix. That format is how the
+spec's `Color` happens to print, not a documented contract: if a bump changes
+it, the globe silently paints every classified feature the flat fallback colour
+rather than failing. The "classifies by a categorical field" test in
+`tests/cesium-feature-style.test.ts` goes through a real compiled expression,
+so run the frontend suite after a bump and re-verify a categorized layer on the
+globe.
+
 `SPEC_DEFAULT_COLOR` (`packages/map/src/mapbox-style-import.ts`) mirrors the
 spec's `default` for `fill-color`, `line-color` and `circle-color` — `#000000`
 for all three — which is the colour a stacked class layer naming none is
