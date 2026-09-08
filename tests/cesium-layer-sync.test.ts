@@ -476,15 +476,23 @@ describe("CesiumLayerSync", () => {
         values: [
           { polygon: { material: { color: { alpha: number } } } },
           { polyline: { material: { color: { alpha: number } } } },
-          { billboard: { color: { value: { alpha: number } } } },
+          {
+            point: {
+              color: { value: { alpha: number } };
+              outlineColor: { value: { alpha: number } };
+            };
+          },
         ];
       };
     };
     const v = ds.entities.values;
-    // fill = 0.5 fill opacity × 0.4 layer opacity; stroke/markers = layer opacity.
+    // fill = 0.5 fill opacity × 0.4 layer opacity; stroke = layer opacity. A
+    // point draws as a circle (the 2D map's default), so its fill and outline
+    // follow the polygon's fill and the line's stroke respectively.
     assert.ok(Math.abs(v[0].polygon.material.color.alpha - 0.2) < 1e-9);
     assert.ok(Math.abs(v[1].polyline.material.color.alpha - 0.4) < 1e-9);
-    assert.ok(Math.abs(v[2].billboard.color.value.alpha - 0.4) < 1e-9);
+    assert.ok(Math.abs(v[2].point.color.value.alpha - 0.2) < 1e-9);
+    assert.ok(Math.abs(v[2].point.outlineColor.value.alpha - 0.4) < 1e-9);
   });
 
   it("fades labels by layer opacity without discarding the colour's own alpha", async () => {
@@ -1247,8 +1255,10 @@ describe("CesiumLayerSync", () => {
   it("skips unsupported layer kinds", () => {
     const sync = newSync(f);
     const layers = [
-      mkLayer({ id: "p", type: "pmtiles", source: { url: "x.pmtiles" } }),
+      // A PMTiles layer without a source to read is neither draped nor bridged.
+      mkLayer({ id: "p", type: "pmtiles", source: {} }),
       mkLayer({ id: "z", type: "zarr", source: {} }),
+      mkLayer({ id: "a", type: "arcgis", source: { tiles: ["https://a/{z}/{x}/{y}.pbf"] } }),
     ];
     sync.sync(layers);
     assert.equal(f.calls.imageryAdded.length, 0);
@@ -1256,7 +1266,7 @@ describe("CesiumLayerSync", () => {
     // The kind-level predicate the UI uses to flag "2D only" layers agrees.
     assert.deepEqual(
       layers.filter((l) => !isCesiumSupportedLayerType(l)).map((l) => l.id),
-      ["p", "z"],
+      ["p", "z", "a"],
     );
   });
 
@@ -1623,7 +1633,7 @@ describe("CesiumLayerSync", () => {
       entities: {
         values: Array<{
           polygon: { extrudedHeight: { value: number }; heightReference?: { value: number } };
-          billboard: { heightReference?: { value: number } };
+          point: { heightReference?: { value: number } };
           polyline: { clampToGround?: { value: boolean } };
         }>;
       };
@@ -1635,7 +1645,7 @@ describe("CesiumLayerSync", () => {
     // extrudes from the ellipsoid; it takes no terrain reference.
     assert.equal(building.polygon.heightReference, undefined);
     // The Z point/line entities are not left as absolute ellipsoid heights.
-    assert.equal(poi.billboard.heightReference?.value, 2);
+    assert.equal(poi.point.heightReference?.value, 2);
     assert.equal(poi.polyline.clampToGround?.value, false);
   });
 
@@ -1671,7 +1681,7 @@ describe("CesiumLayerSync", () => {
       entities: {
         values: Array<{
           polygon?: { heightReference?: unknown; height?: unknown };
-          billboard?: { heightReference?: { value: number } };
+          point?: { heightReference?: { value: number } };
         }>;
       };
     };
@@ -1679,10 +1689,7 @@ describe("CesiumLayerSync", () => {
     assert.ok(zPolygon);
     assert.equal(zPolygon.heightReference, undefined);
     // Point entities in the same layer still get the terrain-relative reference.
-    assert.equal(
-      flat.entities.values.find((e) => e.billboard)?.billboard?.heightReference?.value,
-      2,
-    );
+    assert.equal(flat.entities.values.find((e) => e.point)?.point?.heightReference?.value, 2);
 
     // The extrusion path likewise skips height/heightReference on it and, since
     // Cesium reads extrudedHeight as an absolute altitude there, lifts the roof
