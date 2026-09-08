@@ -386,6 +386,15 @@ export interface AppState {
     // it reopens the Story Map editor instead of dropping to the bare map
     // (#918). Auto-presented projects (opened for viewing) leave this false.
     storymapReturnToEditor: boolean;
+    /**
+     * Layer opacities the active story presentation has applied so far, keyed
+     * by store layer id. Playback fades layers by writing MapLibre paint
+     * properties directly (never the persisted `layers[].opacity`), so this is
+     * how renderers outside MapLibre's paint model (deck.gl diagrams, 3D
+     * Z-value geometry) and the on-map Legend follow a chapter's fades. Empty
+     * while not presenting; never saved with the project.
+     */
+    storymapLayerOpacity: Record<string, number>;
     // Id of the chapter currently being composed on the live map. When set, the
     // Story Map dialog is hidden so the user can pan/zoom/tilt the real map and
     // save the resulting camera back into this chapter (issue #775).
@@ -523,6 +532,11 @@ export interface AppState {
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean, returnToEditor?: boolean) => void;
+  /**
+   * Record the layer opacities a story chapter applied, merging into the
+   * presentation's running map (see `ui.storymapLayerOpacity`).
+   */
+  setStorymapLayerOpacity: (changes: Record<string, number>) => void;
   setStorymapComposing: (chapterId: string | null) => void;
   setBatchToolsOpen: (open: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
@@ -1167,6 +1181,7 @@ export const useAppStore = create<AppState>()(
         storymapPanelOpen: false,
         storymapPresenting: false,
         storymapReturnToEditor: false,
+        storymapLayerOpacity: {},
         storymapComposingId: null,
         batchToolsOpen: false,
         modelBuilderOpen: false,
@@ -1508,8 +1523,25 @@ export const useAppStore = create<AppState>()(
             // Track whether exiting should reopen the editor; only meaningful
             // while presenting, so it clears once the presentation ends (#918).
             storymapReturnToEditor: presenting ? returnToEditor : false,
+            // A presentation starts from (and leaves behind) a clean slate; the
+            // fades it applies are replayed from chapter 0 on the next run.
+            storymapLayerOpacity: {},
           },
         })),
+      setStorymapLayerOpacity: (changes) =>
+        set((s) => {
+          const next = { ...s.ui.storymapLayerOpacity };
+          let changed = false;
+          for (const [layerId, opacity] of Object.entries(changes)) {
+            const clamped = Math.min(1, Math.max(0, opacity));
+            if (next[layerId] === clamped) continue;
+            next[layerId] = clamped;
+            changed = true;
+          }
+          // Skip the write when nothing moved: a chapter re-entering the same
+          // opacities would otherwise rebuild every store subscriber's view.
+          return changed ? { ui: { ...s.ui, storymapLayerOpacity: next } } : {};
+        }),
       setStorymapComposing: (chapterId) =>
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
       setBatchToolsOpen: (open) => set((s) => ({ ui: { ...s.ui, batchToolsOpen: open } })),
@@ -2347,6 +2379,7 @@ export const useAppStore = create<AppState>()(
             ...s.ui,
             storymapPresenting: false,
             storymapReturnToEditor: false,
+            storymapLayerOpacity: {},
             storymapPanelOpen: false,
             storymapComposingId: null,
             // An open selection dialog (and its preselected layer id) belongs
@@ -2410,6 +2443,7 @@ export const useAppStore = create<AppState>()(
             // A bundled story auto-presents for viewing, so exiting it should
             // not pop open the editor (#918).
             storymapReturnToEditor: false,
+            storymapLayerOpacity: {},
             storymapPanelOpen: false,
             storymapComposingId: null,
             // An open selection dialog (and its preselected layer id) belongs

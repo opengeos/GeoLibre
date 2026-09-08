@@ -12,6 +12,7 @@
  */
 import {
   normalizeHexColor,
+  storyVisibleLayers,
   useAppStore,
   type LegendConfig,
   type LegendCustomEntry,
@@ -178,7 +179,16 @@ export function MapLegendPanel({
   mapReadyGeneration: number;
 }) {
   const { t, i18n } = useTranslation();
-  const layers = useAppStore((state) => state.layers);
+  const storeLayers = useAppStore((state) => state.layers);
+  const storyPresenting = useAppStore((state) => state.ui.storymapPresenting);
+  const storyOpacity = useAppStore((state) => state.ui.storymapLayerOpacity);
+  // During a story presentation the legend follows the chapters: a layer the
+  // current chapter has faded fully out drops from the legend as well, so
+  // the reader sees only the symbology on screen (discussion #2326).
+  const layers = useMemo(
+    () => storyVisibleLayers(storeLayers, storyPresenting, storyOpacity),
+    [storeLayers, storyPresenting, storyOpacity],
+  );
   const legend = useAppStore((state) => state.legend);
   const setLegend = useAppStore((state) => state.setLegend);
   const [editing, setEditing] = useState(false);

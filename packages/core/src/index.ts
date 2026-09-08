@@ -38,6 +38,12 @@ export * from "./pixel-format";
 export * from "./print-layout-config";
 export { createSampleStoryMap } from "./storymap-sample";
 export {
+  applyStoryLayerOpacity,
+  isStoryHiddenLayer,
+  storyLayerOpacityFactor,
+  storyVisibleLayers,
+} from "./storymap-playback";
+export {
   scrubWidgetsForRemovedLayers,
   scrubCommentsForRemovedLayers,
   scrubLegendForRemovedLayers,

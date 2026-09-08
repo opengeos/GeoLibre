@@ -1,4 +1,9 @@
-import { type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
+import {
+  applyStoryLayerOpacity,
+  type GeoLibreLayer,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
 import { ensureMercatorProjection } from "../map-projection-utils";
@@ -86,7 +91,14 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   // supplies the "deckviz" layer list.
   await ensureSharedDeckOverlay(app);
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers) renderDeckVizLayers();
+    // Story playback fades layers outside the store's `layers` (see
+    // `ui.storymapLayerOpacity`), so those fades rebuild the overlay too.
+    if (
+      state.layers !== previous.layers ||
+      state.ui.storymapLayerOpacity !== previous.ui.storymapLayerOpacity
+    ) {
+      renderDeckVizLayers();
+    }
   });
   renderDeckVizLayers();
 }
@@ -129,7 +141,14 @@ function syncViewListeners(target: ViewListenerMap | null): void {
 function renderDeckVizLayers(): void {
   if (!deckGL || !appRef) return;
 
-  const storeLayers = useAppStore.getState().layers;
+  const state = useAppStore.getState();
+  // Fold the active story presentation's fades into each layer's opacity so
+  // diagrams and 3D geometry follow a chapter like the MapLibre layers do
+  // (discussion #2326). Untouched layers keep their identity, so the
+  // FeatureCollection-keyed atlas/elevation caches still hit.
+  const storeLayers = state.layers.map((layer) =>
+    applyStoryLayerOpacity(layer, state.ui.storymapLayerOpacity),
+  );
   const vizLayers = storeLayers.filter(isDeckVizLayer);
   const diagramLayers = storeLayers.filter((layer) => layer.visible && isDiagramLayer(layer));
   const hasRenderableLayers =
@@ -177,7 +196,9 @@ function renderDeckVizLayers(): void {
   // them.
   const deckLayers: Layer[] = [];
   for (const layer of storeLayers) {
-    if (!layer.visible) continue;
+    // A layer a chapter has faded fully out has nothing to draw; skipping it
+    // also spares the diagram declutter pass for the hidden layer.
+    if (!layer.visible || layer.opacity <= 0) continue;
     const entry = contextById.get(layer.id);
     try {
       // Diagrams go first so the final reverse() puts them on top of the same

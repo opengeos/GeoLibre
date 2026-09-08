@@ -1716,6 +1716,92 @@ describe("MapController story-map layer helpers", () => {
     assert.equal(paint["raster-opacity"], 0.4);
     assert.equal(paint["raster-opacity-transition"], undefined);
   });
+
+  // A polygon layer whose style draws centroids through the geometry
+  // generator: the companion circle layer is internal (not a candidate style
+  // layer) yet must still follow story fades (discussion #2326).
+  function centroidPolygonLayer(id: string, style: Partial<LayerStyle> = {}): GeoLibreLayer {
+    return pointLayer(
+      id,
+      {
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "Polygon",
+                coordinates: [
+                  [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 1],
+                    [0, 0],
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+      },
+      { geometryGenerator: "centroid", geometryGeneratorOpacity: 0.5, ...style },
+    );
+  }
+
+  it("setStoryLayerOpacity fades geometry-generator companion layers with the layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([centroidPolygonLayer("a")]);
+    assert.ok(fake.layers.get("layer-a-generator-circle"), "centroid layer synced");
+
+    controller.setStoryLayerOpacity("a", 0, 400);
+
+    const paint = fake.layers.get("layer-a-generator-circle")?.paint as Record<string, unknown>;
+    assert.equal(paint["circle-opacity"], 0);
+    assert.equal(paint["circle-stroke-opacity"], 0);
+    assert.deepEqual(paint["circle-opacity-transition"], { duration: 400 });
+    // The primary fill still fades too.
+    const fill = fake.layers.get("layer-a-fill")?.paint as Record<string, unknown>;
+    assert.equal(fill["fill-opacity"], 0);
+  });
+
+  it("setStoryLayerOpacity keeps the generator's own translucency when fading back in", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([centroidPolygonLayer("a")]);
+
+    controller.setStoryLayerOpacity("a", 1);
+
+    const paint = fake.layers.get("layer-a-generator-circle")?.paint as Record<string, unknown>;
+    // circle-opacity = story opacity x geometryGeneratorOpacity; the stroke
+    // follows the plain layer opacity, as in applyGeometryGeneratorLayers.
+    assert.equal(paint["circle-opacity"], 0.5);
+    assert.equal(paint["circle-stroke-opacity"], 1);
+  });
+
+  it("restoreLayerStyles clears companion-layer transitions before re-syncing", () => {
+    const { map, fake } = makeFakeMap();
+    // restoreLayerStyles halts any in-flight story camera move first.
+    (map as unknown as { stop: () => void }).stop = () => {};
+    const controller = controllerWith(map);
+    controller.syncLayers([centroidPolygonLayer("a")]);
+    controller.setStoryLayerOpacity("a", 0, 3000);
+
+    controller.restoreLayerStyles();
+
+    const transition = fake.calls.find(
+      (c) =>
+        c.method === "setPaintProperty" &&
+        c.args[0] === "layer-a-generator-circle" &&
+        c.args[1] === "circle-opacity-transition" &&
+        JSON.stringify(c.args[2]) === JSON.stringify({ duration: 0 }),
+    );
+    assert.ok(transition, "companion transition reset to 0 so the restore does not animate");
+    const paint = fake.layers.get("layer-a-generator-circle")?.paint as Record<string, unknown>;
+    assert.equal(paint["circle-opacity"], 0.5);
+  });
 });
 
 // A DOM stub just rich enough for TerrainControl.onAdd, which the fake map's
