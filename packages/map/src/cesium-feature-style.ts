@@ -5,6 +5,7 @@ import {
   normalizeHexColor,
   simpleStyleNumberValue,
   styleValue,
+  vectorCircleColorValue,
   vectorColorExpression,
   vectorFillColorValue,
   vectorFillOpacityValue,
@@ -36,13 +37,20 @@ import { markerIconSizeValue } from "./markers";
 
 /** One feature's resolved symbology, in CSS colours and pixels. */
 export interface FeatureSymbol {
-  /** Polygon fill / circle fill colour. */
+  /** Polygon fill colour. */
   fill: string;
-  /** Polygon fill / circle opacity, before the layer opacity is applied. */
+  /** Polygon fill opacity, before the layer opacity is applied. */
   fillOpacity: number;
-  /** Line colour for line geometry. */
+  /**
+   * Circle fill colour. The 2D circle layer takes the simplestyle
+   * `marker-color`, not the polygon `fill`, so points have their own channel.
+   */
+  pointFill: string;
+  /** Circle opacity (simplestyle `marker-opacity`), before the layer opacity. */
+  pointFillOpacity: number;
+  /** Line colour for line geometry and polygon outlines (both line layers on the 2D map). */
   stroke: string;
-  /** Outline colour for polygon outlines and circle strokes. */
+  /** Circle stroke colour. */
   outline: string;
   /** Line / outline width in pixels at the evaluated zoom. */
   strokeWidth: number;
@@ -87,10 +95,27 @@ function propertySpec(type: "color" | "number") {
   } as unknown as NonNullable<Parameters<typeof createExpression>[2]>;
 }
 
+/**
+ * The geometry type name MapLibre's evaluator sees. A tiled feature carries
+ * the vector-tile kind (Point / LineString / Polygon), so a `Multi*` geometry
+ * answers `["geometry-type"]` with its member kind, and the globe must match
+ * or an expression branching on it would classify a MultiPolygon differently
+ * from the 2D map.
+ */
+const GEOMETRY_KIND: Record<string, string> = {
+  Point: "Point",
+  MultiPoint: "Point",
+  LineString: "LineString",
+  MultiLineString: "LineString",
+  Polygon: "Polygon",
+  MultiPolygon: "Polygon",
+};
+
 /** The style-spec feature shape: geometry type by name, plus properties and id. */
 function styleFeature(feature: Feature | undefined) {
+  const type = feature?.geometry?.type;
   return {
-    type: feature?.geometry?.type ?? "Unknown",
+    type: (type && GEOMETRY_KIND[type]) ?? "Unknown",
     properties: feature?.properties ?? {},
     ...(feature?.id !== undefined ? { id: feature.id } : {}),
     geometry: feature?.geometry,
@@ -164,6 +189,18 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
     styleValue(s, "fillOpacity"),
     asNumber,
   );
+  // The same pair the 2D `circlePaint` builds: `marker-color` over the
+  // classified colour, and `marker-opacity` over the fill opacity.
+  const pointFill = compileChannel(vectorCircleColorValue(s), "color", fillColor, asColor);
+  const pointFillOpacity = compileChannel(
+    vectorFillOpacityValue(
+      s,
+      simpleStyleNumberValue(s, "marker-opacity", styleValue(s, "fillOpacity")),
+    ),
+    "number",
+    styleValue(s, "fillOpacity"),
+    asNumber,
+  );
   const stroke = compileChannel(vectorLineColorValue(s), "color", strokeColor, asColor);
   const outline = compileChannel(vectorOutlineColorValue(s), "color", strokeColor, asColor);
   const strokeWidth = compileChannel(
@@ -201,6 +238,8 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
   const channels = [
     fill,
     fillOpacity,
+    pointFill,
+    pointFillOpacity,
     stroke,
     outline,
     strokeWidth,
@@ -222,6 +261,8 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
       return {
         fill: fill.read(feature, zoom),
         fillOpacity: Math.min(1, Math.max(0, fillOpacity.read(feature, zoom))),
+        pointFill: pointFill.read(feature, zoom),
+        pointFillOpacity: Math.min(1, Math.max(0, pointFillOpacity.read(feature, zoom))),
         stroke: stroke.read(feature, zoom),
         outline: outline.read(feature, zoom),
         strokeWidth: Math.max(0, (isPoint ? outlineWidth : strokeWidth).read(feature, zoom)),

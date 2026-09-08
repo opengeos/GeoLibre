@@ -124,6 +124,9 @@ interface LayerEntry {
   zoomStyle?: boolean;
   /** Marker sprites baked per resolved marker colour (a classified marker layer has several). */
   markerImages?: Map<string, { canvas: HTMLCanvasElement; pixelRatio: number }>;
+  /** A sprite bake in flight after a zoom step, and the zoom it resolves colours at. */
+  markerBake?: Promise<boolean>;
+  markerBakeZoom?: number;
   /** The fill pattern tile, when the style has one. */
   patternImage?: { canvas: HTMLCanvasElement; pixelRatio: number } | null;
 }
@@ -409,10 +412,53 @@ const IN_PLACE_STYLE_KEYS: ReadonlySet<string> = new Set([
   "blendMode",
 ]);
 
+/**
+ * Style keys the globe never reads: the 2D map's heatmap, diagram, inverted
+ * fill, geometry generator, and line-decoration detail settings. Editing one
+ * must not tear down and reload the data source. Anything not listed here or
+ * in {@link IN_PLACE_STYLE_KEYS} rebuilds when it changes.
+ */
+const GLOBE_IGNORED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  "pointRenderer",
+  "heatmapRadius",
+  "heatmapIntensity",
+  "heatmapColorRamp",
+  "heatmapWeightProperty",
+  "clusterRadius",
+  "clusterMaxZoom",
+  "diagramType",
+  "diagramFields",
+  "diagramSizeMode",
+  "diagramSize",
+  "diagramSizeProperty",
+  "diagramMinZoom",
+  "diagramDeclutter",
+  "invertedFillEnabled",
+  "lineDecorationColor",
+  "lineDecorationSize",
+  "lineDecorationSpacing",
+  "geometryGenerator",
+  "geometryGeneratorBufferDistance",
+  "geometryGeneratorBufferProperty",
+  "geometryGeneratorFillColor",
+  "geometryGeneratorStrokeColor",
+  "geometryGeneratorStrokeWidth",
+  "geometryGeneratorOpacity",
+  "geometryGeneratorCircleRadius",
+  "geometryGeneratorSizeProperty",
+  "geometryGeneratorSizeMinValue",
+  "geometryGeneratorSizeMaxValue",
+  "geometryGeneratorSizeMinRadius",
+  "geometryGeneratorSizeMaxRadius",
+]);
+
 function styleSignature(layer: GeoLibreLayer): string {
   const style = (layer.style ?? {}) as unknown as Record<string, unknown>;
   const entries = Object.entries(style)
-    .filter(([key, value]) => !IN_PLACE_STYLE_KEYS.has(key) && value !== undefined)
+    .filter(
+      ([key, value]) =>
+        !IN_PLACE_STYLE_KEYS.has(key) && !GLOBE_IGNORED_STYLE_KEYS.has(key) && value !== undefined,
+    )
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return JSON.stringify(entries);
 }
@@ -764,13 +810,26 @@ export class CesiumLayerSync {
    */
   private bakeZoomMarkers(entry: LayerEntry): void {
     if (!entry.markerImages || !entry.resolver) return;
-    const handle = entry.handle;
-    void this.prepareSymbolImages(entry, entry.resolver, this.cameraZoom()).then((added) => {
-      if (!added || entry.cancelled || entry.handle !== handle) return;
-      entry.appliedAlpha = undefined;
-      this.applyGeoJsonStyle(entry);
-      this.viewer.scene?.requestRender?.();
-    });
+    const zoom = this.cameraZoom();
+    // Both camera events can land after one zoom step; a bake already in
+    // flight for this zoom covers the second. A further zoom step while a
+    // bake runs queues behind it, so the same colour is never rasterised
+    // twice and each completion restyles at most once.
+    if (entry.markerBake && entry.markerBakeZoom === zoom) return;
+    const { handle, resolver } = entry;
+    const previous = entry.markerBake ?? Promise.resolve(false);
+    entry.markerBakeZoom = zoom;
+    const bake: Promise<boolean> = previous
+      .then(() => (entry.cancelled ? false : this.prepareSymbolImages(entry, resolver, zoom)))
+      .then((added) => {
+        if (entry.markerBake === bake) entry.markerBake = undefined;
+        if (!added || entry.cancelled || entry.handle !== handle) return false;
+        entry.appliedAlpha = undefined;
+        this.applyGeoJsonStyle(entry);
+        this.viewer.scene?.requestRender?.();
+        return true;
+      });
+    entry.markerBake = bake;
   }
 
   /**
@@ -820,8 +879,10 @@ export class CesiumLayerSync {
         const type = feature.geometry?.type;
         if (type !== "Point" && type !== "MultiPoint") continue;
         const colour = resolver.resolveMarkerColor(feature, zoom);
-        if (!images.has(colour)) wanted.add(colour);
-        if (images.size + wanted.size > MAX_MARKER_SPRITES) break;
+        if (images.has(colour) || wanted.has(colour)) continue;
+        // Check before adding, so the cap is the most sprites the layer holds.
+        if (images.size + wanted.size >= MAX_MARKER_SPRITES) break;
+        wanted.add(colour);
       }
       // The colours are independent, so their (possibly SVG-decoding) renders
       // run together rather than one await at a time.
@@ -1724,8 +1785,10 @@ export class CesiumLayerSync {
             colour(symbol.fill, symbol.fillOpacity * opacity),
           );
         }
+        // A polygon boundary is a line layer on the 2D map, so it takes the
+        // line colour channel; the outline channel is the circle stroke.
         entity.polygon.outlineColor = new Cesium.ConstantProperty(
-          colour(symbol.outline, symbol.strokeOpacity * opacity),
+          colour(symbol.stroke, symbol.strokeOpacity * opacity),
         ) as never;
         entity.polygon.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
       }
@@ -1743,7 +1806,7 @@ export class CesiumLayerSync {
       if (entity.point) {
         entity.point.pixelSize = new Cesium.ConstantProperty(symbol.radius * 2) as never;
         entity.point.color = new Cesium.ConstantProperty(
-          colour(symbol.fill, symbol.fillOpacity * opacity),
+          colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
         ) as never;
         entity.point.outlineColor = new Cesium.ConstantProperty(
           colour(symbol.outline, symbol.strokeOpacity * opacity),

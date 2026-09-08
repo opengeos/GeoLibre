@@ -213,6 +213,58 @@ describe("createFeatureStyleResolver", () => {
     assert.equal(styled.fillOpacity, 0.25);
   });
 
+  it("fills circles from marker-color and marker-opacity, as the 2D circle layer does", () => {
+    const resolver = createFeatureStyleResolver(
+      style({ simpleStyleEnabled: true, fillColor: "#999999", fillOpacity: 0.5 }),
+    );
+    const styled = resolver.resolve(
+      feature({ "marker-color": "#ff8800", "marker-opacity": 0.25, fill: "#00ff00" }),
+      0,
+    );
+    assert.deepEqual(rgb(styled.pointFill), [255, 136, 0], "the point ignores the polygon fill");
+    assert.equal(styled.pointFillOpacity, 0.25);
+    assert.deepEqual(rgb(styled.fill), [0, 255, 0], "the polygon channel keeps simplestyle fill");
+    // Without simplestyle both channels agree with the classified colour.
+    const plain = createFeatureStyleResolver(style({ fillColor: "#123456", fillOpacity: 0.7 }));
+    const symbol = plain.resolve(feature({}), 0);
+    assert.deepEqual(rgb(symbol.pointFill), [0x12, 0x34, 0x56]);
+    assert.equal(symbol.pointFillOpacity, 0.7);
+  });
+
+  it("answers geometry-type with the vector-tile kind, so a MultiPolygon is a Polygon", () => {
+    const resolver = createFeatureStyleResolver(
+      style({
+        vectorStyleMode: "expression",
+        vectorStyleExpression: JSON.stringify([
+          "case",
+          ["==", ["geometry-type"], "Polygon"],
+          "#ff0000",
+          "#0000ff",
+        ]),
+      }),
+    );
+    const multi = {
+      type: "Feature" as const,
+      properties: {},
+      geometry: {
+        type: "MultiPolygon" as const,
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        ],
+      },
+    };
+    assert.deepEqual(rgb(resolver.resolve(multi, 0).fill), [255, 0, 0]);
+    assert.deepEqual(rgb(resolver.resolve(feature({}, "Polygon"), 0).fill), [255, 0, 0]);
+    assert.deepEqual(rgb(resolver.resolve(feature({}, "LineString"), 0).fill), [0, 0, 255]);
+  });
+
   it("reads the marker colour channel on its own", () => {
     const resolver = createFeatureStyleResolver(
       style({
@@ -461,6 +513,50 @@ describe("CesiumLayerSync per-feature symbology", () => {
   });
 });
 
+describe("CesiumLayerSync channel routing", () => {
+  it("outlines polygons with the line colour and fills circles from marker-color", async () => {
+    const f = makeFakes();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12);
+    sync.sync([
+      geojsonLayer(
+        [
+          feature({ stroke: "#0088ff" }, "Polygon"),
+          feature({ "marker-color": "#ff8800", "marker-opacity": 0.5 }),
+        ],
+        { opacity: 0.5, style: { simpleStyleEnabled: true, strokeColor: "#ff0000" } },
+      ),
+    ]);
+    await f.flush();
+    await f.flush();
+    const [polygon, point] = f.dataSources[0].entities.values;
+    const outline = (polygon.polygon?.outlineColor as { value: { css: string } }).value;
+    assert.deepEqual(rgb(outline.css), [0, 136, 255], "simplestyle stroke reaches the outline");
+    const circle = point.point as Record<string, { value: { css: string; alpha: number } }>;
+    assert.deepEqual(rgb(circle.color.value.css), [255, 136, 0]);
+    assert.ok(Math.abs(circle.color.value.alpha - 0.25) < 1e-9, "marker-opacity × layer opacity");
+  });
+
+  it("does not reload the data source for a style field the globe never reads", async () => {
+    const f = makeFakes();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12);
+    const layer = geojsonLayer([feature({}, "Polygon")], { style: { heatmapRadius: 20 } });
+    sync.sync([layer]);
+    await f.flush();
+    await f.flush();
+    assert.equal(f.dataSources.length, 1);
+    sync.sync([
+      { ...layer, style: { heatmapRadius: 50, pointRenderer: "heatmap", diagramSize: 30 } },
+    ]);
+    await f.flush();
+    await f.flush();
+    assert.equal(f.dataSources.length, 1, "2D-only fields leave the globe alone");
+    sync.sync([{ ...layer, style: { heatmapRadius: 50, strokeWidth: 4 } }]);
+    await f.flush();
+    await f.flush();
+    assert.equal(f.dataSources.length, 2, "a field the globe bakes still rebuilds");
+  });
+});
+
 describe("CesiumLayerSync marker sprites", () => {
   const sprite = (e: { billboard?: Record<string, unknown> }) =>
     (e.billboard?.image as { value: { sprite: string } } | undefined)?.value.sprite;
@@ -574,5 +670,108 @@ describe("CesiumLayerSync marker sprites", () => {
     await f.flush();
     assert.ok(Math.abs(polygon.material.options.color.alpha - 0.2) < 1e-9, "restyled in place");
     assert.equal(f.counters.spheres, 2, "the restyle reused the cached repeat counts");
+  });
+
+  it("holds at most MAX_MARKER_SPRITES sprites, base included", async () => {
+    const f = makeFakes();
+    const renderer = fakeMarkerRenderer();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12, {
+      renderMarker: renderer.render,
+    });
+    const count = 80;
+    const stops = Array.from({ length: count }, (_, i) => ({
+      value: `c${i}`,
+      color: `#${(0x100000 + i * 0x0137).toString(16).padStart(6, "0")}`,
+    }));
+    sync.sync([
+      geojsonLayer(
+        stops.map((stop) => feature({ kind: stop.value })),
+        {
+          style: {
+            markerEnabled: true,
+            vectorStyleMode: "categorized",
+            vectorStyleProperty: "kind",
+            vectorStyleStops: stops,
+          },
+        },
+      ),
+    ]);
+    await f.flush();
+    await f.flush();
+    assert.equal(renderer.baked.length, 64);
+    assert.ok(renderer.baked.includes(""), "the base fallback is one of them");
+    // A point past the cap draws the base sprite rather than nothing.
+    const last = f.dataSources[0].entities.values[count - 1];
+    assert.equal(sprite(last), "base");
+  });
+
+  it("serialises overlapping zoom bakes so a colour is rasterised once", async () => {
+    const f = makeFakes();
+    // Colour renders wait on a gate the test opens; the load-time bake runs
+    // through an open gate, the zoom-step bakes through a closed one.
+    let gate = Promise.resolve();
+    let release: () => void = () => {};
+    const baked: string[] = [];
+    const renderer = async (_style: LayerStyle, colour?: string) => {
+      baked.push(colour ?? "");
+      if (colour) await gate;
+      return {
+        canvas: { sprite: colour ?? "base" } as unknown as HTMLCanvasElement,
+        pixelRatio: 1,
+      };
+    };
+    let zoom = 10;
+    let renders = 0;
+    f.viewer.scene.requestRender = () => {
+      renders++;
+    };
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => zoom, {
+      renderMarker: renderer,
+    });
+    const rule = (id: string, color: string, minZoom: number) => ({
+      id,
+      label: id,
+      filter: JSON.stringify(["==", ["get", "kind"], "a"]),
+      color,
+      isElse: false,
+      minZoom,
+      maxZoom: minZoom + 1,
+    });
+    sync.sync([
+      geojsonLayer([feature({ kind: "a" })], {
+        style: {
+          markerEnabled: true,
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            rule("z12", "#ff0000", 12),
+            rule("z13", "#0000ff", 13),
+            { id: "else", label: "Other", filter: "", color: "#00ff00", isElse: true },
+          ],
+        },
+      }),
+    ]);
+    await f.flush();
+    await f.flush();
+    gate = new Promise<void>((r) => (release = r));
+    const isRed = (c: string) => Boolean(c) && rgb(c).join() === "255,0,0";
+    const isBlue = (c: string) => Boolean(c) && rgb(c).join() === "0,0,255";
+    // Two zoom steps in quick succession, each firing both camera events,
+    // while the first bake is still rendering.
+    zoom = 12;
+    for (const listener of f.cameraListeners) listener();
+    zoom = 13;
+    for (const listener of f.cameraListeners) listener();
+    await f.flush();
+    assert.equal(baked.filter(isRed).length, 1, "red requested once for the z12 step");
+    assert.equal(baked.filter(isBlue).length, 0, "the z13 bake waits for the z12 bake");
+    release();
+    await f.flush();
+    await f.flush();
+    await f.flush();
+    assert.equal(baked.filter(isBlue).length, 1, "then blue is baked exactly once");
+    assert.equal(baked.filter(isRed).length, 1);
+    const [point] = f.dataSources[0].entities.values;
+    assert.ok(isBlue(sprite(point)!), "the marker ends on the z13 colour");
+    assert.ok(renders >= 1);
   });
 });
