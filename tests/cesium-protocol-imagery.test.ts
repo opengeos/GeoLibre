@@ -513,7 +513,9 @@ describe("isCesiumSupportedLayerType with the bridge", () => {
 // imageryColorAdjustments is that these two agree, so the tests below compare
 // them directly rather than pinning the intermediate factors.
 function mapLibreLuma(input: number, min: number, max: number, contrast: number): number {
-  const k = contrast > 0 ? 1 / (1 - contrast) : 1 + contrast;
+  // 1 / (1 - contrast) is +Infinity at contrast 1; the same floor the source
+  // applies keeps this model comparable at that stop.
+  const k = contrast > 0 ? 1 / Math.max(1e-4, 1 - contrast) : 1 + contrast;
   const contrasted = (input - 0.5) * k + 0.5;
   return min + contrasted * (max - min); // mix(min, max, rgb)
 }
@@ -563,6 +565,11 @@ describe("imageryColorAdjustments", () => {
     ["positive contrast alone", 0, 1, 0.5],
     ["negative contrast alone", 0, 1, -0.4],
     ["a window and positive contrast together", 0.2, 0.9, 0.25],
+    // The slider's own stops. Contrast 1 puts MapLibre's 1 / (1 - contrast) at
+    // Infinity, which used to reach Cesium as brightness NaN.
+    ["contrast pinned to the top of the slider", 0, 1, 1],
+    ["contrast pinned to the bottom of the slider", 0, 1, -1],
+    ["a zero-width window", 0.3, 0.3, 0],
   ] as const) {
     it(`reproduces MapLibre's raster output for ${name}`, () => {
       const adjusted = imageryColorAdjustments({
@@ -571,6 +578,10 @@ describe("imageryColorAdjustments", () => {
         rasterBrightnessMax: max,
         rasterContrast: contrast,
       });
+      assert.ok(
+        Number.isFinite(adjusted.brightness) && Number.isFinite(adjusted.contrast),
+        "both factors reach Cesium as finite shader uniforms",
+      );
       for (const input of SAMPLE_INTENSITIES) {
         assert.ok(
           Math.abs(

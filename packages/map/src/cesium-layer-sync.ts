@@ -470,19 +470,38 @@ export function imageryColorAdjustments(style: LayerStyle | undefined): {
   const s = style ?? DEFAULT_LAYER_STYLE;
   const num = (value: unknown, fallback: number) =>
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  const unit = (value: unknown, fallback: number) =>
+    Math.min(1, Math.max(-1, num(value, fallback)));
   const min = num(styleValue(s, "rasterBrightnessMin"), 0);
   const max = num(styleValue(s, "rasterBrightnessMax"), 1);
-  const contrast = num(styleValue(s, "rasterContrast"), 0);
-  const saturation = num(styleValue(s, "rasterSaturation"), 0);
+  // The raster paint spec bounds both to [-1, 1] and MapLibre clamps on parse,
+  // so a store value outside it would already be rendering differently in 2D.
+  const contrast = unit(styleValue(s, "rasterContrast"), 0);
+  const saturation = unit(styleValue(s, "rasterSaturation"), 0);
 
-  const mapLibreContrast = contrast > 0 ? 1 / (1 - contrast) : 1 + contrast;
+  // MapLibre's own curve, `1 / (1 - contrast)`, is +Infinity at contrast 1 —
+  // reachable, since the Style panel's slider stops there. MapLibre hands that
+  // Infinity to the shader and the framebuffer clamps it into a hard threshold
+  // at mid-grey; here it would poison the slope/intercept solve below and set
+  // brightness to NaN. Flooring the denominator keeps the curve exact
+  // everywhere it is finite and turns the endpoint into the same very hard
+  // threshold, rather than bending the whole positive half to dodge one point.
+  const mapLibreContrast = contrast > 0 ? 1 / Math.max(1e-4, 1 - contrast) : 1 + contrast;
   const slope = mapLibreContrast * (max - min);
   const intercept = (min + max) / 2 - slope / 2;
-  const cesiumContrast = Math.max(MIN_IMAGERY_CONTRAST, 1 - 2 * intercept);
+  // A flat result (contrast -1, or a zero-width window) wants a contrast of 0,
+  // which Cesium reaches exactly, so only floor the contrast when there is a
+  // slope to divide by. Flooring unconditionally would leave the fully
+  // flattened case a few percent off a target it can hit.
+  const exactContrast = 1 - 2 * intercept;
+  const cesiumContrast =
+    slope > 0 ? Math.max(MIN_IMAGERY_CONTRAST, exactContrast) : Math.max(0, exactContrast);
 
   return {
-    brightness: Math.max(0, slope / cesiumContrast),
+    brightness: slope > 0 ? slope / cesiumContrast : 0,
     contrast: cesiumContrast,
+    // 1.001 is MapLibre's own constant in saturationFactor, not a guard added
+    // here; it is why this curve has no endpoint problem of its own.
     saturation: saturation > 0 ? 1 / (1.001 - saturation) : Math.max(0, 1 + saturation),
     hue: (num(styleValue(s, "rasterHueRotate"), 0) * Math.PI) / 180,
   };
@@ -1151,7 +1170,15 @@ export class CesiumLayerSync {
         }
       }
 
-      if (!provider || entry.cancelled) return;
+      if (!provider || entry.cancelled) {
+        // Reachable: the branches above await (the COG tiler, the PMTiles
+        // header, ArcGIS/single-tile fromUrl), and the layer can be removed or
+        // rebuilt in that window. Nothing has requested a tile yet, but the
+        // provider still owns an abort controller, so tear it down rather than
+        // dropping it.
+        if (provider instanceof ProtocolImageryProvider) provider.destroy();
+        return;
+      }
       // addImageryProvider appends above the base imagery (and earlier store
       // layers), so store order maps to Cesium's bottom-to-top stacking.
       const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
