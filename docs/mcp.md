@@ -102,7 +102,8 @@ Give it a directory meant for maps, not your home directory.
 | `add_tile_layer` | A raster XYZ tile template. |
 | `add_tiles_layer` | PMTiles archives and vector tile services. |
 | `add_ogc_layer` | WMS and WMTS endpoints. |
-| `add_3d_tiles_layer` | OGC 3D Tiles tilesets. |
+| `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id. |
+| `add_cesium_ion_layer` | Cesium Ion assets (tileset or imagery) by id; rendered by the 3D globe only. |
 
 ### Editing
 

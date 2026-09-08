@@ -30,6 +30,7 @@ import {
   createLayerLibraryEntryId,
   copyableLayerStyleKind,
   hasActiveQuickFilter,
+  isCesiumOnlyLayer,
   pluginOwnsPaint,
   supportsBridgedOpacity,
   useAppStore,
@@ -3534,6 +3535,16 @@ export function LayerPanel({
                           className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
                         >
                           {t("mapGrid.only2d")}
+                        </span>
+                      )}
+                      {/* The mirror image: a Cesium Ion asset (issue #2290) has
+                          no 2D rendering, so flag it while MapLibre is primary. */}
+                      {!cesiumPrimary && isCesiumOnlyLayer(layer) && (
+                        <span
+                          title={t("renderer.layerCesiumOnly")}
+                          className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
+                        >
+                          {t("mapGrid.only3d")}
                         </span>
                       )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">

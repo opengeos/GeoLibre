@@ -31,7 +31,8 @@ export type KindI18nKey =
   | "postgres"
   | "iceberg"
   | "deckglViz"
-  | "video";
+  | "video"
+  | "cesiumIon";
 
 /**
  * Maps each Add Data kind to its `addData.kind.<key>` i18n segment. The dialog
@@ -59,6 +60,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   iceberg: "iceberg",
   "deckgl-viz": "deckglViz",
   video: "video",
+  "cesium-ion": "cesiumIon",
 };
 
 export const DEFAULT_XYZ_URL =

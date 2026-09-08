@@ -41,7 +41,7 @@ here; #2291 describes it as a possible follow-up.
 | #2287 (implemented) | Native environment plugins | Sun clock and lighting on/off, atmosphere/sky box on/off and restore, spin start/stop, cloud imagery add/remove, and flight take-over/teardown verified in the real app in both themes; unit tests cover each Cesium branch against the real Cesium maths with a faked widget |
 | #2288, #2262 | Enforce declared support in activation, URL dispatch, project restore, delayed controls, and command palette | Tests cover unsupported callbacks, renderer round trips, saved settings, and compatible-control remounting. The wider control facade and native plugin implementations remain separate work. |
 | #2289 | Python/MCP/embed renderer authoring | Project round trips, renderer events, pane kinds, invalid inputs, and docs examples |
-| #2290 | Cesium-native authoring features | Separate real-data verification for Ion, tileset styling, clipping, KML/CZML, and terrain sampling |
+| #2290 (Ion assets implemented) | Cesium-native authoring features | Ion assets: Cesium OSM Buildings (asset 96188) and Bing Aerial (asset 2) added from the Add Data dialog on the globe in both themes, the same project reopened on the 2D map showing the "3D only" badge, a missing token surfacing as a layer error; unit tests cover the layer builder, the asset-id parser, the globe's tileset/imagery routing through `IonResource`/`IonImageryProvider`, rebuild on asset change, and the Python/MCP builders. Tileset styling, clipping polygons, KML/CZML, and terrain sampling remain separate follow-ups. |
 | #2261, #2259 | Update umbrella completion only after child requirements are verified | Accurate supported-layer predicates and an explicit record of remaining gaps |
 
 ## Test gates

@@ -26,6 +26,8 @@ interface AddDataMenuProps {
   chrome: ToolbarChrome;
   addLayer: AddLayerHandlers;
   osmPbfBusy: boolean;
+  /** Whether the 3D globe is the primary renderer (gates the Cesium-only sources). */
+  cesiumPrimary?: boolean;
   onSetAddDataKind: (kind: AddDataKind) => void;
   onAddGltfModel: () => void;
   onOpenOsmPbfDialog: () => void;
@@ -41,6 +43,7 @@ export function AddDataMenu({
   chrome,
   addLayer,
   osmPbfBusy,
+  cesiumPrimary = false,
   onSetAddDataKind,
   onAddGltfModel,
   onOpenOsmPbfDialog,
@@ -89,6 +92,9 @@ export function AddDataMenu({
     lidar: { onSelect: addLayer.lidar },
     splatting: { onSelect: addLayer.splatting },
     "3d-tiles": { onSelect: addLayer.threeDTiles },
+    // Ion assets load through Cesium only (issue #2290); on the 2D map the
+    // entry stays visible but disabled so the capability is discoverable.
+    "cesium-ion": { onSelect: () => onSetAddDataKind("cesium-ion"), disabled: !cesiumPrimary },
     "gltf-model": { onSelect: onAddGltfModel },
     duckdb: { onSelect: addLayer.duckdb },
     postgres: { onSelect: () => onSetAddDataKind("postgres") },

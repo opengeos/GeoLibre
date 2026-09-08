@@ -441,6 +441,9 @@ def test_add_raster_layer_records_its_source(server, project_path):
         ),
         ("add_tile_layer", {"url": "https://example.com/{z}/{x}/{y}.png"}, "xyz"),
         ("add_3d_tiles_layer", {"url": "https://example.com/tileset.json"}, "3d-tiles"),
+        ("add_3d_tiles_layer", {"ion_asset_id": 96188}, "3d-tiles"),
+        ("add_cesium_ion_layer", {"asset_id": 96188}, "3d-tiles"),
+        ("add_cesium_ion_layer", {"asset_id": 2, "kind": "imagery"}, "raster"),
         (
             "add_tiles_layer",
             {"url": "https://example.com/a.pmtiles", "kind": "pmtiles"},

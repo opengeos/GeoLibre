@@ -495,7 +495,7 @@ pull back a hidden column or one of GeoLibre's internal ones. Raster pixel ident
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
 | `duckdb-query`   | Supported for SQL query-result layers                                              |
-| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin                               |
+| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion tileset the 3D globe loads with the app's Ion token (3D only) |
 
 ## API
 
