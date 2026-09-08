@@ -12,14 +12,24 @@ import { featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
 import { readMapViewFromCamera } from "./cesium-camera";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
+import {
+  buildPointCloudCollection,
+  isSplatTilesetUrl,
+  loadCopcPointCloud,
+  pointCloudSourceKind,
+  setPointCloudOpacity,
+  type LoadCopcOptions,
+} from "./cesium-point-cloud";
 import type {
   Cesium3DTileset,
   CesiumWidget,
   Color,
   DataSource,
   Entity,
+  I3SDataProvider,
   ImageryLayer,
   ImageryProvider,
+  PointPrimitiveCollection,
   Resource,
   TilingScheme,
 } from "@cesium/engine";
@@ -87,14 +97,54 @@ const NON_GEOJSON_TYPES = new Set([
  */
 const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
-type EntryKind = "imagery" | "geojson" | "3dtiles";
+type EntryKind = "imagery" | "geojson" | "3dtiles" | "pointcloud";
+
+/** `metadata.sourceKind` of the ArcGIS I3S scene layers (`arcgis-i3s-tiles.ts`). */
+const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
+
+/** Whether a 3D Tiles-typed layer is an I3S scene layer rather than a tileset. */
+function isI3sLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "3d-tiles" && layer.metadata?.sourceKind === ARCGIS_I3S_SOURCE_KIND;
+}
+
+/** A point-cloud (`lidar`) layer's URL. */
+function pointCloudUrl(layer: GeoLibreLayer): string | undefined {
+  return str(layer.source.url) ?? str(layer.sourcePath);
+}
+
+/**
+ * A 3D Tiles-shaped source the globe loads through `Cesium3DTileset`: a 3D
+ * Tiles layer proper, a Gaussian-splat layer whose asset is a tileset (Cesium
+ * renders `KHR_gaussian_splatting` tiles natively; a raw `.ply`/`.splat`
+ * file has no globe loader), or a point cloud already in 3D Tiles form.
+ */
+function isTilesetLayer(layer: GeoLibreLayer): boolean {
+  if (layer.type === "3d-tiles") return true;
+  if (layer.type === "gaussian-splat")
+    return isSplatTilesetUrl(str(layer.source.url) ?? str(layer.sourcePath));
+  if (layer.type === "lidar") return pointCloudSourceKind(pointCloudUrl(layer)) === "tileset";
+  return false;
+}
+
+/** A COPC point cloud the globe decodes itself (issue #2285). */
+function isDecodedPointCloudLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "lidar" && pointCloudSourceKind(pointCloudUrl(layer)) === "copc";
+}
 
 interface LayerEntry {
   kind: EntryKind;
   /** The layer as last applied, for change detection. */
   layer: GeoLibreLayer;
   /** The Cesium object, or null while an async create is in flight. */
-  handle: ImageryLayer | DataSource | Cesium3DTileset | null;
+  handle:
+    | ImageryLayer
+    | DataSource
+    | Cesium3DTileset
+    | I3SDataProvider
+    | PointPrimitiveCollection
+    | null;
+  /** Aborts a decoded point cloud's download when the entry goes. */
+  abort?: AbortController;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
   loadError?: string;
@@ -325,7 +375,8 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   return (
     hasGeoJsonCollection(layer) ||
     layer.type === "geojson" ||
-    layer.type === "3d-tiles" ||
+    isTilesetLayer(layer) ||
+    isDecodedPointCloudLayer(layer) ||
     IMAGERY_TYPES.has(layer.type)
   );
 }
@@ -341,6 +392,8 @@ function isSupported(layer: GeoLibreLayer): boolean {
   // and there is no collection to recognize it by.
   if (hasGeoJsonCollection(layer) || layer.type === "geojson") return false;
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
+  if (layer.type === "gaussian-splat" || layer.type === "lidar")
+    return isTilesetLayer(layer) || isDecodedPointCloudLayer(layer);
   // MapServer only: ArcGisMapServerImageryProvider speaks the MapServer REST
   // surface (a `?f=json` capabilities document, `/export`), which an ImageServer
   // does not expose (it answers `/exportImage` and takes a renderingRule instead
@@ -366,9 +419,25 @@ function isSupported(layer: GeoLibreLayer): boolean {
   return Boolean(firstTile(layer));
 }
 
+/** Whether a tileset (or every tileset of an I3S provider) has loaded its tiles. */
+function tilesLoaded(handle: Cesium3DTileset | I3SDataProvider): boolean {
+  const provider = handle as Partial<I3SDataProvider>;
+  if (Array.isArray(provider.layers)) {
+    return provider.layers.every((layer) => !layer.tileset || layer.tileset.tilesLoaded);
+  }
+  return Boolean((handle as Cesium3DTileset).tilesLoaded);
+}
+
+/** Injection points for the environment-bound pieces of the sync (tests). */
+export interface CesiumLayerSyncDeps {
+  /** Overrides for the COPC decoder (the module, the projector, the budget). */
+  copcOptions?: Omit<LoadCopcOptions, "signal">;
+}
+
 function entryKind(layer: GeoLibreLayer): EntryKind {
   if (hasRenderableGeoJson(layer)) return "geojson";
-  if (layer.type === "3d-tiles") return "3dtiles";
+  if (isTilesetLayer(layer)) return "3dtiles";
+  if (isDecodedPointCloudLayer(layer)) return "pointcloud";
   return "imagery";
 }
 
@@ -454,9 +523,12 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         JSON.stringify(prev.source.requestHeaders ?? null) !==
           JSON.stringify(next.source.requestHeaders ?? null)
       );
+    case "pointcloud":
+      return pointCloudUrl(prev) !== pointCloudUrl(next);
     case "3dtiles":
       return (
         tilesetUrl(prev) !== tilesetUrl(next) ||
+        str(prev.metadata?.sourceKind) !== str(next.metadata?.sourceKind) ||
         JSON.stringify(prev.source.requestHeaders ?? null) !==
           JSON.stringify(next.source.requestHeaders ?? null) ||
         prev.source.altitudeOffset !== next.source.altitudeOffset
@@ -567,7 +639,10 @@ export class CesiumLayerSync {
         errors.push(`${layer.name}: missing or unsupported source configuration`);
       else if (!entry?.handle) pending.push(layer.name);
       // `allTilesLoaded` is an Event (always truthy); `tilesLoaded` is the flag.
-      else if (entry.kind === "3dtiles" && !(entry.handle as Cesium3DTileset).tilesLoaded)
+      else if (
+        entry.kind === "3dtiles" &&
+        !tilesLoaded(entry.handle as Cesium3DTileset | I3SDataProvider)
+      )
         pending.push(layer.name);
       else if (entry.kind === "geojson" && (entry.handle as DataSource).isLoading)
         pending.push(layer.name);
@@ -589,6 +664,7 @@ export class CesiumLayerSync {
     private readonly Cesium: CesiumNs,
     private readonly viewer: CesiumWidget,
     private readonly readZoom: () => number = () => readMapViewFromCamera(Cesium, viewer).zoom,
+    private readonly deps: CesiumLayerSyncDeps = {},
   ) {}
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
@@ -745,7 +821,40 @@ export class CesiumLayerSync {
     this.entries.set(layer.id, entry);
     if (kind === "imagery") void this.createImagery(entry);
     else if (kind === "geojson") void this.createGeoJson(entry);
+    else if (kind === "pointcloud") void this.createPointCloud(entry);
     else void this.createTileset(entry);
+  }
+
+  /**
+   * Decode a COPC point cloud in the browser and draw it as primitives
+   * (issue #2285). The download is bounded (see `cesium-point-cloud.ts`) and
+   * abortable, so removing the layer mid-load wastes no further bandwidth.
+   */
+  private async createPointCloud(entry: LayerEntry): Promise<void> {
+    const { Cesium, viewer } = this;
+    const url = pointCloudUrl(entry.layer);
+    if (!url) return;
+    const abort = new AbortController();
+    entry.abort = abort;
+    try {
+      const cloud = await loadCopcPointCloud(url, {
+        ...this.deps.copcOptions,
+        signal: abort.signal,
+      });
+      if (entry.cancelled) return;
+      const collection = buildPointCloudCollection(Cesium, cloud, this.effectiveOpacity(entry));
+      viewer.scene.primitives.add(collection);
+      entry.handle = collection;
+      entry.appliedAlpha = String(this.effectiveOpacity(entry));
+      this.applyAppearance(entry);
+      if (cloud.truncated)
+        console.info(
+          `[GeoLibre] "${entry.layer.name}" on the globe shows a ${cloud.count.toLocaleString()}-point preview of the point cloud`,
+        );
+    } catch (error) {
+      if (entry.cancelled) return;
+      entry.loadError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   private async createImagery(entry: LayerEntry): Promise<void> {
@@ -1201,6 +1310,24 @@ export class CesiumLayerSync {
     const resource =
       headers && Object.keys(headers).length ? new Cesium.Resource({ url, headers }) : url;
     try {
+      if (isI3sLayer(layer)) {
+        // An ArcGIS scene layer: Cesium's own I3S provider converts the
+        // scene service into 3D Tiles on the fly (issue #2285), no loaders.gl.
+        const provider = await Cesium.I3SDataProvider.fromUrl(resource, {
+          cesium3dTilesetOptions: {},
+        });
+        if (entry.cancelled) {
+          provider.destroy();
+          return;
+        }
+        viewer.scene.primitives.add(provider);
+        const offset = Number(layer.source.altitudeOffset);
+        for (const i3sLayer of provider.layers)
+          if (i3sLayer.tileset) this.applyTilesetAltitude(i3sLayer.tileset, offset);
+        entry.handle = provider;
+        this.applyAppearance(entry);
+        return;
+      }
       const tileset = await Cesium.Cesium3DTileset.fromUrl(resource, {});
       if (entry.cancelled) {
         tileset.destroy();
@@ -1208,6 +1335,12 @@ export class CesiumLayerSync {
       }
       viewer.scene.primitives.add(tileset);
       this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
+      if (layer.type === "lidar" && tileset.pointCloudShading) {
+        // Eye-dome lighting and attenuation: the reading aids the 2D LiDAR
+        // control's dynamic mode gives, native in Cesium's point-cloud shader.
+        tileset.pointCloudShading.attenuation = true;
+        tileset.pointCloudShading.eyeDomeLighting = true;
+      }
       entry.handle = tileset;
       this.applyAppearance(entry);
     } catch (error) {
@@ -1238,8 +1371,17 @@ export class CesiumLayerSync {
       (handle as DataSource).show = layer.visible;
       this.applyGeoJsonStyle(entry);
       this.applyGeoJsonFilter(entry);
+    } else if (entry.kind === "pointcloud") {
+      const collection = handle as PointPrimitiveCollection;
+      collection.show = layer.visible;
+      const opacity = this.effectiveOpacity(entry);
+      const key = String(opacity);
+      if (entry.appliedAlpha !== key) {
+        entry.appliedAlpha = key;
+        setPointCloudOpacity(collection, opacity);
+      }
     } else {
-      (handle as Cesium3DTileset).show = layer.visible;
+      (handle as Cesium3DTileset | I3SDataProvider).show = layer.visible;
     }
   }
 
@@ -1493,6 +1635,7 @@ export class CesiumLayerSync {
 
   private destroyEntry(entry: LayerEntry): void {
     entry.cancelled = true;
+    entry.abort?.abort();
     this.storyOpacities.delete(entry.layer.id);
     const { handle } = entry;
     if (!handle) return;
@@ -1501,7 +1644,10 @@ export class CesiumLayerSync {
     } else if (entry.kind === "geojson") {
       this.viewer.dataSources.remove(handle as DataSource, true);
     } else {
-      this.viewer.scene.primitives.remove(handle as Cesium3DTileset);
+      // A tileset, an I3S provider, or a point-cloud collection: all scene primitives.
+      this.viewer.scene.primitives.remove(
+        handle as Cesium3DTileset | I3SDataProvider | PointPrimitiveCollection,
+      );
     }
   }
 }
