@@ -57,6 +57,9 @@ export function coordinateTargetFromGeoUri(uri: string): CoordinateTarget | null
         .trim()
     : position;
   const parts = coordinates.split(",");
-  if (parts.length !== 2) return null;
+  // A direct geo URI may carry altitude in meters, which does not set zoom.
+  if (parts.length === 3 && !params.has("q")) {
+    if (decimal(parts[2]) === null) return null;
+  } else if (parts.length !== 2) return null;
   return target(parts[0], parts[1], params.get("z"));
 }

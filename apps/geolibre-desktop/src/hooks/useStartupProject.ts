@@ -141,8 +141,11 @@ export function useStartupProject(): {
     return plan.kind === "restore";
   });
 
+  // End native startup in the same synchronous render that reads its target.
+  // Waiting for the passive effect would drop intents received after render.
+  finishNativeCoordinateStartup();
+
   useEffect(() => {
-    finishNativeCoordinateStartup();
     if (inlineProject) return;
     if (
       (initialNativeCoordinateTarget() || coordinateTargetFromSearch(window.location.search)) &&

@@ -58,9 +58,19 @@ test("geo URIs reject addresses and malformed or out-of-range numbers", () => {
     "geo:0,181",
     "geo:,0",
     "geo:NaN,0",
-    "geo:1,2,3",
+    "geo:1,2,altitude",
+    "geo:1,2,3,4",
+    "geo:0,0?q=1,2,3",
     "geo:1,2?z=25",
   ]) {
     assert.equal(coordinateTargetFromGeoUri(uri), null, uri);
   }
+});
+
+test("direct geo URI altitude is validated but does not control map zoom", () => {
+  assert.deepEqual(coordinateTargetFromGeoUri("geo:37.786971,-122.399677,15"), {
+    center: [-122.399677, 37.786971],
+    zoom: 14,
+  });
+  assert.deepEqual(coordinateTargetFromGeoUri("geo:1,2,-10?z=12"), { center: [2, 1], zoom: 12 });
 });

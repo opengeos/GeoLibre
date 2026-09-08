@@ -292,7 +292,9 @@ when launching the app and while it is already open. Supported forms include:
 
 Coordinates use latitude, longitude order. Numeric `q` coordinates override
 the URI's placeholder coordinates; address-only queries are not supported.
-Zoom defaults to 14 and must be between 0 and 24. Invalid locations are ignored.
+An optional third coordinate in a direct URI is altitude in meters; it is validated
+and ignored when positioning the map. Zoom defaults to 14 and must be between
+0 and 24. Invalid locations are ignored.
 A received location moves the map without replacing the current project's layers.
 
 The Tauri deep-link plugin generates the Android intent filter from
