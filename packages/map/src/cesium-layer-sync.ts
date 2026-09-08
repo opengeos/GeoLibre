@@ -903,7 +903,9 @@ export class CesiumLayerSync {
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
     if (this.drapeLayer) {
+      const provider = this.drapeLayer.imageryProvider;
       this.viewer.imageryLayers.remove(this.drapeLayer, true);
+      if (provider instanceof ProtocolImageryProvider) provider.destroy();
       this.drapeLayer = null;
     }
     this.drape?.destroy();
