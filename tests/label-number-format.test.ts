@@ -220,8 +220,13 @@ describe("label number formatting", () => {
       // Nothing rejected may reach the emitted style either.
       assert.ok(!JSON.stringify(labelFieldTextField(style)).includes(tag), `${tag} in expression`);
     }
-    // A rejected app-language fallback degrades the same way.
-    assert.equal(formatLabelNumber(1234, labels({ numberFormatEnabled: true }), "fr-FR"), "1,234");
+    // A rejected app-language fallback degrades the same way. Compared against
+    // the no-fallback call rather than a literal, so the assertion does not
+    // assume the host's own default locale.
+    assert.equal(
+      formatLabelNumber(1234, labels({ numberFormatEnabled: true }), "fr-FR"),
+      formatLabelNumber(1234, labels({ numberFormatEnabled: true })),
+    );
   });
 
   it("refuses a locale whose negative sign the map cannot draw", () => {
