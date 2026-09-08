@@ -1231,5 +1231,10 @@ describe("hasRestorableLayerSource for Cesium Ion assets", () => {
       hasRestorableLayerSource({ source: { type: "raster", ionAssetId: 0 }, metadata: {} }),
       false,
     );
+    assert.equal(
+      hasRestorableLayerSource({ source: { type: "raster", ionAssetId: "96188" }, metadata: {} }),
+      true,
+      "a hand-authored numeric string parses the way the globe parses it",
+    );
   });
 });

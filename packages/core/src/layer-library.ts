@@ -10,6 +10,7 @@
 // memory (drawn features, processing output) or only in a local file have no
 // re-fetchable source, so those embed their features behind a size cap.
 
+import { parseCesiumIonAssetId } from "./cesium-ion";
 import type { FeatureCollection } from "geojson";
 import {
   DEFAULT_LAYER_STYLE,
@@ -82,7 +83,7 @@ export function hasRestorableLayerSource(
   if (nonEmptyString(source.data)) return true;
   if (Array.isArray(source.tiles) && source.tiles.some(nonEmptyString)) return true;
   // A Cesium Ion asset is re-fetched from its id alone.
-  if (Number.isInteger(source.ionAssetId) && (source.ionAssetId as number) > 0) return true;
+  if (parseCesiumIonAssetId(source.ionAssetId) !== null) return true;
   return nonEmptyString((layer.metadata ?? {}).originalUrl);
 }
 

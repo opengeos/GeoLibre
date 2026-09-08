@@ -15,7 +15,7 @@ export type CesiumIonAssetKind = "3d-tiles" | "imagery";
 export const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
 
 /** Bing Maps Aerial through Ion, the imagery asset every Ion account can use. */
-export const CESIUM_WORLD_IMAGERY_ASSET_ID = 2;
+export const CESIUM_BING_AERIAL_ASSET_ID = 2;
 
 /** Ion assets offered as one-click picks in the Add Data dialog. */
 export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<{
@@ -24,7 +24,7 @@ export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<{
   name: string;
 }> = [
   { assetId: CESIUM_OSM_BUILDINGS_ASSET_ID, kind: "3d-tiles", name: "Cesium OSM Buildings" },
-  { assetId: CESIUM_WORLD_IMAGERY_ASSET_ID, kind: "imagery", name: "Bing Maps Aerial (Ion)" },
+  { assetId: CESIUM_BING_AERIAL_ASSET_ID, kind: "imagery", name: "Bing Maps Aerial (Ion)" },
 ];
 
 /** Parse an Ion asset id the way the Add Data form and the project file carry it. */
