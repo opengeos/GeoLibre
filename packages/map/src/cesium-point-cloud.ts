@@ -32,11 +32,14 @@ export type PointCloudSourceKind = "tileset" | "copc" | null;
 /**
  * Classify a point-cloud layer's URL: a 3D Tiles tileset, a COPC archive, or
  * something the globe cannot draw yet (EPT, plain LAS/LAZ without the COPC
- * hierarchy, which the 2D control streams through its own reader).
+ * hierarchy, which the 2D control streams through its own reader). An EPT
+ * manifest is JSON too, but not a tileset: it stays 2D-only rather than
+ * failing inside `Cesium3DTileset.fromUrl`.
  */
 export function pointCloudSourceKind(url: string | undefined): PointCloudSourceKind {
   if (!url) return null;
   const path = url.split(/[?#]/)[0].toLowerCase();
+  if (path.endsWith("/ept.json") || path === "ept.json") return null;
   if (path.endsWith(".json")) return "tileset";
   if (path.endsWith(".copc.laz")) return "copc";
   return null;
@@ -163,6 +166,15 @@ export async function loadCopcPointCloud(
   const copc = await Copc.create(url);
   signal?.throwIfAborted();
   const project = await (options.projector ?? proj4Projector)(copc.wkt);
+  // Without a projector the raw X/Y would be fed to the globe as degrees and
+  // land a projected cloud somewhere near Null Island; refuse instead.
+  if (!project) {
+    throw new Error(
+      copc.wkt
+        ? `COPC archive has no usable CRS (could not parse its WKT: ${copc.wkt.slice(0, 80)})`
+        : "COPC archive has no usable CRS (no WKT in the header)",
+    );
+  }
   const lazPerf = await (options.lazPerf ?? defaultLazPerf)();
   signal?.throwIfAborted();
 
@@ -173,8 +185,8 @@ export async function loadCopcPointCloud(
   const pages = new Map(Object.entries(root.pages));
   const keys = [...nodes.keys()].sort((a, b) => keyDepth(a) - keyDepth(b));
   const chosen: string[] = [];
+  const chosenKeys = new Set<string>();
   let planned = 0;
-  let depth = 0;
   let truncated = false;
   while (keys.length && planned < budget) {
     const key = keys.shift()!;
@@ -188,11 +200,17 @@ export async function loadCopcPointCloud(
       const queued = new Set(keys);
       for (const [k, n] of Object.entries(subtree.nodes)) {
         if (n) nodes.set(k, n);
-        if (!queued.has(k) && !chosen.includes(k)) keys.push(k);
+        if (!queued.has(k) && !chosenKeys.has(k)) {
+          keys.push(k);
+          queued.add(k);
+        }
       }
       for (const [k, p] of Object.entries(subtree.pages)) {
         if (p) pages.set(k, p);
-        if (!queued.has(k) && !nodes.has(k) && !keys.includes(k)) keys.push(k);
+        if (!queued.has(k) && !nodes.has(k)) {
+          keys.push(k);
+          queued.add(k);
+        }
       }
       pages.delete(key);
       keys.sort((a, b) => keyDepth(a) - keyDepth(b));
@@ -204,8 +222,8 @@ export async function loadCopcPointCloud(
       break;
     }
     chosen.push(key);
+    chosenKeys.add(key);
     planned += node.pointCount;
-    depth = Math.max(depth, keyDepth(key));
   }
   if (keys.length) truncated = true;
 
@@ -231,7 +249,7 @@ export async function loadCopcPointCloud(
     const b = hasColor ? view.getter("Blue") : null;
     if (hasColor && !colors) colors = new Uint8Array(planned * 3);
     for (let i = 0; i < view.pointCount && count < planned; i++) {
-      const [lng, lat] = project ? project(x(i), y(i)) : [x(i), y(i)];
+      const [lng, lat] = project(x(i), y(i));
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
       const height = z(i);
       positions[count * 3] = lng;

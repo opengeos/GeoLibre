@@ -19,6 +19,9 @@ import {
 // the budget, the reprojection hook, the colouring, and the layer-sync routing
 // are the real code.
 
+/** A projector for archives whose coordinates already are degrees. */
+const identity = (x: number, y: number): [number, number] => [x, y];
+
 describe("pointCloudSourceKind", () => {
   it("tells tilesets, COPC archives, and unsupported sources apart", () => {
     assert.equal(pointCloudSourceKind("https://x/cloud/tileset.json"), "tileset");
@@ -26,9 +29,10 @@ describe("pointCloudSourceKind", () => {
     assert.equal(pointCloudSourceKind("https://s3/autzen-classified.copc.laz"), "copc");
     assert.equal(
       pointCloudSourceKind("https://x/ept.json"),
-      "tileset",
-      "EPT's index is JSON; Cesium rejects it at load",
+      null,
+      "an EPT manifest is JSON but not a tileset",
     );
+    assert.equal(pointCloudSourceKind("https://x/EPT.json?token=1"), null);
     assert.equal(pointCloudSourceKind("https://x/plain.laz"), null);
     assert.equal(pointCloudSourceKind(undefined), null);
     assert.equal(isSplatTilesetUrl("https://x/splats/tileset.json"), true);
@@ -153,7 +157,7 @@ describe("loadCopcPointCloud", () => {
     const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
       copc: fake.module,
       budget: MAX_POINT_CLOUD_POINTS,
-      projector: async () => null,
+      projector: async () => identity,
       lazPerf: async () => ({}),
     });
     assert.deepEqual(fake.loads, ["100", "200", "200", "300", "400"]);
@@ -165,7 +169,20 @@ describe("loadCopcPointCloud", () => {
       [10, 20, 30],
       "16-bit colour scaled to 8-bit",
     );
-    assert.equal(cloud.positions[0], 100, "no projector: coordinates pass through");
+    assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
+  });
+
+  it("refuses an archive whose CRS cannot be used", async () => {
+    const fake = fakeCopc();
+    await assert.rejects(
+      loadCopcPointCloud("https://x/a.copc.laz", {
+        copc: fake.module,
+        projector: async () => null,
+        lazPerf: async () => ({}),
+      }),
+      /COPC archive has no usable CRS/,
+    );
+    assert.equal(fake.pages, 0, "nothing is walked without a CRS");
   });
 
   it("stops when aborted", async () => {
@@ -176,7 +193,7 @@ describe("loadCopcPointCloud", () => {
       loadCopcPointCloud("https://x/a.copc.laz", {
         copc: fake.module,
         signal: controller.signal,
-        projector: async () => null,
+        projector: async () => identity,
         lazPerf: async () => ({}),
       }),
     );
@@ -332,6 +349,11 @@ describe("CesiumLayerSync native 3D routing", () => {
       isCesiumSupportedLayerType(layer({ type: "lidar", source: { url: "https://x/plain.laz" } })),
       false,
     );
+    assert.equal(
+      isCesiumSupportedLayerType(layer({ type: "lidar", source: { url: "https://x/ept.json" } })),
+      false,
+      "EPT stays 2D-only",
+    );
     assert.equal(isCesiumSupportedLayerType(layer({ type: "deckgl-viz" })), false);
   });
 
@@ -380,7 +402,7 @@ describe("CesiumLayerSync native 3D routing", () => {
     const sync = new CesiumLayerSync(makeCesium(calls) as never, f.viewer as never, () => 10, {
       copcOptions: {
         copc: fake.module,
-        projector: async () => null,
+        projector: async () => identity,
         lazPerf: async () => ({}),
         budget: 500,
       },
@@ -426,13 +448,30 @@ describe("CesiumLayerSync native 3D routing", () => {
     };
     const f = makeViewer();
     const sync = new CesiumLayerSync(makeCesium(calls) as never, f.viewer as never, () => 10, {
-      copcOptions: { copc: slow, projector: async () => null, lazPerf: async () => ({}) },
+      copcOptions: { copc: slow, projector: async () => identity, lazPerf: async () => ({}) },
     });
     sync.sync([layer({ id: "c", type: "lidar", source: { url: "https://x/a.copc.laz" } })]);
     sync.sync([]);
     release();
     for (let i = 0; i < 8; i++) await flush();
+    assert.equal(fake.pages, 0, "aborted decode does not load hierarchy");
     assert.equal(f.primitives.length, 0, "the removed layer's primitives never reach the scene");
+  });
+
+  it("surfaces a missing CRS as a layer error", async () => {
+    const calls = { tilesets: [] as unknown[], i3s: [] as unknown[] };
+    const fake = fakeCopc();
+    const f = makeViewer();
+    const sync = new CesiumLayerSync(makeCesium(calls) as never, f.viewer as never, () => 10, {
+      copcOptions: { copc: fake.module, projector: async () => null, lazPerf: async () => ({}) },
+    });
+    sync.sync([layer({ id: "c", type: "lidar", source: { url: "https://x/a.copc.laz" } })]);
+    for (let i = 0; i < 8; i++) await flush();
+    assert.equal(f.primitives.length, 0);
+    const status = sync.getRenderStatus();
+    assert.deepEqual(status.pending, []);
+    assert.equal(status.errors.length, 1);
+    assert.match(status.errors[0], /no usable CRS/);
   });
 });
 
