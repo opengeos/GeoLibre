@@ -22,7 +22,10 @@ import { createLayerSync, type LayerSync } from "./headless";
 // Known limits, by construction: draped content is flat (no extrusion),
 // labels are placed per tile (no cross-tile collision), the second map is a
 // second WebGL context and render loop, and tiles render one after another.
-// Picking on draped content is a follow-up.
+// All draped layers share one Cesium imagery layer, stacked at the topmost
+// draped layer's position, so a native imagery layer sitting between two
+// draped layers in the store order renders below both of them. Picking on
+// draped content is a follow-up.
 
 type CesiumNs = typeof import("@cesium/engine");
 
