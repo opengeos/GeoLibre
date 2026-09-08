@@ -932,8 +932,10 @@ describe("review follow-ups", () => {
         "the native template must not be fetched straight from the webview",
       );
       assert.match(bridged.tileUrl(1, 0, 2), /^geolibre-test-wms:\/\//);
+      // Naming the provider, not just ruling out the bridge: falling through to
+      // UrlTemplateImageryProvider would be its own regression in this branch.
       assert.ok(
-        !(added[1].imageryProvider instanceof ProtocolImageryProvider),
+        added[1].imageryProvider instanceof RoutingCesium.WebMapServiceImageryProvider,
         "a plain endpoint still uses Cesium's own WMS provider",
       );
       sync.destroy();
