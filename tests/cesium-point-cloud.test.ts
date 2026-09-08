@@ -172,6 +172,18 @@ describe("loadCopcPointCloud", () => {
     assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
   });
 
+  it("normalises a NaN or fractional budget", async () => {
+    const load = (budget: number) =>
+      loadCopcPointCloud("https://x/a.copc.laz", {
+        copc: fakeCopc().module,
+        budget,
+        projector: async () => identity,
+        lazPerf: async () => ({}),
+      });
+    assert.equal((await load(Number.NaN)).count, 1200, "NaN falls back to the default budget");
+    assert.equal((await load(2.5)).count, 2, "a fractional budget is floored");
+  });
+
   it("treats a cloud whose nodes disagree on colour as colourless", async () => {
     const fake = fakeCopc({ color: true });
     let views = 0;

@@ -160,7 +160,10 @@ export async function loadCopcPointCloud(
   url: string,
   options: LoadCopcOptions = {},
 ): Promise<DecodedPointCloud> {
-  const budget = Math.max(1, options.budget ?? MAX_POINT_CLOUD_POINTS);
+  // A NaN, infinite, or fractional budget would size buffers badly; normalise.
+  const budget = Number.isFinite(options.budget)
+    ? Math.max(1, Math.floor(options.budget as number))
+    : MAX_POINT_CLOUD_POINTS;
   const signal = options.signal;
   const { Copc } = options.copc ?? ((await import("copc")) as unknown as CopcModule);
   const copc = await Copc.create(url);
