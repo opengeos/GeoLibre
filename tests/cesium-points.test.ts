@@ -115,6 +115,7 @@ function makeCesium() {
   class PointPrimitiveCollection {
     show = true;
     points: Array<Record<string, unknown>> = [];
+    constructor(public options?: { scene?: unknown }) {}
     get length() {
       return this.points.length;
     }
@@ -170,27 +171,42 @@ describe("buildPointBatch", () => {
         ],
       },
     });
+    const scene = { fake: "scene" };
     const collection = buildPointBatch(
       Cesium as never,
       layer,
       createFeatureStyleResolver(layer.style),
       0.5,
       0,
+      { scene: scene as never, clampToGround: true },
     ) as unknown as InstanceType<typeof Cesium.PointPrimitiveCollection>;
+    assert.equal(collection.options?.scene, scene, "the collection knows its scene");
     assert.equal(collection.length, 5, "a MultiPoint contributes one primitive per point");
     const first = collection.get(0) as {
       pixelSize: number;
       color: { css: string; alpha: number };
-      id: unknown;
+      heightReference: number;
+      id: { geolibreLayerId: string; index: number; primitive?: unknown };
     };
     assert.equal(first.pixelSize, 10);
     assert.ok(Math.abs(first.color.alpha - 0.25) < 1e-9, "fill opacity × layer opacity");
+    assert.equal(first.heightReference, 1, "clamped to ground like the entity path");
     assert.ok(isBatchedPointRef(first.id));
-    assert.deepEqual(first.id, { geolibreLayerId: "pts", index: 0 });
-    assert.deepEqual((collection.get(4) as { id: unknown }).id, {
-      geolibreLayerId: "pts",
-      index: 3,
-    });
+    assert.equal(first.id.geolibreLayerId, "pts");
+    assert.equal(first.id.index, 0);
+    assert.equal(first.id.primitive, first, "the reference points back at its primitive");
+    const fifth = collection.get(4) as { id: { index: number } };
+    assert.equal(fifth.id.index, 3);
+    // Without a scene or clamping (3D-elevated layers) heights stay as given.
+    const raised = buildPointBatch(
+      Cesium as never,
+      layer,
+      createFeatureStyleResolver(layer.style),
+      0.5,
+      0,
+    ) as unknown as InstanceType<typeof Cesium.PointPrimitiveCollection>;
+    assert.equal(raised.options, undefined);
+    assert.equal((raised.get(0) as { heightReference: number }).heightReference, 0);
   });
 });
 
@@ -341,9 +357,17 @@ describe("CesiumLayerSync point rendering", () => {
     await f.flush();
     assert.equal(f.primitives.length, 1, "one PointPrimitiveCollection in the scene");
     const collection = f.primitives[0] as {
+      options?: { scene?: unknown };
       length: number;
-      get(i: number): { id: unknown; show: boolean; color: { alpha: number } };
+      get(i: number): {
+        id: unknown;
+        show: boolean;
+        color: { alpha: number };
+        heightReference: number;
+      };
     };
+    assert.equal(collection.options?.scene, f.viewer.scene, "built against the viewer's scene");
+    assert.equal(collection.get(0).heightReference, 1, "flat points clamp to the ground");
     assert.equal(collection.length, MAX_ENTITY_POINT_FEATURES + 5);
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
     // Picking resolves the primitive's id back to its feature.

@@ -3,8 +3,10 @@ import type {
   Color,
   DataSource,
   Entity,
+  HeightReference,
   PointPrimitive,
   PointPrimitiveCollection,
+  Scene,
 } from "@cesium/engine";
 import type { Feature } from "geojson";
 import type { FeatureStyleResolver } from "./cesium-feature-style";
@@ -39,6 +41,11 @@ export const MAX_ENTITY_POINT_FEATURES = 50_000;
 export interface BatchedPointRef {
   readonly geolibreLayerId: string;
   readonly index: number;
+  /**
+   * The primitive carrying this reference, so a pick (which hands back the
+   * reference) can read the primitive's state without scanning the batch.
+   */
+  primitive?: PointPrimitive;
 }
 
 export function isBatchedPointRef(value: unknown): value is BatchedPointRef {
@@ -257,13 +264,6 @@ function pointCoordinates(feature: Feature): number[][] {
 }
 
 /**
- * Build a `PointPrimitiveCollection` for a batched point layer: one primitive
- * per point, coloured and sized by the resolver, tagged with its feature
- * reference for picking. Positions sit on the ellipsoid and draw through
- * terrain (`disableDepthTestDistance`), the primitive path's stand-in for
- * ground clamping.
- */
-/**
  * Colours for one pass over a batch: a classified layer resolves to a handful
  * of distinct CSS strings across tens of thousands of points, so each string
  * (and alpha) is parsed once rather than per primitive.
@@ -286,14 +286,40 @@ function colourCache(Cesium: CesiumNs): (css: string, alpha: number) => Color {
   };
 }
 
+/** Where a batch sits: the scene (needed for ground clamping) and whether to clamp. */
+export interface PointBatchPlacement {
+  /** The scene the collection is added to; height references need it. */
+  scene?: Scene;
+  /** Clamp each point to terrain, the same decision the entity path makes. */
+  clampToGround?: boolean;
+}
+
+/**
+ * Build a `PointPrimitiveCollection` for a batched point layer: one primitive
+ * per point, coloured and sized by the resolver, tagged with its feature
+ * reference for picking (and the reference with its primitive, for the
+ * reverse lookup). Points clamp to the ground when the layer would on the
+ * entity path — which needs the scene on the collection — and draw through
+ * terrain (`disableDepthTestDistance`) either way.
+ */
 export function buildPointBatch(
   Cesium: CesiumNs,
   layer: GeoLibreLayer,
   resolver: FeatureStyleResolver,
   opacity: number,
   zoom: number,
+  placement: PointBatchPlacement = {},
 ): PointPrimitiveCollection {
-  const collection = new Cesium.PointPrimitiveCollection();
+  // `scene` is a documented constructor option ("must be passed in for points
+  // that use the height reference property") that the typings leave out.
+  const collection = new Cesium.PointPrimitiveCollection(
+    (placement.scene ? { scene: placement.scene } : undefined) as never,
+  );
+  const heightReference = (
+    placement.clampToGround
+      ? (Cesium.HeightReference?.CLAMP_TO_GROUND ?? 1)
+      : (Cesium.HeightReference?.NONE ?? 0)
+  ) as HeightReference;
   const features = layer.geojson?.features ?? [];
   const colour = colourCache(Cesium);
   for (let index = 0; index < features.length; index++) {
@@ -301,14 +327,16 @@ export function buildPointBatch(
     const symbol = resolver.resolve(feature, zoom);
     for (const [lng, lat, z] of pointCoordinates(feature)) {
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      collection.add({
+      const ref: BatchedPointRef = { geolibreLayerId: layer.id, index };
+      ref.primitive = collection.add({
         position: Cesium.Cartesian3.fromDegrees(lng, lat, Number.isFinite(z) ? z : 0),
         pixelSize: symbol.radius * 2,
         color: colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
         outlineColor: colour(symbol.outline, symbol.strokeOpacity * opacity),
         outlineWidth: symbol.strokeWidth,
+        heightReference,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        id: { geolibreLayerId: layer.id, index } satisfies BatchedPointRef,
+        id: ref,
       });
     }
   }

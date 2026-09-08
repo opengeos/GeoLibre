@@ -568,19 +568,10 @@ export class CesiumLayerSync {
         entry.layer.opacity <= 0
       )
         return null;
-      // A primitive the filter hid is not pickable, matching hidden entities.
-      // The pick hands back the reference object, and each primitive carries
-      // its own, so the collection is scanned by identity (on a click, not
-      // per frame).
-      const collection = entry.handle as PointPrimitiveCollection | null;
-      if (collection) {
-        for (let i = 0; i < collection.length; i++) {
-          const point = collection.get(i);
-          if (point.id !== entity) continue;
-          if (!point.show) return null;
-          break;
-        }
-      }
+      // A primitive the filter hid is not pickable, matching hidden entities;
+      // the reference carries its primitive, so this is a field read on the
+      // hover path rather than a scan of the batch.
+      if (entity.primitive && !entity.primitive.show) return null;
       const feature = entry.layer.geojson?.features[entity.index];
       return feature
         ? {
@@ -1119,12 +1110,21 @@ export class CesiumLayerSync {
     try {
       const resolver = this.resolverFor(entry);
       const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+      // The same ground-clamping decision the entity path makes: extruded or
+      // 3D-elevated layers keep their heights, everything else sits on terrain.
+      const style = entry.layer.style ?? {};
+      const clampToGround = !(
+        style.extrusionEnabled ||
+        style.elevation3dEnabled ||
+        geojsonHasZCoordinates(entry.layer.geojson)
+      );
       const collection = buildPointBatch(
         Cesium,
         entry.layer,
         resolver,
         this.effectiveOpacity(entry),
         zoom,
+        { scene: viewer.scene, clampToGround },
       );
       viewer.scene.primitives.add(collection);
       entry.handle = collection;
