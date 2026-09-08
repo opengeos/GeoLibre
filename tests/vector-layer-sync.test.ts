@@ -1206,6 +1206,40 @@ describe("removeVectorStoreLayers", () => {
 });
 
 describe("savedVectorState", () => {
+  it("persists and restores the label number format across a reload", () => {
+    // savedVectorState feeds restoreVectorLayers, so a field missing from
+    // savedVectorStyle is a setting silently lost when the project is reopened.
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        style: vectorStyle({
+          labelField: "pop",
+          labelNumberFormat: true,
+          labelNumberDecimals: 2,
+          labelNumberLocale: "de-DE",
+        }),
+      }),
+    );
+
+    const restored = savedVectorState(layer);
+    assert.equal(restored.style?.labelNumberFormat, true);
+    assert.equal(restored.style?.labelNumberDecimals, 2);
+    assert.equal(restored.style?.labelNumberLocale, "de-DE");
+  });
+
+  it("drops an out-of-range decimals value from a hand-edited project file", () => {
+    for (const bad of [2.5, -1, 99, Number.NaN, "2"]) {
+      const layer = createVectorStoreLayer(
+        vectorInfo({ style: vectorStyle({ labelField: "pop" }) }),
+      );
+      // Reach past the typed builder the way a hand-edited project file would.
+      (layer.metadata.vectorState as { style: Record<string, unknown> }).style.labelNumberDecimals =
+        bad;
+
+      const restored = savedVectorState(layer);
+      assert.equal(restored.style?.labelNumberDecimals, undefined, String(bad));
+    }
+  });
+
   it("round-trips the state persisted by createVectorStoreLayer", () => {
     const layer = createVectorStoreLayer(
       vectorInfo({

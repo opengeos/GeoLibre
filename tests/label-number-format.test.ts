@@ -6,6 +6,7 @@ import {
   formatLabelNumber,
   formatLabelNumberSample,
   labelFieldTextField,
+  resolveLabelNumberLocale,
   LABEL_NUMBER_LOCALES,
   type LabelStyle,
 } from "@geolibre/core";
@@ -200,6 +201,36 @@ describe("label number formatting", () => {
     for (const value of [-2.005, -1234.5, -0.001, 1234.005]) {
       assert.equal(formatLabelNumber(value, style), renderTextField(style, value), String(value));
     }
+  });
+
+  it("refuses a locale the map's glyph stack cannot draw", () => {
+    // The curated picker list is not the only route in: a hand-edited project
+    // can pin any tag, and the "" default follows the app language, so a French
+    // or Arabic UI would otherwise bake U+202F / Arabic-Indic digits into the
+    // text-field and label the map with blank boxes.
+    const runtimeDefault = formatLabelNumberSample("", 0);
+    for (const tag of ["fr-FR", "ar-EG"]) {
+      assert.equal(formatLabelNumberSample(tag, 0), runtimeDefault, tag);
+      const style = labels({
+        field: "pop",
+        numberFormatEnabled: true,
+        numberDecimals: 0,
+        numberLocale: tag,
+      });
+      // Nothing rejected may reach the emitted style either.
+      assert.ok(!JSON.stringify(labelFieldTextField(style)).includes(tag), `${tag} in expression`);
+    }
+    // A rejected app-language fallback degrades the same way.
+    assert.equal(formatLabelNumber(1234, labels({ numberFormatEnabled: true }), "fr-FR"), "1,234");
+  });
+
+  it("resolves the effective locale the same way for every path", () => {
+    assert.equal(resolveLabelNumberLocale("en-US"), "en-US");
+    assert.equal(resolveLabelNumberLocale("not a locale"), undefined);
+    assert.equal(resolveLabelNumberLocale("fr-FR"), undefined);
+    // Falls through to the next usable candidate.
+    assert.equal(resolveLabelNumberLocale("fr-FR", "de-DE"), "de-DE");
+    assert.equal(resolveLabelNumberLocale("", undefined), undefined);
   });
 
   it("only offers locales whose separators the map's glyph stack can draw", () => {

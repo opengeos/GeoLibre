@@ -688,6 +688,24 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   if (typeof candidate.labelAllowOverlap === "boolean") {
     style.labelAllowOverlap = candidate.labelAllowOverlap;
   }
+  if (typeof candidate.labelNumberFormat === "boolean") {
+    style.labelNumberFormat = candidate.labelNumberFormat;
+  }
+  // Same 0-10 integer range the control and LabelStyle both clamp to, so a
+  // hand-edited project cannot restore a fractional or out-of-range precision.
+  if (
+    typeof candidate.labelNumberDecimals === "number" &&
+    Number.isInteger(candidate.labelNumberDecimals) &&
+    candidate.labelNumberDecimals >= 0 &&
+    candidate.labelNumberDecimals <= 10
+  ) {
+    style.labelNumberDecimals = candidate.labelNumberDecimals;
+  }
+  // Length-capped like the field name; the renderer validates the tag itself
+  // and falls back when Intl rejects it or the map cannot draw its separators.
+  if (typeof candidate.labelNumberLocale === "string" && candidate.labelNumberLocale.length <= 35) {
+    style.labelNumberLocale = candidate.labelNumberLocale;
+  }
 
   return Object.keys(style).length > 0 ? style : null;
 }
@@ -851,8 +869,14 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
       placement: style.labelPlacement === "line" ? "line" : "point",
       allowOverlap: style.labelAllowOverlap ?? defaults.allowOverlap,
       numberFormatEnabled: style.labelNumberFormat ?? defaults.numberFormatEnabled,
+      // Range-checked like labelSize above: the control's snapshot is untrusted
+      // input here (it can come from a hand-edited project), and a fractional,
+      // negative or huge precision would otherwise reach LabelStyle.
       numberDecimals:
-        typeof style.labelNumberDecimals === "number"
+        typeof style.labelNumberDecimals === "number" &&
+        Number.isInteger(style.labelNumberDecimals) &&
+        style.labelNumberDecimals >= 0 &&
+        style.labelNumberDecimals <= 10
           ? style.labelNumberDecimals
           : defaults.numberDecimals,
       numberLocale: style.labelNumberLocale ?? defaults.numberLocale,

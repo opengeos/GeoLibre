@@ -7,6 +7,7 @@ import {
   geojsonHasZCoordinates,
   getExternalNativePaintBridge,
   labelFieldTextField,
+  resolveLabelNumberLocale,
   pluginOwnsPaint,
   proportionalRadiusExpression,
   ruleBasedVisibilityFilter,
@@ -2725,15 +2726,17 @@ function getDedupedLabelFeatures(
     dedupedLabelCache.set(collection, byKey);
   }
   // Number formatting is part of the key: it changes the aggregated label
-  // text, and "unique"/"concatenate" group on that text. The resolved locale
-  // goes in rather than the stored one, so switching the app language
-  // reformats labels that follow it (`numberLocale: ""`) instead of serving
-  // the previous language's separators from this cache.
+  // text, and "unique"/"concatenate" group on that text. The key carries the
+  // *effective* locale, resolved the same way the formatter resolves it, so a
+  // stored tag the formatter rejects (malformed, or one the map cannot draw)
+  // does not pin the cache to a locale the labels were never formatted with,
+  // and switching the app language reformats labels that follow it
+  // (`numberLocale: ""`) instead of serving the previous language's separators.
   const locale = documentLocale();
   const key = [
     labels.dedupe,
     labels.numberFormatEnabled
-      ? `${labels.numberDecimals}:${labels.numberLocale || locale || ""}`
+      ? `${labels.numberDecimals}:${resolveLabelNumberLocale(labels.numberLocale, locale) ?? ""}`
       : "raw",
     labels.field,
   ].join("|");

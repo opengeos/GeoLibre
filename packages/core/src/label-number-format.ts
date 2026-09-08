@@ -50,13 +50,13 @@ export const LABEL_NUMBER_SAMPLE = 1234567.5;
  */
 const formatterCache = new Map<string, Intl.NumberFormat>();
 
-/** Locale tags `Intl` has already accepted or rejected, so each is tried once. */
+/** Locale tags already accepted or rejected, so each is tested once. */
 const localeSupport = new Map<string, boolean>();
 
 /**
  * A formatter for this locale/decimals pair. Grouping is always on: it is the
  * whole point of the setting. The locale must already have been vetted by
- * {@link usableLocale}, so this never throws.
+ * {@link resolveLabelNumberLocale}, so this never throws.
  */
 function labelNumberFormatter(locale: string | undefined, decimals: number): Intl.NumberFormat {
   const digits = clampLabelDecimals(decimals);
@@ -73,39 +73,63 @@ function labelNumberFormatter(locale: string | undefined, decimals: number): Int
 }
 
 /**
- * The first locale tag `Intl` accepts, or `undefined` to leave `Intl` and
- * MapLibre on the runtime default.
+ * Whether every character a locale's grouping produces is one the map's glyph
+ * stack can draw: ASCII, or the no-break space U+00A0.
  *
- * A malformed BCP 47 tag (`"en_US"`, `"not a locale"`) makes `Intl` throw a
- * `RangeError`. It can only arrive from a hand-edited project — the Style panel
- * offers a fixed list — but a throw would propagate out of the Cesium labeler
- * and the dedup builder and take down the whole layer's labels, and MapLibre
- * evaluates its own `Intl.NumberFormat` per feature, so the expression path is
- * exposed too. Both paths resolve the locale through here instead, degrading to
- * the next candidate and finally to the runtime default.
+ * {@link LABEL_NUMBER_LOCALES} is curated on exactly this basis, but the picker
+ * is not the only way a locale reaches the renderer. A hand-edited project can
+ * pin any tag, and the default (`numberLocale: ""`) follows the app's own
+ * language, so a French or Arabic UI would otherwise put U+202F or Arabic-Indic
+ * digits into the `text-field` and label the map with blank boxes. Testing the
+ * rendered sample rather than the tag covers both routes and needs no list to
+ * keep in sync.
  */
-function usableLocale(...tags: (string | undefined)[]): string | undefined {
-  for (const tag of tags) {
-    if (!tag) continue;
-    let supported = localeSupport.get(tag);
-    if (supported === undefined) {
-      try {
-        new Intl.NumberFormat(tag);
-        supported = true;
-      } catch {
-        supported = false;
-      }
-      localeSupport.set(tag, supported);
+function glyphSafeLocale(tag: string): boolean {
+  try {
+    const sample = new Intl.NumberFormat(tag, {
+      useGrouping: true,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(LABEL_NUMBER_SAMPLE);
+    for (const char of sample) {
+      const code = char.codePointAt(0) ?? 0;
+      if (code >= 0x80 && code !== 0x00a0) return false;
     }
-    if (supported) return tag;
+    return true;
+  } catch {
+    // A malformed BCP 47 tag (`"en_US"`, `"not a locale"`) makes Intl throw a
+    // RangeError. It would propagate out of the Cesium labeler and the dedup
+    // builder and take down the layer's labels, and MapLibre evaluates its own
+    // Intl.NumberFormat per feature, so the expression path is exposed too.
+    return false;
   }
-  return undefined;
 }
 
 /** Clamp a decimal-places setting to the range the UI and `Intl` both accept. */
 export function clampLabelDecimals(decimals: number): number {
   if (!Number.isFinite(decimals)) return 0;
   return Math.max(0, Math.min(10, Math.trunc(decimals)));
+}
+
+/**
+ * The first locale tag that both `Intl` accepts and the map can draw, or
+ * `undefined` to leave `Intl` and MapLibre on the runtime default.
+ *
+ * Every path resolves its locale through here -- the JavaScript formatter, the
+ * MapLibre expression, and the dedup cache key -- so all three agree on which
+ * locale is actually in effect.
+ */
+export function resolveLabelNumberLocale(...tags: (string | undefined)[]): string | undefined {
+  for (const tag of tags) {
+    if (!tag) continue;
+    let usable = localeSupport.get(tag);
+    if (usable === undefined) {
+      usable = glyphSafeLocale(tag);
+      localeSupport.set(tag, usable);
+    }
+    if (usable) return tag;
+  }
+  return undefined;
 }
 
 /**
@@ -125,7 +149,7 @@ export function formatLabelNumber(
 ): string | null {
   if (!labels.numberFormatEnabled) return null;
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const locale = usableLocale(labels.numberLocale, fallbackLocale);
+  const locale = resolveLabelNumberLocale(labels.numberLocale, fallbackLocale);
   return labelNumberFormatter(locale, labels.numberDecimals).format(value);
 }
 
@@ -146,7 +170,7 @@ export function labelFieldTextField(
   if (!field) return "";
   const asText = ["to-string", ["coalesce", ["get", field], ""]];
   if (!labels.numberFormatEnabled) return asText;
-  const locale = usableLocale(labels.numberLocale, fallbackLocale);
+  const locale = resolveLabelNumberLocale(labels.numberLocale, fallbackLocale);
   const digits = clampLabelDecimals(labels.numberDecimals);
   const options: Record<string, unknown> = {};
   if (locale) options.locale = locale;
@@ -177,5 +201,7 @@ export function labelFieldTextField(
  * hand-edited project from throwing inside a render.
  */
 export function formatLabelNumberSample(locale: string, decimals: number): string {
-  return labelNumberFormatter(usableLocale(locale), decimals).format(LABEL_NUMBER_SAMPLE);
+  return labelNumberFormatter(resolveLabelNumberLocale(locale), decimals).format(
+    LABEL_NUMBER_SAMPLE,
+  );
 }
