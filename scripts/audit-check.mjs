@@ -41,6 +41,25 @@ const ALLOWLIST = new Map([
       "image-size in the tree; `npm ls image-size` is the honest count. " +
       "Re-verified 2026-08-07.",
   ],
+  [
+    "GHSA-2883-xcg3-v3hh",
+    "js-yaml DoS (maxTotalMergeKeys does not bound CPU for empty merge sources). " +
+      "This one is the exception to the no-patched-version rule above, so it needs " +
+      "the extra justification: patches exist (3.15.2 and 4.3.2) but npm 12 will " +
+      "not install them here. An `overrides` entry — plain, exact, and with the " +
+      "nested read-yaml-file form, since that consumer needs 3.x for safeLoad — is " +
+      "accepted and rewrites the declared ranges, but the tree is left permanently " +
+      '`invalid: "^4.3.2" from node_modules/@changesets/parse` and the installed ' +
+      "copies stay at 4.3.1/3.15.1. Reachability is what makes the hold safe: " +
+      "js-yaml is in the production graph only because " +
+      "@placemarkio/geojson-rewind@1.0.3 declares @changesets/cli as a *runtime* " +
+      "dependency, which is an upstream packaging mistake — changesets is a " +
+      "release tool. Nothing in GeoLibre parses YAML through it at runtime, and " +
+      "the production build contains no js-yaml: grepping dist for `js-yaml`, " +
+      "`YAMLException` and `DUMPER_STATE` finds nothing. Revisit when npm honors " +
+      "the override, or when geojson-rewind moves changesets to devDependencies. " +
+      "Added 2026-09-08.",
+  ],
 ]);
 
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
