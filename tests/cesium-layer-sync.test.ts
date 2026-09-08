@@ -1255,8 +1255,10 @@ describe("CesiumLayerSync", () => {
   it("skips unsupported layer kinds", () => {
     const sync = newSync(f);
     const layers = [
-      mkLayer({ id: "p", type: "pmtiles", source: { url: "x.pmtiles" } }),
+      // A PMTiles layer without a source to read is neither draped nor bridged.
+      mkLayer({ id: "p", type: "pmtiles", source: {} }),
       mkLayer({ id: "z", type: "zarr", source: {} }),
+      mkLayer({ id: "a", type: "arcgis", source: { tiles: ["https://a/{z}/{x}/{y}.pbf"] } }),
     ];
     sync.sync(layers);
     assert.equal(f.calls.imageryAdded.length, 0);
@@ -1264,7 +1266,7 @@ describe("CesiumLayerSync", () => {
     // The kind-level predicate the UI uses to flag "2D only" layers agrees.
     assert.deepEqual(
       layers.filter((l) => !isCesiumSupportedLayerType(l)).map((l) => l.id),
-      ["p", "z"],
+      ["p", "z", "a"],
     );
   });
 

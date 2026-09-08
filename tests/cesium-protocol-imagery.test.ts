@@ -489,7 +489,7 @@ function rasterLayer(patch: Partial<GeoLibreLayer>): GeoLibreLayer {
 }
 
 describe("isCesiumSupportedLayerType with the bridge", () => {
-  it("accepts COGs, raster archives, and rejects vector archives", () => {
+  it("accepts COGs and raster archives, and vector archives now that they are draped", () => {
     assert.equal(isCesiumSupportedLayerType(cogLayer()), true);
     assert.equal(
       isCesiumSupportedLayerType(
@@ -519,7 +519,8 @@ describe("isCesiumSupportedLayerType with the bridge", () => {
           source: { type: "vector", url: "pmtiles://https://a/b.pmtiles" },
         }),
       ),
-      false,
+      true,
+      "vector archives go through the MapLibre drape (issue #2284)",
     );
   });
 });

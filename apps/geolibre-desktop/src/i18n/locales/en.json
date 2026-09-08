@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Add Encoded Polyline Layer",
         "description": "Import encoded polyline strings (Google, OSRM, Valhalla) from text or files as vector lines."
+      },
+      "cesiumIon": {
+        "label": "Add Cesium Ion Asset",
+        "description": "Add a 3D Tiles tileset or imagery from Cesium Ion by asset id. Renders on the 3D globe with your Cesium Ion token."
       }
     },
     "shared": {
@@ -403,6 +407,18 @@
       "imported_other": "Imported {{count}} services.",
       "importedWithDropped_one": "Imported {{count}} service ({{dropped}} skipped — library full).",
       "importedWithDropped_other": "Imported {{count}} services ({{dropped}} skipped — library full)."
+    },
+    "cesiumIon": {
+      "defaultName": "Cesium Ion asset",
+      "assetId": "Asset ID",
+      "kindTileset": "3D Tiles",
+      "kindImagery": "Imagery",
+      "altitudeOffset": "Altitude offset (m)",
+      "quickPicks": "Quick picks",
+      "hint": "Find asset ids under My Assets at ion.cesium.com. The asset must be shared with the token configured in Settings.",
+      "errorAssetId": "Enter a Cesium Ion asset id (a positive whole number).",
+      "errorAltitude": "Enter the altitude offset as a number of metres.",
+      "tokenMissing": "No Cesium Ion token is configured. Add one in Settings → Environment variables (VITE_CESIUM_TOKEN) or the asset will fail to load."
     },
     "xyz": {
       "defaultName": "XYZ Layer",
@@ -1877,6 +1893,7 @@
     "show3d": "Show map {{number}} as a 3D globe",
     "show2d": "Show map {{number}} as a 2D map",
     "only2d": "2D only",
+    "only3d": "3D only",
     "cesiumTokenHint": "Add a Cesium Ion token in Settings for terrain and Ion imagery"
   },
   "renderer": {
@@ -1884,6 +1901,7 @@
     "imagery": "Imagery",
     "projectBasemap": "Project basemap",
     "layerUnsupported": "Not rendered by the 3D globe",
+    "layerCesiumOnly": "Rendered by the 3D globe only",
     "resetView": "Reset view",
     "scene3D": "3D globe",
     "scene2D": "2D map",
@@ -2488,6 +2506,7 @@
       "georss": "GeoRSS Layer",
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
+      "cesiumIon": "Cesium Ion Asset",
       "gltfModel": "3D Model (glTF)",
       "postgres": "PostgreSQL Layer",
       "iceberg": "Apache Iceberg Layer"

@@ -149,6 +149,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     tier: "advanced",
   },
   {
+    id: "cesium-ion",
+    section: "threeD",
+    labelKey: "toolbar.layerType.cesiumIon",
+    tier: "advanced",
+  },
+  {
     id: "gltf-model",
     section: "threeD",
     labelKey: "toolbar.layerType.gltfModel",

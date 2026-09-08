@@ -1567,20 +1567,25 @@ def pmtiles_layer(
 
 def three_d_tiles_layer(
     name: str,
-    url: str,
+    url: str | None = None,
     *,
+    ion_asset_id: int | None = None,
     altitude_offset: float = 0,
     request_headers: dict[str, str] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
-    """Build a 3D Tiles layer from a ``tileset.json`` URL.
+    """Build a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
 
-    The shape matches what ``restoreThreeDTilesLayers`` replays from a saved
-    project, so the deck.gl 3D-tiles overlay is rebuilt on load.
+    A URL layer matches what ``restoreThreeDTilesLayers`` replays from a saved
+    project, so the deck.gl 3D-tiles overlay is rebuilt on load. An Ion asset
+    (``ion_asset_id``) renders only on the 3D globe, which loads it with the
+    app's Cesium Ion token; the token itself is never written to the project.
 
     Args:
         name: Layer display name.
-        url: URL of the 3D Tiles ``tileset.json``.
+        url: URL of the 3D Tiles ``tileset.json``. Omit for an Ion asset.
+        ion_asset_id: A Cesium Ion asset id (for example 96188, Cesium OSM
+            Buildings). Mutually exclusive with ``url``.
         altitude_offset: Vertical offset applied to the tileset, in meters.
         request_headers: Optional request headers (e.g. an auth token). Stored in
             the project file, so avoid persisting secrets you do not want saved.
@@ -1588,7 +1593,20 @@ def three_d_tiles_layer(
 
     Returns:
         A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If neither or both of ``url`` and ``ion_asset_id`` are given,
+            the asset id is not a positive integer, or ``request_headers`` are
+            combined with an Ion asset (Ion requests carry the token instead).
     """
+    if (url is None) == (ion_asset_id is None):
+        raise ValueError("pass exactly one of url or ion_asset_id")
+    if ion_asset_id is not None:
+        if request_headers:
+            raise ValueError("request_headers do not apply to a Cesium Ion asset")
+        return cesium_ion_layer(
+            name, ion_asset_id, kind="3d-tiles", altitude_offset=altitude_offset, **style
+        )
     layer = _layer_base(name, "3d-tiles", **style)
     source_id = layer["id"]
     source: dict[str, Any] = {
@@ -1612,6 +1630,66 @@ def three_d_tiles_layer(
         "status": "loading",
     }
     layer["sourcePath"] = url
+    return layer
+
+
+CESIUM_ION_SOURCE_KIND = "cesium-ion"
+"""``metadata.sourceKind`` of a layer that references a Cesium Ion asset."""
+
+
+def cesium_ion_layer(
+    name: str,
+    asset_id: int,
+    *,
+    kind: str = "3d-tiles",
+    altitude_offset: float = 0,
+    **style: Any,
+) -> dict[str, Any]:
+    """Build a layer that references a Cesium Ion asset by id.
+
+    The shape matches ``createCesiumIonLayer`` in ``@geolibre/core``: a
+    ``3d-tiles`` layer for a tileset, a ``raster`` layer for imagery, both
+    marked external so the 2D map leaves them alone and badges them "3D only".
+    The globe loads the asset with the app's Cesium Ion token.
+
+    Args:
+        name: Layer display name.
+        asset_id: The Cesium Ion asset id (a positive integer).
+        kind: ``"3d-tiles"`` for a tileset or ``"imagery"`` for an imagery asset.
+        altitude_offset: Vertical offset applied to a tileset, in meters.
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``kind`` is unknown or ``asset_id`` is not a positive integer.
+    """
+    if kind not in ("3d-tiles", "imagery"):
+        raise ValueError(f"kind must be '3d-tiles' or 'imagery', got {kind!r}")
+    if isinstance(asset_id, bool) or not isinstance(asset_id, int) or asset_id <= 0:
+        raise ValueError(f"asset_id must be a positive integer, got {asset_id!r}")
+    tileset = kind == "3d-tiles"
+    layer = _layer_base(name, "3d-tiles" if tileset else "raster", **style)
+    source_id = layer["id"]
+    source: dict[str, Any] = {
+        "type": "3d-tiles" if tileset else "raster",
+        "ionAssetId": asset_id,
+        "sourceId": source_id,
+    }
+    metadata: dict[str, Any] = {
+        "sourceKind": CESIUM_ION_SOURCE_KIND,
+        "externalNativeLayer": True,
+        "identifiable": False,
+        "sourceId": source_id,
+        "nativeLayerIds": [source_id],
+    }
+    if tileset:
+        source["altitudeOffset"] = altitude_offset
+        metadata["customLayerType"] = "3d-tiles"
+        metadata["altitudeOffset"] = altitude_offset
+    layer["source"] = source
+    layer["metadata"] = metadata
     return layer
 
 

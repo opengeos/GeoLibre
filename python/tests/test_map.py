@@ -372,6 +372,22 @@ def test_add_3d_tiles(m):
     assert layer["source"]["altitudeOffset"] == 5
 
 
+def test_add_3d_tiles_from_ion_asset(m):
+    m.add_3d_tiles(ion_asset_id=96188, name="Buildings")
+    layer = _last_layer(m)
+    assert layer["type"] == "3d-tiles"
+    assert layer["source"]["ionAssetId"] == 96188
+    assert layer["metadata"]["sourceKind"] == "cesium-ion"
+
+
+def test_add_cesium_ion_imagery(m):
+    m.add_cesium_ion(2, kind="imagery", name="Aerial")
+    layer = _last_layer(m)
+    assert layer["type"] == "raster"
+    assert layer["source"]["ionAssetId"] == 2
+    assert layer["metadata"]["externalNativeLayer"] is True
+
+
 def test_add_video_wraps_single_url(m):
     m.add_video("https://e/a.mp4", [[0, 0], [1, 0], [1, 1], [0, 1]])
     assert _last_layer(m)["source"]["urls"] == ["https://e/a.mp4"]

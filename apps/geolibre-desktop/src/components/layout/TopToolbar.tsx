@@ -2249,6 +2249,7 @@ export function TopToolbar({
           chrome={chrome}
           addLayer={addLayer}
           osmPbfBusy={osmPbf.busy}
+          cesiumPrimary={cesiumPrimary}
           onSetAddDataKind={openAddDataKind}
           onAddGltfModel={() => {
             setAddDataDeckVizKind("scenegraph");

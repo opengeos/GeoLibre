@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { isCesiumOnlyLayer, useAppStore } from "@geolibre/core";
 import { CesiumCanvas, isCesiumSupportedLayerType, SecondaryMapCanvas } from "@geolibre/map";
 import {
   Button,
@@ -227,6 +227,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
             const override = layerVisibility?.[layer.id];
             const visible = override === undefined ? layer.visible : override;
             const only2d = is3d && !isCesiumSupportedLayerType(layer);
+            const only3d = !is3d && isCesiumOnlyLayer(layer);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}
@@ -239,9 +240,9 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
                 onSelect={(event: Event) => event.preventDefault()}
               >
                 <span className="truncate">{layer.name}</span>
-                {only2d ? (
+                {only2d || only3d ? (
                   <span className="ms-auto shrink-0 ps-2 text-xs text-muted-foreground">
-                    {t("mapGrid.only2d")}
+                    {t(only2d ? "mapGrid.only2d" : "mapGrid.only3d")}
                   </span>
                 ) : null}
               </DropdownMenuCheckboxItem>

@@ -132,6 +132,20 @@ export {
 } from "./runtime-env";
 export { isIpadDesktopUserAgent } from "./platform";
 export {
+  CESIUM_ION_QUICK_PICKS,
+  CESIUM_ION_SOURCE_KIND,
+  CESIUM_OSM_BUILDINGS_ASSET_ID,
+  CESIUM_BING_AERIAL_ASSET_ID,
+  cesiumIonAssetId,
+  cesiumIonAssetKind,
+  createCesiumIonLayer,
+  isCesiumIonLayer,
+  isCesiumOnlyLayer,
+  parseCesiumIonAssetId,
+  type CesiumIonAssetKind,
+  type CesiumIonLayerOptions,
+} from "./cesium-ion";
+export {
   GOOGLE_MAPS_API_KEY_HEADER,
   googleMapsApiKeyHeaderValue,
   isGooglePhotorealisticTilesetUrl,

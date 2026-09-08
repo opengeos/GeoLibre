@@ -2637,18 +2637,21 @@ class Map(anywidget.AnyWidget):
 
     def add_3d_tiles(
         self,
-        url: str,
+        url: str | None = None,
         name: str = "3D Tiles",
         *,
+        ion_asset_id: int | None = None,
         altitude_offset: float = 0,
         request_headers: dict[str, str] | None = None,
         **style: Any,
     ) -> str:
-        """Add a 3D Tiles layer from a ``tileset.json`` URL.
+        """Add a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
 
         Args:
-            url: URL of the 3D Tiles ``tileset.json``.
+            url: URL of the 3D Tiles ``tileset.json``. Omit for an Ion asset.
             name: Layer display name.
+            ion_asset_id: A Cesium Ion asset id (for example 96188, Cesium OSM
+                Buildings). Renders on the 3D globe only, with the app's Ion token.
             altitude_offset: Vertical offset applied to the tileset, in meters.
             request_headers: Optional request headers (persisted in the project).
             **style: Style overrides.
@@ -2660,9 +2663,40 @@ class Map(anywidget.AnyWidget):
             _project.three_d_tiles_layer(
                 name,
                 url,
+                ion_asset_id=ion_asset_id,
                 altitude_offset=altitude_offset,
                 request_headers=request_headers,
                 **style,
+            )
+        )
+
+    def add_cesium_ion(
+        self,
+        asset_id: int,
+        name: str = "Cesium Ion asset",
+        *,
+        kind: str = "3d-tiles",
+        altitude_offset: float = 0,
+        **style: Any,
+    ) -> str:
+        """Add a Cesium Ion asset (a 3D Tiles tileset or imagery) by asset id.
+
+        The layer renders on the 3D globe only, which loads it with the app's
+        Cesium Ion token; the token is never written to the project.
+
+        Args:
+            asset_id: The Cesium Ion asset id (a positive integer).
+            name: Layer display name.
+            kind: ``"3d-tiles"`` for a tileset or ``"imagery"`` for an imagery asset.
+            altitude_offset: Vertical offset applied to a tileset, in meters.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.cesium_ion_layer(
+                name, asset_id, kind=kind, altitude_offset=altitude_offset, **style
             )
         )
 

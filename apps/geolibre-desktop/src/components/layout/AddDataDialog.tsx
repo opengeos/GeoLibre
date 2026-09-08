@@ -8,6 +8,7 @@ import { AddDataShellProvider } from "./add-data/context";
 import { KIND_I18N_KEY } from "./add-data/constants";
 import { ArcGISSource } from "./add-data/sources/ArcGISSource";
 import { CadSource } from "./add-data/sources/CadSource";
+import { CesiumIonSource } from "./add-data/sources/CesiumIonSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
@@ -81,6 +82,8 @@ function renderSource(
   switch (kind) {
     case "xyz":
       return <XyzSource initialUrl={initialUrl} />;
+    case "cesium-ion":
+      return <CesiumIonSource />;
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
     case "csw":

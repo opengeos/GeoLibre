@@ -483,7 +483,7 @@ pull back a hidden column or one of GeoLibre's internal ones. Raster pixel ident
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
 | `wms`            | Supported as tiled WMS GetMap layers                                                               |
-| `raster`         | Supported for raster tile templates                                                                |
+| `raster`         | Supported for raster tile templates; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion imagery asset the 3D globe loads with the app's Ion token (3D only) |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
 | `mbtiles`        | Supported in the desktop app through a local MapLibre protocol                                     |
 | `arcgis`         | Supported for ArcGIS VectorTileServer layers (FeatureServer layers are saved as `geojson`, and MapServer/ImageServer layers as `raster`) |
@@ -495,7 +495,7 @@ pull back a hidden column or one of GeoLibre's internal ones. Raster pixel ident
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
 | `duckdb-query`   | Supported for SQL query-result layers                                              |
-| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin                               |
+| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion tileset the 3D globe loads with the app's Ion token (3D only) |
 
 ## API
 
