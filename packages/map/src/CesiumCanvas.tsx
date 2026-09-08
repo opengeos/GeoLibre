@@ -403,7 +403,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         if (cancelled || viewer.isDestroyed()) return;
 
         if (viewId === undefined) {
-          const host = new CesiumControlHost(viewer, container);
+          const host = new CesiumControlHost(viewer, container, Cesium);
           controlHostRef.current = host;
           setPrimaryCesiumControlHost(host);
           // Cesium's native toolbar widgets. Imported

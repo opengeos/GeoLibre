@@ -1,6 +1,20 @@
 import * as maplibregl from "maplibre-gl";
 import type { CesiumWidget } from "@cesium/engine";
 import { useAppStore } from "@geolibre/core";
+import { groundHeightAt, pickGlobeHit } from "./cesium-camera";
+
+/** The Cesium module namespace, injected so this file never imports the engine. */
+type CesiumNs = typeof import("@cesium/engine");
+
+/**
+ * Where {@link CesiumMapFacade.project} puts a coordinate the scene cannot
+ * place: behind the camera, or on the far side of the globe. MapLibre's own
+ * globe projection answers such a point with window coordinates far outside
+ * the canvas rather than with an error, and the controls that call `project`
+ * read the result as "off screen" — so answer the same way instead of
+ * throwing at them mid-render.
+ */
+const OFF_SCREEN_PX = -1e6;
 
 class CesiumMapFacade extends maplibregl.Evented {
   private sources = new Map<string, any>();
@@ -9,6 +23,7 @@ class CesiumMapFacade extends maplibregl.Evented {
   constructor(
     private host: CesiumControlHost,
     private viewer: CesiumWidget,
+    private Cesium: CesiumNs | null,
   ) {
     super();
   }
@@ -92,12 +107,55 @@ class CesiumMapFacade extends maplibregl.Evented {
     return this;
   }
 
-  // Not implemented but required by IControl type definition/plugins in fallback
+  /**
+   * Window coordinates for a geographic position, the globe's answer to
+   * MapLibre's `project` (issue #2262).
+   *
+   * The position is placed on the terrain surface first — `SceneTransforms`
+   * projects a point in the scene, and a coordinate held at ellipsoid zero
+   * would land visibly uphill or downhill of its own ground once terrain is
+   * on. A point the scene cannot place answers {@link OFF_SCREEN_PX} rather
+   * than throwing; see that constant.
+   */
   project(lnglat: maplibregl.LngLatLike) {
-    throw new Error("CesiumControlHost: project not implemented");
+    const C = this.Cesium;
+    const scene = this.scene();
+    const { lng, lat } = maplibregl.LngLat.convert(lnglat);
+    if (!C || !scene) return new maplibregl.Point(OFF_SCREEN_PX, OFF_SCREEN_PX);
+    const height = groundHeightAt(C, this.viewer, lng, lat);
+    const world = C.Cartesian3.fromDegrees(lng, lat, height);
+    const point = C.SceneTransforms.worldToWindowCoordinates(scene, world);
+    return point && Number.isFinite(point.x) && Number.isFinite(point.y)
+      ? new maplibregl.Point(point.x, point.y)
+      : new maplibregl.Point(OFF_SCREEN_PX, OFF_SCREEN_PX);
   }
+
+  /**
+   * The geographic position under a window coordinate — the terrain surface
+   * when terrain is loaded, else the ellipsoid, sharing `pickGlobeHit` with
+   * the cursor readout so both agree on where the ground is.
+   *
+   * A screen point that misses the globe entirely (space, past the horizon)
+   * has no ground coordinate at all. It answers the current view centre: a
+   * defined position inside the scene, which the callers — hit-testing a
+   * pointer that is over the canvas — can carry on with, where a throw would
+   * take down the control's event handler.
+   */
   unproject(point: maplibregl.PointLike) {
-    throw new Error("CesiumControlHost: unproject not implemented");
+    const C = this.Cesium;
+    const scene = this.scene();
+    const p = maplibregl.Point.convert(point);
+    if (!C || !scene) return this.getCenter();
+    const hit = pickGlobeHit(C, this.viewer, { x: p.x, y: p.y });
+    if (!hit) return this.getCenter();
+    const ellipsoid = scene.globe?.ellipsoid ?? C.Ellipsoid.WGS84;
+    const carto = ellipsoid.cartesianToCartographic(hit.position);
+    if (!carto) return this.getCenter();
+    const lng = C.Math.toDegrees(carto.longitude);
+    const lat = C.Math.toDegrees(carto.latitude);
+    return Number.isFinite(lng) && Number.isFinite(lat)
+      ? new maplibregl.LngLat(lng, lat)
+      : this.getCenter();
   }
   getCenter() {
     const view = useAppStore.getState().mapView;
@@ -112,8 +170,38 @@ class CesiumMapFacade extends maplibregl.Evented {
   getPitch() {
     return useAppStore.getState().mapView.pitch;
   }
+  /**
+   * The geographic extent the camera currently sees.
+   *
+   * `computeViewRectangle` has no answer when the globe does not fill enough
+   * of the frustum to bound — looking at space past the limb, or mid-morph
+   * between scene modes. Controls call `getBounds` to *narrow* something (a
+   * catalog search to the viewport, a fetch to the visible tiles), so the
+   * fallback is the whole world: a superset returns more than the view holds,
+   * where a guess or a throw would drop results the user can see.
+   */
   getBounds() {
-    throw new Error("CesiumControlHost: getBounds not implemented");
+    const C = this.Cesium;
+    const scene = this.scene();
+    const rectangle =
+      C && scene?.globe
+        ? this.viewer.camera.computeViewRectangle(scene.globe.ellipsoid)
+        : undefined;
+    if (!C || !rectangle) return new maplibregl.LngLatBounds([-180, -90], [180, 90]);
+    const degrees = C.Math.toDegrees;
+    const west = degrees(rectangle.west);
+    const east = degrees(rectangle.east);
+    // Cesium inverts the pair across the antimeridian; LngLatBounds unwraps it
+    // the way MapExtent does in CesiumEngine.getViewBounds.
+    return new maplibregl.LngLatBounds(
+      [west, degrees(rectangle.south)],
+      [east < west ? east + 360 : east, degrees(rectangle.north)],
+    );
+  }
+
+  /** The live scene, or null once the widget has been destroyed. */
+  private scene() {
+    return this.viewer.isDestroyed?.() ? null : (this.viewer.scene ?? null);
   }
 
   // Throw explicitly for style-spec mutations
@@ -134,9 +222,17 @@ export class CesiumControlHost {
   private controls = new Map<maplibregl.IControl, HTMLElement>();
   private facade: CesiumMapFacade;
 
+  /**
+   * @param viewer The globe this host mounts controls over.
+   * @param containerParent The element the corner containers are appended to.
+   * @param Cesium The engine namespace, for the facade's scene geometry
+   *   (`project` / `unproject` / `getBounds`). Omitting it leaves those
+   *   answering their documented fallbacks rather than throwing.
+   */
   constructor(
     public viewer: CesiumWidget,
     containerParent: HTMLElement,
+    Cesium: CesiumNs | null = null,
   ) {
     this.container = document.createElement("div");
     this.container.className = "maplibregl-control-container";
@@ -157,7 +253,7 @@ export class CesiumControlHost {
     }
 
     containerParent.appendChild(this.container);
-    this.facade = new CesiumMapFacade(this, viewer);
+    this.facade = new CesiumMapFacade(this, viewer, Cesium);
   }
 
   destroy() {

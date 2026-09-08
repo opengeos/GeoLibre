@@ -37,6 +37,72 @@ function makeFakeViewer(document: Document) {
   };
 }
 
+const RADIANS = Math.PI / 180;
+
+/**
+ * A viewer with the scene surface the facade's geometry reads: a globe that
+ * reports a ground height, an ellipsoid that round-trips a cartesian, and a
+ * camera that picks and bounds. `hit` controls whether a screen point lands on
+ * the globe at all.
+ */
+function makeSceneViewer(document: Document, options: { hit?: boolean } = {}) {
+  const canvas = document.createElement("canvas");
+  const hit = options.hit ?? true;
+  const ellipsoid = {
+    // The fake Cartesian3 carries its own degrees, so the round trip is exact.
+    cartesianToCartographic: (position: { lng: number; lat: number }) => ({
+      longitude: position.lng * RADIANS,
+      latitude: position.lat * RADIANS,
+    }),
+  };
+  const scene = {
+    canvas,
+    globe: {
+      ellipsoid,
+      getHeight: () => 120,
+      // The picked cartesian is the fake's own lng/lat pair, so unproject
+      // round-trips it through cartesianToCartographic above.
+      pick: () => (hit ? { lng: 12.5, lat: -3.25 } : undefined),
+    },
+  };
+  return {
+    canvas,
+    scene,
+    camera: {
+      heading: 0,
+      pitch: -Math.PI / 2,
+      getPickRay: (point: { x: number; y: number }) => (hit ? { point } : undefined),
+      pickEllipsoid: () => undefined,
+      computeViewRectangle: () => ({
+        west: -10 * RADIANS,
+        south: -20 * RADIANS,
+        east: 30 * RADIANS,
+        north: 40 * RADIANS,
+      }),
+    },
+    isDestroyed: () => false,
+  };
+}
+
+/** Just enough of `@cesium/engine` for the facade's project/unproject/getBounds. */
+function makeFakeCesium(options: { project?: { x: number; y: number } | undefined } = {}) {
+  return {
+    Math: { toDegrees: (radians: number) => radians / RADIANS },
+    Cartographic: { fromDegrees: (lng: number, lat: number) => ({ lng, lat }) },
+    Cartesian3: {
+      fromDegrees: (lng: number, lat: number, height: number) => ({
+        lng,
+        lat,
+        height,
+      }),
+    },
+    Ellipsoid: { WGS84: {} },
+    SceneTransforms: {
+      worldToWindowCoordinates: () => ("project" in options ? options.project : { x: 400, y: 300 }),
+    },
+  };
+}
+
 describe("CesiumControlHost", () => {
   let doc: Document;
   let parent: HTMLElement;
@@ -288,7 +354,6 @@ describe("CesiumControlHost", () => {
     assert.throws(() => facade.setPaintProperty(), /setPaintProperty is not supported/);
     assert.throws(() => facade.setLayoutProperty(), /setLayoutProperty is not supported/);
     assert.throws(() => facade.getStyle(), /getStyle is not supported/);
-    assert.throws(() => facade.getBounds(), /getBounds not implemented/);
 
     // Source management works
     facade.addSource("test-src", { type: "geojson" });
@@ -296,6 +361,102 @@ describe("CesiumControlHost", () => {
     facade.removeSource("test-src");
     assert.equal(facade.getSource("test-src"), undefined);
 
+    host.destroy();
+  });
+
+  /** Mount a throwaway control just to capture the facade `onAdd` receives. */
+  function facadeOf(host: CesiumControlHost): any {
+    let facade: any = null;
+    host.addControl({
+      onAdd: (map) => {
+        facade = map;
+        return doc.createElement("div");
+      },
+      onRemove: () => {},
+    });
+    return facade;
+  }
+
+  it("projects and unprojects through the Cesium scene", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const facade = facadeOf(host);
+
+    const point = facade.project([-122.4, 37.7]);
+    assert.equal(point.x, 400);
+    assert.equal(point.y, 300);
+
+    const lngLat = facade.unproject([400, 300]);
+    assert.ok(Math.abs(lngLat.lng - 12.5) < 1e-9);
+    assert.ok(Math.abs(lngLat.lat - -3.25) < 1e-9);
+
+    host.destroy();
+  });
+
+  it("answers off-screen for a coordinate the scene cannot place", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    const host = new CesiumControlHost(
+      sceneViewer as never,
+      parent,
+      makeFakeCesium({ project: undefined }) as never,
+    );
+    const facade = facadeOf(host);
+
+    const point = facade.project([-122.4, 37.7]);
+    assert.ok(point.x < 0 && point.y < 0, "a point behind the globe must read as off screen");
+    host.destroy();
+  });
+
+  it("unprojects a screen point that misses the globe to the view centre", () => {
+    const sceneViewer = makeSceneViewer(doc, { hit: false });
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const facade = facadeOf(host);
+
+    const lngLat = facade.unproject([5, 5]);
+    assert.equal(lngLat.lng, -122.4);
+    assert.equal(lngLat.lat, 37.7);
+    host.destroy();
+  });
+
+  it("reads the camera's view rectangle as MapLibre bounds", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const bounds = facadeOf(host).getBounds();
+
+    assert.ok(Math.abs(bounds.getWest() - -10) < 1e-9);
+    assert.ok(Math.abs(bounds.getSouth() - -20) < 1e-9);
+    assert.ok(Math.abs(bounds.getEast() - 30) < 1e-9);
+    assert.ok(Math.abs(bounds.getNorth() - 40) < 1e-9);
+    host.destroy();
+  });
+
+  it("unwraps a view rectangle that crosses the antimeridian", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    // Cesium reports west > east across the seam; MapLibre bounds must not.
+    sceneViewer.camera.computeViewRectangle = () => ({
+      west: (170 * Math.PI) / 180,
+      south: 0,
+      east: (-170 * Math.PI) / 180,
+      north: (10 * Math.PI) / 180,
+    });
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const bounds = facadeOf(host).getBounds();
+
+    assert.ok(Math.abs(bounds.getWest() - 170) < 1e-9);
+    assert.ok(Math.abs(bounds.getEast() - 190) < 1e-9);
+    host.destroy();
+  });
+
+  it("falls back to the whole world when the camera cannot bound the globe", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    sceneViewer.camera.computeViewRectangle = () => undefined as never;
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const bounds = facadeOf(host).getBounds();
+
+    assert.equal(bounds.getWest(), -180);
+    assert.equal(bounds.getSouth(), -90);
+    assert.equal(bounds.getEast(), 180);
+    assert.equal(bounds.getNorth(), 90);
     host.destroy();
   });
 

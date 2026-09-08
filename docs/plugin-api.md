@@ -1125,3 +1125,36 @@ are the reference implementations of this pattern. A plugin bound to the globe
 must restore any scene state it changes on `deactivate`, because both engines
 are rebuilt on a renderer swap and the host re-activates compatible plugins
 against the new one.
+
+### What a MapLibre control gets on the globe
+
+`app.addMapControl` works under Cesium too. The globe mounts the control's DOM
+in the same four `.maplibregl-ctrl-{top,bottom}-{left,right}` corner containers
+over its canvas — so the scoped CSS in `index.css` keeps applying — and hands
+`onAdd` a MapLibre-shaped facade over the Cesium scene rather than a real
+`Map`. The facade answers:
+
+- `getContainer`, `getCanvas`, `isStyleLoaded`, and the `Evented` methods
+  (`on` / `off` / `once` / `fire`).
+- `getCenter`, `getZoom`, `getBearing`, `getPitch` from the store's map view,
+  and `jumpTo` / `flyTo` / `easeTo` by writing it back.
+- `project`, `unproject`, and `getBounds` from the live scene: a coordinate is
+  projected on the terrain surface, a screen point is picked against terrain
+  then the ellipsoid, and the bounds come from the camera's view rectangle. A
+  coordinate the scene cannot place reads as off-screen window coordinates, a
+  screen point that misses the globe unprojects to the view centre, and a
+  camera with no bounded view rectangle reports the whole world — the same
+  shapes MapLibre's globe projection answers with, so a control keeps running
+  instead of throwing mid-render.
+- `setStyle(url)`, routed to the project basemap.
+- `addSource` / `getSource` / `removeSource`, kept in a map on the facade.
+
+Everything that paints through the Mapbox Style Spec — `addLayer`,
+`setPaintProperty`, `setLayoutProperty`, `getStyle` — **throws**. That is the
+honest boundary: a control that draws its own map layers has no globe
+representation, and a silent no-op would leave it reporting success while
+nothing appears. `addMapControl` catches the throw and returns `false`, so a
+control that trips it fails to mount rather than taking plugin activation down
+with it. A plugin whose control needs those methods should keep the default
+`engines: ["maplibre"]` and, if the globe matters, add a Cesium branch through
+`app.getCesiumScene()`.
