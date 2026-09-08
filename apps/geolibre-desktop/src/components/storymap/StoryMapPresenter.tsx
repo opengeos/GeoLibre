@@ -497,14 +497,21 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   // is up: it listens in the capture phase and stops propagation, so on-map
   // panels that also close on Escape (the Legend panel, for one) do not close
   // themselves as a side effect of leaving the story (discussion #2326). An
-  // Escape aimed at an open dialog or menu is left alone so it still dismisses
-  // that surface first.
+  // Escape aimed at an open dialog, menu, or an editable control (the Legend
+  // panel's inline rename and dictionary textarea handle Escape locally) is
+  // left alone so it still dismisses or reverts that surface first.
   useEffect(() => {
     if (!presenting) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) return;
+      if (
+        target?.closest(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="combobox"], input, textarea, select, [contenteditable="true"]',
+        )
+      ) {
+        return;
+      }
       event.stopPropagation();
       exitPresentation();
     };

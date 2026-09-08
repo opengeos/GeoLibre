@@ -79,13 +79,24 @@ describe("store storymapLayerOpacity", () => {
     assert.deepEqual(useAppStore.getState().ui.storymapLayerOpacity, { a: 0, b: 0.5, c: 0 });
   });
 
-  it("keeps the record identity when a write changes nothing", () => {
+  it("keeps the record identity and stays silent when a write changes nothing", () => {
     const store = useAppStore.getState();
     store.setStorymapLayerOpacity({ a: 0.5 });
     const before = useAppStore.getState().ui.storymapLayerOpacity;
-    store.setStorymapLayerOpacity({ a: 0.5 });
-    store.setStorymapLayerOpacity({});
+    let notifications = 0;
+    const unsubscribe = useAppStore.subscribe(() => {
+      notifications += 1;
+    });
+    try {
+      store.setStorymapLayerOpacity({ a: 0.5 });
+      store.setStorymapLayerOpacity({});
+    } finally {
+      unsubscribe();
+    }
     assert.equal(useAppStore.getState().ui.storymapLayerOpacity, before);
+    // Subscribers (the deck overlay, the Legend panel) must not rebuild for a
+    // no-op write.
+    assert.equal(notifications, 0);
   });
 
   it("resets when a presentation starts or ends", () => {

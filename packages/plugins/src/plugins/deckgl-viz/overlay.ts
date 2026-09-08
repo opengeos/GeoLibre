@@ -145,14 +145,22 @@ function renderDeckVizLayers(): void {
   // Fold the active story presentation's fades into each layer's opacity so
   // diagrams and 3D geometry follow a chapter like the MapLibre layers do
   // (discussion #2326). Untouched layers keep their identity, so the
-  // FeatureCollection-keyed atlas/elevation caches still hit.
-  const storeLayers = state.layers.map((layer) =>
-    applyStoryLayerOpacity(layer, state.ui.storymapLayerOpacity),
-  );
-  const vizLayers = storeLayers.filter(isDeckVizLayer);
-  const diagramLayers = storeLayers.filter((layer) => layer.visible && isDiagramLayer(layer));
+  // FeatureCollection-keyed atlas/elevation caches still hit; with no fades
+  // recorded (the common case, including every animation frame outside a
+  // presentation) the store array is used as-is rather than copied.
+  const storyOpacity = state.ui.storymapLayerOpacity;
+  const storeLayers =
+    Object.keys(storyOpacity).length === 0
+      ? state.layers
+      : state.layers.map((layer) => applyStoryLayerOpacity(layer, storyOpacity));
+  // A hidden or fully faded layer has nothing to draw, so it is left out of
+  // every decision below: it must not keep the animation loop, the Mercator
+  // projection, or the diagram view listeners alive on its own.
+  const renderableLayers = storeLayers.filter((layer) => layer.visible && layer.opacity > 0);
+  const vizLayers = renderableLayers.filter(isDeckVizLayer);
+  const diagramLayers = renderableLayers.filter(isDiagramLayer);
   const hasRenderableLayers =
-    vizLayers.length > 0 || diagramLayers.length > 0 || storeLayers.some(isElevation3dLayer);
+    vizLayers.length > 0 || diagramLayers.length > 0 || renderableLayers.some(isElevation3dLayer);
 
   if (!hasRenderableLayers) {
     setSharedDeckLayers("deckviz", []);
@@ -167,7 +175,6 @@ function renderDeckVizLayers(): void {
   ensureMercatorProjection(appRef.getMap?.());
 
   const contexts = vizLayers
-    .filter((layer) => layer.visible)
     .map((layer) => buildContext(layer))
     .filter((entry): entry is RenderEntry => entry !== null);
 
@@ -195,10 +202,7 @@ function renderDeckVizLayers(): void {
   // layers, and feature diagrams interleave exactly as the Layers panel shows
   // them.
   const deckLayers: Layer[] = [];
-  for (const layer of storeLayers) {
-    // A layer a chapter has faded fully out has nothing to draw; skipping it
-    // also spares the diagram declutter pass for the hidden layer.
-    if (!layer.visible || layer.opacity <= 0) continue;
+  for (const layer of renderableLayers) {
     const entry = contextById.get(layer.id);
     try {
       // Diagrams go first so the final reverse() puts them on top of the same

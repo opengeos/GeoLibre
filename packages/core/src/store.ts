@@ -1538,9 +1538,11 @@ export const useAppStore = create<AppState>()(
             next[layerId] = clamped;
             changed = true;
           }
-          // Skip the write when nothing moved: a chapter re-entering the same
-          // opacities would otherwise rebuild every store subscriber's view.
-          return changed ? { ui: { ...s.ui, storymapLayerOpacity: next } } : {};
+          // Return the current state untouched when nothing moved: Zustand only
+          // skips the listener broadcast for the same state reference, and a
+          // chapter re-entering the same opacities would otherwise rebuild
+          // every store subscriber's view.
+          return changed ? { ui: { ...s.ui, storymapLayerOpacity: next } } : s;
         }),
       setStorymapComposing: (chapterId) =>
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
