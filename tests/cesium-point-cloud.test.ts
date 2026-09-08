@@ -172,6 +172,33 @@ describe("loadCopcPointCloud", () => {
     assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
   });
 
+  it("treats a cloud whose nodes disagree on colour as colourless", async () => {
+    const fake = fakeCopc({ color: true });
+    let views = 0;
+    const mixed: CopcModule = {
+      Copc: {
+        ...fake.module.Copc,
+        loadPointDataView: async (source, copc, n, options) => {
+          const view = await fake.module.Copc.loadPointDataView(source, copc, n, options);
+          // The second node carries no RGB.
+          if (views++ === 1) {
+            const { Red: _r, Green: _g, Blue: _b, ...rest } = view.dimensions;
+            return { ...view, dimensions: rest };
+          }
+          return view;
+        },
+      },
+    };
+    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+      copc: mixed,
+      budget: 550,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+    });
+    assert.equal(cloud.count, 500);
+    assert.equal(cloud.colors, null, "no point is left black");
+  });
+
   it("reads only up to the budget from a first node bigger than the budget", async () => {
     const fake = fakeCopc();
     const budget = 60;

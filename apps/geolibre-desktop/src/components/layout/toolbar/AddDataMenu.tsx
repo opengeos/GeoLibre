@@ -96,7 +96,9 @@ export function AddDataMenu({
     lidar: { onSelect: addLayer.lidar },
     splatting: { onSelect: addLayer.splatting },
     "3d-tiles": { onSelect: addLayer.threeDTiles },
-    "gltf-model": { onSelect: onAddGltfModel },
+    // The glTF model opens the same deck.gl scenegraph builder, so it is
+    // gated the way "deckgl-viz" is.
+    "gltf-model": { onSelect: onAddGltfModel, disabled: !capabilities.customLayers },
     duckdb: { onSelect: addLayer.duckdb },
     postgres: { onSelect: () => onSetAddDataKind("postgres") },
     iceberg: { onSelect: () => onSetAddDataKind("iceberg") },

@@ -233,7 +233,11 @@ export async function loadCopcPointCloud(
   if (keys.length) truncated = true;
 
   const positions = new Float64Array(planned * 3);
-  let colors: Uint8Array | null = null;
+  // A LAS file has one point record format, so the first node decides whether
+  // the cloud carries RGB and the buffer is allocated up front. Should a node
+  // ever disagree, the cloud is treated as colourless rather than leaving
+  // those points black: `undefined` until the first node, `null` for no colour.
+  let colors: Uint8Array | null | undefined;
   let count = 0;
   let zMin = Number.POSITIVE_INFINITY;
   let zMax = Number.NEGATIVE_INFINITY;
@@ -249,10 +253,11 @@ export async function loadCopcPointCloud(
     const z = view.getter("Z");
     const hasColor =
       "Red" in view.dimensions && "Green" in view.dimensions && "Blue" in view.dimensions;
-    const r = hasColor ? view.getter("Red") : null;
-    const g = hasColor ? view.getter("Green") : null;
-    const b = hasColor ? view.getter("Blue") : null;
-    if (hasColor && !colors) colors = new Uint8Array(planned * 3);
+    if (colors === undefined) colors = hasColor ? new Uint8Array(planned * 3) : null;
+    else if (hasColor !== (colors !== null)) colors = null;
+    const r = colors ? view.getter("Red") : null;
+    const g = colors ? view.getter("Green") : null;
+    const b = colors ? view.getter("Blue") : null;
     for (let i = 0; i < view.pointCount && count < planned; i++) {
       const [lng, lat] = project(x(i), y(i));
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
