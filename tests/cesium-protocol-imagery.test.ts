@@ -305,6 +305,39 @@ describe("createCogImageryProvider", () => {
     assert.deepEqual(renders[0], [12, 3, 5, { bidx: [1], colormap: "gray", rescale: [[20, 220]] }]);
   });
 
+  it("discards a tile whose render outlived the provider without decoding it", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let decoded = 0;
+    const tiler: CogTilerModule = {
+      openCog: async () =>
+        ({
+          boundsLonLat: [-122.3, 37.8, -122.2, 37.9],
+          statistics: async () => ({}),
+          renderTileRGBA: async () => {
+            // cog-tiler-wasm 0.3.5 cannot be interrupted, so the render runs
+            // to completion; the provider must drop the result afterwards.
+            await gate;
+            return new Uint8Array(256 * 256 * 4).fill(255);
+          },
+        }) as never,
+    };
+    const provider = await createCogImageryProvider(
+      Cesium,
+      tiler,
+      cogLayer({}, { mode: "single", bands: [1], colormap: "gray", rescale: [[0, 1]] }),
+      async (rgba, size) => {
+        decoded++;
+        return fakeTile(`${size}:${rgba[0]}`);
+      },
+    );
+    const pending = provider.requestImage(0, 0, 1) as Promise<unknown>;
+    provider.destroy();
+    release();
+    await assert.rejects(pending);
+    assert.equal(decoded, 0, "the abandoned render is not decoded into a bitmap");
+  });
+
   it("refuses a layer with nothing readable", async () => {
     const tiler: CogTilerModule = { openCog: async () => ({}) as never };
     await assert.rejects(

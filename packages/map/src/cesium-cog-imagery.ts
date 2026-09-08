@@ -219,14 +219,18 @@ export async function createCogImageryProvider(
     // The tiler decodes on the main thread; keep the globe from queueing a
     // whole screen of tiles at once.
     maxConcurrentRequests: 4,
-    loadImage: async (tileUrl) => {
+    loadImage: async (tileUrl, signal) => {
       const [z, x, y] = tileUrl
         .slice(tileUrl.indexOf("//") + 2)
         .split("/")
         .slice(1)
         .map(Number);
+      // The WASM render cannot be interrupted once started (cog-tiler-wasm
+      // 0.3.5 takes no signal), so a tile the provider has already abandoned
+      // is skipped before the render rather than rendered and discarded.
+      if (signal?.aborted) return null;
       const rgba = await source.renderTileRGBA(z, x, y, render);
-      if (!rgba || rgba.length === 0) return null;
+      if (signal?.aborted || !rgba || rgba.length === 0) return null;
       return tileRenderer(rgba, size);
     },
   });

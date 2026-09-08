@@ -1702,10 +1702,12 @@ export class CesiumLayerSync {
     if (!handle) return;
     if (entry.kind === "imagery") {
       const imagery = handle as ImageryLayer;
-      this.viewer.imageryLayers.remove(imagery, true);
       // Cesium destroys the layer but not its provider; a bridged provider
       // holds an abort controller for the handler requests still in flight.
+      // Read the provider before the layer is destroyed, so the abort never
+      // depends on what `destroy()` leaves behind.
       const provider = imagery.imageryProvider as { destroy?: () => void } | undefined;
+      this.viewer.imageryLayers.remove(imagery, true);
       if (provider instanceof ProtocolImageryProvider) provider.destroy();
     } else if (entry.kind === "geojson") {
       this.viewer.dataSources.remove(handle as DataSource, true);
