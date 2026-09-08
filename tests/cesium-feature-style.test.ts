@@ -545,7 +545,15 @@ describe("CesiumLayerSync channel routing", () => {
     await f.flush();
     assert.equal(f.dataSources.length, 1);
     sync.sync([
-      { ...layer, style: { heatmapRadius: 50, pointRenderer: "heatmap", diagramSize: 30 } },
+      {
+        ...layer,
+        style: {
+          heatmapRadius: 50,
+          pointRenderer: "heatmap",
+          diagramSize: 30,
+          blendMode: "multiply",
+        },
+      },
     ]);
     await f.flush();
     await f.flush();

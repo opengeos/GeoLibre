@@ -406,19 +406,16 @@ function entryKind(layer: GeoLibreLayer): EntryKind {
  * Opacity is the hot path (a slider drag), and the fill opacity is a resolver
  * channel the in-place pass re-reads, so neither forces a reload.
  */
-const IN_PLACE_STYLE_KEYS: ReadonlySet<string> = new Set([
-  "fillOpacity",
-  "extrusionOpacity",
-  "blendMode",
-]);
+const IN_PLACE_STYLE_KEYS: ReadonlySet<string> = new Set(["fillOpacity", "extrusionOpacity"]);
 
 /**
- * Style keys the globe never reads: the 2D map's heatmap, diagram, inverted
- * fill, geometry generator, and line-decoration detail settings. Editing one
- * must not tear down and reload the data source. Anything not listed here or
- * in {@link IN_PLACE_STYLE_KEYS} rebuilds when it changes.
+ * Style keys the globe never reads: the 2D map's blend mode, heatmap, diagram,
+ * inverted fill, geometry generator, and line-decoration detail settings.
+ * Editing one must not tear down and reload the data source. Anything not
+ * listed here or in {@link IN_PLACE_STYLE_KEYS} rebuilds when it changes.
  */
 const GLOBE_IGNORED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  "blendMode",
   "pointRenderer",
   "heatmapRadius",
   "heatmapIntensity",
