@@ -433,13 +433,12 @@ const IN_PLACE_STYLE_KEYS: ReadonlySet<string> = new Set(["fillOpacity", "extrus
  */
 const GLOBE_IGNORED_STYLE_KEYS: ReadonlySet<string> = new Set([
   "blendMode",
-  "pointRenderer",
+  // `pointRenderer`, `clusterRadius`, and `clusterMaxZoom` are read by the
+  // clustering path (issue #2282) and so still rebuild.
   "heatmapRadius",
   "heatmapIntensity",
   "heatmapColorRamp",
   "heatmapWeightProperty",
-  "clusterRadius",
-  "clusterMaxZoom",
   "diagramType",
   "diagramFields",
   "diagramSizeMode",

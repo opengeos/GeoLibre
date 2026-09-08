@@ -258,7 +258,9 @@ export function buildPointBatch(
       collection.add({
         position: Cesium.Cartesian3.fromDegrees(lng, lat, Number.isFinite(z) ? z : 0),
         pixelSize: symbol.radius * 2,
-        color: Cesium.Color.fromCssColorString(symbol.fill).withAlpha(symbol.fillOpacity * opacity),
+        color: Cesium.Color.fromCssColorString(symbol.pointFill).withAlpha(
+          symbol.pointFillOpacity * opacity,
+        ),
         outlineColor: Cesium.Color.fromCssColorString(symbol.outline).withAlpha(
           symbol.strokeOpacity * opacity,
         ),
@@ -293,8 +295,8 @@ export function restylePointBatch(
       lastIndex = ref.index;
     }
     point.pixelSize = symbol.radius * 2;
-    point.color = Cesium.Color.fromCssColorString(symbol.fill).withAlpha(
-      symbol.fillOpacity * opacity,
+    point.color = Cesium.Color.fromCssColorString(symbol.pointFill).withAlpha(
+      symbol.pointFillOpacity * opacity,
     );
     point.outlineColor = Cesium.Color.fromCssColorString(symbol.outline).withAlpha(
       symbol.strokeOpacity * opacity,

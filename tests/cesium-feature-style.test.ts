@@ -545,12 +545,13 @@ describe("CesiumLayerSync channel routing", () => {
     await f.flush();
     assert.equal(f.dataSources.length, 1);
     sync.sync([
+      // (`pointRenderer` is read by the clustering path, so it is not among them.)
       {
         ...layer,
         style: {
           heatmapRadius: 50,
-          pointRenderer: "heatmap",
           diagramSize: 30,
+          invertedFillEnabled: true,
           blendMode: "multiply",
         },
       },
