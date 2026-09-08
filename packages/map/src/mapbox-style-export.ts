@@ -6,10 +6,10 @@ import {
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
+  documentLocale,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
-import { documentLocale } from "./document-locale";
 import { detectGeometryProfile } from "./geojson-loader";
 import {
   circlePaint,

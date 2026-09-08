@@ -3,11 +3,11 @@ import {
   DEFAULT_LAYER_STYLE,
   formatLabelNumber,
   type GeoLibreLayer,
+  documentLocale,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
 import type { Cartesian3, CesiumWidget, DistanceDisplayCondition, Entity } from "@cesium/engine";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
-import { documentLocale } from "./document-locale";
 
 /** Whether a label expression reads `["zoom"]`, so its text changes with the camera. */
 const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
@@ -69,8 +69,12 @@ export function createCesiumLabeler(
     cachedZoom = readZoom();
     return cachedZoom;
   };
-  const locale = documentLocale();
+  // Read per call rather than closing over one value: a UI language switch does
+  // not change the layer object, so it never rebuilds the data source and this
+  // labeler outlives it. Capturing would leave "Match app language" labels on
+  // the previous language's separators until some unrelated change rebuilt.
   const readText = (feature: Feature, zoom: number): string => {
+    const locale = documentLocale();
     let value: unknown = feature.properties?.[labels.field];
     let fromExpression = false;
     if (expression.evaluate) {

@@ -86,14 +86,22 @@ function labelNumberFormatter(locale: string | undefined, decimals: number): Int
  */
 function glyphSafeLocale(tag: string): boolean {
   try {
-    const sample = new Intl.NumberFormat(tag, {
+    const format = new Intl.NumberFormat(tag, {
       useGrouping: true,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(LABEL_NUMBER_SAMPLE);
-    for (const char of sample) {
-      const code = char.codePointAt(0) ?? 0;
-      if (code >= 0x80 && code !== 0x00a0) return false;
+    });
+    // Both signs: sv-SE, fi-FI and nb-NO group with U+00A0 (safe) but write
+    // negatives with U+2212 MINUS SIGN, so a positive-only check would pass
+    // them and then blank-box every negative label.
+    for (const sample of [
+      format.format(LABEL_NUMBER_SAMPLE),
+      format.format(-LABEL_NUMBER_SAMPLE),
+    ]) {
+      for (const char of sample) {
+        const code = char.codePointAt(0) ?? 0;
+        if (code >= 0x80 && code !== 0x00a0) return false;
+      }
     }
     return true;
   } catch {

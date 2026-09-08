@@ -18,6 +18,7 @@ import {
   type LabelStyle,
   type LayerStyle,
   validateMapExpression,
+  documentLocale,
 } from "@geolibre/core";
 import {
   normalizePMTilesUrl,
@@ -64,7 +65,6 @@ import {
   sourceId,
   textLayerId,
 } from "./geojson-loader";
-import { documentLocale } from "./document-locale";
 import { buildDedupedLabelFeatures } from "./label-dedup";
 import {
   buildGeneratedGeometry,

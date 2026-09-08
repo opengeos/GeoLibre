@@ -9,9 +9,9 @@ import {
   type FieldVisibility,
   type LayerPopupConfig,
   type PopupRow,
+  documentLocale,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
-import { documentLocale } from "./document-locale";
 
 /**
  * The author's popup design for a layer, plus what the renderer needs to apply

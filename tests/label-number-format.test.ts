@@ -224,6 +224,15 @@ describe("label number formatting", () => {
     assert.equal(formatLabelNumber(1234, labels({ numberFormatEnabled: true }), "fr-FR"), "1,234");
   });
 
+  it("refuses a locale whose negative sign the map cannot draw", () => {
+    // sv-SE, fi-FI and nb-NO group with U+00A0 (safe) but write negatives with
+    // U+2212 MINUS SIGN, so checking only a positive sample would let them
+    // through and blank-box every negative label.
+    for (const tag of ["sv-SE", "fi-FI", "nb-NO"]) {
+      assert.equal(resolveLabelNumberLocale(tag), undefined, tag);
+    }
+  });
+
   it("resolves the effective locale the same way for every path", () => {
     assert.equal(resolveLabelNumberLocale("en-US"), "en-US");
     assert.equal(resolveLabelNumberLocale("not a locale"), undefined);

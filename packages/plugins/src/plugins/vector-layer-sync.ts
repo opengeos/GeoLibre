@@ -11,6 +11,8 @@ import {
   type LayerStyle,
   type VectorColorValue,
   useAppStore,
+  documentLocale,
+  resolveLabelNumberLocale,
 } from "@geolibre/core";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
@@ -788,7 +790,11 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     labelAllowOverlap: style.labels.allowOverlap,
     labelNumberFormat: style.labels.numberFormatEnabled,
     labelNumberDecimals: style.labels.numberDecimals,
-    labelNumberLocale: style.labels.numberLocale,
+    // Resolve the "match app language" sentinel here rather than pushing the
+    // empty string: the control would hand "" to Intl as the runtime default,
+    // which is the browser's locale, not GeoLibre's UI language. layer-sync
+    // resolves it the same way for its own layers, so both paths agree.
+    labelNumberLocale: resolveLabelNumberLocale(style.labels.numberLocale, documentLocale()) ?? "",
   };
 }
 
