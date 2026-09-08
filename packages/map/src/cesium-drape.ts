@@ -76,8 +76,21 @@ export function isDrapedLayer(layer: GeoLibreLayer): boolean {
  * of these rebuilds the imagery layer rather than restyling it in place.
  */
 export function drapeSignature(layers: readonly GeoLibreLayer[]): string {
-  return JSON.stringify(
-    layers.map((layer) => [
+  return layers.map(layerSignature).join("\n");
+}
+
+/**
+ * One layer's slice of the signature, memoised on the layer object: the store
+ * replaces a layer record when it changes, so an unchanged record (the common
+ * case, `sync()` also running on unrelated edits) costs a WeakMap lookup rather
+ * than a re-serialisation of its style, source, and metadata.
+ */
+const layerSignatures = new WeakMap<GeoLibreLayer, string>();
+
+function layerSignature(layer: GeoLibreLayer): string {
+  let signature = layerSignatures.get(layer);
+  if (signature === undefined) {
+    signature = JSON.stringify([
       layer.id,
       layer.type,
       layer.visible,
@@ -89,8 +102,10 @@ export function drapeSignature(layers: readonly GeoLibreLayer[]): string {
       layer.quickFilters,
       layer.timeFilter,
       layer.embedFilter,
-    ]),
-  );
+    ]);
+    layerSignatures.set(layer, signature);
+  }
+  return signature;
 }
 
 /** Centre of a Web Mercator tile, in degrees. */

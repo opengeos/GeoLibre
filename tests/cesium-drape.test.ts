@@ -123,6 +123,17 @@ describe("isDrapedLayer", () => {
     );
     assert.equal(drapeSignature([a]), drapeSignature([{ ...a }]));
   });
+
+  it("serialises an unchanged layer record once", () => {
+    const a = vectorTiles();
+    const nested = a.style as { fillColor?: string };
+    const first = drapeSignature([a]);
+    // Mutating the record in place is not how the store changes a layer (it
+    // replaces the record), so the memoised signature is returned as is.
+    nested.fillColor = "#123456";
+    assert.equal(drapeSignature([a]), first);
+    assert.notEqual(drapeSignature([{ ...a }]), first, "a new record is serialised afresh");
+  });
 });
 
 describe("observeDrapeErrors", () => {
