@@ -376,4 +376,31 @@ describe("CesiumLayerSync point rendering", () => {
     sync.sync([]);
     assert.equal(clustering.enabled, false, "removal switches the clusterer off");
   });
+
+  it("re-clusters when an in-place restyle changes the bubbles' appearance", async () => {
+    const f = makeViewer();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 5);
+    const layer = pointLayer(20, { style: { pointRenderer: "cluster" } });
+    sync.sync([layer]);
+    await f.flush();
+    await f.flush();
+    const clustering = f.dataSources[0].clustering;
+    let enabled = clustering.enabled;
+    const writes: boolean[] = [];
+    Object.defineProperty(clustering, "enabled", {
+      get: () => enabled,
+      set: (value: boolean) => {
+        writes.push(value);
+        enabled = value;
+      },
+    });
+    // An unrelated sync leaves the clusterer alone.
+    sync.sync([layer]);
+    assert.deepEqual(writes, []);
+    // An opacity edit restyles in place, and the bubbles must follow without
+    // a camera move: the clusterer is dirtied by an off/on flip.
+    sync.sync([{ ...layer, opacity: 0.5 }]);
+    assert.deepEqual(writes, [false, true]);
+    assert.equal(enabled, true);
+  });
 });

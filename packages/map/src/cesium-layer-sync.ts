@@ -1756,10 +1756,6 @@ export class CesiumLayerSync {
 
   /**
    * Evaluate a layer's composed feature filter (timeFilter, embedFilter, quickFilters,
-   * rule-based visibility) against each GeoJSON entity, toggling `entity.show` in place.
-   */
-  /**
-   * Evaluate a layer's composed feature filter (timeFilter, embedFilter, quickFilters,
    * rule-based visibility) against each entity — or each batched point primitive —
    * toggling its `show` in place.
    */
@@ -2015,6 +2011,10 @@ export class CesiumLayerSync {
         entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
       }
     }
+    // Cluster bubbles read the appearance when they form, so an in-place
+    // restyle (an opacity drag, a story fade) re-clusters to pick it up
+    // instead of waiting for the camera to move.
+    entry.cluster?.refresh();
   }
 
   /**

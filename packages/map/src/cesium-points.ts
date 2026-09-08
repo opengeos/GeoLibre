@@ -1,11 +1,5 @@
 import { DEFAULT_LAYER_STYLE, styleValue, type GeoLibreLayer } from "@geolibre/core";
-import type {
-  Cartesian3,
-  DataSource,
-  Entity,
-  PointPrimitive,
-  PointPrimitiveCollection,
-} from "@cesium/engine";
+import type { DataSource, Entity, PointPrimitive, PointPrimitiveCollection } from "@cesium/engine";
 import type { Feature } from "geojson";
 import type { FeatureStyleResolver } from "./cesium-feature-style";
 
@@ -89,6 +83,23 @@ function isPointFeature(feature: Feature): boolean {
 }
 
 /**
+ * Whether a collection holds only points, remembered per collection object.
+ * The plan is consulted on every sync tick for every layer (through
+ * `entryKind`/`needsRebuild`), and the store swaps the collection object on
+ * any feature edit, so the scan runs once per collection rather than once per
+ * tick over the very large layers batching exists for.
+ */
+const pointsOnlyByCollection = new WeakMap<object, boolean>();
+
+function allPoints(collection: object, features: readonly Feature[]): boolean {
+  const known = pointsOnlyByCollection.get(collection);
+  if (known !== undefined) return known;
+  const result = features.every(isPointFeature);
+  pointsOnlyByCollection.set(collection, result);
+  return result;
+}
+
+/**
  * Decide the point rendering for a layer. Clustering and batching are for
  * point-only layers, as on the 2D map; a layer that also carries lines or
  * polygons keeps the entity path for all of it. Markers, extrusion, and true
@@ -98,7 +109,7 @@ function isPointFeature(feature: Feature): boolean {
 export function planPointRendering(layer: GeoLibreLayer): PointRenderPlan {
   const style = { ...DEFAULT_LAYER_STYLE, ...layer.style };
   const features = layer.geojson?.features ?? [];
-  const pointsOnly = features.length > 0 && features.every(isPointFeature);
+  const pointsOnly = features.length > 0 && allPoints(layer.geojson!, features);
   const renderer = styleValue(style, "pointRenderer");
   const cluster = pointsOnly && renderer === "cluster";
   const batched =
@@ -239,13 +250,11 @@ export function buildPointBatch(
 ): PointPrimitiveCollection {
   const collection = new Cesium.PointPrimitiveCollection();
   const features = layer.geojson?.features ?? [];
-  const positions: Cartesian3[] = [];
   for (let index = 0; index < features.length; index++) {
     const feature = features[index];
     const symbol = resolver.resolve(feature, zoom);
     for (const [lng, lat, z] of pointCoordinates(feature)) {
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      positions.length = 0;
       collection.add({
         position: Cesium.Cartesian3.fromDegrees(lng, lat, Number.isFinite(z) ? z : 0),
         pixelSize: symbol.radius * 2,
