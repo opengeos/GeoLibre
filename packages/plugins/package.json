@@ -41,7 +41,7 @@
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@turf/union": "^7.4.0",
     "a5-js": "^0.10.0",
-    "cog-tiler-wasm": "^0.3.5",
+    "cog-tiler-wasm": "^0.3.6",
     "dggal": "^0.0.6",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.8.16",
