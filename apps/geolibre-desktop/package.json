@@ -97,7 +97,7 @@
     "maplibre-gl-swipe": "^0.11.2",
     "maplibre-gl-time-slider": "^1.8.7",
     "maplibre-gl-usgs-lidar": "^0.11.5",
-    "maplibre-gl-vector": "^0.10.13",
+    "maplibre-gl-vector": "^0.11.0",
     "openai": "^7.10.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",

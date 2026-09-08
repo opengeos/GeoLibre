@@ -755,7 +755,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     // an empty labelField clears it.
     //
     // Only field-based labeling is wired here. LabelStyle.expression,
-    // .minZoom, and .maxZoom have no maplibre-gl-vector@0.8.0 equivalent, so
+    // .minZoom, and .maxZoom have no maplibre-gl-vector equivalent, so
     // they are intentionally left out of this mapping, out of vectorStylesEqual,
     // and out of savedVectorStyle. The shared Style panel still shows those
     // controls, but for a control-managed layer they are no-ops; adding them
@@ -768,6 +768,9 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     labelHaloWidth: style.labels.haloWidth,
     labelPlacement: style.labels.placement,
     labelAllowOverlap: style.labels.allowOverlap,
+    labelNumberFormat: style.labels.numberFormatEnabled,
+    labelNumberDecimals: style.labels.numberDecimals,
+    labelNumberLocale: style.labels.numberLocale,
   };
 }
 
@@ -847,6 +850,12 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
         typeof style.labelHaloWidth === "number" ? style.labelHaloWidth : defaults.haloWidth,
       placement: style.labelPlacement === "line" ? "line" : "point",
       allowOverlap: style.labelAllowOverlap ?? defaults.allowOverlap,
+      numberFormatEnabled: style.labelNumberFormat ?? defaults.numberFormatEnabled,
+      numberDecimals:
+        typeof style.labelNumberDecimals === "number"
+          ? style.labelNumberDecimals
+          : defaults.numberDecimals,
+      numberLocale: style.labelNumberLocale ?? defaults.numberLocale,
     };
   }
 
@@ -901,7 +910,10 @@ function vectorStylesEqual(left: VectorLayerStyle, right: VectorLayerStyle): boo
     left.labelHaloColor === right.labelHaloColor &&
     left.labelHaloWidth === right.labelHaloWidth &&
     left.labelPlacement === right.labelPlacement &&
-    left.labelAllowOverlap === right.labelAllowOverlap
+    left.labelAllowOverlap === right.labelAllowOverlap &&
+    left.labelNumberFormat === right.labelNumberFormat &&
+    left.labelNumberDecimals === right.labelNumberDecimals &&
+    left.labelNumberLocale === right.labelNumberLocale
   );
 }
 
