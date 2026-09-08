@@ -709,3 +709,20 @@ def test_a_tooltip_field_also_narrows_the_click_popup():
     # Documented consequence of the app's schema: the tooltip and the click
     # popup share `fields`, and a non-empty list is what the click popup shows.
     assert project.normalize_popup(None, "name")["fields"] == [{"field": "name", "hover": True}]
+
+
+def test_popup_field_format_block_rejects_a_field_level_flag():
+    # `hover` is a field-level flag, not a format concern; accepting it inside
+    # `format` would be a hole in the reject-what-you-do-not-recognize rule.
+    with pytest.raises(ValueError, match="unknown popup field format key 'hover'"):
+        project.normalize_popup([{"field": "x", "format": {"hover": True}}])
+
+
+def test_popup_field_rejects_a_fractional_decimals():
+    # Truncating to 2 would format to a precision nobody asked for.
+    with pytest.raises(ValueError, match="decimals must be a whole number"):
+        project.popup_field("pop", kind="number", decimals=2.9)
+
+
+def test_popup_field_accepts_an_integral_float_for_decimals():
+    assert project.popup_field("pop", kind="number", decimals=2.0)["format"]["decimals"] == 2

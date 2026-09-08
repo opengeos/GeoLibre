@@ -561,7 +561,15 @@ def popup_field(
 
     fmt: dict[str, Any] = {}
     if decimals is not None:
-        digits = int(decimals)
+        # Truncating 2.9 to 2 would quietly format to a precision the caller
+        # never asked for, which the range check below would not catch either.
+        try:
+            digits = int(decimals)
+            exact = digits == decimals
+        except (TypeError, ValueError):
+            exact = False
+        if not exact:
+            raise ValueError(f"decimals must be a whole number, got {decimals!r}")
         # Intl.NumberFormat throws outside 0-20, which would take the whole
         # popup render down rather than mis-format one cell.
         if not 0 <= digits <= 20:
@@ -610,7 +618,13 @@ def _coerce_popup_field(entry: Any) -> dict[str, Any]:
                 raise ValueError("popup field 'format' must be a mapping")
             for fmt_key, fmt_value in value.items():
                 fmt_mapped = _POPUP_FIELD_KEYS.get(_normalize_key(fmt_key))
-                if fmt_mapped is None or fmt_mapped in ("field", "label", "kind", "format"):
+                if fmt_mapped is None or fmt_mapped in (
+                    "field",
+                    "label",
+                    "kind",
+                    "hover",
+                    "format",
+                ):
                     raise ValueError(f"unknown popup field format key {fmt_key!r}")
                 kwargs.setdefault(fmt_mapped, fmt_value)
         else:
