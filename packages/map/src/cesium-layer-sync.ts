@@ -1156,7 +1156,13 @@ export class CesiumLayerSync {
       // layers), so store order maps to Cesium's bottom-to-top stacking.
       const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
       if (entry.cancelled) {
+        // Unreachable today: nothing awaits between the check above and here,
+        // so `cancelled` cannot flip. Kept as the guard it was written to be,
+        // and tearing the provider down the way destroyEntry does, so adding an
+        // await in between cannot silently start leaking a bridged provider's
+        // abort controller and the handler requests still in flight.
         viewer.imageryLayers.remove(imageryLayer, true);
+        if (provider instanceof ProtocolImageryProvider) provider.destroy();
         return;
       }
       this.imageryRefs.set(imageryLayer, layer.id);
