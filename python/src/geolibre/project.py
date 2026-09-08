@@ -701,11 +701,20 @@ def _assert_tooltip_can_render(config: dict[str, Any]) -> None:
     """
     if config.get("hover") is not True:
         return
-    fields = config.get("fields") or []
-    if any(isinstance(entry, dict) and entry.get("hover") is True for entry in fields):
-        return
     if config.get("titleField") or config.get("titleExpression"):
         return
+    fields = [entry for entry in (config.get("fields") or []) if isinstance(entry, dict)]
+    hovered = [entry for entry in fields if entry.get("hover") is True]
+    # An image row is dropped from the hover subset by resolvePopupRows (its
+    # value is a URL, which would print as the tip's whole body), so flagging
+    # only image fields leaves the same empty tip as flagging none.
+    if any(entry.get("kind") != "image" for entry in hovered):
+        return
+    if hovered:
+        raise ValueError(
+            "the hover tooltip is on but only image fields are flagged for it, and an "
+            "image never renders in a tooltip; flag a text field too, or set a popup title"
+        )
     raise ValueError(
         "the hover tooltip is on but nothing would render in it: name the fields to "
         "show (tooltip=['name']), set a popup title, or turn it off (tooltip=False)"
@@ -726,7 +735,10 @@ def apply_tooltip(config: dict[str, Any], tooltip: Any) -> dict[str, Any]:
         config: The popup config being built (mutated in place).
         tooltip: ``True``/``False`` to flag every configured field or turn the
             tooltip off, or a property name or sequence of names to flag. An
-            empty sequence means the same as ``False``.
+            empty sequence means the same as ``False``. Note that naming a
+            field here adds it to ``fields``, and a non-empty ``fields`` is
+            also what the *click* popup shows -- so a tooltip field on a popup
+            that had no field list narrows the click popup to it.
 
     Returns:
         The same ``config``.

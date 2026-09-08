@@ -1134,7 +1134,10 @@ class Map(anywidget.AnyWidget):
             show_feature_id: ``False`` drops the synthetic ``id`` row.
             tooltip: Hover shorthand -- a property name, a sequence of names,
                 ``True`` to flag every configured field, or ``False`` to turn
-                the tooltip off.
+                the tooltip off. The tooltip and the click popup share one
+                field list, so naming a tooltip field on a popup that had none
+                also narrows the click popup to it; pass ``fields`` too to keep
+                the click popup full.
             merge: Merge into the layer's existing popup config rather than
                 replacing it.
 
@@ -1155,23 +1158,23 @@ class Map(anywidget.AnyWidget):
             ... )
         """
         handle = self._resolve_layer(layer)
-        config = _project.popup_config(
-            fields,
-            click=click,
-            hover=hover,
-            title=title,
-            title_expression=title_expression,
-            body_expression=body_expression,
-            show_feature_id=show_feature_id,
+        # Delegate rather than re-deriving the merge: authoring.set_popup is the
+        # one implementation the MCP server uses too, so the two cannot drift.
+        self._update_project(
+            lambda project: _authoring.set_popup(
+                project,
+                handle.id,
+                fields,
+                click=click,
+                hover=hover,
+                title=title,
+                title_expression=title_expression,
+                body_expression=body_expression,
+                show_feature_id=show_feature_id,
+                tooltip=tooltip,
+                merge=merge,
+            )
         )
-
-        def _apply(target: dict[str, Any]) -> None:
-            merged = config
-            if merge and isinstance(target.get("popup"), dict):
-                merged = {**copy.deepcopy(target["popup"]), **config}
-            target["popup"] = _project.apply_tooltip(copy.deepcopy(merged), tooltip)
-
-        self._mutate_layer(handle.id, _apply)
         return handle.popup
 
     def set_tooltip(self, layer: str | Layer, fields: Any = True) -> dict[str, Any]:
@@ -1181,7 +1184,9 @@ class Map(anywidget.AnyWidget):
             layer: The layer, by id, name, or handle.
             fields: A property name, a sequence of names, ``True`` to use every
                 field the layer's popup already configures, or ``False`` to
-                turn the tooltip off.
+                turn the tooltip off. On a layer whose popup configures no
+                fields, naming one here also narrows the click popup to it --
+                see :meth:`set_popup`.
 
         Returns:
             The layer's popup config after the change.
@@ -1191,7 +1196,7 @@ class Map(anywidget.AnyWidget):
     def clear_popup(self, layer: str | Layer) -> None:
         """Drop a layer's popup config, restoring the default popup."""
         handle = self._resolve_layer(layer)
-        self._mutate_layer(handle.id, lambda target: target.pop("popup", None))
+        self._update_project(lambda project: _authoring.clear_popup(project, handle.id))
 
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.

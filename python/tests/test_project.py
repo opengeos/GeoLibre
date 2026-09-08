@@ -689,3 +689,23 @@ def test_normalize_popup_rejects_a_value_that_is_not_a_field_spec():
 def test_tooltip_rejects_a_value_that_is_not_a_name_or_sequence():
     with pytest.raises(ValueError, match="tooltip must be True/False"):
         project.normalize_popup(["a"], tooltip=42)
+
+
+def test_tooltip_only_image_fields_is_rejected():
+    # resolvePopupRows drops image rows from the hover subset, so flagging only
+    # an image leaves the same empty tip as flagging nothing.
+    with pytest.raises(ValueError, match="only image fields are flagged"):
+        project.normalize_popup([{"field": "photo", "kind": "image"}], tooltip="photo")
+
+
+def test_tooltip_accepts_an_image_alongside_a_text_field():
+    config = project.normalize_popup(
+        [{"field": "photo", "kind": "image"}, "name"], tooltip=["photo", "name"]
+    )
+    assert config["hover"] is True
+
+
+def test_a_tooltip_field_also_narrows_the_click_popup():
+    # Documented consequence of the app's schema: the tooltip and the click
+    # popup share `fields`, and a non-empty list is what the click popup shows.
+    assert project.normalize_popup(None, "name")["fields"] == [{"field": "name", "hover": True}]

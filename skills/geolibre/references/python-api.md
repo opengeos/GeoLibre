@@ -125,6 +125,11 @@ in a property is **not** rendered as markup (an untrusted GeoJSON must not be
 able to inject it); use `kind="image"`/`"link"` for pictures and links, or
 `body_expression` for composed text.
 
+The tooltip and the click popup share one field list, and the click popup only
+falls back to "all properties" while that list is empty — so `tooltip="name"`
+on its own narrows the click popup to `name`. Pass `popup=` with the fields you
+want on click whenever you pass `tooltip=`.
+
 ### In-memory xarray rasters
 
 `add_raster` also accepts an `xarray.DataArray` or `xarray.Dataset`, which needs

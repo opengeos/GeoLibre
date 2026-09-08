@@ -407,13 +407,26 @@ Two rules worth knowing before you port a popup from another library:
   `body_expression='["concat", ["get", "name"], " — ", ["get", "county"], " County"]'`.
   The one exception is a KML `description` property, whose known markup is
   sanitized and rendered, so a converted KML keeps its description card.
-- **A tooltip needs fields flagged for hover.** `tooltip=` does that flagging
-  for you, and a tooltip that could never show anything is an error rather than
-  a tip that silently never appears. A field named only in `tooltip=` is added
-  to the popup's field list, so it appears in the click popup too; to keep a
-  field out of the click popup, hide it on the layer instead. Image fields are
-  skipped in tooltips (they would print a data URL); the click popup shows the
-  picture.
+- **A tooltip needs fields flagged for hover, and flagging them narrows the
+  click popup.** The two share one field list: the tooltip shows the entries
+  flagged for hover, and the click popup shows *every* entry — but only falls
+  back to "all visible properties" while that list is empty. So
+
+  ```python
+  m.add_markers(points, tooltip="name")     # click popup now shows ONLY name
+  ```
+
+  because naming a tooltip field creates the list. To keep the full click popup,
+  list the fields you want on click as well, and flag one for hover:
+
+  ```python
+  m.add_markers(points, popup=["name", "pop", "county"], tooltip="name")
+  ```
+
+  A tooltip that could never show anything is an error rather than a tip that
+  silently never appears — including one whose only flagged field is an
+  `image`, since images are dropped from tooltips (their value is a URL, which
+  would become the whole tip). The click popup still shows the picture.
 
 ## Use in marimo
 
