@@ -20,6 +20,7 @@ import {
   createCogImageryProvider,
   type CogTilerModule,
 } from "./cesium-cog-imagery";
+import { drapeSignature, isDrapedLayer, MapLibreDrape } from "./cesium-drape";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import {
   hasRegisteredProtocol,
@@ -367,7 +368,8 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
     layer.type === "3d-tiles" ||
     IMAGERY_TYPES.has(layer.type) ||
     isRasterArchive(layer) ||
-    isCogLayer(layer)
+    isCogLayer(layer) ||
+    isDrapedLayer(layer)
   );
 }
 
@@ -627,6 +629,12 @@ export interface CesiumLayerSyncDeps {
    * `pmtiles://` protocol's archive (a range request over HTTP).
    */
   readPMTilesHeader?: (url: string) => Promise<PMTilesRasterHeader | undefined>;
+  /**
+   * Builds the hidden MapLibre map that drapes tile-backed vector layers
+   * (issue #2284); defaults to a real one. `null` means draping is unavailable
+   * (no WebGL context to spare), and those layers are reported as errors.
+   */
+  createDrape?: () => MapLibreDrape | null;
 }
 
 async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
@@ -727,6 +735,11 @@ export class CesiumLayerSync {
       // not load failures: reporting them in `errors` would make every capture
       // throw for an ordinary mixed project.
       if (!isCesiumSupportedLayerType(layer)) continue;
+      if (isDrapedLayer(layer)) {
+        if (this.drapeError) errors.push(`${layer.name}: ${this.drapeError}`);
+        else if (!this.drape || this.drape.pending > 0) pending.push(layer.name);
+        continue;
+      }
       const entry = this.entries.get(layer.id);
       if (entry?.handle?.show === false) continue;
       if (entry?.loadError) errors.push(`${layer.name}: ${entry.loadError}`);
@@ -821,7 +834,12 @@ export class CesiumLayerSync {
     // to the top), so the reorder pass below runs even when the store id order
     // is unchanged.
     let imageryRebuilt = false;
+    // Tile-backed vector layers are drawn by the shared MapLibre drape rather
+    // than by an entry each (issue #2284).
+    const draped = layers.filter(isDrapedLayer);
+    if (this.syncDrape(draped)) imageryRebuilt = true;
     for (const layer of layers) {
+      if (isDrapedLayer(layer)) continue;
       if (!isSupported(layer)) {
         // A previously-supported layer that became unrenderable (e.g. its data
         // was cleared) is torn down.
@@ -882,6 +900,13 @@ export class CesiumLayerSync {
     this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
+    if (this.drapeLayer) {
+      this.viewer.imageryLayers.remove(this.drapeLayer, true);
+      this.drapeLayer = null;
+    }
+    this.drape?.destroy();
+    this.drape = undefined;
+    this.drapeKey = "";
     void this.cogTiler?.then((tiler) => tiler.clear()).catch(() => {});
     this.unwatchCamera?.();
     this.unwatchCamera = null;
@@ -951,7 +976,54 @@ export class CesiumLayerSync {
       if (entry?.kind === "imagery" && entry.handle) {
         this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
       }
+      // The drape stacks where its topmost layer sits in the store order; the
+      // draped layers keep their order among themselves inside the drape.
+      if (this.drapeLayer && layer.id === this.drapeTopId) {
+        this.viewer.imageryLayers.raiseToTop(this.drapeLayer);
+      }
     }
+  }
+
+  /** The hidden MapLibre map draping tile-backed vector layers, once one is needed. */
+  private drape: MapLibreDrape | null | undefined;
+  /** The imagery layer the drape's tiles land on. */
+  private drapeLayer: ImageryLayer | null = null;
+  private drapeKey = "";
+  private drapeTopId: string | null = null;
+  private drapeError: string | null = null;
+
+  /**
+   * Reconcile the drape with the store's draped layers. Returns whether the
+   * imagery stack changed (a new imagery layer was added), so the caller
+   * re-asserts the order.
+   */
+  private syncDrape(draped: GeoLibreLayer[]): boolean {
+    const key = draped.length ? drapeSignature(draped) : "";
+    if (key === this.drapeKey) return false;
+    this.drapeKey = key;
+    this.drapeTopId = draped.length ? draped[draped.length - 1].id : null;
+    if (this.drapeLayer) {
+      this.viewer.imageryLayers.remove(this.drapeLayer, true);
+      this.drapeLayer = null;
+    }
+    if (!draped.length) {
+      this.drape?.destroy();
+      this.drape = undefined;
+      return false;
+    }
+    if (this.drape === undefined) {
+      this.drape = (this.deps.createDrape ?? (() => MapLibreDrape.create()))();
+      this.drapeError = this.drape ? null : "the globe could not start a MapLibre drape";
+    }
+    if (!this.drape) return false;
+    // A new provider per change: Cesium caches the tiles it has, so restyling
+    // in place would leave stale tiles on screen.
+    this.drape.sync(draped);
+    const layer = this.viewer.imageryLayers.addImageryProvider(
+      this.drape.createProvider(this.Cesium),
+    );
+    this.drapeLayer = layer;
+    return true;
   }
 
   private createEntry(layer: GeoLibreLayer): void {
