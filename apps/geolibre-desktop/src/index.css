@@ -2471,11 +2471,13 @@ body,
 }
 
 @media (max-width: 767px) {
+  /* Planetary Computer sizes its panel from the live map rectangle. Keep it
+     out of this viewport-based cap, which ignores the mobile sidebar strips
+     and status bar and leaves the bottom of its scroll area clipped. */
   .geolibre-components-control .maplibre-gl-control-grid-floating-panel,
   .geolibre-components-control .maplibre-gl-control-grid-relocated,
   .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
   .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
-  .maplibregl-map .pc-control-panel,
   .maplibregl-map .layer-control-panel,
   .duckdb-control-panel {
     box-sizing: border-box;
