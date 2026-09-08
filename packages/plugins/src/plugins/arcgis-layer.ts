@@ -503,14 +503,11 @@ async function addArcGISFeatureLayerAsGeoJson(
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
   const store = useAppStore.getState();
-  // engine-audit-allow: getMap-bounds — the viewport loader below needs more
-  // than the extent (it binds `moveend` and reads `isMoving`), and the plugin
-  // API has no camera-idle hook yet, so this cannot move to `getViewBounds`.
-  // A null map is not a silent no-op here: it takes the complete paged
-  // download instead, which is also what the globe gets today.
   const map = app.getMap?.();
   // Headless/API consumers have no viewport to query, so retain the complete
   // paged download for them. The interactive app takes the bounded path below.
+  // A globe-primary app has no MapLibre map either, so it takes the same path:
+  // a complete download rather than a silently unfiltered viewport query.
   const initialData: FeatureCollection = map
     ? { type: "FeatureCollection", features: [] }
     : await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
@@ -594,6 +591,12 @@ function startArcGISViewportLoader(
       if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
       throw error;
     }
+    // engine-audit-allow: getMap-bounds — this loader needs more than the
+    // extent (it binds `moveend` and reads `isMoving` below), and the plugin
+    // API has no camera-idle hook to answer those on the globe, so it cannot
+    // move to `app.getViewBounds()`. It only runs with a MapLibre map: without
+    // one the layer took the complete paged download above instead, so a null
+    // `getMap()` is a documented branch here, not a silent no-op.
     const envelopes = arcgisViewportEnvelopes(map.getBounds());
     // One bucket per envelope, so a viewport split across the antimeridian
     // publishes both halves together instead of each replacing the other.

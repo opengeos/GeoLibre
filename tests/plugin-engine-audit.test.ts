@@ -19,7 +19,7 @@ const PLUGIN_DIR = resolve(import.meta.dirname, "..", "packages", "plugins", "sr
 const DECLARES_CESIUM = /engines:\s*\[[^\]]*["']cesium["'][^\]]*\]/;
 
 /** A chained read: `app.getMap?.()?.getBounds()`. */
-const CHAINED_BOUNDS = /getMap\??\.?\(\)[^;\n]*\.getBounds\(\)/;
+const CHAINED_BOUNDS = /getMap\??\.?\(\)[^;\n]*\.getBounds\(\)/g;
 
 /**
  * The same read split over two statements, which is this directory's more
@@ -30,20 +30,44 @@ const CHAINED_BOUNDS = /getMap\??\.?\(\)[^;\n]*\.getBounds\(\)/;
 const MAP_ALIAS = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=[^;\n]*getMap\??\.?\(\)/g;
 
 /**
- * Opt out one deliberate site. `getMap()` returning null is only a bug when it
+ * Opt out one deliberate call. `getMap()` returning null is only a bug when it
  * *silently* weakens something the user asked for; a module that branches on
- * it and does something else instead says so here, at the call, rather than in
- * a list that rots somewhere else. Read off the raw source, before comments
- * are stripped.
+ * it and does something else instead says so at the call, rather than in a
+ * list that rots somewhere else.
+ *
+ * Scoped to the call, not the file: it must appear on the flagged line or
+ * within {@link OPT_OUT_LOOKBACK} lines above it, so a second, unrelated
+ * bounds read in the same module still reports. Read off the raw source,
+ * before comments are blanked.
  */
 const AUDIT_OPT_OUT = "engine-audit-allow: getMap-bounds";
 
+/** How far above a flagged call its opt-out comment may sit. */
+const OPT_OUT_LOOKBACK = 6;
+
 /**
- * Drop comments before scanning: a module that explains why it avoids one of
+ * Blank out comments before scanning, preserving line structure so a match
+ * still maps back to its own line. A module that explains why it avoids one of
  * these calls names the call, and would otherwise report itself.
  */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+function blankComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (comment) => " ".repeat(comment.length));
+}
+
+/** 1-based line number of a match offset. */
+function lineOf(source: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index; i += 1) if (source[i] === "\n") line += 1;
+  return line;
+}
+
+/** Whether an opt-out marker sits on, or just above, this line. */
+function optedOutAt(rawLines: string[], line: number): boolean {
+  return rawLines
+    .slice(Math.max(0, line - 1 - OPT_OUT_LOOKBACK), line)
+    .some((text) => text.includes(AUDIT_OPT_OUT));
 }
 
 /** Resolve a relative import to the file it names, `.ts` or `/index.ts`. */
@@ -70,7 +94,7 @@ function importClosure(entry: string): string[] {
     const file = pending.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = stripComments(readFileSync(file, "utf8"));
+    const source = blankComments(readFileSync(file, "utf8"));
     for (const match of source.matchAll(/from\s+"(\.[^"]*)"/g)) {
       const resolved = resolveImport(file, match[1]);
       if (resolved) pending.push(resolved);
@@ -79,16 +103,18 @@ function importClosure(entry: string): string[] {
   return [...seen];
 }
 
-/** Whether this module reads the viewport through the MapLibre-only map. */
-function readsBoundsThroughGetMap(file: string): boolean {
+/** Lines where this module reads the viewport through the MapLibre-only map. */
+function boundsReadsThroughGetMap(file: string): number[] {
   const raw = readFileSync(file, "utf8");
-  if (raw.includes(AUDIT_OPT_OUT)) return false;
-  const source = stripComments(raw);
-  if (CHAINED_BOUNDS.test(source)) return true;
+  const rawLines = raw.split("\n");
+  const source = blankComments(raw);
+  const lines = new Set<number>();
+  for (const match of source.matchAll(CHAINED_BOUNDS)) lines.add(lineOf(source, match.index));
   for (const [, alias] of source.matchAll(MAP_ALIAS)) {
-    if (new RegExp(`\\b${alias}\\??\\.getBounds\\(\\)`).test(source)) return true;
+    const uses = new RegExp(`\\b${alias}\\??\\.getBounds\\(\\)`, "g");
+    for (const use of source.matchAll(uses)) lines.add(lineOf(source, use.index));
   }
-  return false;
+  return [...lines].filter((line) => !optedOutAt(rawLines, line)).sort((a, b) => a - b);
 }
 
 /** Plugin entry points that declare Cesium support, with everything they import. */
@@ -96,7 +122,7 @@ function cesiumPluginClosures(): { plugin: string; files: string[] }[] {
   return readdirSync(PLUGIN_DIR)
     .filter((name) => name.endsWith(".ts"))
     .map((name) => join(PLUGIN_DIR, name))
-    .filter((file) => DECLARES_CESIUM.test(stripComments(readFileSync(file, "utf8"))))
+    .filter((file) => DECLARES_CESIUM.test(blankComments(readFileSync(file, "utf8"))))
     .map((file) => ({ plugin: relative(PLUGIN_DIR, file), files: importClosure(file) }));
 }
 
@@ -123,9 +149,11 @@ describe("plugin engine audit", () => {
 
   it("reads the viewport through app.getViewBounds, not getMap()?.getBounds()", () => {
     const offenders = cesiumPluginClosures().flatMap(({ plugin, files }) =>
-      files
-        .filter(readsBoundsThroughGetMap)
-        .map((file) => `${plugin} -> ${relative(PLUGIN_DIR, file)}`),
+      files.flatMap((file) =>
+        boundsReadsThroughGetMap(file).map(
+          (line) => `${plugin} -> ${relative(PLUGIN_DIR, file)}:${line}`,
+        ),
+      ),
     );
     assert.deepEqual(
       offenders,

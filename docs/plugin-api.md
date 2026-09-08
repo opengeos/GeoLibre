@@ -1133,8 +1133,10 @@ search and say the extent is unavailable, as the ArcGIS Hub panel does.
 A frontend test scans every plugin that declares Cesium support, follows its
 relative imports so a plugin split across a subdirectory is covered too, and
 fails on a `getMap()`-routed bounds read — chained or split across two
-statements. A module that deliberately branches on `getMap()` being null marks
-the site with `engine-audit-allow: getMap-bounds` and says why.
+statements. A call that deliberately branches on `getMap()` being null carries
+an `engine-audit-allow: getMap-bounds` comment on its own line or just above
+it, with the reason — the opt-out is scoped to that call, so a second bounds
+read elsewhere in the same module still reports.
 
 A plugin that drives the renderer directly branches on which handle is
 non-null: `app.getMap()` on MapLibre, `app.getCesiumScene()` on the globe. The
