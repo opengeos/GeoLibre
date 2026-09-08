@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D ამოწევა",
     "noControls": "სტილის კონტროლები ამ ტიპის შრისთვის ჯერ მიუწვდომელია.",
+    "tilesetSymbology": "ფერები და ფილტრები ვრცელდება ამ ფილაკრებულზე 3D გლობუსზე.",
     "selectedLayerType": "არჩეული შრის ტიპი: {{type}}",
     "footerDeck": "ცვლილებები რეალურ დროში ედება DuckDB deck.gl შრის სტილს.",
     "footerMaplibre": "ცვლილებები რეალურ დროში ედება MapLibre-ის paint-თვისებებს.",

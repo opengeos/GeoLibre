@@ -6672,6 +6672,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D 돌출",
     "noControls": "이 레이어 유형에서는 아직 스타일 컨트롤을 사용할 수 없습니다.",
+    "tilesetSymbology": "색상과 필터는 3D 지구본의 이 타일셋에 적용됩니다.",
     "selectedLayerType": "선택한 레이어 유형: {{type}}",
     "footerDeck": "변경 사항은 DuckDB deck.gl 레이어 스타일에 즉시 적용됩니다.",
     "footerMaplibre": "변경 사항은 MapLibre 페인트 속성에 즉시 적용됩니다.",

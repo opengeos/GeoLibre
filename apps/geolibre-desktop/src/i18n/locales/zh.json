@@ -6672,6 +6672,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D 拉伸",
     "noControls": "此图层类型尚不支持样式控件。",
+    "tilesetSymbology": "颜色和筛选条件将应用于三维地球上的此瓦片集。",
     "selectedLayerType": "所选图层类型：{{type}}",
     "footerDeck": "更改会实时应用于 DuckDB deck.gl 图层样式。",
     "footerMaplibre": "更改会实时应用于 MapLibre 绘制属性。",

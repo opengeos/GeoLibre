@@ -6760,6 +6760,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "Estrusione 3D",
     "noControls": "I controlli di stile non sono ancora disponibili per questo tipo di livello.",
+    "tilesetSymbology": "I colori e i filtri si applicano a questo tileset sul globo 3D.",
     "selectedLayerType": "Tipo di livello selezionato: {{type}}",
     "footerDeck": "Le modifiche si applicano in tempo reale allo stile del livello deck.gl DuckDB.",
     "footerMaplibre": "Le modifiche si applicano in tempo reale alle proprietà paint di MapLibre.",

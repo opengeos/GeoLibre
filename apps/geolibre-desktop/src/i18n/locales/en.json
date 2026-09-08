@@ -6843,6 +6843,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D extrusion",
     "noControls": "Style controls are not available for this layer type yet.",
+    "tilesetSymbology": "Colors and filters apply to this tileset on the 3D globe.",
     "selectedLayerType": "Selected layer type: {{type}}",
     "footerDeck": "Changes apply live to DuckDB deck.gl layer styling.",
     "footerMaplibre": "Changes apply live to MapLibre paint properties.",

@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D-Extrusion",
     "noControls": "Stil-Steuerelemente sind für diesen Ebenentyp noch nicht verfügbar.",
+    "tilesetSymbology": "Farben und Filter gelten für dieses Tileset auf dem 3D-Globus.",
     "selectedLayerType": "Ausgewählter Ebenentyp: {{type}}",
     "footerDeck": "Änderungen werden sofort auf die deck.gl-Ebenengestaltung von DuckDB angewendet.",
     "footerMaplibre": "Änderungen werden sofort auf die MapLibre-Paint-Eigenschaften angewendet.",

@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "Extrusão 3D",
     "noControls": "Os controles de estilo ainda não estão disponíveis para este tipo de camada.",
+    "tilesetSymbology": "As cores e os filtros aplicam-se a este conjunto de tiles no globo 3D.",
     "selectedLayerType": "Tipo de camada selecionado: {{type}}",
     "footerDeck": "As alterações são aplicadas ao vivo ao estilo da camada deck.gl do DuckDB.",
     "footerMaplibre": "As alterações são aplicadas ao vivo às propriedades paint do MapLibre.",

@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "Extrusión 3D",
     "noControls": "Los controles de estilo aún no están disponibles para este tipo de capa.",
+    "tilesetSymbology": "Los colores y filtros se aplican a este conjunto de teselas en el globo 3D.",
     "selectedLayerType": "Tipo de capa seleccionada: {{type}}",
     "footerDeck": "Los cambios se aplican en vivo al estilo de la capa deck.gl de DuckDB.",
     "footerMaplibre": "Los cambios se aplican en vivo a las propiedades de pintura de MapLibre.",

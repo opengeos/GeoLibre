@@ -310,7 +310,9 @@ export class CesiumEngine implements MapEngine {
     this.worldTerrainAvailable = options.worldTerrainAvailable ?? true;
     this.capabilities =
       options.viewId === undefined ? CESIUM_CAPABILITIES : CESIUM_PANE_CAPABILITIES;
-    this.layerSync = new CesiumLayerSync(Cesium, viewer);
+    this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
+      onTilesetFields: publishTilesetFields,
+    });
     this.terrainExaggeration = viewer.scene.verticalExaggeration ?? 1;
     this.installInputTracking();
     this.installTerrainCorrection();
@@ -1375,4 +1377,27 @@ export class CesiumEngine implements MapEngine {
   getLastAppliedView(): MapViewState | null {
     return this.lastApplied;
   }
+}
+
+/**
+ * Record a tileset's attribute names on its store layer (issue #2290).
+ *
+ * A 3D Tiles layer has no `layer.geojson`, so the Style panel's attribute
+ * dropdowns have nothing to list until the tiles say what the features carry.
+ * `metadata.fields` is the channel the panel already reads for layers in that
+ * position (see `vector-layer-sync`, which fills it for control-managed vector
+ * layers). Written only when the names actually differ, so a globe re-mount —
+ * or a second pane drawing the same tileset — cannot loop the store.
+ */
+function publishTilesetFields(layerId: string, fields: string[]): void {
+  const state = useAppStore.getState();
+  const layer = state.layers.find((candidate) => candidate.id === layerId);
+  if (!layer) return;
+  const existing = layer.metadata?.fields;
+  const same =
+    Array.isArray(existing) &&
+    existing.length === fields.length &&
+    existing.every((name, index) => name === fields[index]);
+  if (same) return;
+  state.updateLayer(layerId, { metadata: { ...layer.metadata, fields: [...fields] } });
 }

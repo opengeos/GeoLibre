@@ -49,6 +49,11 @@ import {
   protocolScheme,
   webMercatorRectangle,
 } from "./cesium-protocol-imagery";
+import {
+  compileTilesetStyle,
+  tilesetStyleKey,
+  type TilesetStyleSpec,
+} from "./cesium-tileset-style";
 import { renderFillPatternCanvas } from "./fill-patterns";
 import { getLayerBounds } from "./geojson-loader";
 import { getPMTilesArchive } from "./layer-sync";
@@ -172,6 +177,12 @@ const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
 type EntryKind = "imagery" | "geojson" | "3dtiles" | "points" | "pointcloud";
 
+/** The slice of a rendered tile's content the attribute-name discovery reads. */
+interface TileContentLike {
+  featuresLength?: number;
+  getFeature?: (index: number) => { getPropertyIds?: () => string[] } | undefined;
+}
+
 /** `metadata.sourceKind` of the ArcGIS I3S scene layers (`arcgis-i3s-tiles.ts`). */
 const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 
@@ -218,6 +229,8 @@ interface LayerEntry {
     | null;
   /** Aborts a decoded point cloud's download when the entry goes. */
   abort?: AbortController;
+  /** Removes the one-shot tile listener that reads a tileset's attribute names. */
+  fieldsListener?: () => void;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
   /**
@@ -825,6 +838,15 @@ export interface CesiumLayerSyncDeps {
   renderFillPattern?: typeof renderFillPatternCanvas;
   /** Overrides for the COPC decoder (the module, the projector, the budget). */
   copcOptions?: Omit<LoadCopcOptions, "signal">;
+  /**
+   * Publishes the attribute names read off a tileset's first rendered tile
+   * (issue #2290). A 3D Tiles layer has no `layer.geojson` for the Style panel
+   * to read property keys from, so the panel's attribute dropdowns stay empty
+   * until the names arrive from the tiles themselves. Defaults to writing
+   * `metadata.fields`, the same channel `vector-layer-sync` uses for
+   * control-managed vector layers; omitted, the discovery is skipped.
+   */
+  onTilesetFields?: (layerId: string, fields: string[]) => void;
 }
 
 async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
@@ -2283,6 +2305,7 @@ export class CesiumLayerSync {
         viewer.scene.primitives.add(tileset);
         this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
         entry.handle = tileset;
+        this.discoverTilesetFields(entry, tileset);
         this.applyAppearance(entry);
       } catch (error) {
         entry.loadError = error instanceof Error ? error.message : String(error);
@@ -2313,8 +2336,12 @@ export class CesiumLayerSync {
         }
         viewer.scene.primitives.add(provider);
         const offset = Number(layer.source.altitudeOffset);
-        for (const tileset of i3sTilesets(provider)) this.applyTilesetAltitude(tileset, offset);
+        const tilesets = i3sTilesets(provider);
+        for (const tileset of tilesets) this.applyTilesetAltitude(tileset, offset);
         entry.handle = provider;
+        // One sub-layer is enough for the schema: an I3S scene service publishes
+        // one attribute set that every layer it drives shares.
+        if (tilesets[0]) this.discoverTilesetFields(entry, tilesets[0]);
         this.applyAppearance(entry);
         return;
       }
@@ -2332,6 +2359,7 @@ export class CesiumLayerSync {
         tileset.pointCloudShading.eyeDomeLighting = true;
       }
       entry.handle = tileset;
+      this.discoverTilesetFields(entry, tileset);
       this.applyAppearance(entry);
     } catch (error) {
       // A tileset that fails to load should not break the whole sync.
@@ -2384,7 +2412,81 @@ export class CesiumLayerSync {
       this.applyGeoJsonFilter(entry);
     } else {
       (handle as Cesium3DTileset | I3SDataProvider).show = layer.visible;
+      this.applyTilesetStyle(entry);
     }
+  }
+
+  /**
+   * Publish a tileset's attribute names the first time a tile with features
+   * becomes visible (issue #2290).
+   *
+   * A tileset carries its schema in the tiles, not in the layer record, so
+   * there is nothing to read until one has actually rendered. The listener is
+   * one-shot — the names are a property of the tileset, not of the tile — and
+   * is removed with the entry, so a layer dropped mid-load leaves nothing
+   * subscribed to the scene.
+   */
+  private discoverTilesetFields(entry: LayerEntry, tileset: Cesium3DTileset): void {
+    const publish = this.deps.onTilesetFields;
+    if (!publish) return;
+    const layerId = entry.layer.id;
+    const stop = () => {
+      entry.fieldsListener?.();
+      entry.fieldsListener = undefined;
+    };
+    const remove = tileset.tileVisible.addEventListener((tile: unknown) => {
+      const content = (tile as { content?: TileContentLike } | undefined)?.content;
+      if (!content?.featuresLength || typeof content.getFeature !== "function") return;
+      const ids = content.getFeature(0)?.getPropertyIds?.();
+      stop();
+      if (Array.isArray(ids) && ids.length > 0) publish(layerId, ids);
+    });
+    entry.fieldsListener = remove;
+  }
+
+  /** Every `Cesium3DTileset` behind a 3D Tiles entry (an I3S provider drives several). */
+  private entryTilesets(entry: LayerEntry): Cesium3DTileset[] {
+    const handle = entry.handle;
+    if (!handle) return [];
+    const provider = handle as Partial<I3SDataProvider>;
+    if (Array.isArray(provider.layers)) return i3sTilesets(provider);
+    return [handle as Cesium3DTileset];
+  }
+
+  /**
+   * Classify a tileset's features from the layer's symbology (issue #2290).
+   *
+   * The layer's own colour expression and per-feature filter are translated
+   * into a `Cesium3DTileStyle`, so a building tileset categorizes, graduates,
+   * or follows a rule tree exactly as an extruded vector layer does — and the
+   * Layers-panel opacity slider, which had no effect on a tileset at all,
+   * reaches it as a white multiply that fades textured tiles without tinting
+   * them. A layer that neither classifies nor filters at full opacity clears
+   * the style so the tileset draws its own colours.
+   */
+  private applyTilesetStyle(entry: LayerEntry): void {
+    const spec: TilesetStyleSpec | null = compileTilesetStyle(
+      entry.layer,
+      this.effectiveOpacity(entry),
+      composeLayerFeatureFilter(entry.layer),
+    );
+    const key = tilesetStyleKey(spec);
+    if (entry.appliedAlpha === key) return;
+    entry.appliedAlpha = key;
+    let style: InstanceType<CesiumNs["Cesium3DTileStyle"]> | undefined;
+    if (spec) {
+      try {
+        style = new this.Cesium.Cesium3DTileStyle(spec);
+      } catch (error) {
+        // The styling language is compiled by Cesium, not by the translator,
+        // so a shape that translates but does not compile (an unexpected
+        // property name, a colour Cesium rejects) must not take the sync down.
+        console.warn("[GeoLibre] could not apply the 3D Tiles style", error);
+        return;
+      }
+    }
+    for (const tileset of this.entryTilesets(entry)) tileset.style = style;
+    this.viewer.scene.requestRender();
   }
 
   private readonly storyOpacities = new Map<
@@ -2805,6 +2907,8 @@ export class CesiumLayerSync {
   private destroyEntry(entry: LayerEntry): void {
     entry.cancelled = true;
     entry.abort?.abort();
+    entry.fieldsListener?.();
+    entry.fieldsListener = undefined;
     this.storyOpacities.delete(entry.layer.id);
     const { handle } = entry;
     if (!handle) return;

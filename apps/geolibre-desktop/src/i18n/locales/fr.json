@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "Extrusion 3D",
     "noControls": "Les commandes de style ne sont pas encore disponibles pour ce type de couche.",
+    "tilesetSymbology": "Les couleurs et les filtres s'appliquent à ce jeu de tuiles sur le globe 3D.",
     "selectedLayerType": "Type de couche sélectionnée : {{type}}",
     "footerDeck": "Les modifications s'appliquent en direct au style de la couche deck.gl de DuckDB.",
     "footerMaplibre": "Les modifications s'appliquent en direct aux propriétés de peinture de MapLibre.",

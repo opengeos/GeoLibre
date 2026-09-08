@@ -6672,6 +6672,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D押し出し",
     "noControls": "このレイヤータイプではまだスタイルコントロールを利用できません。",
+    "tilesetSymbology": "色とフィルターは 3D グローブ上のこのタイルセットに適用されます。",
     "selectedLayerType": "選択中のレイヤータイプ: {{type}}",
     "footerDeck": "変更はDuckDB deck.glレイヤーのスタイルにリアルタイムで反映されます。",
     "footerMaplibre": "変更はMapLibreのペイントプロパティにリアルタイムで反映されます。",

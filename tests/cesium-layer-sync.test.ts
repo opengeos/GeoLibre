@@ -239,14 +239,31 @@ function makeFakes() {
     Cesium3DTileset: {
       fromUrl: (url: unknown) => {
         calls.tilesetUrls.push(url);
+        // `tileVisible` is Cesium's per-frame tile event; the fake records its
+        // listeners so a test can hand one a tile the way a rendered frame does.
+        const listeners = new Set<(tile: unknown) => void>();
         return Promise.resolve({
           kind: "tileset",
           show: true,
+          style: undefined as unknown,
           destroy: () => {},
           modelMatrix: null,
           boundingSphere: { center: {} },
+          tileVisible: {
+            addEventListener: (listener: (tile: unknown) => void) => {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+          },
+          emitTileVisible: (tile: unknown) => {
+            for (const listener of [...listeners]) listener(tile);
+          },
+          tileVisibleListenerCount: () => listeners.size,
         });
       },
+    },
+    Cesium3DTileStyle: class {
+      constructor(public spec: unknown) {}
     },
     Color: {
       fromCssColorString: (css: string) => ({
@@ -326,12 +343,17 @@ function mkEvent(bag: (() => void)[]) {
   };
 }
 
-function newSync(f: ReturnType<typeof makeFakes>, readZoom?: () => number) {
+function newSync(
+  f: ReturnType<typeof makeFakes>,
+  readZoom?: () => number,
+  deps?: ConstructorParameters<typeof CesiumLayerSync>[3],
+) {
   // The fakes stand in for the Cesium namespace + Viewer (cast through unknown).
   return new CesiumLayerSync(
     f.Cesium as unknown as typeof import("cesium"),
     f.viewer as unknown as import("cesium").Viewer,
     readZoom,
+    deps,
   );
 }
 
@@ -705,6 +727,78 @@ describe("CesiumLayerSync", () => {
     await f.flush();
     assert.equal(f.calls.tilesetUrls[0], "https://tiles/root.json");
     assert.equal(f.calls.primitivesAdded.length, 1);
+  });
+
+  it("classifies a tileset through Cesium3DTileStyle and clears it when nothing classifies", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "t",
+      type: "3d-tiles",
+      source: { url: "https://tiles/root.json" },
+      style: {
+        vectorStyleMode: "categorized",
+        vectorStyleProperty: "kind",
+        vectorStyleStops: [{ value: "school", color: "#ff0000" }],
+        fillColor: "#cccccc",
+      },
+    });
+    sync.sync([layer]);
+    await f.flush();
+    const tileset = f.calls.primitivesAdded[0] as { style?: { spec?: unknown } };
+    assert.deepEqual((tileset.style as { spec: { color: unknown } }).spec.color, {
+      conditions: [
+        ['(String(${kind}) === "school")', "color('#ff0000', 1)"],
+        ["true", "color('#cccccc', 1)"],
+      ],
+    });
+
+    // Back to the default single-colour style at full opacity: the tileset must
+    // draw its own colours again rather than keep the stale conditions.
+    sync.sync([mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } })]);
+    assert.equal(tileset.style, undefined);
+  });
+
+  it("fades a tileset with the layer opacity without tinting it", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "t",
+        type: "3d-tiles",
+        source: { url: "https://tiles/root.json" },
+        opacity: 0.25,
+      }),
+    ]);
+    await f.flush();
+    const tileset = f.calls.primitivesAdded[0] as { style: { spec: { color: string } } };
+    assert.equal(tileset.style.spec.color, "color('#ffffff', 0.25)");
+  });
+
+  it("publishes a tileset's attribute names once, from the first tile that has features", async () => {
+    const published: Array<[string, string[]]> = [];
+    const sync = newSync(f, undefined, {
+      onTilesetFields: (layerId, fields) => published.push([layerId, fields]),
+    });
+    sync.sync([mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } })]);
+    await f.flush();
+    const tileset = f.calls.primitivesAdded[0] as {
+      emitTileVisible: (tile: unknown) => void;
+      tileVisibleListenerCount: () => number;
+    };
+
+    // A tile with no features (a tileset's interior nodes have none) says
+    // nothing about the schema and must not end the discovery.
+    tileset.emitTileVisible({ content: { featuresLength: 0 } });
+    assert.deepEqual(published, []);
+    assert.equal(tileset.tileVisibleListenerCount(), 1);
+
+    tileset.emitTileVisible({
+      content: {
+        featuresLength: 4,
+        getFeature: () => ({ getPropertyIds: () => ["height", "kind"] }),
+      },
+    });
+    assert.deepEqual(published, [["t", ["height", "kind"]]]);
+    assert.equal(tileset.tileVisibleListenerCount(), 0, "the listener is one-shot");
   });
 
   it("keeps the Google Maps API key header on a Google Photorealistic tileset", async () => {

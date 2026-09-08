@@ -6672,6 +6672,7 @@
     "mode2d": "biểu hiện chiều cao",
     "mode3dExtrusion": "đùn 3D",
     "noControls": "Điều khiển kiểu chưa có sẵn cho loại lớp này.",
+    "tilesetSymbology": "Màu sắc và bộ lọc áp dụng cho tập ô này trên quả địa cầu 3D.",
     "selectedLayerType": "Loại lớp đã chọn: {{type}}",
     "footerDeck": "Các thay đổi áp dụng trực tiếp cho kiểu dáng lớp DuckDB deck.gl.",
     "footerMaplibre": "Các thay đổi áp dụng trực tiếp cho thuộc tính sơn MapLibre.",

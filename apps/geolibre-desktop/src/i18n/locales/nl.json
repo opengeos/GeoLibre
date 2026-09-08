@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D-extrusie",
     "noControls": "Stijlbesturingselementen zijn nog niet beschikbaar voor dit laagtype.",
+    "tilesetSymbology": "Kleuren en filters gelden voor deze tileset op de 3D-globe.",
     "selectedLayerType": "Geselecteerd laagtype: {{type}}",
     "footerDeck": "Wijzigingen worden direct toegepast op de deck.gl-laagstijl van DuckDB.",
     "footerMaplibre": "Wijzigingen worden direct toegepast op de paint-eigenschappen van MapLibre.",

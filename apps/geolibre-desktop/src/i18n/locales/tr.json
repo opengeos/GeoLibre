@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3B yükseltme",
     "noControls": "Bu katman türü için stil denetimleri henüz kullanılamıyor.",
+    "tilesetSymbology": "Renkler ve filtreler bu döşeme kümesine 3B küre üzerinde uygulanır.",
     "selectedLayerType": "Seçili katman türü: {{type}}",
     "footerDeck": "Değişiklikler, DuckDB deck.gl katman stiline anlık olarak uygulanır.",
     "footerMaplibre": "Değişiklikler, MapLibre paint özelliklerine anlık olarak uygulanır.",

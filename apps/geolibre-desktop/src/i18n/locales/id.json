@@ -6672,6 +6672,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "Ekstrusi 3D",
     "noControls": "Kontrol gaya belum tersedia untuk jenis layer ini.",
+    "tilesetSymbology": "Warna dan filter berlaku untuk tileset ini pada globe 3D.",
     "selectedLayerType": "Jenis layer yang dipilih: {{type}}",
     "footerDeck": "Perubahan berlaku langsung pada penataan gaya layer deck.gl DuckDB.",
     "footerMaplibre": "Perubahan berlaku langsung pada properti paint MapLibre.",

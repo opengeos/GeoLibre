@@ -6751,6 +6751,7 @@
     "mode2d": "2D",
     "mode3dExtrusion": "3D एक्सट्रूज़न",
     "noControls": "इस लेयर प्रकार के लिए शैली नियंत्रण अभी उपलब्ध नहीं हैं।",
+    "tilesetSymbology": "रंग और फ़िल्टर इस टाइलसेट पर 3D ग्लोब में लागू होते हैं।",
     "selectedLayerType": "चयनित लेयर प्रकार: {{type}}",
     "footerDeck": "बदलाव DuckDB deck.gl लेयर स्टाइलिंग पर लाइव लागू होते हैं।",
     "footerMaplibre": "बदलाव MapLibre paint प्रॉपर्टी पर लाइव लागू होते हैं।",

@@ -4930,6 +4930,18 @@ export function StylePanel({
                 still has to appear for a layer restored from one. */}
             {hasNetcdfSymbology ? (
               <NetcdfSymbologySection layer={layer} />
+            ) : isThreeDTilesLayer ? (
+              // A tileset has no MapLibre paint properties, but the globe can
+              // classify its features from the same symbology every vector
+              // layer uses — `CesiumLayerSync` compiles the colour expression
+              // and the layer filter into a `Cesium3DTileStyle` (#2290). The
+              // attribute list comes from `metadata.fields`, which the globe
+              // fills in from the first rendered tile, so it appears once the
+              // tileset has drawn rather than while it is still loading.
+              <>
+                <p className="text-xs text-muted-foreground">{t("style.tilesetSymbology")}</p>
+                {vectorSymbologyControls}
+              </>
             ) : (
               <p className="text-xs text-muted-foreground">{t("style.noControls")}</p>
             )}
