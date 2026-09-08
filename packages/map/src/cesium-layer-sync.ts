@@ -839,10 +839,10 @@ export class CesiumLayerSync {
     const draped = layers.filter(isDrapedLayer);
     if (this.syncDrape(draped)) imageryRebuilt = true;
     for (const layer of layers) {
-      if (isDrapedLayer(layer)) continue;
-      if (!isSupported(layer)) {
+      if (isDrapedLayer(layer) || !isSupported(layer)) {
         // A previously-supported layer that became unrenderable (e.g. its data
-        // was cleared) is torn down.
+        // was cleared), or that now draws through the drape (a render-mode
+        // switch keeps the id), is torn down.
         const stale = this.entries.get(layer.id);
         if (stale) {
           this.destroyEntry(stale);

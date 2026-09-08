@@ -324,6 +324,31 @@ describe("CesiumLayerSync drape integration", () => {
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
   });
 
+  it("tears down a native entry whose layer switched to a draped kind", async () => {
+    const f = makeViewer();
+    const { host } = makeHost();
+    const sync = new CesiumLayerSync(
+      { ...Cesium, UrlTemplateImageryProvider: class {} } as never,
+      f.viewer as never,
+      () => 10,
+      { createDrape: () => new MapLibreDrape(host, async () => fakeTile("t")) },
+    );
+    const asRaster = vectorTiles({
+      id: "same",
+      type: "xyz",
+      source: { type: "raster", tiles: ["https://tiles.example/{z}/{x}/{y}.png"] },
+    });
+    sync.sync([asRaster]);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(f.imagery.length, 1);
+    assert.ok(!(f.imagery[0].provider instanceof ProtocolImageryProvider), "a native entry");
+    // A source switch keeps the id and turns the layer into vector tiles.
+    sync.sync([vectorTiles({ id: "same" })]);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(f.imagery.length, 1, "the native layer is destroyed, not leaked");
+    assert.ok(f.imagery[0].provider instanceof ProtocolImageryProvider, "the drape draws it now");
+  });
+
   it("re-stacks the drape when it moves relative to native imagery", async () => {
     const f = makeViewer();
     const { host } = makeHost();
