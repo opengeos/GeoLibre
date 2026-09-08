@@ -77,6 +77,31 @@ function expectSameZoom(actual: number, expected: number): void {
   expect(Math.abs(actual - expected), `zoom ${actual} vs ${expected}`).toBeLessThan(0.5);
 }
 
+/**
+ * Seed a known camera through View → Set View, and wait for the map to arrive
+ * at it.
+ *
+ * The status bar reads `mapView`, which `MapCanvas` publishes on MapLibre's
+ * `moveend` alone, so it is a step function: while an ease is still running it
+ * keeps reporting the *previous* settled camera, and two identical samples
+ * 500 ms apart look stable to {@link waitForStableZoom}. Seeding with a wheel
+ * burst therefore records a zoom the map then moves on from — the globe seeds
+ * from the later one, and the two disagree by more than the conversion
+ * tolerance. Set View gives an endpoint that can be waited for *by value*, which
+ * is what makes the seed deterministic.
+ */
+async function setView(page: Page, lng: number, lat: number, zoom: number): Promise<void> {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await dialog.locator("#set-view-longitude").fill(String(lng));
+  await dialog.locator("#set-view-latitude").fill(String(lat));
+  await dialog.locator("#set-view-zoom").fill(String(zoom));
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBe(zoom);
+}
+
 /** Pick a primary renderer from View → Rendering engine. */
 async function chooseRenderer(page: Page, label: "MapLibre" | "Cesium"): Promise<void> {
   await page.getByRole("button", { name: "View", exact: true }).click();
@@ -96,19 +121,20 @@ test.describe("Cesium as the primary rendering engine", () => {
     await expect(layerRow(page, "cities")).toBeVisible();
 
     // Move off the default camera so "the camera carried across" is a real
-    // assertion rather than a coincidence of two default views agreeing.
-    const mapCanvas = page.getByTestId("map-canvas");
-    const box = await mapCanvas.boundingBox();
-    expect(box).not.toBeNull();
-    const cx = box!.x + box!.width / 2;
-    const cy = box!.y + box!.height / 2;
-    await page.mouse.move(cx, cy);
-    for (let tick = 0; tick < 4; tick++) {
-      await page.mouse.wheel(0, -200);
-      await page.waitForTimeout(80);
-    }
+    // assertion rather than a coincidence of two default views agreeing. This
+    // used to be a wheel burst, which {@link setView} explains is not a settled
+    // camera — all the more so here, where the map may still be flying to the
+    // layer just dropped. Arriving zoomed in also keeps the globe off the
+    // whole-Earth framing that trips a `DeveloperError` in Cesium's own
+    // `ScreenSpaceCameraController` on the first wheel event.
+    const SEED_ZOOM = 8;
+    await setView(page, -122.42, 37.77, SEED_ZOOM);
     const zoomOn2d = await waitForStableZoom(page);
-    expect(zoomOn2d).toBeGreaterThan(0);
+    // Nothing may still be easing when the engines swap, so this is an equality
+    // rather than a range: a camera that has moved on from the requested
+    // endpoint fails here, naming the seed, instead of surfacing later as an
+    // unexplained disagreement between the two engines.
+    expect(zoomOn2d).toBe(SEED_ZOOM);
 
     await chooseRenderer(page, "Cesium");
 
@@ -208,18 +234,10 @@ test.describe("Cesium toolbar controls on the globe", () => {
 
     await waitForMap(page);
 
-    // Seed a known close camera through the UI. A burst of wheel events can
-    // still be queued while two identical status-bar samples appear stable on
-    // a busy CI runner. Wait for the requested endpoint before swapping engines.
-    await page.getByRole("button", { name: "View", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Set View/ }).click();
-    const dialog = page.getByRole("dialog", { name: "Set View" });
-    await dialog.locator("#set-view-longitude").fill("-97.5");
-    await dialog.locator("#set-view-latitude").fill("35.4");
-    await dialog.locator("#set-view-zoom").fill("6");
-    await dialog.getByRole("button", { name: "Go", exact: true }).click();
-    await expect(dialog).toBeHidden();
-    await expect.poll(() => readZoom(page), { timeout: 30_000 }).toBe(6);
+    // Seed a known close camera through the UI, for the reason {@link setView}
+    // gives: a burst of wheel events can still be queued while two identical
+    // status-bar samples appear stable on a busy CI runner.
+    await setView(page, -97.5, 35.4, 6);
     const zoomOn2dMap = await waitForStableZoom(page);
 
     await chooseRenderer(page, "Cesium");
