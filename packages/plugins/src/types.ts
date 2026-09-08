@@ -13,6 +13,7 @@ import type {
   QueryResult as ZarrQueryResult,
   Selector as ZarrSelector,
 } from "@carbonplan/zarr-layer";
+import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { OvertureTheme } from "maplibre-gl-overture-maps";
@@ -577,6 +578,14 @@ export interface GeoLibreAppAPI {
   getMap?: () => MapLibreMap | null;
   /** Active primary renderer, including while its canvas is being replaced. */
   getMapRenderer?: () => MapRendererKind;
+  /**
+   * The primary Cesium globe's native scene, or `null` when the primary map is
+   * not a globe (or is still mounting). The globe's counterpart to
+   * {@link getMap}: a plugin that declares `engines: ["maplibre", "cesium"]`
+   * branches on which of the two is non-null. The handle carries the
+   * `@cesium/engine` namespace, so a plugin never imports Cesium itself.
+   */
+  getCesiumScene?: () => CesiumSceneHandle | null;
   /**
    * Open an http(s) URL in the system browser. Needed because the Tauri
    * desktop webview ignores `window.open`/`target="_blank"` and would open the

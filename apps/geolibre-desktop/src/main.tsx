@@ -81,7 +81,11 @@ import { parseDeploymentCapabilities, useAppStore } from "@geolibre/core";
 import { readDeploymentEnvValue } from "./lib/deployment-env";
 import { initializeNativeProjectOpen } from "./lib/native-project-open";
 
+import { initializeNativeCoordinateOpen } from "./lib/native-coordinate-open";
+
 installDiagnosticsCapture();
+
+const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
 let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
 // In the desktop build, route geocoding (place search / reverse geocode)
@@ -283,6 +287,7 @@ void Promise.all([
   // Capture a file-association or command-line project path before App decides
   // whether to restore a configured startup project or the default workspace.
   nativeProjectOpenReady,
+  nativeCoordinateOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
   startupLanguageReady,

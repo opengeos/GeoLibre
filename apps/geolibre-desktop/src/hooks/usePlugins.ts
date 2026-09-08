@@ -96,7 +96,7 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
 } from "@geolibre/plugins";
-import { getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
+import { CesiumEngine, getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
 import type {
   GeoLibreCogLayerOptions,
   GeoLibreCogRenderEngine,
@@ -1056,6 +1056,10 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     getMapRenderer: () => useAppStore.getState().primaryRenderer,
+    getCesiumScene: () => {
+      const engine = mapControllerRef?.current;
+      return engine instanceof CesiumEngine ? engine.getCesiumScene() : null;
+    },
     getProjectSnapshot: () => buildProjectEgressSnapshot(mapControllerRef ?? { current: null }),
     openExternalUrl: (url: string) => void openExternalLink(url),
     pickLocalDirectoryFiles,

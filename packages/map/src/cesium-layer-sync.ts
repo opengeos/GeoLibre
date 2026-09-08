@@ -6,16 +6,34 @@ import {
   resolveThreeDTilesRequestHeaders,
   ruleBasedVisibilityFilter,
   transformGeojsonElevation,
+  styleValue,
   type GeoLibreLayer,
+  type LayerStyle,
 } from "@geolibre/core";
 import { featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
+import {
+  cachingCogTiler,
+  cogRenderSignature,
+  cogSourceUrl,
+  createCogImageryProvider,
+  type CogTilerModule,
+} from "./cesium-cog-imagery";
 import { createFeatureStyleResolver, type FeatureStyleResolver } from "./cesium-feature-style";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
+import {
+  hasRegisteredProtocol,
+  ProtocolImageryProvider,
+  protocolScheme,
+  webMercatorRectangle,
+} from "./cesium-protocol-imagery";
 import { renderFillPatternCanvas } from "./fill-patterns";
 import { getLayerBounds } from "./geojson-loader";
+import { getPMTilesArchive } from "./layer-sync";
 import { renderMarkerCanvas } from "./markers";
+import { normalizePMTilesUrl } from "./pmtiles-layer";
+import type { Header as PMTilesHeader } from "pmtiles";
 import type {
   Cartesian2,
   Cesium3DTileset,
@@ -63,6 +81,26 @@ interface CameraEvent {
 const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
 
 /**
+ * Tile-archive kinds that render on the globe when the archive holds raster
+ * tiles (issue #2283). Their vector form has no globe renderer (#2284), so the
+ * predicate reads the archive's tile type rather than the layer type alone.
+ */
+const RASTER_ARCHIVE_TYPES = new Set(["pmtiles", "mbtiles"]);
+
+/** Whether a PMTiles/MBTiles layer describes a raster archive. */
+function isRasterArchive(layer: GeoLibreLayer): boolean {
+  return (
+    RASTER_ARCHIVE_TYPES.has(layer.type) &&
+    (layer.metadata?.tileType === "raster" || layer.source?.type === "raster")
+  );
+}
+
+/** Whether this is a maplibre-gl-raster COG layer the globe can open itself. */
+function isCogLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "cog";
+}
+
+/**
  * Kinds that never take the GeoJSON path, whatever `layer.geojson` holds.
  *
  * Cesium draws imagery and 3D Tiles natively, so those go to their own
@@ -84,6 +122,7 @@ const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
 const NON_GEOJSON_TYPES = new Set([
   ...IMAGERY_TYPES,
   "3d-tiles",
+  "cog",
   "vector-tiles",
   "pmtiles",
   "mbtiles",
@@ -351,7 +390,9 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
     hasGeoJsonCollection(layer) ||
     layer.type === "geojson" ||
     layer.type === "3d-tiles" ||
-    IMAGERY_TYPES.has(layer.type)
+    IMAGERY_TYPES.has(layer.type) ||
+    isRasterArchive(layer) ||
+    isCogLayer(layer)
   );
 }
 
@@ -388,7 +429,107 @@ function isSupported(layer: GeoLibreLayer): boolean {
   if (layer.type === "wmts") {
     return Boolean(wmtsCapabilities(layer)) || Boolean(firstTile(layer));
   }
+  if (isCogLayer(layer)) return Boolean(cogSourceUrl(layer));
+  if (layer.type === "pmtiles") return Boolean(pmtilesArchiveUrl(layer));
   return Boolean(firstTile(layer));
+}
+
+/** The archive URL a raster PMTiles layer draws from, with the `pmtiles://` prefix. */
+function pmtilesArchiveUrl(layer: GeoLibreLayer): string | undefined {
+  const raw = str(layer.source.url) ?? str(layer.sourcePath);
+  return raw ? normalizePMTilesUrl(raw) : undefined;
+}
+
+// Floor for the contrast handed to Cesium. MapLibre can ask for a black point
+// at or above mid-grey, which Cesium's brightness/contrast pair cannot express
+// (see imageryColorAdjustments); flooring the contrast keeps the stretch exact
+// and degrades only the lift, instead of letting the brightness factor run away.
+const MIN_IMAGERY_CONTRAST = 0.1;
+
+/**
+ * Cesium's `ImageryLayer` colour controls for a layer's raster symbology.
+ *
+ * MapLibre and Cesium run the same four operations, but with different curves,
+ * different neutral points, and a different order, so this is not a
+ * property-by-property rename. Writing MapLibre's raster shader in order (hue
+ * spin, saturation, contrast, brightness) and Cesium's `sampleAndBlend` in
+ * order (brightness, contrast, hue, saturation):
+ *
+ * | step       | MapLibre                       | Cesium                     |
+ * | ---------- | ------------------------------ | -------------------------- |
+ * | saturation | `rgb += (avg - rgb) * f`       | `luma + (rgb - luma) * a`  |
+ * | contrast   | `(rgb - 0.5) * k + 0.5`        | `0.5 + (rgb - 0.5) * k'`   |
+ * | brightness | `mix(min, max, rgb)`           | `rgb * b`                  |
+ *
+ * where MapLibre derives `f` and `k` through
+ * `f = s > 0 ? 1 - 1 / (1.001 - s) : -s` and `k = c > 0 ? 1 / (1 - c) : 1 + c`.
+ *
+ * Two things follow. Both curves bend above 0, so `1 + value` tracks MapLibre
+ * only on the negative half and would leave the globe visibly flatter than the
+ * 2D map for any positive contrast or saturation; both are mirrored exactly
+ * here. (MapLibre pivots saturation on the channel average and Cesium on
+ * luminance. That pivot is not something `ImageryLayer` exposes; the multiplier
+ * is the part that translates.)
+ *
+ * And MapLibre's brightness is a *window*, not a gain: it scales by the
+ * window's width and lifts the black point to `min`. Mapping the window onto
+ * `brightness` alone would drop the width, so the globe would miss the
+ * flattening that a narrowed window produces on the 2D map. Cesium has no
+ * window, but its brightness and contrast compose into the same shape of
+ * affine map, so the two are solved for together. With MapLibre's composed
+ * contrast and brightness written as `out = S * in + I`:
+ *
+ *     S = k * (max - min)          I = (min + max) / 2 - S / 2
+ *
+ * and Cesium's composed brightness and contrast as
+ * `out = (b * k') * in + 0.5 * (1 - k')`, matching slope and intercept gives
+ * `k' = 1 - 2I` and `b = S / k'`. The one shape Cesium cannot reach is
+ * `I >= 0.5`, hence {@link MIN_IMAGERY_CONTRAST}.
+ */
+export function imageryColorAdjustments(style: LayerStyle | undefined): {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  hue: number;
+} {
+  const s = style ?? DEFAULT_LAYER_STYLE;
+  const num = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  const unit = (value: unknown, fallback: number) =>
+    Math.min(1, Math.max(-1, num(value, fallback)));
+  const min = num(styleValue(s, "rasterBrightnessMin"), 0);
+  const max = num(styleValue(s, "rasterBrightnessMax"), 1);
+  // The raster paint spec bounds both to [-1, 1] and MapLibre clamps on parse,
+  // so a store value outside it would already be rendering differently in 2D.
+  const contrast = unit(styleValue(s, "rasterContrast"), 0);
+  const saturation = unit(styleValue(s, "rasterSaturation"), 0);
+
+  // MapLibre's own curve, `1 / (1 - contrast)`, is +Infinity at contrast 1,
+  // which is reachable: the Style panel's slider stops there. MapLibre hands that
+  // Infinity to the shader and the framebuffer clamps it into a hard threshold
+  // at mid-grey; here it would poison the slope/intercept solve below and set
+  // brightness to NaN. Flooring the denominator keeps the curve exact
+  // everywhere it is finite and turns the endpoint into the same very hard
+  // threshold, rather than bending the whole positive half to dodge one point.
+  const mapLibreContrast = contrast > 0 ? 1 / Math.max(1e-4, 1 - contrast) : 1 + contrast;
+  const slope = mapLibreContrast * (max - min);
+  const intercept = (min + max) / 2 - slope / 2;
+  // A flat result (contrast -1, or a zero-width window) wants a contrast of 0,
+  // which Cesium reaches exactly, so only floor the contrast when there is a
+  // slope to divide by. Flooring unconditionally would leave the fully
+  // flattened case a few percent off a target it can hit.
+  const exactContrast = 1 - 2 * intercept;
+  const cesiumContrast =
+    slope > 0 ? Math.max(MIN_IMAGERY_CONTRAST, exactContrast) : Math.max(0, exactContrast);
+
+  return {
+    brightness: slope > 0 ? slope / cesiumContrast : 0,
+    contrast: cesiumContrast,
+    // 1.001 is MapLibre's own constant in saturationFactor, not a guard added
+    // here; it is why this curve has no endpoint problem of its own.
+    saturation: saturation > 0 ? 1 / (1.001 - saturation) : Math.max(0, 1 + saturation),
+    hue: (num(styleValue(s, "rasterHueRotate"), 0) * Math.PI) / 180,
+  };
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
@@ -475,6 +616,13 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
       return prev.geojson !== next.geojson || styleSignature(prev) !== styleSignature(next);
     case "imagery":
       return (
+        (isCogLayer(next) && cogRenderSignature(prev) !== cogRenderSignature(next)) ||
+        str(prev.metadata?.tileType) !== str(next.metadata?.tileType) ||
+        // The Y-axis convention and the coverage rectangle bake into the
+        // bridged provider.
+        str(prev.source.scheme) !== str(next.source.scheme) ||
+        JSON.stringify(prev.source.bounds ?? null) !== JSON.stringify(next.source.bounds ?? null) ||
+        prev.source.tileSize !== next.source.tileSize ||
         firstTile(prev) !== firstTile(next) ||
         // min/maxzoom bake into UrlTemplateImageryProvider's min/maximumLevel.
         prev.source.maxzoom !== next.source.maxzoom ||
@@ -519,12 +667,30 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   }
 }
 
-/** Collaborators the sync loads lazily or that tests replace. */
+/** The slice of a PMTiles header the raster branch reads. */
+export type PMTilesRasterHeader = Pick<
+  PMTilesHeader,
+  "minZoom" | "maxZoom" | "minLon" | "minLat" | "maxLon" | "maxLat"
+>;
+
+/** Injection points for the environment-bound pieces of the sync (tests). */
 export interface CesiumLayerSyncDeps {
+  /** Loads the COG tiler module; defaults to `import("cog-tiler-wasm")`. */
+  loadCogTiler?: () => Promise<CogTilerModule>;
+  /**
+   * Reads a raster PMTiles archive's header; defaults to the shared
+   * `pmtiles://` protocol's archive (a range request over HTTP).
+   */
+  readPMTilesHeader?: (url: string) => Promise<PMTilesRasterHeader | undefined>;
   /** Rasterises one marker sprite; defaults to the 2D map's marker renderer. */
   renderMarker?: typeof renderMarkerCanvas;
   /** Rasterises the fill-pattern tile; defaults to the 2D map's renderer. */
   renderFillPattern?: typeof renderFillPatternCanvas;
+}
+
+async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
+  const archive = getPMTilesArchive(url);
+  return archive ? archive.getHeader() : undefined;
 }
 
 export class CesiumLayerSync {
@@ -655,6 +821,37 @@ export class CesiumLayerSync {
     private readonly deps: CesiumLayerSyncDeps = {},
   ) {}
 
+  /**
+   * The WASM COG tiler, loaded on first use and shared by every COG layer.
+   * Lazy for the same reason the raster control loads it lazily: the module
+   * and its peers are several megabytes that a globe without a COG never
+   * needs. Injectable through {@link CesiumLayerSyncDeps} for tests.
+   */
+  private cogTiler: Promise<ReturnType<typeof cachingCogTiler>> | null = null;
+  private loadCogTiler(): Promise<ReturnType<typeof cachingCogTiler>> {
+    this.cogTiler ??= (this.deps.loadCogTiler ?? (() => import("cog-tiler-wasm")))().then(
+      cachingCogTiler,
+      (error) => {
+        // A failed module load must not poison every later COG for the life
+        // of the globe; the next COG layer retries the import.
+        this.cogTiler = null;
+        throw error;
+      },
+    );
+    return this.cogTiler;
+  }
+
+  /** Drop a COG source from the cache once no remaining entry reads it. */
+  private forgetCogSource(entry: LayerEntry): void {
+    const url = cogSourceUrl(entry.layer);
+    if (!url || !this.cogTiler) return;
+    for (const other of this.entries.values()) {
+      if (other !== entry && isCogLayer(other.layer) && cogSourceUrl(other.layer) === url) return;
+    }
+    // A tiler that failed to load has nothing to forget; keep the rejection quiet.
+    void this.cogTiler.then((tiler) => tiler.forget(url)).catch(() => {});
+  }
+
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
   sync(layers: GeoLibreLayer[]): void {
     this.restoreHighlight();
@@ -672,6 +869,9 @@ export class CesiumLayerSync {
     for (const [id, entry] of this.entries) {
       if (!nextIds.has(id)) {
         this.destroyEntry(entry);
+        // A layer that left the project releases its COG source; a rebuild
+        // (below) keeps it, which is the point of the cache.
+        if (isCogLayer(entry.layer)) this.forgetCogSource(entry);
         this.entries.delete(id);
       }
     }
@@ -687,6 +887,7 @@ export class CesiumLayerSync {
         const stale = this.entries.get(layer.id);
         if (stale) {
           this.destroyEntry(stale);
+          if (isCogLayer(stale.layer)) this.forgetCogSource(stale);
           this.entries.delete(layer.id);
         }
         continue;
@@ -699,6 +900,14 @@ export class CesiumLayerSync {
       } else if (needsRebuild(existing.layer, layer)) {
         this.destroyEntry(existing);
         this.entries.delete(layer.id);
+        // A COG whose source moved (a re-read blob URL, an authoring swap)
+        // leaves its old source behind unless something forgets it.
+        if (
+          isCogLayer(existing.layer) &&
+          (!isCogLayer(layer) || cogSourceUrl(existing.layer) !== cogSourceUrl(layer))
+        ) {
+          this.forgetCogSource(existing);
+        }
         this.createEntry(layer);
         if (entryKind(layer) === "imagery") imageryRebuilt = true;
       } else {
@@ -732,6 +941,7 @@ export class CesiumLayerSync {
     this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
+    void this.cogTiler?.then((tiler) => tiler.clear()).catch(() => {});
     this.unwatchCamera?.();
     this.unwatchCamera = null;
   }
@@ -1157,25 +1367,114 @@ export class CesiumLayerSync {
           tilingScheme,
           tileMatrixLabels,
         });
+      } else if (isCogLayer(layer)) {
+        // The WASM tiler renders the tiles itself (issue #2283), so neither
+        // request headers nor a Resource apply: the COG is range-read by the
+        // tiler from the same URL the raster control opened it from.
+        isAsync = true;
+        provider = await createCogImageryProvider(Cesium, await this.loadCogTiler(), layer);
+      } else if (layer.type === "pmtiles" && pmtilesArchiveUrl(layer)) {
+        // Raster PMTiles ride the shared `pmtiles://` protocol the 2D map
+        // registers, through the same archive object, so a local (in-memory)
+        // archive and a remote one both answer. The header bounds the tile
+        // requests to what the archive actually holds.
+        isAsync = true;
+        const url = pmtilesArchiveUrl(layer)!;
+        const header = await (this.deps.readPMTilesHeader ?? readSharedPMTilesHeader)(url);
+        if (entry.cancelled) return;
+        const rectangle =
+          header &&
+          [header.minLon, header.minLat, header.maxLon, header.maxLat].every(Number.isFinite)
+            ? webMercatorRectangle(Cesium, [
+                header.minLon,
+                header.minLat,
+                header.maxLon,
+                header.maxLat,
+              ])
+            : undefined;
+        provider = new ProtocolImageryProvider(Cesium, {
+          template: `${url}/{z}/{x}/{y}`,
+          rectangle,
+          minimumLevel: Number.isFinite(header?.minZoom) ? header?.minZoom : undefined,
+          maximumLevel: Number.isFinite(header?.maxZoom) ? header?.maxZoom : undefined,
+          credit: str(layer.source.attribution),
+        });
       } else {
         const url = firstTile(layer);
         if (!url) throw new Error("no tile URL template");
-        const resource = makeResource(url);
         const maxLevel = Number(layer.source.maxzoom);
         const minLevel = Number(layer.source.minzoom);
-        provider = new Cesium.UrlTemplateImageryProvider({
-          url: resource,
-          maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
-          minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
-        });
+        const scheme = protocolScheme(url);
+        if (scheme) {
+          // A custom-protocol template (local MBTiles, the desktop's native
+          // XYZ/WMS fetcher, a KML super-overlay, the COG DEM): the tiles come
+          // from the handler MapLibre registered, not from HTTP. An
+          // unregistered scheme is refused rather than rendered blank, so the
+          // layer reads as failed instead of as a working layer drawing
+          // nothing.
+          if (!hasRegisteredProtocol(scheme))
+            throw new Error(`no MapLibre protocol handler registered for "${scheme}://"`);
+          const bounds = layer.source.bounds;
+          const rectangle =
+            Array.isArray(bounds) &&
+            bounds.length === 4 &&
+            bounds.every((v) => typeof v === "number" && Number.isFinite(v))
+              ? webMercatorRectangle(Cesium, bounds as [number, number, number, number])
+              : undefined;
+          // The tile size drives Cesium's level selection the way it drives
+          // MapLibre's, so a 512 px source fetches the same zoom on both.
+          const tileSize = Number(layer.source.tileSize);
+          const tileWidth = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : undefined;
+          provider = new ProtocolImageryProvider(Cesium, {
+            template: url,
+            scheme: layer.source.scheme === "tms" ? "tms" : "xyz",
+            tileWidth,
+            tileHeight: tileWidth,
+            rectangle,
+            maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
+            minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
+            credit: str(layer.source.attribution),
+          });
+        } else {
+          const resource = makeResource(url);
+          provider = new Cesium.UrlTemplateImageryProvider({
+            url: resource,
+            maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
+            minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
+          });
+        }
       }
 
-      if (!provider || entry.cancelled) return;
+      if (!provider || entry.cancelled) {
+        // Reachable: the branches above await (the COG tiler, the PMTiles
+        // header, ArcGIS/single-tile fromUrl), and the layer can be removed or
+        // rebuilt in that window. Nothing has requested a tile yet, but the
+        // provider still owns an abort controller, so tear it down rather than
+        // dropping it.
+        if (provider instanceof ProtocolImageryProvider) provider.destroy();
+        // Redundant today, and deliberately kept. A removal that races the
+        // (multi-megabyte) tiler import runs forgetCogSource against a cache
+        // this URL has not reached yet, so it only works because that forget is
+        // itself deferred through `this.cogTiler.then(...)` while openCog is
+        // reached synchronously from the earlier-queued continuation here: the
+        // open always lands first and the forget always finds it. Nothing
+        // enforces that ordering, and an await added before openCog in
+        // createCogImageryProvider would silently turn it into a leaked
+        // CogSource, so forget once more where the open has certainly happened.
+        if (isCogLayer(layer)) this.forgetCogSource(entry);
+        return;
+      }
       // addImageryProvider appends above the base imagery (and earlier store
       // layers), so store order maps to Cesium's bottom-to-top stacking.
       const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
       if (entry.cancelled) {
+        // Unreachable today: nothing awaits between the check above and here,
+        // so `cancelled` cannot flip. Kept as the guard it was written to be,
+        // and tearing the provider down the way destroyEntry does, so adding an
+        // await in between cannot silently start leaking a bridged provider's
+        // abort controller and the handler requests still in flight.
         viewer.imageryLayers.remove(imageryLayer, true);
+        if (provider instanceof ProtocolImageryProvider) provider.destroy();
         return;
       }
       this.imageryRefs.set(imageryLayer, layer.id);
@@ -1527,6 +1826,14 @@ export class CesiumLayerSync {
       const imagery = handle as ImageryLayer;
       imagery.show = layer.visible;
       imagery.alpha = this.effectiveOpacity(entry);
+      // The raster symbology (Style panel → brightness, contrast, saturation,
+      // hue) maps onto ImageryLayer's own adjustments; applied on every sync
+      // since the four assignments are cheaper than a change key.
+      const colour = imageryColorAdjustments(layer.style);
+      imagery.brightness = colour.brightness;
+      imagery.contrast = colour.contrast;
+      imagery.saturation = colour.saturation;
+      imagery.hue = colour.hue;
     } else if (entry.kind === "geojson") {
       (handle as DataSource).show = layer.visible;
       this.applyGeoJsonStyle(entry);
@@ -1884,7 +2191,14 @@ export class CesiumLayerSync {
     const { handle } = entry;
     if (!handle) return;
     if (entry.kind === "imagery") {
-      this.viewer.imageryLayers.remove(handle as ImageryLayer, true);
+      const imagery = handle as ImageryLayer;
+      // Cesium destroys the layer but not its provider; a bridged provider
+      // holds an abort controller for the handler requests still in flight.
+      // Read the provider before the layer is destroyed, so the abort never
+      // depends on what `destroy()` leaves behind.
+      const provider = imagery.imageryProvider as { destroy?: () => void } | undefined;
+      this.viewer.imageryLayers.remove(imagery, true);
+      if (provider instanceof ProtocolImageryProvider) provider.destroy();
     } else if (entry.kind === "geojson") {
       this.viewer.dataSources.remove(handle as DataSource, true);
     } else {
