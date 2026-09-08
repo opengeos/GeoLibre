@@ -748,6 +748,13 @@ describe("review follow-ups", () => {
     await flush();
     await flush();
     assert.equal(opens, 4, "the old URL was forgotten by the swap, so it is reopened");
+    // Turning the layer into another imagery kind with the same URL forgets it too.
+    sync.sync([{ ...layer, type: "xyz", metadata: { ...layer.metadata, sourceKind: "xyz-url" } }]);
+    await flush();
+    sync.sync([layer]);
+    await flush();
+    await flush();
+    assert.equal(opens, 5, "a type transition releases the source");
     sync.destroy();
   });
 
