@@ -49,6 +49,7 @@
     "h5wasm": "^0.10.3",
     "icechunk-js": "^0.6.0",
     "jspdf": "^4.2.1",
+    "lerc": "^4.2.0",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^6.7.0",
     "maplibre-gl-3d-tiles": "^0.5.6",

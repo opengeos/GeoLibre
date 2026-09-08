@@ -28,6 +28,7 @@ import {
   unwireRasterStoreSync,
   wireRasterStoreSync,
 } from "./raster-layer-sync";
+import { isAbbreviatedJpegCompression } from "./cog-compression";
 import {
   activateRasterClassification,
   disposeAllRasterClassification,
@@ -159,6 +160,8 @@ type RasterLayerManagerInternals = {
 };
 type CogTilerModule = {
   openCog: (source: unknown) => Promise<unknown>;
+  /** cog-tiler-wasm >= 0.3.6: where lerc's wasm is served from. */
+  configureLercDecoder?: (options: { wasmUrl?: string | null }) => void;
   [key: string]: unknown;
 };
 type GeoTiffImage = {
@@ -890,6 +893,7 @@ function patchCogTilerJpegTables(control: RasterControl): void {
   const loadCogTiler = deps.loadCogTiler;
   deps.loadCogTiler = async () => {
     const module = await loadCogTiler();
+    await configureLercWasmUrl(module);
     return {
       ...module,
       openCog: async (input: unknown) => patchJpegCogSource(await module.openCog(input)),
@@ -898,11 +902,34 @@ function patchCogTilerJpegTables(control: RasterControl): void {
   deps.geolibreJpegTablesPatched = true;
 }
 
+/**
+ * Point cog-tiler-wasm's mask-aware LERC decoder (#2339) at lerc's wasm.
+ *
+ * lerc locates `lerc-wasm.wasm` relative to its own module URL, which Vite's
+ * hashed build output and dev pre-bundling do not rewrite: the fetch lands on
+ * index.html and the wasm compile aborts. Vite's `?url` import resolves the
+ * served asset in both modes. It is a dynamic import so the Node test runner,
+ * which cannot resolve the `?url` suffix, never evaluates it; a resolution
+ * failure leaves lerc's own lookup in place rather than breaking the tiler.
+ */
+async function configureLercWasmUrl(module: CogTilerModule): Promise<void> {
+  if (typeof module.configureLercDecoder !== "function") return;
+  try {
+    const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
+    module.configureLercDecoder({ wasmUrl });
+  } catch (error) {
+    console.warn(
+      "[GeoLibre] Could not resolve lerc's wasm URL; LERC nodata may decode as 0",
+      error,
+    );
+  }
+}
+
 function patchJpegCogSource(source: unknown): unknown {
   const cog = source as CogSourceInternals;
   if (
     cog.geolibreJpegTablesPatched ||
-    !/jpeg/i.test(cog.levels?.[0]?.compression ?? "") ||
+    !isAbbreviatedJpegCompression(cog.levels?.[0]?.compression) ||
     !cog.tiff ||
     !cog._tiffImage ||
     !cog._assembleWindow
