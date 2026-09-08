@@ -883,8 +883,10 @@ export class CesiumLayerSync {
     // could actually have changed. sync() also runs on unrelated changes (e.g.
     // an opacity drag), and each raiseToTop is O(n), so reordering every time
     // would be a needless O(n²) on that hot path.
+    // Draped layers have no entry, yet the drape's stacking position among the
+    // native imagery follows the store order too, so they join the key.
     const imageryOrder = layers
-      .filter((l) => this.entries.get(l.id)?.kind === "imagery")
+      .filter((l) => this.entries.get(l.id)?.kind === "imagery" || isDrapedLayer(l))
       .map((l) => l.id)
       .join("\n");
     if (imageryRebuilt || imageryOrder !== this.lastImageryOrder) {
@@ -1015,7 +1017,12 @@ export class CesiumLayerSync {
       this.drape = (this.deps.createDrape ?? (() => MapLibreDrape.create()))();
       this.drapeError = this.drape ? null : "the globe could not start a MapLibre drape";
     }
-    if (!this.drape) return false;
+    if (!this.drape) {
+      // Leave the slot empty so the next change to a draped layer retries the
+      // creation; the error stands until a retry succeeds.
+      this.drape = undefined;
+      return false;
+    }
     // A new provider per change: Cesium caches the tiles it has, so restyling
     // in place would leave stale tiles on screen.
     this.drape.sync(draped);

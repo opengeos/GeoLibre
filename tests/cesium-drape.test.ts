@@ -284,18 +284,65 @@ describe("CesiumLayerSync drape integration", () => {
     assert.equal(drape.pending, 0);
   });
 
-  it("reports draped layers as errors when no drape can be created", () => {
+  it("reports draped layers as errors when no drape can be created, and retries on change", async () => {
     const f = makeViewer();
+    let attempts = 0;
+    const { host } = makeHost();
     const sync = new CesiumLayerSync(
       { ...Cesium, UrlTemplateImageryProvider: class {} } as never,
       f.viewer as never,
       () => 10,
-      { createDrape: () => null },
+      {
+        createDrape: () =>
+          ++attempts === 1 ? null : new MapLibreDrape(host, async () => fakeTile("t")),
+      },
     );
-    sync.sync([vectorTiles()]);
+    const layer = vectorTiles();
+    sync.sync([layer]);
     assert.equal(f.imagery.length, 0);
     const status = sync.getRenderStatus();
     assert.equal(status.errors.length, 1);
     assert.match(status.errors[0], /could not start a MapLibre drape/);
+    // An unrelated sync does not retry; a change to the draped layer does.
+    sync.sync([layer]);
+    assert.equal(attempts, 1);
+    sync.sync([{ ...layer, opacity: 0.5 }]);
+    await Promise.resolve();
+    assert.equal(attempts, 2);
+    assert.equal(f.imagery.length, 1);
+    assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
+  });
+
+  it("re-stacks the drape when it moves relative to native imagery", async () => {
+    const f = makeViewer();
+    const { host } = makeHost();
+    const drape = new MapLibreDrape(host, async () => fakeTile("t"));
+    const sync = new CesiumLayerSync(
+      { ...Cesium, UrlTemplateImageryProvider: class {} } as never,
+      f.viewer as never,
+      () => 10,
+      { createDrape: () => drape },
+    );
+    const raster = vectorTiles({
+      id: "img",
+      type: "xyz",
+      source: { type: "raster", tiles: ["https://tiles.example/{z}/{x}/{y}.png"] },
+    });
+    const draped = vectorTiles({ id: "vt" });
+    sync.sync([raster, draped]);
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(f.imagery.length, 2);
+    const before = f.order.length;
+    // Same members, the drape now below the raster: neither the drape
+    // signature nor the native-imagery order changed, but the stack did.
+    sync.sync([draped, raster]);
+    assert.ok(f.order.length > before, "reorderImagery ran for the swap");
+    const rasterLayer = f.imagery.find((l) => !(l.provider instanceof ProtocolImageryProvider));
+    assert.equal(
+      f.order[f.order.length - 1],
+      rasterLayer,
+      "the raster is raised last, above the drape",
+    );
   });
 });
