@@ -289,7 +289,11 @@ function makeFakes() {
             show: true,
           };
           const type = f.geometry?.type;
-          if (type === "Polygon") return { ...base, polygon: { material: null } };
+          if (type === "Polygon")
+            return {
+              ...base,
+              polygon: { material: null, hierarchy: { getValue: () => ({ positions: [{}, {}] }) } },
+            };
           if (type === "LineString") return { ...base, polyline: { material: null } };
           return { ...base, billboard: { color: undefined } };
         });
@@ -317,9 +321,36 @@ function makeFakes() {
     },
     Rectangle: { fromDegrees: () => ({}) },
     JulianDate: { fromDate: (d: Date) => d },
+    BoundingSphere: {
+      fromPoints: () => {
+        counters.spheres++;
+        return { radius: 500 };
+      },
+    },
+    Cartesian2: class {
+      constructor(
+        public x: number,
+        public y: number,
+      ) {}
+    },
+    ImageMaterialProperty: class {
+      constructor(public options: Record<string, unknown>) {}
+    },
   };
+  const counters = { spheres: 0 };
   const flush = () => new Promise((r) => setTimeout(r, 0));
-  return { viewer, Cesium, dataSources, flush, cameraListeners };
+  return { viewer, Cesium, dataSources, flush, cameraListeners, counters };
+}
+
+/** A marker renderer that records the colours it baked and can refuse some. */
+function fakeMarkerRenderer(refuse: string[] = []) {
+  const baked: string[] = [];
+  const render = async (_style: LayerStyle, colour?: string) => {
+    baked.push(colour ?? "");
+    if (colour && refuse.some((r) => rgb(colour).join() === rgb(r).join())) return null;
+    return { canvas: { sprite: colour ?? "base" } as unknown as HTMLCanvasElement, pixelRatio: 2 };
+  };
+  return { baked, render };
 }
 
 function geojsonLayer(features: unknown[], patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
@@ -427,5 +458,121 @@ describe("CesiumLayerSync per-feature symbology", () => {
     await f.flush();
     await f.flush();
     assert.equal(f.dataSources.length, 2);
+  });
+});
+
+describe("CesiumLayerSync marker sprites", () => {
+  const sprite = (e: { billboard?: Record<string, unknown> }) =>
+    (e.billboard?.image as { value: { sprite: string } } | undefined)?.value.sprite;
+
+  it("bakes one sprite per classified colour in parallel, with the base marker as fallback", async () => {
+    const f = makeFakes();
+    const renderer = fakeMarkerRenderer(["#0000aa"]);
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12, {
+      renderMarker: renderer.render,
+    });
+    sync.sync([
+      geojsonLayer([feature({ kind: "park" }), feature({ kind: "water" })], {
+        style: {
+          markerEnabled: true,
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "kind",
+          vectorStyleStops: [
+            { value: "park", color: "#00aa00" },
+            { value: "water", color: "#0000aa" },
+          ],
+        },
+      }),
+    ]);
+    await f.flush();
+    await f.flush();
+    // The base marker is always baked, not only past the sprite cap.
+    assert.equal(renderer.baked.length, 3);
+    assert.ok(renderer.baked.includes(""), "base marker baked");
+    const [park, water] = f.dataSources[0].entities.values;
+    assert.equal(
+      sprite(park),
+      renderer.baked.find((c) => c && rgb(c).join() === "0,170,0"),
+    );
+    assert.equal(sprite(water), "base", "a colour whose sprite failed falls back to the base");
+    assert.equal(
+      (water.billboard?.scale as { value: number }).value,
+      0.5,
+      "scale divides by the sprite's pixel ratio",
+    );
+  });
+
+  it("bakes the colours a zoom-dependent rule activates when the camera crosses its zoom", async () => {
+    const f = makeFakes();
+    const renderer = fakeMarkerRenderer();
+    let zoom = 10;
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => zoom, {
+      renderMarker: renderer.render,
+    });
+    sync.sync([
+      geojsonLayer([feature({ kind: "a" })], {
+        style: {
+          markerEnabled: true,
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "close",
+              label: "Close",
+              filter: JSON.stringify(["==", ["get", "kind"], "a"]),
+              color: "#ff0000",
+              isElse: false,
+              minZoom: 12,
+            },
+            { id: "else", label: "Other", filter: "", color: "#00ff00", isElse: true },
+          ],
+        },
+      }),
+    ]);
+    await f.flush();
+    await f.flush();
+    const [point] = f.dataSources[0].entities.values;
+    const isRed = (c: string) => Boolean(c) && rgb(c).join() === "255,0,0";
+    assert.ok(!renderer.baked.some(isRed), "the rule is inactive at z10, so no red sprite yet");
+    assert.ok(sprite(point) && rgb(sprite(point)!).join() === "0,255,0");
+    zoom = 12;
+    for (const listener of f.cameraListeners) listener();
+    await f.flush();
+    await f.flush();
+    assert.ok(renderer.baked.some(isRed), "the zoom step baked the newly active colour");
+    assert.ok(isRed(sprite(point)!), "and the marker switched to it");
+    // Another crossing back and forth reuses what is baked.
+    const bakedBefore = renderer.baked.length;
+    zoom = 10;
+    for (const listener of f.cameraListeners) listener();
+    await f.flush();
+    zoom = 12;
+    for (const listener of f.cameraListeners) listener();
+    await f.flush();
+    assert.equal(renderer.baked.length, bakedBefore, "no sprite is baked twice");
+  });
+
+  it("computes a fill pattern's repeat count once per polygon, not per restyle", async () => {
+    const f = makeFakes();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12, {
+      renderFillPattern: async () => ({
+        canvas: { tile: true } as unknown as HTMLCanvasElement,
+        pixelRatio: 1,
+      }),
+    });
+    const layer = geojsonLayer([feature({}, "Polygon"), feature({}, "Polygon")], {
+      style: { fillPattern: "hatch", fillOpacity: 0.5 },
+    });
+    sync.sync([layer]);
+    await f.flush();
+    await f.flush();
+    const polygon = f.dataSources[0].entities.values[0].polygon as {
+      material: { options: { repeat: { x: number }; color: { alpha: number } } };
+    };
+    assert.equal(polygon.material.options.repeat.x, 50, "2 × 500 m radius / 20 m per tile");
+    assert.equal(f.counters.spheres, 2, "one bounding sphere per polygon");
+    sync.sync([{ ...layer, opacity: 0.4 }]);
+    await f.flush();
+    assert.ok(Math.abs(polygon.material.options.color.alpha - 0.2) < 1e-9, "restyled in place");
+    assert.equal(f.counters.spheres, 2, "the restyle reused the cached repeat counts");
   });
 });

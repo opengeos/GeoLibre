@@ -476,6 +476,14 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   }
 }
 
+/** Collaborators the sync loads lazily or that tests replace. */
+export interface CesiumLayerSyncDeps {
+  /** Rasterises one marker sprite; defaults to the 2D map's marker renderer. */
+  renderMarker?: typeof renderMarkerCanvas;
+  /** Rasterises the fill-pattern tile; defaults to the 2D map's renderer. */
+  renderFillPattern?: typeof renderFillPatternCanvas;
+}
+
 export class CesiumLayerSync {
   private readonly featureRefs = new WeakMap<object, { layerId: string; index: number }>();
   private readonly imageryRefs = new WeakMap<object, string>();
@@ -601,6 +609,7 @@ export class CesiumLayerSync {
     private readonly Cesium: CesiumNs,
     private readonly viewer: CesiumWidget,
     private readonly readZoom: () => number = () => readMapViewFromCamera(Cesium, viewer).zoom,
+    private readonly deps: CesiumLayerSyncDeps = {},
   ) {}
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
@@ -737,10 +746,31 @@ export class CesiumLayerSync {
       if (entry.zoomStyle) {
         const before = entry.appliedAlpha;
         this.applyGeoJsonStyle(entry);
-        if (entry.appliedAlpha !== before) changed = true;
+        if (entry.appliedAlpha !== before) {
+          changed = true;
+          this.bakeZoomMarkers(entry);
+        }
       }
     }
     if (changed) this.viewer.scene?.requestRender?.();
+  }
+
+  /**
+   * A marker colour can itself be zoom-dependent (a rule with a zoom range
+   * compiles to a `["step", ["zoom"], …]` colour), so a zoom step may resolve
+   * colours no sprite was baked for at load. Those entities fell back to the
+   * base sprite in the restyle that just ran; bake the missing colours and
+   * restyle once more when they land.
+   */
+  private bakeZoomMarkers(entry: LayerEntry): void {
+    if (!entry.markerImages || !entry.resolver) return;
+    const handle = entry.handle;
+    void this.prepareSymbolImages(entry, entry.resolver, this.cameraZoom()).then((added) => {
+      if (!added || entry.cancelled || entry.handle !== handle) return;
+      entry.appliedAlpha = undefined;
+      this.applyGeoJsonStyle(entry);
+      this.viewer.scene?.requestRender?.();
+    });
   }
 
   /**
@@ -764,40 +794,54 @@ export class CesiumLayerSync {
 
   /**
    * Rasterise the sprites a layer's symbology needs: one marker per distinct
-   * resolved marker colour (capped, so a categorized field with thousands of
-   * classes cannot bake thousands of canvases) and the fill pattern tile.
-   * Both are async (custom SVGs decode through an `Image`), which is why this
-   * runs once at load rather than inside the synchronous restyle pass.
+   * marker colour resolved at `zoom` (capped, so a categorized field with
+   * thousands of classes cannot bake thousands of canvases), the base marker
+   * as the fallback for a colour past the cap or whose sprite failed, and the
+   * fill pattern tile. Sprites already baked are kept, so a later call for
+   * another zoom only adds the colours that zoom introduces. Both are async
+   * (custom SVGs decode through an `Image`), which is why this runs at load
+   * and on a zoom step rather than inside the synchronous restyle pass.
+   * Resolves to whether any new sprite was added.
    */
   private async prepareSymbolImages(
     entry: LayerEntry,
     resolver: FeatureStyleResolver,
-  ): Promise<void> {
+    zoom: number,
+  ): Promise<boolean> {
     const style = { ...DEFAULT_LAYER_STYLE, ...entry.layer.style };
     const features = entry.layer.geojson?.features ?? [];
+    const render = this.deps.renderMarker ?? renderMarkerCanvas;
+    let added = false;
     if (style.markerEnabled) {
-      const colours = new Set<string>();
+      const images = (entry.markerImages ??= new Map());
+      const wanted = new Set<string>();
+      if (!images.has("")) wanted.add("");
       for (const feature of features) {
         const type = feature.geometry?.type;
         if (type !== "Point" && type !== "MultiPoint") continue;
-        colours.add(resolver.resolveMarkerColor(feature, 0));
-        if (colours.size >= MAX_MARKER_SPRITES) break;
+        const colour = resolver.resolveMarkerColor(feature, zoom);
+        if (!images.has(colour)) wanted.add(colour);
+        if (images.size + wanted.size > MAX_MARKER_SPRITES) break;
       }
-      const images = new Map<string, { canvas: HTMLCanvasElement; pixelRatio: number }>();
-      for (const colour of colours) {
-        const image = await renderMarkerCanvas(style, colour).catch(() => null);
-        if (image) images.set(colour, image);
+      // The colours are independent, so their (possibly SVG-decoding) renders
+      // run together rather than one await at a time.
+      const baked = await Promise.all(
+        [...wanted].map(
+          async (colour) =>
+            [colour, await render(style, colour || undefined).catch(() => null)] as const,
+        ),
+      );
+      for (const [colour, image] of baked) {
+        if (!image || images.has(colour)) continue;
+        images.set(colour, image);
+        added = true;
       }
-      // The base marker doubles as the fallback for a colour past the cap.
-      if (colours.size >= MAX_MARKER_SPRITES) {
-        const base = await renderMarkerCanvas(style).catch(() => null);
-        if (base) images.set("", base);
-      }
-      entry.markerImages = images;
     }
-    if (style.fillPattern !== "none") {
-      entry.patternImage = await renderFillPatternCanvas(style).catch(() => null);
+    if (style.fillPattern !== "none" && entry.patternImage === undefined) {
+      const renderPattern = this.deps.renderFillPattern ?? renderFillPatternCanvas;
+      entry.patternImage = await renderPattern(style).catch(() => null);
     }
+    return added;
   }
 
   /**
@@ -1174,7 +1218,11 @@ export class CesiumLayerSync {
       // shapes per classified colour, the fill pattern tile) are rasterised
       // once per layer before the first restyle pass bakes them in.
       const resolver = this.resolverFor(entry);
-      await this.prepareSymbolImages(entry, resolver);
+      await this.prepareSymbolImages(
+        entry,
+        resolver,
+        resolver.zoomDependent ? this.cameraZoom() : 0,
+      );
       if (entry.cancelled) return;
       this.installPointGraphics(entry, dataSource, clampToGround);
       this.installZoomRange(entry, dataSource);
@@ -1587,13 +1635,6 @@ export class CesiumLayerSync {
   /**
    * Re-apply a GeoJSON layer's opacity in place, so dragging the opacity slider
    * restyles the entities instead of reloading the whole GeoJsonDataSource.
-   * Polygon fill uses layer opacity × fill opacity; polyline stroke and point
-   * markers use the layer opacity alone (matching the 2D map, where opacity
-   * fades lines and points too). Colours themselves bake in at load, so a colour
-   * change still rebuilds; the `appliedAlpha` guard makes a no-op call cheap on
-   * unrelated syncs.
-   */
-  /**
    * Bake every entity's symbology from the per-feature resolver (issue #2278),
    * folded with the layer (or story) opacity. Runs after load and again on
    * every opacity change, style-object change, or — for zoom-dependent
@@ -1736,6 +1777,11 @@ export class CesiumLayerSync {
    * pixels, which the globe cannot reproduce on a draped surface.
    */
   private patternRepeat(entity: Entity): Cartesian2 {
+    // The extent only changes with a rebuild, which creates new entities, so
+    // the answer is cached per entity: the restyle pass re-runs on every
+    // opacity-slider tick and must not recompute a bounding sphere per polygon.
+    const cached = this.patternRepeats.get(entity);
+    if (cached) return cached;
     const { Cesium, viewer } = this;
     let repeat = 8;
     try {
@@ -1748,10 +1794,15 @@ export class CesiumLayerSync {
     } catch {
       // Keep the default density.
     }
-    return (
+    const result = (
       Cesium.Cartesian2 ? new Cesium.Cartesian2(repeat, repeat) : { x: repeat, y: repeat }
     ) as Cartesian2;
+    this.patternRepeats.set(entity, result);
+    return result;
   }
+
+  /** Fill-pattern repeat counts, by entity; see {@link patternRepeat}. */
+  private readonly patternRepeats = new WeakMap<Entity, Cartesian2>();
 
   private destroyEntry(entry: LayerEntry): void {
     entry.cancelled = true;
