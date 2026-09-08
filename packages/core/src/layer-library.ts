@@ -81,6 +81,8 @@ export function hasRestorableLayerSource(
   if (nonEmptyString(source.url)) return true;
   if (nonEmptyString(source.data)) return true;
   if (Array.isArray(source.tiles) && source.tiles.some(nonEmptyString)) return true;
+  // A Cesium Ion asset is re-fetched from its id alone.
+  if (Number.isInteger(source.ionAssetId) && (source.ionAssetId as number) > 0) return true;
   return nonEmptyString((layer.metadata ?? {}).originalUrl);
 }
 

@@ -1217,3 +1217,19 @@ describe("createLayerLibraryEntryId", () => {
     assert.notEqual(a, b);
   });
 });
+
+describe("hasRestorableLayerSource for Cesium Ion assets", () => {
+  it("treats an Ion asset id as a re-fetchable source", () => {
+    assert.equal(
+      hasRestorableLayerSource({
+        source: { type: "3d-tiles", ionAssetId: 96188 },
+        metadata: { sourceKind: "cesium-ion" },
+      }),
+      true,
+    );
+    assert.equal(
+      hasRestorableLayerSource({ source: { type: "raster", ionAssetId: 0 }, metadata: {} }),
+      false,
+    );
+  });
+});

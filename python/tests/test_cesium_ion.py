@@ -60,3 +60,8 @@ def test_three_d_tiles_layer_accepts_ion_asset():
 def test_three_d_tiles_layer_needs_exactly_one_source(kwargs):
     with pytest.raises(ValueError):
         project.three_d_tiles_layer("T", **kwargs)
+
+
+def test_three_d_tiles_layer_rejects_headers_on_an_ion_asset():
+    with pytest.raises(ValueError, match="request_headers"):
+        project.three_d_tiles_layer("T", ion_asset_id=1, request_headers={"k": "v"})

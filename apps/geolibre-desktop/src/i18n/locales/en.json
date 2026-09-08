@@ -417,6 +417,7 @@
       "quickPicks": "Quick picks",
       "hint": "Find asset ids under My Assets at ion.cesium.com. The asset must be shared with the token configured in Settings.",
       "errorAssetId": "Enter a Cesium Ion asset id (a positive whole number).",
+      "errorAltitude": "Enter the altitude offset as a number of metres.",
       "tokenMissing": "No Cesium Ion token is configured. Add one in Settings → Environment variables (VITE_CESIUM_TOKEN) or the asset will fail to load."
     },
     "xyz": {

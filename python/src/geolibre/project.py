@@ -1596,11 +1596,14 @@ def three_d_tiles_layer(
 
     Raises:
         ValueError: If neither or both of ``url`` and ``ion_asset_id`` are given,
-            or the asset id is not a positive integer.
+            the asset id is not a positive integer, or ``request_headers`` are
+            combined with an Ion asset (Ion requests carry the token instead).
     """
     if (url is None) == (ion_asset_id is None):
         raise ValueError("pass exactly one of url or ion_asset_id")
     if ion_asset_id is not None:
+        if request_headers:
+            raise ValueError("request_headers do not apply to a Cesium Ion asset")
         return cesium_ion_layer(
             name, ion_asset_id, kind="3d-tiles", altitude_offset=altitude_offset, **style
         )

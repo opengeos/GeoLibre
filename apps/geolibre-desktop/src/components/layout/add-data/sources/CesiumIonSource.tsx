@@ -27,14 +27,17 @@ export function CesiumIonSource() {
   const handleSubmit = source.runSubmit(() => {
     const id = parseCesiumIonAssetId(assetId);
     if (id === null) throw new Error(t("addData.cesiumIon.errorAssetId"));
-    const offset = Number(altitudeOffset);
+    const offset = altitudeOffset.trim() === "" ? 0 : Number(altitudeOffset);
+    if (kind === "3d-tiles" && !Number.isFinite(offset)) {
+      throw new Error(t("addData.cesiumIon.errorAltitude"));
+    }
     const name = source.layerName.trim() || t("addData.cesiumIon.defaultName");
     source.addAndClose(
       createCesiumIonLayer({
         name,
         assetId: id,
         kind,
-        altitudeOffset: Number.isFinite(offset) ? offset : 0,
+        altitudeOffset: kind === "3d-tiles" ? offset : 0,
       }),
     );
   });
