@@ -946,8 +946,10 @@ export class CesiumLayerSync {
       // throw for an ordinary mixed project.
       if (!isCesiumSupportedLayerType(layer)) continue;
       if (isDrapedLayer(layer)) {
-        if (this.drapeError) errors.push(`${layer.name}: ${this.drapeError}`);
-        else if (!this.drape || this.drape.pending > 0) pending.push(layer.name);
+        const error = this.drapeError ?? this.drape?.error;
+        if (error) errors.push(`${layer.name}: ${error}`);
+        else if (!this.drape || !this.drape.ready || this.drape.pending > 0)
+          pending.push(layer.name);
         continue;
       }
       const entry = this.entries.get(layer.id);
@@ -1115,12 +1117,7 @@ export class CesiumLayerSync {
     this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
-    if (this.drapeLayer) {
-      const provider = this.drapeLayer.imageryProvider;
-      this.viewer.imageryLayers.remove(this.drapeLayer, true);
-      if (provider instanceof ProtocolImageryProvider) provider.destroy();
-      this.drapeLayer = null;
-    }
+    this.removeDrapeLayer();
     this.drape?.destroy();
     this.drape = undefined;
     this.drapeKey = "";
@@ -1439,15 +1436,7 @@ export class CesiumLayerSync {
     if (key === this.drapeKey) return false;
     this.drapeKey = key;
     this.drapeTopId = draped.length ? draped[draped.length - 1].id : null;
-    const removed = this.drapeLayer !== null;
-    if (this.drapeLayer) {
-      // As in destroyEntry: Cesium destroys the layer but not the provider,
-      // whose abort controller cancels the tile renders still queued.
-      const provider = this.drapeLayer.imageryProvider;
-      this.viewer.imageryLayers.remove(this.drapeLayer, true);
-      if (provider instanceof ProtocolImageryProvider) provider.destroy();
-      this.drapeLayer = null;
-    }
+    const removed = this.removeDrapeLayer();
     if (!draped.length) {
       this.drape?.destroy();
       this.drape = undefined;
@@ -1471,6 +1460,18 @@ export class CesiumLayerSync {
       this.drape.createProvider(this.Cesium),
     );
     this.drapeLayer = layer;
+    return true;
+  }
+
+  /** Drop the drape's imagery layer, if any; returns whether there was one. */
+  private removeDrapeLayer(): boolean {
+    if (!this.drapeLayer) return false;
+    // As in destroyEntry: Cesium destroys the layer but not the provider,
+    // whose abort controller cancels the tile renders still queued.
+    const provider = this.drapeLayer.imageryProvider;
+    this.viewer.imageryLayers.remove(this.drapeLayer, true);
+    if (provider instanceof ProtocolImageryProvider) provider.destroy();
+    this.drapeLayer = null;
     return true;
   }
 

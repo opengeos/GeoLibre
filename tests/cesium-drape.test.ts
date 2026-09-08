@@ -110,6 +110,14 @@ describe("isDrapedLayer", () => {
     );
     assert.equal(isDrapedLayer(vectorTiles({ type: "arcgis" })), false);
     assert.equal(isCesiumSupportedLayerType(vectorTiles()), true);
+    // A hand-authored project can omit `source` altogether: not draped, no throw.
+    for (const type of ["vector-tiles", "pmtiles", "mbtiles"] as const) {
+      assert.equal(
+        isDrapedLayer(vectorTiles({ type, source: undefined as never })),
+        false,
+        `${type} without a source`,
+      );
+    }
   });
 
   it("changes the signature for style, order, visibility, and filter edits", () => {
@@ -208,6 +216,59 @@ describe("MapLibreDrape", () => {
     assert.equal(isDisposed(), true);
   });
 
+  it("settles an aborted tile at once so the next provider's tile is not held up", async () => {
+    // The map never goes idle on its own: a tile waits for the 8 s timeout
+    // unless something ends the wait early.
+    const { host, jumps } = makeHost({ idle: false });
+    const drape = new MapLibreDrape(host, async () => fakeTile("tile"));
+    const controller = new AbortController();
+    const stale = drape.requestTile(0, 0, 1, controller.signal);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(jumps.length, 1, "the stale tile is being rendered");
+    // A rebuild: the old provider is aborted and the new one asks for a tile.
+    drape.sync([vectorTiles()]);
+    const freshController = new AbortController();
+    const fresh = drape.requestTile(1, 0, 1, freshController.signal);
+    controller.abort();
+    assert.equal(await stale, null, "the aborted tile never reaches the globe");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(jumps.length, 2, "the fresh tile started without waiting for idle");
+    assert.equal(drape.pending, 1, "the fresh tile is still waiting for idle");
+    freshController.abort();
+    assert.equal(await fresh, null);
+    assert.equal(drape.pending, 0);
+    drape.destroy();
+  });
+
+  it("reports a layer the hidden map rejects instead of leaving the rejection unhandled", async () => {
+    const { host } = makeHost();
+    host.layerSync.sync = () => {
+      throw new Error("layers.vt: filter is not an expression");
+    };
+    const drape = new MapLibreDrape(host, async () => fakeTile("tile"));
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      drape.sync([vectorTiles()]);
+      assert.equal(drape.ready, false);
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(drape.ready, true, "the sync settled even though it failed");
+    assert.match(drape.error ?? "", /filter is not an expression/);
+    assert.equal(warnings.length, 1);
+    host.layerSync.sync = () => {};
+    drape.sync([vectorTiles()]);
+    assert.equal(drape.error, null, "a new sync clears the last error");
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(drape.ready, true);
+  });
+
   it("hands Cesium a 512-px provider that routes back into the render queue", async () => {
     const { host, jumps } = makeHost();
     const drape = new MapLibreDrape(host, async () => fakeTile("tile"));
@@ -293,6 +354,52 @@ describe("CesiumLayerSync drape integration", () => {
     sync.sync([]);
     assert.equal(f.imagery.length, 0);
     assert.equal(drape.pending, 0);
+  });
+
+  it("keeps draped layers pending until the hidden map has applied them", async () => {
+    const f = makeViewer();
+    const { host } = makeHost();
+    let markReady = () => {};
+    host.ready = new Promise<void>((resolve) => {
+      markReady = resolve;
+    });
+    const drape = new MapLibreDrape(host, async () => fakeTile("t"));
+    const sync = new CesiumLayerSync(
+      { ...Cesium, UrlTemplateImageryProvider: class {} } as never,
+      f.viewer as never,
+      () => 10,
+      { createDrape: () => drape },
+    );
+    sync.sync([vectorTiles()]);
+    await Promise.resolve();
+    assert.equal(drape.pending, 0, "no tile has been requested yet");
+    assert.deepEqual(
+      sync.getRenderStatus(),
+      { pending: ["Vector tiles"], errors: [] },
+      "the hidden map has not loaded, so the layer cannot be settled",
+    );
+    markReady();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
+
+    // A layer the hidden map rejects surfaces as that layer's error.
+    host.layerSync.sync = () => {
+      throw new Error("bad paint");
+    };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      sync.sync([vectorTiles({ opacity: 0.5 })]);
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(sync.getRenderStatus(), {
+      pending: [],
+      errors: ["Vector tiles: bad paint"],
+    });
   });
 
   it("reports draped layers as errors when no drape can be created, and retries on change", async () => {

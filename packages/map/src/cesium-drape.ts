@@ -63,20 +63,23 @@ export function isDrapedLayer(layer: GeoLibreLayer): boolean {
   if (!DRAPED_TYPES.has(layer.type)) return false;
   if (layer.type === "vector-tiles") {
     return (
-      Boolean(str(layer.source.url)) ||
-      (Array.isArray(layer.source.tiles) && layer.source.tiles.length > 0)
+      Boolean(str(layer.source?.url)) ||
+      (Array.isArray(layer.source?.tiles) && layer.source.tiles.length > 0)
     );
   }
   if (!isVectorArchive(layer)) return false;
-  if (layer.type === "pmtiles") return Boolean(str(layer.source.url) ?? str(layer.sourcePath));
-  return Array.isArray(layer.source.tiles) && layer.source.tiles.length > 0;
+  if (layer.type === "pmtiles") return Boolean(str(layer.source?.url) ?? str(layer.sourcePath));
+  return Array.isArray(layer.source?.tiles) && layer.source.tiles.length > 0;
 }
 
 /**
- * What a change to would have to re-render the drape: the layers' identity,
+ * What a change has to touch to re-render the drape: the layers' identity,
  * order, visibility, opacity, style, source, and the metadata the 2D sync
  * reads (source layers, native ids). Cesium caches the tiles it has, so any
  * of these rebuilds the imagery layer rather than restyling it in place.
+ * Opacity is on the list deliberately: the hidden map bakes every draped
+ * layer's opacity into one composite texture, so unlike a native imagery
+ * entry it cannot be applied afterwards as the imagery layer's `alpha`.
  */
 export function drapeSignature(layers: readonly GeoLibreLayer[]): string {
   return layers.map(layerSignature).join("\n");
@@ -218,6 +221,9 @@ export class MapLibreDrape {
   private inFlight = 0;
   private destroyed = false;
   private generation = 0;
+  /** The generation whose layers the hidden map has applied (`-1`: none yet). */
+  private synced = -1;
+  private syncError: string | null = null;
 
   constructor(
     private readonly host: DrapeHost,
@@ -238,12 +244,44 @@ export class MapLibreDrape {
     return this.inFlight;
   }
 
+  /**
+   * Whether the hidden map has applied the latest `sync()`'s layers. Until it
+   * has, no tile can have been requested for them, so `pending` alone would
+   * read as settled.
+   */
+  get ready(): boolean {
+    return this.synced === this.generation;
+  }
+
+  /** Why the hidden map could not apply the latest layers, if it could not. */
+  get error(): string | null {
+    return this.syncError;
+  }
+
   /** Give the drape a new layer list; bumps the generation so stale tiles are dropped. */
   sync(layers: GeoLibreLayer[]): void {
-    this.generation++;
-    void this.host.ready.then(() => {
-      if (!this.destroyed) this.host.layerSync.sync(layers);
-    });
+    const generation = ++this.generation;
+    this.syncError = null;
+    void this.host.ready.then(
+      () => {
+        if (this.destroyed || generation !== this.generation) return;
+        try {
+          this.host.layerSync.sync(layers);
+        } catch (error) {
+          // A layer MapLibre rejects (a bad filter or paint expression from a
+          // hand-authored project) is reported like any other layer error
+          // rather than left as an unhandled rejection.
+          this.syncError = error instanceof Error ? error.message : String(error);
+          console.warn("[cesium-drape]", error);
+        }
+        this.synced = generation;
+      },
+      (error) => {
+        if (this.destroyed || generation !== this.generation) return;
+        this.syncError = error instanceof Error ? error.message : String(error);
+        this.synced = generation;
+      },
+    );
   }
 
   /**
@@ -260,17 +298,22 @@ export class MapLibreDrape {
         await this.host.ready;
         if (this.destroyed || signal?.aborted || generation !== this.generation) return null;
         const { map } = this.host;
+        // An abort (the provider was replaced or destroyed) ends the wait at
+        // once: tiles render one after another, so a stale tile that kept
+        // waiting for `idle` would hold up the next provider's first tile.
         await new Promise<void>((resolve) => {
           let settled = false;
           const done = () => {
             if (settled) return;
             settled = true;
             map.off("idle", done);
+            signal?.removeEventListener("abort", done);
             clearTimeout(timer);
             resolve();
           };
           const timer = setTimeout(done, IDLE_TIMEOUT_MS);
           map.once("idle", done);
+          signal?.addEventListener("abort", done, { once: true });
           map.jumpTo({ center: tileCenter(z, x, y), zoom: z });
         });
         if (this.destroyed || signal?.aborted || generation !== this.generation) return null;
