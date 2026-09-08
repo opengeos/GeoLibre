@@ -14,19 +14,19 @@ export async function initializeNativeCoordinateOpen(): Promise<void> {
   if (!isTauri()) return;
   try {
     const { getCurrent, onOpenUrl } = await import("@tauri-apps/plugin-deep-link");
-    let receivedEvent = false;
+    let receivedCoordinate = false;
     const accept = (urls: string[]) => {
       const location = urls.map(coordinateTargetFromGeoUri).find((value) => value !== null);
-      if (!location) return;
+      if (!location) return false;
       if (startup) initialTarget = location;
       else useAppStore.getState().setMapView(location);
+      return true;
     };
     await onOpenUrl((urls) => {
-      receivedEvent = true;
-      accept(urls);
+      if (accept(urls)) receivedCoordinate = true;
     });
     const urls = await getCurrent();
-    if (!receivedEvent && urls) accept(urls);
+    if (!receivedCoordinate && urls) accept(urls);
   } catch (error) {
     console.error("[GeoLibre] Could not initialize coordinate links", error);
   }

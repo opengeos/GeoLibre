@@ -20,7 +20,10 @@ test("native link bridge captures cold launches and moves the live map without r
       async invoke(command: string) {
         commands.push(command);
         if (command === "plugin:event|listen") return 1;
-        if (command === "plugin:deep-link|get_current") return ["geo:40.7128,-74.006?z=12"];
+        if (command === "plugin:deep-link|get_current") {
+          handler({ payload: ["geo:0,0?q=an+address"] });
+          return ["geo:40.7128,-74.006?z=12"];
+        }
         throw new Error(command);
       },
     },
@@ -36,6 +39,8 @@ test("native link bridge captures cold launches and moves the live map without r
     assert.equal(useAppStore.getState().mapView.zoom, 15);
     assert.equal(useAppStore.getState().layers, layers);
     assert.equal(useAppStore.getState().projectGeneration, projectGeneration);
+    handler({ payload: ["geo:51.5,-0.12?z=16"] });
+    assert.equal(useAppStore.getState().mapView.zoom, 16);
     handler({ payload: ["geo:0,0?q=an+address"] });
     assert.deepEqual(useAppStore.getState().mapView.center, [-0.12, 51.5]);
   } finally {
