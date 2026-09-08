@@ -24,8 +24,10 @@ import { createLayerSync, type LayerSync } from "./headless";
 // second WebGL context and render loop, and tiles render one after another.
 // All draped layers share one Cesium imagery layer, stacked at the topmost
 // draped layer's position, so a native imagery layer sitting between two
-// draped layers in the store order renders below both of them. Picking on
-// draped content is a follow-up.
+// draped layers in the store order renders below both of them. Label glyphs
+// come from `DRAPE_GLYPHS`, a remote host, so a draped layer viewed offline
+// (a local MBTiles archive with no network) renders without its text; the
+// features themselves still draw. Picking on draped content is a follow-up.
 
 type CesiumNs = typeof import("@cesium/engine");
 
