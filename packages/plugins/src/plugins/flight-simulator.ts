@@ -23,6 +23,7 @@
  * terrain rather than empty sky filling the viewport.
  */
 
+import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
@@ -98,6 +99,13 @@ const MAX_SEED_ALTITUDE_AGL = 8000;
 
 /** How often the HUD is notified, in ms. The camera still updates every frame. */
 const HUD_REFRESH_MS = 100;
+
+/**
+ * Lowest ground height the Cesium adapter accepts from `globe.getHeight`, in
+ * metres: below the lowest land (the Dead Sea shore, −430 m) and above the
+ * skirt depths a coarse terrain tile interpolates to.
+ */
+const MIN_GROUND_HEIGHT_METERS = -500;
 
 /** Physical key codes (layout-independent) bound to each control axis. */
 const KEYS = {
@@ -254,7 +262,7 @@ const IDLE_HUD: FlightHudState = {
   grounded: false,
 };
 
-/** Map state saved on entry and restored when flight ends. */
+/** MapLibre map state saved on entry and restored when flight ends. */
 interface SavedMapState {
   maxPitch: number;
   /** Camera pitch before flight, restored on exit. */
@@ -265,13 +273,266 @@ interface SavedMapState {
   enabledHandlers: boolean[];
 }
 
+/** Where the aircraft is seeded from: the camera the user was looking through. */
+interface FlightSeedView {
+  lng: number;
+  lat: number;
+  zoom: number;
+  bearing: number;
+  viewportHeightPx: number;
+}
+
+/**
+ * The renderer-specific half of the simulator (issue #2287).
+ *
+ * The flight model, the keyboard, the HUD, and the animation loop are the same
+ * whichever engine draws the world; only reading the starting view, sampling
+ * the ground, taking the camera over, and placing it each frame differ. Those
+ * five operations are the adapter, so the 2D map and the globe share one
+ * {@link FlightSimulatorEngine} instead of two drifting copies.
+ */
+interface FlightCameraAdapter {
+  /** The view to seed the aircraft from. */
+  seedView(): FlightSeedView;
+  /**
+   * Rendered terrain height under a position, in meters — as drawn, so with
+   * any vertical exaggeration applied (see {@link FlightSimulatorEngine}).
+   */
+  groundElevation(lng: number, lat: number): number;
+  /** Suspend interaction, widen the pitch limit, enable terrain. */
+  takeOver(): void;
+  /** Place the camera at the aircraft. */
+  applyCamera(state: AircraftState, cameraPitch: number, roll: number): void;
+  /** Level the camera and hand the map back. */
+  release(): void;
+  /** Whether this adapter drives `target` (a MapLibre map or a Cesium widget). */
+  drives(target: unknown): boolean;
+}
+
+/**
+ * The MapLibre adapter: `calculateCameraOptionsFromCameraLngLatAltRotation`
+ * (see the module header), interaction handlers suspended while flying, and
+ * the pitch ceiling widened so the camera is not clamped flat.
+ */
+class MapLibreFlightAdapter implements FlightCameraAdapter {
+  private saved: SavedMapState | null = null;
+  private cameraToken = 0;
+
+  constructor(
+    private readonly map: MapLibreMap,
+    private readonly setTerrainEnabled?: (enabled: boolean) => boolean,
+  ) {}
+
+  drives(target: unknown): boolean {
+    return target === this.map;
+  }
+
+  seedView(): FlightSeedView {
+    const center = this.map.getCenter();
+    return {
+      lng: center.lng,
+      lat: center.lat,
+      zoom: this.map.getZoom(),
+      bearing: this.map.getBearing(),
+      viewportHeightPx: this.map.getCanvas()?.clientHeight ?? 600,
+    };
+  }
+
+  groundElevation(lng: number, lat: number): number {
+    try {
+      const elevation = this.map.queryTerrainElevation?.([lng, lat]);
+      return Number.isFinite(elevation) ? (elevation as number) : 0;
+    } catch {
+      // Terrain can be mid-teardown (style reload); sea level is a safe floor.
+      return 0;
+    }
+  }
+
+  takeOver(): void {
+    const handlers = INTERACTION_HANDLERS.map((key) => this.map[key]);
+    this.saved = {
+      maxPitch: this.map.getMaxPitch(),
+      pitch: this.map.getPitch(),
+      centerClampedToGround: this.map.getCenterClampedToGround(),
+      terrainEnabled: this.map.getTerrain?.() != null,
+      enabledHandlers: handlers.map((handler) => handler.isEnabled()),
+    };
+    // Terrain is part of flight mode, not an optional prerequisite. Enable it
+    // before seeding the aircraft so its starting altitude is measured above
+    // the rendered ground rather than sea level.
+    if (!this.saved.terrainEnabled) this.setTerrainEnabled?.(true);
+    for (const handler of handlers) handler.disable();
+    // The app's default max pitch is 85 but a user preference can lower it;
+    // flight needs the full range or the camera would be clamped flat.
+    if (this.map.getMaxPitch() < MAX_CAMERA_PITCH) this.map.setMaxPitch(MAX_CAMERA_PITCH);
+    // MapLibre pins the map center to the terrain surface by default, which
+    // would drag the camera down with the ground passing beneath it.
+    this.map.setCenterClampedToGround(false);
+  }
+
+  applyCamera(state: AircraftState, cameraPitch: number, roll: number): void {
+    try {
+      const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
+        [state.lng, state.lat],
+        state.altitude,
+        state.heading,
+        cameraPitch,
+        roll,
+      );
+      this.map.jumpTo(options, { [FLIGHT_CAMERA_TOKEN]: ++this.cameraToken });
+    } catch {
+      // A style/terrain reload can briefly make camera conversion unavailable.
+      // Keep the simulation alive; the next animation frame will retry.
+    }
+  }
+
+  release(): void {
+    if (!this.saved) return;
+    const { maxPitch, pitch, centerClampedToGround, terrainEnabled, enabledHandlers } = this.saved;
+    // Level the wings and return to the tilt the user started from, keeping
+    // where they flew to. Leaving the flight's own ~78 deg pitch in place
+    // would drop them into a near-horizon view spanning half a continent.
+    // Done *before* the pitch ceiling is reinstated so the exit view is one
+    // the app considers valid and the store's `moveend` sync records it.
+    this.map.jumpTo({ roll: 0, pitch: Math.min(pitch, maxPitch) });
+    this.map.setMaxPitch(maxPitch);
+    if (!terrainEnabled) this.setTerrainEnabled?.(false);
+    this.map.setCenterClampedToGround(centerClampedToGround);
+    INTERACTION_HANDLERS.forEach((key, index) => {
+      if (enabledHandlers[index]) this.map[key].enable();
+    });
+    this.saved = null;
+  }
+}
+
+/**
+ * The Cesium adapter: the camera is placed with `camera.setView` from the
+ * aircraft's own position and attitude (Cesium's camera is a free camera, so
+ * there is no MapLibre-style conversion and no pitch singularity), and
+ * `screenSpaceCameraController.enableInputs` stands in for the suspended
+ * MapLibre handlers.
+ *
+ * Cesium's pitch is horizon-referenced (0 level, −90° straight down) where the
+ * flight model and MapLibre's are nadir-referenced, so the MapLibre camera
+ * pitch the engine computes is shifted by 90° here; the same
+ * {@link LEVEL_CAMERA_PITCH} then reads as a slight nose-down view on both.
+ */
+class CesiumFlightAdapter implements FlightCameraAdapter {
+  private restoreInputs: (() => void) | null = null;
+  private savedTerrainEnabled = false;
+  private savedPitch = 0;
+
+  constructor(
+    private readonly globe: CesiumSceneHandle,
+    private readonly setTerrainEnabled?: (enabled: boolean) => boolean,
+    private readonly isTerrainEnabled?: () => boolean,
+  ) {}
+
+  drives(target: unknown): boolean {
+    return target === this.globe.viewer;
+  }
+
+  private live(): boolean {
+    return !this.globe.viewer.isDestroyed();
+  }
+
+  seedView(): FlightSeedView {
+    const { canvas } = this.globe;
+    const view = this.globe.readView();
+    return {
+      lng: view.center[0],
+      lat: view.center[1],
+      zoom: view.zoom,
+      bearing: view.bearing,
+      viewportHeightPx: canvas.clientHeight || canvas.height || 600,
+    };
+  }
+
+  groundElevation(lng: number, lat: number): number {
+    if (!this.live()) return 0;
+    const { Cesium, scene } = this.globe;
+    const globe = scene.globe;
+    if (!globe) return 0;
+    try {
+      const height = globe.getHeight(Cesium.Cartographic.fromDegrees(lng, lat));
+      if (typeof height !== "number" || !Number.isFinite(height)) return 0;
+      // `getHeight` interpolates whatever tile is loaded at the position. Far
+      // from the camera that is a coarse level whose mesh skirts hang
+      // kilometres below the surface, and the interpolation returns them as
+      // heights (−9 km over Kansas was observed); no land is below −500 m, so
+      // anything under that is a skirt, not the ground.
+      const grounded = Math.max(height, MIN_GROUND_HEIGHT_METERS);
+      // `getHeight` reports the source height; the globe is drawn scaled by
+      // `verticalExaggeration`, and the aircraft must clear what is drawn.
+      const exaggeration = scene.verticalExaggeration;
+      return Number.isFinite(exaggeration) && exaggeration > 0 ? grounded * exaggeration : grounded;
+    } catch {
+      return 0;
+    }
+  }
+
+  takeOver(): void {
+    if (!this.live()) return;
+    const { Cesium, scene, camera } = this.globe;
+    this.savedPitch = Cesium.Math.toDegrees(camera.pitch);
+    this.savedTerrainEnabled = this.isTerrainEnabled?.() ?? false;
+    if (!this.savedTerrainEnabled) this.setTerrainEnabled?.(true);
+    const controller = scene.screenSpaceCameraController;
+    const previous = controller.enableInputs;
+    controller.enableInputs = false;
+    this.restoreInputs = () => {
+      if (this.live()) controller.enableInputs = previous;
+    };
+  }
+
+  applyCamera(state: AircraftState, cameraPitch: number, roll: number): void {
+    if (!this.live()) return;
+    const { Cesium, camera } = this.globe;
+    try {
+      camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(state.lng, state.lat, state.altitude),
+        orientation: {
+          heading: Cesium.Math.toRadians(state.heading),
+          pitch: Cesium.Math.toRadians(cameraPitch - 90),
+          roll: Cesium.Math.toRadians(roll),
+        },
+      });
+      this.globe.requestRender();
+    } catch {
+      // A morph between scene modes rejects camera writes; retry next frame.
+    }
+  }
+
+  release(): void {
+    this.restoreInputs?.();
+    this.restoreInputs = null;
+    if (!this.savedTerrainEnabled) this.setTerrainEnabled?.(false);
+    if (!this.live()) return;
+    const { Cesium, camera } = this.globe;
+    try {
+      // Level the wings and return to the tilt the user started from, where
+      // they flew to — the same exit the 2D adapter gives. Cesium's setView
+      // keeps the position when only the orientation is supplied.
+      camera.setView({
+        orientation: {
+          heading: camera.heading,
+          pitch: Cesium.Math.toRadians(Math.min(this.savedPitch, 0)),
+          roll: 0,
+        },
+      });
+      this.globe.requestRender();
+    } catch {
+      // Mid-morph; the engine's own morph handling re-applies the view.
+    }
+  }
+}
+
 /**
  * Owns the map while flight mode is active: the animation loop, the keyboard,
- * the suspended interaction handlers, and the camera.
+ * and the aircraft. The renderer-specific camera work is delegated to a
+ * {@link FlightCameraAdapter}.
  */
 class FlightSimulatorEngine {
-  private readonly map: MapLibreMap;
-  private readonly setTerrainEnabled?: (enabled: boolean) => boolean;
   private settings: FlightSimulatorSettings;
   private aircraft: AircraftState;
   private held = new Set<string>();
@@ -287,18 +548,13 @@ class FlightSimulatorEngine {
   private lastFrame: number | null = null;
   private lastHudAt = 0;
   private grounded = false;
-  private saved: SavedMapState | null = null;
-  private cameraToken = 0;
   private destroyed = false;
 
   constructor(
-    map: MapLibreMap,
+    private readonly adapter: FlightCameraAdapter,
     settings: FlightSimulatorSettings,
-    setTerrainEnabled?: (enabled: boolean) => boolean,
   ) {
-    this.map = map;
     this.settings = settings;
-    this.setTerrainEnabled = setTerrainEnabled;
     this.aircraft = this.seedAircraft();
     this.tick = this.tick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -308,25 +564,21 @@ class FlightSimulatorEngine {
 
   /** Place the aircraft at the current map view, heading where the map faces. */
   private seedAircraft(): AircraftState {
-    const center = this.map.getCenter();
-    const canvas = this.map.getCanvas();
-    const ground = this.groundElevation(center.lng, center.lat);
+    const view = this.adapter.seedView();
+    const ground = this.groundElevation(view.lng, view.lat);
     // Start from the height the user was already looking from, but inside a
     // band that is actually flyable: a wide view corresponds to an eye height of
     // tens of kilometers, where there is nothing to see and the controls feel
     // inert.
     const altitude = Math.min(
-      Math.max(
-        altitudeForZoom(center.lat, this.map.getZoom(), canvas?.clientHeight ?? 600),
-        MIN_SEED_ALTITUDE_AGL,
-      ),
+      Math.max(altitudeForZoom(view.lat, view.zoom, view.viewportHeightPx), MIN_SEED_ALTITUDE_AGL),
       MAX_SEED_ALTITUDE_AGL,
     );
     return {
-      lng: center.lng,
-      lat: center.lat,
+      lng: view.lng,
+      lat: view.lat,
       altitude: ground + altitude,
-      heading: this.map.getBearing(),
+      heading: view.bearing,
       pitch: 0,
       roll: 0,
       airspeed: this.model().minSpeedMps,
@@ -350,13 +602,7 @@ class FlightSimulatorEngine {
    * mountain taller than it really is.
    */
   private groundElevation(lng: number, lat: number): number {
-    try {
-      const elevation = this.map.queryTerrainElevation?.([lng, lat]);
-      return Number.isFinite(elevation) ? (elevation as number) : 0;
-    } catch {
-      // Terrain can be mid-teardown (style reload); sea level is a safe floor.
-      return 0;
-    }
+    return this.adapter.groundElevation(lng, lat);
   }
 
   applySettings(settings: FlightSimulatorSettings): void {
@@ -367,33 +613,15 @@ class FlightSimulatorEngine {
     return this.running;
   }
 
-  /** The map this engine is bound to, so a reattach can skip an unchanged one. */
-  getMapInstance(): MapLibreMap {
-    return this.map;
+  /** Whether this engine drives `target`, so a reattach can skip an unchanged one. */
+  drives(target: unknown): boolean {
+    return this.adapter.drives(target);
   }
 
   /** Take over the map: suspend interaction, widen the pitch limit, start flying. */
   start(): void {
     if (this.destroyed || this.running) return;
-    const handlers = INTERACTION_HANDLERS.map((key) => this.map[key]);
-    this.saved = {
-      maxPitch: this.map.getMaxPitch(),
-      pitch: this.map.getPitch(),
-      centerClampedToGround: this.map.getCenterClampedToGround(),
-      terrainEnabled: this.map.getTerrain?.() != null,
-      enabledHandlers: handlers.map((handler) => handler.isEnabled()),
-    };
-    // Terrain is part of flight mode, not an optional prerequisite. Enable it
-    // before seeding the aircraft so its starting altitude is measured above
-    // the rendered ground rather than sea level.
-    if (!this.saved.terrainEnabled) this.setTerrainEnabled?.(true);
-    for (const handler of handlers) handler.disable();
-    // The app's default max pitch is 85 but a user preference can lower it;
-    // flight needs the full range or the camera would be clamped flat.
-    if (this.map.getMaxPitch() < MAX_CAMERA_PITCH) this.map.setMaxPitch(MAX_CAMERA_PITCH);
-    // MapLibre pins the map center to the terrain surface by default, which
-    // would drag the camera down with the ground passing beneath it.
-    this.map.setCenterClampedToGround(false);
+    this.adapter.takeOver();
 
     this.aircraft = this.seedAircraft();
     this.held.clear();
@@ -419,6 +647,7 @@ class FlightSimulatorEngine {
 
   /** Hand the map back: level the camera, restore limits and interaction. */
   stop(): void {
+    const wasRunning = this.running;
     this.running = false;
     if (this.rafId !== null) {
       window.cancelAnimationFrame(this.rafId);
@@ -430,23 +659,7 @@ class FlightSimulatorEngine {
     this.held.clear();
     this.lastFrame = null;
 
-    if (this.saved) {
-      const { maxPitch, pitch, centerClampedToGround, terrainEnabled, enabledHandlers } =
-        this.saved;
-      // Level the wings and return to the tilt the user started from, keeping
-      // where they flew to. Leaving the flight's own ~78 deg pitch in place
-      // would drop them into a near-horizon view spanning half a continent.
-      // Done *before* the pitch ceiling is reinstated so the exit view is one
-      // the app considers valid and the store's `moveend` sync records it.
-      this.map.jumpTo({ roll: 0, pitch: Math.min(pitch, maxPitch) });
-      this.map.setMaxPitch(maxPitch);
-      if (!terrainEnabled) this.setTerrainEnabled?.(false);
-      this.map.setCenterClampedToGround(centerClampedToGround);
-      INTERACTION_HANDLERS.forEach((key, index) => {
-        if (enabledHandlers[index]) this.map[key].enable();
-      });
-      this.saved = null;
-    }
+    if (wasRunning) this.adapter.release();
     publishHud(IDLE_HUD);
   }
 
@@ -534,27 +747,15 @@ class FlightSimulatorEngine {
     };
   }
 
-  /** Place the MapLibre camera at the aircraft. */
+  /** Place the camera at the aircraft. */
   private applyCamera(): void {
-    const { lng, lat, altitude, heading, pitch, roll } = this.aircraft;
+    const { pitch, roll } = this.aircraft;
     const cameraPitch = Math.min(
       MAX_CAMERA_PITCH,
       Math.max(MIN_CAMERA_PITCH, LEVEL_CAMERA_PITCH + pitch),
     );
     const cameraRoll = this.settings.bankCamera ? roll : 0;
-    try {
-      const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
-        [lng, lat],
-        altitude,
-        heading,
-        cameraPitch,
-        cameraRoll,
-      );
-      this.map.jumpTo(options, { [FLIGHT_CAMERA_TOKEN]: ++this.cameraToken });
-    } catch {
-      // A style/terrain reload can briefly make camera conversion unavailable.
-      // Keep the simulation alive; the next animation frame will retry.
-    }
+    this.adapter.applyCamera(this.aircraft, cameraPitch, cameraRoll);
   }
 
   private hudState(): FlightHudState {
@@ -651,11 +852,26 @@ function publishHud(next: FlightHudState): void {
   for (const listener of hudListeners) listener();
 }
 
-function attachEngine(app: GeoLibreAppAPI): void {
+/**
+ * The renderer the simulator should bind to: the MapLibre map when there is
+ * one, else the primary Cesium globe. `null` while neither is mounted.
+ */
+function flightTarget(app: GeoLibreAppAPI): MapLibreMap | CesiumSceneHandle | null {
   const map = app.getMap?.() ?? null;
-  if (!map) return;
+  if (map) return map;
+  const globe = app.getCesiumScene?.() ?? null;
+  return globe?.primary ? globe : null;
+}
+
+function attachEngine(app: GeoLibreAppAPI): void {
+  const target = flightTarget(app);
+  if (!target) return;
   if (engine) return;
-  engine = new FlightSimulatorEngine(map, settings, app.setTerrainEnabled);
+  const adapter =
+    "viewer" in target
+      ? new CesiumFlightAdapter(target, app.setTerrainEnabled, app.isTerrainEnabled)
+      : new MapLibreFlightAdapter(target, app.setTerrainEnabled);
+  engine = new FlightSimulatorEngine(adapter, settings);
 }
 
 function detachEngine(): void {
@@ -705,12 +921,13 @@ export function getFlightHudSnapshot(): FlightHudState {
 /** Re-attach the engine after the map is rebuilt (style reload, project load). */
 export function reattachFlightSimulator(app: GeoLibreAppAPI): void {
   if (!panelVisible) return;
-  const map = app.getMap?.() ?? null;
+  const target = flightTarget(app);
   // Rebinding tears the engine down, which hands the map back and ends any
   // flight in progress. The host calls this from an effect that also re-runs on
   // a project load, so skip the work when the map instance has not actually
   // changed — that is the only thing a reattach exists to handle.
-  if (map && engine?.getMapInstance() === map) return;
+  const bound = target && "viewer" in target ? target.viewer : target;
+  if (bound && engine?.drives(bound)) return;
   detachEngine();
   attachEngine(app);
 }
@@ -788,8 +1005,9 @@ export function restoreFlightSimulator(app: GeoLibreAppAPI, state: unknown): boo
 export const flightSimulatorPlugin: GeoLibrePlugin = {
   id: FLIGHT_SIMULATOR_PLUGIN_ID,
   name: "Flight Simulator",
-  version: "1.0.0",
+  version: "1.1.0",
   activeByDefault: false,
+  engines: ["maplibre", "cesium"],
   activate: (app: GeoLibreAppAPI) => openFlightSimulatorPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeFlightSimulatorPanel(app),
   // Persist the panel flag and the handling/HUD preferences, but never the

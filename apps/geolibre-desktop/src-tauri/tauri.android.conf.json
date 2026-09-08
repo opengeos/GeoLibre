@@ -5,5 +5,15 @@
   "bundle": {
     "resources": [],
     "fileAssociations": []
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["geo"],
+          "appLink": false
+        }
+      ]
+    }
   }
 }

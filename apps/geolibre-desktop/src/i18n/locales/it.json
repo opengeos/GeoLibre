@@ -436,7 +436,7 @@
       "urlPlaceholder": "https://example.com/csw",
       "keyword": "Parola chiave",
       "search": "Cerca",
-      "searching": "Ricerca in corso…",
+      "searching": "Ricerca in corso...",
       "results": "Risultati del catalogo",
       "errorUrl": "Inserisci un URL HTTP o HTTPS valido del servizio CSW.",
       "searchError": "Impossibile cercare in questo catalogo.",
@@ -530,7 +530,7 @@
       "sublayersPlaceholder": "Tutti i sottolivelli visibili",
       "sublayersHint": "Id dei sottolivelli facoltativi separati da virgole, ad esempio 0,2,5. Selezionare i sottolivelli disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
       "retrieveSublayers": "Sfoglia livelli",
-      "retrievingSublayers": "Recupero in corso...",
+      "retrievingSublayers": "Recupero in corso…",
       "availableSublayers": "Sottolivelli disponibili",
       "noSublayersFound": "Questo servizio mappa non ha dichiarato alcun livello.",
       "retrieveError": "Impossibile recuperare i livelli del servizio mappa.",
@@ -538,7 +538,7 @@
       "rasterFunction": "Funzione raster",
       "serviceDefaultRasterFunction": "Predefinito del servizio",
       "retrieveRasterFunctions": "Sfoglia funzioni",
-      "retrievingRasterFunctions": "Recupero in corso...",
+      "retrievingRasterFunctions": "Recupero in corso…",
       "noRasterFunctionsFound": "Questo servizio immagini non ha dichiarato alcuna funzione raster.",
       "retrieveRasterFunctionsError": "Impossibile recuperare le funzioni raster del servizio immagini.",
       "errorImageServiceUrl": "Inserisci un URL ArcGIS ImageServer.",
@@ -912,7 +912,16 @@
       "cellSize": "Dimensione cella",
       "lineWidth": "Spessore linea",
       "extrusion": "Estrusione 3D",
-      "modelUrlPlaceholder": "https://example.com/model.glb"
+      "modelUrlPlaceholder": "https://example.com/model.glb",
+      "chooseModelFile": "Scegli modello locale",
+      "sampleDataset": "Dataset di esempio",
+      "sampleCustom": "Modello personalizzato",
+      "sampleAirplane": "Aereo — San Francisco",
+      "sampleShanghai": "Shanghai — centro città",
+      "modelFileHint": "Scegli un file GLB o un file glTF autonomo. I modelli locali vengono incorporati nei progetti salvati, aumentandone le dimensioni.",
+      "modelExternalResources": "Questo modello fa riferimento a file separati. Esportalo come GLB con texture e buffer incorporati, quindi riprova.",
+      "modelTooLarge": "Questo modello supera il limite di {{limit}} MB per l'incorporamento in un progetto. Ospitalo su un server e aggiungilo tramite URL.",
+      "modelFileError": "Impossibile leggere questo modello. Scegli un file glTF 2.0 o GLB valido."
     },
     "nonGeographicCoordinates": "Le coordinate in {{names}} non sono longitudine/latitudine, quindi non verrà disegnato nulla sulla mappa. Il CRS è errato: riproietta i dati (o correggi il .prj) e ricaricali."
   },
@@ -4236,7 +4245,7 @@
     "exportData": "Esporta",
     "exportJson": "Esporta JSON",
     "exportCsv": "Esporta CSV",
-    "reset": "Reimposta",
+    "reset": "Ripristina",
     "resetTitle": "Cancella la storia e ricomincia",
     "resetConfirm": "Cancellare questa mappa narrativa? Tutti i capitoli e le impostazioni verranno rimossi per poter iniziare una nuova storia."
   },
@@ -6127,7 +6136,7 @@
     }
   },
   "segmentation": {
-    "title": "Segmentazione AI",
+    "title": "Segmentazione IA",
     "description": "Trasforma le immagini in elementi vettoriali con SAM3 (segment-geospatial). Scegli un GeoTIFF, descrivi cosa segmentare e ottieni poligoni restituiti come nuovo livello.",
     "startServer": "Avvia server",
     "downloadDesktop": "Scarica l'app desktop",
@@ -6142,9 +6151,9 @@
     "confidenceLabel": "Soglia di confidenza",
     "segment": "Segmenta",
     "status": {
-      "checking": "Verifica del servizio di segmentazione AI in corso…",
-      "unavailableDesktop": "Il servizio di segmentazione AI non è ancora in esecuzione. Avvia il server GeoLibre con segment-geospatial abilitato per utilizzarlo.",
-      "unavailableWeb": "La segmentazione AI non è disponibile nel browser. Usa l'app desktop di GeoLibre per eseguirla."
+      "checking": "Verifica del servizio di segmentazione IA in corso…",
+      "unavailableDesktop": "Il servizio di segmentazione IA non è ancora in esecuzione. Avvia il server GeoLibre con segment-geospatial abilitato per utilizzarlo.",
+      "unavailableWeb": "La segmentazione IA non è disponibile nel browser. Usa l'app desktop di GeoLibre per eseguirla."
     },
     "error": {
       "chooseImage": "Scegli un'immagine (GeoTIFF) da segmentare.",
@@ -6157,8 +6166,8 @@
     "layerName": "Segmentazione: {{prompt}}",
     "layerNameDefault": "Segmentazione",
     "sidecar": {
-      "title": "Impossibile avviare il server di segmentazione AI.",
-      "intro": "La segmentazione AI viene eseguita in un server helper locale ({{sidecarUrl}}) che ospita il modello SAM3 di segment-geospatial. Esegue Python in background, separatamente dall'app, e non fa parte della build per browser.",
+      "title": "Impossibile avviare il server di segmentazione IA.",
+      "intro": "La segmentazione IA viene eseguita in un server helper locale ({{sidecarUrl}}) che ospita il modello SAM3 di segment-geospatial. Esegue Python in background, separatamente dall'app, e non fa parte della build per browser.",
       "troubleshootingTitle": "Come avviare il server",
       "stepInstall": "Assicurati che il server GeoLibre sia installato con il backend segment-geospatial abilitato, in modo che il modello di segmentazione sia disponibile.",
       "stepStartServerDesktop": "Fai clic su “Avvia server” qui sopra per avviarlo, quindi attendi qualche secondo che il modello sia online."

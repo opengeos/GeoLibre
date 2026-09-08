@@ -19,6 +19,15 @@ afterEach(() => {
 });
 
 describe("shouldSuppressOnboarding", () => {
+  it("skips onboarding only for valid coordinate links", () => {
+    withSearch("?lat=40.7&lon=-74&zoom=12");
+    assert.equal(shouldSuppressOnboarding(), true);
+    withSearch("?12/40.7/-74");
+    assert.equal(shouldSuppressOnboarding(), true);
+    withSearch("?lat=91&lon=-74");
+    assert.equal(shouldSuppressOnboarding(), false);
+  });
+
   it("shows the wizard with no query params", () => {
     withSearch("");
     assert.equal(shouldSuppressOnboarding(), false);

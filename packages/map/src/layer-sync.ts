@@ -1076,6 +1076,17 @@ export function ensureRemotePMTilesArchive(url: string): void {
   ensurePMTilesProtocol(url);
 }
 
+/**
+ * The `PMTiles` archive registered for `url` (a bare `https://…` or a
+ * `pmtiles://…` URL), registering a remote one on first use. The globe's raster
+ * PMTiles path reads the header (zoom range, bounds) off it so its imagery
+ * provider only requests tiles the archive can answer.
+ */
+export function getPMTilesArchive(url: string): PMTiles | undefined {
+  ensurePMTilesProtocol(url);
+  return getSharedPMTilesProtocol().tiles.get(stripPMTilesProtocol(url));
+}
+
 // The set of in-memory-archive keys lives on globalThis alongside the shared
 // Protocol, so the two share a lifetime across module reloads (HMR) and never
 // drift — a stale module-level set could otherwise refuse to free archives the

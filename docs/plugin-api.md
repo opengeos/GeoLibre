@@ -144,6 +144,10 @@ export interface GeoLibreAppAPI {
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => import("maplibre-gl").Map | null;
+  // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
+  // canvas, readView), or null when the primary map is not a globe. The globe's
+  // counterpart to getMap for plugins that declare engines: ["maplibre", "cesium"].
+  getCesiumScene?: () => import("@geolibre/map").CesiumSceneHandle | null;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,
@@ -1104,3 +1108,20 @@ parameters, project restoration, and delayed control registration, as well as
 by the Plugins menu and command palette. Renderer changes suspend unsupported
 plugins and retain their saved settings and activation for the return trip.
 Compatible plugins remount their controls on the replacement renderer.
+
+A plugin that drives the renderer directly branches on which handle is
+non-null: `app.getMap()` on MapLibre, `app.getCesiumScene()` on the globe. The
+Cesium handle carries the `@cesium/engine` namespace alongside the live widget,
+scene, camera, and clock, so a plugin constructs Cesium objects (`SunLight`,
+`JulianDate`, `Cartesian3`) without importing the engine itself — which is what
+keeps Cesium off the 2D boot path. Its `primary` flag distinguishes the primary
+map area from a grid pane; the built-in environment plugins bind to the
+primary map only, as they do on MapLibre. The Sun simulation (native
+`SunLight`, globe lighting, and the scene clock), Atmospheric Effects (the sky
+box, `SkyAtmosphere` hue/saturation/brightness shifts, and the background
+colour), the Flight Simulator (`camera.setView` each frame with navigation
+inputs suspended), and the Clouds / Precipitation overlays (store tile layers)
+are the reference implementations of this pattern. A plugin bound to the globe
+must restore any scene state it changes on `deactivate`, because both engines
+are rebuilt on a renderer swap and the host re-activates compatible plugins
+against the new one.

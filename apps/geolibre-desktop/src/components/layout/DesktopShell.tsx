@@ -1275,6 +1275,30 @@ export function DesktopShell({
       // leaving the next one to notice.
       .catch(console.error)
       .finally(enforceViewerPlugins);
+    // The environment plugins have a branch for each renderer (#2287): the
+    // effects engine drives Cesium's sky box and atmosphere, the sun simulation
+    // its lighting and clock, the flight simulator its camera. They rebind the
+    // same way on both — a renderer swap rebuilds the engine, so the host
+    // re-attaches them exactly as it does after a MapLibre re-init.
+    //
+    // activeByDefault plugins are marked active without activate() being
+    // called, so the effects engine must be kicked explicitly to match the
+    // restored active state (idempotent).
+    restoreEffects(
+      appAPI,
+      pluginManager.isActive(EFFECTS_PLUGIN_ID),
+      useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID],
+    );
+    // The sun simulation reads/writes native map layers, so it must re-bind to
+    // the (possibly new) map instance after a map re-init or basemap change.
+    // Reattach only — it must NOT derive open/closed state here, which would
+    // reset a locally-opened panel on an unrelated basemap swap or remote edit.
+    // Project loads open/close it via the plugin's applyProjectState (invoked by
+    // restoreProjectState above).
+    reattachSun(appAPI);
+    // The flight simulator holds a reference to the live map (and suspends its
+    // interaction handlers while flying), so rebind it after a map re-init too.
+    reattachFlightSimulator(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
       void restoreLocalFileLayers();
       return;
@@ -1305,28 +1329,10 @@ export function DesktopShell({
       if (applyStacSearchLayerOrder(layerId, beforeId)) return;
       applyRasterLayerOrder(layerId, beforeId);
     });
-    // activeByDefault plugins are marked active without activate() being
-    // called, so the effects engine must be kicked explicitly to match the
-    // restored active state (idempotent).
-    restoreEffects(
-      appAPI,
-      pluginManager.isActive(EFFECTS_PLUGIN_ID),
-      useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID],
-    );
-    // The sun simulation reads/writes native map layers, so it must re-bind to
-    // the (possibly new) map instance after a map re-init or basemap change.
-    // Reattach only — it must NOT derive open/closed state here, which would
-    // reset a locally-opened panel on an unrelated basemap swap or remote edit.
-    // Project loads open/close it via the plugin's applyProjectState (invoked by
-    // restoreProjectState above).
-    reattachSun(appAPI);
-    // The route animation likewise owns native marker/trail layers, so rebind it
-    // to the (possibly new) map after a re-init/basemap swap without deriving
+    // The route animation owns native marker/trail layers, so rebind it to the
+    // (possibly new) map after a re-init/basemap swap without deriving
     // open/closed state (project loads handle that via applyProjectState).
     reattachRouteAnimation(appAPI);
-    // The flight simulator holds a reference to the live map (and suspends its
-    // interaction handlers while flying), so rebind it after a map re-init too.
-    reattachFlightSimulator(appAPI);
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
