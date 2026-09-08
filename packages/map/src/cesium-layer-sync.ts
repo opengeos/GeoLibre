@@ -504,6 +504,7 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         // bridged provider.
         str(prev.source.scheme) !== str(next.source.scheme) ||
         JSON.stringify(prev.source.bounds ?? null) !== JSON.stringify(next.source.bounds ?? null) ||
+        prev.source.tileSize !== next.source.tileSize ||
         firstTile(prev) !== firstTile(next) ||
         // min/maxzoom bake into UrlTemplateImageryProvider's min/maximumLevel.
         prev.source.maxzoom !== next.source.maxzoom ||
@@ -1068,9 +1069,15 @@ export class CesiumLayerSync {
             bounds.every((v) => typeof v === "number" && Number.isFinite(v))
               ? webMercatorRectangle(Cesium, bounds as [number, number, number, number])
               : undefined;
+          // The tile size drives Cesium's level selection the way it drives
+          // MapLibre's, so a 512 px source fetches the same zoom on both.
+          const tileSize = Number(layer.source.tileSize);
+          const tileWidth = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : undefined;
           provider = new ProtocolImageryProvider(Cesium, {
             template: url,
             scheme: layer.source.scheme === "tms" ? "tms" : "xyz",
+            tileWidth,
+            tileHeight: tileWidth,
             rectangle,
             maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
             minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
