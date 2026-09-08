@@ -13,6 +13,16 @@ import type { Feature } from "geojson";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
 import { createFeatureStyleResolver, type FeatureStyleResolver } from "./cesium-feature-style";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
+import {
+  buildPointBatch,
+  clusterActiveAtZoom,
+  clusterAppearance,
+  configureClustering,
+  isBatchedPointRef,
+  planPointRendering,
+  restylePointBatch,
+  type PointRenderPlan,
+} from "./cesium-points";
 import { renderFillPatternCanvas } from "./fill-patterns";
 import { getLayerBounds } from "./geojson-loader";
 import { renderMarkerCanvas } from "./markers";
@@ -26,6 +36,7 @@ import type {
   Entity,
   ImageryLayer,
   ImageryProvider,
+  PointPrimitiveCollection,
   Resource,
   TilingScheme,
 } from "@cesium/engine";
@@ -99,14 +110,14 @@ const NON_GEOJSON_TYPES = new Set([
  */
 const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
-type EntryKind = "imagery" | "geojson" | "3dtiles";
+type EntryKind = "imagery" | "geojson" | "3dtiles" | "points";
 
 interface LayerEntry {
   kind: EntryKind;
   /** The layer as last applied, for change detection. */
   layer: GeoLibreLayer;
   /** The Cesium object, or null while an async create is in flight. */
-  handle: ImageryLayer | DataSource | Cesium3DTileset | null;
+  handle: ImageryLayer | DataSource | Cesium3DTileset | PointPrimitiveCollection | null;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
   loadError?: string;
@@ -129,6 +140,12 @@ interface LayerEntry {
   markerBakeZoom?: number;
   /** The fill pattern tile, when the style has one. */
   patternImage?: { canvas: HTMLCanvasElement; pixelRatio: number } | null;
+  /** How the layer's points render (clustered, batched, plain). */
+  plan?: PointRenderPlan;
+  /** The clusterer handle for a clustered geojson entry. */
+  cluster?: ReturnType<typeof configureClustering>;
+  /** Whether clustering must switch on/off as the camera crosses `clusterMaxZoom`. */
+  zoomCluster?: boolean;
 }
 
 /**
@@ -392,7 +409,7 @@ function isSupported(layer: GeoLibreLayer): boolean {
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
-  if (hasRenderableGeoJson(layer)) return "geojson";
+  if (hasRenderableGeoJson(layer)) return planPointRendering(layer).batched ? "points" : "geojson";
   if (layer.type === "3d-tiles") return "3dtiles";
   return "imagery";
 }
@@ -470,8 +487,13 @@ function styleSignature(layer: GeoLibreLayer): string {
  */
 function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   if (prev.type !== next.type) return true;
-  switch (entryKind(next)) {
+  const kind = entryKind(next);
+  // Crossing the batching threshold, or switching clustering on, changes the
+  // Cesium object kind outright.
+  if (entryKind(prev) !== kind) return true;
+  switch (kind) {
     case "geojson":
+    case "points":
       return prev.geojson !== next.geojson || styleSignature(prev) !== styleSignature(next);
     case "imagery":
       return (
@@ -535,6 +557,28 @@ export class CesiumLayerSync {
 
   /** Only live, visible entities owned by this synchronizer can identify a feature. */
   resolveFeature(entity: object) {
+    // A batched point primitive carries its reference on `id` rather than
+    // being an Entity the WeakMap knows.
+    if (isBatchedPointRef(entity)) {
+      const entry = this.entries.get(entity.geolibreLayerId);
+      if (
+        !entry ||
+        entry.cancelled ||
+        entry.kind !== "points" ||
+        !entry.layer.visible ||
+        entry.layer.opacity <= 0
+      )
+        return null;
+      const feature = entry.layer.geojson?.features[entity.index];
+      return feature
+        ? {
+            layerId: entity.geolibreLayerId,
+            featureId: String(feature.id ?? entity.index),
+            properties: feature.properties ?? {},
+            geometry: feature.geometry,
+          }
+        : null;
+    }
     const ref = this.featureRefs.get(entity);
     if (!ref) return null;
     const entry = this.entries.get(ref.layerId);
@@ -581,9 +625,28 @@ export class CesiumLayerSync {
   private applyHighlight(): void {
     const selected = this.selection;
     const entry = selected && this.entries.get(selected.layerId);
-    if (!selected || !entry || entry.kind !== "geojson" || !entry.handle) return;
+    if (!selected || !entry || !entry.handle) return;
     const C = this.Cesium;
     const color = C.Color.fromCssColorString("#facc15");
+    if (entry.kind === "points") {
+      const collection = entry.handle as PointPrimitiveCollection;
+      const features = entry.layer.geojson?.features ?? [];
+      for (let i = 0; i < collection.length; i++) {
+        const point = collection.get(i);
+        const ref = point.id;
+        if (!isBatchedPointRef(ref)) continue;
+        const feature = features[ref.index];
+        if (!feature || !selected.ids.has(String(feature.id ?? ref.index))) continue;
+        const original = point.color;
+        point.color = color;
+        this.highlightRestorers.push(() => {
+          point.color = original;
+        });
+      }
+      this.viewer.scene.requestRender();
+      return;
+    }
+    if (entry.kind !== "geojson") return;
     for (const entity of (entry.handle as DataSource).entities.values) {
       const ref = this.featureRefs.get(entity);
       const feature = ref && entry.layer.geojson?.features[ref.index];
@@ -749,7 +812,7 @@ export class CesiumLayerSync {
   private watchCameraZoom(): void {
     let wanted = false;
     for (const entry of this.entries.values()) {
-      if (entry.zoomFilter || entry.zoomStyle) {
+      if (entry.zoomFilter || entry.zoomStyle || entry.zoomCluster) {
         wanted = true;
         break;
       }
@@ -780,7 +843,7 @@ export class CesiumLayerSync {
   private reapplyZoomFilters(): void {
     let changed = false;
     for (const entry of this.entries.values()) {
-      if (entry.kind !== "geojson" || !entry.handle) continue;
+      if ((entry.kind !== "geojson" && entry.kind !== "points") || !entry.handle) continue;
       if (entry.zoomFilter) {
         const before = entry.appliedFilterKey;
         this.applyGeoJsonFilter(entry);
@@ -788,11 +851,15 @@ export class CesiumLayerSync {
       }
       if (entry.zoomStyle) {
         const before = entry.appliedAlpha;
-        this.applyGeoJsonStyle(entry);
+        if (entry.kind === "points") this.applyPointBatchStyle(entry);
+        else this.applyGeoJsonStyle(entry);
         if (entry.appliedAlpha !== before) {
           changed = true;
-          this.bakeZoomMarkers(entry);
+          if (entry.kind === "geojson") this.bakeZoomMarkers(entry);
         }
+      }
+      if (entry.zoomCluster && entry.cluster && entry.plan) {
+        entry.cluster.setEnabled(clusterActiveAtZoom(entry.plan, this.cameraZoom()));
       }
     }
     if (changed) this.viewer.scene?.requestRender?.();
@@ -1025,7 +1092,79 @@ export class CesiumLayerSync {
     this.entries.set(layer.id, entry);
     if (kind === "imagery") void this.createImagery(entry);
     else if (kind === "geojson") void this.createGeoJson(entry);
+    else if (kind === "points") this.createPointBatch(entry);
     else void this.createTileset(entry);
+  }
+
+  /**
+   * The primitive path for large point-only layers (issue #2282): one
+   * `PointPrimitiveCollection` built synchronously from the features, with
+   * each primitive's `id` carrying the feature reference so picking and
+   * highlighting work as they do for entities.
+   */
+  private createPointBatch(entry: LayerEntry): void {
+    const { Cesium, viewer } = this;
+    try {
+      const resolver = this.resolverFor(entry);
+      const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+      const collection = buildPointBatch(
+        Cesium,
+        entry.layer,
+        resolver,
+        this.effectiveOpacity(entry),
+        zoom,
+      );
+      viewer.scene.primitives.add(collection);
+      entry.handle = collection;
+      entry.plan = planPointRendering(entry.layer);
+      // The build already applied the current opacity and symbols; seed the
+      // restyle key so the appearance pass below only applies visibility and
+      // the filter.
+      entry.appliedAlpha = this.pointStyleKey(entry, zoom);
+      this.applyAppearance(entry);
+    } catch (error) {
+      entry.loadError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * Cluster a point-only layer whose style asks for it (issue #2282) through
+   * the data source's `EntityCluster`, styled like the 2D map's cluster
+   * bubbles, and switched off past `clusterMaxZoom` as the camera zooms in.
+   */
+  private installClustering(entry: LayerEntry, dataSource: DataSource): void {
+    const plan = planPointRendering(entry.layer);
+    entry.plan = plan;
+    if (!plan.cluster || !dataSource.clustering?.clusterEvent) return;
+    entry.cluster = configureClustering(this.Cesium, dataSource, plan, () =>
+      clusterAppearance(entry.layer, this.effectiveOpacity(entry)),
+    );
+    entry.zoomCluster = true;
+    entry.cluster.setEnabled(clusterActiveAtZoom(plan, this.cameraZoom()));
+    this.watchCameraZoom();
+  }
+
+  private pointStyleKey(entry: LayerEntry, zoom: number): string {
+    return `${this.effectiveOpacity(entry)}|${zoom}|${entry.resolverKey ?? ""}`;
+  }
+
+  /** Re-colour a batched point layer in place (opacity, fill opacity, zoom-dependent sizes). */
+  private applyPointBatchStyle(entry: LayerEntry): void {
+    const collection = entry.handle as PointPrimitiveCollection | null;
+    if (!collection) return;
+    const resolver = this.resolverFor(entry);
+    const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+    const key = this.pointStyleKey(entry, zoom);
+    if (entry.appliedAlpha === key) return;
+    entry.appliedAlpha = key;
+    restylePointBatch(
+      this.Cesium,
+      collection,
+      entry.layer,
+      resolver,
+      this.effectiveOpacity(entry),
+      zoom,
+    );
   }
 
   private async createImagery(entry: LayerEntry): Promise<void> {
@@ -1298,6 +1437,7 @@ export class CesiumLayerSync {
       if (entry.cancelled) return;
       this.installPointGraphics(entry, dataSource, clampToGround);
       this.installZoomRange(entry, dataSource);
+      this.installClustering(entry, dataSource);
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
       // stroke, marker) by the layer opacity right after load, so points/lines
@@ -1531,6 +1671,10 @@ export class CesiumLayerSync {
       (handle as DataSource).show = layer.visible;
       this.applyGeoJsonStyle(entry);
       this.applyGeoJsonFilter(entry);
+    } else if (entry.kind === "points") {
+      (handle as PointPrimitiveCollection).show = layer.visible;
+      this.applyPointBatchStyle(entry);
+      this.applyGeoJsonFilter(entry);
     } else {
       (handle as Cesium3DTileset).show = layer.visible;
     }
@@ -1614,9 +1758,13 @@ export class CesiumLayerSync {
    * Evaluate a layer's composed feature filter (timeFilter, embedFilter, quickFilters,
    * rule-based visibility) against each GeoJSON entity, toggling `entity.show` in place.
    */
+  /**
+   * Evaluate a layer's composed feature filter (timeFilter, embedFilter, quickFilters,
+   * rule-based visibility) against each entity — or each batched point primitive —
+   * toggling its `show` in place.
+   */
   private applyGeoJsonFilter(entry: LayerEntry): void {
-    const dataSource = entry.handle as DataSource | null;
-    if (!dataSource) return;
+    if (!entry.handle) return;
     const filter = composeLayerFeatureFilter(entry.layer);
     const filterKey = filter ? JSON.stringify(filter) : "";
     // A rule-based visibility filter carries `["zoom"]` for per-rule zoom
@@ -1635,20 +1783,50 @@ export class CesiumLayerSync {
     const indexKey = "__geolibre_cesium_feature_index";
     const features = entry.layer.geojson?.features;
 
-    if (!filter) {
-      for (const entity of dataSource.entities.values) {
-        entity.show = true;
+    // The things to show or hide: entities of a data source, or the primitives
+    // of a point batch, each paired with the feature it came from.
+    type Target = { feature: Feature | null; properties?: object; setShow(show: boolean): void };
+    const targets = (): Iterable<Target> => {
+      if (entry.kind === "points") {
+        const collection = entry.handle as PointPrimitiveCollection;
+        const out: Target[] = [];
+        for (let i = 0; i < collection.length; i++) {
+          const point = collection.get(i);
+          const ref = point.id;
+          out.push({
+            feature: isBatchedPointRef(ref) ? (features?.[ref.index] ?? null) : null,
+            setShow: (show) => {
+              point.show = show;
+            },
+          });
+        }
+        return out;
       }
-      return;
-    }
+      const dataSource = entry.handle as DataSource;
+      return dataSource.entities.values.map((entity) => {
+        const propIndex = entity.properties?.[indexKey];
+        const index =
+          typeof propIndex?.getValue === "function" ? propIndex.getValue(currentTime) : propIndex;
+        return {
+          feature: Number.isInteger(index) && features ? features[index] : null,
+          properties: entity.properties,
+          setShow: (show) => {
+            entity.show = show;
+          },
+        };
+      });
+    };
 
-    let compiled: ReturnType<typeof featureFilter>;
-    try {
-      compiled = featureFilter(filter as never, "layers[0].filter");
-    } catch {
-      for (const entity of dataSource.entities.values) {
-        entity.show = true;
+    let compiled: ReturnType<typeof featureFilter> | null = null;
+    if (filter) {
+      try {
+        compiled = featureFilter(filter as never, "layers[0].filter");
+      } catch {
+        compiled = null;
       }
+    }
+    if (!compiled) {
+      for (const target of targets()) target.setShow(true);
       return;
     }
 
@@ -1661,11 +1839,8 @@ export class CesiumLayerSync {
       MultiPolygon: 3,
     };
 
-    for (const entity of dataSource.entities.values) {
-      const propIndex = entity.properties?.[indexKey];
-      const index =
-        typeof propIndex?.getValue === "function" ? propIndex.getValue(currentTime) : propIndex;
-      const feat = Number.isInteger(index) && features ? features[index] : null;
+    for (const target of targets()) {
+      const feat = target.feature;
       let properties: Record<string, unknown> = {};
       let geomType: 0 | 1 | 2 | 3 = 1;
       let id: unknown = undefined;
@@ -1674,8 +1849,8 @@ export class CesiumLayerSync {
         properties = (feat.properties as Record<string, unknown>) ?? {};
         geomType = (feat.geometry?.type && typeMap[feat.geometry.type]) ?? 1;
         id = feat.id;
-      } else if (entity.properties) {
-        const propBag = entity.properties as Record<string, unknown>;
+      } else if (target.properties) {
+        const propBag = target.properties as Record<string, unknown>;
         const names = Array.isArray(propBag.propertyNames)
           ? propBag.propertyNames
           : Object.keys(propBag);
@@ -1700,7 +1875,7 @@ export class CesiumLayerSync {
       } catch {
         visible = true;
       }
-      entity.show = visible;
+      target.setShow(visible);
     }
   }
 
@@ -1886,9 +2061,12 @@ export class CesiumLayerSync {
     if (entry.kind === "imagery") {
       this.viewer.imageryLayers.remove(handle as ImageryLayer, true);
     } else if (entry.kind === "geojson") {
+      entry.cluster?.dispose();
+      entry.cluster = undefined;
       this.viewer.dataSources.remove(handle as DataSource, true);
     } else {
-      this.viewer.scene.primitives.remove(handle as Cesium3DTileset);
+      // A 3D Tiles tileset or a point batch; both live in the scene primitives.
+      this.viewer.scene.primitives.remove(handle as Cesium3DTileset | PointPrimitiveCollection);
     }
   }
 }
