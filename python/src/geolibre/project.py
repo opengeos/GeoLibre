@@ -742,7 +742,19 @@ def apply_tooltip(config: dict[str, Any], tooltip: Any) -> dict[str, Any]:
     if tooltip is not None:
         fields: list[dict[str, Any]] = list(config.get("fields") or [])
         if tooltip is not True:
-            names = [tooltip] if isinstance(tooltip, str) else list(tooltip)
+            if isinstance(tooltip, str):
+                names = [tooltip]
+            else:
+                try:
+                    names = list(tooltip)
+                except TypeError:
+                    # Same guard as popup_config's `fields`, for the same
+                    # reason: `tooltip=1` is a public-API typo and deserves a
+                    # sentence, not "'int' object is not iterable".
+                    raise ValueError(
+                        "tooltip must be True/False, a property name, or a sequence of "
+                        f"names; got {type(tooltip).__name__}"
+                    ) from None
             if not names:
                 # An empty selection is "no tooltip", which is what the MCP
                 # tool's `tooltip=[]` means too.

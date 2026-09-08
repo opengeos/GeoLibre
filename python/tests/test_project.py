@@ -684,3 +684,8 @@ def test_marker_style_is_empty_when_nothing_is_passed():
 def test_normalize_popup_rejects_a_value_that_is_not_a_field_spec():
     with pytest.raises(ValueError, match="popup fields must be a property name"):
         project.normalize_popup(42)
+
+
+def test_tooltip_rejects_a_value_that_is_not_a_name_or_sequence():
+    with pytest.raises(ValueError, match="tooltip must be True/False"):
+        project.normalize_popup(["a"], tooltip=42)
