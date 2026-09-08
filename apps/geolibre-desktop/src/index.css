@@ -2471,21 +2471,27 @@ body,
 }
 
 @media (max-width: 767px) {
-  /* Planetary Computer sizes its panel from the live map rectangle. Keep it
-     out of this viewport-based cap, which ignores the mobile sidebar strips
-     and status bar and leaves the bottom of its scroll area clipped. */
+  /* Only the legacy Components grid needs a viewport-based fallback. The
+     standalone panels below calculate their own map-relative height limits. */
+  .geolibre-components-control .maplibre-gl-control-grid-floating-panel,
+  .geolibre-components-control .maplibre-gl-control-grid-relocated {
+    max-height: calc(100vh - 96px) !important;
+    max-height: calc(100dvh - 96px) !important;
+    overflow-y: auto;
+  }
+
+  /* Preserve mobile width bounds without overriding map-relative heights.
+     A viewport-based height cap ignores sidebar strips and the status bar,
+     leaving the bottom of these panels' scroll areas clipped. */
   .geolibre-components-control .maplibre-gl-control-grid-floating-panel,
   .geolibre-components-control .maplibre-gl-control-grid-relocated,
   .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
   .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
+  .maplibregl-map .pc-control-panel,
   .maplibregl-map .layer-control-panel,
   .duckdb-control-panel {
     box-sizing: border-box;
-    /* 96px clears the mobile top toolbar plus the panel's own top offset */
-    max-height: calc(100vh - 96px) !important;
-    max-height: calc(100dvh - 96px) !important;
     max-width: calc(100vw - 20px) !important;
-    overflow-y: auto;
   }
 
   .duckdb-control-panel {
