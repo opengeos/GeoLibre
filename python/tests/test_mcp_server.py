@@ -477,6 +477,17 @@ def test_each_layer_tool_adds_a_layer_of_its_type(
     assert described["layers"][0]["type"] == expected_type
 
 
+def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):
+    """The globe loads Ion assets from `source.ionAssetId`, so it must survive the save."""
+    call(server, "add_3d_tiles_layer", path=project_path, name="A", ion_asset_id=96188)
+    call(server, "add_cesium_ion_layer", path=project_path, name="B", asset_id=96188)
+    call(server, "add_cesium_ion_layer", path=project_path, name="C", asset_id=2, kind="imagery")
+    saved = json.loads((tmp_path / project_path).read_text())
+    assert [layer["source"]["ionAssetId"] for layer in saved["layers"]] == [96188, 96188, 2]
+    assert [layer["type"] for layer in saved["layers"]] == ["3d-tiles", "3d-tiles", "raster"]
+    assert {layer["metadata"]["sourceKind"] for layer in saved["layers"]} == {"cesium-ion"}
+
+
 def test_add_vector_layer_rejects_an_undocumented_render_mode(server, project_path):
     """The tool's docstring names the accepted values; they must be the real ones."""
     assert "render_mode" in call_error(
