@@ -419,11 +419,25 @@ function isSupported(layer: GeoLibreLayer): boolean {
   return Boolean(firstTile(layer));
 }
 
+/**
+ * Every tileset an I3S provider drives. `I3SDataProvider.layers` is already
+ * flat: a Building Scene Layer's nested sublayers register their `I3SLayer`s
+ * there too (Cesium's `I3SDataProvider._fromData` pushes each sublayer's
+ * layers into `_layers`), so one pass covers the whole tree.
+ */
+function i3sTilesets(provider: Partial<I3SDataProvider>): Cesium3DTileset[] {
+  const tilesets: Cesium3DTileset[] = [];
+  for (const layer of provider.layers ?? []) {
+    if (layer.tileset && !tilesets.includes(layer.tileset)) tilesets.push(layer.tileset);
+  }
+  return tilesets;
+}
+
 /** Whether a tileset (or every tileset of an I3S provider) has loaded its tiles. */
 function tilesLoaded(handle: Cesium3DTileset | I3SDataProvider): boolean {
   const provider = handle as Partial<I3SDataProvider>;
   if (Array.isArray(provider.layers)) {
-    return provider.layers.every((layer) => !layer.tileset || layer.tileset.tilesLoaded);
+    return i3sTilesets(provider).every((tileset) => tileset.tilesLoaded);
   }
   return Boolean((handle as Cesium3DTileset).tilesLoaded);
 }
@@ -1322,8 +1336,7 @@ export class CesiumLayerSync {
         }
         viewer.scene.primitives.add(provider);
         const offset = Number(layer.source.altitudeOffset);
-        for (const i3sLayer of provider.layers)
-          if (i3sLayer.tileset) this.applyTilesetAltitude(i3sLayer.tileset, offset);
+        for (const tileset of i3sTilesets(provider)) this.applyTilesetAltitude(tileset, offset);
         entry.handle = provider;
         this.applyAppearance(entry);
         return;

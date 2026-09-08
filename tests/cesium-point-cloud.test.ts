@@ -172,6 +172,31 @@ describe("loadCopcPointCloud", () => {
     assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
   });
 
+  it("reads only up to the budget from a first node bigger than the budget", async () => {
+    const fake = fakeCopc();
+    const budget = 60;
+    const big = {
+      Copc: {
+        ...fake.module.Copc,
+        loadHierarchyPage: async () => ({
+          nodes: {
+            "0-0-0-0": { pointCount: budget + 1000, pointDataOffset: 0, pointDataLength: 0 },
+          },
+          pages: {},
+        }),
+      },
+    };
+    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+      copc: big,
+      budget,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+    });
+    assert.equal(cloud.count, budget, "the primitive count never exceeds the budget");
+    assert.equal(cloud.positions.length, budget * 3);
+    assert.equal(cloud.truncated, true);
+  });
+
   it("refuses an archive whose CRS cannot be used", async () => {
     const fake = fakeCopc();
     await assert.rejects(
@@ -234,7 +259,13 @@ function makeCesium(calls: { tilesets: unknown[]; i3s: unknown[] }) {
   return {
     PointPrimitiveCollection,
     Color,
-    Cartesian3: { fromDegrees: (lng: number, lat: number, z: number) => ({ lng, lat, z }) },
+    Cartesian3: class {
+      static fromDegrees = (lng: number, lat: number, z: number) => ({ lng, lat, z });
+      static fromRadians = (lng: number, lat: number, z: number) => ({ lng, lat, z });
+      static subtract = (a: { z: number }, b: { z: number }) => ({ z: a.z - b.z });
+    },
+    Cartographic: { fromCartesian: () => ({ longitude: 0, latitude: 0 }) },
+    Matrix4: { fromTranslation: (t: unknown) => ({ translation: t }) },
     Cesium3DTileset: {
       fromUrl: async (url: unknown) => {
         const tileset = {
@@ -252,11 +283,14 @@ function makeCesium(calls: { tilesets: unknown[]; i3s: unknown[] }) {
     },
     I3SDataProvider: {
       fromUrl: async (url: unknown, options: unknown) => {
+        // Cesium flattens a Building Scene Layer's nested sublayers into
+        // `layers`, so the fake carries two entries the way a BSL would.
         const provider = {
           url,
           options,
           show: true,
           layers: [
+            { tileset: { tilesLoaded: true, modelMatrix: null, boundingSphere: { center: {} } } },
             { tileset: { tilesLoaded: true, modelMatrix: null, boundingSphere: { center: {} } } },
           ],
           destroy: () => {},
@@ -373,8 +407,33 @@ describe("CesiumLayerSync native 3D routing", () => {
     assert.equal(calls.tilesets.length, 0, "no plain tileset attempt on a scene service");
     assert.equal(f.primitives.length, 1);
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
+    // Every tileset the provider drives — a building sublayer's included —
+    // counts toward readiness.
+    const provider = calls.i3s[0] as { layers: Array<{ tileset: { tilesLoaded: boolean } }> };
+    provider.layers[1].tileset.tilesLoaded = false;
+    assert.deepEqual(sync.getRenderStatus().pending, ["Layer"]);
+    provider.layers[1].tileset.tilesLoaded = true;
     sync.sync([]);
     assert.equal(f.primitives.length, 0);
+  });
+
+  it("offsets every I3S tileset, sublayers included", async () => {
+    const calls = { tilesets: [] as unknown[], i3s: [] as unknown[] };
+    const f = makeViewer();
+    const sync = new CesiumLayerSync(makeCesium(calls) as never, f.viewer as never, () => 10);
+    sync.sync([
+      layer({
+        metadata: { sourceKind: "arcgis-i3s" },
+        source: { url: "https://x/SceneServer/layers/0", type: "arcgis-i3s", altitudeOffset: 25 },
+      }),
+    ]);
+    await flush();
+    await flush();
+    const provider = calls.i3s[0] as { layers: Array<{ tileset: { modelMatrix: unknown } }> };
+    assert.equal(provider.layers.length, 2);
+    for (const { tileset } of provider.layers) {
+      assert.ok(tileset.modelMatrix, "the altitude offset reached this tileset");
+    }
   });
 
   it("loads a splat tileset and a point-cloud tileset as 3D Tiles with shading", async () => {

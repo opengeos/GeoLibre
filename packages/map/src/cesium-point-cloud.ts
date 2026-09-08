@@ -217,13 +217,18 @@ export async function loadCopcPointCloud(
       continue;
     }
     if (node.pointCount === 0) continue;
-    if (planned + node.pointCount > budget && chosen.length > 0) {
+    if (planned + node.pointCount > budget) {
+      if (chosen.length > 0) {
+        truncated = true;
+        break;
+      }
+      // A first node bigger than the whole budget is read partially, so the
+      // primitive count never exceeds the budget.
       truncated = true;
-      break;
     }
     chosen.push(key);
     chosenKeys.add(key);
-    planned += node.pointCount;
+    planned = Math.min(budget, planned + node.pointCount);
   }
   if (keys.length) truncated = true;
 
