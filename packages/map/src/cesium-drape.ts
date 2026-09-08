@@ -151,17 +151,24 @@ export function createDrapeHost(): DrapeHost {
     pointerEvents: "none",
   });
   document.body.appendChild(container);
-  const map = new MapLibreMap({
-    container,
-    style: { version: 8, sources: {}, layers: [], glyphs: DRAPE_GLYPHS },
-    interactive: false,
-    attributionControl: false,
-    // One CSS pixel per canvas pixel, so the canvas is exactly one tile.
-    pixelRatio: 1,
-    // No cross-fades: an `idle` frame must be the final frame.
-    fadeDuration: 0,
-    canvasContextAttributes: { preserveDrawingBuffer: true },
-  });
+  let map: MapLibreMap;
+  try {
+    map = new MapLibreMap({
+      container,
+      style: { version: 8, sources: {}, layers: [], glyphs: DRAPE_GLYPHS },
+      interactive: false,
+      attributionControl: false,
+      // One CSS pixel per canvas pixel, so the canvas is exactly one tile.
+      pixelRatio: 1,
+      // No cross-fades: an `idle` frame must be the final frame.
+      fadeDuration: 0,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
+    });
+  } catch (error) {
+    // No WebGL context to spare: leave nothing behind, since the sync retries.
+    container.remove();
+    throw error;
+  }
   const ready = new Promise<void>((resolve) => {
     if (map.isStyleLoaded()) resolve();
     else map.once("load", () => resolve());

@@ -1004,6 +1004,7 @@ export class CesiumLayerSync {
     if (key === this.drapeKey) return false;
     this.drapeKey = key;
     this.drapeTopId = draped.length ? draped[draped.length - 1].id : null;
+    const removed = this.drapeLayer !== null;
     if (this.drapeLayer) {
       this.viewer.imageryLayers.remove(this.drapeLayer, true);
       this.drapeLayer = null;
@@ -1011,7 +1012,8 @@ export class CesiumLayerSync {
     if (!draped.length) {
       this.drape?.destroy();
       this.drape = undefined;
-      return false;
+      this.drapeError = null;
+      return removed;
     }
     if (this.drape === undefined) {
       this.drape = (this.deps.createDrape ?? (() => MapLibreDrape.create()))();
