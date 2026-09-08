@@ -69,6 +69,14 @@ describe("point rendering plan", () => {
     assert.equal(plan.clusterRadius, 60);
     assert.equal(clusterActiveAtZoom(plan, 8), true);
     assert.equal(clusterActiveAtZoom(plan, 12), false);
+    // A hand-edited project with non-numeric cluster settings gets the defaults.
+    const guarded = planPointRendering(
+      pointLayer(10, {
+        style: { pointRenderer: "cluster", clusterRadius: NaN, clusterMaxZoom: "x" as never },
+      }),
+    );
+    assert.equal(guarded.clusterRadius, DEFAULT_LAYER_STYLE.clusterRadius);
+    assert.equal(guarded.clusterMaxZoom, DEFAULT_LAYER_STYLE.clusterMaxZoom);
   });
 
   it("does not cluster or batch a mixed-geometry layer", () => {
@@ -222,6 +230,7 @@ describe("configureClustering", () => {
         fillOpacity: 0.6,
         stroke: "#000000",
         strokeWidth: 2,
+        strokeOpacity: 0.5,
         textColor: "#111111",
         opacity,
       }),
@@ -239,6 +248,11 @@ describe("configureClustering", () => {
     assert.equal(cluster.point.show, true);
     assert.equal(cluster.point.pixelSize, 32);
     assert.deepEqual(cluster.point.color, { css: "#00ff00", alpha: 0.6 });
+    assert.deepEqual(
+      cluster.point.outlineColor,
+      { css: "#000000", alpha: 0.5 },
+      "the outline takes the stroke opacity, as the 2D bubble's circle-stroke-opacity",
+    );
     assert.equal(cluster.label.text, "5");
     opacity = 0.5;
     handle.refresh();
@@ -246,6 +260,7 @@ describe("configureClustering", () => {
     listeners[0](Array.from({ length: 250 }), cluster);
     assert.equal(cluster.point.pixelSize, 60);
     assert.deepEqual(cluster.point.color, { css: "#00ff00", alpha: 0.3 });
+    assert.deepEqual(cluster.point.outlineColor, { css: "#000000", alpha: 0.25 });
     handle.setEnabled(false);
     assert.equal(writes[writes.length - 1], false);
     handle.dispose();
@@ -344,6 +359,12 @@ describe("CesiumLayerSync point rendering", () => {
     ]);
     assert.equal(collection.get(2).show, true);
     assert.equal(collection.get(3).show, false);
+    assert.ok(sync.resolveFeature(collection.get(2).id as object), "a shown primitive picks");
+    assert.equal(
+      sync.resolveFeature(collection.get(3).id as object),
+      null,
+      "a primitive the filter hid is not pickable, like a hidden entity",
+    );
     // Opacity restyles in place.
     sync.sync([{ ...layer, opacity: 0.2 }]);
     assert.ok(

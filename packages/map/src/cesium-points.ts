@@ -1,5 +1,11 @@
 import { DEFAULT_LAYER_STYLE, styleValue, type GeoLibreLayer } from "@geolibre/core";
-import type { DataSource, Entity, PointPrimitive, PointPrimitiveCollection } from "@cesium/engine";
+import type {
+  Color,
+  DataSource,
+  Entity,
+  PointPrimitive,
+  PointPrimitiveCollection,
+} from "@cesium/engine";
 import type { Feature } from "geojson";
 import type { FeatureStyleResolver } from "./cesium-feature-style";
 
@@ -123,8 +129,14 @@ export function planPointRendering(layer: GeoLibreLayer): PointRenderPlan {
     renderer,
     cluster,
     batched,
-    clusterRadius: Math.max(1, styleValue(style, "clusterRadius")),
-    clusterMaxZoom: styleValue(style, "clusterMaxZoom"),
+    clusterRadius: Math.max(
+      1,
+      finiteStyleNumber(styleValue(style, "clusterRadius"), DEFAULT_LAYER_STYLE.clusterRadius),
+    ),
+    clusterMaxZoom: finiteStyleNumber(
+      styleValue(style, "clusterMaxZoom"),
+      DEFAULT_LAYER_STYLE.clusterMaxZoom,
+    ),
   };
 }
 
@@ -134,6 +146,8 @@ export interface ClusterAppearance {
   fillOpacity: number;
   stroke: string;
   strokeWidth: number;
+  /** Outline opacity before the layer opacity (the 2D bubble's `circle-stroke-opacity`). */
+  strokeOpacity: number;
   textColor: string;
   /** Layer (or story) opacity, folded into every colour. */
   opacity: number;
@@ -147,9 +161,17 @@ export function clusterAppearance(layer: GeoLibreLayer, opacity: number): Cluste
     fillOpacity: style.fillOpacity,
     stroke: style.strokeColor,
     strokeWidth: style.strokeWidth,
+    // The 2D bubble reads the simplestyle `stroke-opacity` of its feature, and
+    // a cluster is a synthetic feature without one, so it resolves to the base.
+    strokeOpacity: 1,
     textColor: style.textColor,
     opacity,
   };
+}
+
+/** Finite style numbers, falling back to the defaults for a hand-edited project. */
+function finiteStyleNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 /**
@@ -184,7 +206,7 @@ export function configureClustering(
     cluster.point.show = true;
     cluster.point.pixelSize = clusterPixelSize(count);
     cluster.point.color = colour(look.fill, look.fillOpacity * look.opacity);
-    cluster.point.outlineColor = colour(look.stroke, look.opacity);
+    cluster.point.outlineColor = colour(look.stroke, look.strokeOpacity * look.opacity);
     cluster.point.outlineWidth = look.strokeWidth;
     cluster.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
     cluster.label.show = true;
@@ -241,6 +263,29 @@ function pointCoordinates(feature: Feature): number[][] {
  * terrain (`disableDepthTestDistance`), the primitive path's stand-in for
  * ground clamping.
  */
+/**
+ * Colours for one pass over a batch: a classified layer resolves to a handful
+ * of distinct CSS strings across tens of thousands of points, so each string
+ * (and alpha) is parsed once rather than per primitive.
+ */
+function colourCache(Cesium: CesiumNs): (css: string, alpha: number) => Color {
+  const parsed = new Map<string, Color>();
+  const withAlpha = new Map<string, Color>();
+  return (css, alpha) => {
+    const key = `${css}|${alpha}`;
+    let colour = withAlpha.get(key);
+    if (colour) return colour;
+    let base = parsed.get(css);
+    if (!base) {
+      base = Cesium.Color.fromCssColorString(css);
+      parsed.set(css, base);
+    }
+    colour = base.withAlpha(alpha);
+    withAlpha.set(key, colour);
+    return colour;
+  };
+}
+
 export function buildPointBatch(
   Cesium: CesiumNs,
   layer: GeoLibreLayer,
@@ -250,6 +295,7 @@ export function buildPointBatch(
 ): PointPrimitiveCollection {
   const collection = new Cesium.PointPrimitiveCollection();
   const features = layer.geojson?.features ?? [];
+  const colour = colourCache(Cesium);
   for (let index = 0; index < features.length; index++) {
     const feature = features[index];
     const symbol = resolver.resolve(feature, zoom);
@@ -258,12 +304,8 @@ export function buildPointBatch(
       collection.add({
         position: Cesium.Cartesian3.fromDegrees(lng, lat, Number.isFinite(z) ? z : 0),
         pixelSize: symbol.radius * 2,
-        color: Cesium.Color.fromCssColorString(symbol.pointFill).withAlpha(
-          symbol.pointFillOpacity * opacity,
-        ),
-        outlineColor: Cesium.Color.fromCssColorString(symbol.outline).withAlpha(
-          symbol.strokeOpacity * opacity,
-        ),
+        color: colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
+        outlineColor: colour(symbol.outline, symbol.strokeOpacity * opacity),
         outlineWidth: symbol.strokeWidth,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         id: { geolibreLayerId: layer.id, index } satisfies BatchedPointRef,
@@ -283,6 +325,7 @@ export function restylePointBatch(
   zoom: number,
 ): void {
   const features = layer.geojson?.features ?? [];
+  const colour = colourCache(Cesium);
   let lastIndex = -1;
   let symbol = resolver.resolve(undefined, zoom);
   for (let i = 0; i < collection.length; i++) {
@@ -295,12 +338,8 @@ export function restylePointBatch(
       lastIndex = ref.index;
     }
     point.pixelSize = symbol.radius * 2;
-    point.color = Cesium.Color.fromCssColorString(symbol.pointFill).withAlpha(
-      symbol.pointFillOpacity * opacity,
-    );
-    point.outlineColor = Cesium.Color.fromCssColorString(symbol.outline).withAlpha(
-      symbol.strokeOpacity * opacity,
-    );
+    point.color = colour(symbol.pointFill, symbol.pointFillOpacity * opacity);
+    point.outlineColor = colour(symbol.outline, symbol.strokeOpacity * opacity);
     point.outlineWidth = symbol.strokeWidth;
   }
 }

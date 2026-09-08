@@ -568,6 +568,19 @@ export class CesiumLayerSync {
         entry.layer.opacity <= 0
       )
         return null;
+      // A primitive the filter hid is not pickable, matching hidden entities.
+      // The pick hands back the reference object, and each primitive carries
+      // its own, so the collection is scanned by identity (on a click, not
+      // per frame).
+      const collection = entry.handle as PointPrimitiveCollection | null;
+      if (collection) {
+        for (let i = 0; i < collection.length; i++) {
+          const point = collection.get(i);
+          if (point.id !== entity) continue;
+          if (!point.show) return null;
+          break;
+        }
+      }
       const feature = entry.layer.geojson?.features[entity.index];
       return feature
         ? {
