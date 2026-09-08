@@ -1758,7 +1758,19 @@ export class CesiumLayerSync {
         const options = { rectangle };
 
         provider = await Cesium.SingleTileImageryProvider.fromUrl(resource, options);
-      } else if (layer.type === "wms" && str(layer.source.url)) {
+      } else if (
+        layer.type === "wms" &&
+        str(layer.source.url) &&
+        // On desktop, routeWmsLayerThroughNativeProtocol rewrites `source.tiles`
+        // to a `geolibre-wms://` template but leaves `source.url` as the plain
+        // endpoint buildWmsLayer recorded. Matching on `source.url` alone would
+        // therefore always take this branch and fetch the service straight from
+        // the webview, which is the CORS failure the native fetcher exists to
+        // avoid. Defer to the tile template whenever it names a protocol, so the
+        // layer falls through to the bridge below (nothing between here and it
+        // matches a WMS layer).
+        !protocolScheme(firstTile(layer) ?? "")
+      ) {
         const url = String(layer.source.url);
         const resource = makeResource(url);
         provider = new Cesium.WebMapServiceImageryProvider({

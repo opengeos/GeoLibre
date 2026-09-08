@@ -470,6 +470,9 @@ const RoutingCesium = {
   UrlTemplateImageryProvider: class {
     constructor(public options: Record<string, unknown>) {}
   },
+  WebMapServiceImageryProvider: class {
+    constructor(public options: Record<string, unknown>) {}
+  },
 } as unknown as typeof import("@cesium/engine");
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -886,6 +889,57 @@ describe("review follow-ups", () => {
     await flush();
     assert.equal(opens, 5, "a type transition releases the source");
     sync.destroy();
+  });
+
+  it("bridges a WMS layer the desktop routed through its native fetcher", async () => {
+    registerProtocol("geolibre-test-wms", async () => ({ data: new ArrayBuffer(0) }));
+    try {
+      const { viewer, added } = makeViewer();
+      const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10);
+      // What routeWmsLayerThroughNativeProtocol produces on desktop: the tiles
+      // are rewritten to the custom protocol, while source.url keeps the plain
+      // endpoint buildWmsLayer recorded.
+      const routed = rasterLayer({
+        id: "wms-native",
+        type: "wms",
+        source: {
+          type: "raster",
+          tiles: ["geolibre-test-wms://https%3A%2F%2Fwms.example%2Fows?bbox={bbox-epsg-3857}"],
+          url: "https://wms.example/ows",
+          layers: "topo",
+        },
+      });
+      // The browser build, where the tiles are a plain https template.
+      const direct = rasterLayer({
+        id: "wms-web",
+        type: "wms",
+        source: {
+          type: "raster",
+          tiles: ["https://wms.example/ows?bbox={bbox-epsg-3857}"],
+          url: "https://wms.example/ows",
+          layers: "topo",
+        },
+      });
+      sync.sync([routed, direct]);
+      await flush();
+      await flush();
+
+      assert.deepEqual(sync.getRenderStatus().errors, []);
+      assert.equal(added.length, 2);
+      const bridged = added[0].imageryProvider as ProtocolImageryProvider;
+      assert.ok(
+        bridged instanceof ProtocolImageryProvider,
+        "the native template must not be fetched straight from the webview",
+      );
+      assert.match(bridged.tileUrl(1, 0, 2), /^geolibre-test-wms:\/\//);
+      assert.ok(
+        !(added[1].imageryProvider instanceof ProtocolImageryProvider),
+        "a plain endpoint still uses Cesium's own WMS provider",
+      );
+      sync.destroy();
+    } finally {
+      unregisterProtocol("geolibre-test-wms");
+    }
   });
 
   it("forgets a COG removed while its tiler import was still in flight", async () => {
