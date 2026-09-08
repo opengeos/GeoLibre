@@ -252,12 +252,12 @@ describe("label sync", () => {
         features: [
           {
             type: "Feature",
-            properties: { name: "A" },
+            properties: { name: "A", pop: 1234567 },
             geometry: { type: "Point", coordinates: [0, 0] },
           },
           {
             type: "Feature",
-            properties: { name: "B" },
+            properties: { name: "B", pop: 1234567 },
             geometry: { type: "Point", coordinates: [0, 0] },
           },
         ],
@@ -541,6 +541,44 @@ describe("label sync", () => {
       ["number-format", ["round", ["to-number", ["get", "pop"]]], { locale: "en-US" }],
       ["to-string", ["coalesce", ["get", "pop"], ""]],
     ]);
+  });
+
+  it("reformats deduplicated labels when the app language changes", () => {
+    // The dedup cache is keyed by collection + settings; the resolved locale
+    // has to be part of that key, or a layer whose Separators follow the app
+    // language keeps the previous language's separators after a switch.
+    const withDocumentLang = (lang: string, run: () => void) => {
+      const previous = (globalThis as { document?: unknown }).document;
+      (globalThis as { document?: unknown }).document = { documentElement: { lang } };
+      try {
+        run();
+      } finally {
+        if (previous === undefined) delete (globalThis as { document?: unknown }).document;
+        else (globalThis as { document?: unknown }).document = previous;
+      }
+    };
+    const layer = colocatedPointLayer({
+      enabled: true,
+      field: "pop",
+      dedupe: "unique",
+      numberFormatEnabled: true,
+      numberDecimals: 0,
+      numberLocale: "",
+    });
+    const labelText = (sources: Map<string, Record<string, unknown>>) => {
+      const data = (sources.get("source-lyr-label") as { data: GeoJSON.FeatureCollection }).data;
+      return data.features[0].properties?.__geolibre_label;
+    };
+
+    const english = makeMap();
+    withDocumentLang("en-US", () => syncLayer(english.map as never, layer));
+    assert.equal(labelText(english.sources), "1,234,567");
+
+    // Same layer object, so the memoized dedup features are a cache hit unless
+    // the locale is part of the key.
+    const german = makeMap();
+    withDocumentLang("de-DE", () => syncLayer(german.map as never, layer));
+    assert.equal(labelText(german.sources), "1.234.567");
   });
 
   it("leaves a label expression unformatted", () => {

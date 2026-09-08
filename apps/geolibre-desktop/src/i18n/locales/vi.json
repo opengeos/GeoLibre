@@ -6748,7 +6748,7 @@
         "upcase": "Tạo màu từ đỏ, lục và lam (0-255).",
         "downcase": "Chuyển đổi một chuỗi thành chữ thường.",
         "slice": "Trả về một phần của chuỗi hoặc mảng.",
-        "numberFormat": "Định dạng một số thành văn bản bằng dấu phân cách hàng nghìn và dấu thập phân của một ngôn ngữ, có thể cố định số chữ số thập phân.",
+        "numberFormat": "Định dạng một số thành văn bản bằng dấu phân cách hàng nghìn và dấu thập phân của một ngôn ngữ và khu vực, có thể cố định số chữ số thập phân.",
         "toNumber": "Chuyển đổi một giá trị thành một số.",
         "toString": "Chuyển đổi một giá trị thành một chuỗi.",
         "toBoolean": "Chuyển đổi một giá trị thành true hoặc false.",

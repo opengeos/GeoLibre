@@ -6644,7 +6644,7 @@
       "rotation": "Rotation (°)",
       "maxWidth": "Wrap width (em)",
       "numberFormat": "Format numbers",
-      "numberFormatHint": "Numeric values label with thousands and decimal separators, e.g. {{sample}}. Text values are unchanged, and a label expression formats its own output.",
+      "numberFormatHint": "Numeric values are labeled with thousands and decimal separators, e.g. {{sample}}. Text values are unchanged, and a label expression formats its own output.",
       "numberDecimals": "Decimal places",
       "numberLocale": "Separators",
       "numberLocaleApp": "Match app language",

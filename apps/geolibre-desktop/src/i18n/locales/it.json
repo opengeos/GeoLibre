@@ -6867,7 +6867,7 @@
         "upcase": "Converte una stringa in maiuscolo.",
         "downcase": "Converte una stringa in minuscolo.",
         "slice": "Restituisce una porzione di una stringa o di un array.",
-        "numberFormat": "Formatta un numero come testo usando i separatori delle migliaia e dei decimali di una lingua, con un numero fisso di decimali facoltativo.",
+        "numberFormat": "Formatta un numero come testo usando i separatori delle migliaia e dei decimali di una localizzazione, con un numero fisso di decimali facoltativo.",
         "toNumber": "Converte un valore in numero.",
         "toString": "Converte un valore in stringa.",
         "toBoolean": "Converte un valore in vero o falso.",

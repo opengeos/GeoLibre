@@ -2725,14 +2725,19 @@ function getDedupedLabelFeatures(
     dedupedLabelCache.set(collection, byKey);
   }
   // Number formatting is part of the key: it changes the aggregated label
-  // text, and "unique"/"concatenate" group on that text.
+  // text, and "unique"/"concatenate" group on that text. The resolved locale
+  // goes in rather than the stored one, so switching the app language
+  // reformats labels that follow it (`numberLocale: ""`) instead of serving
+  // the previous language's separators from this cache.
+  const locale = documentLocale();
   const key = [
     labels.dedupe,
-    labels.numberFormatEnabled ? `${labels.numberDecimals}:${labels.numberLocale}` : "raw",
+    labels.numberFormatEnabled
+      ? `${labels.numberDecimals}:${labels.numberLocale || locale || ""}`
+      : "raw",
     labels.field,
   ].join("|");
   if (byKey.has(key)) return byKey.get(key) ?? null;
-  const locale = documentLocale();
   const result = buildDedupedLabelFeatures(collection, labels.field, labels.dedupe, (value) =>
     formatLabelNumber(value, labels, locale),
   );

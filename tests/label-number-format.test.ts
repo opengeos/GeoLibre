@@ -141,8 +141,65 @@ describe("label number formatting", () => {
   it("previews each offered locale by the separators it produces", () => {
     assert.equal(formatLabelNumberSample("en-US", 2), "1,234,567.50");
     assert.equal(formatLabelNumberSample("de-DE", 0), "1.234.568");
-    // A tag Intl rejects must not throw inside a render.
-    assert.equal(formatLabelNumberSample("not a locale", 0), "1234567.5");
+  });
+
+  it("degrades a locale tag Intl rejects to the runtime default", () => {
+    // A malformed tag can only arrive from a hand-edited project, but Intl
+    // throws a RangeError on one, which would take down a whole layer's
+    // labels rather than just that setting.
+    const runtimeDefault = formatLabelNumberSample("", 0);
+    assert.equal(formatLabelNumberSample("not a locale", 0), runtimeDefault);
+    assert.equal(formatLabelNumberSample("en_US", 0), runtimeDefault);
+
+    const bad = labels({
+      field: "pop",
+      numberFormatEnabled: true,
+      numberDecimals: 0,
+      numberLocale: "not a locale",
+    });
+    assert.equal(
+      formatLabelNumber(1234, bad),
+      formatLabelNumber(1234, { ...bad, numberLocale: "" }),
+    );
+    // The expression path is exposed too: MapLibre builds its own
+    // Intl.NumberFormat per feature, so the tag must not reach the style.
+    assert.equal(renderTextField(bad, 1234), formatLabelNumber(1234, bad));
+    // A rejected pinned tag falls through to the caller's fallback locale.
+    assert.equal(formatLabelNumber(1234, bad, "de-DE"), "1.234");
+  });
+
+  it("rounds halves away from zero on both paths", () => {
+    // The zero-decimals branch rounds with MapLibre's `round`, which is
+    // half-away-from-zero (`v < 0 ? -Math.round(-v) : Math.round(v)`), not
+    // Math.round's half-toward-+Infinity. That happens to match Intl's default
+    // rounding, so the map and the globe agree — but only by agreement, not by
+    // construction, so pin it.
+    const style = labels({
+      field: "pop",
+      numberFormatEnabled: true,
+      numberDecimals: 0,
+      numberLocale: "en-US",
+    });
+    for (const [value, expected] of [
+      [-2.5, "-3"],
+      [2.5, "3"],
+      [-1.4, "-1"],
+    ] as const) {
+      assert.equal(renderTextField(style, value), expected, `map ${value}`);
+      assert.equal(formatLabelNumber(value, style), expected, `js ${value}`);
+    }
+  });
+
+  it("keeps the two paths in step for negative values at two decimals", () => {
+    const style = labels({
+      field: "pop",
+      numberFormatEnabled: true,
+      numberDecimals: 2,
+      numberLocale: "en-US",
+    });
+    for (const value of [-2.005, -1234.5, -0.001, 1234.005]) {
+      assert.equal(formatLabelNumber(value, style), renderTextField(style, value), String(value));
+    }
   });
 
   it("only offers locales whose separators the map's glyph stack can draw", () => {
