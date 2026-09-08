@@ -415,16 +415,51 @@ function pmtilesArchiveUrl(layer: GeoLibreLayer): string | undefined {
   return raw ? normalizePMTilesUrl(raw) : undefined;
 }
 
+// Floor for the contrast handed to Cesium. MapLibre can ask for a black point
+// at or above mid-grey, which Cesium's brightness/contrast pair cannot express
+// (see imageryColorAdjustments); flooring the contrast keeps the stretch exact
+// and degrades only the lift, instead of letting the brightness factor run away.
+const MIN_IMAGERY_CONTRAST = 0.1;
+
 /**
  * Cesium's `ImageryLayer` colour controls for a layer's raster symbology.
  *
- * MapLibre's raster paint and Cesium's imagery adjustments are the same four
- * operations with different neutral points: MapLibre remaps brightness
- * through a `[min, max]` window (neutral `[0, 1]`), and offsets saturation and
- * contrast around 0 (`[-1, 1]`), with the hue rotation in degrees; Cesium
- * multiplies brightness, contrast, and saturation (neutral 1) and rotates hue
- * in radians. The window's shift (`min + max − 1`) is what lifts or lowers
- * the image overall, so it becomes the brightness factor.
+ * MapLibre and Cesium run the same four operations, but with different curves,
+ * different neutral points, and a different order, so this is not a
+ * property-by-property rename. Writing MapLibre's raster shader in order (hue
+ * spin, saturation, contrast, brightness) and Cesium's `sampleAndBlend` in
+ * order (brightness, contrast, hue, saturation):
+ *
+ * | step       | MapLibre                       | Cesium                     |
+ * | ---------- | ------------------------------ | -------------------------- |
+ * | saturation | `rgb += (avg - rgb) * f`       | `luma + (rgb - luma) * a`  |
+ * | contrast   | `(rgb - 0.5) * k + 0.5`        | `0.5 + (rgb - 0.5) * k'`   |
+ * | brightness | `mix(min, max, rgb)`           | `rgb * b`                  |
+ *
+ * where MapLibre derives `f` and `k` through
+ * `f = s > 0 ? 1 - 1 / (1.001 - s) : -s` and `k = c > 0 ? 1 / (1 - c) : 1 + c`.
+ *
+ * Two things follow. Both curves bend above 0, so `1 + value` tracks MapLibre
+ * only on the negative half and would leave the globe visibly flatter than the
+ * 2D map for any positive contrast or saturation; both are mirrored exactly
+ * here. (MapLibre pivots saturation on the channel average and Cesium on
+ * luminance. That pivot is not something `ImageryLayer` exposes; the multiplier
+ * is the part that translates.)
+ *
+ * And MapLibre's brightness is a *window*, not a gain: it scales by the
+ * window's width and lifts the black point to `min`. Mapping the window onto
+ * `brightness` alone would drop the width, so the globe would miss the
+ * flattening that a narrowed window produces on the 2D map. Cesium has no
+ * window, but its brightness and contrast compose into the same shape of
+ * affine map, so the two are solved for together. With MapLibre's composed
+ * contrast and brightness written as `out = S * in + I`:
+ *
+ *     S = k * (max - min)          I = (min + max) / 2 - S / 2
+ *
+ * and Cesium's composed brightness and contrast as
+ * `out = (b * k') * in + 0.5 * (1 - k')`, matching slope and intercept gives
+ * `k' = 1 - 2I` and `b = S / k'`. The one shape Cesium cannot reach is
+ * `I >= 0.5`, hence {@link MIN_IMAGERY_CONTRAST}.
  */
 export function imageryColorAdjustments(style: LayerStyle | undefined): {
   brightness: number;
@@ -437,10 +472,18 @@ export function imageryColorAdjustments(style: LayerStyle | undefined): {
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   const min = num(styleValue(s, "rasterBrightnessMin"), 0);
   const max = num(styleValue(s, "rasterBrightnessMax"), 1);
+  const contrast = num(styleValue(s, "rasterContrast"), 0);
+  const saturation = num(styleValue(s, "rasterSaturation"), 0);
+
+  const mapLibreContrast = contrast > 0 ? 1 / (1 - contrast) : 1 + contrast;
+  const slope = mapLibreContrast * (max - min);
+  const intercept = (min + max) / 2 - slope / 2;
+  const cesiumContrast = Math.max(MIN_IMAGERY_CONTRAST, 1 - 2 * intercept);
+
   return {
-    brightness: Math.max(0, 1 + min + (max - 1)),
-    contrast: Math.max(0, 1 + num(styleValue(s, "rasterContrast"), 0)),
-    saturation: Math.max(0, 1 + num(styleValue(s, "rasterSaturation"), 0)),
+    brightness: Math.max(0, slope / cesiumContrast),
+    contrast: cesiumContrast,
+    saturation: saturation > 0 ? 1 / (1.001 - saturation) : Math.max(0, 1 + saturation),
     hue: (num(styleValue(s, "rasterHueRotate"), 0) * Math.PI) / 180,
   };
 }

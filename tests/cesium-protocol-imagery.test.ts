@@ -478,6 +478,23 @@ describe("isCesiumSupportedLayerType with the bridge", () => {
   });
 });
 
+// Models of the two shaders' luminance paths, transcribed from
+// maplibre-gl's raster.fragment.glsl and Cesium's sampleAndBlend. The point of
+// imageryColorAdjustments is that these two agree, so the tests below compare
+// them directly rather than pinning the intermediate factors.
+function mapLibreLuma(input: number, min: number, max: number, contrast: number): number {
+  const k = contrast > 0 ? 1 / (1 - contrast) : 1 + contrast;
+  const contrasted = (input - 0.5) * k + 0.5;
+  return min + contrasted * (max - min); // mix(min, max, rgb)
+}
+
+function cesiumLuma(input: number, brightness: number, contrast: number): number {
+  const brightened = input * brightness; // mix(vec3(0.0), color, b)
+  return 0.5 + (brightened - 0.5) * contrast; // mix(vec3(0.5), color, k)
+}
+
+const SAMPLE_INTENSITIES = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
+
 describe("imageryColorAdjustments", () => {
   it("is neutral for the default raster symbology", () => {
     assert.deepEqual(imageryColorAdjustments(DEFAULT_LAYER_STYLE), {
@@ -488,19 +505,72 @@ describe("imageryColorAdjustments", () => {
     });
   });
 
-  it("maps MapLibre's offsets onto Cesium's multipliers and radians", () => {
+  it("converts the hue rotation to radians", () => {
+    const adjusted = imageryColorAdjustments({ ...DEFAULT_LAYER_STYLE, rasterHueRotate: 90 });
+    assert.ok(Math.abs(adjusted.hue - Math.PI / 2) < 1e-9);
+  });
+
+  // MapLibre's saturation and contrast curves both bend above 0, so the globe
+  // would read flatter than the 2D map if either were mapped as `1 + value`.
+  it("mirrors MapLibre's saturation curve on both sides of neutral", () => {
+    const saturationFor = (rasterSaturation: number) =>
+      imageryColorAdjustments({ ...DEFAULT_LAYER_STYLE, rasterSaturation }).saturation;
+    assert.equal(saturationFor(-0.5), 0.5);
+    assert.equal(saturationFor(-1), 0);
+    // MapLibre: rgb += (avg - rgb) * (1 - 1 / (1.001 - s)), so the multiplier
+    // about the pivot is 1 / (1.001 - s), not 1 + s.
+    assert.ok(Math.abs(saturationFor(0.5) - 1 / 0.501) < 1e-9);
+    assert.ok(Math.abs(saturationFor(0.25) - 1 / 0.751) < 1e-9);
+  });
+
+  // Every reachable combination should land on MapLibre's own output exactly:
+  // the brightness window is an affine remap, and Cesium's brightness and
+  // contrast compose into one, so they are solved for as a pair.
+  for (const [name, min, max, contrast] of [
+    ["a darkened window", 0, 0.5, 0],
+    ["a narrowed window (a flatten, not a boost)", 0.2, 0.8, 0],
+    ["a lifted black point", 0.4, 1, 0],
+    ["positive contrast alone", 0, 1, 0.5],
+    ["negative contrast alone", 0, 1, -0.4],
+    ["a window and positive contrast together", 0.2, 0.9, 0.25],
+  ] as const) {
+    it(`reproduces MapLibre's raster output for ${name}`, () => {
+      const adjusted = imageryColorAdjustments({
+        ...DEFAULT_LAYER_STYLE,
+        rasterBrightnessMin: min,
+        rasterBrightnessMax: max,
+        rasterContrast: contrast,
+      });
+      for (const input of SAMPLE_INTENSITIES) {
+        assert.ok(
+          Math.abs(
+            mapLibreLuma(input, min, max, contrast) -
+              cesiumLuma(input, adjusted.brightness, adjusted.contrast),
+          ) < 1e-9,
+          `intensity ${input} diverged`,
+        );
+      }
+    });
+  }
+
+  // A black point at or above mid-grey is the one shape Cesium's
+  // brightness/contrast pair cannot express. The contrast floor keeps the
+  // stretch exact there and lets only the lift drift.
+  it("keeps the stretch exact when the black point is too high for Cesium", () => {
+    const [min, max] = [0.6, 1];
     const adjusted = imageryColorAdjustments({
       ...DEFAULT_LAYER_STYLE,
-      rasterBrightnessMin: 0.2,
-      rasterBrightnessMax: 0.9,
-      rasterSaturation: -0.5,
-      rasterContrast: 0.25,
-      rasterHueRotate: 90,
+      rasterBrightnessMin: min,
+      rasterBrightnessMax: max,
     });
-    assert.ok(Math.abs(adjusted.brightness - 1.1) < 1e-9);
-    assert.equal(adjusted.saturation, 0.5);
-    assert.equal(adjusted.contrast, 1.25);
-    assert.ok(Math.abs(adjusted.hue - Math.PI / 2) < 1e-9);
+    const slopeOf = (f: (input: number) => number) => f(1) - f(0);
+    assert.ok(
+      Math.abs(
+        slopeOf((input) => mapLibreLuma(input, min, max, 0)) -
+          slopeOf((input) => cesiumLuma(input, adjusted.brightness, adjusted.contrast)),
+      ) < 1e-9,
+    );
+    assert.ok(adjusted.contrast > 0, "contrast must not collapse to flat grey");
   });
 });
 
@@ -580,7 +650,9 @@ describe("CesiumLayerSync raster bridge routing", () => {
       (added[0].imageryProvider as ProtocolImageryProvider).template,
       "cog://cog-1/{z}/{x}/{y}",
     );
-    assert.equal(added[0].saturation, 1.5);
+    // MapLibre's own factor for rasterSaturation 0.5; the curve itself is
+    // covered by the imageryColorAdjustments suite.
+    assert.ok(Math.abs(added[0].saturation - 1 / 0.501) < 1e-9);
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
     // A symbology change (colormap) rebuilds; an opacity change restyles in place.
     const recoloured = {

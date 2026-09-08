@@ -300,6 +300,18 @@ export class ProtocolImageryProvider implements ImageryProvider {
     return expandTileTemplate(this.template, level, x, y, this.scheme);
   }
 
+  /**
+   * `request` is accepted to satisfy `ImageryProvider` and deliberately
+   * ignored. Cesium only ever flags that object through `RequestScheduler`,
+   * which is reached from `Resource.fetchImage` (the HTTP path this provider
+   * exists to bypass), so for a bridged tile nothing would ever set it. Honouring
+   * per-tile cancellation therefore means routing the handler's bytes through
+   * the scheduler, not reading a flag here. Until then cancellation is by
+   * provider lifetime (the shared `AbortController`, aborted in `destroy`) and
+   * back-pressure is `maxConcurrentRequests`: a tile that scrolls off-screen
+   * mid-flight still holds its slot until it resolves, so a fast pan can queue
+   * briefly behind tiles Cesium no longer wants.
+   */
   requestImage(
     x: number,
     y: number,
