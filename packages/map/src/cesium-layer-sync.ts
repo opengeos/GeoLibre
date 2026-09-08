@@ -110,6 +110,7 @@ function isCogLayer(layer: GeoLibreLayer): boolean {
 const NON_GEOJSON_TYPES = new Set([
   ...IMAGERY_TYPES,
   "3d-tiles",
+  "cog",
   "vector-tiles",
   "pmtiles",
   "mbtiles",
@@ -709,6 +710,12 @@ export class CesiumLayerSync {
   private loadCogTiler(): Promise<ReturnType<typeof cachingCogTiler>> {
     this.cogTiler ??= (this.deps.loadCogTiler ?? (() => import("cog-tiler-wasm")))().then(
       cachingCogTiler,
+      (error) => {
+        // A failed module load must not poison every later COG for the life
+        // of the globe; the next COG layer retries the import.
+        this.cogTiler = null;
+        throw error;
+      },
     );
     return this.cogTiler;
   }

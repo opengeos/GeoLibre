@@ -338,6 +338,32 @@ describe("createCogImageryProvider", () => {
     assert.equal(decoded, 0, "the abandoned render is not decoded into a bitmap");
   });
 
+  it("parses tile coordinates whatever the layer id contains", async () => {
+    const renders: number[][] = [];
+    const tiler: CogTilerModule = {
+      openCog: async () =>
+        ({
+          boundsLonLat: [-122.3, 37.8, -122.2, 37.9],
+          statistics: async () => ({}),
+          renderTileRGBA: async (z: number, x: number, y: number) => {
+            renders.push([z, x, y]);
+            return new Uint8Array(256 * 256 * 4).fill(255);
+          },
+        }) as never,
+    };
+    const provider = await createCogImageryProvider(
+      Cesium,
+      tiler,
+      cogLayer(
+        { id: "group/cog:1" },
+        { mode: "single", bands: [1], colormap: "gray", rescale: [[0, 1]] },
+      ),
+      async (rgba, size) => fakeTile(`${size}:${rgba[0]}`),
+    );
+    await provider.requestImage(3, 5, 12);
+    assert.deepEqual(renders, [[12, 3, 5]]);
+  });
+
   it("refuses a layer with nothing readable", async () => {
     const tiler: CogTilerModule = { openCog: async () => ({}) as never };
     await assert.rejects(
@@ -480,6 +506,56 @@ describe("imageryColorAdjustments", () => {
 
 describe("CesiumLayerSync raster bridge routing", () => {
   afterEach(() => unregisterProtocol("geolibre-test-mbtiles"));
+
+  it("retries the tiler import after a failed load instead of caching the rejection", async () => {
+    const { viewer, added } = makeViewer();
+    const tiler: CogTilerModule = {
+      openCog: async () =>
+        ({
+          boundsLonLat: [-122.3, 37.8, -122.2, 37.9],
+          statistics: async () => ({}),
+          renderTileRGBA: async () => new Uint8Array(256 * 256 * 4),
+        }) as never,
+    };
+    let loads = 0;
+    const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10, {
+      loadCogTiler: () =>
+        ++loads === 1 ? Promise.reject(new Error("chunk failed")) : Promise.resolve(tiler),
+    });
+    sync.sync([cogLayer()]);
+    await flush();
+    await flush();
+    assert.equal(added.length, 0);
+    assert.match(sync.getRenderStatus().errors[0] ?? "", /chunk failed/);
+    // A second COG (or the same one re-added) loads the module afresh.
+    sync.sync([]);
+    sync.sync([cogLayer({ id: "cog-2" })]);
+    await flush();
+    await flush();
+    assert.equal(loads, 2);
+    assert.equal(added.length, 1);
+    sync.destroy();
+  });
+
+  it("keeps a COG on the tiler even when a collection is attached to it", async () => {
+    const { viewer, added } = makeViewer();
+    const tiler: CogTilerModule = {
+      openCog: async () =>
+        ({
+          boundsLonLat: [-122.3, 37.8, -122.2, 37.9],
+          statistics: async () => ({}),
+          renderTileRGBA: async () => new Uint8Array(256 * 256 * 4),
+        }) as never,
+    };
+    const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10, {
+      loadCogTiler: () => Promise.resolve(tiler),
+    });
+    sync.sync([cogLayer({ geojson: { type: "FeatureCollection", features: [] } })]);
+    await flush();
+    await flush();
+    assert.equal(added.length, 1, "a hand-authored geojson on a cog layer does not divert it");
+    sync.destroy();
+  });
 
   it("renders a COG through the tiler and applies the raster symbology", async () => {
     const { viewer, added } = makeViewer();
