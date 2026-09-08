@@ -739,6 +739,15 @@ describe("review follow-ups", () => {
     await flush();
     await flush();
     assert.equal(opens, 2, "removing the last layer forgets the source");
+    // A source swap under the same id forgets the old URL as it rebuilds.
+    sync.sync([{ ...layer, source: { ...layer.source, url: "https://example.com/other.tif" } }]);
+    await flush();
+    await flush();
+    assert.equal(opens, 3, "the new URL is opened");
+    sync.sync([layer]);
+    await flush();
+    await flush();
+    assert.equal(opens, 4, "the old URL was forgotten by the swap, so it is reopened");
     sync.destroy();
   });
 

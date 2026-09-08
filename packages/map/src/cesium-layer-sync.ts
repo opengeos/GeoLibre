@@ -779,6 +779,11 @@ export class CesiumLayerSync {
       } else if (needsRebuild(existing.layer, layer)) {
         this.destroyEntry(existing);
         this.entries.delete(layer.id);
+        // A COG whose source moved (a re-read blob URL, an authoring swap)
+        // leaves its old source behind unless something forgets it.
+        if (isCogLayer(existing.layer) && cogSourceUrl(existing.layer) !== cogSourceUrl(layer)) {
+          this.forgetCogSource(existing);
+        }
         this.createEntry(layer);
         if (entryKind(layer) === "imagery") imageryRebuilt = true;
       } else {
