@@ -12,7 +12,7 @@ import {
 } from "@geolibre/core";
 import { featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
-import { readMapViewFromCamera } from "./cesium-camera";
+import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
 import {
   cachingCogTiler,
   cogRenderSignature,
@@ -21,24 +21,50 @@ import {
   type CogTilerModule,
 } from "./cesium-cog-imagery";
 import { drapeSignature, isDrapedLayer, MapLibreDrape } from "./cesium-drape";
+import { createFeatureStyleResolver, type FeatureStyleResolver } from "./cesium-feature-style";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
+import {
+  buildPointCloudCollection,
+  isSplatTilesetUrl,
+  loadCopcPointCloud,
+  pointCloudSourceKind,
+  setPointCloudOpacity,
+  type LoadCopcOptions,
+} from "./cesium-point-cloud";
+import {
+  buildPointBatch,
+  clusterActiveAtZoom,
+  clusterAppearance,
+  configureClustering,
+  isBatchedPointRef,
+  planPointRendering,
+  restylePointBatch,
+  type PointRenderPlan,
+} from "./cesium-points";
 import {
   hasRegisteredProtocol,
   ProtocolImageryProvider,
   protocolScheme,
   webMercatorRectangle,
 } from "./cesium-protocol-imagery";
+import { renderFillPatternCanvas } from "./fill-patterns";
+import { getLayerBounds } from "./geojson-loader";
 import { getPMTilesArchive } from "./layer-sync";
+import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
 import type { Header as PMTilesHeader } from "pmtiles";
 import type {
+  Cartesian2,
   Cesium3DTileset,
   CesiumWidget,
   Color,
   DataSource,
+  DistanceDisplayCondition,
   Entity,
+  I3SDataProvider,
   ImageryLayer,
   ImageryProvider,
+  PointPrimitiveCollection,
   Resource,
   TilingScheme,
 } from "@cesium/engine";
@@ -59,6 +85,12 @@ type CesiumNs = typeof import("@cesium/engine");
 
 /** Whether a serialized filter reads `["zoom"]`, so its result depends on the camera. */
 const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
+
+/** Most marker sprites baked for one layer (one per distinct classified colour). */
+const MAX_MARKER_SPRITES = 64;
+
+/** Ground metres one fill-pattern tile spans on a draped polygon. */
+const PATTERN_TILE_METERS = 20;
 
 /** The subset of a Cesium `Event` the camera watch needs. */
 interface CameraEvent {
@@ -127,14 +159,54 @@ const NON_GEOJSON_TYPES = new Set([
  */
 const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
-type EntryKind = "imagery" | "geojson" | "3dtiles";
+type EntryKind = "imagery" | "geojson" | "3dtiles" | "points" | "pointcloud";
+
+/** `metadata.sourceKind` of the ArcGIS I3S scene layers (`arcgis-i3s-tiles.ts`). */
+const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
+
+/** Whether a 3D Tiles-typed layer is an I3S scene layer rather than a tileset. */
+function isI3sLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "3d-tiles" && layer.metadata?.sourceKind === ARCGIS_I3S_SOURCE_KIND;
+}
+
+/** A point-cloud (`lidar`) layer's URL. */
+function pointCloudUrl(layer: GeoLibreLayer): string | undefined {
+  return str(layer.source.url) ?? str(layer.sourcePath);
+}
+
+/**
+ * A 3D Tiles-shaped source the globe loads through `Cesium3DTileset`: a 3D
+ * Tiles layer proper, a Gaussian-splat layer whose asset is a tileset (Cesium
+ * renders `KHR_gaussian_splatting` tiles natively; a raw `.ply`/`.splat`
+ * file has no globe loader), or a point cloud already in 3D Tiles form.
+ */
+function isTilesetLayer(layer: GeoLibreLayer): boolean {
+  if (layer.type === "3d-tiles") return true;
+  if (layer.type === "gaussian-splat")
+    return isSplatTilesetUrl(str(layer.source.url) ?? str(layer.sourcePath));
+  if (layer.type === "lidar") return pointCloudSourceKind(pointCloudUrl(layer)) === "tileset";
+  return false;
+}
+
+/** A COPC point cloud the globe decodes itself (issue #2285). */
+function isDecodedPointCloudLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "lidar" && pointCloudSourceKind(pointCloudUrl(layer)) === "copc";
+}
 
 interface LayerEntry {
   kind: EntryKind;
   /** The layer as last applied, for change detection. */
   layer: GeoLibreLayer;
   /** The Cesium object, or null while an async create is in flight. */
-  handle: ImageryLayer | DataSource | Cesium3DTileset | null;
+  handle:
+    | ImageryLayer
+    | DataSource
+    | Cesium3DTileset
+    | I3SDataProvider
+    | PointPrimitiveCollection
+    | null;
+  /** Aborts a decoded point cloud's download when the entry goes. */
+  abort?: AbortController;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
   loadError?: string;
@@ -144,6 +216,25 @@ interface LayerEntry {
   appliedFilterKey?: string;
   /** Whether the applied filter reads `["zoom"]`, so it must re-run when the camera moves. */
   zoomFilter?: boolean;
+  /** The per-feature style resolver for a geojson entry, compiled for {@link resolverKey}. */
+  resolver?: FeatureStyleResolver;
+  /** The style content {@link resolver} was compiled from (recompiled when it changes). */
+  resolverKey?: string;
+  /** Whether the resolver reads `["zoom"]`, so symbols must be re-resolved as the camera zooms. */
+  zoomStyle?: boolean;
+  /** Marker sprites baked per resolved marker colour (a classified marker layer has several). */
+  markerImages?: Map<string, { canvas: HTMLCanvasElement; pixelRatio: number }>;
+  /** A sprite bake in flight after a zoom step, and the zoom it resolves colours at. */
+  markerBake?: Promise<boolean>;
+  markerBakeZoom?: number;
+  /** The fill pattern tile, when the style has one. */
+  patternImage?: { canvas: HTMLCanvasElement; pixelRatio: number } | null;
+  /** How the layer's points render (clustered, batched, plain). */
+  plan?: PointRenderPlan;
+  /** The clusterer handle for a clustered geojson entry. */
+  cluster?: ReturnType<typeof configureClustering>;
+  /** Whether clustering must switch on/off as the camera crosses `clusterMaxZoom`. */
+  zoomCluster?: boolean;
 }
 
 /**
@@ -365,7 +456,8 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   return (
     hasGeoJsonCollection(layer) ||
     layer.type === "geojson" ||
-    layer.type === "3d-tiles" ||
+    isTilesetLayer(layer) ||
+    isDecodedPointCloudLayer(layer) ||
     IMAGERY_TYPES.has(layer.type) ||
     isRasterArchive(layer) ||
     isCogLayer(layer) ||
@@ -384,6 +476,8 @@ function isSupported(layer: GeoLibreLayer): boolean {
   // and there is no collection to recognize it by.
   if (hasGeoJsonCollection(layer) || layer.type === "geojson") return false;
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
+  if (layer.type === "gaussian-splat" || layer.type === "lidar")
+    return isTilesetLayer(layer) || isDecodedPointCloudLayer(layer);
   // MapServer only: ArcGisMapServerImageryProvider speaks the MapServer REST
   // surface (a `?f=json` capabilities document, `/export`), which an ImageServer
   // does not expose (it answers `/exportImage` and takes a renderingRule instead
@@ -409,6 +503,29 @@ function isSupported(layer: GeoLibreLayer): boolean {
   if (isCogLayer(layer)) return Boolean(cogSourceUrl(layer));
   if (layer.type === "pmtiles") return Boolean(pmtilesArchiveUrl(layer));
   return Boolean(firstTile(layer));
+}
+
+/**
+ * Every tileset an I3S provider drives. `I3SDataProvider.layers` is already
+ * flat: a Building Scene Layer's nested sublayers register their `I3SLayer`s
+ * there too (Cesium's `I3SDataProvider._fromData` pushes each sublayer's
+ * layers into `_layers`), so one pass covers the whole tree.
+ */
+function i3sTilesets(provider: Partial<I3SDataProvider>): Cesium3DTileset[] {
+  const tilesets: Cesium3DTileset[] = [];
+  for (const layer of provider.layers ?? []) {
+    if (layer.tileset && !tilesets.includes(layer.tileset)) tilesets.push(layer.tileset);
+  }
+  return tilesets;
+}
+
+/** Whether a tileset (or every tileset of an I3S provider) has loaded its tiles. */
+function tilesLoaded(handle: Cesium3DTileset | I3SDataProvider): boolean {
+  const provider = handle as Partial<I3SDataProvider>;
+  if (Array.isArray(provider.layers)) {
+    return i3sTilesets(provider).every((tileset) => tileset.tilesLoaded);
+  }
+  return Boolean((handle as Cesium3DTileset).tilesLoaded);
 }
 
 /** The archive URL a raster PMTiles layer draws from, with the `pmtiles://` prefix. */
@@ -510,42 +627,72 @@ export function imageryColorAdjustments(style: LayerStyle | undefined): {
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
-  if (hasRenderableGeoJson(layer)) return "geojson";
-  if (layer.type === "3d-tiles") return "3dtiles";
+  if (hasRenderableGeoJson(layer)) return planPointRendering(layer).batched ? "points" : "geojson";
+  if (isTilesetLayer(layer)) return "3dtiles";
+  if (isDecodedPointCloudLayer(layer)) return "pointcloud";
   return "imagery";
 }
 
-// Fill/stroke *colours*, stroke width, marker colour, extrusion settings, and
-// 3D elevation parameters bake into the GeoJSON entities at load, so a change to
-// any of them forces a rebuild. Opacity (layer.opacity × fill opacity, and the
-// extrusion opacity) is deliberately excluded: it is re-applied in place by
-// applyGeoJsonStyle, so dragging the opacity slider restyles the alpha instead
-// of reloading the whole GeoJsonDataSource on every tick.
+/**
+ * Style fields re-applied in place by {@link CesiumLayerSync.applyGeoJsonStyle}
+ * rather than by reloading the data source. Everything else in the style —
+ * colours, classification stops and rules, expressions, widths, marker shape
+ * and size, patterns, decorations, extrusion, elevation, labels, the zoom
+ * range — bakes into the entities at load, so a change to any of them rebuilds.
+ * Opacity is the hot path (a slider drag), and the fill opacity is a resolver
+ * channel the in-place pass re-reads, so neither forces a reload.
+ */
+const IN_PLACE_STYLE_KEYS: ReadonlySet<string> = new Set(["fillOpacity", "extrusionOpacity"]);
+
+/**
+ * Style keys the globe never reads: the 2D map's blend mode, heatmap, diagram,
+ * inverted fill, geometry generator, and line-decoration detail settings.
+ * Editing one must not tear down and reload the data source. Anything not
+ * listed here or in {@link IN_PLACE_STYLE_KEYS} rebuilds when it changes.
+ */
+const GLOBE_IGNORED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  "blendMode",
+  // `pointRenderer`, `clusterRadius`, and `clusterMaxZoom` are read by the
+  // clustering path (issue #2282) and so still rebuild.
+  "heatmapRadius",
+  "heatmapIntensity",
+  "heatmapColorRamp",
+  "heatmapWeightProperty",
+  "diagramType",
+  "diagramFields",
+  "diagramSizeMode",
+  "diagramSize",
+  "diagramSizeProperty",
+  "diagramMinZoom",
+  "diagramDeclutter",
+  "invertedFillEnabled",
+  "lineDecorationColor",
+  "lineDecorationSize",
+  "lineDecorationSpacing",
+  "geometryGenerator",
+  "geometryGeneratorBufferDistance",
+  "geometryGeneratorBufferProperty",
+  "geometryGeneratorFillColor",
+  "geometryGeneratorStrokeColor",
+  "geometryGeneratorStrokeWidth",
+  "geometryGeneratorOpacity",
+  "geometryGeneratorCircleRadius",
+  "geometryGeneratorSizeProperty",
+  "geometryGeneratorSizeMinValue",
+  "geometryGeneratorSizeMaxValue",
+  "geometryGeneratorSizeMinRadius",
+  "geometryGeneratorSizeMaxRadius",
+]);
+
 function styleSignature(layer: GeoLibreLayer): string {
-  const style = layer.style ?? {};
-  // The layer zoom range only reaches the globe through the labels' distance
-  // limits, so it forces a reload only while labels are on; dragging the range
-  // on an unlabelled layer must not re-parse every feature.
-  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
-  return JSON.stringify([
-    style.fillColor,
-    style.strokeColor,
-    style.strokeWidth,
-    style.markerColor,
-    style.extrusionEnabled,
-    style.extrusionHeightProperty,
-    style.extrusionHeightScale,
-    style.extrusionBase,
-    style.extrusionColor,
-    style.extrusionAdvancedStyleEnabled,
-    style.extrusionHeightExpression,
-    style.extrusionColorExpression,
-    style.elevation3dEnabled,
-    style.elevation3dVerticalScale,
-    style.elevation3dOffset,
-    style.labels,
-    ...(labels.enabled ? [style.minZoom, style.maxZoom] : []),
-  ]);
+  const style = (layer.style ?? {}) as unknown as Record<string, unknown>;
+  const entries = Object.entries(style)
+    .filter(
+      ([key, value]) =>
+        !IN_PLACE_STYLE_KEYS.has(key) && !GLOBE_IGNORED_STYLE_KEYS.has(key) && value !== undefined,
+    )
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify(entries);
 }
 
 /**
@@ -558,8 +705,13 @@ function styleSignature(layer: GeoLibreLayer): string {
  */
 function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   if (prev.type !== next.type) return true;
-  switch (entryKind(next)) {
+  const kind = entryKind(next);
+  // Crossing the batching threshold, or switching clustering on, changes the
+  // Cesium object kind outright.
+  if (entryKind(prev) !== kind) return true;
+  switch (kind) {
     case "geojson":
+    case "points":
       return prev.geojson !== next.geojson || styleSignature(prev) !== styleSignature(next);
     case "imagery":
       return (
@@ -604,9 +756,16 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         JSON.stringify(prev.source.requestHeaders ?? null) !==
           JSON.stringify(next.source.requestHeaders ?? null)
       );
+    case "pointcloud":
+      return (
+        pointCloudUrl(prev) !== pointCloudUrl(next) ||
+        // The offset bakes into every point's position.
+        prev.source.altitudeOffset !== next.source.altitudeOffset
+      );
     case "3dtiles":
       return (
         tilesetUrl(prev) !== tilesetUrl(next) ||
+        str(prev.metadata?.sourceKind) !== str(next.metadata?.sourceKind) ||
         JSON.stringify(prev.source.requestHeaders ?? null) !==
           JSON.stringify(next.source.requestHeaders ?? null) ||
         prev.source.altitudeOffset !== next.source.altitudeOffset
@@ -635,6 +794,12 @@ export interface CesiumLayerSyncDeps {
    * (no WebGL context to spare), and those layers are reported as errors.
    */
   createDrape?: () => MapLibreDrape | null;
+  /** Rasterises one marker sprite; defaults to the 2D map's marker renderer. */
+  renderMarker?: typeof renderMarkerCanvas;
+  /** Rasterises the fill-pattern tile; defaults to the 2D map's renderer. */
+  renderFillPattern?: typeof renderFillPatternCanvas;
+  /** Overrides for the COPC decoder (the module, the projector, the budget). */
+  copcOptions?: Omit<LoadCopcOptions, "signal">;
 }
 
 async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
@@ -650,6 +815,32 @@ export class CesiumLayerSync {
 
   /** Only live, visible entities owned by this synchronizer can identify a feature. */
   resolveFeature(entity: object) {
+    // A batched point primitive carries its reference on `id` rather than
+    // being an Entity the WeakMap knows.
+    if (isBatchedPointRef(entity)) {
+      const entry = this.entries.get(entity.geolibreLayerId);
+      if (
+        !entry ||
+        entry.cancelled ||
+        entry.kind !== "points" ||
+        !entry.layer.visible ||
+        entry.layer.opacity <= 0
+      )
+        return null;
+      // A primitive the filter hid is not pickable, matching hidden entities;
+      // the reference carries its primitive, so this is a field read on the
+      // hover path rather than a scan of the batch.
+      if (entity.primitive && !entity.primitive.show) return null;
+      const feature = entry.layer.geojson?.features[entity.index];
+      return feature
+        ? {
+            layerId: entity.geolibreLayerId,
+            featureId: String(feature.id ?? entity.index),
+            properties: feature.properties ?? {},
+            geometry: feature.geometry,
+          }
+        : null;
+    }
     const ref = this.featureRefs.get(entity);
     if (!ref) return null;
     const entry = this.entries.get(ref.layerId);
@@ -696,9 +887,28 @@ export class CesiumLayerSync {
   private applyHighlight(): void {
     const selected = this.selection;
     const entry = selected && this.entries.get(selected.layerId);
-    if (!selected || !entry || entry.kind !== "geojson" || !entry.handle) return;
+    if (!selected || !entry || !entry.handle) return;
     const C = this.Cesium;
     const color = C.Color.fromCssColorString("#facc15");
+    if (entry.kind === "points") {
+      const collection = entry.handle as PointPrimitiveCollection;
+      const features = entry.layer.geojson?.features ?? [];
+      for (let i = 0; i < collection.length; i++) {
+        const point = collection.get(i);
+        const ref = point.id;
+        if (!isBatchedPointRef(ref)) continue;
+        const feature = features[ref.index];
+        if (!feature || !selected.ids.has(String(feature.id ?? ref.index))) continue;
+        const original = point.color;
+        point.color = color;
+        this.highlightRestorers.push(() => {
+          point.color = original;
+        });
+      }
+      this.viewer.scene.requestRender();
+      return;
+    }
+    if (entry.kind !== "geojson") return;
     for (const entity of (entry.handle as DataSource).entities.values) {
       const ref = this.featureRefs.get(entity);
       const feature = ref && entry.layer.geojson?.features[ref.index];
@@ -750,7 +960,10 @@ export class CesiumLayerSync {
         errors.push(`${layer.name}: missing or unsupported source configuration`);
       else if (!entry?.handle) pending.push(layer.name);
       // `allTilesLoaded` is an Event (always truthy); `tilesLoaded` is the flag.
-      else if (entry.kind === "3dtiles" && !(entry.handle as Cesium3DTileset).tilesLoaded)
+      else if (
+        entry.kind === "3dtiles" &&
+        !tilesLoaded(entry.handle as Cesium3DTileset | I3SDataProvider)
+      )
         pending.push(layer.name);
       else if (entry.kind === "geojson" && (entry.handle as DataSource).isLoading)
         pending.push(layer.name);
@@ -929,7 +1142,7 @@ export class CesiumLayerSync {
   private watchCameraZoom(): void {
     let wanted = false;
     for (const entry of this.entries.values()) {
-      if (entry.zoomFilter) {
+      if (entry.zoomFilter || entry.zoomStyle || entry.zoomCluster) {
         wanted = true;
         break;
       }
@@ -952,16 +1165,236 @@ export class CesiumLayerSync {
     };
   }
 
-  /** Re-run every zoom-dependent filter; renders only if some entity's visibility changed. */
+  /**
+   * Re-run every zoom-dependent filter and restyle every zoom-dependent
+   * symbology (metre-unit strokes, per-rule zoom ranges); renders only if
+   * something actually changed.
+   */
   private reapplyZoomFilters(): void {
     let changed = false;
     for (const entry of this.entries.values()) {
-      if (entry.kind !== "geojson" || !entry.zoomFilter || !entry.handle) continue;
-      const before = entry.appliedFilterKey;
-      this.applyGeoJsonFilter(entry);
-      if (entry.appliedFilterKey !== before) changed = true;
+      if ((entry.kind !== "geojson" && entry.kind !== "points") || !entry.handle) continue;
+      if (entry.zoomFilter) {
+        const before = entry.appliedFilterKey;
+        this.applyGeoJsonFilter(entry);
+        if (entry.appliedFilterKey !== before) changed = true;
+      }
+      if (entry.zoomStyle) {
+        const before = entry.appliedAlpha;
+        if (entry.kind === "points") this.applyPointBatchStyle(entry);
+        else this.applyGeoJsonStyle(entry);
+        if (entry.appliedAlpha !== before) {
+          changed = true;
+          if (entry.kind === "geojson") this.bakeZoomMarkers(entry);
+        }
+      }
+      if (entry.zoomCluster && entry.cluster && entry.plan) {
+        entry.cluster.setEnabled(clusterActiveAtZoom(entry.plan, this.cameraZoom()));
+      }
     }
     if (changed) this.viewer.scene?.requestRender?.();
+  }
+
+  /**
+   * A marker colour can itself be zoom-dependent (a rule with a zoom range
+   * compiles to a `["step", ["zoom"], …]` colour), so a zoom step may resolve
+   * colours no sprite was baked for at load. Those entities fell back to the
+   * base sprite in the restyle that just ran; bake the missing colours and
+   * restyle once more when they land.
+   */
+  private bakeZoomMarkers(entry: LayerEntry): void {
+    if (!entry.markerImages || !entry.resolver) return;
+    const zoom = this.cameraZoom();
+    // Both camera events can land after one zoom step; a bake already in
+    // flight for this zoom covers the second. A further zoom step while a
+    // bake runs queues behind it, so the same colour is never rasterised
+    // twice and each completion restyles at most once.
+    if (entry.markerBake && entry.markerBakeZoom === zoom) return;
+    const { handle, resolver } = entry;
+    const previous = entry.markerBake ?? Promise.resolve(false);
+    entry.markerBakeZoom = zoom;
+    const bake: Promise<boolean> = previous
+      .then(() => (entry.cancelled ? false : this.prepareSymbolImages(entry, resolver, zoom)))
+      .then((added) => {
+        if (entry.markerBake === bake) entry.markerBake = undefined;
+        if (!added || entry.cancelled || entry.handle !== handle) return false;
+        entry.appliedAlpha = undefined;
+        this.applyGeoJsonStyle(entry);
+        this.viewer.scene?.requestRender?.();
+        return true;
+      });
+    entry.markerBake = bake;
+  }
+
+  /**
+   * The per-feature resolver for an entry, recompiled only when the style
+   * *content* it reads changes. The store hands every edit a fresh style
+   * object, so identity would recompile all channels on each opacity-slider
+   * tick; the key is the rebuild signature plus the one in-place field the
+   * resolver reads (the fill opacity), and a plain layer-opacity drag leaves
+   * it untouched.
+   */
+  private resolverFor(entry: LayerEntry): FeatureStyleResolver {
+    const style = entry.layer.style;
+    const key = `${styleSignature(entry.layer)}|${style?.fillOpacity ?? ""}`;
+    if (!entry.resolver || entry.resolverKey !== key) {
+      entry.resolver = createFeatureStyleResolver(style);
+      entry.resolverKey = key;
+      entry.zoomStyle = entry.resolver.zoomDependent;
+    }
+    return entry.resolver;
+  }
+
+  /**
+   * Rasterise the sprites a layer's symbology needs: one marker per distinct
+   * marker colour resolved at `zoom` (capped, so a categorized field with
+   * thousands of classes cannot bake thousands of canvases), the base marker
+   * as the fallback for a colour past the cap or whose sprite failed, and the
+   * fill pattern tile. Sprites already baked are kept, so a later call for
+   * another zoom only adds the colours that zoom introduces. Both are async
+   * (custom SVGs decode through an `Image`), which is why this runs at load
+   * and on a zoom step rather than inside the synchronous restyle pass.
+   * Resolves to whether any new sprite was added.
+   */
+  private async prepareSymbolImages(
+    entry: LayerEntry,
+    resolver: FeatureStyleResolver,
+    zoom: number,
+  ): Promise<boolean> {
+    const style = { ...DEFAULT_LAYER_STYLE, ...entry.layer.style };
+    const features = entry.layer.geojson?.features ?? [];
+    const render = this.deps.renderMarker ?? renderMarkerCanvas;
+    let added = false;
+    if (style.markerEnabled) {
+      const images = (entry.markerImages ??= new Map());
+      const wanted = new Set<string>();
+      if (!images.has("")) wanted.add("");
+      for (const feature of features) {
+        const type = feature.geometry?.type;
+        if (type !== "Point" && type !== "MultiPoint") continue;
+        const colour = resolver.resolveMarkerColor(feature, zoom);
+        if (images.has(colour) || wanted.has(colour)) continue;
+        // Check before adding, so the cap is the most sprites the layer holds.
+        if (images.size + wanted.size >= MAX_MARKER_SPRITES) break;
+        wanted.add(colour);
+      }
+      // The base sprite ("") is the layer's own marker colour, which is what
+      // a flat marker style resolves every feature to; when that colour is
+      // baked anyway, the fallback is an alias of it rather than a second
+      // identical render (an SVG decode for custom shapes).
+      const base = resolver.resolveMarkerColor(undefined, zoom);
+      const aliasBase = wanted.has("") && (wanted.has(base) || images.has(base));
+      if (aliasBase) wanted.delete("");
+      // The colours are independent, so their (possibly SVG-decoding) renders
+      // run together rather than one await at a time.
+      const baked = await Promise.all(
+        [...wanted].map(
+          async (colour) =>
+            [colour, await render(style, colour || undefined).catch(() => null)] as const,
+        ),
+      );
+      for (const [colour, image] of baked) {
+        if (!image || images.has(colour)) continue;
+        images.set(colour, image);
+        added = true;
+      }
+      if (aliasBase && !images.has("")) {
+        const image = images.get(base);
+        if (image) {
+          images.set("", image);
+          added = true;
+        }
+      }
+    }
+    if (style.fillPattern !== "none" && entry.patternImage === undefined) {
+      const renderPattern = this.deps.renderFillPattern ?? renderFillPatternCanvas;
+      entry.patternImage = await renderPattern(style).catch(() => null);
+    }
+    return added;
+  }
+
+  /**
+   * Draw points the way the 2D map does — a circle sized by the layer's
+   * `circleRadius` — instead of the pin billboard `GeoJsonDataSource` creates,
+   * unless the layer renders markers, in which case the billboard stays and
+   * receives its sprite in the restyle pass.
+   */
+  private installPointGraphics(
+    entry: LayerEntry,
+    dataSource: DataSource,
+    clampToGround: boolean,
+  ): void {
+    const { Cesium, viewer } = this;
+    const style = { ...DEFAULT_LAYER_STYLE, ...entry.layer.style };
+    if (style.markerEnabled && entry.markerImages?.size) return;
+    const heightReference = (
+      clampToGround
+        ? (Cesium.HeightReference?.CLAMP_TO_GROUND ?? 1)
+        : (Cesium.HeightReference?.NONE ?? 0)
+    ) as number;
+    for (const entity of dataSource.entities.values) {
+      if (!entity.billboard || entity.point) continue;
+      const graphics = {
+        pixelSize: style.circleRadius * 2,
+        color: Cesium.Color.fromCssColorString(style.fillColor),
+        outlineColor: Cesium.Color.fromCssColorString(style.strokeColor),
+        outlineWidth: style.strokeWidth,
+        heightReference,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      };
+      entity.billboard = undefined;
+      entity.point = (
+        Cesium.PointGraphics ? new Cesium.PointGraphics(graphics as never) : graphics
+      ) as never;
+    }
+    viewer.scene?.requestRender?.();
+  }
+
+  /**
+   * Map the layer's `minZoom` / `maxZoom` onto one `DistanceDisplayCondition`
+   * shared by every entity of the layer, evaluated per frame against the
+   * current canvas size and scene mode (the way the labeler does), so the
+   * layer appears and disappears at the same zoom levels as on the 2D map.
+   * The latitude the zoom-to-distance conversion needs is the layer's
+   * extent centre — one condition per layer, not one per feature.
+   */
+  private installZoomRange(entry: LayerEntry, dataSource: DataSource): void {
+    const { Cesium, viewer } = this;
+    const style = { ...DEFAULT_LAYER_STYLE, ...entry.layer.style };
+    const minZoom = Number.isFinite(style.minZoom) ? style.minZoom : 0;
+    const maxZoom = Number.isFinite(style.maxZoom) ? style.maxZoom : 24;
+    if (minZoom <= 0 && maxZoom >= 24) return;
+    if (!Cesium.CallbackProperty || !Cesium.DistanceDisplayCondition) return;
+    const bounds = getLayerBounds(entry.layer);
+    const latitude = bounds ? (bounds[1] + bounds[3]) / 2 : 0;
+    let conditionKey = "";
+    let near = 0;
+    let far = Number.POSITIVE_INFINITY;
+    const displayKey = () => {
+      const canvas = viewer.scene.canvas;
+      return `${canvas.clientWidth}x${canvas.clientHeight}:${viewer.scene.mode}`;
+    };
+    const condition = new Cesium.CallbackProperty((_time, result?: DistanceDisplayCondition) => {
+      const key = displayKey();
+      if (key !== conditionKey) {
+        conditionKey = key;
+        near = maxZoom >= 24 ? 0 : zoomToDisplayDistance(Cesium, viewer, maxZoom, latitude);
+        far =
+          minZoom <= 0
+            ? Number.POSITIVE_INFINITY
+            : zoomToDisplayDistance(Cesium, viewer, minZoom, latitude);
+      }
+      const out = result ?? new Cesium.DistanceDisplayCondition();
+      out.near = near;
+      out.far = far;
+      return out;
+    }, false);
+    for (const entity of dataSource.entities.values) {
+      for (const key of ["polygon", "polyline", "point", "billboard"] as const) {
+        const graphics = entity[key] as { distanceDisplayCondition?: unknown } | undefined;
+        if (graphics) graphics.distanceDisplayCondition = condition;
+      }
+    }
   }
 
   /** The camera's integer MapLibre zoom, as `["zoom"]` filters evaluate at integer levels. */
@@ -1047,7 +1480,128 @@ export class CesiumLayerSync {
     this.entries.set(layer.id, entry);
     if (kind === "imagery") void this.createImagery(entry);
     else if (kind === "geojson") void this.createGeoJson(entry);
+    else if (kind === "pointcloud") void this.createPointCloud(entry);
+    else if (kind === "points") this.createPointBatch(entry);
     else void this.createTileset(entry);
+  }
+
+  /**
+   * Decode a COPC point cloud in the browser and draw it as primitives
+   * (issue #2285). The download is bounded (see `cesium-point-cloud.ts`) and
+   * abortable, so removing the layer mid-load wastes no further bandwidth.
+   */
+  private async createPointCloud(entry: LayerEntry): Promise<void> {
+    const { Cesium, viewer } = this;
+    const url = pointCloudUrl(entry.layer);
+    if (!url) return;
+    const abort = new AbortController();
+    entry.abort = abort;
+    try {
+      const cloud = await loadCopcPointCloud(url, {
+        ...this.deps.copcOptions,
+        signal: abort.signal,
+      });
+      if (entry.cancelled) return;
+      const collection = buildPointCloudCollection(
+        Cesium,
+        cloud,
+        this.effectiveOpacity(entry),
+        Number(entry.layer.source.altitudeOffset),
+      );
+      viewer.scene.primitives.add(collection);
+      entry.handle = collection;
+      entry.appliedAlpha = String(this.effectiveOpacity(entry));
+      this.applyAppearance(entry);
+      if (cloud.truncated)
+        console.info(
+          `[GeoLibre] "${
+            entry.layer.name
+          }" on the globe shows a ${cloud.count.toLocaleString()}-point preview of the point cloud`,
+        );
+    } catch (error) {
+      if (entry.cancelled) return;
+      entry.loadError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * The primitive path for large point-only layers (issue #2282): one
+   * `PointPrimitiveCollection` built synchronously from the features, with
+   * each primitive's `id` carrying the feature reference so picking and
+   * highlighting work as they do for entities.
+   */
+  private createPointBatch(entry: LayerEntry): void {
+    const { Cesium, viewer } = this;
+    try {
+      const resolver = this.resolverFor(entry);
+      const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+      // The same ground-clamping decision the entity path makes: extruded or
+      // 3D-elevated layers keep their heights, everything else sits on terrain.
+      const style = entry.layer.style ?? {};
+      const clampToGround = !(
+        style.extrusionEnabled ||
+        style.elevation3dEnabled ||
+        geojsonHasZCoordinates(entry.layer.geojson)
+      );
+      const collection = buildPointBatch(
+        Cesium,
+        entry.layer,
+        resolver,
+        this.effectiveOpacity(entry),
+        zoom,
+        { scene: viewer.scene, clampToGround },
+      );
+      viewer.scene.primitives.add(collection);
+      entry.handle = collection;
+      entry.plan = planPointRendering(entry.layer);
+      // The build already applied the current opacity and symbols; seed the
+      // restyle key so the appearance pass below only applies visibility and
+      // the filter.
+      entry.appliedAlpha = this.pointStyleKey(entry, zoom);
+      this.applyAppearance(entry);
+    } catch (error) {
+      entry.loadError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * Cluster a point-only layer whose style asks for it (issue #2282) through
+   * the data source's `EntityCluster`, styled like the 2D map's cluster
+   * bubbles, and switched off past `clusterMaxZoom` as the camera zooms in.
+   */
+  private installClustering(entry: LayerEntry, dataSource: DataSource): void {
+    const plan = planPointRendering(entry.layer);
+    entry.plan = plan;
+    if (!plan.cluster || !dataSource.clustering?.clusterEvent) return;
+    entry.cluster = configureClustering(this.Cesium, dataSource, plan, () =>
+      clusterAppearance(entry.layer, this.effectiveOpacity(entry)),
+    );
+    entry.zoomCluster = true;
+    entry.cluster.setEnabled(clusterActiveAtZoom(plan, this.cameraZoom()));
+    this.watchCameraZoom();
+  }
+
+  private pointStyleKey(entry: LayerEntry, zoom: number): string {
+    return `${this.effectiveOpacity(entry)}|${zoom}|${entry.resolverKey ?? ""}`;
+  }
+
+  /** Re-colour a batched point layer in place (opacity, fill opacity, zoom-dependent sizes). */
+  private applyPointBatchStyle(entry: LayerEntry): void {
+    const collection = entry.handle as PointPrimitiveCollection | null;
+    if (!collection) return;
+    const resolver = this.resolverFor(entry);
+    const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+    const key = this.pointStyleKey(entry, zoom);
+    if (entry.appliedAlpha === key) return;
+    entry.appliedAlpha = key;
+    restylePointBatch(
+      this.Cesium,
+      collection,
+      entry.layer,
+      resolver,
+      this.effectiveOpacity(entry),
+      zoom,
+    );
   }
 
   private async createImagery(entry: LayerEntry): Promise<void> {
@@ -1396,6 +1950,20 @@ export class CesiumLayerSync {
       if (labelEntity)
         for (const [index, entities] of parts)
           labelEntity(pickLabelPart(Cesium, viewer, entities), index);
+      // Per-feature symbology (issue #2278): the resolver evaluates the same
+      // expressions the 2D map paints with, and the sprites it needs (marker
+      // shapes per classified colour, the fill pattern tile) are rasterised
+      // once per layer before the first restyle pass bakes them in.
+      const resolver = this.resolverFor(entry);
+      await this.prepareSymbolImages(
+        entry,
+        resolver,
+        resolver.zoomDependent ? this.cameraZoom() : 0,
+      );
+      if (entry.cancelled) return;
+      this.installPointGraphics(entry, dataSource, clampToGround);
+      this.installZoomRange(entry, dataSource);
+      this.installClustering(entry, dataSource);
       entry.handle = dataSource;
       // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
       // stroke, marker) by the layer opacity right after load, so points/lines
@@ -1592,6 +2160,23 @@ export class CesiumLayerSync {
     const resource =
       headers && Object.keys(headers).length ? new Cesium.Resource({ url, headers }) : url;
     try {
+      if (isI3sLayer(layer)) {
+        // An ArcGIS scene layer: Cesium's own I3S provider converts the
+        // scene service into 3D Tiles on the fly (issue #2285), no loaders.gl.
+        const provider = await Cesium.I3SDataProvider.fromUrl(resource, {
+          cesium3dTilesetOptions: {},
+        });
+        if (entry.cancelled) {
+          provider.destroy();
+          return;
+        }
+        viewer.scene.primitives.add(provider);
+        const offset = Number(layer.source.altitudeOffset);
+        for (const tileset of i3sTilesets(provider)) this.applyTilesetAltitude(tileset, offset);
+        entry.handle = provider;
+        this.applyAppearance(entry);
+        return;
+      }
       const tileset = await Cesium.Cesium3DTileset.fromUrl(resource, {});
       if (entry.cancelled) {
         tileset.destroy();
@@ -1599,6 +2184,12 @@ export class CesiumLayerSync {
       }
       viewer.scene.primitives.add(tileset);
       this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
+      if (layer.type === "lidar" && tileset.pointCloudShading) {
+        // Eye-dome lighting and attenuation: the reading aids the 2D LiDAR
+        // control's dynamic mode gives, native in Cesium's point-cloud shader.
+        tileset.pointCloudShading.attenuation = true;
+        tileset.pointCloudShading.eyeDomeLighting = true;
+      }
       entry.handle = tileset;
       this.applyAppearance(entry);
     } catch (error) {
@@ -1637,8 +2228,21 @@ export class CesiumLayerSync {
       (handle as DataSource).show = layer.visible;
       this.applyGeoJsonStyle(entry);
       this.applyGeoJsonFilter(entry);
+    } else if (entry.kind === "pointcloud") {
+      const collection = handle as PointPrimitiveCollection;
+      collection.show = layer.visible;
+      const opacity = this.effectiveOpacity(entry);
+      const key = String(opacity);
+      if (entry.appliedAlpha !== key) {
+        entry.appliedAlpha = key;
+        setPointCloudOpacity(collection, opacity);
+      }
+    } else if (entry.kind === "points") {
+      (handle as PointPrimitiveCollection).show = layer.visible;
+      this.applyPointBatchStyle(entry);
+      this.applyGeoJsonFilter(entry);
     } else {
-      (handle as Cesium3DTileset).show = layer.visible;
+      (handle as Cesium3DTileset | I3SDataProvider).show = layer.visible;
     }
   }
 
@@ -1718,11 +2322,11 @@ export class CesiumLayerSync {
 
   /**
    * Evaluate a layer's composed feature filter (timeFilter, embedFilter, quickFilters,
-   * rule-based visibility) against each GeoJSON entity, toggling `entity.show` in place.
+   * rule-based visibility) against each entity — or each batched point primitive —
+   * toggling its `show` in place.
    */
   private applyGeoJsonFilter(entry: LayerEntry): void {
-    const dataSource = entry.handle as DataSource | null;
-    if (!dataSource) return;
+    if (!entry.handle) return;
     const filter = composeLayerFeatureFilter(entry.layer);
     const filterKey = filter ? JSON.stringify(filter) : "";
     // A rule-based visibility filter carries `["zoom"]` for per-rule zoom
@@ -1741,20 +2345,54 @@ export class CesiumLayerSync {
     const indexKey = "__geolibre_cesium_feature_index";
     const features = entry.layer.geojson?.features;
 
-    if (!filter) {
-      for (const entity of dataSource.entities.values) {
-        entity.show = true;
+    // The things to show or hide: entities of a data source, or the primitives
+    // of a point batch, each paired with the feature it came from.
+    type Target = {
+      feature: Feature | null;
+      properties?: object;
+      setShow(show: boolean): void;
+    };
+    const targets = (): Iterable<Target> => {
+      if (entry.kind === "points") {
+        const collection = entry.handle as PointPrimitiveCollection;
+        const out: Target[] = [];
+        for (let i = 0; i < collection.length; i++) {
+          const point = collection.get(i);
+          const ref = point.id;
+          out.push({
+            feature: isBatchedPointRef(ref) ? (features?.[ref.index] ?? null) : null,
+            setShow: (show) => {
+              point.show = show;
+            },
+          });
+        }
+        return out;
       }
-      return;
-    }
+      const dataSource = entry.handle as DataSource;
+      return dataSource.entities.values.map((entity) => {
+        const propIndex = entity.properties?.[indexKey];
+        const index =
+          typeof propIndex?.getValue === "function" ? propIndex.getValue(currentTime) : propIndex;
+        return {
+          feature: Number.isInteger(index) && features ? features[index] : null,
+          properties: entity.properties,
+          setShow: (show) => {
+            entity.show = show;
+          },
+        };
+      });
+    };
 
-    let compiled: ReturnType<typeof featureFilter>;
-    try {
-      compiled = featureFilter(filter as never, "layers[0].filter");
-    } catch {
-      for (const entity of dataSource.entities.values) {
-        entity.show = true;
+    let compiled: ReturnType<typeof featureFilter> | null = null;
+    if (filter) {
+      try {
+        compiled = featureFilter(filter as never, "layers[0].filter");
+      } catch {
+        compiled = null;
       }
+    }
+    if (!compiled) {
+      for (const target of targets()) target.setShow(true);
       return;
     }
 
@@ -1767,11 +2405,8 @@ export class CesiumLayerSync {
       MultiPolygon: 3,
     };
 
-    for (const entity of dataSource.entities.values) {
-      const propIndex = entity.properties?.[indexKey];
-      const index =
-        typeof propIndex?.getValue === "function" ? propIndex.getValue(currentTime) : propIndex;
-      const feat = Number.isInteger(index) && features ? features[index] : null;
+    for (const target of targets()) {
+      const feat = target.feature;
       let properties: Record<string, unknown> = {};
       let geomType: 0 | 1 | 2 | 3 = 1;
       let id: unknown = undefined;
@@ -1780,8 +2415,8 @@ export class CesiumLayerSync {
         properties = (feat.properties as Record<string, unknown>) ?? {};
         geomType = (feat.geometry?.type && typeMap[feat.geometry.type]) ?? 1;
         id = feat.id;
-      } else if (entity.properties) {
-        const propBag = entity.properties as Record<string, unknown>;
+      } else if (target.properties) {
+        const propBag = target.properties as Record<string, unknown>;
         const names = Array.isArray(propBag.propertyNames)
           ? propBag.propertyNames
           : Object.keys(propBag);
@@ -1806,47 +2441,61 @@ export class CesiumLayerSync {
       } catch {
         visible = true;
       }
-      entity.show = visible;
+      target.setShow(visible);
     }
   }
 
   /**
    * Re-apply a GeoJSON layer's opacity in place, so dragging the opacity slider
    * restyles the entities instead of reloading the whole GeoJsonDataSource.
-   * Polygon fill uses layer opacity × fill opacity; polyline stroke and point
-   * markers use the layer opacity alone (matching the 2D map, where opacity
-   * fades lines and points too). Colours themselves bake in at load, so a colour
-   * change still rebuilds; the `appliedAlpha` guard makes a no-op call cheap on
-   * unrelated syncs.
+   * Bake every entity's symbology from the per-feature resolver (issue #2278),
+   * folded with the layer (or story) opacity. Runs after load and again on
+   * every opacity change, style-object change, or — for zoom-dependent
+   * styles — integer zoom change; the key on the entry makes an unrelated
+   * sync a string compare.
+   *
+   * Polygons take the resolved fill (or the fill-pattern material), outline
+   * colour, and outline width; lines the resolved stroke and width (an arrow
+   * decoration becomes Cesium's arrow material); circles the resolved radius,
+   * fill, and outline; markers their baked sprite for the resolved colour,
+   * scaled by proportional sizing. Extruded polygons keep the extrusion
+   * colour path, which has its own expression.
    */
   private applyGeoJsonStyle(entry: LayerEntry): void {
     const dataSource = entry.handle as DataSource | null;
     if (!dataSource) return;
     const style = entry.layer.style ?? {};
     const opacity = this.effectiveOpacity(entry);
-    const fillAlpha = (style.fillOpacity ?? 0.6) * opacity;
     const extOpacity =
       (Number.isFinite(style.extrusionOpacity) ? (style.extrusionOpacity as number) : 0.8) *
       opacity;
-    // Key on every alpha so any opacity change is picked up (e.g. a lines-only
-    // layer whose fill alpha never varies, or an extrusion-opacity edit alone).
-    const key = `${fillAlpha}|${opacity}|${extOpacity}`;
+    const resolver = this.resolverFor(entry);
+    const zoom = resolver.zoomDependent ? this.cameraZoom() : 0;
+    // Any opacity change, any style-object change (the in-place fields), and a
+    // zoom step for a zoom-dependent style all reach the entities; the style
+    // object is identified by the resolver compiled from it.
+    const key = `${opacity}|${extOpacity}|${zoom}|${entry.resolverKey ?? ""}`;
     if (entry.appliedAlpha === key) return;
     entry.appliedAlpha = key;
     const { Cesium } = this;
-    const fill = Cesium.Color.fromCssColorString(style.fillColor ?? "#3b82f6").withAlpha(fillAlpha);
-    const stroke = Cesium.Color.fromCssColorString(style.strokeColor ?? "#1e40af").withAlpha(
-      opacity,
-    );
-    // Point pins keep their baked-in colour; multiplying by white+alpha only
-    // fades them.
+    const features = entry.layer.geojson?.features;
+    const currentTime = this.viewer.clock?.currentTime;
+    const colour = (css: string, alpha: number) =>
+      Cesium.Color.fromCssColorString(css).withAlpha(Math.min(1, Math.max(0, alpha)));
+    // Point pins and marker sprites keep their baked-in colour; multiplying by
+    // white+alpha only fades them.
     const marker = Cesium.Color.WHITE.withAlpha(opacity);
-    const isExtruded = style.extrusionEnabled;
+    const isExtruded = Boolean(style.extrusionEnabled);
     const extColorStr = style.extrusionColor || style.fillColor || "#3b82f6";
     const extFill = Cesium.Color.fromCssColorString(extColorStr).withAlpha(extOpacity);
-
     const hasColorExpr =
       isExtruded && style.extrusionAdvancedStyleEnabled && Boolean(style.extrusionColorExpression);
+    const arrow =
+      style.lineDecoration === "arrow" &&
+      Boolean(
+        (Cesium as { PolylineArrowMaterialProperty?: unknown }).PolylineArrowMaterialProperty,
+      );
+    const pattern = entry.patternImage ?? null;
 
     // Scale the label colour's own alpha (an rgba()/#rrggbbaa label colour) by
     // the layer opacity, as text-opacity does on the 2D map, rather than
@@ -1856,42 +2505,132 @@ export class CesiumLayerSync {
     const labelFill = labelColor.withAlpha(labelColor.alpha * opacity);
     const halo = Cesium.Color.fromCssColorString(labels.haloColor);
     const labelOutline = halo.withAlpha(halo.alpha * opacity);
-    for (const feature of dataSource.entities.values) {
-      if (feature.polygon) {
+    for (const entity of dataSource.entities.values) {
+      const ref = this.featureRefs.get(entity);
+      const feature = ref && features ? features[ref.index] : undefined;
+      const symbol = resolver.resolve(feature, zoom);
+      if (entity.polygon) {
         if (hasColorExpr) {
           // ColorMaterialProperty wraps its colour in a ConstantProperty, so
           // resolve the Property before re-alphaing the per-feature colour.
-          const colorProp = (feature.polygon.material as { color?: unknown } | undefined)?.color as
-            | { getValue?: (time: unknown) => Color | undefined; withAlpha?: (a: number) => Color }
+          const colorProp = (entity.polygon.material as { color?: unknown } | undefined)?.color as
+            | {
+                getValue?: (time: unknown) => Color | undefined;
+                withAlpha?: (a: number) => Color;
+              }
             | undefined;
           const current =
-            typeof colorProp?.getValue === "function"
-              ? colorProp.getValue(this.viewer.clock?.currentTime)
-              : colorProp;
+            typeof colorProp?.getValue === "function" ? colorProp.getValue(currentTime) : colorProp;
           if (current?.withAlpha) {
-            feature.polygon.material = new Cesium.ColorMaterialProperty(
+            entity.polygon.material = new Cesium.ColorMaterialProperty(
               current.withAlpha(extOpacity),
             );
           }
+        } else if (isExtruded) {
+          entity.polygon.material = new Cesium.ColorMaterialProperty(extFill);
+        } else if (pattern && Cesium.ImageMaterialProperty) {
+          entity.polygon.material = new Cesium.ImageMaterialProperty({
+            image: pattern.canvas,
+            repeat: this.patternRepeat(entity),
+            transparent: true,
+            color: Cesium.Color.WHITE.withAlpha(symbol.fillOpacity * opacity),
+          }) as never;
         } else {
-          feature.polygon.material = new Cesium.ColorMaterialProperty(isExtruded ? extFill : fill);
+          entity.polygon.material = new Cesium.ColorMaterialProperty(
+            colour(symbol.fill, symbol.fillOpacity * opacity),
+          );
         }
+        // A polygon boundary is a line layer on the 2D map, so it takes the
+        // line colour channel; the outline channel is the circle stroke.
+        entity.polygon.outlineColor = new Cesium.ConstantProperty(
+          colour(symbol.stroke, symbol.strokeOpacity * opacity),
+        ) as never;
+        entity.polygon.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
       }
-      if (feature.polyline) {
-        feature.polyline.material = new Cesium.ColorMaterialProperty(stroke);
+      if (entity.polyline) {
+        const stroke = colour(symbol.stroke, symbol.strokeOpacity * opacity);
+        entity.polyline.material = (
+          arrow
+            ? new (
+                Cesium as {
+                  PolylineArrowMaterialProperty: new (c: Color) => unknown;
+                }
+              ).PolylineArrowMaterialProperty(stroke)
+            : new Cesium.ColorMaterialProperty(stroke)
+        ) as never;
+        entity.polyline.width = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
       }
-      if (feature.billboard) {
-        feature.billboard.color = new Cesium.ConstantProperty(marker);
+      if (entity.point) {
+        entity.point.pixelSize = new Cesium.ConstantProperty(symbol.radius * 2) as never;
+        entity.point.color = new Cesium.ConstantProperty(
+          colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
+        ) as never;
+        entity.point.outlineColor = new Cesium.ConstantProperty(
+          colour(symbol.outline, symbol.strokeOpacity * opacity),
+        ) as never;
+        entity.point.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
       }
-      if (feature.label) {
-        feature.label.fillColor = new Cesium.ConstantProperty(labelFill);
-        feature.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
+      if (entity.billboard) {
+        const sprite =
+          entry.markerImages?.get(symbol.markerColor) ?? entry.markerImages?.get("") ?? null;
+        if (sprite) {
+          entity.billboard.image = new Cesium.ConstantProperty(sprite.canvas) as never;
+          entity.billboard.scale = new Cesium.ConstantProperty(
+            symbol.markerScale / sprite.pixelRatio,
+          ) as never;
+        }
+        entity.billboard.color = new Cesium.ConstantProperty(marker);
+      }
+      if (entity.label) {
+        entity.label.fillColor = new Cesium.ConstantProperty(labelFill);
+        entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
       }
     }
+    // Cluster bubbles read the appearance when they form, so an in-place
+    // restyle (an opacity drag, a story fade) re-clusters to pick it up
+    // instead of waiting for the camera to move.
+    entry.cluster?.refresh();
   }
+
+  /**
+   * How many times a fill-pattern tile repeats across a polygon. Cesium's
+   * image material spans texture coordinates 0..1 over the polygon's extent,
+   * so the repeat count is derived from that extent in metres to keep the
+   * pattern's ground density roughly constant (one tile per
+   * {@link PATTERN_TILE_METERS}); the 2D map draws its pattern in screen
+   * pixels, which the globe cannot reproduce on a draped surface.
+   */
+  private patternRepeat(entity: Entity): Cartesian2 {
+    // The extent only changes with a rebuild, which creates new entities, so
+    // the answer is cached per entity: the restyle pass re-runs on every
+    // opacity-slider tick and must not recompute a bounding sphere per polygon.
+    const cached = this.patternRepeats.get(entity);
+    if (cached) return cached;
+    const { Cesium, viewer } = this;
+    let repeat = 8;
+    try {
+      const ring = entity.polygon?.hierarchy?.getValue(viewer.clock?.currentTime)?.positions;
+      if (ring?.length && Cesium.BoundingSphere) {
+        const radius = Cesium.BoundingSphere.fromPoints(ring).radius;
+        if (Number.isFinite(radius) && radius > 0)
+          repeat = Math.min(256, Math.max(1, Math.round((2 * radius) / PATTERN_TILE_METERS)));
+      }
+    } catch {
+      // Keep the default density.
+    }
+    const result = (
+      Cesium.Cartesian2 ? new Cesium.Cartesian2(repeat, repeat) : { x: repeat, y: repeat }
+    ) as Cartesian2;
+    this.patternRepeats.set(entity, result);
+    return result;
+  }
+
+  /** Fill-pattern repeat counts, by entity; see {@link patternRepeat}. */
+  private readonly patternRepeats = new WeakMap<Entity, Cartesian2>();
 
   private destroyEntry(entry: LayerEntry): void {
     entry.cancelled = true;
+    entry.abort?.abort();
     this.storyOpacities.delete(entry.layer.id);
     const { handle } = entry;
     if (!handle) return;
@@ -1905,9 +2644,15 @@ export class CesiumLayerSync {
       this.viewer.imageryLayers.remove(imagery, true);
       if (provider instanceof ProtocolImageryProvider) provider.destroy();
     } else if (entry.kind === "geojson") {
+      entry.cluster?.dispose();
+      entry.cluster = undefined;
       this.viewer.dataSources.remove(handle as DataSource, true);
     } else {
-      this.viewer.scene.primitives.remove(handle as Cesium3DTileset);
+      // A tileset, an I3S provider, a point batch, or a point-cloud collection: all
+      // scene primitives.
+      this.viewer.scene.primitives.remove(
+        handle as Cesium3DTileset | I3SDataProvider | PointPrimitiveCollection,
+      );
     }
   }
 }

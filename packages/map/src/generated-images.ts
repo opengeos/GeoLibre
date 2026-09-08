@@ -49,6 +49,52 @@ export interface GeneratedImageResult {
 }
 
 /** Produces an image synchronously, or asynchronously (e.g. rasterizing SVG). */
+/**
+ * Materialise a generated image as a canvas, for renderers that take an
+ * element rather than MapLibre's `addImage` payload (the globe's billboards
+ * and polygon materials). Resolves `null` when the factory produced nothing
+ * or the payload is a shape a canvas cannot be drawn from.
+ */
+export async function generatedImageToCanvas(
+  produced: ReturnType<GeneratedImageFactory>,
+): Promise<{ canvas: HTMLCanvasElement; pixelRatio: number } | null> {
+  const result = await produced;
+  if (!result) return null;
+  const { image, pixelRatio } = result;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  if (typeof ImageData !== "undefined" && image instanceof ImageData) {
+    canvas.width = image.width;
+    canvas.height = image.height;
+    context.putImageData(image, 0, 0);
+    return { canvas, pixelRatio };
+  }
+  const drawable = image as { width?: number; height?: number; data?: unknown };
+  if (drawable.data instanceof Uint8ClampedArray || drawable.data instanceof Uint8Array) {
+    const width = drawable.width ?? 0;
+    const height = drawable.height ?? 0;
+    if (!width || !height) return null;
+    canvas.width = width;
+    canvas.height = height;
+    const pixels = new Uint8ClampedArray(drawable.data.length);
+    pixels.set(drawable.data as Uint8ClampedArray);
+    context.putImageData(new ImageData(pixels, width, height), 0, 0);
+    return { canvas, pixelRatio };
+  }
+  if (typeof drawable.width === "number" && typeof drawable.height === "number") {
+    canvas.width = drawable.width;
+    canvas.height = drawable.height;
+    try {
+      context.drawImage(image as CanvasImageSource, 0, 0);
+      return { canvas, pixelRatio };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export type GeneratedImageFactory = () =>
   | GeneratedImageResult
   | Promise<GeneratedImageResult | null>

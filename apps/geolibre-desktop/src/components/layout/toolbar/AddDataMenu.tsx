@@ -14,6 +14,7 @@ import type { AddDataKind } from "../AddDataDialog";
 import { isMobile } from "../../../lib/is-mobile";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -47,6 +48,7 @@ export function AddDataMenu({
 }: AddDataMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((state) => state.desktopSettings.uiProfile);
+  const capabilities = useMapCapabilities();
   // PostgreSQL layers are served through the Martin tile server, a local helper
   // binary with no Android build, so hide the source on mobile.
   // The user agent is stable for the session, so evaluate once.
@@ -78,7 +80,12 @@ export function AddDataMenu({
     georss: { onSelect: () => onSetAddDataKind("georss") },
     stac: { onSelect: addLayer.stac },
     video: { onSelect: () => onSetAddDataKind("video") },
-    "deckgl-viz": { onSelect: () => onSetAddDataKind("deckgl-viz") },
+    // deck.gl draws into MapLibre's own WebGL pass; there is no Cesium interop,
+    // so the builder is offered only where the engine hosts custom layers.
+    "deckgl-viz": {
+      onSelect: () => onSetAddDataKind("deckgl-viz"),
+      disabled: !capabilities.customLayers,
+    },
     // GeoParquet loads through the same vector file picker as "vector"; keep
     // both pointing at addLayer.vector if that handler ever changes.
     geoparquet: { onSelect: addLayer.vector },
@@ -89,7 +96,9 @@ export function AddDataMenu({
     lidar: { onSelect: addLayer.lidar },
     splatting: { onSelect: addLayer.splatting },
     "3d-tiles": { onSelect: addLayer.threeDTiles },
-    "gltf-model": { onSelect: onAddGltfModel },
+    // The glTF model opens the same deck.gl scenegraph builder, so it is
+    // gated the way "deckgl-viz" is.
+    "gltf-model": { onSelect: onAddGltfModel, disabled: !capabilities.customLayers },
     duckdb: { onSelect: addLayer.duckdb },
     postgres: { onSelect: () => onSetAddDataKind("postgres") },
     iceberg: { onSelect: () => onSetAddDataKind("iceberg") },

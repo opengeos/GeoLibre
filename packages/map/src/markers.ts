@@ -8,6 +8,7 @@ import {
   type MarkerShape,
 } from "@geolibre/core";
 import {
+  generatedImageToCanvas,
   hashText,
   registerGeneratedImage,
   resolveSvgSource,
@@ -264,6 +265,33 @@ export function prepareMarker(style: LayerStyle, colorOverride?: string): string
   const id = `geolibre-marker-${shape}-${color.replace("#", "")}-${size}`;
   registerGeneratedImage(id, () => drawBuiltinMarker(shape, color, size));
   return id;
+}
+
+/**
+ * The marker sprite as a canvas, for a renderer that takes an element rather
+ * than a MapLibre image id (the globe's billboards). Baked at
+ * {@link markerBakedSize} × the pixel ratio, so a billboard draws it at
+ * `1 / pixelRatio` scale to land at the configured size. Resolves `null` when
+ * markers are off or the custom SVG cannot be rasterised.
+ *
+ * @param style - The layer style.
+ * @param colorOverride - The colour to bake, for a classified marker.
+ */
+export async function renderMarkerCanvas(
+  style: LayerStyle,
+  colorOverride?: string,
+): Promise<{ canvas: HTMLCanvasElement; pixelRatio: number } | null> {
+  if (!styleValue(style, "markerEnabled")) return Promise.resolve(null);
+  const shape = styleValue(style, "markerShape");
+  const size = markerBakedSize(style);
+  const color = colorOverride ?? markerColor(style);
+  if (shape === "custom") {
+    const markup = styleValue(style, "markerSvg").trim();
+    if (!markup) return Promise.resolve(null);
+    return generatedImageToCanvas(loadSvgMarker(markup, color, size));
+  }
+  if (!BUILTIN_SHAPES.has(shape)) return Promise.resolve(null);
+  return generatedImageToCanvas(drawBuiltinMarker(shape, color, size));
 }
 
 /**
