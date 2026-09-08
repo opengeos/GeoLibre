@@ -116,10 +116,10 @@ interface LayerEntry {
   appliedFilterKey?: string;
   /** Whether the applied filter reads `["zoom"]`, so it must re-run when the camera moves. */
   zoomFilter?: boolean;
-  /** The per-feature style resolver for a geojson entry, compiled from {@link resolverStyle}. */
+  /** The per-feature style resolver for a geojson entry, compiled for {@link resolverKey}. */
   resolver?: FeatureStyleResolver;
-  /** The `layer.style` object {@link resolver} was compiled from (recompiled when it changes). */
-  resolverStyle?: unknown;
+  /** The style content {@link resolver} was compiled from (recompiled when it changes). */
+  resolverKey?: string;
   /** Whether the resolver reads `["zoom"]`, so symbols must be re-resolved as the camera zooms. */
   zoomStyle?: boolean;
   /** Marker sprites baked per resolved marker colour (a classified marker layer has several). */
@@ -744,15 +744,19 @@ export class CesiumLayerSync {
   }
 
   /**
-   * The per-feature resolver for an entry, recompiled when `layer.style` is a
-   * new object (an in-place field such as the fill opacity changed; every
-   * other change rebuilds the entry, and with it the resolver).
+   * The per-feature resolver for an entry, recompiled only when the style
+   * *content* it reads changes. The store hands every edit a fresh style
+   * object, so identity would recompile all channels on each opacity-slider
+   * tick; the key is the rebuild signature plus the one in-place field the
+   * resolver reads (the fill opacity), and a plain layer-opacity drag leaves
+   * it untouched.
    */
   private resolverFor(entry: LayerEntry): FeatureStyleResolver {
     const style = entry.layer.style;
-    if (!entry.resolver || entry.resolverStyle !== style) {
+    const key = `${styleSignature(entry.layer)}|${style?.fillOpacity ?? ""}`;
+    if (!entry.resolver || entry.resolverKey !== key) {
       entry.resolver = createFeatureStyleResolver(style);
-      entry.resolverStyle = style;
+      entry.resolverKey = key;
       entry.zoomStyle = entry.resolver.zoomDependent;
     }
     return entry.resolver;
@@ -776,7 +780,7 @@ export class CesiumLayerSync {
       for (const feature of features) {
         const type = feature.geometry?.type;
         if (type !== "Point" && type !== "MultiPoint") continue;
-        colours.add(resolver.resolve(feature, 0).markerColor);
+        colours.add(resolver.resolveMarkerColor(feature, 0));
         if (colours.size >= MAX_MARKER_SPRITES) break;
       }
       const images = new Map<string, { canvas: HTMLCanvasElement; pixelRatio: number }>();
@@ -1616,7 +1620,7 @@ export class CesiumLayerSync {
     // Any opacity change, any style-object change (the in-place fields), and a
     // zoom step for a zoom-dependent style all reach the entities; the style
     // object is identified by the resolver compiled from it.
-    const key = `${opacity}|${extOpacity}|${zoom}|${this.resolverSerial(entry)}`;
+    const key = `${opacity}|${extOpacity}|${zoom}|${entry.resolverKey ?? ""}`;
     if (entry.appliedAlpha === key) return;
     entry.appliedAlpha = key;
     const { Cesium } = this;
@@ -1721,19 +1725,6 @@ export class CesiumLayerSync {
         entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
       }
     }
-  }
-
-  /** Identity of the style object an entry's resolver was compiled from, for the restyle key. */
-  private readonly resolverSerials = new WeakMap<object, number>();
-  private resolverSerialNext = 0;
-  private resolverSerial(entry: LayerEntry): number {
-    const style = (entry.resolverStyle ?? entry.layer.style ?? DEFAULT_LAYER_STYLE) as object;
-    let serial = this.resolverSerials.get(style);
-    if (serial === undefined) {
-      serial = ++this.resolverSerialNext;
-      this.resolverSerials.set(style, serial);
-    }
-    return serial;
   }
 
   /**

@@ -5,10 +5,7 @@ import {
   type GeoLibreLayer,
   type LayerStyle,
 } from "../packages/core/src/types";
-import {
-  createFeatureStyleResolver,
-  sameFeatureSymbol,
-} from "../packages/map/src/cesium-feature-style";
+import { createFeatureStyleResolver } from "../packages/map/src/cesium-feature-style";
 import { CesiumLayerSync } from "../packages/map/src/cesium-layer-sync";
 
 // The per-feature style resolver (issue #2278). The expressions it evaluates
@@ -216,11 +213,20 @@ describe("createFeatureStyleResolver", () => {
     assert.equal(styled.fillOpacity, 0.25);
   });
 
-  it("compares symbols channel by channel", () => {
-    const resolver = createFeatureStyleResolver(style({}));
-    const a = resolver.resolve(feature({}), 0);
-    assert.equal(sameFeatureSymbol(a, resolver.resolve(feature({}), 0)), true);
-    assert.equal(sameFeatureSymbol(a, { ...a, radius: a.radius + 1 }), false);
+  it("reads the marker colour channel on its own", () => {
+    const resolver = createFeatureStyleResolver(
+      style({
+        vectorStyleMode: "categorized",
+        vectorStyleProperty: "kind",
+        vectorStyleStops: [{ value: "park", color: "#00aa00" }],
+        markerColor: "#123456",
+      }),
+    );
+    assert.deepEqual(rgb(resolver.resolveMarkerColor(feature({ kind: "park" }), 0)), [0, 170, 0]);
+    assert.deepEqual(
+      rgb(resolver.resolveMarkerColor(feature({ kind: "x" }), 0)),
+      [0x12, 0x34, 0x56],
+    );
   });
 });
 

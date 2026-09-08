@@ -59,6 +59,8 @@ export interface FeatureSymbol {
 export interface FeatureStyleResolver {
   /** The symbol for `feature` as the map would draw it at `zoom`. */
   resolve(feature: Feature | undefined, zoom: number): FeatureSymbol;
+  /** Just the marker colour channel, for baking one sprite per distinct colour. */
+  resolveMarkerColor(feature: Feature | undefined, zoom: number): string;
   /**
    * Whether any channel reads `["zoom"]` (metre-unit strokes, per-rule zoom
    * ranges), so the answers change as the camera moves and the caller must
@@ -210,6 +212,7 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
   ];
   return {
     zoomDependent: channels.some((channel) => channel.zoomDependent),
+    resolveMarkerColor: (feature, zoom) => markerColor.read(feature, zoom),
     resolve(feature, zoom) {
       // Lines and polygon outlines are line layers on the 2D map, so they take
       // the line width (metre units, proportional sizing, simplestyle); only
@@ -229,22 +232,4 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
       };
     },
   };
-}
-
-/**
- * Whether two symbols would draw identically, so a restyle pass can skip an
- * entity whose answers did not change.
- */
-export function sameFeatureSymbol(a: FeatureSymbol, b: FeatureSymbol): boolean {
-  return (
-    a.fill === b.fill &&
-    a.fillOpacity === b.fillOpacity &&
-    a.stroke === b.stroke &&
-    a.outline === b.outline &&
-    a.strokeWidth === b.strokeWidth &&
-    a.strokeOpacity === b.strokeOpacity &&
-    a.radius === b.radius &&
-    a.markerColor === b.markerColor &&
-    a.markerScale === b.markerScale
-  );
 }
