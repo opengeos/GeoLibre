@@ -280,3 +280,33 @@ review, so gate them on mobile the way the sidecar tools already are via
   basemap caching (bundled/downloaded MBTiles/PMTiles) is a future enhancement.
 - Earth Engine OAuth uses a desktop loopback/multi-window flow; a mobile
   deep-link redirect is future work.
+
+## Open a location from another app
+
+GeoLibre handles Android `ACTION_VIEW` intents with the `geo:` scheme, both
+when launching the app and while it is already open. Supported forms include:
+
+- `geo:40.7128,-74.006`
+- `geo:40.7128,-74.006?z=12`
+- `geo:0,0?q=40.7128,-74.006(New%20York)&z=12`
+
+Coordinates use latitude, longitude order. Numeric `q` coordinates override
+the URI's placeholder coordinates; address-only queries are not supported.
+Zoom defaults to 14 and must be between 0 and 24. Invalid locations are ignored.
+A received location moves the map without replacing the current project's layers.
+
+The Tauri deep-link plugin generates the Android intent filter from
+`tauri.android.conf.json`, so it also applies when CI regenerates `gen/android`.
+To check both a cold launch and a running app on a connected device, run this
+command twice, panning the map between invocations:
+
+```bash
+adb shell am start -a android.intent.action.VIEW -d 'geo:0,0?q=40.7128,-74.006&z=12' org.geolibre.app
+```
+
+Web links can open the same location with
+`https://geolibre.app/?lat=40.7128&lon=-74.006&zoom=12` or the compact form
+`https://geolibre.app/?12/40.7128/-74.006`. A coordinate-only launch takes
+precedence over saved startup settings and skips onboarding. An explicit
+project or data link retains its existing camera/loading behavior when combined
+with coordinate parameters.

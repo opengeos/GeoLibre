@@ -11,6 +11,11 @@ import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopS
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
 import { initialNativeProjectPath } from "../lib/native-project-open";
+import { coordinateTargetFromSearch } from "../lib/coordinate-url";
+import {
+  initialNativeCoordinateTarget,
+  finishNativeCoordinateStartup,
+} from "../lib/native-coordinate-open";
 
 /**
  * How long the shell stays unmounted waiting for a startup restore. The read and
@@ -122,13 +127,29 @@ export function useStartupProject(): {
       useAppStore.getState().loadProject(inlineProject, null, { rememberRecent: false });
       return false;
     }
+    const location =
+      initialNativeCoordinateTarget() ?? coordinateTargetFromSearch(window.location.search);
+    if (location && !hasExplicitLaunchPayload() && !openedProjectPath) {
+      applyDefaultWorkspace({
+        ...startupDefaultWorkspace(useDesktopSettingsStore.getState().desktopSettings.startup),
+        ...location,
+      });
+      return false;
+    }
     const plan = currentStartupPlan(openedProjectPath);
     if (plan.kind === "default") applyDefaultWorkspace(plan);
     return plan.kind === "restore";
   });
 
   useEffect(() => {
+    finishNativeCoordinateStartup();
     if (inlineProject) return;
+    if (
+      (initialNativeCoordinateTarget() || coordinateTargetFromSearch(window.location.search)) &&
+      !hasExplicitLaunchPayload() &&
+      !openedProjectPath
+    )
+      return;
     const plan = currentStartupPlan(openedProjectPath);
     // Both other cases were settled by the initializer above.
     if (plan.kind !== "restore") return;

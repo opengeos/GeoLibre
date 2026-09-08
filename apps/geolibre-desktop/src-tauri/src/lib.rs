@@ -382,7 +382,8 @@ pub fn run() {
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_geolocation::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     // The Earth Engine OAuth loopback listener is compiled out of the Apple App
     // Store builds (see the module gate at the top of this file); the stub
