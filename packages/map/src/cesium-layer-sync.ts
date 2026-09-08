@@ -479,8 +479,8 @@ export function imageryColorAdjustments(style: LayerStyle | undefined): {
   const contrast = unit(styleValue(s, "rasterContrast"), 0);
   const saturation = unit(styleValue(s, "rasterSaturation"), 0);
 
-  // MapLibre's own curve, `1 / (1 - contrast)`, is +Infinity at contrast 1 —
-  // reachable, since the Style panel's slider stops there. MapLibre hands that
+  // MapLibre's own curve, `1 / (1 - contrast)`, is +Infinity at contrast 1,
+  // which is reachable: the Style panel's slider stops there. MapLibre hands that
   // Infinity to the shader and the framebuffer clamps it into a hard threshold
   // at mid-grey; here it would poison the slope/intercept solve below and set
   // brightness to NaN. Flooring the denominator keeps the curve exact
