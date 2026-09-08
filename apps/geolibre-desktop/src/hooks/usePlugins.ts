@@ -1054,6 +1054,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     removeLayerGroup: (id: string) => useAppStore.getState().removeLayerGroup(id),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
+    getViewBounds: () => mapControllerRef?.current?.getViewBounds() ?? null,
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     getMapRenderer: () => useAppStore.getState().primaryRenderer,
     getCesiumScene: () => {

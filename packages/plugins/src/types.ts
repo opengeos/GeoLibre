@@ -575,6 +575,21 @@ export interface GeoLibreAppAPI {
   /** Remove a Layers-panel group without removing its child layers. */
   removeLayerGroup?: (id: string) => void;
   fitBounds?: (bounds: [number, number, number, number]) => void;
+  /**
+   * The geographic extent the primary map currently shows, as
+   * `[west, south, east, north]` in degrees, or `null` when no map is mounted
+   * (or the globe is mid-morph and has no bounded view).
+   *
+   * The renderer-neutral replacement for `getMap()?.getBounds()`, which is the
+   * shape a catalog or service browser needs to narrow a search to the
+   * viewport. `getMap()` answers `null` on the globe, so a plugin reading
+   * bounds through it silently drops the filter there and searches the whole
+   * world while its "current view only" checkbox stays ticked — use this
+   * instead in any plugin that declares `engines: ["maplibre", "cesium"]`.
+   * A crossing of the antimeridian is unwrapped (east > 180), as
+   * `MapExtent` carries it everywhere else in the app.
+   */
+  getViewBounds?: () => [number, number, number, number] | null;
   getMap?: () => MapLibreMap | null;
   /** Active primary renderer, including while its canvas is being replaced. */
   getMapRenderer?: () => MapRendererKind;

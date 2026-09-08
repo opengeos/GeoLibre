@@ -143,6 +143,10 @@ export interface GeoLibreAppAPI {
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
+  // The extent the primary map currently shows, [west, south, east, north] in
+  // degrees, on either renderer. The engine-neutral replacement for
+  // getMap()?.getBounds() — see "Reading the viewport" below.
+  getViewBounds?: () => [number, number, number, number] | null;
   getMap?: () => import("maplibre-gl").Map | null;
   // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
   // canvas, readView), or null when the primary map is not a globe. The globe's
@@ -1108,6 +1112,19 @@ parameters, project restoration, and delayed control registration, as well as
 by the Plugins menu and command palette. Renderer changes suspend unsupported
 plugins and retain their saved settings and activation for the return trip.
 Compatible plugins remount their controls on the replacement renderer.
+
+### Reading the viewport
+
+A catalog or service browser that narrows its search to what the user can see
+must read the extent through `app.getViewBounds()`, not
+`app.getMap()?.getBounds()`. `getMap()` is null on the globe, so the second
+form yields no bounds there — and a plugin that reads "no bounds" as "no
+filter" then searches the whole world while its "current view only" checkbox
+stays ticked, which is exactly the silent success an `engines` declaration is
+meant to rule out. `getViewBounds` answers from whichever engine is primary
+and unwraps an antimeridian crossing (east > 180), as `MapExtent` does
+everywhere else in the app. A frontend test scans the plugins that declare
+Cesium support and fails on a `getMap()`-routed bounds read.
 
 A plugin that drives the renderer directly branches on which handle is
 non-null: `app.getMap()` on MapLibre, `app.getCesiumScene()` on the globe. The

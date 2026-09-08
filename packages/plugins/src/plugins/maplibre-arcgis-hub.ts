@@ -401,11 +401,13 @@ function buildPanel(container: HTMLElement): () => void {
       // Capture the map filter once per search. Re-deriving it on Load more
       // would page a stale `start` offset into a differently filtered result
       // set if the user panned, silently skipping or repeating datasets.
-      const mapBounds = appRef?.getMap?.()?.getBounds();
-      activeBbox =
-        viewOnly.checked && mapBounds
-          ? [mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]
-          : undefined;
+      //
+      // Read through `getViewBounds`, not `getMap()?.getBounds()`: this plugin
+      // declares `engines: ["maplibre", "cesium"]`, and `getMap()` is null on
+      // the globe — so the bounds came back undefined there and every search
+      // covered the whole world with "current view only" still ticked.
+      const mapBounds = appRef?.getViewBounds?.() ?? null;
+      activeBbox = viewOnly.checked && mapBounds ? [...mapBounds] : undefined;
       start = 1;
       shown = 0;
       removeThumbnailPreview();
