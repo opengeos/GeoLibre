@@ -65,7 +65,7 @@ interface PersistedRasterState {
   colormap?: string;
   reversed?: boolean;
   rescale?: [number, number][] | [number, number] | null;
-  nodata?: number | "auto" | null;
+  nodata?: number | "auto" | "off" | null;
   stretch?: "linear" | "sqrt" | "log";
   gamma?: number;
 }
@@ -137,7 +137,14 @@ export function cogRenderOptions(
     const ranges = bidx.map((b) => autoRange(statistics[`b${b}`]));
     if (ranges.every((r): r is [number, number] => r !== null)) options.rescale = ranges;
   }
+  // The tiler resolves an omitted `nodata` to the source's own declared value
+  // (`opts.nodata != null ? opts.nodata : this.nodata`), which is exactly what
+  // "auto" means, so "auto" is the omitted case. "off" has to be said out loud:
+  // omitting it would mask on the source's nodata, the opposite of what the
+  // control shows in 2D. NaN is the tiler's own "no nodata" sentinel -- it
+  // gates masking on `!Number.isNaN(nodata)`.
   if (typeof state.nodata === "number") options.nodata = state.nodata;
+  else if (state.nodata === "off") options.nodata = Number.NaN;
   return options;
 }
 
@@ -155,9 +162,26 @@ export function cogSourceUrl(layer: GeoLibreLayer): string | undefined {
   return typeof local === "string" && local ? local : undefined;
 }
 
-/** What `styleSignature`-style change detection compares for a COG layer. */
+/**
+ * What `styleSignature`-style change detection compares for a COG layer.
+ *
+ * The resolved band list is carried alongside the raw state because it is not
+ * a function of the state alone: an RGB state whose `bands` array is short (a
+ * hand-authored project, an older save) composites `[1, 2, 3]` or a single
+ * band depending on `metadata.bandCount`, which is null until the GeoTIFF
+ * header loads and resolves in place afterwards. Without it a layer built
+ * during that window would keep the single-band fallback on the globe while
+ * the 2D map moved on to the composite, with nothing in the signature to say
+ * so.
+ */
 export function cogRenderSignature(layer: GeoLibreLayer): string {
-  return JSON.stringify([cogSourceUrl(layer), rasterState(layer)]);
+  const state = rasterState(layer);
+  const bandCount = layer.metadata?.bandCount;
+  return JSON.stringify([
+    cogSourceUrl(layer),
+    state,
+    cogRenderBands(state, typeof bandCount === "number" ? bandCount : null),
+  ]);
 }
 
 /** Wrap a rendered RGBA tile as an image Cesium can upload. */

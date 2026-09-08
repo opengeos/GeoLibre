@@ -273,6 +273,36 @@ describe("COG render options", () => {
       cogRenderSignature(cogLayer({}, { colormap: "magma" })),
     );
   });
+
+  // The tiler resolves an omitted nodata to the source's own declared value,
+  // so "auto" is the omitted case and "off" has to be stated, or the globe
+  // would mask pixels the 2D map draws.
+  it("distinguishes the three nodata states the raster control persists", () => {
+    const nodataFor = (state: unknown) => cogRenderOptions(cogLayer({}, state), null).nodata;
+    assert.equal(nodataFor({ nodata: -9999 }), -9999);
+    assert.equal(nodataFor({ nodata: "auto" }), undefined, "auto defers to the source");
+    assert.ok(
+      Number.isNaN(nodataFor({ nodata: "off" })),
+      "off must say so: NaN is the tiler's no-masking sentinel",
+    );
+    assert.equal(nodataFor({}), undefined);
+  });
+
+  // bandCount arrives with the GeoTIFF header, after the layer is already in
+  // the store, and it is what decides whether a short RGB state composites
+  // [1, 2, 3] or falls back to one band.
+  it("rebuilds when a late bandCount changes which bands composite", () => {
+    const withBandCount = (bandCount: number | null) => {
+      const layer = cogLayer({}, { mode: "rgb", bands: [] });
+      layer.metadata.bandCount = bandCount;
+      return layer;
+    };
+    assert.notEqual(cogRenderSignature(withBandCount(null)), cogRenderSignature(withBandCount(3)));
+    assert.deepEqual(cogRenderOptions(withBandCount(null), null).bidx, [1]);
+    assert.deepEqual(cogRenderOptions(withBandCount(3), null).bidx, [1, 2, 3]);
+    // A bandCount that changes nothing about the composite must not churn.
+    assert.equal(cogRenderSignature(withBandCount(3)), cogRenderSignature(withBandCount(4)));
+  });
 });
 
 describe("createCogImageryProvider", () => {

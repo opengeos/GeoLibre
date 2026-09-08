@@ -239,6 +239,11 @@ export class ProtocolImageryProvider implements ImageryProvider {
   readonly tileHeight: number;
   readonly minimumLevel: number;
   readonly maximumLevel: number | undefined;
+  // Owned but deliberately never raised here. `ImageryLayer._requestImagery`
+  // already funnels a rejected `requestImage` through
+  // `TileProviderError.reportError(..., imageryProvider.errorEvent, ...)`,
+  // so raising it from the provider would report every failed tile twice and
+  // sidestep the retry bookkeeping `TileProviderError` keeps across attempts.
   readonly errorEvent: Event;
   // Cesium declares a non-optional Credit; providers without one leave it
   // undefined at runtime (UrlTemplateImageryProvider does the same).
