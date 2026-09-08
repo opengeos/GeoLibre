@@ -500,8 +500,10 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
       return (
         (isCogLayer(next) && cogRenderSignature(prev) !== cogRenderSignature(next)) ||
         str(prev.metadata?.tileType) !== str(next.metadata?.tileType) ||
-        // The Y-axis convention bakes into the bridged provider.
+        // The Y-axis convention and the coverage rectangle bake into the
+        // bridged provider.
         str(prev.source.scheme) !== str(next.source.scheme) ||
+        JSON.stringify(prev.source.bounds ?? null) !== JSON.stringify(next.source.bounds ?? null) ||
         firstTile(prev) !== firstTile(next) ||
         // min/maxzoom bake into UrlTemplateImageryProvider's min/maximumLevel.
         prev.source.maxzoom !== next.source.maxzoom ||
@@ -717,7 +719,8 @@ export class CesiumLayerSync {
     for (const other of this.entries.values()) {
       if (other !== entry && isCogLayer(other.layer) && cogSourceUrl(other.layer) === url) return;
     }
-    void this.cogTiler.then((tiler) => tiler.forget(url));
+    // A tiler that failed to load has nothing to forget; keep the rejection quiet.
+    void this.cogTiler.then((tiler) => tiler.forget(url)).catch(() => {});
   }
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
@@ -801,7 +804,7 @@ export class CesiumLayerSync {
     this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
-    void this.cogTiler?.then((tiler) => tiler.clear());
+    void this.cogTiler?.then((tiler) => tiler.clear()).catch(() => {});
     this.unwatchCamera?.();
     this.unwatchCamera = null;
   }
@@ -1039,8 +1042,8 @@ export class CesiumLayerSync {
         provider = new ProtocolImageryProvider(Cesium, {
           template: `${url}/{z}/{x}/{y}`,
           rectangle,
-          minimumLevel: header?.minZoom,
-          maximumLevel: header?.maxZoom,
+          minimumLevel: Number.isFinite(header?.minZoom) ? header?.minZoom : undefined,
+          maximumLevel: Number.isFinite(header?.maxZoom) ? header?.maxZoom : undefined,
           credit: str(layer.source.attribution),
         });
       } else {

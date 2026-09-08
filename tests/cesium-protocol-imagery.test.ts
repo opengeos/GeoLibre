@@ -652,6 +652,18 @@ describe("review follow-ups", () => {
         (added[1].imageryProvider as ProtocolImageryProvider).tileUrl(1, 0, 2),
         "geolibre-test-mbtiles://tile/2/1/3?path=a",
       );
+      // The coverage rectangle bakes in too: new bounds rebuild, same bounds do not.
+      const bounded = {
+        ...layer,
+        source: { ...layer.source, scheme: "tms", bounds: [-10, -5, 10, 5] },
+      };
+      sync.sync([bounded]);
+      await flush();
+      assert.equal(added.length, 3);
+      assert.ok((added[2].imageryProvider as ProtocolImageryProvider).rectangle);
+      sync.sync([{ ...bounded, source: { ...bounded.source, bounds: [-10, -5, 10, 5] } }]);
+      await flush();
+      assert.equal(added.length, 3, "equal bounds are not a rebuild");
       sync.destroy();
     } finally {
       unregisterProtocol("geolibre-test-mbtiles");
