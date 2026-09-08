@@ -3489,6 +3489,7 @@
     "search": "검색",
     "searchCurrentView": "현재 지도 영역 검색",
     "enterKeyword": "시작하려면 키워드를 입력하세요.",
+    "viewUnavailable": "현재 지도 범위를 사용할 수 없습니다. 검색하려면 지도 범위 필터를 끄세요.",
     "loadMore": "더 불러오기",
     "searching": "검색 중…",
     "loadingMore": "데이터셋을 더 불러오는 중…",

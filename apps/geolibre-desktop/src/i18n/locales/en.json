@@ -3639,6 +3639,7 @@
     "search": "Search",
     "searchCurrentView": "Search the current map area",
     "enterKeyword": "Enter a keyword to begin.",
+    "viewUnavailable": "The current map area is unavailable; turn off the map-area filter to search.",
     "loadMore": "Load more",
     "searching": "Searching…",
     "loadingMore": "Loading more datasets…",

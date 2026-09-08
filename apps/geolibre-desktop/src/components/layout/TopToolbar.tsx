@@ -379,6 +379,7 @@ export function TopToolbar({
       search: t("arcgisHub.search"),
       searchCurrentView: t("arcgisHub.searchCurrentView"),
       enterKeyword: t("arcgisHub.enterKeyword"),
+      viewUnavailable: t("arcgisHub.viewUnavailable"),
       loadMore: t("arcgisHub.loadMore"),
       searching: t("arcgisHub.searching"),
       loadingMore: t("arcgisHub.loadingMore"),

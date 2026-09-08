@@ -3547,6 +3547,7 @@
     "search": "Ara",
     "searchCurrentView": "Geçerli harita alanında ara",
     "enterKeyword": "Başlamak için bir anahtar kelime girin.",
+    "viewUnavailable": "Geçerli harita alanı kullanılamıyor; arama yapmak için harita alanı filtresini kapatın.",
     "loadMore": "Daha fazla yükle",
     "searching": "Aranıyor…",
     "loadingMore": "Daha fazla veri kümesi yükleniyor…",

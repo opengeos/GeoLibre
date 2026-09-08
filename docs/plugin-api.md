@@ -1123,8 +1123,18 @@ filter" then searches the whole world while its "current view only" checkbox
 stays ticked, which is exactly the silent success an `engines` declaration is
 meant to rule out. `getViewBounds` answers from whichever engine is primary
 and unwraps an antimeridian crossing (east > 180), as `MapExtent` does
-everywhere else in the app. A frontend test scans the plugins that declare
-Cesium support and fails on a `getMap()`-routed bounds read.
+everywhere else in the app.
+
+`getViewBounds` has its own `null`: no map mounted yet, the globe mid-morph
+between scene modes, or a camera pointed away from Earth. Do not read that as
+"no filter" — widening the search is the same lie in a second place. Refuse the
+search and say the extent is unavailable, as the ArcGIS Hub panel does.
+
+A frontend test scans every plugin that declares Cesium support, follows its
+relative imports so a plugin split across a subdirectory is covered too, and
+fails on a `getMap()`-routed bounds read — chained or split across two
+statements. A module that deliberately branches on `getMap()` being null marks
+the site with `engine-audit-allow: getMap-bounds` and says why.
 
 A plugin that drives the renderer directly branches on which handle is
 non-null: `app.getMap()` on MapLibre, `app.getCesiumScene()` on the globe. The

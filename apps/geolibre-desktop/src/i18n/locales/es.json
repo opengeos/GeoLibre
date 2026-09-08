@@ -3547,6 +3547,7 @@
     "search": "Buscar",
     "searchCurrentView": "Buscar en el área actual del mapa",
     "enterKeyword": "Introduzca una palabra clave para empezar.",
+    "viewUnavailable": "El área de mapa actual no está disponible; desactive el filtro de área de mapa para buscar.",
     "loadMore": "Cargar más",
     "searching": "Buscando…",
     "loadingMore": "Cargando más conjuntos de datos…",

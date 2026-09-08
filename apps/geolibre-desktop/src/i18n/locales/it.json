@@ -3556,6 +3556,7 @@
     "search": "Cerca",
     "searchCurrentView": "Cerca nell'area corrente della mappa",
     "enterKeyword": "Inserisci una parola chiave per iniziare.",
+    "viewUnavailable": "L'area di mappa corrente non è disponibile; disattiva il filtro area di mappa per cercare.",
     "loadMore": "Carica altri",
     "searching": "Ricerca in corso…",
     "loadingMore": "Caricamento di altri dataset…",

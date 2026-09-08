@@ -3489,6 +3489,7 @@
     "search": "検索",
     "searchCurrentView": "現在の地図範囲を検索",
     "enterKeyword": "キーワードを入力して開始してください。",
+    "viewUnavailable": "現在の地図範囲を取得できません。検索するには地図範囲フィルターをオフにしてください。",
     "loadMore": "さらに読み込む",
     "searching": "検索中…",
     "loadingMore": "データセットをさらに読み込んでいます…",

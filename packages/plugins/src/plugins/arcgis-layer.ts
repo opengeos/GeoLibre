@@ -503,6 +503,11 @@ async function addArcGISFeatureLayerAsGeoJson(
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
   const store = useAppStore.getState();
+  // engine-audit-allow: getMap-bounds — the viewport loader below needs more
+  // than the extent (it binds `moveend` and reads `isMoving`), and the plugin
+  // API has no camera-idle hook yet, so this cannot move to `getViewBounds`.
+  // A null map is not a silent no-op here: it takes the complete paged
+  // download instead, which is also what the globe gets today.
   const map = app.getMap?.();
   // Headless/API consumers have no viewport to query, so retain the complete
   // paged download for them. The interactive app takes the bounded path below.

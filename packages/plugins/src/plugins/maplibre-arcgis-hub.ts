@@ -20,6 +20,8 @@ export interface ArcGisHubLabels {
   search: string;
   searchCurrentView: string;
   enterKeyword: string;
+  /** Shown when "current view only" is on but the map reports no extent. */
+  viewUnavailable: string;
   loadMore: string;
   searching: string;
   loadingMore: string;
@@ -47,6 +49,7 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   search: "Search",
   searchCurrentView: "Search the current map area",
   enterKeyword: "Enter a keyword to begin.",
+  viewUnavailable: "The current map area is unavailable; turn off the map-area filter to search.",
   loadMore: "Load more",
   searching: "Searching…",
   loadingMore: "Loading more datasets…",
@@ -393,21 +396,31 @@ function buildPanel(container: HTMLElement): () => void {
       status.textContent = labels.enterKeyword;
       return;
     }
+    // Read the extent through `getViewBounds`, not `getMap()?.getBounds()`:
+    // this plugin declares `engines: ["maplibre", "cesium"]`, and `getMap()` is
+    // null on the globe — so the bounds came back undefined there and every
+    // search covered the whole world with "current view only" still ticked.
+    //
+    // `getViewBounds` has its own null: no map mounted yet, the globe mid-morph
+    // between scene modes, or a camera pointed away from Earth. Widening to the
+    // whole world there would reproduce the same lie in a second place, so a
+    // view-only search with no extent is refused and says so instead. Checked
+    // before the abort below, like the empty-query guard, so a refused search
+    // leaves the running one alone.
+    const viewBounds = !append && viewOnly.checked ? (appRef?.getViewBounds?.() ?? null) : null;
+    if (!append && viewOnly.checked && !viewBounds) {
+      status.textContent = labels.viewUnavailable;
+      return;
+    }
     controller?.abort();
     controller = new AbortController();
     const token = ++generation;
     if (!append) {
       activeQuery = query;
-      // Capture the map filter once per search. Re-deriving it on Load more
+      // Hold the map filter for the whole search. Re-deriving it on Load more
       // would page a stale `start` offset into a differently filtered result
       // set if the user panned, silently skipping or repeating datasets.
-      //
-      // Read through `getViewBounds`, not `getMap()?.getBounds()`: this plugin
-      // declares `engines: ["maplibre", "cesium"]`, and `getMap()` is null on
-      // the globe — so the bounds came back undefined there and every search
-      // covered the whole world with "current view only" still ticked.
-      const mapBounds = appRef?.getViewBounds?.() ?? null;
-      activeBbox = viewOnly.checked && mapBounds ? [...mapBounds] : undefined;
+      activeBbox = viewBounds ? [...viewBounds] : undefined;
       start = 1;
       shown = 0;
       removeThumbnailPreview();

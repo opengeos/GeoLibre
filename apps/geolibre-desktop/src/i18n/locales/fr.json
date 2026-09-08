@@ -3547,6 +3547,7 @@
     "search": "Rechercher",
     "searchCurrentView": "Rechercher dans la zone actuelle de la carte",
     "enterKeyword": "Saisissez un mot-clé pour commencer.",
+    "viewUnavailable": "La zone de carte actuelle n'est pas disponible ; désactivez le filtre de zone de carte pour lancer la recherche.",
     "loadMore": "Charger plus",
     "searching": "Recherche…",
     "loadingMore": "Chargement d'autres jeux de données…",

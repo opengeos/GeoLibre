@@ -3489,6 +3489,7 @@
     "search": "Cari",
     "searchCurrentView": "Cari di area peta saat ini",
     "enterKeyword": "Masukkan kata kunci untuk memulai.",
+    "viewUnavailable": "Area peta saat ini tidak tersedia; matikan filter area peta untuk mencari.",
     "loadMore": "Muat lebih banyak",
     "searching": "Mencari…",
     "loadingMore": "Memuat lebih banyak kumpulan data…",

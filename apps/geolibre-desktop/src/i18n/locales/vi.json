@@ -3489,6 +3489,7 @@
     "search": "Tìm kiếm",
     "searchCurrentView": "Tìm kiếm khu vực bản đồ hiện tại",
     "enterKeyword": "Nhập từ khóa để bắt đầu.",
+    "viewUnavailable": "Không có phạm vi bản đồ hiện tại; hãy tắt bộ lọc phạm vi bản đồ để tìm kiếm.",
     "loadMore": "Tải thêm",
     "searching": "Đang tìm kiếm…",
     "loadingMore": "Đang tải thêm tập dữ liệu…",

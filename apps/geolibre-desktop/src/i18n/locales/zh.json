@@ -3489,6 +3489,7 @@
     "search": "搜索",
     "searchCurrentView": "搜索当前地图范围",
     "enterKeyword": "请输入关键词开始搜索。",
+    "viewUnavailable": "当前地图范围不可用；请关闭地图范围筛选后再搜索。",
     "loadMore": "加载更多",
     "searching": "搜索中…",
     "loadingMore": "正在加载更多数据集…",

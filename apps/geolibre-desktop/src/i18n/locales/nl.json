@@ -3547,6 +3547,7 @@
     "search": "Zoeken",
     "searchCurrentView": "Het huidige kaartgebied doorzoeken",
     "enterKeyword": "Voer een trefwoord in om te beginnen.",
+    "viewUnavailable": "Het huidige kaartgebied is niet beschikbaar; schakel het kaartgebiedfilter uit om te zoeken.",
     "loadMore": "Meer laden",
     "searching": "Zoeken…",
     "loadingMore": "Meer datasets laden…",

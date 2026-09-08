@@ -3547,6 +3547,7 @@
     "search": "Suchen",
     "searchCurrentView": "Aktuellen Kartenbereich durchsuchen",
     "enterKeyword": "Geben Sie ein Stichwort ein, um zu beginnen.",
+    "viewUnavailable": "Der aktuelle Kartenausschnitt ist nicht verfügbar; deaktivieren Sie den Kartenausschnitt-Filter, um zu suchen.",
     "loadMore": "Weitere laden",
     "searching": "Wird gesucht…",
     "loadingMore": "Weitere Datensätze werden geladen…",
