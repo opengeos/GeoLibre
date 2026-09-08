@@ -172,6 +172,30 @@ describe("loadCopcPointCloud", () => {
     assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
   });
 
+  it("walks into a sub-page the root only points at", async () => {
+    const fake = fakeCopc();
+    const rootless: CopcModule = {
+      Copc: {
+        ...fake.module.Copc,
+        loadHierarchyPage: async (source, page) => {
+          if (page.pageOffset === 0) {
+            // A root page with no nodes of its own: every key lives in a sub-page.
+            return { nodes: {}, pages: { "0-0-0-0": { pageOffset: 999, pageLength: 1 } } };
+          }
+          return fake.module.Copc.loadHierarchyPage(source, page);
+        },
+      },
+    };
+    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+      copc: rootless,
+      budget: MAX_POINT_CLOUD_POINTS,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+    });
+    assert.deepEqual(fake.loads, ["300", "400"], "the sub-page's nodes are decoded");
+    assert.equal(cloud.count, 700);
+  });
+
   it("normalises a NaN or fractional budget", async () => {
     const load = (budget: number) =>
       loadCopcPointCloud("https://x/a.copc.laz", {
@@ -521,9 +545,21 @@ describe("CesiumLayerSync native 3D routing", () => {
     };
     assert.equal(collection.length, 500);
     assert.equal(collection.get(0).color.alpha, 0.5);
+    assert.equal(
+      (collection.get(0) as unknown as { position: { z: number } }).position.z,
+      10,
+      "no offset: the decoded height is used as is",
+    );
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
     sync.sync([{ ...copc, opacity: 0.2 }]);
     assert.ok(Math.abs(collection.get(0).color.alpha - 0.2) < 1e-9);
+    // An altitude offset rebuilds the cloud with every point lifted.
+    sync.sync([{ ...copc, source: { ...copc.source, altitudeOffset: 10 } }]);
+    for (let i = 0; i < 8; i++) await flush();
+    assert.equal(f.primitives.length, 1);
+    const lifted = f.primitives[0] as { get(i: number): { position: { z: number } } };
+    assert.notEqual(lifted, collection, "the offset rebuilds the collection");
+    assert.equal(lifted.get(0).position.z, 20);
     sync.sync([]);
     assert.equal(f.primitives.length, 0);
   });
@@ -599,6 +635,10 @@ describe("buildPointCloudCollection", () => {
     assert.equal(first.color.blue, 0);
     assert.equal(first.color.alpha, 0.75);
     assert.deepEqual(first.position, { lng: 1, lat: 2, z: 3 });
+    const lifted = buildPointCloudCollection(Cesium as never, cloud, 1, 10) as unknown as {
+      get(i: number): { position: { z: number } };
+    };
+    assert.equal(lifted.get(1).position.z, 16, "the altitude offset lifts every point");
     setPointCloudOpacity(collection as never, 0.1);
     assert.ok(
       Math.abs((collection.get(0) as unknown as { color: { alpha: number } }).color.alpha - 0.1) <

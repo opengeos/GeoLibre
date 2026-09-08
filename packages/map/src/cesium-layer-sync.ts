@@ -538,7 +538,11 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
           JSON.stringify(next.source.requestHeaders ?? null)
       );
     case "pointcloud":
-      return pointCloudUrl(prev) !== pointCloudUrl(next);
+      return (
+        pointCloudUrl(prev) !== pointCloudUrl(next) ||
+        // The offset bakes into every point's position.
+        prev.source.altitudeOffset !== next.source.altitudeOffset
+      );
     case "3dtiles":
       return (
         tilesetUrl(prev) !== tilesetUrl(next) ||
@@ -856,7 +860,12 @@ export class CesiumLayerSync {
         signal: abort.signal,
       });
       if (entry.cancelled) return;
-      const collection = buildPointCloudCollection(Cesium, cloud, this.effectiveOpacity(entry));
+      const collection = buildPointCloudCollection(
+        Cesium,
+        cloud,
+        this.effectiveOpacity(entry),
+        Number(entry.layer.source.altitudeOffset),
+      );
       viewer.scene.primitives.add(collection);
       entry.handle = collection;
       entry.appliedAlpha = String(this.effectiveOpacity(entry));

@@ -118,8 +118,8 @@ export interface LoadCopcOptions {
   lazPerf?: () => Promise<unknown>;
   /**
    * Builds the CRS → WGS84 projector from the cloud's WKT; defaults to
-   * proj4. Returns `null` for a cloud with no usable CRS, which is then read
-   * as already being in degrees.
+   * proj4. Returns `null` for a cloud with no usable CRS, which the loader
+   * refuses rather than reading raw coordinates as degrees.
    */
   projector?: (wkt: string | undefined) => Promise<PointCloudProjector | null>;
 }
@@ -186,7 +186,11 @@ export async function loadCopcPointCloud(
   const root = await Copc.loadHierarchyPage(url, copc.info.rootHierarchyPage);
   const nodes = new Map(Object.entries(root.nodes));
   const pages = new Map(Object.entries(root.pages));
-  const keys = [...nodes.keys()].sort((a, b) => keyDepth(a) - keyDepth(b));
+  // The frontier starts from both the nodes the root page carries and the keys
+  // it only points at through sub-pages (the normal case for a large cloud).
+  const keys = [...new Set([...nodes.keys(), ...pages.keys()])].sort(
+    (a, b) => keyDepth(a) - keyDepth(b),
+  );
   const chosen: string[] = [];
   const chosenKeys = new Set<string>();
   let planned = 0;
@@ -332,17 +336,20 @@ export function buildPointCloudCollection(
   Cesium: CesiumNs,
   cloud: DecodedPointCloud,
   opacity: number,
+  altitudeOffset = 0,
 ): PointPrimitiveCollection {
   const collection = new Cesium.PointPrimitiveCollection();
   const ramp = getVectorColorRamp("viridis").colors;
   const alpha = Math.min(1, Math.max(0, opacity));
+  // The layer's altitude offset lifts every point, as it does a tileset.
+  const lift = Number.isFinite(altitudeOffset) ? altitudeOffset : 0;
   for (let i = 0; i < cloud.count; i++) {
     const [r, g, b] = pointCloudColor(cloud, i, ramp);
     collection.add({
       position: Cesium.Cartesian3.fromDegrees(
         cloud.positions[i * 3],
         cloud.positions[i * 3 + 1],
-        cloud.positions[i * 3 + 2],
+        cloud.positions[i * 3 + 2] + lift,
       ),
       pixelSize: POINT_CLOUD_PIXEL_SIZE,
       color: new Cesium.Color(r / 255, g / 255, b / 255, alpha),
