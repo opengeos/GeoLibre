@@ -90,4 +90,23 @@ describe("buildDedupedLabelFeatures", () => {
     assert.ok(result);
     assert.equal(result.features[0].properties?.__geolibre_label, "42");
   });
+
+  it("applies the caller's formatter before grouping", () => {
+    const collection = fc([
+      { coords: [5, 5], props: { pop: 1234567 } },
+      { coords: [5, 5], props: { pop: 89 } },
+    ]);
+    const format = (value: unknown) =>
+      typeof value === "number" ? new Intl.NumberFormat("en-US").format(value) : null;
+    const result = buildDedupedLabelFeatures(collection, "pop", "concatenate", format);
+    assert.ok(result);
+    assert.equal(result.features[0].properties?.__geolibre_label, "1,234,567\n89");
+  });
+
+  it("falls back to the raw string when the formatter declines a value", () => {
+    const collection = fc([{ coords: [5, 5], props: { pop: "n/a" } }]);
+    const result = buildDedupedLabelFeatures(collection, "pop", "unique", () => null);
+    assert.ok(result);
+    assert.equal(result.features[0].properties?.__geolibre_label, "n/a");
+  });
 });

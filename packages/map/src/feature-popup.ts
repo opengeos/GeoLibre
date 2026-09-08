@@ -11,6 +11,7 @@ import {
   type PopupRow,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
+import { documentLocale } from "./document-locale";
 
 /**
  * The author's popup design for a layer, plus what the renderer needs to apply
@@ -24,12 +25,6 @@ export interface IdentifyPopupOptions {
   feature?: Feature | null;
   /** Map zoom for `["zoom"]` in the title/body expressions. */
   zoom?: number;
-}
-
-/** The document language, so formatted numbers and dates follow the UI locale. */
-function documentLocale(): string | undefined {
-  const lang = typeof document !== "undefined" ? document.documentElement.lang.trim() : "";
-  return lang || undefined;
 }
 
 /**

@@ -110,6 +110,11 @@ export const EXPRESSION_FUNCTION_CATEGORIES: ExpressionFunctionCategory[] = [
       fn("upcase", '["upcase", ["get", "field"]]', "upcase"),
       fn("downcase", '["downcase", ["get", "field"]]', "downcase"),
       fn("slice", '["slice", ["get", "field"], 0, 3]', "slice"),
+      fn(
+        "number-format",
+        '["number-format", ["get", "field"], {"locale": "en-US", "max-fraction-digits": 2}]',
+        "numberFormat",
+      ),
     ],
   },
   {

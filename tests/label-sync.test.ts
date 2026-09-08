@@ -520,4 +520,43 @@ describe("label sync", () => {
     assert.equal(label.paint["text-color"], DEFAULT_LAYER_STYLE.labels.color);
     assert.equal(label.filter, undefined);
   });
+
+  it("formats a numeric label field with thousands separators", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "pop",
+        numberFormatEnabled: true,
+        numberDecimals: 0,
+        numberLocale: "en-US",
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    assert.deepEqual(label.layout["text-field"], [
+      "case",
+      ["==", ["typeof", ["get", "pop"]], "number"],
+      ["number-format", ["round", ["to-number", ["get", "pop"]]], { locale: "en-US" }],
+      ["to-string", ["coalesce", ["get", "pop"], ""]],
+    ]);
+  });
+
+  it("leaves a label expression unformatted", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "pop",
+        expression: '["get", "pop"]',
+        numberFormatEnabled: true,
+        numberLocale: "en-US",
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    assert.deepEqual(label.layout["text-field"], ["get", "pop"]);
+  });
 });

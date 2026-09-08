@@ -300,6 +300,22 @@ export interface LabelStyle {
   /** Letter-case transform applied to the label text (MapLibre `text-transform`). */
   transform: LabelTransform;
   /**
+   * Render a numeric {@link field} with the locale's thousands and decimal
+   * separators (issue #2336), so `1234567.5` labels as `1,234,567.5` instead
+   * of running together. Non-numeric values are unaffected, and it is not
+   * applied to {@link expression}, which formats its own output (MapLibre's
+   * `number-format`, offered in the Expression Builder).
+   */
+  numberFormatEnabled: boolean;
+  /** Decimal places kept while {@link numberFormatEnabled} is on (0-10). */
+  numberDecimals: number;
+  /**
+   * BCP 47 tag picking the separators for {@link numberFormatEnabled}, from
+   * {@link LABEL_NUMBER_LOCALES}. Empty (the default) follows the app's own
+   * language, the way popup number fields do.
+   */
+  numberLocale: string;
+  /**
    * How to handle features that share a label.
    *
    * - `"off"`: every feature is labeled (the historical behavior).
@@ -656,6 +672,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     rotation: 0,
     maxWidth: 10,
     transform: "none",
+    numberFormatEnabled: false,
+    numberDecimals: 0,
+    numberLocale: "",
     dedupe: "off",
     sizeExpression: "",
     colorExpression: "",

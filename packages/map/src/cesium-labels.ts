@@ -1,7 +1,13 @@
-import { compileFeatureExpression, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import {
+  compileFeatureExpression,
+  DEFAULT_LAYER_STYLE,
+  formatLabelNumber,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { Feature } from "geojson";
 import type { Cartesian3, CesiumWidget, DistanceDisplayCondition, Entity } from "@cesium/engine";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
+import { documentLocale } from "./document-locale";
 
 /** Whether a label expression reads `["zoom"]`, so its text changes with the camera. */
 const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
@@ -63,17 +69,22 @@ export function createCesiumLabeler(
     cachedZoom = readZoom();
     return cachedZoom;
   };
+  const locale = documentLocale();
   const readText = (feature: Feature, zoom: number): string => {
     let value: unknown = feature.properties?.[labels.field];
+    let fromExpression = false;
     if (expression.evaluate) {
       try {
         value = expression.evaluate(feature, zoom);
+        fromExpression = true;
       } catch {
         value = undefined;
       }
     }
     if (value === undefined || value === null || value === "") return "";
-    let text = String(value);
+    // Number formatting applies to the field only, matching the 2D map: an
+    // expression formats its own output.
+    let text = (fromExpression ? null : formatLabelNumber(value, labels, locale)) ?? String(value);
     if (labels.transform === "uppercase") text = text.toUpperCase();
     if (labels.transform === "lowercase") text = text.toLowerCase();
     return text;

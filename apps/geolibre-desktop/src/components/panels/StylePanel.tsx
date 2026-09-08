@@ -2,7 +2,9 @@ import {
   BLEND_MODES,
   DEFAULT_BLEND_MODE,
   DEFAULT_LAYER_STYLE,
+  LABEL_NUMBER_LOCALES,
   controlRendersLayer,
+  formatLabelNumberSample,
   isInitialLayerStyle,
   type BlendMode,
   type DiagramField,
@@ -1009,7 +1011,7 @@ export function StylePanel({
   onCollapsedChange,
   hideOwnRail = false,
 }: StylePanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
@@ -3986,6 +3988,58 @@ export function StylePanel({
                 </>
               )}
             </Select>
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="labelNumberFormat"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <input
+                id="labelNumberFormat"
+                type="checkbox"
+                checked={labels.numberFormatEnabled}
+                onChange={(event) => updateLabels({ numberFormatEnabled: event.target.checked })}
+              />
+              {t("style.labels.numberFormat")}
+            </label>
+            {labels.numberFormatEnabled ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <NumericStyleInput
+                    id="labelNumberDecimals"
+                    label={t("style.labels.numberDecimals")}
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={labels.numberDecimals}
+                    onChange={(numberDecimals) => updateLabels({ numberDecimals })}
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="labelNumberLocale">{t("style.labels.numberLocale")}</Label>
+                    <Select
+                      id="labelNumberLocale"
+                      value={labels.numberLocale}
+                      onChange={(event) => updateLabels({ numberLocale: event.target.value })}
+                    >
+                      <option value="">{t("style.labels.numberLocaleApp")}</option>
+                      {LABEL_NUMBER_LOCALES.map((locale) => (
+                        <option key={locale} value={locale}>
+                          {formatLabelNumberSample(locale, labels.numberDecimals)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("style.labels.numberFormatHint", {
+                    sample: formatLabelNumberSample(
+                      labels.numberLocale || i18n.language,
+                      labels.numberDecimals,
+                    ),
+                  })}
+                </p>
+              </>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="labelPlacement">{t("style.labels.placement")}</Label>

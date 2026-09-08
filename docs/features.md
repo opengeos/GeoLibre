@@ -109,6 +109,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - ArcGIS-style placement and styling controls: anchor, X/Y offset, rotation, wrap width, and letter case
     - Expression-driven label properties and placement priority
     - A Duplicate labels option, plus unique and concatenate modes that collapse points stacked at the same coordinate into a single deduplicated label
+    - Number formatting for a numeric label field: thousands and decimal separators with a fixed number of decimal places, either following the app language or pinned to a separator style, so populations read as 1,234,567 rather than 1234567
 - Popup and tooltip designer that decides what a viewer sees on click and hover, per layer, instead of dumping every property into the Identify popup
     - Pick which fields appear and in what order, relabel them, and format each value as text, a number with decimals and thousands separators, a date, a link, or an image, with an optional prefix and suffix
     - Title the popup from a field or an expression, or replace the rows entirely with an expression-built sentence, and show or hide the feature id
