@@ -680,6 +680,26 @@ describe("CesiumLayerSync marker sprites", () => {
     assert.equal(f.counters.spheres, 2, "the restyle reused the cached repeat counts");
   });
 
+  it("bakes a flat marker colour once and aliases the base fallback to it", async () => {
+    const f = makeFakes();
+    const renderer = fakeMarkerRenderer();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12, {
+      renderMarker: renderer.render,
+    });
+    sync.sync([
+      geojsonLayer([feature({}), feature({})], {
+        style: { markerEnabled: true, markerColor: "#ff8800" },
+      }),
+    ]);
+    await f.flush();
+    await f.flush();
+    assert.equal(renderer.baked.length, 1, "one render for the one colour");
+    assert.deepEqual(rgb(renderer.baked[0]), [255, 136, 0]);
+    const [a, b] = f.dataSources[0].entities.values;
+    assert.equal(sprite(a), renderer.baked[0]);
+    assert.equal(sprite(b), renderer.baked[0]);
+  });
+
   it("holds at most MAX_MARKER_SPRITES sprites, base included", async () => {
     const f = makeFakes();
     const renderer = fakeMarkerRenderer();

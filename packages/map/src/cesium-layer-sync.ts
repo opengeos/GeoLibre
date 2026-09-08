@@ -881,6 +881,13 @@ export class CesiumLayerSync {
         if (images.size + wanted.size >= MAX_MARKER_SPRITES) break;
         wanted.add(colour);
       }
+      // The base sprite ("") is the layer's own marker colour, which is what
+      // a flat marker style resolves every feature to; when that colour is
+      // baked anyway, the fallback is an alias of it rather than a second
+      // identical render (an SVG decode for custom shapes).
+      const base = resolver.resolveMarkerColor(undefined, zoom);
+      const aliasBase = wanted.has("") && (wanted.has(base) || images.has(base));
+      if (aliasBase) wanted.delete("");
       // The colours are independent, so their (possibly SVG-decoding) renders
       // run together rather than one await at a time.
       const baked = await Promise.all(
@@ -893,6 +900,13 @@ export class CesiumLayerSync {
         if (!image || images.has(colour)) continue;
         images.set(colour, image);
         added = true;
+      }
+      if (aliasBase && !images.has("")) {
+        const image = images.get(base);
+        if (image) {
+          images.set("", image);
+          added = true;
+        }
       }
     }
     if (style.fillPattern !== "none" && entry.patternImage === undefined) {
