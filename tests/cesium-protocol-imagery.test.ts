@@ -575,3 +575,86 @@ describe("CesiumLayerSync raster bridge routing", () => {
     sync.destroy();
   });
 });
+
+describe("review follow-ups", () => {
+  it("clamps bounds to the Web Mercator tiling scheme", async () => {
+    const { webMercatorRectangle } = await import("../packages/map/src/cesium-protocol-imagery");
+    const rect = webMercatorRectangle(Cesium, [-200, -89, 200, 89]);
+    assert.ok(Math.abs(rect.west + Math.PI) < 1e-9);
+    assert.ok(Math.abs(rect.east - Math.PI) < 1e-9);
+    assert.ok(rect.north < (85.1 * Math.PI) / 180 && rect.north > (85 * Math.PI) / 180);
+  });
+
+  it("falls back to an RGB composite only when the source has three bands", () => {
+    assert.deepEqual(cogRenderBands({ mode: "rgb", bands: [] }, 4), [1, 2, 3]);
+    assert.deepEqual(cogRenderBands({ mode: "rgb", bands: [] }, 1), [1]);
+    assert.deepEqual(cogRenderBands({ mode: "rgb", bands: [2] }, null), [2]);
+  });
+
+  it("opens each COG once across rebuilds and forgets it with its last layer", async () => {
+    let opens = 0;
+    // The raw module: the sync wraps it in its own cache.
+    const tiler: CogTilerModule = {
+      openCog: async () => {
+        opens++;
+        return {
+          boundsLonLat: [0, 0, 1, 1],
+          statistics: async () => ({}),
+          renderTileRGBA: async () => new Uint8Array(256 * 256 * 4),
+        } as never;
+      },
+    };
+    const { viewer, added } = makeViewer();
+    const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10, {
+      loadCogTiler: () => Promise.resolve(tiler),
+    });
+    const layer = cogLayer({}, { mode: "single", bands: [1], colormap: "gray" });
+    sync.sync([layer]);
+    await flush();
+    await flush();
+    sync.sync([
+      {
+        ...layer,
+        metadata: {
+          ...layer.metadata,
+          rasterState: { mode: "single", bands: [1], colormap: "magma" },
+        },
+      },
+    ]);
+    await flush();
+    await flush();
+    assert.equal(added.length, 2, "the symbology edit rebuilt the provider");
+    assert.equal(opens, 1, "but reused the opened source");
+    sync.sync([]);
+    sync.sync([layer]);
+    await flush();
+    await flush();
+    assert.equal(opens, 2, "removing the last layer forgets the source");
+    sync.destroy();
+  });
+
+  it("rebuilds a bridged template when its Y-axis scheme flips", async () => {
+    registerProtocol("geolibre-test-mbtiles", async () => ({ data: new ArrayBuffer(0) }));
+    try {
+      const { viewer, added } = makeViewer();
+      const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10);
+      const layer = rasterLayer({
+        type: "mbtiles",
+        metadata: { tileType: "raster" },
+        source: { type: "raster", tiles: ["geolibre-test-mbtiles://tile/{z}/{x}/{y}?path=a"] },
+      });
+      sync.sync([layer]);
+      await flush();
+      sync.sync([{ ...layer, source: { ...layer.source, scheme: "tms" } }]);
+      await flush();
+      assert.equal(added.length, 2);
+      assert.equal(
+        (added[1].imageryProvider as ProtocolImageryProvider).tileUrl(1, 0, 2),
+        "geolibre-test-mbtiles://tile/2/1/3?path=a",
+      );
+      sync.destroy();
+    } finally {
+      unregisterProtocol("geolibre-test-mbtiles");
+    }
+  });
+});

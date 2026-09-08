@@ -14,6 +14,7 @@ import { featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
 import { readMapViewFromCamera } from "./cesium-camera";
 import {
+  cachingCogTiler,
   cogRenderSignature,
   cogSourceUrl,
   createCogImageryProvider,
@@ -24,9 +25,11 @@ import {
   hasRegisteredProtocol,
   ProtocolImageryProvider,
   protocolScheme,
+  webMercatorRectangle,
 } from "./cesium-protocol-imagery";
 import { getPMTilesArchive } from "./layer-sync";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
+import type { Header as PMTilesHeader } from "pmtiles";
 import type {
   Cesium3DTileset,
   CesiumWidget,
@@ -497,6 +500,8 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
       return (
         (isCogLayer(next) && cogRenderSignature(prev) !== cogRenderSignature(next)) ||
         str(prev.metadata?.tileType) !== str(next.metadata?.tileType) ||
+        // The Y-axis convention bakes into the bridged provider.
+        str(prev.source.scheme) !== str(next.source.scheme) ||
         firstTile(prev) !== firstTile(next) ||
         // min/maxzoom bake into UrlTemplateImageryProvider's min/maximumLevel.
         prev.source.maxzoom !== next.source.maxzoom ||
@@ -542,14 +547,10 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
 }
 
 /** The slice of a PMTiles header the raster branch reads. */
-export interface PMTilesRasterHeader {
-  minZoom: number;
-  maxZoom: number;
-  minLon: number;
-  minLat: number;
-  maxLon: number;
-  maxLat: number;
-}
+export type PMTilesRasterHeader = Pick<
+  PMTilesHeader,
+  "minZoom" | "maxZoom" | "minLon" | "minLat" | "maxLon" | "maxLat"
+>;
 
 /** Injection points for the environment-bound pieces of the sync (tests). */
 export interface CesiumLayerSyncDeps {
@@ -701,10 +702,22 @@ export class CesiumLayerSync {
    * and its peers are several megabytes that a globe without a COG never
    * needs. Injectable through {@link CesiumLayerSyncDeps} for tests.
    */
-  private cogTiler: Promise<CogTilerModule> | null = null;
-  private loadCogTiler(): Promise<CogTilerModule> {
-    this.cogTiler ??= (this.deps.loadCogTiler ?? (() => import("cog-tiler-wasm")))();
+  private cogTiler: Promise<ReturnType<typeof cachingCogTiler>> | null = null;
+  private loadCogTiler(): Promise<ReturnType<typeof cachingCogTiler>> {
+    this.cogTiler ??= (this.deps.loadCogTiler ?? (() => import("cog-tiler-wasm")))().then(
+      cachingCogTiler,
+    );
     return this.cogTiler;
+  }
+
+  /** Drop a COG source from the cache once no remaining entry reads it. */
+  private forgetCogSource(entry: LayerEntry): void {
+    const url = cogSourceUrl(entry.layer);
+    if (!url || !this.cogTiler) return;
+    for (const other of this.entries.values()) {
+      if (other !== entry && isCogLayer(other.layer) && cogSourceUrl(other.layer) === url) return;
+    }
+    void this.cogTiler.then((tiler) => tiler.forget(url));
   }
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
@@ -724,6 +737,9 @@ export class CesiumLayerSync {
     for (const [id, entry] of this.entries) {
       if (!nextIds.has(id)) {
         this.destroyEntry(entry);
+        // A layer that left the project releases its COG source; a rebuild
+        // (below) keeps it, which is the point of the cache.
+        if (isCogLayer(entry.layer)) this.forgetCogSource(entry);
         this.entries.delete(id);
       }
     }
@@ -739,6 +755,7 @@ export class CesiumLayerSync {
         const stale = this.entries.get(layer.id);
         if (stale) {
           this.destroyEntry(stale);
+          if (isCogLayer(stale.layer)) this.forgetCogSource(stale);
           this.entries.delete(layer.id);
         }
         continue;
@@ -784,6 +801,7 @@ export class CesiumLayerSync {
     this.selection = null;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
     this.entries.clear();
+    void this.cogTiler?.then((tiler) => tiler.clear());
     this.unwatchCamera?.();
     this.unwatchCamera = null;
   }
@@ -1011,12 +1029,12 @@ export class CesiumLayerSync {
         const rectangle =
           header &&
           [header.minLon, header.minLat, header.maxLon, header.maxLat].every(Number.isFinite)
-            ? Cesium.Rectangle.fromDegrees(
+            ? webMercatorRectangle(Cesium, [
                 header.minLon,
-                Math.max(-85.05113, header.minLat),
+                header.minLat,
                 header.maxLon,
-                Math.min(85.05113, header.maxLat),
-              )
+                header.maxLat,
+              ])
             : undefined;
         provider = new ProtocolImageryProvider(Cesium, {
           template: `${url}/{z}/{x}/{y}`,
@@ -1045,12 +1063,7 @@ export class CesiumLayerSync {
             Array.isArray(bounds) &&
             bounds.length === 4 &&
             bounds.every((v) => typeof v === "number" && Number.isFinite(v))
-              ? Cesium.Rectangle.fromDegrees(
-                  bounds[0],
-                  Math.max(-85.05113, bounds[1]),
-                  bounds[2],
-                  Math.min(85.05113, bounds[3]),
-                )
+              ? webMercatorRectangle(Cesium, bounds as [number, number, number, number])
               : undefined;
           provider = new ProtocolImageryProvider(Cesium, {
             template: url,

@@ -3,6 +3,7 @@ import type { CogSource, RenderOptions } from "cog-tiler-wasm";
 import {
   CESIUM_IMAGE_BITMAP_OPTIONS,
   ProtocolImageryProvider,
+  webMercatorRectangle,
   type DecodedTile,
 } from "./cesium-protocol-imagery";
 
@@ -25,6 +26,36 @@ type CesiumNs = typeof import("@cesium/engine");
 /** The tiler surface this module drives; the real module, or a test fake. */
 export interface CogTilerModule {
   openCog(source: string | ArrayBuffer | Uint8Array | Blob): Promise<CogSource>;
+}
+
+/**
+ * Wrap a tiler so each URL is opened once and shared. Opening a COG reads and
+ * parses its header over range requests; a symbology edit rebuilds the
+ * imagery provider but not the source, so the sync keeps one of these for
+ * the widget's lifetime and forgets a URL when its last layer goes.
+ */
+export function cachingCogTiler(module: CogTilerModule): CogTilerModule & {
+  forget(url: string): void;
+  clear(): void;
+} {
+  const sources = new Map<string, Promise<CogSource>>();
+  return {
+    openCog(source) {
+      if (typeof source !== "string") return module.openCog(source);
+      let pending = sources.get(source);
+      if (!pending) {
+        pending = module.openCog(source);
+        // A failed open must not poison every later attempt at the URL.
+        pending.catch(() => {
+          if (sources.get(source) === pending) sources.delete(source);
+        });
+        sources.set(source, pending);
+      }
+      return pending;
+    },
+    forget: (url) => void sources.delete(url),
+    clear: () => sources.clear(),
+  };
 }
 
 /** `metadata.rasterState`, as maplibre-gl-raster persists it. */
@@ -52,12 +83,16 @@ function rasterState(layer: GeoLibreLayer): PersistedRasterState {
  * first three for RGB. Mirrors maplibre-gl-raster's own resolution so the globe
  * composites the same channels the 2D map does.
  */
-export function cogRenderBands(state: PersistedRasterState): number[] {
+export function cogRenderBands(state: PersistedRasterState, bandCount?: number | null): number[] {
   const bands = Array.isArray(state.bands) ? state.bands : [];
   const colormapped = state.mode === "single" || state.mode === "index";
   if (colormapped) return [bands[0] || 1];
   const rgb = bands.slice(0, 3).map((b) => b || 1);
-  return rgb.length ? rgb : [1];
+  if (rgb.length >= 3) return rgb;
+  // A state with fewer than three bands (a hand-authored project, an older
+  // save) composites the first three when the source has them — the control's
+  // own default — and otherwise draws the one band it can.
+  return typeof bandCount === "number" && bandCount >= 3 ? [1, 2, 3] : [rgb[0] ?? 1];
 }
 
 /**
@@ -85,7 +120,8 @@ export function cogRenderOptions(
 ): RenderOptions {
   const state = rasterState(layer);
   const colormapped = state.mode === "single" || state.mode === "index";
-  const bidx = cogRenderBands(state);
+  const bandCount = layer.metadata?.bandCount;
+  const bidx = cogRenderBands(state, typeof bandCount === "number" ? bandCount : null);
   const options: RenderOptions = { bidx };
   if (state.stretch) options.stretch = state.stretch;
   if (typeof state.gamma === "number" && Number.isFinite(state.gamma)) options.gamma = state.gamma;
@@ -169,12 +205,7 @@ export async function createCogImageryProvider(
   const bounds = source.boundsLonLat;
   const rectangle =
     Array.isArray(bounds) && bounds.length === 4 && bounds.every(Number.isFinite)
-      ? Cesium.Rectangle.fromDegrees(
-          Math.max(-180, bounds[0]),
-          Math.max(-85.05113, bounds[1]),
-          Math.min(180, bounds[2]),
-          Math.min(85.05113, bounds[3]),
-        )
+      ? webMercatorRectangle(Cesium, bounds as [number, number, number, number])
       : undefined;
   const size = 256;
   return new ProtocolImageryProvider(Cesium, {

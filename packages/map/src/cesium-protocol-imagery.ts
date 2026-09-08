@@ -77,6 +77,32 @@ export interface ProtocolImageryOptions {
   maxConcurrentRequests?: number;
 }
 
+/** Web Mercator's latitude limit, in degrees. */
+const MAX_MERCATOR_LATITUDE = 85.05113;
+
+/**
+ * A Cesium `Rectangle` from `[west, south, east, north]` degrees, clamped to
+ * what a Web Mercator tiling scheme can address. Bounds arrive from archive
+ * headers, tiler metadata, and hand-authored projects, any of which can carry
+ * a longitude past ±180 or a latitude past the Mercator limit;
+ * `Rectangle.fromDegrees` would accept the numbers and the provider would then
+ * request tiles that do not exist.
+ */
+export function webMercatorRectangle(
+  Cesium: CesiumNs,
+  bounds: readonly [number, number, number, number],
+): Rectangle {
+  const clampLon = (v: number) => Math.min(180, Math.max(-180, v));
+  const clampLat = (v: number) =>
+    Math.min(MAX_MERCATOR_LATITUDE, Math.max(-MAX_MERCATOR_LATITUDE, v));
+  return Cesium.Rectangle.fromDegrees(
+    clampLon(bounds[0]),
+    clampLat(bounds[1]),
+    clampLon(bounds[2]),
+    clampLat(bounds[3]),
+  );
+}
+
 /**
  * The URL scheme of a tile template that names a custom protocol, or `null`
  * for a plain web (`http`, `https`, `blob`, `data`) or relative URL that
