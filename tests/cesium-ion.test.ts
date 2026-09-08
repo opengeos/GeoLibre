@@ -142,7 +142,8 @@ function makeGlobe() {
         calls.imagery.push(layer);
         return layer;
       },
-      remove: (layer: { provider: unknown }) => calls.imagery.splice(calls.imagery.indexOf(layer), 1),
+      remove: (layer: { provider: unknown }) =>
+        calls.imagery.splice(calls.imagery.indexOf(layer), 1),
       raiseToTop: () => {},
     },
     dataSources: { add: async (ds: unknown) => ds, remove: () => {} },
