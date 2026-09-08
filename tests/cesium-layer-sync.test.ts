@@ -27,6 +27,8 @@ function makeFakes() {
     geojsonLoads: [] as { data: unknown; options: Record<string, unknown> }[],
     tilesetUrls: [] as unknown[],
     cameraListeners: [] as (() => void)[],
+    suspendEventsCount: 0,
+    resumeEventsCount: 0,
   };
 
   const viewer = {
@@ -44,6 +46,10 @@ function makeFakes() {
         remove: (p: unknown) => calls.primitivesRemoved.push(p),
       },
       requestRender: () => {},
+    },
+    dataSourceDisplay: {
+      ready: true,
+      getBoundingSphere: (_entity: unknown, _allowPartial: boolean, _result: unknown): number => 0,
     },
     imageryLayers: {
       addImageryProvider: (provider: unknown) => {
@@ -81,6 +87,15 @@ function makeFakes() {
   const Cesium = {
     GeographicTilingScheme: class {},
     WebMercatorTilingScheme: class {},
+    BoundingSphere: class {
+      center = { x: 0, y: 0, z: 0 };
+      radius = 1;
+    },
+    BoundingSphereState: {
+      DONE: 0,
+      PENDING: 1,
+      FAILED: 2,
+    },
     UrlTemplateImageryProvider: class {
       url?: string;
       constructor(opts: Record<string, unknown>) {
@@ -151,6 +166,12 @@ function makeFakes() {
           kind: "geojson",
           show: true,
           entities: {
+            suspendEvents: () => {
+              calls.suspendEventsCount++;
+            },
+            resumeEvents: () => {
+              calls.resumeEventsCount++;
+            },
             values:
               features.length > 1
                 ? features.map((f, i) => ({
@@ -259,6 +280,37 @@ function mkLayer(over: Partial<GeoLibreLayer>): GeoLibreLayer {
     metadata: {},
     ...over,
   } as GeoLibreLayer;
+}
+
+/** A one-polygon GeoJSON layer, the shape the render-status tests need. */
+function mkPolygonLayer(id: string, name: string): GeoLibreLayer {
+  return mkLayer({
+    id,
+    name,
+    type: "geojson",
+    visible: true,
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    },
+  });
 }
 
 /** A minimal Cesium `Event` stand-in that records its listeners in `bag`. */
@@ -2044,5 +2096,152 @@ describe("CesiumLayerSync", () => {
 
     sync.restoreStoryLayerStyles();
     assert.ok(Math.abs(ds.entities.values[0].polygon.material.color.alpha - 0.4) < 1e-9);
+  });
+
+  it("suspends entity events and styles entities before adding GeoJsonDataSource to viewer", async () => {
+    const sync = newSync(f);
+    let eventsSuspendedAtAdd = false;
+    let materialStyledAtAdd = false;
+    const originalAdd = f.viewer.dataSources.add;
+    f.viewer.dataSources.add = (ds: unknown) => {
+      eventsSuspendedAtAdd = f.calls.suspendEventsCount > 0;
+      const entities = (
+        ds as { entities?: { values?: Array<{ polygon?: { material?: unknown } }> } }
+      )?.entities;
+      materialStyledAtAdd = Boolean(entities?.values?.[0]?.polygon?.material);
+      return originalAdd(ds);
+    };
+
+    const layer = mkLayer({
+      id: "poly-layer",
+      type: "geojson",
+      opacity: 1,
+      style: { fillColor: "#ff0000", fillOpacity: 0.5 },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    assert.equal(eventsSuspendedAtAdd, true, "events must be suspended before adding dataSource");
+    assert.equal(materialStyledAtAdd, true, "entities must be styled before adding dataSource");
+    assert.ok(f.calls.resumeEventsCount >= f.calls.suspendEventsCount, "events must be resumed");
+  });
+
+  it("reports pending in getRenderStatus when polygon entities report BoundingSphereState.PENDING", async () => {
+    const sync = newSync(f);
+    let sphereState = f.Cesium.BoundingSphereState.PENDING;
+    f.viewer.dataSourceDisplay.getBoundingSphere = () => sphereState;
+
+    const layer = mkLayer({
+      id: "pending-polys",
+      name: "Countries",
+      type: "geojson",
+      visible: true,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "Country" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    // While entity bounding sphere is PENDING, getRenderStatus reports the layer as pending
+    const pendingStatus = sync.getRenderStatus();
+    assert.deepEqual(pendingStatus.pending, ["Countries"]);
+
+    // When entity reaches DONE, getRenderStatus reports settled
+    sphereState = f.Cesium.BoundingSphereState.DONE;
+    const settledStatus = sync.getRenderStatus();
+    assert.deepEqual(settledStatus.pending, []);
+  });
+
+  it("reports pending until the data source has actually joined the scene", async () => {
+    const sync = newSync(f);
+    // `getBoundingSphere` answers DONE throughout: the only thing keeping the
+    // layer pending is that `viewer.dataSources.add` has not resolved yet.
+    f.viewer.dataSourceDisplay.getBoundingSphere = () => f.Cesium.BoundingSphereState.DONE;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const originalAdd = f.viewer.dataSources.add;
+    f.viewer.dataSources.add = async (ds: unknown) => {
+      await gate;
+      return originalAdd(ds);
+    };
+
+    sync.sync([mkPolygonLayer("late-add", "Countries")]);
+    await f.flush();
+    assert.deepEqual(
+      sync.getRenderStatus().pending,
+      ["Countries"],
+      "a data source outside viewer.dataSources cannot be reported as settled",
+    );
+
+    release();
+    await f.flush();
+    assert.deepEqual(sync.getRenderStatus().pending, []);
+  });
+
+  it("resumes entity events when the GeoJSON build throws", async () => {
+    const sync = newSync(f);
+    const originalFromCss = f.Cesium.Color.fromCssColorString;
+    f.Cesium.Color.fromCssColorString = (css: string) => {
+      if (css === "#boom") throw new Error("bad colour");
+      return originalFromCss(css);
+    };
+
+    const layer = mkPolygonLayer("throwing", "Broken");
+    sync.sync([
+      { ...layer, style: { ...layer.style, extrusionEnabled: true, extrusionColor: "#boom" } },
+    ]);
+    await f.flush();
+
+    assert.ok(f.calls.suspendEventsCount > 0, "the build must have suspended events");
+    assert.equal(
+      f.calls.resumeEventsCount,
+      f.calls.suspendEventsCount,
+      "a throw must not leave the entity collection suspended",
+    );
+    assert.equal(sync.getRenderStatus().errors.length, 1);
   });
 });

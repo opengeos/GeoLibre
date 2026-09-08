@@ -56,6 +56,7 @@ import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
 import type { Header as PMTilesHeader } from "pmtiles";
 import type {
+  BoundingSphere,
   Cartesian2,
   Cesium3DTileset,
   CesiumWidget,
@@ -154,6 +155,14 @@ const NON_GEOJSON_TYPES = new Set([
 ]);
 
 /**
+ * Cesium's BoundingSphereState enum values (internal runtime enum in `@cesium/engine`,
+ * omitted from public TypeScript typings).
+ * BoundingSphereState.PENDING indicates that asynchronous geometry workers are still
+ * computing the visual representation / bounding volume.
+ */
+const BOUNDING_SPHERE_STATE_PENDING = 1;
+
+/**
  * `metadata.sourceKind` of the ArcGIS layers Cesium has a native provider for.
  * Must stay in sync with `ARCGIS_MAP_SERVICE_SOURCE_KIND` in
  * `packages/plugins/src/plugins/arcgis-layer.ts`, which writes it — `@geolibre/map`
@@ -211,6 +220,13 @@ interface LayerEntry {
   abort?: AbortController;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
+  /**
+   * Whether {@link handle} is actually in the scene. A geojson entry's handle is
+   * assigned as soon as the data source loads, but the data source only joins
+   * `viewer.dataSources` once every entity is built (#2311), so "handle exists"
+   * and "handle renders" are not the same window.
+   */
+  added?: boolean;
   loadError?: string;
   /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
   appliedAlpha?: string;
@@ -942,6 +958,7 @@ export class CesiumLayerSync {
   }
 
   private readonly entries = new Map<string, LayerEntry>();
+  private scratchBoundingSphere?: BoundingSphere;
 
   getRenderStatus(): { pending: string[]; errors: string[] } {
     const pending: string[] = [];
@@ -976,9 +993,48 @@ export class CesiumLayerSync {
         !tilesLoaded(entry.handle as Cesium3DTileset | I3SDataProvider)
       )
         pending.push(layer.name);
-      else if (entry.kind === "geojson" && (entry.handle as DataSource).isLoading)
-        pending.push(layer.name);
-      else if (entry.kind === "imagery" && !(entry.handle as ImageryLayer).ready)
+      else if (entry.kind === "geojson") {
+        const ds = entry.handle as DataSource;
+        // `entry.added` gates the bounding-sphere scan below: until the data
+        // source joins `viewer.dataSources`, `getBoundingSphere` finds no owner
+        // for its entities and answers FAILED rather than PENDING, which would
+        // read as "settled" while the layer is still being built.
+        if (ds.isLoading || !entry.added) {
+          pending.push(layer.name);
+        } else if (this.viewer.dataSourceDisplay) {
+          const display = this.viewer.dataSourceDisplay as {
+            getBoundingSphere?: (
+              entity: unknown,
+              allowPartial: boolean,
+              result: unknown,
+            ) => number | undefined;
+          };
+          if (typeof display.getBoundingSphere === "function") {
+            const cesiumAny = this.Cesium as unknown as {
+              BoundingSphereState?: { PENDING?: number };
+            };
+            const pendingState =
+              cesiumAny.BoundingSphereState?.PENDING ?? BOUNDING_SPHERE_STATE_PENDING;
+            const scratch = (this.scratchBoundingSphere ??= new this.Cesium.BoundingSphere());
+            // Rescanned on every poll rather than memoised per entry: a clamped
+            // polygon re-enters PENDING whenever new terrain tiles arrive, with
+            // no style or filter change to invalidate a cache on, and Cesium's
+            // own `DataSourceDisplay.ready` latches true and never drops back.
+            // A stale "settled" is the #2311 bug; the scan short-circuits on the
+            // first pending entity and only runs while a capture is polling.
+            for (const entity of ds.entities.values) {
+              if (entity.show === false) continue;
+              if (entity.polygon || entity.polyline || entity.corridor || entity.wall) {
+                const state = display.getBoundingSphere(entity, false, scratch);
+                if (state === pendingState) {
+                  pending.push(layer.name);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } else if (entry.kind === "imagery" && !(entry.handle as ImageryLayer).ready)
         pending.push(layer.name);
     }
     return { pending, errors };
@@ -1702,7 +1758,19 @@ export class CesiumLayerSync {
         const options = { rectangle };
 
         provider = await Cesium.SingleTileImageryProvider.fromUrl(resource, options);
-      } else if (layer.type === "wms" && str(layer.source.url)) {
+      } else if (
+        layer.type === "wms" &&
+        str(layer.source.url) &&
+        // On desktop, routeWmsLayerThroughNativeProtocol rewrites `source.tiles`
+        // to a `geolibre-wms://` template but leaves `source.url` as the plain
+        // endpoint buildWmsLayer recorded. Matching on `source.url` alone would
+        // therefore always take this branch and fetch the service straight from
+        // the webview, which is the CORS failure the native fetcher exists to
+        // avoid. Defer to the tile template whenever it names a protocol, so the
+        // layer falls through to the bridge below (nothing between here and it
+        // matches a WMS layer).
+        !protocolScheme(firstTile(layer) ?? "")
+      ) {
         const url = String(layer.source.url);
         const resource = makeResource(url);
         provider = new Cesium.WebMapServiceImageryProvider({
@@ -1910,7 +1978,11 @@ export class CesiumLayerSync {
     // Fold the layer + fill opacity into the fill colour (a GeoJsonDataSource has
     // no global alpha). A later opacity change re-applies this alpha in place
     // (applyGeoJsonStyle) rather than reloading the whole data source.
-    const fillAlpha = (style.fillOpacity ?? 0.6) * layer.opacity;
+    const opacity = this.effectiveOpacity(entry);
+    const fillAlpha = (style.fillOpacity ?? 0.6) * opacity;
+    const extOpacity =
+      (Number.isFinite(style.extrusionOpacity) ? (style.extrusionOpacity as number) : 0.8) *
+      opacity;
 
     const has3dElevation = Boolean(
       style.elevation3dEnabled || geojsonHasZCoordinates(layer.geojson),
@@ -1939,229 +2011,250 @@ export class CesiumLayerSync {
           properties: { ...feature.properties, [indexKey]: index },
         })),
       };
+      // Pre-bake initial alpha into fill, stroke, and marker load options so
+      // entities are created with their final initial materials.
       const dataSource = await Cesium.GeoJsonDataSource.load(data, {
-        stroke,
+        stroke: stroke.withAlpha(opacity),
         strokeWidth: style.strokeWidth ?? 2,
         fill: fill.withAlpha(fillAlpha),
-        markerColor: Cesium.Color.fromCssColorString(style.markerColor ?? "#3b82f6"),
+        markerColor: Cesium.Color.fromCssColorString(style.markerColor ?? "#3b82f6").withAlpha(
+          opacity,
+        ),
         clampToGround,
       });
       if (entry.cancelled) return;
-      await viewer.dataSources.add(dataSource);
-      if (entry.cancelled) {
-        viewer.dataSources.remove(dataSource, true);
-        return;
-      }
-      // A multipart feature arrives as several entities sharing one index; it
-      // gets one label, on its largest part (pickLabelPart), not one per part.
-      // The grouping (and pickLabelPart's geometry math) is skipped outright
-      // when the layer has no labels, so an unlabelled boundary set pays nothing.
-      const labelsEnabled = Boolean({ ...DEFAULT_LAYER_STYLE.labels, ...style.labels }.enabled);
-      const labelEntity = labelsEnabled ? createCesiumLabeler(Cesium, viewer, layer) : null;
-      const parts = new Map<number, Entity[]>();
-      for (const entity of dataSource.entities.values) {
-        const propIndex = entity.properties?.[indexKey];
-        const index =
-          typeof propIndex?.getValue === "function"
-            ? propIndex.getValue(viewer.clock?.currentTime)
-            : propIndex;
-        if (Number.isInteger(index)) {
-          this.featureRefs.set(entity, { layerId: layer.id, index });
-          if (!labelEntity) continue;
-          const group = parts.get(index);
-          if (group) group.push(entity);
-          else parts.set(index, [entity]);
-        }
-      }
-      if (labelEntity)
-        for (const [index, entities] of parts)
-          labelEntity(pickLabelPart(Cesium, viewer, entities), index);
-      // Per-feature symbology (issue #2278): the resolver evaluates the same
-      // expressions the 2D map paints with, and the sprites it needs (marker
-      // shapes per classified colour, the fill pattern tile) are rasterised
-      // once per layer before the first restyle pass bakes them in.
-      const resolver = this.resolverFor(entry);
-      await this.prepareSymbolImages(
-        entry,
-        resolver,
-        resolver.zoomDependent ? this.cameraZoom() : 0,
-      );
-      if (entry.cancelled) return;
-      this.installPointGraphics(entry, dataSource, clampToGround);
-      this.installZoomRange(entry, dataSource);
-      this.installClustering(entry, dataSource);
+
       entry.handle = dataSource;
-      // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
-      // stroke, marker) by the layer opacity right after load, so points/lines
-      // match the 2D map instead of rendering fully opaque.
-      this.applyAppearance(entry);
 
-      const heightRef = (Cesium.HeightReference?.RELATIVE_TO_GROUND ?? 2) as number;
-      const ConstantProperty = (Cesium as { ConstantProperty?: new (v: unknown) => unknown })
-        .ConstantProperty;
-      const ColorMaterialProperty = (
-        Cesium as {
-          ColorMaterialProperty?: new (c: unknown) => unknown;
-        }
-      ).ColorMaterialProperty;
-      const makeProp = (v: unknown) => (ConstantProperty ? new ConstantProperty(v) : v);
-      const makeMat = (c: unknown) =>
-        ColorMaterialProperty ? new ColorMaterialProperty(c) : { color: c };
-      // Cesium flags a polygon whose ring carries Z as perPositionHeight and then
-      // ignores height/heightReference on it (with a one-time console warning),
-      // keeping each vertex's own ellipsoid height. Only flat polygons take the
-      // terrain-relative references.
-      // Highest Z on a polygon feature's rings (0 when none carries a height).
-      const ringTopAltitude = (feature: Feature | null): number => {
-        const geometry = feature?.geometry;
-        const polygons =
-          geometry?.type === "Polygon"
-            ? [geometry.coordinates]
-            : geometry?.type === "MultiPolygon"
-              ? geometry.coordinates
-              : [];
-        let top = Number.NEGATIVE_INFINITY;
-        for (const rings of polygons)
-          for (const ring of rings)
-            for (const position of ring) {
-              const z = position[2];
-              if (typeof z === "number" && Number.isFinite(z) && z > top) top = z;
-            }
-        return Number.isFinite(top) ? top : 0;
-      };
-      const perPositionHeight = (polygon: { perPositionHeight?: unknown }): boolean => {
-        const prop = polygon.perPositionHeight as
-          | { getValue?: (time: unknown) => unknown }
-          | boolean
-          | undefined;
-        return Boolean(
-          typeof prop === "object" && typeof prop.getValue === "function"
-            ? prop.getValue(viewer.clock?.currentTime)
-            : prop,
-        );
-      };
-
-      if (style.extrusionEnabled) {
-        const heightProp = style.extrusionHeightProperty?.trim() || "height";
-        const heightScale = Number.isFinite(style.extrusionHeightScale)
-          ? (style.extrusionHeightScale as number)
-          : 1;
-        const base = Number.isFinite(style.extrusionBase) ? (style.extrusionBase as number) : 0;
-        const extColorStr = style.extrusionColor || style.fillColor || "#3b82f6";
-        const extOpacity =
-          (Number.isFinite(style.extrusionOpacity) ? (style.extrusionOpacity as number) : 0.8) *
-          layer.opacity;
-
-        let heightEvaluator: ((f: Feature) => unknown) | undefined;
-        if (style.extrusionAdvancedStyleEnabled && style.extrusionHeightExpression) {
-          const res = compileFeatureExpression(style.extrusionHeightExpression, {
-            expectedType: "number",
-          });
-          if (res.ok && res.evaluate) heightEvaluator = res.evaluate;
-        }
-
-        let colorEvaluator: ((f: Feature) => unknown) | undefined;
-        if (style.extrusionAdvancedStyleEnabled && style.extrusionColorExpression) {
-          const res = compileFeatureExpression(style.extrusionColorExpression, {
-            expectedType: "color",
-          });
-          if (res.ok && res.evaluate) colorEvaluator = res.evaluate;
-        }
-
-        // Parsed once: a full 3D-buildings layer would otherwise re-parse the
-        // same CSS string per polygon. withAlpha() below returns a fresh Color.
-        const baseColor = Cesium.Color.fromCssColorString(extColorStr);
-        const features = sourceGeoJson.features;
+      // A throw anywhere in the build below must not leave the entity
+      // collection suspended: it would silence every later change event for
+      // this layer, so applyGeoJsonFilter/applyGeoJsonStyle would go on
+      // mutating a collection the visualizers never hear from again.
+      (dataSource.entities as { suspendEvents?: () => void }).suspendEvents?.();
+      try {
+        // A multipart feature arrives as several entities sharing one index; it
+        // gets one label, on its largest part (pickLabelPart), not one per part.
+        // The grouping (and pickLabelPart's geometry math) is skipped outright
+        // when the layer has no labels, so an unlabelled boundary set pays nothing.
+        const labelsEnabled = Boolean({ ...DEFAULT_LAYER_STYLE.labels, ...style.labels }.enabled);
+        const labelEntity = labelsEnabled ? createCesiumLabeler(Cesium, viewer, layer) : null;
+        const parts = new Map<number, Entity[]>();
         for (const entity of dataSource.entities.values) {
-          if (!entity.polygon) continue;
           const propIndex = entity.properties?.[indexKey];
           const index =
             typeof propIndex?.getValue === "function"
               ? propIndex.getValue(viewer.clock?.currentTime)
               : propIndex;
-          const feat = Number.isInteger(index) && features ? features[index] : null;
-
-          let rawHeight: unknown;
-          if (feat && heightEvaluator) {
-            try {
-              rawHeight = heightEvaluator(feat);
-            } catch {
-              rawHeight = feat.properties?.[heightProp];
-            }
-          } else if (feat) {
-            rawHeight = feat.properties?.[heightProp];
-          } else {
-            const prop = entity.properties?.[heightProp];
-            rawHeight =
-              typeof prop?.getValue === "function"
-                ? prop.getValue(viewer.clock?.currentTime)
-                : prop;
+          if (Number.isInteger(index)) {
+            this.featureRefs.set(entity, { layerId: layer.id, index });
+            if (!labelEntity) continue;
+            const group = parts.get(index);
+            if (group) group.push(entity);
+            else parts.set(index, [entity]);
           }
+        }
+        if (labelEntity)
+          for (const [index, entities] of parts)
+            labelEntity(pickLabelPart(Cesium, viewer, entities), index);
+        // Per-feature symbology (issue #2278): the resolver evaluates the same
+        // expressions the 2D map paints with, and the sprites it needs (marker
+        // shapes per classified colour, the fill pattern tile) are rasterised
+        // once per layer before the first restyle pass bakes them in.
+        const resolver = this.resolverFor(entry);
+        await this.prepareSymbolImages(
+          entry,
+          resolver,
+          resolver.zoomDependent ? this.cameraZoom() : 0,
+        );
+        if (entry.cancelled) return;
+        this.installPointGraphics(entry, dataSource, clampToGround);
+        this.installZoomRange(entry, dataSource);
+        this.installClustering(entry, dataSource);
+        // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
+        // stroke, marker) by the layer opacity right after load, so points/lines
+        // match the 2D map instead of rendering fully opaque.
+        this.applyAppearance(entry);
 
-          const num =
-            typeof rawHeight === "number" && Number.isFinite(rawHeight)
-              ? rawHeight
-              : Number(rawHeight);
-          const height = Number.isFinite(num) ? num : 0;
-          // Never below the base: a negative height property or expression would
-          // otherwise put the roof under the floor.
-          const relativeTop = Math.max(base, height * heightScale + base);
-          // With perPositionHeight Cesium takes each vertex's own height as the
-          // base but reads extrudedHeight as an absolute altitude, so lift the
-          // roof by the ring's highest vertex; otherwise it would extrude down
-          // to `relativeTop` metres above the ellipsoid.
-          const extrudedHeight = perPositionHeight(entity.polygon)
-            ? ringTopAltitude(feat) + relativeTop
-            : relativeTop;
-
-          let resolvedColor = baseColor;
-          if (feat && colorEvaluator) {
-            try {
-              const colVal = colorEvaluator(feat);
-              if (typeof colVal === "string") {
-                resolvedColor = Cesium.Color.fromCssColorString(colVal);
-              } else if (
-                colVal &&
-                typeof (colVal as { toString?: () => string }).toString === "function"
-              ) {
-                resolvedColor = Cesium.Color.fromCssColorString(
-                  (colVal as { toString: () => string }).toString(),
-                );
+        const heightRef = (Cesium.HeightReference?.RELATIVE_TO_GROUND ?? 2) as number;
+        const ConstantProperty = (Cesium as { ConstantProperty?: new (v: unknown) => unknown })
+          .ConstantProperty;
+        const ColorMaterialProperty = (
+          Cesium as {
+            ColorMaterialProperty?: new (c: unknown) => unknown;
+          }
+        ).ColorMaterialProperty;
+        const makeProp = (v: unknown) => (ConstantProperty ? new ConstantProperty(v) : v);
+        const makeMat = (c: unknown) =>
+          ColorMaterialProperty ? new ColorMaterialProperty(c) : { color: c };
+        // Cesium flags a polygon whose ring carries Z as perPositionHeight and then
+        // ignores height/heightReference on it (with a one-time console warning),
+        // keeping each vertex's own ellipsoid height. Only flat polygons take the
+        // terrain-relative references.
+        // Highest Z on a polygon feature's rings (0 when none carries a height).
+        const ringTopAltitude = (feature: Feature | null): number => {
+          const geometry = feature?.geometry;
+          const polygons =
+            geometry?.type === "Polygon"
+              ? [geometry.coordinates]
+              : geometry?.type === "MultiPolygon"
+                ? geometry.coordinates
+                : [];
+          let top = Number.NEGATIVE_INFINITY;
+          for (const rings of polygons)
+            for (const ring of rings)
+              for (const position of ring) {
+                const z = position[2];
+                if (typeof z === "number" && Number.isFinite(z) && z > top) top = z;
               }
-            } catch {
-              // fallback to extColorStr
-            }
+          return Number.isFinite(top) ? top : 0;
+        };
+        const perPositionHeight = (polygon: { perPositionHeight?: unknown }): boolean => {
+          const prop = polygon.perPositionHeight as
+            | { getValue?: (time: unknown) => unknown }
+            | boolean
+            | undefined;
+          return Boolean(
+            typeof prop === "object" && typeof prop.getValue === "function"
+              ? prop.getValue(viewer.clock?.currentTime)
+              : prop,
+          );
+        };
+
+        if (style.extrusionEnabled) {
+          const heightProp = style.extrusionHeightProperty?.trim() || "height";
+          const heightScale = Number.isFinite(style.extrusionHeightScale)
+            ? (style.extrusionHeightScale as number)
+            : 1;
+          const base = Number.isFinite(style.extrusionBase) ? (style.extrusionBase as number) : 0;
+          const extColorStr = style.extrusionColor || style.fillColor || "#3b82f6";
+
+          let heightEvaluator: ((f: Feature) => unknown) | undefined;
+          if (style.extrusionAdvancedStyleEnabled && style.extrusionHeightExpression) {
+            const res = compileFeatureExpression(style.extrusionHeightExpression, {
+              expectedType: "number",
+            });
+            if (res.ok && res.evaluate) heightEvaluator = res.evaluate;
           }
 
-          entity.polygon.extrudedHeight = makeProp(extrudedHeight) as never;
-          if (!perPositionHeight(entity.polygon)) {
-            entity.polygon.height = makeProp(base) as never;
-            entity.polygon.heightReference = makeProp(heightRef) as never;
-            entity.polygon.extrudedHeightReference = makeProp(heightRef) as never;
+          let colorEvaluator: ((f: Feature) => unknown) | undefined;
+          if (style.extrusionAdvancedStyleEnabled && style.extrusionColorExpression) {
+            const res = compileFeatureExpression(style.extrusionColorExpression, {
+              expectedType: "color",
+            });
+            if (res.ok && res.evaluate) colorEvaluator = res.evaluate;
           }
-          entity.polygon.material = makeMat(resolvedColor.withAlpha(extOpacity)) as never;
+
+          // Parsed once: a full 3D-buildings layer would otherwise re-parse the
+          // same CSS string per polygon. withAlpha() below returns a fresh Color.
+          const baseColor = Cesium.Color.fromCssColorString(extColorStr);
+          const features = sourceGeoJson.features;
+          for (const entity of dataSource.entities.values) {
+            if (!entity.polygon) continue;
+            const propIndex = entity.properties?.[indexKey];
+            const index =
+              typeof propIndex?.getValue === "function"
+                ? propIndex.getValue(viewer.clock?.currentTime)
+                : propIndex;
+            const feat = Number.isInteger(index) && features ? features[index] : null;
+
+            let rawHeight: unknown;
+            if (feat && heightEvaluator) {
+              try {
+                rawHeight = heightEvaluator(feat);
+              } catch {
+                rawHeight = feat.properties?.[heightProp];
+              }
+            } else if (feat) {
+              rawHeight = feat.properties?.[heightProp];
+            } else {
+              const prop = entity.properties?.[heightProp];
+              rawHeight =
+                typeof prop?.getValue === "function"
+                  ? prop.getValue(viewer.clock?.currentTime)
+                  : prop;
+            }
+
+            const num =
+              typeof rawHeight === "number" && Number.isFinite(rawHeight)
+                ? rawHeight
+                : Number(rawHeight);
+            const height = Number.isFinite(num) ? num : 0;
+
+            // Never below the base: a negative height property or expression would
+            // otherwise put the roof under the floor.
+            const relativeTop = Math.max(base, height * heightScale + base);
+            // With perPositionHeight Cesium takes each vertex's own height as the
+            // base but reads extrudedHeight as an absolute altitude, so lift the
+            // roof by the ring's highest vertex; otherwise it would extrude down
+            // to `relativeTop` metres above the ellipsoid.
+            const extrudedHeight = perPositionHeight(entity.polygon)
+              ? ringTopAltitude(feat) + relativeTop
+              : relativeTop;
+
+            let resolvedColor = baseColor;
+            if (feat && colorEvaluator) {
+              try {
+                const colVal = colorEvaluator(feat);
+                if (typeof colVal === "string") {
+                  resolvedColor = Cesium.Color.fromCssColorString(colVal);
+                } else if (
+                  colVal &&
+                  typeof (colVal as { toString?: () => string }).toString === "function"
+                ) {
+                  resolvedColor = Cesium.Color.fromCssColorString(
+                    (colVal as { toString: () => string }).toString(),
+                  );
+                }
+              } catch {
+                // fallback to extColorStr
+              }
+            }
+
+            entity.polygon.extrudedHeight = makeProp(extrudedHeight) as never;
+            if (!perPositionHeight(entity.polygon)) {
+              entity.polygon.height = makeProp(base) as never;
+              entity.polygon.heightReference = makeProp(heightRef) as never;
+              entity.polygon.extrudedHeightReference = makeProp(heightRef) as never;
+            }
+            entity.polygon.material = makeMat(resolvedColor.withAlpha(extOpacity)) as never;
+          }
         }
-      }
-      // Runs alongside extrusion too: a collection mixing extruded buildings
-      // with Z-carrying points/lines loads unclamped (clampToGround is false
-      // whenever either applies), so those entities still need their
-      // terrain-relative reference; the polygons were handled above.
-      if (has3dElevation) {
-        for (const entity of dataSource.entities.values) {
-          if (entity.polygon && !style.extrusionEnabled && !perPositionHeight(entity.polygon)) {
-            entity.polygon.heightReference = makeProp(heightRef) as never;
-          }
-          if (entity.billboard) {
-            entity.billboard.heightReference = makeProp(heightRef) as never;
-          }
-          if (entity.point) {
-            entity.point.heightReference = makeProp(heightRef) as never;
-          }
-          if (entity.polyline) {
-            (entity.polyline as { clampToGround?: unknown }).clampToGround = makeProp(false);
+        // Runs alongside extrusion too: a collection mixing extruded buildings
+        // with Z-carrying points/lines loads unclamped (clampToGround is false
+        // whenever either applies), so those entities still need their
+        // terrain-relative reference; the polygons were handled above.
+        if (has3dElevation) {
+          for (const entity of dataSource.entities.values) {
+            if (entity.polygon && !style.extrusionEnabled && !perPositionHeight(entity.polygon)) {
+              entity.polygon.heightReference = makeProp(heightRef) as never;
+            }
+            if (entity.billboard) {
+              entity.billboard.heightReference = makeProp(heightRef) as never;
+            }
+            if (entity.point) {
+              entity.point.heightReference = makeProp(heightRef) as never;
+            }
+            if (entity.polyline) {
+              (entity.polyline as { clampToGround?: unknown }).clampToGround = makeProp(false);
+            }
           }
         }
+      } finally {
+        (dataSource.entities as { resumeEvents?: () => void }).resumeEvents?.();
       }
+
+      if (entry.cancelled) return;
+      // Add the data source to the viewer ONLY after all entity properties,
+      // materials, visibilities, and 3D heights are settled. Adding beforehand
+      // causes Cesium's StaticGroundGeometryColorBatch to start building worker
+      // batches that get repeatedly invalidated and rebuilt by subsequent
+      // property mutations, starving polygon compilation (#2311).
+      await viewer.dataSources.add(dataSource);
+      if (entry.cancelled) {
+        viewer.dataSources.remove(dataSource, true);
+        return;
+      }
+      entry.added = true;
 
       this.restoreHighlight();
       this.applyHighlight();
@@ -2410,7 +2503,7 @@ export class CesiumLayerSync {
           out.push({
             feature: isBatchedPointRef(ref) ? (features?.[ref.index] ?? null) : null,
             setShow: (show) => {
-              point.show = show;
+              if (point.show !== show) point.show = show;
             },
           });
         }
@@ -2424,11 +2517,27 @@ export class CesiumLayerSync {
         return {
           feature: Number.isInteger(index) && features ? features[index] : null,
           properties: entity.properties,
+          // A redundant write still marks the entity dirty, so only a real
+          // change is written (#2311).
           setShow: (show) => {
-            entity.show = show;
+            if (entity.show !== show) entity.show = show;
           },
         };
       });
+    };
+
+    // Every `show` write is batched into one definition-change event: writing
+    // them one at a time makes Cesium cancel and rebuild the ground-primitive
+    // batch mid-compile, which starves polygon geometry on a large layer
+    // (#2311). A point batch has no entity collection and needs no suspension.
+    const entities = entry.kind === "points" ? null : (entry.handle as DataSource).entities;
+    const batched = (apply: () => void) => {
+      (entities as { suspendEvents?: () => void } | null)?.suspendEvents?.();
+      try {
+        apply();
+      } finally {
+        (entities as { resumeEvents?: () => void } | null)?.resumeEvents?.();
+      }
     };
 
     let compiled: ReturnType<typeof featureFilter> | null = null;
@@ -2440,9 +2549,13 @@ export class CesiumLayerSync {
       }
     }
     if (!compiled) {
-      for (const target of targets()) target.setShow(true);
+      batched(() => {
+        for (const target of targets()) target.setShow(true);
+      });
       return;
     }
+    // Bound to a const so the null-narrowing survives into the batched closure.
+    const compiledFilter = compiled;
 
     const typeMap: Record<string, 1 | 2 | 3> = {
       Point: 1,
@@ -2453,44 +2566,46 @@ export class CesiumLayerSync {
       MultiPolygon: 3,
     };
 
-    for (const target of targets()) {
-      const feat = target.feature;
-      let properties: Record<string, unknown> = {};
-      let geomType: 0 | 1 | 2 | 3 = 1;
-      let id: unknown = undefined;
+    batched(() => {
+      for (const target of targets()) {
+        const feat = target.feature;
+        let properties: Record<string, unknown> = {};
+        let geomType: 0 | 1 | 2 | 3 = 1;
+        let id: unknown = undefined;
 
-      if (feat) {
-        properties = (feat.properties as Record<string, unknown>) ?? {};
-        geomType = (feat.geometry?.type && typeMap[feat.geometry.type]) ?? 1;
-        id = feat.id;
-      } else if (target.properties) {
-        const propBag = target.properties as Record<string, unknown>;
-        const names = Array.isArray(propBag.propertyNames)
-          ? propBag.propertyNames
-          : Object.keys(propBag);
-        for (const name of names) {
-          if (name === indexKey) continue;
-          const val = propBag[name];
-          properties[name] =
-            typeof (val as { getValue?: (t: unknown) => unknown })?.getValue === "function"
-              ? (val as { getValue: (t: unknown) => unknown }).getValue(currentTime)
-              : val;
+        if (feat) {
+          properties = (feat.properties as Record<string, unknown>) ?? {};
+          geomType = (feat.geometry?.type && typeMap[feat.geometry.type]) ?? 1;
+          id = feat.id;
+        } else if (target.properties) {
+          const propBag = target.properties as Record<string, unknown>;
+          const names = Array.isArray(propBag.propertyNames)
+            ? propBag.propertyNames
+            : Object.keys(propBag);
+          for (const name of names) {
+            if (name === indexKey) continue;
+            const val = propBag[name];
+            properties[name] =
+              typeof (val as { getValue?: (t: unknown) => unknown })?.getValue === "function"
+                ? (val as { getValue: (t: unknown) => unknown }).getValue(currentTime)
+                : val;
+          }
         }
-      }
 
-      let visible = true;
-      try {
-        visible = compiled.filter({ zoom }, {
-          type: geomType,
-          properties,
-          id,
-          geometry: feat?.geometry,
-        } as never);
-      } catch {
-        visible = true;
+        let visible = true;
+        try {
+          visible = compiledFilter.filter({ zoom }, {
+            type: geomType,
+            properties,
+            id,
+            geometry: feat?.geometry,
+          } as never);
+        } catch {
+          visible = true;
+        }
+        target.setShow(visible);
       }
-      target.setShow(visible);
-    }
+    });
   }
 
   /**
@@ -2553,86 +2668,97 @@ export class CesiumLayerSync {
     const labelFill = labelColor.withAlpha(labelColor.alpha * opacity);
     const halo = Cesium.Color.fromCssColorString(labels.haloColor);
     const labelOutline = halo.withAlpha(halo.alpha * opacity);
-    for (const entity of dataSource.entities.values) {
-      const ref = this.featureRefs.get(entity);
-      const feature = ref && features ? features[ref.index] : undefined;
-      const symbol = resolver.resolve(feature, zoom);
-      if (entity.polygon) {
-        if (hasColorExpr) {
-          // ColorMaterialProperty wraps its colour in a ConstantProperty, so
-          // resolve the Property before re-alphaing the per-feature colour.
-          const colorProp = (entity.polygon.material as { color?: unknown } | undefined)?.color as
-            | {
-                getValue?: (time: unknown) => Color | undefined;
-                withAlpha?: (a: number) => Color;
-              }
-            | undefined;
-          const current =
-            typeof colorProp?.getValue === "function" ? colorProp.getValue(currentTime) : colorProp;
-          if (current?.withAlpha) {
+    // Every material/colour write marks its entity dirty; batching the whole
+    // restyle pass into one definition-change event keeps Cesium from
+    // cancelling and rebuilding the ground-primitive batch per entity (#2311).
+    (dataSource.entities as { suspendEvents?: () => void }).suspendEvents?.();
+    try {
+      for (const entity of dataSource.entities.values) {
+        const ref = this.featureRefs.get(entity);
+        const feature = ref && features ? features[ref.index] : undefined;
+        const symbol = resolver.resolve(feature, zoom);
+        if (entity.polygon) {
+          if (hasColorExpr) {
+            // ColorMaterialProperty wraps its colour in a ConstantProperty, so
+            // resolve the Property before re-alphaing the per-feature colour.
+            const colorProp = (entity.polygon.material as { color?: unknown } | undefined)
+              ?.color as
+              | {
+                  getValue?: (time: unknown) => Color | undefined;
+                  withAlpha?: (a: number) => Color;
+                }
+              | undefined;
+            const current =
+              typeof colorProp?.getValue === "function"
+                ? colorProp.getValue(currentTime)
+                : colorProp;
+            if (current?.withAlpha) {
+              entity.polygon.material = new Cesium.ColorMaterialProperty(
+                current.withAlpha(extOpacity),
+              );
+            }
+          } else if (isExtruded) {
+            entity.polygon.material = new Cesium.ColorMaterialProperty(extFill);
+          } else if (pattern && Cesium.ImageMaterialProperty) {
+            entity.polygon.material = new Cesium.ImageMaterialProperty({
+              image: pattern.canvas,
+              repeat: this.patternRepeat(entity),
+              transparent: true,
+              color: Cesium.Color.WHITE.withAlpha(symbol.fillOpacity * opacity),
+            }) as never;
+          } else {
             entity.polygon.material = new Cesium.ColorMaterialProperty(
-              current.withAlpha(extOpacity),
+              colour(symbol.fill, symbol.fillOpacity * opacity),
             );
           }
-        } else if (isExtruded) {
-          entity.polygon.material = new Cesium.ColorMaterialProperty(extFill);
-        } else if (pattern && Cesium.ImageMaterialProperty) {
-          entity.polygon.material = new Cesium.ImageMaterialProperty({
-            image: pattern.canvas,
-            repeat: this.patternRepeat(entity),
-            transparent: true,
-            color: Cesium.Color.WHITE.withAlpha(symbol.fillOpacity * opacity),
-          }) as never;
-        } else {
-          entity.polygon.material = new Cesium.ColorMaterialProperty(
-            colour(symbol.fill, symbol.fillOpacity * opacity),
-          );
-        }
-        // A polygon boundary is a line layer on the 2D map, so it takes the
-        // line colour channel; the outline channel is the circle stroke.
-        entity.polygon.outlineColor = new Cesium.ConstantProperty(
-          colour(symbol.stroke, symbol.strokeOpacity * opacity),
-        ) as never;
-        entity.polygon.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
-      }
-      if (entity.polyline) {
-        const stroke = colour(symbol.stroke, symbol.strokeOpacity * opacity);
-        entity.polyline.material = (
-          arrow
-            ? new (
-                Cesium as {
-                  PolylineArrowMaterialProperty: new (c: Color) => unknown;
-                }
-              ).PolylineArrowMaterialProperty(stroke)
-            : new Cesium.ColorMaterialProperty(stroke)
-        ) as never;
-        entity.polyline.width = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
-      }
-      if (entity.point) {
-        entity.point.pixelSize = new Cesium.ConstantProperty(symbol.radius * 2) as never;
-        entity.point.color = new Cesium.ConstantProperty(
-          colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
-        ) as never;
-        entity.point.outlineColor = new Cesium.ConstantProperty(
-          colour(symbol.outline, symbol.strokeOpacity * opacity),
-        ) as never;
-        entity.point.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
-      }
-      if (entity.billboard) {
-        const sprite =
-          entry.markerImages?.get(symbol.markerColor) ?? entry.markerImages?.get("") ?? null;
-        if (sprite) {
-          entity.billboard.image = new Cesium.ConstantProperty(sprite.canvas) as never;
-          entity.billboard.scale = new Cesium.ConstantProperty(
-            symbol.markerScale / sprite.pixelRatio,
+          // A polygon boundary is a line layer on the 2D map, so it takes the
+          // line colour channel; the outline channel is the circle stroke.
+          entity.polygon.outlineColor = new Cesium.ConstantProperty(
+            colour(symbol.stroke, symbol.strokeOpacity * opacity),
           ) as never;
+          entity.polygon.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
         }
-        entity.billboard.color = new Cesium.ConstantProperty(marker);
+        if (entity.polyline) {
+          const stroke = colour(symbol.stroke, symbol.strokeOpacity * opacity);
+          entity.polyline.material = (
+            arrow
+              ? new (
+                  Cesium as {
+                    PolylineArrowMaterialProperty: new (c: Color) => unknown;
+                  }
+                ).PolylineArrowMaterialProperty(stroke)
+              : new Cesium.ColorMaterialProperty(stroke)
+          ) as never;
+          entity.polyline.width = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
+        }
+        if (entity.point) {
+          entity.point.pixelSize = new Cesium.ConstantProperty(symbol.radius * 2) as never;
+          entity.point.color = new Cesium.ConstantProperty(
+            colour(symbol.pointFill, symbol.pointFillOpacity * opacity),
+          ) as never;
+          entity.point.outlineColor = new Cesium.ConstantProperty(
+            colour(symbol.outline, symbol.strokeOpacity * opacity),
+          ) as never;
+          entity.point.outlineWidth = new Cesium.ConstantProperty(symbol.strokeWidth) as never;
+        }
+        if (entity.billboard) {
+          const sprite =
+            entry.markerImages?.get(symbol.markerColor) ?? entry.markerImages?.get("") ?? null;
+          if (sprite) {
+            entity.billboard.image = new Cesium.ConstantProperty(sprite.canvas) as never;
+            entity.billboard.scale = new Cesium.ConstantProperty(
+              symbol.markerScale / sprite.pixelRatio,
+            ) as never;
+          }
+          entity.billboard.color = new Cesium.ConstantProperty(marker);
+        }
+        if (entity.label) {
+          entity.label.fillColor = new Cesium.ConstantProperty(labelFill);
+          entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
+        }
       }
-      if (entity.label) {
-        entity.label.fillColor = new Cesium.ConstantProperty(labelFill);
-        entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
-      }
+    } finally {
+      (dataSource.entities as { resumeEvents?: () => void }).resumeEvents?.();
     }
     // Cluster bubbles read the appearance when they form, so an in-place
     // restyle (an opacity drag, a story fade) re-clusters to pick it up
@@ -2694,7 +2820,9 @@ export class CesiumLayerSync {
     } else if (entry.kind === "geojson") {
       entry.cluster?.dispose();
       entry.cluster = undefined;
-      this.viewer.dataSources.remove(handle as DataSource, true);
+      // A cancelled entry can hold a data source that never reached the scene;
+      // `remove` would silently no-op on it.
+      if (entry.added) this.viewer.dataSources.remove(handle as DataSource, true);
     } else {
       // A tileset, an I3S provider, a point batch, or a point-cloud collection: all
       // scene primitives.
