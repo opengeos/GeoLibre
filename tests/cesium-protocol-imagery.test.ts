@@ -175,6 +175,22 @@ describe("ProtocolImageryProvider", () => {
     assert.equal(provider.requestImage(0, 0, 0), undefined);
   });
 
+  it("frees the slot when a loader throws synchronously", async () => {
+    const provider = new ProtocolImageryProvider(Cesium, {
+      template: "t://{z}/{x}/{y}",
+      maxConcurrentRequests: 1,
+      // Not `async`, and the type does not require it: a throw here used to
+      // escape before the finally that releases the slot was attached.
+      loadImage: (() => {
+        throw new Error("boom");
+      }) as unknown as (url: string, signal: AbortSignal) => Promise<DecodedTile | null>,
+    });
+    await assert.rejects(provider.requestImage(0, 0, 0)!, /boom/);
+    const second = provider.requestImage(0, 0, 0);
+    assert.ok(second, "the slot is free again");
+    await assert.rejects(second, /boom/);
+  });
+
   it("uses a direct image loader when one is given", async () => {
     const provider = new ProtocolImageryProvider(Cesium, {
       template: "cog://layer/{z}/{x}/{y}",
@@ -868,6 +884,49 @@ describe("review follow-ups", () => {
     await flush();
     await flush();
     assert.equal(opens, 5, "a type transition releases the source");
+    sync.destroy();
+  });
+
+  it("forgets a COG removed while its tiler import was still in flight", async () => {
+    let opens = 0;
+    const tiler: CogTilerModule = {
+      openCog: async () => {
+        opens++;
+        return {
+          boundsLonLat: [0, 0, 1, 1],
+          statistics: async () => ({}),
+          renderTileRGBA: async () => new Uint8Array(256 * 256 * 4),
+        } as never;
+      },
+    };
+    // The tiler import is multiple megabytes in production, so a layer can come
+    // and go before it lands, and the removal's forgetCogSource then runs
+    // against a cache this URL has not reached yet. Pins the outcome rather
+    // than the mechanism: whichever of the deferred forget and the open wins,
+    // the source must not stay cached behind a layer that is gone.
+    let landTiler: (() => void) | null = null;
+    const { viewer } = makeViewer();
+    const sync = new CesiumLayerSync(RoutingCesium, viewer, () => 10, {
+      loadCogTiler: () =>
+        new Promise((resolve) => {
+          landTiler = () => resolve(tiler);
+        }),
+    });
+    const layer = cogLayer({}, { mode: "single", bands: [1], colormap: "gray" });
+    sync.sync([layer]);
+    await flush();
+    sync.sync([]); // removed before the import resolves
+    await flush();
+    landTiler!();
+    await flush();
+    await flush();
+
+    // Whatever the open did behind the removal must not stay cached: adding the
+    // same URL again has to reopen it.
+    sync.sync([layer]);
+    await flush();
+    await flush();
+    assert.equal(opens, 2, "the cancelled open was forgotten, so the URL reopens");
     sync.destroy();
   });
 

@@ -87,6 +87,15 @@ const MAX_MERCATOR_LATITUDE = 85.05113;
  * a longitude past ±180 or a latitude past the Mercator limit;
  * `Rectangle.fromDegrees` would accept the numbers and the provider would then
  * request tiles that do not exist.
+ *
+ * Each edge is clamped on its own, which is what a rectangle crossing the
+ * antimeridian needs: it arrives as `west > east` (e.g. 170 to -170) and stays
+ * that way, the form Cesium's `Rectangle` represents natively (`computeWidth`
+ * adds a turn when `east < west`). What cannot be recovered here is a source
+ * that already flattened such an extent to a plain min/max before handing it
+ * over, which reads as the whole world rather than the strip; that has to be
+ * fixed where the bounds are produced, as `imageBounds` does for a
+ * GroundOverlay's corners in cesium-layer-sync.
  */
 export function webMercatorRectangle(
   Cesium: CesiumNs,
@@ -331,9 +340,22 @@ export class ProtocolImageryProvider implements ImageryProvider {
     this.pending++;
     const url = this.tileUrl(x, y, level);
     const signal = this.abort.signal;
-    const image = this.loadImage
-      ? this.loadImage(url, signal)
-      : this.loadTile(url, signal).then((bytes) => (bytes ? this.decodeTile(bytes) : null));
+    // Every loader here is `async`, so a failure arrives as a rejection and the
+    // `finally` below releases the slot. `TileBytesLoader` does not require
+    // that though, and a synchronous throw would escape before that `finally`
+    // is attached, stranding the slot it just took; `maxConcurrent` of those
+    // and the provider stops granting requests for good. Catching keeps the
+    // loader's invocation synchronous, which the back-pressure accounting and
+    // its test both read.
+    let image: Promise<DecodedTile | null>;
+    try {
+      image = this.loadImage
+        ? this.loadImage(url, signal)
+        : this.loadTile(url, signal).then((bytes) => (bytes ? this.decodeTile(bytes) : null));
+    } catch (error) {
+      this.pending--;
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
     return image
       .then((tile) => {
         signal.throwIfAborted();

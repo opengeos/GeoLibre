@@ -1177,6 +1177,16 @@ export class CesiumLayerSync {
         // provider still owns an abort controller, so tear it down rather than
         // dropping it.
         if (provider instanceof ProtocolImageryProvider) provider.destroy();
+        // Redundant today, and deliberately kept. A removal that races the
+        // (multi-megabyte) tiler import runs forgetCogSource against a cache
+        // this URL has not reached yet, so it only works because that forget is
+        // itself deferred through `this.cogTiler.then(...)` while openCog is
+        // reached synchronously from the earlier-queued continuation here: the
+        // open always lands first and the forget always finds it. Nothing
+        // enforces that ordering, and an await added before openCog in
+        // createCogImageryProvider would silently turn it into a leaked
+        // CogSource, so forget once more where the open has certainly happened.
+        if (isCogLayer(layer)) this.forgetCogSource(entry);
         return;
       }
       // addImageryProvider appends above the base imagery (and earlier store
