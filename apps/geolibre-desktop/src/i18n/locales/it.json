@@ -1443,7 +1443,7 @@
   },
   "printLayout": {
     "title": "Layout di stampa",
-    "description": "Componi una mappa pronta per la stampa con titolo, legenda, barra di scala e freccia del nord, quindi esportala in PNG o PDF.",
+    "description": "Componi una mappa pronta per la stampa con titolo, legenda, barra di scala e freccia del nord, quindi esportala in PNG, PDF o SVG.",
     "preview": "Anteprima",
     "resizeControls": "Ridimensiona il pannello dei controlli",
     "resizeDialog": "Ridimensiona finestra di dialogo",
@@ -1451,6 +1451,7 @@
     "copyToClipboard": "Copia negli appunti",
     "copied": "Copiato",
     "exportPng": "Esporta PNG",
+    "exportSvg": "Esporta SVG",
     "exportPdf": "Esporta PDF",
     "titleLabel": "Titolo",
     "titlePlaceholder": "Titolo della mappa",

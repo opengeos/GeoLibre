@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Diseño de impresión",
-    "description": "Componga un mapa listo para imprimir con título, leyenda, escala gráfica y flecha de norte, y luego expórtelo a PNG o PDF.",
+    "description": "Componga un mapa listo para imprimir con título, leyenda, escala gráfica y flecha de norte, y luego expórtelo a PNG, PDF o SVG.",
     "preview": "Vista previa",
     "resizeControls": "Cambiar el tamaño del panel de controles",
     "resizeDialog": "Cambiar el tamaño del diálogo",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "Copiar al portapapeles",
     "copied": "Copiado",
     "exportPng": "Exportar PNG",
+    "exportSvg": "Exportar SVG",
     "exportPdf": "Exportar PDF",
     "titleLabel": "Título",
     "titlePlaceholder": "Título del mapa",

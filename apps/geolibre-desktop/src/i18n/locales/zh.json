@@ -1395,7 +1395,7 @@
   },
   "printLayout": {
     "title": "打印布局",
-    "description": "使用标题、图例、比例尺和指北针制作可打印的地图，然后导出为 PNG 或 PDF。",
+    "description": "使用标题、图例、比例尺和指北针制作可打印的地图，然后导出为 PNG、PDF 或 SVG。",
     "preview": "预览",
     "resizeControls": "调整控制面板大小",
     "resizeDialog": "调整对话框大小",
@@ -1403,6 +1403,7 @@
     "copyToClipboard": "复制到剪贴板",
     "copied": "已复制",
     "exportPng": "导出 PNG",
+    "exportSvg": "导出 SVG",
     "exportPdf": "导出 PDF",
     "titleLabel": "标题",
     "titlePlaceholder": "地图标题",

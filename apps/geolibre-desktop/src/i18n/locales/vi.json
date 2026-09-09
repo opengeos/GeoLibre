@@ -1395,7 +1395,7 @@
   },
   "printLayout": {
     "title": "Bố cục in",
-    "description": "Soạn bản đồ sẵn sàng để in với tiêu đề, chú giải, thanh tỷ lệ và mũi tên hướng bắc, sau đó xuất bản đồ đó sang PNG hoặc PDF.",
+    "description": "Soạn bản đồ sẵn sàng để in với tiêu đề, chú giải, thanh tỷ lệ và mũi tên hướng bắc, sau đó xuất bản đồ đó sang PNG, PDF hoặc SVG.",
     "preview": "Xem trước",
     "resizeControls": "Thay đổi kích thước bảng điều khiển",
     "resizeDialog": "Thay đổi kích thước hộp thoại",
@@ -1403,6 +1403,7 @@
     "copyToClipboard": "Sao chép vào Clipboard",
     "copied": "Đã sao chép",
     "exportPng": "Xuất PNG",
+    "exportSvg": "Xuất SVG",
     "exportPdf": "Xuất PDF",
     "titleLabel": "Tiêu đề",
     "titlePlaceholder": "Tiêu đề bản đồ",

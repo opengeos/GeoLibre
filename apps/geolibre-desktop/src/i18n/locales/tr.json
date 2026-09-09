@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Yazdırma Düzeni",
-    "description": "Başlık, lejant, ölçek çubuğu ve kuzey oku ile yazdırmaya hazır bir harita oluşturun, ardından PNG veya PDF olarak dışa aktarın.",
+    "description": "Başlık, lejant, ölçek çubuğu ve kuzey oku ile yazdırmaya hazır bir harita oluşturun, ardından PNG, PDF veya SVG olarak dışa aktarın.",
     "preview": "Önizleme",
     "resizeControls": "Denetimler panelini yeniden boyutlandır",
     "resizeDialog": "İletişim kutusunu yeniden boyutlandır",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "Panoya Kopyala",
     "copied": "Kopyalandı",
     "exportPng": "PNG Dışa Aktar",
+    "exportSvg": "SVG Dışa Aktar",
     "exportPdf": "PDF Dışa Aktar",
     "titleLabel": "Başlık",
     "titlePlaceholder": "Harita başlığı",

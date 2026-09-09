@@ -3,9 +3,9 @@
  *
  * Pure, framework-free drawing helpers that compose a captured map image with
  * cartographic furniture (title, legend, scale bar, north arrow, footer) onto a
- * 2D canvas at a paper page size. The same {@link drawLayout} function backs
- * both the on-screen preview (small canvas) and the high-resolution export
- * (PNG / PDF), so the preview is faithful to the output.
+ * 2D canvas at a paper page size. The same {@link drawLayoutContext} commands
+ * back the on-screen preview, high-resolution PNG/PDF, and editable SVG, so
+ * the preview is faithful to the output.
  */
 
 import {
@@ -669,8 +669,16 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const W = canvas.width;
-  const H = canvas.height;
+  drawLayoutContext(ctx, canvas.width, canvas.height, opts);
+}
+
+/** Shared drawing commands for the canvas preview and the SVG export. */
+export function drawLayoutContext(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  opts: LayoutOptions,
+): void {
   // Scale furniture relative to the page's shorter side so output looks the
   // same at any resolution / paper size. The body rectangle and unit come from
   // the shared geometry helper so the on-screen scale matches the export.

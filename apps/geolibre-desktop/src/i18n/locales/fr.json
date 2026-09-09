@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Mise en page d'impression",
-    "description": "Composez une carte prête à imprimer avec un titre, une légende, une échelle et une flèche du nord, puis exportez-la en PNG ou en PDF.",
+    "description": "Composez une carte prête à imprimer avec un titre, une légende, une échelle et une flèche du nord, puis exportez-la en PNG, PDF ou en SVG.",
     "preview": "Aperçu",
     "resizeControls": "Redimensionner le panneau de contrôles",
     "resizeDialog": "Redimensionner la boîte de dialogue",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "Copier dans le presse-papiers",
     "copied": "Copié",
     "exportPng": "Exporter en PNG",
+    "exportSvg": "Exporter en SVG",
     "exportPdf": "Exporter en PDF",
     "titleLabel": "Titre",
     "titlePlaceholder": "Titre de la carte",

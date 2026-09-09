@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Afdruklay-out",
-    "description": "Stel een afdrukklare kaart samen met een titel, legenda, schaalbalk en noordpijl, en exporteer deze vervolgens naar PNG of PDF.",
+    "description": "Stel een afdrukklare kaart samen met een titel, legenda, schaalbalk en noordpijl, en exporteer deze vervolgens naar PNG, PDF of SVG.",
     "preview": "Voorbeeld",
     "resizeControls": "Formaat van bedieningspaneel wijzigen",
     "resizeDialog": "Formaat van dialoogvenster wijzigen",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "Kopiëren naar klembord",
     "copied": "Gekopieerd",
     "exportPng": "PNG exporteren",
+    "exportSvg": "SVG exporteren",
     "exportPdf": "PDF exporteren",
     "titleLabel": "Titel",
     "titlePlaceholder": "Kaarttitel",

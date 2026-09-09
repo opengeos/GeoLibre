@@ -1395,7 +1395,7 @@
   },
   "printLayout": {
     "title": "印刷レイアウト",
-    "description": "タイトル、凡例、縮尺バー、方位記号を含む印刷用地図を作成し、PNGまたはPDFにエクスポートします。",
+    "description": "タイトル、凡例、縮尺バー、方位記号を含む印刷用地図を作成し、PNG、PDFまたはSVGにエクスポートします。",
     "preview": "プレビュー",
     "resizeControls": "コントロールパネルのサイズを変更",
     "resizeDialog": "ダイアログのサイズを変更",
@@ -1403,6 +1403,7 @@
     "copyToClipboard": "クリップボードにコピー",
     "copied": "コピーしました",
     "exportPng": "PNGをエクスポート",
+    "exportSvg": "SVGをエクスポート",
     "exportPdf": "PDFをエクスポート",
     "titleLabel": "タイトル",
     "titlePlaceholder": "地図タイトル",

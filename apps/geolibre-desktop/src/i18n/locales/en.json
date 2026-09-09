@@ -1459,7 +1459,7 @@
   },
   "printLayout": {
     "title": "Print Layout",
-    "description": "Compose a print-ready map with a title, legend, scale bar, and north arrow, then export it to PNG or PDF.",
+    "description": "Compose a print-ready map with a title, legend, scale bar, and north arrow, then export it to PNG, PDF or SVG.",
     "preview": "Preview",
     "resizeControls": "Resize controls panel",
     "resizeDialog": "Resize dialog",
@@ -1467,6 +1467,7 @@
     "copyToClipboard": "Copy to Clipboard",
     "copied": "Copied",
     "exportPng": "Export PNG",
+    "exportSvg": "Export SVG",
     "exportPdf": "Export PDF",
     "titleLabel": "Title",
     "titlePlaceholder": "Map title",
