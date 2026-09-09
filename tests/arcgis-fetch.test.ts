@@ -62,3 +62,53 @@ it("keeps wildcard hosts out of the shared native HTTP capability", () => {
     }
   }
 });
+
+it("rejects unsupported methods, headers, and bodies instead of silently changing the request", async () => {
+  const fetchImpl = createNativeArcGISFetch(async () => {
+    assert.fail("Rust must not be called");
+  });
+  for (const init of [
+    { method: "POST", body: "query" },
+    { headers: { Authorization: "Bearer secret" } },
+    { body: "query" },
+  ]) {
+    await assert.rejects(fetchImpl("https://example.com", init), /only supports GET/);
+  }
+  await assert.rejects(
+    fetchImpl(new Request("https://example.com", { method: "POST", body: "query" })),
+    /only supports GET/,
+  );
+});
+
+for (const abortBeforeReady of [true, false]) {
+  it(`cancels the native request when abort occurs ${abortBeforeReady ? "before" : "after"} registration`, async () => {
+    const { createArcGISRequest } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
+    const controller = new AbortController();
+    const ready = { onmessage: (_: void) => {} };
+    let requestId: unknown;
+    let cancelled: unknown;
+    let rejectFetch!: (error: unknown) => void;
+    const invoke = (async (command: string, args?: Record<string, unknown>) => {
+      if (command === "fetch_arcgis_response") {
+        requestId = args?.requestId;
+        return new Promise((_, reject) => {
+          rejectFetch = reject;
+        });
+      }
+      assert.equal(command, "cancel_arcgis_request");
+      cancelled = args?.requestId;
+      rejectFetch("ArcGIS request cancelled.");
+    }) as Parameters<typeof createArcGISRequest>[0];
+    const fetchImpl = createNativeArcGISFetch(createArcGISRequest(invoke, () => ready));
+    const pending = fetchImpl("https://example.com", { signal: controller.signal });
+    if (!abortBeforeReady) ready.onmessage();
+    controller.abort();
+    if (abortBeforeReady) {
+      assert.equal(cancelled, undefined);
+      ready.onmessage();
+    }
+    await assert.rejects(pending, { name: "AbortError" });
+    assert.equal(cancelled, requestId);
+    assert.equal(typeof cancelled, "string");
+  });
+}

@@ -196,6 +196,7 @@ const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
 #[cfg(not(feature = "mas"))]
 const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
+const MAX_HTTP_REDIRECTS: usize = 10;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
 const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
 /// Ceiling for a caller-supplied `fetch_url_bytes` budget. The default suits a
@@ -357,6 +358,7 @@ pub fn run() {
     let builder = builder
         .manage(pending_project_paths)
         .manage(SelectedImagePaths::default())
+        .manage(arcgis_http::ArcGISRequests::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Runs before persisted-scope's setup hook so legacy photo grants are
@@ -416,6 +418,7 @@ pub fn run() {
             ensure_martin_binary,
             fetch_url_bytes,
             arcgis_http::fetch_arcgis_response,
+            arcgis_http::cancel_arcgis_request,
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
@@ -1099,7 +1102,7 @@ fn ensure_fetchable_url(url: &str) -> Result<(), String> {
 /// and must not be reported as one.
 fn guarded_redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
-        if attempt.previous().len() >= 10 {
+        if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
             return attempt.stop();
         }
         match url_is_fetchable(attempt.url()) {
