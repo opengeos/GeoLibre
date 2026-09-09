@@ -6,9 +6,10 @@ import {
   getRegionalBasemapByStyleUrl,
   isRegionalBasemapSentinel,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
-  type RegionalBasemap,
   scaleAltitudeToActiveBody,
+  styleValue,
   useAppStore,
+  type RegionalBasemap,
 } from "@geolibre/core";
 import type {
   GeoLibreLayer,
@@ -159,12 +160,8 @@ function storyPaintOpacity(
     (nativeId === generatorFillLayerId(layer.id) && prop === "fill-opacity") ||
     (nativeId === generatorCircleLayerId(layer.id) && prop === "circle-opacity");
   if (!isGeneratorFill) return opacity;
-  const generatorOpacity = layer.style.geometryGeneratorOpacity;
-  const factor =
-    typeof generatorOpacity === "number" && Number.isFinite(generatorOpacity)
-      ? Math.min(1, Math.max(0, generatorOpacity))
-      : 1;
-  return opacity * factor;
+  const generatorOpacity = styleValue(layer.style, "geometryGeneratorOpacity");
+  return opacity * Math.min(1, Math.max(0, generatorOpacity));
 }
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
 const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {

@@ -37,13 +37,18 @@ describe("storymap playback helpers", () => {
     assert.equal(storyLayerOpacityFactor({ a: Number.NaN }, "a"), 1);
   });
 
-  it("applyStoryLayerOpacity multiplies the store opacity and keeps identity when untouched", () => {
+  it("applyStoryLayerOpacity replaces the store opacity and keeps identity when untouched", () => {
     const base = layer("a", 0.8);
     assert.equal(applyStoryLayerOpacity(base, {}), base);
     assert.equal(applyStoryLayerOpacity(base, { b: 0 }), base);
+    // Same value as the layer already has: no copy needed.
+    assert.equal(applyStoryLayerOpacity(base, { a: 0.8 }), base);
     const faded = applyStoryLayerOpacity(base, { a: 0.5 });
     assert.notEqual(faded, base);
-    assert.equal(faded.opacity, 0.4);
+    // Absolute, like the MapLibre paint path, not 0.8 x 0.5.
+    assert.equal(faded.opacity, 0.5);
+    // A chapter fading back to 1 also overrides a translucent base opacity.
+    assert.equal(applyStoryLayerOpacity(base, { a: 1 }).opacity, 1);
     // The feature collection is shared, so FeatureCollection-keyed caches hit.
     assert.equal(faded.geojson, base.geojson);
   });
