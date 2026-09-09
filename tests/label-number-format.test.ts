@@ -113,6 +113,24 @@ describe("label number formatting", () => {
     }
   });
 
+  it("keeps non-finite values on the plain-text branch, in step with the JS path", () => {
+    // typeof NaN and typeof Infinity are both "number", so the typeof guard
+    // alone let them into number-format: the map rendered Infinity as U+221E
+    // (a tofu box in the label font) and NaN threw "Could not convert null to
+    // number" out of the render, while formatLabelNumber returned null for
+    // both and the caller fell back to String(value).
+    const style = labels({
+      field: "pop",
+      numberFormatEnabled: true,
+      numberDecimals: 0,
+      numberLocale: "en-US",
+    });
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(formatLabelNumber(value, style), null, String(value));
+      assert.equal(renderTextField(style, value), String(value), `map ${value}`);
+    }
+  });
+
   it("formats nothing in JavaScript when off or the value is not a number", () => {
     const on = labels({ numberFormatEnabled: true, numberDecimals: 1, numberLocale: "en-US" });
     assert.equal(formatLabelNumber(12.5, labels({})), null);

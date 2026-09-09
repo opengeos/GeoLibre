@@ -535,10 +535,16 @@ describe("label sync", () => {
     );
 
     const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    // The guard is finite-number, not merely typeof: NaN and +/-Infinity are
+    // also typeof "number" and must take the plain-text branch.
     assert.deepEqual(label.layout["text-field"], [
       "case",
-      ["==", ["typeof", ["get", "pop"]], "number"],
-      ["number-format", ["round", ["to-number", ["get", "pop"]]], { locale: "en-US" }],
+      [
+        "all",
+        ["==", ["typeof", ["get", "pop"]], "number"],
+        ["<", ["abs", ["to-number", ["get", "pop"], 1e308]], 1e308],
+      ],
+      ["number-format", ["round", ["to-number", ["get", "pop"], 1e308]], { locale: "en-US" }],
       ["to-string", ["coalesce", ["get", "pop"], ""]],
     ]);
   });

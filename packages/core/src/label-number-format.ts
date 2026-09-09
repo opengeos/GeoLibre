@@ -36,6 +36,17 @@ import type { LabelStyle } from "./types";
  */
 export const LABEL_NUMBER_LOCALES = ["en-US", "de-DE", "ru-RU", "hi-IN"] as const;
 
+/**
+ * Magnitude at which the text-field stops treating a value as a finite number.
+ *
+ * JSON carries no `Infinity`, so the expression cannot test against it
+ * directly; this is the largest power of ten a double holds, which doubles as
+ * the `to-number` fallback so an unconvertible value fails the same test. A
+ * real attribute at or above it labels as plain text instead of a formatted
+ * number -- a trade worth making for values already past 1e308.
+ */
+const NON_FINITE_SENTINEL = 1e308;
+
 /** Sample value used to preview a locale's separators in the Style panel. */
 export const LABEL_NUMBER_SAMPLE = 1234567.5;
 
@@ -186,15 +197,30 @@ export function labelFieldTextField(
   // cannot be requested that way — it would silently fall back to the spec
   // default of up to three. Rounding first gives an integer, which then prints
   // with no fraction digits at all.
-  const number =
-    digits > 0 ? ["to-number", ["get", field]] : ["round", ["to-number", ["get", field]]];
+  // `to-number` carries a fallback so it can never throw: MapLibre hands a NaN
+  // property through as null, and an unguarded conversion raised "Could not
+  // convert null to number" from inside the render. The fallback is the same
+  // sentinel the finiteness test rejects, so a value that could not convert
+  // takes the plain-text branch rather than labelling as the fallback itself.
+  const numeric = ["to-number", ["get", field], NON_FINITE_SENTINEL];
+  const number = digits > 0 ? numeric : ["round", numeric];
   if (digits > 0) {
     options["min-fraction-digits"] = digits;
     options["max-fraction-digits"] = digits;
   }
   return [
     "case",
-    ["==", ["typeof", ["get", field]], "number"],
+    [
+      "all",
+      ["==", ["typeof", ["get", field]], "number"],
+      // Finite only, matching formatLabelNumber's Number.isFinite guard.
+      // Without it the map rendered Infinity as U+221E -- a glyph the label
+      // font need not carry, so a tofu box -- while the JavaScript path fell
+      // back to the plain string, which is the disagreement the parity tests
+      // exist to prevent. NaN was worse: it reached the render as null and
+      // threw out of the conversion.
+      ["<", ["abs", numeric], NON_FINITE_SENTINEL],
+    ],
     ["number-format", number, options],
     asText,
   ];
@@ -205,8 +231,9 @@ export function labelFieldTextField(
  * the Style panel can name each choice by the separators it actually produces
  * ("1,234,567.50") instead of by an opaque language tag.
  *
- * Falls back to the raw number if the tag is one `Intl` rejects, which keeps a
- * hand-edited project from throwing inside a render.
+ * A tag `Intl` rejects (or one the map cannot draw) falls back to the runtime
+ * locale's formatting rather than to an unformatted number, matching what
+ * {@link formatLabelNumber} and the emitted expression do with the same tag.
  */
 export function formatLabelNumberSample(locale: string, decimals: number): string {
   return labelNumberFormatter(resolveLabelNumberLocale(locale), decimals).format(
