@@ -6,6 +6,18 @@ import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson
 import type * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
+let arcGISFetchOverride: typeof globalThis.fetch | null = null;
+
+/** Install the desktop HTTP transport for ArcGIS REST requests; null restores browser fetch. */
+export function setArcGISFetch(fetchImpl: typeof globalThis.fetch | null): void {
+  arcGISFetchOverride = fetchImpl;
+}
+
+/** Resolve at request time so restored layers and refreshes use the installed transport. */
+function arcGISFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return (arcGISFetchOverride ?? globalThis.fetch)(input, init);
+}
+
 export type ArcGISLayerType = "feature" | "vector-tile" | "map-service" | "image-service";
 export type ArcGISSourceType = "url" | "portal-item";
 
@@ -1517,7 +1529,7 @@ async function fetchArcGISFeatureCount(
   params: Record<string, string | undefined>,
 ): Promise<number | null> {
   try {
-    const response = await fetch(
+    const response = await arcGISFetch(
       appendArcGISParams(queryUrl, {
         ...params,
         f: "json",
@@ -1664,7 +1676,7 @@ async function fetchArcGISObjectIds(
   plan: ArcGISPagingPlan,
 ): Promise<{ field: string; objectIds: number[] } | null> {
   try {
-    const response = await fetch(
+    const response = await arcGISFetch(
       appendArcGISParams(plan.queryUrl, {
         ...plan.params,
         f: "json",
@@ -1808,7 +1820,7 @@ async function fetchArcGISGeoJson(
   url: string,
   signal?: AbortSignal,
 ): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
-  const response = await fetch(url, { signal });
+  const response = await arcGISFetch(url, { signal });
   if (!response.ok) {
     throw new ArcGISQueryError(`ArcGIS feature query failed with ${response.status}.`, {
       status: response.status,
@@ -2081,7 +2093,7 @@ async function fetchArcGISPortalItemInfo(
     f: "json",
     token: options.token?.trim(),
   });
-  const response = await fetch(itemUrl);
+  const response = await arcGISFetch(itemUrl);
   if (!response.ok) {
     throw new Error(`ArcGIS portal item request failed with ${response.status}.`, {
       cause,
@@ -2096,7 +2108,7 @@ async function fetchArcGISJson<T>(
   cause: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(
+  const response = await arcGISFetch(
     appendArcGISParams(url, {
       f: "json",
       token: options.token?.trim(),

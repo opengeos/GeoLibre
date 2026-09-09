@@ -4,6 +4,7 @@ import { useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   addArcGISLayer,
+  setArcGISFetch,
   refreshArcGISFeatureLayer,
   reloadArcGISViewportLayer,
   restoreArcGISViewportLayers,
@@ -247,8 +248,42 @@ describe("addArcGISLayer (feature layer)", () => {
   });
 
   afterEach(() => {
+    setArcGISFetch(null);
     globalThis.fetch = originalFetch;
   });
+
+  for (const supportsPagination of [true, false]) {
+    it(`uses the installed transport for metadata, counts, paging, and refresh (pagination=${supportsPagination})`, async () => {
+      const service = fakeArcGISService({ total: 5, maxRecordCount: 2, supportsPagination });
+      const urls: string[] = [];
+      globalThis.fetch = async () => {
+        throw new TypeError("Browser fetch blocked by CORS");
+      };
+      setArcGISFetch(async (input, init) => {
+        urls.push(String(input));
+        return service.fetch(input, init);
+      });
+      const id = await addArcGISLayer(app, {
+        layerType: "feature",
+        sourceType: "url",
+        url: SERVICE_URL,
+        name: "Native cities",
+      });
+      const layer = useAppStore.getState().layers.find((entry) => entry.id === id)!;
+      assert.equal(layer.geojson?.features.length, 5);
+      assert.ok(urls.some((url) => url.includes("returnCountOnly=true")));
+      if (!supportsPagination) assert.ok(urls.some((url) => url.includes("returnIdsOnly=true")));
+      const refreshed = await refreshArcGISFeatureLayer({
+        queryUrl: String(layer.source.arcgisQueryUrl),
+      });
+      assert.equal(refreshed.features.length, 5);
+      setArcGISFetch(null);
+      await assert.rejects(
+        refreshArcGISFeatureLayer({ queryUrl: String(layer.source.arcgisQueryUrl) }),
+        /Browser fetch blocked/,
+      );
+    });
+  }
 
   it("loads a feature layer as a GeoJSON layer with its attributes intact", async () => {
     const id = await addArcGISLayer(app, {

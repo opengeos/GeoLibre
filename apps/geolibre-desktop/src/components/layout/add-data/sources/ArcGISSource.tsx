@@ -15,6 +15,7 @@ import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
+import { serviceRequestErrorMessage } from "../helpers";
 import { DEFAULT_ARCGIS_URLS } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldString, type ServiceFields } from "../service-library";
@@ -267,6 +268,10 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         sublayers: arcgisSublayers.trim() || undefined,
         token: arcgisAccessToken.trim() || undefined,
         url: arcgisUrl.trim() || undefined,
+      });
+    } catch (error) {
+      throw new Error(serviceRequestErrorMessage(error, t, t("addData.shared.addError")), {
+        cause: error,
       });
     } finally {
       setProgress(null);

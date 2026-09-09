@@ -74,6 +74,7 @@ export {
 } from "./plugins/maplibre-basemap-control";
 export {
   addArcGISLayer,
+  setArcGISFetch,
   fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
   ARCGIS_FEATURE_SOURCE_KIND,
