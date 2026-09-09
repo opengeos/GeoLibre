@@ -70,7 +70,7 @@
     "maplibre-gl-raster": "^0.14.11",
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.7.0",
-    "maplibre-gl-swipe": "^0.11.2",
+    "maplibre-gl-swipe": "^0.11.3",
     "maplibre-gl-time-slider": "^1.8.7",
     "maplibre-gl-usgs-lidar": "^0.11.5",
     "maplibre-gl-vector": "^0.11.0",
