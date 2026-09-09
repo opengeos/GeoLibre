@@ -1,3 +1,4 @@
+mod arcgis_http;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -414,6 +415,7 @@ pub fn run() {
             native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,
             fetch_url_bytes,
+            arcgis_http::fetch_arcgis_response,
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
@@ -1312,12 +1314,18 @@ fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
 }
 
 fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
+    build_guarded_http_client_with_redirects(guarded_redirect_policy())
+}
+
+fn build_guarded_http_client_with_redirects(
+    redirects: reqwest::redirect::Policy,
+) -> Result<reqwest::blocking::Client, String> {
     // The SSRF guard (GuardedDnsResolver + redirect re-validation) is applied
     // here, independent of the TLS backend chosen below, so it holds on both the
     // rustls and native-tls paths.
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .redirect(guarded_redirect_policy())
+        .redirect(redirects)
         .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
         .user_agent("GeoLibre Desktop");
 

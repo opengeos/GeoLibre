@@ -38,7 +38,7 @@
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
     {
-      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The sidecar adapter routes only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, and GeoLens use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. ArcGIS REST services and portals are user-selected HTTP(S) URLs, including custom reverse-proxy paths, so their native downloads require the wildcard entries. GeoLens custom/self-hosted services still use browser fetch.",
+      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The loopback scope is only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, and GeoLens use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. Any custom/self-hosted service falls back to browser fetch.",
       "identifier": "http:default",
       "allow": [
         { "url": "http://127.0.0.1:8765/*" },
@@ -49,9 +49,7 @@
         { "url": "https://maps.googleapis.com/*" },
         { "url": "https://www.cartociudad.es/*" },
         { "url": "https://share.geolibre.app/*" },
-        { "url": "https://datasets.geolibre.app/*" },
-        { "url": "http://*/*" },
-        { "url": "https://*/*" }
+        { "url": "https://datasets.geolibre.app/*" }
       ]
     }
   ]

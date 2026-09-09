@@ -89,11 +89,8 @@ const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
 let nativeArcGISFetchReady: Promise<void> = Promise.resolve();
 let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
-// In the desktop build, route geocoding (place search / reverse geocode)
-// through Tauri's native HTTP client so it bypasses WebView CORS: public
-// Nominatim's CDN intermittently omits the CORS header on cached responses,
-// which the WebView rejects as "Search failed. Try again." Lazy + desktop-only
-// so the web/embedded bundles never import the Tauri HTTP plugin.
+// Install desktop-only transports before requests can be issued. ArcGIS uses
+// a dedicated guarded Rust command; the other adapters use scoped HTTP hosts.
 if (isTauri()) {
   nativeArcGISFetchReady = import("./lib/arcgis-fetch")
     .then(({ installNativeArcGISFetch }) => installNativeArcGISFetch())

@@ -1,42 +1,64 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { it } from "node:test";
 import { createNativeArcGISFetch } from "../apps/geolibre-desktop/src/lib/arcgis-fetch";
 
-it("rejects token-bearing HTTP requests before calling native HTTP", async () => {
-  let called = false;
-  const fetchImpl = createNativeArcGISFetch(async () => {
-    called = true;
-    return new Response();
+it("preserves ArcGIS HTTP errors and bodies for retry and service-error handling", async () => {
+  const fetchImpl = createNativeArcGISFetch(async (url) => {
+    assert.equal(url, "https://example.com/FeatureServer/0");
+    return { status: 503, body: '{"error":{"message":"Busy"}}' };
   });
-  await assert.rejects(
-    fetchImpl("http://example.com/FeatureServer/0?token=secret"),
-    /tokens require HTTPS/,
-  );
-  assert.equal(called, false);
+  const response = await fetchImpl("https://example.com/FeatureServer/0");
+  assert.equal(response.ok, false);
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.message, "Busy");
 });
 
-it("disables native redirects for authenticated requests and preserves cancellation", async () => {
+it("cancels a pending native request and ignores a later rejection", async () => {
   const controller = new AbortController();
-  const fetchImpl = createNativeArcGISFetch(async (input, init) => {
-    assert.equal(String(input), "https://example.com/FeatureServer/0?token=secret");
-    assert.equal(init?.maxRedirections, 0);
-    assert.equal(init?.signal, controller.signal);
-    return new Response(null, {
-      status: 302,
-      headers: { Location: "http://example.com/FeatureServer/0?token=secret" },
-    });
-  });
-  const response = await fetchImpl("https://example.com/FeatureServer/0?token=secret", {
-    signal: controller.signal,
-  });
-  assert.equal(response.status, 302);
+  let rejectNative!: (error: Error) => void;
+  const fetchImpl = createNativeArcGISFetch(
+    () =>
+      new Promise((_, reject) => {
+        rejectNative = reject;
+      }),
+  );
+  const pending = fetchImpl("https://example.com/FeatureServer/0", { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  rejectNative(new Error("Late native failure"));
 });
 
-it("retains unauthenticated HTTP service support", async () => {
-  const fetchImpl = createNativeArcGISFetch(async (input, init) => {
-    assert.equal(String(input), "http://example.com/FeatureServer/0");
-    assert.equal(init?.maxRedirections, undefined);
-    return new Response("{}");
+it("does not invoke Rust for a pre-aborted request", async () => {
+  const fetchImpl = createNativeArcGISFetch(async () => {
+    assert.fail("Native request must not start");
   });
-  assert.equal((await fetchImpl("http://example.com/FeatureServer/0")).status, 200);
+  await assert.rejects(fetchImpl("https://example.com", { signal: AbortSignal.abort() }), {
+    name: "AbortError",
+  });
+});
+
+it("normalizes IPC string errors", async () => {
+  const fetchImpl = createNativeArcGISFetch(async () => {
+    throw "Blocked address";
+  });
+  await assert.rejects(fetchImpl("https://example.com"), /Blocked address/);
+});
+
+it("keeps wildcard hosts out of the shared native HTTP capability", () => {
+  const capability = JSON.parse(
+    readFileSync(
+      new URL("../apps/geolibre-desktop/src-tauri/capabilities/default.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  for (const permission of capability.permissions) {
+    if (permission.identifier === "http:default") {
+      assert.ok(
+        permission.allow.every(
+          (entry: { url: string }) => !new URL(entry.url).hostname.includes("*"),
+        ),
+      );
+    }
+  }
 });
