@@ -3060,10 +3060,16 @@ export function DesktopShell({
       ) : null}
       <div className="pointer-events-none absolute left-1/2 top-14 z-50 flex w-max max-w-[min(90vw,32rem)] -translate-x-1/2 flex-col gap-2">
         {projectUrlLoadState?.error ? (
-          <UrlLoadErrorBanner key={projectUrlLoadState.error} message={projectUrlLoadState.error} />
+          <UrlLoadErrorBanner
+            key={`project:${projectUrlLoadState.error}`}
+            message={projectUrlLoadState.error}
+          />
         ) : null}
         {dataUrlLoadState?.error ? (
-          <UrlLoadErrorBanner key={dataUrlLoadState.error} message={dataUrlLoadState.error} />
+          <UrlLoadErrorBanner
+            key={`data:${dataUrlLoadState.error}`}
+            message={dataUrlLoadState.error}
+          />
         ) : null}
       </div>
       {crsWarning ? (
