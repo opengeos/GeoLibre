@@ -68,6 +68,7 @@ import {
 import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
+import { UrlLoadErrorBanner } from "./UrlLoadErrorBanner";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import { CommentMapOverlay } from "../comments/CommentMapOverlay";
 import { useCommentTool } from "../comments/useCommentTool";
@@ -3057,26 +3058,14 @@ export function DesktopShell({
           </div>
         </div>
       ) : null}
-      {projectUrlLoadState?.error ? (
-        <div
-          aria-live="assertive"
-          className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
-        >
-          {projectUrlLoadState.error}
-        </div>
-      ) : null}
-      {dataUrlLoadState?.error ? (
-        // A link can carry both `url=` and `data=`, and both loaders can fail.
-        // Drop below the project banner so neither message is covered.
-        <div
-          aria-live="assertive"
-          className={`pointer-events-none absolute left-1/2 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg ${
-            projectUrlLoadState?.error ? "top-28" : "top-14"
-          }`}
-        >
-          {dataUrlLoadState.error}
-        </div>
-      ) : null}
+      <div className="pointer-events-none absolute left-1/2 top-14 z-50 flex w-max max-w-[min(90vw,32rem)] -translate-x-1/2 flex-col gap-2">
+        {projectUrlLoadState?.error ? (
+          <UrlLoadErrorBanner key={projectUrlLoadState.error} message={projectUrlLoadState.error} />
+        ) : null}
+        {dataUrlLoadState?.error ? (
+          <UrlLoadErrorBanner key={dataUrlLoadState.error} message={dataUrlLoadState.error} />
+        ) : null}
+      </div>
       {crsWarning ? (
         <div
           data-testid="crs-warning"
