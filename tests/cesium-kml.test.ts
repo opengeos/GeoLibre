@@ -127,10 +127,15 @@ it("native opacity retains time-varying colors and styles refreshed entities", (
     (time) => (time!.secondsOfDay < 100 ? C.Color.RED : C.Color.BLUE),
     false,
   );
-  const entity = ds.entities.add({ point: { color: original } });
+  const entity = ds.entities.add({
+    point: { color: original },
+    label: { text: "Landmark", fillColor: C.Color.YELLOW },
+  });
   const time = new C.JulianDate(2451545, 0);
   assert.equal(entity.point!.color!.getValue(time).red, 1);
   assert.equal(entity.point!.color!.getValue(time).alpha, 0.5);
+  assert.equal(entity.label!.fillColor!.getValue(time).alpha, 0.5);
+  assert.equal(entity.label!.fillColor!.getValue(time).red, 1);
   time.secondsOfDay = 200;
   assert.equal(entity.point!.color!.getValue(time).blue, 1);
   alpha = 1;

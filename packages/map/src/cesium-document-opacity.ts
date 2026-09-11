@@ -24,9 +24,11 @@ export function bindDocumentOpacity(
     values[key] = property;
   };
   const apply = (entity: Entity) => {
-    for (const graphic of [entity.billboard, entity.point, entity.label, entity.model]) {
+    for (const graphic of [entity.billboard, entity.point, entity.model]) {
       wrap(graphic, "color", C.Color.WHITE);
     }
+    wrap(entity.label, "fillColor", C.Color.WHITE);
+    wrap(entity.label, "backgroundColor", new C.Color(0.165, 0.165, 0.165, 0.8));
     for (const graphic of [
       entity.point,
       entity.label,

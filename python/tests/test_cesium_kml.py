@@ -4,13 +4,16 @@ import json
 
 import pytest
 
+import geolibre.geolibre as gmod
 from geolibre import Map, project
 
 
 @pytest.mark.parametrize(
     "data", ["<kml><Document/></kml>", "data:application/vnd.google-earth.kmz;base64,UEs="]
 )
-def test_native_kml_roundtrip(data):
+def test_native_kml_roundtrip(data, monkeypatch):
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
     m = Map()
     layer_id = m.add_cesium_kml(data=data, source_path="landmarks.kmz")
     layer = json.loads(json.dumps(m.to_project()))["layers"][-1]
