@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { useAppStore } from "@geolibre/core";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+import { Event as CesiumEvent } from "@cesium/engine";
 import {
   CesiumControlHost,
   getPrimaryCesiumControlHost,
@@ -355,10 +356,13 @@ describe("CesiumControlHost", () => {
     assert.throws(() => facade.setLayoutProperty(), /setLayoutProperty is not supported/);
     assert.throws(() => facade.getStyle(), /getStyle is not supported/);
 
-    // Source management works
-    facade.addSource("test-src", { type: "geojson" });
-    assert.deepEqual(facade.getSource("test-src"), { type: "geojson" });
-    facade.removeSource("test-src");
+    // Source mutations must not report success without rendering anything.
+    assert.throws(
+      () => facade.addSource("test-src", { type: "geojson" }),
+      /addSource is not supported/,
+    );
+    assert.throws(() => facade.removeSource("test-src"), /removeSource is not supported/);
+    assert.throws(() => facade.removeLayer("test-layer"), /removeLayer is not supported/);
     assert.equal(facade.getSource("test-src"), undefined);
 
     host.destroy();
@@ -376,6 +380,47 @@ describe("CesiumControlHost", () => {
     });
     return facade;
   }
+
+  it("forwards camera events and detaches every subscription on destroy", () => {
+    const camera = Object.assign(viewer.camera, {
+      moveStart: new CesiumEvent(),
+      changed: new CesiumEvent(),
+      moveEnd: new CesiumEvent(),
+    });
+    const host = new CesiumControlHost(viewer as never, parent);
+    const facade = facadeOf(host);
+    const events: string[] = [];
+    for (const name of ["movestart", "move", "moveend"]) facade.on(name, () => events.push(name));
+    camera.moveStart.raiseEvent();
+    camera.changed.raiseEvent();
+    camera.moveEnd.raiseEvent();
+    assert.deepEqual(events, ["movestart", "move", "moveend"]);
+    host.destroy();
+    assert.equal(camera.moveStart.numberOfListeners, 0);
+    assert.equal(camera.changed.numberOfListeners, 0);
+    assert.equal(camera.moveEnd.numberOfListeners, 0);
+  });
+
+  it("forwards geographic pointer events and stops forwarding after destruction", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    parent.appendChild(sceneViewer.canvas);
+    sceneViewer.canvas.getBoundingClientRect = () => ({ left: 10, top: 20 }) as DOMRect;
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const facade = facadeOf(host);
+    assert.equal(facade.getContainer(), parent);
+    const clicks: any[] = [];
+    facade.on("click", (event: unknown) => clicks.push(event));
+    const event = new doc.defaultView!.Event("click");
+    Object.assign(event, { clientX: 110, clientY: 220 });
+    sceneViewer.canvas.dispatchEvent(event);
+    assert.equal(clicks.length, 1);
+    assert.deepEqual([clicks[0].point.x, clicks[0].point.y], [100, 200]);
+    assert.ok(Math.abs(clicks[0].lngLat.lng - 12.5) < 1e-9);
+    assert.equal(clicks[0].originalEvent, event);
+    host.destroy();
+    sceneViewer.canvas.dispatchEvent(event);
+    assert.equal(clicks.length, 1);
+  });
 
   it("projects and unprojects through the Cesium scene", () => {
     const sceneViewer = makeSceneViewer(doc);

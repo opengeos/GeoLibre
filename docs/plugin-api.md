@@ -1164,7 +1164,11 @@ over its canvas — so the scoped CSS in `index.css` keeps applying — and hand
 `Map`. The facade answers:
 
 - `getContainer`, `getCanvas`, `isStyleLoaded`, and the `Evented` methods
-  (`on` / `off` / `once` / `fire`).
+  (`on` / `off` / `once` / `fire`). `getContainer` returns the sized canvas
+  parent so controls can anchor their panels. Camera `movestart`, `move`, and
+  `moveend`, canvas `resize`, and geographic mouse events reach subscriptions;
+  pointer events over space are omitted because they have no ground location.
+  The host removes these subscriptions when the globe is destroyed.
 - `getCenter`, `getZoom`, `getBearing`, `getPitch` from the store's map view,
   and `jumpTo` / `flyTo` / `easeTo` by writing it back.
 - `project`, `unproject`, and `getBounds` from the live scene: a coordinate is
@@ -1176,9 +1180,9 @@ over its canvas — so the scoped CSS in `index.css` keeps applying — and hand
   shapes MapLibre's globe projection answers with, so a control keeps running
   instead of throwing mid-render.
 - `setStyle(url)`, routed to the project basemap.
-- `addSource` / `getSource` / `removeSource`, kept in a map on the facade.
 
-Everything that paints through the Mapbox Style Spec — `addLayer`,
+Everything that paints through the Mapbox Style Spec, including `addSource`,
+`removeSource`, `addLayer`, `removeLayer`,
 `setPaintProperty`, `setLayoutProperty`, `getStyle` — **throws**. That is the
 honest boundary: a control that draws its own map layers has no globe
 representation, and a silent no-op would leave it reporting success while

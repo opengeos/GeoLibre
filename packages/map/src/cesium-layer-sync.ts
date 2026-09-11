@@ -1138,15 +1138,20 @@ export class CesiumLayerSync {
    */
   private cogTiler: Promise<ReturnType<typeof cachingCogTiler>> | null = null;
   private loadCogTiler(): Promise<ReturnType<typeof cachingCogTiler>> {
-    this.cogTiler ??= (this.deps.loadCogTiler ?? (() => import("cog-tiler-wasm")))().then(
-      cachingCogTiler,
-      (error) => {
-        // A failed module load must not poison every later COG for the life
-        // of the globe; the next COG layer retries the import.
-        this.cogTiler = null;
-        throw error;
-      },
-    );
+    this.cogTiler ??= (
+      this.deps.loadCogTiler ??
+      (async () => {
+        const module = await import("cog-tiler-wasm");
+        const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
+        module.configureLercDecoder({ wasmUrl });
+        return module;
+      })
+    )().then(cachingCogTiler, (error) => {
+      // A failed module load must not poison every later COG for the life
+      // of the globe; the next COG layer retries the import.
+      this.cogTiler = null;
+      throw error;
+    });
     return this.cogTiler;
   }
 

@@ -17,8 +17,8 @@ type CesiumNs = typeof import("@cesium/engine");
 const OFF_SCREEN_PX = -1e6;
 
 class CesiumMapFacade extends maplibregl.Evented {
-  private sources = new Map<string, any>();
-  private layers = new Map<string, any>();
+  private cleanups: Array<() => void> = [];
+  private disposed = false;
 
   constructor(
     private host: CesiumControlHost,
@@ -26,10 +26,57 @@ class CesiumMapFacade extends maplibregl.Evented {
     private Cesium: CesiumNs | null,
   ) {
     super();
+    for (const [event, name] of [
+      [viewer.camera.moveStart, "movestart"],
+      [viewer.camera.changed, "move"],
+      [viewer.camera.moveEnd, "moveend"],
+    ] as const) {
+      if (event) this.cleanups.push(event.addEventListener(() => this.fire(name)));
+    }
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => this.fire("resize"));
+      observer.observe(viewer.canvas);
+      this.cleanups.push(() => observer.disconnect());
+    }
+    for (const name of [
+      "click",
+      "dblclick",
+      "mousemove",
+      "mousedown",
+      "mouseup",
+      "contextmenu",
+    ] as const) {
+      const listener = (originalEvent: MouseEvent) => {
+        const C = this.Cesium;
+        if (!C || !this.scene()) return;
+        const rect = viewer.canvas.getBoundingClientRect();
+        const point = new maplibregl.Point(
+          originalEvent.clientX - rect.left,
+          originalEvent.clientY - rect.top,
+        );
+        const hit = pickGlobeHit(C, viewer, point);
+        // A click on space has no geographic location. Do not fabricate the
+        // view centre for a control that may place a marker or start a query.
+        if (!hit) return;
+        const position = viewer.scene.globe.ellipsoid.cartesianToCartographic(hit.position);
+        const lngLat = new maplibregl.LngLat(
+          C.Math.toDegrees(position.longitude),
+          C.Math.toDegrees(position.latitude),
+        );
+        this.fire(new maplibregl.Event(name, { point, lngLat, originalEvent }));
+      };
+      viewer.canvas.addEventListener(name, listener);
+      this.cleanups.push(() => viewer.canvas.removeEventListener(name, listener));
+    }
   }
 
   getContainer() {
-    return this.host.getContainer();
+    return this.viewer.canvas.parentElement ?? this.host.getContainer();
+  }
+
+  dispose() {
+    this.disposed = true;
+    for (const cleanup of this.cleanups.splice(0)) cleanup();
   }
 
   getCanvas() {
@@ -51,7 +98,7 @@ class CesiumMapFacade extends maplibregl.Evented {
       // controls wait for it before finishing a basemap swap (they would hang
       // otherwise); it does not promise the pixels have changed.
       setTimeout(() => {
-        this.fire(new maplibregl.Event("style.load"));
+        if (!this.disposed) this.fire(new maplibregl.Event("style.load"));
       }, 0);
     } else {
       throw new Error("CesiumControlHost: setStyle with an object is not supported.");
@@ -85,17 +132,15 @@ class CesiumMapFacade extends maplibregl.Evented {
   }
 
   addSource(id: string, source: any) {
-    this.sources.set(id, source);
-    return this;
+    throw new Error("CesiumControlHost: addSource is not supported on the globe.");
   }
 
   getSource(id: string) {
-    return this.sources.get(id);
+    return undefined;
   }
 
   removeSource(id: string) {
-    this.sources.delete(id);
-    return this;
+    throw new Error("CesiumControlHost: removeSource is not supported on the globe.");
   }
 
   addLayer(layer: any, beforeId?: string) {
@@ -103,8 +148,7 @@ class CesiumMapFacade extends maplibregl.Evented {
   }
 
   removeLayer(id: string) {
-    this.layers.delete(id);
-    return this;
+    throw new Error("CesiumControlHost: removeLayer is not supported on the globe.");
   }
 
   /**
@@ -257,6 +301,7 @@ export class CesiumControlHost {
   }
 
   destroy() {
+    this.facade.dispose();
     for (const control of Array.from(this.controls.keys())) {
       this.removeControl(control);
     }
