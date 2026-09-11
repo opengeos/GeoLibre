@@ -3551,7 +3551,8 @@ export function LayerPanel({
                         {layerTypeLabel(layer, t)}
                       </span>
                     </div>
-                    {isPlaceholderLayer(layer) && (
+                    {/* Placeholder detection checks MapLibre source ids, which native globe layers do not need. */}
+                    {!cesiumPrimary && isPlaceholderLayer(layer) && (
                       <p className="mt-1 text-[10px] text-amber-600">{placeholderMessage(layer)}</p>
                     )}
                     {refreshStatus && (

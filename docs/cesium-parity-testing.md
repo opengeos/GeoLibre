@@ -43,7 +43,10 @@ The Vite audit also found that excluding `lerc` from dependency optimization
 externalized Cesium's LERC 2 import to the top-level LERC 4 package, preventing
 the globe from opening. Both versions now remain in their respective dependency
 graphs. The globe's COG loader supplies LERC 4's WASM URL explicitly, as the
-2D raster loader already does.
+2D raster loader already does. A real single-band Athens LERC DEM in
+EPSG:2100 renders with a terrain colormap in both themes. The Layers panel
+no longer applies its MapLibre-source placeholder warning to native Cesium
+layers.
 
 | Issues | Next work | Required evidence |
 | --- | --- | --- |
