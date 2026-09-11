@@ -39,12 +39,19 @@ export function detectGeometryProfile(fc: FeatureCollection): GeometryProfile {
 
 export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
   if (layer.geojson?.features?.length) {
-    const box = bbox(layer.geojson);
+    // `bbox()` returns a collection's own `bbox` member untouched rather than
+    // recomputing it, and RFC 7946 §5 lets that member carry elevation — six
+    // values, [west, south, minAltitude, east, north, maxAltitude] — which the
+    // USGS earthquake feeds ship. Read as four, the altitude lands where a
+    // longitude belongs and the east edge where a latitude does, so MapLibre
+    // rejects the fit with "Invalid LngLat latitude value".
+    const raw = bbox(layer.geojson) as number[];
+    const box = raw.length === 6 ? [raw[0], raw[1], raw[3], raw[4]] : raw;
     // A collection whose features all carry a null geometry (e.g. a delimited
     // text file imported as an attribute table, or a non-spatial SQL result)
     // yields a degenerate ±Infinity box. Continue to the stored extent in
     // that case instead of flying to invalid coordinates.
-    if (box.every((value) => Number.isFinite(value))) {
+    if (box.length === 4 && box.every((value) => Number.isFinite(value))) {
       return box as [number, number, number, number];
     }
   }

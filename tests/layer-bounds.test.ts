@@ -39,6 +39,33 @@ describe("getLayerBounds", () => {
     assert.deepEqual(bounds, [-78.638, 35.779, -70, 40]);
   });
 
+  it("reduces a six-element 3D bbox carried by the source data", () => {
+    // RFC 7946 §5 allows a `bbox` member to carry elevation, in which case it
+    // holds six values: [west, south, minAltitude, east, north, maxAltitude].
+    // The USGS earthquake feeds ship exactly that, and `bbox()` returns a
+    // collection's own member verbatim instead of recomputing it.
+    const bounds = getLayerBounds(
+      layerWith({
+        type: "FeatureCollection",
+        bbox: [-179.9224, -61.5305, -3.6, 179.7358, 66.921, 621.93],
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-179.9224, -61.5305, 10] },
+            properties: {},
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [179.7358, 66.921, 621.93] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    assert.deepEqual(bounds, [-179.9224, -61.5305, 179.7358, 66.921]);
+  });
+
   it("returns null for a table layer whose features all have null geometry", () => {
     const bounds = getLayerBounds(
       layerWith({
