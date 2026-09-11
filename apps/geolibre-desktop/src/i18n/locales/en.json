@@ -355,6 +355,10 @@
       "czml": {
         "label": "Add CZML Dynamic 3D Layer",
         "description": "Load a dynamic Cesium Language (CZML) document describing orbits, trajectories, vehicle paths, and time-varying 3D scenes on the globe."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Load KML or KMZ with native globe styling, overlays, and network links."
       }
     },
     "shared": {
@@ -437,6 +441,9 @@
       "errorFileMissing": "The selected file could not be read.",
       "errorInvalidCzml": "The file does not contain a valid CZML document (expected JSON array or packet object).",
       "readError": "Failed to read CZML data."
+    },
+    "kml": {
+      "errorSource": "Enter a KML/KMZ URL or choose a file."
     },
     "xyz": {
       "defaultName": "XYZ Layer",

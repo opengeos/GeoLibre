@@ -63,7 +63,14 @@ class CesiumMapFacade extends maplibregl.Evented {
           C.Math.toDegrees(position.longitude),
           C.Math.toDegrees(position.latitude),
         );
-        this.fire(new maplibregl.Event(name, { point, lngLat, originalEvent }));
+        this.fire(
+          new maplibregl.Event(name, {
+            point,
+            lngLat,
+            originalEvent,
+            preventDefault: () => originalEvent.preventDefault(),
+          }),
+        );
       };
       viewer.canvas.addEventListener(name, listener);
       this.cleanups.push(() => viewer.canvas.removeEventListener(name, listener));

@@ -345,6 +345,10 @@
       "polyline": {
         "label": "添加编码折线图层",
         "description": "将编码折线字符串（Google、OSRM、Valhalla）从文本或文件导入为矢量线。"
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "在地球仪上加载 KML 或 KMZ，保留原生样式、叠加层和网络链接。"
       }
     },
     "shared": {
@@ -399,6 +403,9 @@
       "errorRead": "无法将该文件作为服务库读取。",
       "imported_other": "已导入 {{count}} 个服务。",
       "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。"
+    },
+    "kml": {
+      "errorSource": "输入 KML/KMZ URL 或选择文件。"
     },
     "xyz": {
       "defaultName": "XYZ 图层",

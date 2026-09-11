@@ -347,6 +347,10 @@
       "polyline": {
         "label": "დაშიფრული პოლიხაზის შრის დამატება",
         "description": "დაშიფრული პოლიხაზის სტრიქონების (Google, OSRM, Valhalla) იმპორტი ტექსტიდან ან ფაილებიდან ვექტორული ხაზების სახით."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "ჩატვირთეთ KML ან KMZ გლობუსზე ორიგინალური სტილებით, გადაფარვებითა და ქსელური ბმულებით."
       }
     },
     "shared": {
@@ -403,6 +407,9 @@
       "imported_other": "დაიმპორტდა {{count}} სერვისი.",
       "importedWithDropped_one": "დაიმპორტდა {{count}} სერვისი ({{dropped}} გამოტოვდა — ბიბლიოთეკა სავსეა).",
       "importedWithDropped_other": "დაიმპორტდა {{count}} სერვისი ({{dropped}} გამოტოვდა — ბიბლიოთეკა სავსეა)."
+    },
+    "kml": {
+      "errorSource": "შეიყვანეთ KML/KMZ URL ან აირჩიეთ ფაილი."
     },
     "xyz": {
       "defaultName": "XYZ შრე",

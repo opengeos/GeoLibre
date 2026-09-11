@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Ajouter une couche de polyligne encodée",
         "description": "Importer des chaînes de polylignes encodées (Google, OSRM, Valhalla) depuis du texte ou des fichiers sous forme de lignes vectorielles."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Chargez un KML ou KMZ avec ses styles natifs, superpositions et liens réseau sur le globe."
       }
     },
     "shared": {
@@ -403,6 +407,9 @@
       "imported_other": "{{count}} services importés.",
       "importedWithDropped_one": "{{count}} service importé ({{dropped}} ignoré — bibliothèque pleine).",
       "importedWithDropped_other": "{{count}} services importés ({{dropped}} ignorés — bibliothèque pleine)."
+    },
+    "kml": {
+      "errorSource": "Saisissez une URL KML/KMZ ou choisissez un fichier."
     },
     "xyz": {
       "defaultName": "Couche XYZ",

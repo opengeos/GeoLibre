@@ -10,6 +10,7 @@ import { ArcGISSource } from "./add-data/sources/ArcGISSource";
 import { CadSource } from "./add-data/sources/CadSource";
 import { CesiumIonSource } from "./add-data/sources/CesiumIonSource";
 import { CzmlSource } from "./add-data/sources/CzmlSource";
+import { KmlSource } from "./add-data/sources/KmlSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
@@ -87,6 +88,8 @@ function renderSource(
       return <CesiumIonSource />;
     case "czml":
       return <CzmlSource initialUrl={initialUrl} />;
+    case "kml":
+      return <KmlSource initialUrl={initialUrl} />;
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
     case "csw":

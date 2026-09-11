@@ -2733,6 +2733,24 @@ class Map(anywidget.AnyWidget):
             _project.czml_layer(name, url=url, data=data, source_path=source_path, **style)
         )
 
+    def add_cesium_kml(
+        self,
+        url: str | None = None,
+        name: str = "KML / KMZ",
+        *,
+        data: str | None = None,
+        source_path: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add native KML/KMZ on the globe, preserving document styling.
+
+        Supply a URL, inline XML, or a KMZ data URL. Use ``add_kml`` for the
+        vector conversion that works on both rendering engines.
+        """
+        return self._add_layer(
+            _project.cesium_kml_layer(name, url=url, data=data, source_path=source_path, **style)
+        )
+
     def add_video(
         self,
         urls: str | list[str],

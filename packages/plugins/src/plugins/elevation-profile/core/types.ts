@@ -2,6 +2,7 @@ import type { Feature, Geometry } from "geojson";
 
 import type { LngLat } from "../elevation/geometry";
 import type { UnitSystem } from "../elevation/format";
+import type { NativeProfileMap } from "./native";
 
 /** Corner of the map the control can dock to. */
 export type ControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -36,6 +37,8 @@ export type ExportTextFile = (
 
 /** Options for configuring the {@link ElevationProfileControl}. */
 export interface ElevationProfileControlOptions {
+  /** Optional native renderer for profile geometry and terrain sampling. */
+  nativeMap?: NativeProfileMap;
   /** Start collapsed (toggle button only). @default true */
   collapsed?: boolean;
   /** Title shown in the panel header. @default 'Elevation Profile' */

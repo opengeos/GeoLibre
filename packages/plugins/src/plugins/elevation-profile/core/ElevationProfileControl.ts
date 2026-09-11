@@ -1,3 +1,4 @@
+import type { NativeProfileMap } from "./native";
 import type { IControl, Map as MapLibreMap, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 
@@ -54,7 +55,7 @@ const MAX_CHART_POINTS = 2000;
 const DEFAULT_OPTIONS: Required<
   Omit<
     ElevationProfileControlOptions,
-    "exportTextFile" | "getSelectedFeatures" | "onSelectionChange"
+    "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap"
   >
 > = {
   collapsed: true,
@@ -99,9 +100,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _options: Required<
     Omit<
       ElevationProfileControlOptions,
-      "exportTextFile" | "getSelectedFeatures" | "onSelectionChange"
+      "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap"
     >
   >;
+  private _nativeMap?: NativeProfileMap;
   private _exportTextFile?: ExportTextFile;
   private _getSelectedFeatures?: ElevationProfileControlOptions["getSelectedFeatures"];
   private _onSelectionChange?: ElevationProfileControlOptions["onSelectionChange"];
@@ -151,7 +153,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
    * @param options - Optional configuration overrides
    */
   constructor(options?: Partial<ElevationProfileControlOptions>) {
-    const { exportTextFile, getSelectedFeatures, onSelectionChange, ...visual } = options ?? {};
+    const { nativeMap, exportTextFile, getSelectedFeatures, onSelectionChange, ...visual } =
+      options ?? {};
+    this._nativeMap = nativeMap;
     this._exportTextFile = exportTextFile;
     this._getSelectedFeatures = getSelectedFeatures;
     this._onSelectionChange = onSelectionChange;
@@ -329,7 +333,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._drawing = true;
     this._drawVertices = [];
     this._map.getCanvas().style.cursor = "crosshair";
-    this._map.doubleClickZoom.disable();
+    if (!this._nativeMap) this._map.doubleClickZoom.disable();
     this._map.on("click", this._onMapClick);
     this._map.on("dblclick", this._onMapDblClick);
     document.addEventListener("keydown", this._onKeyDown);
@@ -344,7 +348,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     }
     this._drawing = false;
     this._map.getCanvas().style.cursor = "";
-    this._map.doubleClickZoom.enable();
+    if (!this._nativeMap) this._map.doubleClickZoom.enable();
     this._map.off("click", this._onMapClick);
     this._map.off("dblclick", this._onMapDblClick);
     document.removeEventListener("keydown", this._onKeyDown);
@@ -460,7 +464,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
 
     const sampled = resampleLine(coords, this._options.maxSamples);
     try {
-      const elevations = await fetchElevations(sampled.coords);
+      const elevations = await (this._nativeMap?.sample(sampled.coords) ??
+        fetchElevations(sampled.coords));
       if (token !== this._requestToken) return; // superseded by a newer request
 
       this._sampledCoords = sampled.coords;
@@ -509,6 +514,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   // --- Map layers --------------------------------------------------------
 
   private _ensureMapLayers(): boolean {
+    if (this._nativeMap) return true;
     const map = this._map;
     if (!map) return false;
     if (!map.isStyleLoaded()) {
@@ -569,6 +575,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   }
 
   private _removeMapLayers(): void {
+    if (this._nativeMap) {
+      this._nativeMap.clear();
+      return;
+    }
     const map = this._map;
     if (!map) return;
     for (const layer of [LAYER_HOVER, LAYER_VERTICES, LAYER_LINE]) {
@@ -580,6 +590,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   }
 
   private _setLineData(coords: LngLat[]): void {
+    if (this._nativeMap) {
+      this._nativeMap.setLine(coords);
+      return;
+    }
     const map = this._map;
     if (!map) return;
     const lineSource = map.getSource(SOURCE_LINE) as GeoJSONSource | undefined;
@@ -609,6 +623,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   }
 
   private _setHoverPoint(coord: LngLat | null): void {
+    if (this._nativeMap) {
+      this._nativeMap.setHover(coord);
+      return;
+    }
     const map = this._map;
     if (!map) return;
     const source = map.getSource(SOURCE_HOVER) as GeoJSONSource | undefined;
@@ -617,6 +635,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   }
 
   private _fitToLine(coords: LngLat[]): void {
+    if (this._nativeMap) {
+      this._nativeMap.fit(coords);
+      return;
+    }
     if (!this._map || coords.length === 0) return;
     // Unwrap longitudes so a line crossing the antimeridian (e.g. Bering Strait)
     // yields a tight box around the line rather than one spanning the globe.

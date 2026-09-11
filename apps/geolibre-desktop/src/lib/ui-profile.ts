@@ -160,6 +160,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     labelKey: "toolbar.layerType.czml",
     tier: "advanced",
   },
+  { id: "kml", section: "threeD", labelKey: "addData.kind.kml.label", tier: "advanced" },
   {
     id: "gltf-model",
     section: "threeD",

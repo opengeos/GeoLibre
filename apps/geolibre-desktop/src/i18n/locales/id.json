@@ -345,6 +345,10 @@
       "polyline": {
         "label": "Tambahkan Layer Polyline Terenkode",
         "description": "Impor string polyline terenkode (Google, OSRM, Valhalla) dari teks atau file sebagai garis vektor."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Muat KML atau KMZ dengan gaya asli, overlay, dan tautan jaringan pada globe."
       }
     },
     "shared": {
@@ -399,6 +403,9 @@
       "errorRead": "Tidak dapat membaca file tersebut sebagai pustaka layanan.",
       "imported_other": "Mengimpor {{count}} layanan.",
       "importedWithDropped_other": "Mengimpor {{count}} layanan ({{dropped}} dilewati — pustaka penuh)."
+    },
+    "kml": {
+      "errorSource": "Masukkan URL KML/KMZ atau pilih berkas."
     },
     "xyz": {
       "defaultName": "Layer XYZ",

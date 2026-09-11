@@ -345,6 +345,10 @@
       "polyline": {
         "label": "Thêm lớp polyline mã hóa",
         "description": "Nhập các chuỗi polyline mã hóa (Google, OSRM, Valhalla) từ văn bản hoặc tệp dưới dạng đường vector."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Tải KML hoặc KMZ lên địa cầu với kiểu gốc, lớp phủ và liên kết mạng."
       }
     },
     "shared": {
@@ -399,6 +403,9 @@
       "errorNoServices": "Không tìm thấy dịch vụ hợp lệ trong tập tin đó.",
       "errorRead": "Không thể đọc tệp đó dưới dạng thư viện dịch vụ.",
       "imported_other": "Đã nhập dịch vụ {{count}}."
+    },
+    "kml": {
+      "errorSource": "Nhập URL KML/KMZ hoặc chọn một tệp."
     },
     "xyz": {
       "defaultName": "Lớp XYZ",

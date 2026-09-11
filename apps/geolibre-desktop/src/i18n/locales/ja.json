@@ -345,6 +345,10 @@
       "polyline": {
         "label": "エンコードポリラインレイヤーを追加",
         "description": "エンコードされたポリライン文字列（Google、OSRM、Valhalla）をテキストまたはファイルからベクターラインとしてインポートします。"
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "元のスタイル、オーバーレイ、ネットワークリンクを保持して KML または KMZ を地球儀に読み込みます。"
       }
     },
     "shared": {
@@ -399,6 +403,9 @@
       "errorRead": "そのファイルをサービスライブラリとして読み込めませんでした。",
       "imported_other": "{{count}}件のサービスをインポートしました。",
       "importedWithDropped_other": "{{count}}件のサービスをインポートしました({{dropped}}件はライブラリが上限に達したためスキップされました)。"
+    },
+    "kml": {
+      "errorSource": "KML/KMZ の URL を入力するか、ファイルを選択してください。"
     },
     "xyz": {
       "defaultName": "XYZレイヤー",

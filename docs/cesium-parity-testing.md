@@ -26,10 +26,10 @@ here; #2291 describes it as a possible follow-up.
 
 ## Remaining work and ordering
 
-September 11 audit: the open Cesium issues are #2259, #2261, #2262, and #2290.
-The tileset styling requirement of #2290 landed in #2337. Native CZML is under
-review in #2350; that PR does not complete the other requirements of #2290.
-Native KML, clipping polygons, terrain sampling in the measurement tools,
+September 11 audit: the open Cesium trackers are #2259, #2261, and #2262.
+The tileset styling requirement of #2290 landed in #2337 and native CZML in
+#2350. Although #2350 closed #2290, several requirements remain.
+Clipping polygons, terrain sampling in the measurement tools,
 Ion terrain assets, and Google Photorealistic 3D Tiles remain outstanding.
 The layer-format gaps listed below also remain, including ArcGIS vector tiles,
 drape picking, Zarr, raw point clouds and splats, and deck.gl visualizations.
@@ -60,7 +60,7 @@ graphs. The globe's COG loader supplies LERC 4's WASM URL explicitly, as the
 | #2287 (implemented) | Native environment plugins | Sun clock and lighting on/off, atmosphere/sky box on/off and restore, spin start/stop, cloud imagery add/remove, and flight take-over/teardown verified in the real app in both themes; unit tests cover each Cesium branch against the real Cesium maths with a faked widget |
 | #2288, #2262 | Enforce declared support in activation, URL dispatch, project restore, delayed controls, and command palette | Tests cover unsupported callbacks, renderer round trips, saved settings, and compatible-control remounting. The wider control facade and native plugin implementations remain separate work. |
 | #2289 | Python/MCP/embed renderer authoring | Project round trips, renderer events, pane kinds, invalid inputs, and docs examples |
-| #2290 (Ion assets implemented) | Cesium-native authoring features | Ion assets: Cesium OSM Buildings (asset 96188) and Bing Aerial (asset 2) added from the Add Data dialog on the globe in both themes, the same project reopened on the 2D map showing the "3D only" badge, a missing token surfacing as a layer error; unit tests cover the layer builder, the asset-id parser, the globe's tileset/imagery routing through `IonResource`/`IonImageryProvider`, rebuild on asset change, and the Python/MCP builders. Tileset styling, clipping polygons, KML/CZML, and terrain sampling remain separate follow-ups. |
+| #2290 (Ion assets implemented) | Cesium-native authoring features | Ion assets: Cesium OSM Buildings (asset 96188) and Bing Aerial (asset 2) added from the Add Data dialog on the globe in both themes, the same project reopened on the 2D map showing the "3D only" badge, a missing token surfacing as a layer error; unit tests cover the layer builder, the asset-id parser, the globe's tileset/imagery routing through `IonResource`/`IonImageryProvider`, rebuild on asset change, and the Python/MCP builders. Tileset styling and CZML have merged. Native KML/KMZ and elevation profiles are implemented: a real San Francisco landmarks KMZ retains its billboard styles and labels in both themes; a drawn 3.43 km profile samples World Terrain from -27 m to 74 m. Tests cover document loading, cancellation, opacity, cleanup, Python serialization, and terrain-provider replacement. Clipping polygons, Terrain Measure, Ion terrain assets, and Google Photorealistic 3D Tiles remain follow-ups. |
 | #2261, #2259 | Update umbrella completion only after child requirements are verified | Accurate supported-layer predicates and an explicit record of remaining gaps |
 
 ## Test gates

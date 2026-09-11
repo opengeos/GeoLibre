@@ -355,6 +355,10 @@
       "polyline": {
         "label": "إضافة طبقة خط متعدد مشفر",
         "description": "استيراد سلاسل الخطوط المتعددة المشفرة (Google وOSRM وValhalla) من نص أو ملفات كخطوط متجهة."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "حمّل KML أو KMZ مع الأنماط والتراكبات وروابط الشبكة الأصلية على الكرة الأرضية."
       }
     },
     "shared": {
@@ -419,6 +423,9 @@
       "importedWithDropped_few": "تم استيراد {{count}} خدمات (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_many": "تم استيراد {{count}} خدمةً (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_other": "تم استيراد {{count}} خدمة (تم تخطي {{dropped}} — المكتبة ممتلئة)."
+    },
+    "kml": {
+      "errorSource": "أدخل رابط KML/KMZ أو اختر ملفًا."
     },
     "xyz": {
       "defaultName": "طبقة XYZ",

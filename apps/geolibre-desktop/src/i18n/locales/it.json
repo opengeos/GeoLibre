@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Aggiungi layer polilinea codificata",
         "description": "Importa stringhe di polilinea codificata (Google, OSRM, Valhalla) da testo o file come linee vettoriali."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Carica KML o KMZ con stili nativi, sovrapposizioni e collegamenti di rete sul globo."
       }
     },
     "shared": {
@@ -403,6 +407,9 @@
       "imported_other": "Importati {{count}} servizi.",
       "importedWithDropped_one": "Importato {{count}} servizio ({{dropped}} ignorato — libreria piena).",
       "importedWithDropped_other": "Importati {{count}} servizi ({{dropped}} ignorati — libreria piena)."
+    },
+    "kml": {
+      "errorSource": "Inserisci un URL KML/KMZ o scegli un file."
     },
     "xyz": {
       "defaultName": "Layer XYZ",
