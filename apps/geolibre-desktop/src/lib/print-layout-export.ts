@@ -1,9 +1,10 @@
 /**
- * Print layout capture, legend building, and export (PNG / PDF).
+ * Print layout capture, legend building, and export (PNG / PDF / SVG).
  *
  * {@link buildLegend} is a pure transform from layers to legend entries and is
  * unit tested. {@link captureMapImage} reads the live map's canvases, and the
- * export helpers rasterize {@link drawLayout} at print resolution.
+ * PNG/PDF helpers rasterize {@link drawLayout} at print resolution; SVG keeps
+ * the layout furniture editable and embeds the captured map image.
  */
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
@@ -278,6 +279,21 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
   );
   if (!blob) throw new Error("Failed to render PNG");
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Export one page with editable layout furniture and an embedded map image. */
+export async function exportLayoutSvg(
+  opts: LayoutOptions,
+  filename: string,
+): Promise<string | null> {
+  const { renderLayoutSvg } = await import("./print-layout-svg");
+  const bytes = new TextEncoder().encode(renderLayoutSvg(opts));
+  return saveBinaryFileWithFallback(bytes, {
+    defaultName: filename,
+    filters: [{ name: "SVG Image", extensions: ["svg"] }],
+    browserTypes: [{ description: "SVG Image", accept: { "image/svg+xml": [".svg"] } }],
+    mimeType: "image/svg+xml",
+  });
 }
 
 /**

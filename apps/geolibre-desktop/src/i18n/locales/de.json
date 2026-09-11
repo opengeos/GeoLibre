@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Drucklayout",
-    "description": "Erstellen Sie eine druckfertige Karte mit Titel, Legende, Maßstabsleiste und Nordpfeil und exportieren Sie sie als PNG oder PDF.",
+    "description": "Erstellen Sie eine druckfertige Karte mit Titel, Legende, Maßstabsleiste und Nordpfeil und exportieren Sie sie als PNG, PDF oder SVG.",
     "preview": "Vorschau",
     "resizeControls": "Bedienfeld in der Größe ändern",
     "resizeDialog": "Dialog in der Größe ändern",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "In die Zwischenablage kopieren",
     "copied": "Kopiert",
     "exportPng": "PNG exportieren",
+    "exportSvg": "SVG exportieren",
     "exportPdf": "PDF exportieren",
     "titleLabel": "Titel",
     "titlePlaceholder": "Kartentitel",

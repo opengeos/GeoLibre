@@ -91,6 +91,7 @@ import {
   exportAtlasPngZip,
   exportLayoutPdf,
   exportLayoutPng,
+  exportLayoutSvg,
   legendEditorRows,
   reorderLegendEntry,
   setLegendItemLabel,
@@ -175,7 +176,7 @@ function ToggleField({ id, label, checked, disabled, onChange }: ToggleFieldProp
 /**
  * Print Layout composer dialog: captures the current map view and composes it
  * with a title, legend, scale bar, north arrow, and footer onto a chosen paper
- * or screen size, then exports the result to PNG or PDF.
+ * or screen size, then exports the result to PNG, PDF, or SVG.
  */
 export function PrintLayoutDialog({
   open,
@@ -1970,7 +1971,7 @@ export function PrintLayoutDialog({
     }
   };
 
-  const handleExport = async (kind: "png" | "pdf") => {
+  const handleExport = async (kind: "png" | "pdf" | "svg") => {
     if (!captured) {
       setError(t("printLayout.errors.captureFirst"));
       return;
@@ -1981,6 +1982,8 @@ export function PrintLayoutDialog({
       const base = sanitizeFilename(displayOptions.title || projectName || "map-layout");
       if (kind === "png") {
         await exportLayoutPng(displayOptions, `${base}.png`);
+      } else if (kind === "svg") {
+        await exportLayoutSvg(displayOptions, `${base}.svg`);
       } else {
         await exportLayoutPdf(displayOptions, `${base}.pdf`);
       }
@@ -3656,7 +3659,7 @@ export function PrintLayoutDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
           {/* Atlas export progress, kept visible next to the buttons. */}
           {atlasProgress && (
             <span className="me-auto text-sm text-muted-foreground">
@@ -3686,6 +3689,16 @@ export function PrintLayoutDialog({
             )}
             {copied ? t("printLayout.copied") : t("printLayout.copyToClipboard")}
           </Button>
+          {!atlasEnabled && (
+            <Button
+              variant="outline"
+              disabled={exporting || atlasBusy || !captured}
+              onClick={() => void handleExport("svg")}
+            >
+              <FileImage className="me-2 h-4 w-4" />
+              {t("printLayout.exportSvg")}
+            </Button>
+          )}
           {/* Equal-weight export buttons: neither format is the "primary" one
               (GH #520). In atlas mode they become the whole-series exports:
               a zip of per-page PNGs and one multi-page PDF (GH #1291). */}

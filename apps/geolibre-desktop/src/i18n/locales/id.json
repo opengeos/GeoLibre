@@ -1395,7 +1395,7 @@
   },
   "printLayout": {
     "title": "Tata Letak Cetak",
-    "description": "Susun peta siap cetak dengan judul, legenda, skala, dan penunjuk utara, lalu ekspor ke PNG atau PDF.",
+    "description": "Susun peta siap cetak dengan judul, legenda, skala, dan penunjuk utara, lalu ekspor ke PNG, PDF atau SVG.",
     "preview": "Pratinjau",
     "resizeControls": "Ubah ukuran panel kontrol",
     "resizeDialog": "Ubah ukuran dialog",
@@ -1403,6 +1403,7 @@
     "copyToClipboard": "Salin ke Papan Klip",
     "copied": "Tersalin",
     "exportPng": "Ekspor PNG",
+    "exportSvg": "Ekspor SVG",
     "exportPdf": "Ekspor PDF",
     "titleLabel": "Judul",
     "titlePlaceholder": "Judul peta",

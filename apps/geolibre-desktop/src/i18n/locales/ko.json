@@ -1395,7 +1395,7 @@
   },
   "printLayout": {
     "title": "인쇄 레이아웃",
-    "description": "제목, 범례, 축척 막대, 방위표를 포함한 인쇄용 지도를 구성한 다음 PNG 또는 PDF로 내보내세요.",
+    "description": "제목, 범례, 축척 막대, 방위표를 포함한 인쇄용 지도를 구성한 다음 PNG, PDF 또는 SVG로 내보내세요.",
     "preview": "미리보기",
     "resizeControls": "컨트롤 패널 크기 조절",
     "resizeDialog": "대화상자 크기 조절",
@@ -1403,6 +1403,7 @@
     "copyToClipboard": "클립보드에 복사",
     "copied": "복사됨",
     "exportPng": "PNG 내보내기",
+    "exportSvg": "SVG 내보내기",
     "exportPdf": "PDF 내보내기",
     "titleLabel": "제목",
     "titlePlaceholder": "지도 제목",

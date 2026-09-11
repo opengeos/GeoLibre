@@ -1434,7 +1434,7 @@
   },
   "printLayout": {
     "title": "Layout de impressão",
-    "description": "Componha um mapa pronto para impressão com título, legenda, barra de escala e seta norte e, em seguida, exporte-o para PNG ou PDF.",
+    "description": "Componha um mapa pronto para impressão com título, legenda, barra de escala e seta norte e, em seguida, exporte-o para PNG, PDF ou SVG.",
     "preview": "Pré-visualização",
     "resizeControls": "Redimensionar painel de controles",
     "resizeDialog": "Redimensionar diálogo",
@@ -1442,6 +1442,7 @@
     "copyToClipboard": "Copiar para a área de transferência",
     "copied": "Copiado",
     "exportPng": "Exportar PNG",
+    "exportSvg": "Exportar SVG",
     "exportPdf": "Exportar PDF",
     "titleLabel": "Título",
     "titlePlaceholder": "Título do mapa",
