@@ -1,0 +1,25 @@
+diff --git a/node_modules/@carbonplan/zarr-layer/dist/index.js b/node_modules/@carbonplan/zarr-layer/dist/index.js
+index 9fc526c8..213a1f8b 100644
+--- a/node_modules/@carbonplan/zarr-layer/dist/index.js
++++ b/node_modules/@carbonplan/zarr-layer/dist/index.js
+@@ -2497,9 +2497,17 @@ function createShaderProgram(gl, options) {
+     scaleLoc: mustGetUniformLocation(gl, program, "scale"),
+     scaleXLoc: mustGetUniformLocation(gl, program, "scale_x"),
+     scaleYLoc: mustGetUniformLocation(gl, program, "scale_y"),
+-    shiftXLoc: mustGetUniformLocation(gl, program, "shift_x"),
+-    shiftYLoc: mustGetUniformLocation(gl, program, "shift_y"),
+-    worldXOffsetLoc: mustGetUniformLocation(gl, program, "u_worldXOffset"),
++    // In the source-projected flat (wgs84) shader gl_Position comes from
++    // u_anchor_clip + deltaClip, so shift_x/shift_y/u_worldXOffset only feed
++    // the v_mercatorPos varying, which the fragment shader never reads. Mesa
++    // (Intel/AMD/llvmpipe) eliminates that chain at link time and reports the
++    // uniforms inactive, which made mustGetUniformLocation throw on every
++    // frame from the moment the map left the globe transition, so the layer
++    // silently vanished at zoom >= 12 on those GPUs. A null location is a
++    // no-op for gl.uniform1f, so look these up without throwing.
++    shiftXLoc: gl.getUniformLocation(program, "shift_x"),
++    shiftYLoc: gl.getUniformLocation(program, "shift_y"),
++    worldXOffsetLoc: gl.getUniformLocation(program, "u_worldXOffset"),
+     // MapLibre modes use projectTile instead of matrix. The Mapbox flat
+     // source-projected (wgs84) shader uses u_eye_matrix, not matrix, so the
+     // compiler drops `matrix` there too — use the non-throwing lookup. All
