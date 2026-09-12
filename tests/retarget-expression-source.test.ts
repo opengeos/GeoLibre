@@ -56,6 +56,48 @@ describe("retargetExpressionSource", () => {
     assert.equal(next.seededFromLayerId, null);
   });
 
+  it("keeps authored text rather than overwriting it with the target's saved filter", () => {
+    const next = retargetExpressionSource(
+      { source: '[">", ["get", "pop"], 1000]', seededFromLayerId: null },
+      layer("b", ["==", ["get", "kind"], "park"]),
+    );
+
+    assert.equal(next.source, '[">", ["get", "pop"], 1000]', "the user's own text survives");
+    assert.equal(next.seededFromLayerId, null);
+  });
+
+  it("refreshes a seed from the target's saved filter", () => {
+    const next = retargetExpressionSource(
+      { source: '["==", ["get", "kind"], "park"]', seededFromLayerId: "a" },
+      layer("b", [">", ["get", "pop"], 1000]),
+    );
+
+    assert.equal(next.source, JSON.stringify([">", ["get", "pop"], 1000], null, 2));
+    assert.equal(next.seededFromLayerId, "b");
+  });
+
+  it("seeds over whitespace, which is not authored text", () => {
+    const next = retargetExpressionSource(
+      { source: "  \n ", seededFromLayerId: null },
+      layer("b", [">", ["get", "pop"], 1000]),
+    );
+
+    assert.equal(next.source, JSON.stringify([">", ["get", "pop"], 1000], null, 2));
+    assert.equal(next.seededFromLayerId, "b");
+  });
+
+  it("does not re-seed over edits when the target resolves to the same layer", () => {
+    // Re-opening on the same layer must not discard an in-progress edit: the
+    // edit unseeded the textarea, so the layer's saved filter stays put.
+    const next = retargetExpressionSource(
+      { source: '["==", ["get", "kind"], "par', seededFromLayerId: null },
+      layer("a", ["==", ["get", "kind"], "park"]),
+    );
+
+    assert.equal(next.source, '["==", ["get", "kind"], "par');
+    assert.equal(next.seededFromLayerId, null);
+  });
+
   it("clears a seeded filter when the panel is left with no target at all", () => {
     const next = retargetExpressionSource(
       { source: '["==", ["get", "kind"], "park"]', seededFromLayerId: "a" },

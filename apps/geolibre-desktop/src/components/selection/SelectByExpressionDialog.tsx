@@ -63,10 +63,11 @@ export function SelectByExpressionDialog({
   const [builderOpen, setBuilderOpen] = useState(false);
   const [summary, setSummary] = useState<ExpressionSummary | null>(null);
   // The layer whose saved filter currently fills the textarea, or null when the
-  // text is the user's own. Re-running a hand-written expression against
-  // another layer is a normal thing to want, so authored text follows the
-  // target; a seeded filter belongs to one layer and must not, or "Filter
-  // layer" would persist layer A's filter onto layer B.
+  // text is the user's own. The two are retargeted differently — authored text
+  // is never overwritten, a seed never follows to an unfiltered layer — so
+  // "Filter layer" cannot persist layer A's filter onto layer B, nor can
+  // switching layers discard a half-written expression. See
+  // retargetExpressionSource.
   const seededFilterLayerId = useRef<string | null>(null);
 
   const retargetExpression = (next: GeoLibreLayer | null | undefined): void => {
