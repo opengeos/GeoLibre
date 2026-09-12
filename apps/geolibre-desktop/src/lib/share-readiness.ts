@@ -447,8 +447,19 @@ export function collectShareSources(input: ShareReadinessInput): ShareSourceRef[
     }
     const credentialField = hasCredentialField(layer.source) || hasCredentialField(layer.metadata);
     for (const reference of references) {
-      const classified = classifyReference(reference.url);
+      let classified = classifyReference(reference.url);
       if (!classified) continue;
+      // These two fields exist only to hold a file the author opened from disk:
+      // the absolute path, and the desktop app's bytes URL for it, which is a
+      // loopback `asset.localhost` address the host check would otherwise call a
+      // private network. Name the file, not the network.
+      if (
+        classified.status === "local" &&
+        (reference.field === "metadata.localFilePath" ||
+          reference.field === "metadata.localBytesUrl")
+      ) {
+        classified = { ...classified, reason: "local-file" };
+      }
       refs.push({
         layerId: layer.id,
         label: layer.name,
@@ -648,6 +659,34 @@ export function summarizeShareSources(refs: readonly ShareSourceRef[]): ShareRea
     }
   }
   return [...byOwner.values()];
+}
+
+/**
+ * Whether a verdict means the layer is empty for every recipient, no matter
+ * who they are: a file on the author's machine, or no source at all. A
+ * private-network host is deliberately not one of these. It is `local` for
+ * the probe report, but an author sharing an intranet map with intranet
+ * colleagues is doing the right thing, and that layer may well load for them.
+ */
+export function isMissingForRecipients(
+  item: Pick<ShareReadinessItem, "status" | "reason">,
+): boolean {
+  return item.status === "local" && item.reason !== "private-host";
+}
+
+/**
+ * The references that are settled without the network and that no recipient
+ * can load (see {@link isMissingForRecipients}). Synchronous, so the Share
+ * dialog can show them the moment it opens rather than after the probes
+ * finish, and cheap enough to run before a token is configured (issue #2360:
+ * a project whose every data layer was a local file uploaded "cleanly" and
+ * drew only the basemap for everyone else).
+ */
+export function findLocalShareSources(input: ShareReadinessInput): ShareReadinessItem[] {
+  // Filter the references, not the summarized rows: a layer that remembers
+  // both a private-network address and a file on disk must be listed for the
+  // file, whichever reference the summary happened to keep.
+  return summarizeShareSources(collectShareSources(input).filter(isMissingForRecipients));
 }
 
 /** Collect, probe, and summarize. What the Share dialog calls. */

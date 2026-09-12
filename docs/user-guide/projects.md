@@ -79,9 +79,20 @@ A project file is mostly references, so a project can upload cleanly and still d
 - **Uses a credential that is removed when sharing.** Tokens and API keys are stripped from the upload, so the recipient gets the URL without the secret. Make the service public, or tell them to supply their own key.
 - **A browser cannot fetch this host.** The host sends no cross-origin (CORS) headers, or it did not answer. Layers like this keep working in the desktop app, which is not subject to browser CORS, but stay empty in the browser viewer.
 - **The service answered not found.** A signed URL that has expired, or a file that moved.
-- **Points at a file on your machine, or at a private network address.** Local vector data is embedded in the upload automatically, but a local raster, an intranet service, or a database-backed layer only resolves where you authored it.
+- **Points at a private or local network address.** An intranet service only resolves for people on that network, which may be exactly who you are sharing with. A file on your machine, or a layer with no source at all, is not listed here but in a separate warning the moment the dialog opens; see [Sharing local data](#sharing-local-data) below.
 
 The check runs in the browser, without your credentials attached, so it sees what a recipient sees. It never blocks the upload: sharing an intranet map with intranet colleagues is a normal thing to do, and the list is there to inform you, not to stop you.
+
+### Sharing local data
+
+A project file holds references to data, not the data itself, and `share.geolibre.app` stores only that file. It never uploads files from your computer. So a layer you added from a local GeoTIFF, GeoPackage, Shapefile, or other file on disk opens fine for you and draws nothing for anyone else: recipients open the project in a browser, which cannot read your disk. The same goes for a query-backed layer (PostGIS, a DuckDB SQL layer, a sidecar result) that names no URL. A layer on a private network address (`localhost`, an intranet server) is different: it may load for colleagues on the same network, so it stays in the softer readiness list above rather than in this warning.
+
+When the Share dialog finds such layers it lists them under **N layers will be missing from the shared map**, and the Share button reads **Share anyway**. You can still share; the map will simply not include those layers. To include them:
+
+- **Host the data online.** Convert rasters to Cloud Optimized GeoTIFF and vectors to PMTiles or GeoParquet, put the files on a public HTTPS server such as GitHub or Hugging Face, and add them to the map by URL (**Add Data → Raster Layer** or **Vector Layer** with the URL). Tile services, WMS, ArcGIS services, and other hosted sources work as they are, as long as the host allows cross-origin requests and needs no login.
+- **Let small vectors ride along.** Local vector layers added with **Add Data → Vector Layer** are embedded in the upload automatically, so they are never listed. Large vector datasets are better hosted, since every feature of an embedded layer has to be parsed when the project opens.
+
+The dialog warns even before a share token is configured, because uploading a saved `.geolibre.json` by hand on `share.geolibre.app` drops the same layers, silently.
 
 ## Export as HTML
 
