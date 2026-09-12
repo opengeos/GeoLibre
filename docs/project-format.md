@@ -422,11 +422,13 @@ comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
 A control with nothing chosen places no constraint, so an emptied selection
 shows every feature rather than none.
 
-A quick filter narrows the *rendered* features, so a point layer using the
-cluster renderer is an exception worth noting: MapLibre clusters at the source,
-from the layer's whole dataset, so cluster bubbles and their counts describe the
-unfiltered data while clustering is on (as they already do for a Time Slider
-window or a rule filter).
+A point layer using the cluster renderer is worth noting, because MapLibre
+clusters at the source, before the renderer evaluates any filter. GeoLibre
+therefore narrows a clustered layer's source data by the persistent expression
+filter and Quick Filters, so its bubbles and counts follow both. A Time Slider
+window, a rule filter, and an embed `setFilter` remain per-feature render
+filters and cannot change an already-built cluster, so counts stay unnarrowed by
+those while clustering is on.
 
 The compiled filter is combined with the transient `timeFilter` and
 `embedFilter` and with the rule-based renderer's hide-unmatched filter under a

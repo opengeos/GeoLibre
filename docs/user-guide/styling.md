@@ -96,12 +96,15 @@ Tile-backed layers (vector tiles, PMTiles, MBTiles) carry no local features, so
 their value lists are read from the tiles currently loaded and grow as you pan
 and zoom; the section says so under the controls.
 
-One limit is worth knowing: a point layer using the **cluster** renderer builds
-its clusters from the layer's whole dataset before any filter applies, so while
-clustering is on the bubbles and their counts describe the unfiltered data. The
-same is true of a Time Slider window and a rule-based filter. Switch the point
-renderer back to **Single symbol** to see the filtered features drawn
-individually, one circle each, with no cluster counts to misread.
+One limit is worth knowing, and it now cuts two ways. MapLibre builds clusters
+at the source, before the renderer evaluates any filter. A persistent expression
+filter and Quick Filters are applied to a clustered layer's source data first,
+so its bubbles and counts do follow them. A Time Slider window, a rule-based
+filter, and an embed `setFilter` stay per-feature render filters, so while
+clustering is on the bubbles and their counts still describe data those have not
+narrowed. Switch the point renderer back to **Single symbol** to see the
+filtered features drawn individually, one circle each, with no cluster counts to
+misread.
 
 ### Style interchange and URL styles
 
