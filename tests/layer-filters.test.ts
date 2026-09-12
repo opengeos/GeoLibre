@@ -37,16 +37,10 @@ describe("persistent layer filters", () => {
       compileLayerFilters(
         layer({
           filterExpression: expression,
-          quickFilters: [
-            { id: "score", field: "score", kind: "range", min: 10, max: null },
-          ],
-        })
+          quickFilters: [{ id: "score", field: "score", kind: "range", min: 10, max: null }],
+        }),
       ),
-      [
-        "all",
-        expression,
-        ["all", ["has", "score"], [">=", ["to-number", ["get", "score"]], 10]],
-      ]
+      ["all", expression, ["all", ["has", "score"], [">=", ["to-number", ["get", "score"]], 10]]],
     );
   });
 
