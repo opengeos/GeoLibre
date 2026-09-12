@@ -397,15 +397,16 @@ const managedZoomRangeLayerIds = new Set<string>();
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 const clusteredFilterInputs = new WeakMap<
   GeoJSON.FeatureCollection,
-  Map<string, GeoJSON.FeatureCollection>
+  { key: string; value: GeoJSON.FeatureCollection }
 >();
 
 /**
  * Narrow a cluster renderer's source data by the layer's authored filters.
  * MapLibre clusters before evaluating style-layer filters, so applying the
  * expression only to the unclustered circle would leave hidden points in
- * cluster bubbles and counts. Results are cached by source object and compiled
- * filter so ordinary sync ticks keep a stable data reference.
+ * cluster bubbles and counts. Only the current filter's result is cached per
+ * source object, so ordinary sync ticks keep a stable data reference while
+ * iterating on a filter does not retain a copy of the dataset per attempt.
  */
 function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
   const geojson = layer.geojson!;
@@ -413,9 +414,8 @@ function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
   if (!filter) return geojson;
 
   const filterKey = JSON.stringify(filter);
-  let cachedByFilter = clusteredFilterInputs.get(geojson);
-  const cached = cachedByFilter?.get(filterKey);
-  if (cached) return cached;
+  const cached = clusteredFilterInputs.get(geojson);
+  if (cached?.key === filterKey) return cached.value;
 
   const compiled = compileFeatureExpression(filterKey, { expectedType: "boolean" });
   if (!compiled.ok || !compiled.evaluate) return geojson;
@@ -428,11 +428,7 @@ function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
     }
   });
   const filtered = { ...geojson, features };
-  if (!cachedByFilter) {
-    cachedByFilter = new Map();
-    clusteredFilterInputs.set(geojson, cachedByFilter);
-  }
-  cachedByFilter.set(filterKey, filtered);
+  clusteredFilterInputs.set(geojson, { key: filterKey, value: filtered });
   return filtered;
 }
 

@@ -406,6 +406,12 @@ The expression is saved with the project and remains active until it is cleared
 from the Select by Expression panel or from the layer's **Clear filters** action.
 It combines with Quick Filters and the transient filters described below.
 
+What is stored is a plain MapLibre expression, so the Expression Builder's `@`
+variables (`@project_name`, `@layer_name`, `@feature_count`, `@map_zoom`,
+`@map_scale`) are resolved to literal values at the moment the filter is
+applied and do not track the map afterwards. Use the MapLibre `["zoom"]`
+operator instead when the filter should follow the current zoom.
+
 `kind` picks the control and the comparison: `categorical` (checkboxes over
 `values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
 open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`

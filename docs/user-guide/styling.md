@@ -74,7 +74,11 @@ symbology rather than replacing them.
 A quick filter hides features; it does not select them. **Select by Expression**
 can either build a live selection or apply a persistent expression filter to the
 layer. The latter provides definition-query behavior without creating a copy of
-the matching features.
+the matching features. A saved filter keeps the expression itself live but not
+the builder's `@` variables: `@map_zoom`, `@map_scale`, `@feature_count`,
+`@project_name`, and `@layer_name` are replaced by their values when you click
+**Filter layer**. Write `["zoom"]` rather than `@map_zoom` when the filter
+should keep responding to the camera.
 
 A layer with an active filter shows a funnel icon on its row in the Layers
 panel, so a filtered layer is never mistaken for missing data, and its **Layer

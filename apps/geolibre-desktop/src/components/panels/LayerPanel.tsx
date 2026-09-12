@@ -26,7 +26,9 @@ import {
   isStyleLibraryTargetLayer,
   canSaveLayerToLibrary,
   captureLayerLibraryEntry,
+  activeLayerFilterExpression,
   clearQuickFilterValues,
+  compileQuickFilters,
   createLayerLibraryEntryId,
   copyableLayerStyleKind,
   hasActiveLayerFilter,
@@ -344,6 +346,19 @@ type LayerRefreshTimer = {
   intervalMs: number;
   timer: number;
 };
+
+/**
+ * Pick the tooltip text for a filtered layer's funnel icon. A persistent
+ * expression and Quick Filters can narrow the same layer at once, so name both
+ * rather than letting the expression wording hide the controls doing half the
+ * work.
+ */
+function layerFilteredHintKey(layer: GeoLibreLayer): ParseKeys {
+  const hasExpression = activeLayerFilterExpression(layer) !== null;
+  const hasQuickFilters = compileQuickFilters(layer.quickFilters) !== null;
+  if (hasExpression && hasQuickFilters) return "selection.layerFilteredBothHint";
+  return hasExpression ? "selection.layerFilteredHint" : "quickFilters.layerFilteredHint";
+}
 
 function layerTypeLabel(layer: GeoLibreLayer, t: TFunction): string {
   if (layer.metadata?.sourceKind === "maplibre-basemap-control") {
@@ -3517,20 +3532,10 @@ export function LayerPanel({
                       {/* A layer filter hides features, so say so on the row:
                           without this a filtered layer reads as missing data. */}
                       {hasActiveLayerFilter(layer) && (
-                        <span
-                          title={t(
-                            layer.filterExpression?.length
-                              ? "selection.layerFilteredHint"
-                              : "quickFilters.layerFilteredHint",
-                          )}
-                        >
+                        <span title={t(layerFilteredHintKey(layer))}>
                           <Filter
                             className="h-3 w-3 shrink-0 text-primary"
-                            aria-label={t(
-                              layer.filterExpression?.length
-                                ? "selection.layerFilteredHint"
-                                : "quickFilters.layerFilteredHint",
-                            )}
+                            aria-label={t(layerFilteredHintKey(layer))}
                           />
                         </span>
                       )}

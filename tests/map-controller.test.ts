@@ -566,6 +566,50 @@ describe("MapController.syncLayers reconciliation", () => {
     );
   });
 
+  it("reuses the clustered filter result and re-derives it when the filter changes", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const geojson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { continent: "Europe" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { continent: "Asia" },
+          geometry: { type: "Point", coordinates: [100, 0] },
+        },
+      ],
+    };
+    const filteredBy = (continent: string) => {
+      const layer = pointLayer(
+        "cluster-cache",
+        { filterExpression: ["==", ["get", "continent"], continent] },
+        { pointRenderer: "cluster" },
+      );
+      layer.geojson = geojson;
+      return layer;
+    };
+    const sourceData = () =>
+      fake.sources.get(srcId("cluster-cache"))?.data as GeoJSON.FeatureCollection;
+    const continents = () => sourceData().features.map((f) => f.properties?.continent);
+
+    controller.syncLayers([filteredBy("Europe")]);
+    const first = sourceData();
+    controller.syncLayers([filteredBy("Europe")]);
+    assert.equal(sourceData(), first, "an unchanged filter keeps a stable data reference");
+
+    // Only the current filter is cached, so switching away and back must
+    // re-derive the result rather than serve a stale or missing entry.
+    controller.syncLayers([filteredBy("Asia")]);
+    assert.deepEqual(continents(), ["Asia"]);
+    controller.syncLayers([filteredBy("Europe")]);
+    assert.deepEqual(continents(), ["Europe"]);
+  });
+
   it("applies a visibility toggle as a layout property", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);

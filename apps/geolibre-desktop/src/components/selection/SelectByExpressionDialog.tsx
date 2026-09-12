@@ -165,6 +165,9 @@ export function SelectByExpressionDialog({
       expectedType: "boolean",
     });
     if (!checked.ok || !checked.parsed) return;
+    // The project stores a plain MapLibre expression, which has no binding for
+    // the builder's `@` variables, so they are resolved to literals here and
+    // stop tracking the map. `["zoom"]` is the live alternative (docs/user-guide/styling.md).
     const expression = substituteExpressionVariables(checked.parsed, liveVariables) as unknown[];
     setLayerFilterExpression(targetLayer.id, expression);
 

@@ -3184,6 +3184,7 @@
     "applyLayerFilter": "Filter layer",
     "clearLayerFilter": "Clear layer filter",
     "layerFilteredHint": "A persistent filter is hiding some of this layer's features.",
+    "layerFilteredBothHint": "A persistent filter and a quick filter are hiding some of this layer's features.",
     "noLayers": "Add a vector layer with features to make a selection.",
     "needTwoLayers": "Selecting by location needs two vector layers with features.",
     "summary": "{{selected}} of {{total}} feature(s) selected ({{matched}} matched).",
