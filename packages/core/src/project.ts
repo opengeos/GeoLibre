@@ -60,6 +60,7 @@ import {
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
 import { normalizeLayerCapabilities } from "./capabilities";
+import { validateMapExpression } from "./expressions";
 import {
   createDefaultPrintLayout,
   isDefaultPrintLayout,
@@ -1444,8 +1445,14 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   // that normalizes to nothing (`{}`, an array, a string, an object with no
   // boolean flag) must not survive into the normalized layer and be written
   // back out on the next save.
-  const { capabilities: rawCapabilities, ...rest } = layer;
+  const { capabilities: rawCapabilities, filterExpression: rawFilterExpression, ...rest } = layer;
   const capabilities = normalizeLayerCapabilities(rawCapabilities);
+  const filterExpression =
+    Array.isArray(rawFilterExpression) &&
+    rawFilterExpression.length > 0 &&
+    validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
+      ? rawFilterExpression
+      : undefined;
   return {
     ...rest,
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
@@ -1454,6 +1461,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     metadata: layer.metadata ?? {},
     source: layer.source ?? {},
     ...(capabilities ? { capabilities } : {}),
+    ...(filterExpression ? { filterExpression } : {}),
   };
 }
 

@@ -1258,6 +1258,14 @@ export interface GeoLibreLayer {
   /** Transient MapLibre expression applied by the iframe embed API. */
   embedFilter?: unknown[];
   /**
+   * Project-persisted boolean MapLibre expression that narrows the features
+   * rendered for this layer. Unlike a selection, this leaves the source data
+   * intact and keeps non-matching features hidden until the filter is cleared.
+   * It is composed with transient filters, quick filters, and rule visibility
+   * by the map renderers.
+   */
+  filterExpression?: unknown[];
+  /**
    * Data-driven filter controls authored in the layer's Quick Filters section
    * (issue #2114). Unlike {@link timeFilter} and {@link embedFilter} this is
    * persisted control *state*, not a compiled expression: `@geolibre/map`

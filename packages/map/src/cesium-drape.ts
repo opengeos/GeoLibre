@@ -108,6 +108,7 @@ function layerSignature(layer: GeoLibreLayer): string {
       layer.metadata,
       layer.sourcePath,
       layer.quickFilters,
+      layer.filterExpression,
       layer.timeFilter,
       layer.embedFilter,
     ]);

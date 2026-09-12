@@ -392,6 +392,20 @@ compiled output, so a saved filter can always be reopened and changed:
 }
 ```
 
+A vector layer may also carry a persistent boolean MapLibre expression filter.
+This is authored from **Select by Expression → Filter layer** and hides
+non-matching features without changing or copying the source data:
+
+```json
+{
+  "filterExpression": [">=", ["get", "population"], 100000]
+}
+```
+
+The expression is saved with the project and remains active until it is cleared
+from the Select by Expression panel or from the layer's **Clear filters** action.
+It combines with Quick Filters and the transient filters described below.
+
 `kind` picks the control and the comparison: `categorical` (checkboxes over
 `values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
 open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`

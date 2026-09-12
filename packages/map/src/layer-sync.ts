@@ -1,5 +1,5 @@
 import {
-  compileQuickFilters,
+  compileLayerFilters,
   controlRendersLayer,
   DEFAULT_LAYER_STYLE,
   generatorCircleRadiusValue,
@@ -169,9 +169,8 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
  * only renders features inside the current timeline window), the transient
  * {@link GeoLibreLayer.embedFilter} (the embed API's `setFilter`, set by the
- * host page that frames the app), the persisted
- * {@link GeoLibreLayer.quickFilters} compiled by `compileQuickFilters` (the
- * layer's own data-driven filter controls), and the rule-based visibility
+ * host page that frames the app), the persisted expression and Quick Filter
+ * controls compiled by `compileLayerFilters`, and the rule-based visibility
  * filter (a rule-based layer whose else rule is switched off hides features
  * matching no rule — see {@link ruleBasedVisibilityFilter}). They are combined
  * with `all`, so a host page's filter and a user's quick filter narrow the
@@ -215,8 +214,8 @@ function withFeatureFilters(
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     filters.push(layer.embedFilter);
   }
-  const quickFilter = compileQuickFilters(layer.quickFilters);
-  if (quickFilter) filters.push(quickFilter);
+  const authoredFilter = compileLayerFilters(layer);
+  if (authoredFilter) filters.push(authoredFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
   if (layer.metadata?.sourceKind === "annotation") {
@@ -269,8 +268,8 @@ function nativeLayerSupportsFilter(type: string): boolean {
 /**
  * The active per-feature filters GeoLibre applies on top of an external
  * layer's own filters: the transient Time-Slider window, the embed API's
- * host-set `setFilter` expression, the layer's compiled quick filters, and the
- * rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter}).
+ * host-set `setFilter` expression, the layer's persisted authored filters, and
+ * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter}).
  * Empty when none applies.
  */
 function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
@@ -282,8 +281,8 @@ function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     extras.push(layer.embedFilter);
   }
-  const quickFilter = compileQuickFilters(layer.quickFilters);
-  if (quickFilter) extras.push(quickFilter);
+  const authoredFilter = compileLayerFilters(layer);
+  if (authoredFilter) extras.push(authoredFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) extras.push(ruleFilter);
   return extras;
@@ -1964,7 +1963,7 @@ function applyVectorDataRenderLayers(
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
-    compileQuickFilters(layer.quickFilters) !== null ||
+    compileLayerFilters(layer) !== null ||
     ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {

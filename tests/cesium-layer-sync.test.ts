@@ -2036,6 +2036,39 @@ describe("CesiumLayerSync", () => {
     assert.equal(ds.entities.values[3].show, false);
   });
 
+  it("applies a persistent expression filter to GeoJSON entities", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "definition-query",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { status: "open" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { status: "closed" },
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+      filterExpression: ["==", ["get", "status"], "open"],
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ show: boolean }> };
+    };
+    assert.equal(ds.entities.values[0].show, true);
+    assert.equal(ds.entities.values[1].show, false);
+  });
+
   it("synchronizes viewer clock currentTime when a layer carries a timeFilter date", async () => {
     const sync = newSync(f);
     const dateMs = new Date("2026-06-15T12:00:00Z").getTime();

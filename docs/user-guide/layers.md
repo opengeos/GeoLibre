@@ -107,7 +107,7 @@ The **Layer actions** menu (the `…` button) holds everything else:
 | **Open attribute table** | Show this layer's records in the [Attribute table](attribute-table.md). |
 | **Quick analysis** | Run a buffer, centroids, convex hull, or bounding box over the whole layer with no dialog. See [Right-click quick actions](map-controls.md#right-click-quick-actions). |
 | **Select features** | The interactive selection modes: by click, rectangle, polygon, freehand, or radius, plus **Clear Selection**. Hold `Shift` to add, `Alt` to remove, `Shift`+`Alt` to intersect, and `Esc` to cancel. |
-| **Select by Expression…** / **Select by Location…** | Build a selection from an attribute expression or a spatial relationship. Both are also on the [Edit menu](interface.md#the-top-toolbar). |
+| **Select by Expression…** / **Select by Location…** | Build a selection from an attribute expression or a spatial relationship. Select by Expression can also apply the expression as a persistent layer filter, hiding non-matching features without creating a new layer. Both are also on the [Edit menu](interface.md#the-top-toolbar). |
 | **Bind to Time Slider…** | Drive the Time Slider from one of this layer's date or number fields. |
 | **Export** | Write the layer out as GeoJSON, GeoParquet, GeoPackage, KML, KMZ, zipped Shapefile, or CSV (attributes only). |
 | **Styles** | Import and export symbology — see [below](#importing-and-exporting-styles). |

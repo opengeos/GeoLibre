@@ -1,11 +1,12 @@
 import {
   matchFeaturesByExpression,
+  substituteExpressionVariables,
   type SelectionMode,
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
 import { Button, Label, Select, Textarea } from "@geolibre/ui";
-import { SquareFunction } from "lucide-react";
+import { Filter, FilterX, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -20,8 +21,9 @@ import {
   selectableVectorLayers,
 } from "./selection-dialog-shared";
 
-/** Outcome of the last "Select features" run, shown inline. */
-interface SelectionSummary {
+/** Outcome of the last selection or layer-filter run, shown inline. */
+interface ExpressionSummary {
+  kind: "selection" | "filter";
   matched: number;
   selected: number;
   total: number;
@@ -45,6 +47,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
   const projectName = useAppStore((s) => s.projectName);
+  const setLayerFilterExpression = useAppStore((s) => s.setLayerFilterExpression);
 
   const eligibleLayers = useMemo(() => selectableVectorLayers(layers), [layers]);
 
@@ -52,7 +55,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   const [mode, setMode] = useState<SelectionMode>("new");
   const [source, setSource] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [summary, setSummary] = useState<SelectionSummary | null>(null);
+  const [summary, setSummary] = useState<ExpressionSummary | null>(null);
 
   // Re-seed the target each time the dialog opens: an explicit context-menu
   // target wins, then the active layer (when selectable), then the first
@@ -61,15 +64,17 @@ export function SelectByExpressionDialog(): ReactElement | null {
   useEffect(() => {
     if (!open) return;
     setSummary(null);
-    setTargetLayerId((current) => {
-      const eligible = selectableVectorLayers(useAppStore.getState().layers);
-      const candidates = [preselectedLayerId, current, useAppStore.getState().selectedLayerId];
-      for (const id of candidates) {
-        if (id && eligible.some((layer) => layer.id === id)) return id;
-      }
-      return eligible[0]?.id ?? null;
-    });
-  }, [open, preselectedLayerId]);
+    const eligible = selectableVectorLayers(useAppStore.getState().layers);
+    const candidates = [preselectedLayerId, targetLayerId, useAppStore.getState().selectedLayerId];
+    const target =
+      candidates
+        .map((id) => eligible.find((layer) => layer.id === id))
+        .find((layer) => layer !== undefined) ?? eligible[0];
+    setTargetLayerId(target?.id ?? null);
+    if (target?.filterExpression) setSource(JSON.stringify(target.filterExpression, null, 2));
+    // targetLayerId is intentionally read only when the panel opens. Including
+    // it here would re-run this seed after the user changes the target.
+  }, [open, preselectedLayerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const targetLayer = eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
 
@@ -107,6 +112,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
     [source, variables],
   );
   const canSelect = Boolean(targetLayer) && source.trim().length > 0 && validation.ok;
+  const hasExpressionFilter = Boolean(targetLayer?.filterExpression?.length);
   // The combine modes only make sense when the target layer holds the live
   // selection; otherwise remove/intersect would always yield an empty
   // selection, so the mode dropdown falls back to "new".
@@ -131,11 +137,50 @@ export function SelectByExpressionDialog(): ReactElement | null {
     if (!result.ok) return;
     const selected = applyMatchedSelection(targetLayer.id, result.ids, effectiveMode);
     setSummary({
+      kind: "selection",
       matched: result.ids.length,
       selected,
       total: features.length,
       errorCount: result.errorCount,
     });
+  };
+
+  const applyLayerFilter = () => {
+    if (!targetLayer) return;
+    const { zoom: liveZoom, center } = useAppStore.getState().mapView;
+    const liveVariables = standardExpressionVariables({
+      projectName,
+      layerName: targetLayer.name,
+      featureCount: features.length,
+      zoom: liveZoom,
+      centerLat: center[1],
+    });
+    const checked = validateMapExpression(source, {
+      variables: liveVariables,
+      expectedType: "boolean",
+    });
+    if (!checked.ok || !checked.parsed) return;
+    const expression = substituteExpressionVariables(checked.parsed, liveVariables) as unknown[];
+    setLayerFilterExpression(targetLayer.id, expression);
+
+    const result = matchFeaturesByExpression(features, source, {
+      zoom: liveZoom,
+      variables: liveVariables,
+    });
+    if (!result.ok) return;
+    setSummary({
+      kind: "filter",
+      matched: result.ids.length,
+      selected: selectionCount,
+      total: features.length,
+      errorCount: result.errorCount,
+    });
+  };
+
+  const clearLayerFilter = () => {
+    if (!targetLayer) return;
+    setLayerFilterExpression(targetLayer.id, null);
+    setSummary(null);
   };
 
   return (
@@ -160,7 +205,12 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   id="select-expression-layer"
                   value={targetLayerId ?? ""}
                   onChange={(event) => {
-                    setTargetLayerId(event.target.value || null);
+                    const nextId = event.target.value || null;
+                    setTargetLayerId(nextId);
+                    const nextLayer = eligibleLayers.find((layer) => layer.id === nextId);
+                    if (nextLayer?.filterExpression) {
+                      setSource(JSON.stringify(nextLayer.filterExpression, null, 2));
+                    }
                     setSummary(null);
                   }}
                 >
@@ -206,11 +256,16 @@ export function SelectByExpressionDialog(): ReactElement | null {
               />
               {summary && (
                 <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
-                  {t("selection.summary", {
-                    selected: summary.selected,
-                    total: summary.total,
-                    matched: summary.matched,
-                  })}
+                  {summary.kind === "filter"
+                    ? t("selection.filterSummary", {
+                        matched: summary.matched,
+                        total: summary.total,
+                      })
+                    : t("selection.summary", {
+                        selected: summary.selected,
+                        total: summary.total,
+                        matched: summary.matched,
+                      })}
                   {summary.errorCount > 0 && (
                     <>
                       {" "}
@@ -221,8 +276,23 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   )}
                 </p>
               )}
-              <div className="flex justify-end">
-                <Button onClick={runSelection} disabled={!canSelect}>
+              <div className="flex flex-wrap justify-end gap-2">
+                {hasExpressionFilter && (
+                  <Button type="button" variant="outline" onClick={clearLayerFilter}>
+                    <FilterX className="me-2 h-4 w-4" />
+                    {t("selection.clearLayerFilter")}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={applyLayerFilter}
+                  disabled={!canSelect}
+                >
+                  <Filter className="me-2 h-4 w-4" />
+                  {t("selection.applyLayerFilter")}
+                </Button>
+                <Button type="button" onClick={runSelection} disabled={!canSelect}>
                   {t("selection.select")}
                 </Button>
               </div>

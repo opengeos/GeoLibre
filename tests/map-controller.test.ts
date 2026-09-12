@@ -744,6 +744,21 @@ describe("MapController.syncLayers vector-tile time filtering", () => {
     ]);
   });
 
+  it("combines a persistent expression filter with transient filters", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const filterExpression = ["==", ["get", "status"], "open"];
+
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter, filterExpression })]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, [
+      "all",
+      POLYGON_GEOMETRY_FILTER,
+      timeFilter,
+      filterExpression,
+    ]);
+  });
+
   it("applies the window to an extruded tile layer", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);

@@ -71,9 +71,10 @@ checkboxes instead. Several filters on one layer narrow it together, and they
 combine with a Time Slider window, an embed `setFilter`, and rule-based
 symbology rather than replacing them.
 
-A quick filter hides features; it does not select them. Use **Select by
-Expression** or the selection tools when you want to act on features rather than
-take them off the map.
+A quick filter hides features; it does not select them. **Select by Expression**
+can either build a live selection or apply a persistent expression filter to the
+layer. The latter provides definition-query behavior without creating a copy of
+the matching features.
 
 A layer with an active filter shows a funnel icon on its row in the Layers
 panel, so a filtered layer is never mistaken for missing data, and its **Layer
@@ -83,9 +84,9 @@ clearing that filter: it shows every value, not none. **Remove all** at the top 
 the section deletes the controls outright.
 
 Filters are saved with the project, so a shared map opens with the same view of
-the data. They also appear in the read-only viewer chrome (`?layout=viewer`) —
-filtering is a way of reading a map, so the person you shared it with can ask it
-questions even though the authoring panels are hidden.
+the data. Quick Filter controls also appear in the read-only viewer chrome
+(`?layout=viewer`), so the person you shared it with can adjust those controls
+even though the authoring panels are hidden.
 
 Tile-backed layers (vector tiles, PMTiles, MBTiles) carry no local features, so
 their value lists are read from the tiles currently loaded and grow as you pan

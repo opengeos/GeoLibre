@@ -739,6 +739,8 @@ export interface AppState {
    * array to remove every control.
    */
   setLayerQuickFilters: (id: string, filters: LayerQuickFilter[]) => void;
+  /** Set or clear the project-persisted expression filter for a layer. */
+  setLayerFilterExpression: (id: string, expression: unknown[] | null) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   moveLayersRelative: (
@@ -1937,6 +1939,9 @@ export const useAppStore = create<AppState>()(
 
       setLayerQuickFilters: (id, filters) =>
         get().updateLayer(id, { quickFilters: filters.length > 0 ? filters : undefined }),
+
+      setLayerFilterExpression: (id, expression) =>
+        get().updateLayer(id, { filterExpression: expression ?? undefined }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 
