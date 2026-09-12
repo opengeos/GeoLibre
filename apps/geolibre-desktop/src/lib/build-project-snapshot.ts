@@ -8,6 +8,7 @@ import {
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";
+import { embedEditedGeometry } from "./edited-geometry-save";
 import { prepareCollaborationLayers } from "./collaboration-layers";
 
 /**
@@ -38,7 +39,9 @@ export function buildProjectSnapshot(
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     blankBackgroundColor: state.blankBackgroundColor,
-    layers: overrides.layers ?? state.layers,
+    // History and external snapshots must preserve the current edited data.
+    // File saves use their own explicit embedding choice before serialization.
+    layers: (overrides.layers ?? state.layers).map(embedEditedGeometry),
     selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,
     preferences: state.preferences,

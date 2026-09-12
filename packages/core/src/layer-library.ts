@@ -58,8 +58,9 @@ export const MAX_LAYER_LIBRARY_ENTRIES = 500;
  * Metadata keys dropped when capturing an entry. `resolvedUrl` is the dev-server
  * proxy rewrite of an XYZ template — a per-session artifact that must not be
  * baked into a saved source (the same reason `prepareLayerForSave` strips it).
+ * `geometryEdited` tracks changes to the live layer, not a library source.
  */
-const TRANSIENT_METADATA_KEYS = ["resolvedUrl"] as const;
+const TRANSIENT_METADATA_KEYS = ["resolvedUrl", "geometryEdited"] as const;
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";

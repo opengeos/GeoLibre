@@ -1246,3 +1246,19 @@ describe("hasRestorableLayerSource for Cesium Ion assets", () => {
     );
   });
 });
+
+it("strips geometry edit flags when capturing and importing library entries", () => {
+  const original = layer({
+    source: { url: "https://example.com/buildings.geojson" },
+    metadata: { geometryEdited: true },
+  });
+  const captured = captureLayerLibraryEntry(original, CAPTURE_OPTIONS);
+  assert.equal(captured.ok, true);
+  if (!captured.ok) return;
+  assert.equal(captured.entry.metadata.geometryEdited, undefined);
+  assert.equal(original.metadata.geometryEdited, true);
+  const [normalized] = normalizeLayerLibraryEntries([
+    { ...captured.entry, metadata: { geometryEdited: true } },
+  ]);
+  assert.equal(normalized.metadata.geometryEdited, undefined);
+});

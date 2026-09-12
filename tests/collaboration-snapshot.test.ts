@@ -46,3 +46,17 @@ describe("collaboration vector snapshots", () => {
     assert.equal(portable.metadata.embeddedGeoJSON, FEATURES);
   });
 });
+
+it("preserves edited URL geometries over stale materialized control data", () => {
+  const layer = geojsonLayer({
+    source: { type: "geojson", url: "https://example.com/buildings.geojson" },
+    geojson: FEATURES,
+    metadata: { externalNativeLayer: true, sourceKind: "maplibre-gl-vector", geometryEdited: true },
+  });
+  const stale: FeatureCollection = { type: "FeatureCollection", features: [] };
+  const [portable] = prepareCollaborationLayers([layer], new Map([[layer.id, stale]]));
+  assert.equal(portable.source.url, undefined);
+  assert.equal(portable.metadata.embeddedGeoJSON, FEATURES);
+  assert.equal(portable.metadata.geometryEdited, undefined);
+  assert.equal(layer.metadata.geometryEdited, true);
+});

@@ -1,5 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
 
 /**
  * Make local vector layers portable across a collaboration connection.
@@ -15,6 +16,8 @@ export function prepareCollaborationLayers(
   materialized: ReadonlyMap<string, FeatureCollection>,
 ): GeoLibreLayer[] {
   return layers.map((layer) => {
+    // Committed store edits take precedence over the control's cached data.
+    if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
     let metadata = layer.metadata;
     const collection = materialized.get(layer.id);
     if (collection) metadata = { ...metadata, embeddedGeoJSON: collection };
