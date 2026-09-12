@@ -709,6 +709,35 @@ describe("findLocalShareSources", () => {
     }
   });
 
+  it("lists a layer for its file even when a private-network reference comes first", () => {
+    const problems = findLocalShareSources({
+      layers: [
+        layer({
+          id: "cog",
+          name: "dem.tif",
+          type: "cog",
+          source: { url: "http://asset.localhost/E%3A%5Cdem.tif" },
+          metadata: { localFilePath: "E:\\dem.tif" },
+        }),
+        // The desktop app's bytes URL on its own is still the author's file.
+        layer({
+          id: "bytes",
+          name: "bytes.tif",
+          type: "cog",
+          source: { type: "raster" },
+          metadata: { localBytesUrl: "http://asset.localhost/E%3A%5Cbytes.tif" },
+        }),
+      ],
+    });
+    assert.deepEqual(
+      problems.map((item) => [item.layerId, item.reason]),
+      [
+        ["cog", "local-file"],
+        ["bytes", "local-file"],
+      ],
+    );
+  });
+
   it("leaves out a local vector the publish path embeds", () => {
     const problems = findLocalShareSources({
       layers: [

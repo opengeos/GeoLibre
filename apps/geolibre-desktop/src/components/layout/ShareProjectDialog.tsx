@@ -245,9 +245,13 @@ export function ShareProjectDialog({
   // The verdicts that are missing for everyone have their own block above the
   // form, so the probe report lists the rest: what the network settled, plus a
   // private-network host, which may still load for the intended recipients.
-  const remoteProblems = readiness?.problems.filter((item) => !isMissingForRecipients(item)) ?? [];
-  const remoteItemCount =
-    readiness?.items.filter((item) => !isMissingForRecipients(item)).length ?? 0;
+  // A row already in that block is not repeated here, whatever verdict the
+  // probe summary kept for it.
+  const missingKeys = new Set(localProblems.map((item) => item.layerId ?? item.field));
+  const isRemoteRow = (item: ShareReadinessItem) =>
+    !isMissingForRecipients(item) && !missingKeys.has(item.layerId ?? item.field);
+  const remoteProblems = readiness?.problems.filter(isRemoteRow) ?? [];
+  const remoteItemCount = readiness?.items.filter(isRemoteRow).length ?? 0;
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
   // error never lingers into a new share. Seed the title from the current

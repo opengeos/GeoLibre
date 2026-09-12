@@ -447,8 +447,19 @@ export function collectShareSources(input: ShareReadinessInput): ShareSourceRef[
     }
     const credentialField = hasCredentialField(layer.source) || hasCredentialField(layer.metadata);
     for (const reference of references) {
-      const classified = classifyReference(reference.url);
+      let classified = classifyReference(reference.url);
       if (!classified) continue;
+      // These two fields exist only to hold a file the author opened from disk:
+      // the absolute path, and the desktop app's bytes URL for it, which is a
+      // loopback `asset.localhost` address the host check would otherwise call a
+      // private network. Name the file, not the network.
+      if (
+        classified.status === "local" &&
+        (reference.field === "metadata.localFilePath" ||
+          reference.field === "metadata.localBytesUrl")
+      ) {
+        classified = { ...classified, reason: "local-file" };
+      }
       refs.push({
         layerId: layer.id,
         label: layer.name,
@@ -672,7 +683,10 @@ export function isMissingForRecipients(
  * drew only the basemap for everyone else).
  */
 export function findLocalShareSources(input: ShareReadinessInput): ShareReadinessItem[] {
-  return summarizeShareSources(collectShareSources(input)).filter(isMissingForRecipients);
+  // Filter the references, not the summarized rows: a layer that remembers
+  // both a private-network address and a file on disk must be listed for the
+  // file, whichever reference the summary happened to keep.
+  return summarizeShareSources(collectShareSources(input).filter(isMissingForRecipients));
 }
 
 /** Collect, probe, and summarize. What the Share dialog calls. */
