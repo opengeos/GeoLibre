@@ -422,6 +422,70 @@ describe("CesiumControlHost", () => {
     assert.equal(clicks.length, 1);
   });
 
+  it("forwards a pointer event on a scene that has no globe", () => {
+    // `pickGlobeHit` answers a globe-less scene with a WGS84 ellipsoid pick, so
+    // the facade's cartographic conversion cannot assume `scene.globe` exists.
+    const canvas = doc.createElement("canvas");
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0 }) as DOMRect;
+    parent.appendChild(canvas);
+    const sceneViewer = {
+      canvas,
+      scene: { canvas },
+      camera: {
+        heading: 0,
+        pitch: -Math.PI / 2,
+        getPickRay: (point: { x: number; y: number }) => ({ point }),
+        pickEllipsoid: () => ({ lng: 42, lat: -7 }),
+      },
+      isDestroyed: () => false,
+    };
+    const Cesium = makeFakeCesium();
+    Cesium.Ellipsoid.WGS84 = {
+      cartesianToCartographic: (position: { lng: number; lat: number }) => ({
+        longitude: position.lng * RADIANS,
+        latitude: position.lat * RADIANS,
+      }),
+    } as never;
+    const host = new CesiumControlHost(sceneViewer as never, parent, Cesium as never);
+    const facade = facadeOf(host);
+    const clicks: any[] = [];
+    facade.on("click", (event: unknown) => clicks.push(event));
+    const event = new doc.defaultView!.Event("click");
+    Object.assign(event, { clientX: 5, clientY: 6 });
+    canvas.dispatchEvent(event);
+    assert.equal(clicks.length, 1);
+    assert.ok(Math.abs(clicks[0].lngLat.lng - 42) < 1e-9);
+    assert.ok(Math.abs(clicks[0].lngLat.lat - -7) < 1e-9);
+    host.destroy();
+  });
+
+  it("skips the globe pick when no control listens for the event", () => {
+    // mousemove fires every pointer frame and each pick is a terrain ray
+    // intersection, so an unsubscribed event must not reach the scene at all.
+    const sceneViewer = makeSceneViewer(doc);
+    parent.appendChild(sceneViewer.canvas);
+    sceneViewer.canvas.getBoundingClientRect = () => ({ left: 0, top: 0 }) as DOMRect;
+    let picks = 0;
+    const getPickRay = sceneViewer.camera.getPickRay;
+    sceneViewer.camera.getPickRay = (point: { x: number; y: number }) => {
+      picks++;
+      return getPickRay(point);
+    };
+    const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);
+    const facade = facadeOf(host);
+    const move = new doc.defaultView!.Event("mousemove");
+    Object.assign(move, { clientX: 5, clientY: 6 });
+    sceneViewer.canvas.dispatchEvent(move);
+    assert.equal(picks, 0);
+
+    const moves: unknown[] = [];
+    facade.on("mousemove", (event: unknown) => moves.push(event));
+    sceneViewer.canvas.dispatchEvent(move);
+    assert.equal(picks, 1);
+    assert.equal(moves.length, 1);
+    host.destroy();
+  });
+
   it("projects and unprojects through the Cesium scene", () => {
     const sceneViewer = makeSceneViewer(doc);
     const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);

@@ -405,6 +405,8 @@
       "imported_other": "Đã nhập dịch vụ {{count}}."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
       "errorSource": "Nhập URL KML/KMZ hoặc chọn một tệp."
     },
     "xyz": {

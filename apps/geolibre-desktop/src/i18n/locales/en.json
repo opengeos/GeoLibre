@@ -443,6 +443,8 @@
       "readError": "Failed to read CZML data."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
       "errorSource": "Enter a KML/KMZ URL or choose a file."
     },
     "xyz": {

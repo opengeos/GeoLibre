@@ -1264,9 +1264,36 @@ export class CesiumLayerSync {
     }
     this.applyHighlight();
     this.watchCameraZoom();
+    this.reorderKmlOverlays();
     // Reordering two loaded CZML layers changes which one comes first.
     this.electCzmlClockOwner();
   }
+
+  /**
+   * Re-append the KML ScreenOverlay containers in store order. `createKml`
+   * appends each container once, so a later panel reorder (which rebuilds
+   * nothing) would leave two overlapping overlays stacked the way they happened
+   * to load. Sibling DOM order decides that stacking, so re-appending in turn
+   * re-asserts it — skipped unless the order actually changed, since each pass
+   * moves live DOM nodes on a hot path.
+   */
+  private reorderKmlOverlays(): void {
+    const containers: HTMLElement[] = [];
+    for (const layer of this.currentLayers) {
+      const container = this.entries.get(layer.id)?.overlayContainer;
+      if (container) containers.push(container);
+    }
+    const order = this.currentLayers
+      .filter((l) => this.entries.get(l.id)?.overlayContainer)
+      .map((l) => l.id)
+      .join("\n");
+    if (order === this.lastKmlOverlayOrder) return;
+    this.lastKmlOverlayOrder = order;
+    for (const container of containers) container.parentElement?.appendChild(container);
+  }
+
+  /** The KML overlay stacking order {@link reorderKmlOverlays} last asserted. */
+  private lastKmlOverlayOrder = "";
 
   destroy(): void {
     this.restoreHighlight();

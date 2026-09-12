@@ -48,7 +48,12 @@ class CesiumMapFacade extends maplibregl.Evented {
     ] as const) {
       const listener = (originalEvent: MouseEvent) => {
         const C = this.Cesium;
-        if (!C || !this.scene()) return;
+        const scene = this.scene();
+        if (!C || !scene) return;
+        // `pickGlobeHit` costs a terrain ray intersection, and `mousemove` fires
+        // on every pointer frame. The engine's own cursor readout already picks
+        // on move, so skip the work entirely when no control is listening here.
+        if (!this.listens(name)) return;
         const rect = viewer.canvas.getBoundingClientRect();
         const point = new maplibregl.Point(
           originalEvent.clientX - rect.left,
@@ -58,7 +63,11 @@ class CesiumMapFacade extends maplibregl.Evented {
         // A click on space has no geographic location. Do not fabricate the
         // view centre for a control that may place a marker or start a query.
         if (!hit) return;
-        const position = viewer.scene.globe.ellipsoid.cartesianToCartographic(hit.position);
+        // `pickGlobeHit` falls back to a WGS84 ellipsoid pick when the scene has
+        // no globe, so the conversion cannot assume one is configured either.
+        const position = (scene.globe?.ellipsoid ?? C.Ellipsoid.WGS84).cartesianToCartographic(
+          hit.position,
+        );
         const lngLat = new maplibregl.LngLat(
           C.Math.toDegrees(position.longitude),
           C.Math.toDegrees(position.latitude),

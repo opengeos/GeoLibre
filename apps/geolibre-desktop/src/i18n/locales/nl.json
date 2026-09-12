@@ -409,6 +409,8 @@
       "importedWithDropped_other": "{{count}} services geïmporteerd ({{dropped}} overgeslagen — bibliotheek vol)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML-/KMZ-URL",
       "errorSource": "Voer een KML/KMZ-URL in of kies een bestand."
     },
     "xyz": {

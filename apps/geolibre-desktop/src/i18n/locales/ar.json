@@ -425,6 +425,8 @@
       "importedWithDropped_other": "تم استيراد {{count}} خدمة (تم تخطي {{dropped}} — المكتبة ممتلئة)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "عنوان URL لملف KML / KMZ",
       "errorSource": "أدخل رابط KML/KMZ أو اختر ملفًا."
     },
     "xyz": {

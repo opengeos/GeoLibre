@@ -409,6 +409,8 @@
       "importedWithDropped_other": "Importati {{count}} servizi ({{dropped}} ignorati — libreria piena)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
       "errorSource": "Inserisci un URL KML/KMZ o scegli un file."
     },
     "xyz": {

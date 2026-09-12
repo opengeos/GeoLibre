@@ -405,6 +405,8 @@
       "importedWithDropped_other": "Mengimpor {{count}} layanan ({{dropped}} dilewati — pustaka penuh)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
       "errorSource": "Masukkan URL KML/KMZ atau pilih berkas."
     },
     "xyz": {

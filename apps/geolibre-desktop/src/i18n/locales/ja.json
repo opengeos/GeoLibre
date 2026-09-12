@@ -405,6 +405,8 @@
       "importedWithDropped_other": "{{count}}件のサービスをインポートしました({{dropped}}件はライブラリが上限に達したためスキップされました)。"
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ の URL",
       "errorSource": "KML/KMZ の URL を入力するか、ファイルを選択してください。"
     },
     "xyz": {

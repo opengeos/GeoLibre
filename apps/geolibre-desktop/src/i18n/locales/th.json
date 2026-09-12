@@ -405,6 +405,8 @@
       "importedWithDropped_other": "นำเข้าบริการแล้ว {{count}} รายการ (ข้าม {{dropped}} รายการ — คลังเต็ม)"
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL ของ KML / KMZ",
       "errorSource": "ป้อน URL ของ KML/KMZ หรือเลือกไฟล์"
     },
     "xyz": {

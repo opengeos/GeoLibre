@@ -9,7 +9,8 @@ import { AddDataSourceForm, useAddDataSource } from "../shared";
 /** Preserve the original KML document or KMZ archive in the project. */
 export function KmlSource({ initialUrl }: { initialUrl?: string }) {
   const { t } = useTranslation();
-  const source = useAddDataSource("KML / KMZ");
+  const [defaultName] = useState(() => t("addData.kml.defaultName"));
+  const source = useAddDataSource(defaultName);
   const [url, setUrl] = useState(initialUrl ?? "");
   const [file, setFile] = useState<{ path: string; data: string } | null>(null);
   const chooseFile = async () => {
@@ -37,9 +38,9 @@ export function KmlSource({ initialUrl }: { initialUrl?: string }) {
       setFile({ path: picked.path, data });
       setUrl("");
       source.setLayerName((current) =>
-        current.trim() && current !== "KML / KMZ"
+        current.trim() && current !== defaultName
           ? current
-          : layerNameFromPath(picked.path, "KML / KMZ"),
+          : layerNameFromPath(picked.path, defaultName),
       );
     } catch (error) {
       source.setError(errorMessage(error, t("addData.shared.addError")));
@@ -49,7 +50,7 @@ export function KmlSource({ initialUrl }: { initialUrl?: string }) {
     if (!file && !url.trim()) throw new Error(t("addData.kml.errorSource"));
     source.addAndClose(
       createCesiumKmlLayer({
-        name: source.layerName.trim() || "KML / KMZ",
+        name: source.layerName.trim() || defaultName,
         url: url.trim(),
         data: file?.data,
         sourcePath: file?.path,
@@ -68,7 +69,7 @@ export function KmlSource({ initialUrl }: { initialUrl?: string }) {
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="kml-url">KML / KMZ URL</Label>
+          <Label htmlFor="kml-url">{t("addData.kml.url")}</Label>
           <Input
             id="kml-url"
             value={url}

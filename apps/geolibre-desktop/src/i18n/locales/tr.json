@@ -409,6 +409,8 @@
       "importedWithDropped_other": "{{count}} servis içe aktarıldı ({{dropped}} tanesi atlandı — kitaplık dolu)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL'si",
       "errorSource": "Bir KML/KMZ URL’si girin veya dosya seçin."
     },
     "xyz": {

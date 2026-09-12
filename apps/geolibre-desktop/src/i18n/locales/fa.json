@@ -409,6 +409,8 @@
       "importedWithDropped_other": "{{count}} سرویس وارد شد ({{dropped}} مورد رد شد — کتابخانه پر است)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "نشانی KML / KMZ",
       "errorSource": "نشانی KML/KMZ را وارد کنید یا یک فایل انتخاب کنید."
     },
     "xyz": {

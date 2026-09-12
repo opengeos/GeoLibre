@@ -405,6 +405,8 @@
       "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。"
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
       "errorSource": "输入 KML/KMZ URL 或选择文件。"
     },
     "xyz": {

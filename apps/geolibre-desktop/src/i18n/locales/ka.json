@@ -409,6 +409,8 @@
       "importedWithDropped_other": "დაიმპორტდა {{count}} სერვისი ({{dropped}} გამოტოვდა — ბიბლიოთეკა სავსეა)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
       "errorSource": "შეიყვანეთ KML/KMZ URL ან აირჩიეთ ფაილი."
     },
     "xyz": {

@@ -478,8 +478,13 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       this._renderProfile();
     } catch (error) {
       if (token !== this._requestToken) return;
+      // The native sampler reports actionable conditions of its own ("the terrain
+      // source changed", "the globe was closed") as plain Errors; those messages
+      // are written for the user, so keep them instead of the HTTP-path fallback.
       const message =
-        error instanceof ElevationFetchError ? error.message : "Could not load elevation data.";
+        error instanceof ElevationFetchError || (this._nativeMap && error instanceof Error)
+          ? error.message
+          : "Could not load elevation data.";
       this._stats = null;
       this._profilePoints = [];
       this._setStatus(message);

@@ -405,6 +405,8 @@
       "importedWithDropped_other": "서비스 {{count}}개를 가져왔습니다({{dropped}}개는 라이브러리가 가득 차서 건너뜀)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
       "errorSource": "KML/KMZ URL을 입력하거나 파일을 선택하세요."
     },
     "xyz": {

@@ -409,6 +409,8 @@
       "importedWithDropped_other": "{{count}} services importés ({{dropped}} ignorés — bibliothèque pleine)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
       "errorSource": "Saisissez une URL KML/KMZ ou choisissez un fichier."
     },
     "xyz": {

@@ -69,6 +69,18 @@ describe("native KML documents", () => {
     assert.throws(() => createCesiumKmlLayer({ name: "Empty", url: " " }), /Provide/);
   });
 
+  it("strips a byte order mark so inline XML is still recognized as a document", () => {
+    // A KML exported with a UTF-8 BOM must still take createKml's inline branch
+    // rather than being handed to KmlDataSource.load as a URL. `trim()` drops
+    // U+FEFF (ECMAScript counts <ZWNBSP> as whitespace); pin that down so a
+    // future rewrite of the normalization keeps it.
+    const xml = '<kml xmlns="http://www.opengis.net/kml/2.2"/>';
+    const layer = createCesiumKmlLayer({ name: "BOM", data: `\uFEFF\n${xml}` });
+    const source = cesiumKmlSource(layer)!;
+    assert.equal(source, xml);
+    assert.equal(source.startsWith("<"), true);
+  });
+
   it("loads native documents, preserves colors while fading, and removes their overlays", async () => {
     const { sync, viewer, sources } = globe();
     const layer = createCesiumKmlLayer({ name: "KML", url: "https://example.org/map.kmz" });

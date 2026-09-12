@@ -417,6 +417,8 @@
       "importedWithDropped_other": "Импортировано {{count}} сервиса ({{dropped}} пропущено — библиотека заполнена)."
     },
     "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
       "errorSource": "Введите URL KML/KMZ или выберите файл."
     },
     "xyz": {
