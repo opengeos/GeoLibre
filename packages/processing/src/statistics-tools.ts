@@ -4,7 +4,7 @@ import centroid from "@turf/centroid";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { earthAreaToBody, getActiveMeanRadiusMeters } from "@geolibre/core";
+import { earthAreaToBody, getActiveMeanRadiusMeters, horizontalBbox } from "@geolibre/core";
 import type {
   FieldDirection,
   FieldNormalization,
@@ -590,7 +590,12 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
     const observedMean = sumNn / n;
 
     // Study area = bounding-box area (m²) of the input extent.
-    const [west, south, east, north] = bbox(layer.geojson);
+    const extentBox = horizontalBbox(bbox(layer.geojson));
+    if (!extentBox) {
+      ctx.log("Error: the layer has no usable extent.");
+      return;
+    }
+    const [west, south, east, north] = extentBox;
     const extent = turfPolygon([
       [
         [west, south],
@@ -710,7 +715,12 @@ export const kernelDensityTool: ProcessingAlgorithm = {
 
     // Build a grid over the point extent, padded by one bandwidth so the
     // kernel tails near the edges are represented.
-    const [west, south, east, north] = bbox(layer.geojson);
+    const extentBox = horizontalBbox(bbox(layer.geojson));
+    if (!extentBox) {
+      ctx.log("Error: the layer has no usable extent.");
+      return;
+    }
+    const [west, south, east, north] = extentBox;
     const midLat = (south + north) / 2;
     const kmPerDegLat = 111.32;
     const kmPerDegLon = 111.32 * Math.cos((midLat * Math.PI) / 180) || 1e-6;

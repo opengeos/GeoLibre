@@ -20,8 +20,9 @@ import type { Feature, FeatureCollection, GeoJSON, Geometry, Position } from "ge
  * feed reached MapLibre as an out-of-range latitude (#2358).
  *
  * Returns null when there is no usable horizontal extent: a box of any other
- * length, or one carrying a non-finite value — an empty collection, or one
- * whose features all have a null geometry, bboxes to ±Infinity.
+ * length, or one carrying a non-finite value anywhere — an empty collection, or
+ * one whose features all have a null geometry, bboxes to ±Infinity, and a box
+ * whose altitudes are not finite is not one to trust the rest of.
  *
  * @param box - A GeoJSON or Turf bounding box, of four or six values.
  */
@@ -29,14 +30,9 @@ export function horizontalBbox(
   box: readonly number[] | null | undefined,
 ): [number, number, number, number] | null {
   if (!box) return null;
-  const horizontal =
-    box.length === 4
-      ? [box[0], box[1], box[2], box[3]]
-      : box.length === 6
-        ? [box[0], box[1], box[3], box[4]]
-        : null;
-  if (!horizontal?.every((value) => Number.isFinite(value))) return null;
-  return horizontal as [number, number, number, number];
+  if (box.length !== 4 && box.length !== 6) return null;
+  if (!box.every((value) => Number.isFinite(value))) return null;
+  return box.length === 6 ? [box[0], box[1], box[3], box[4]] : [box[0], box[1], box[2], box[3]];
 }
 
 // Proving the *negative* (no Z anywhere) walks every coordinate, so cache the

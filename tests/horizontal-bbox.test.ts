@@ -30,6 +30,12 @@ describe("horizontalBbox", () => {
     assert.equal(horizontalBbox([-78, Number.NaN, -77, 36]), null);
   });
 
+  it("returns null when only the altitudes are non-finite", () => {
+    // The horizontal values alone would pass, but a box whose altitudes are
+    // not finite is not one to trust the rest of.
+    assert.equal(horizontalBbox([-78, 35, Number.NaN, -77, 36, Number.POSITIVE_INFINITY]), null);
+  });
+
   it("returns null for a box of any other length", () => {
     assert.equal(horizontalBbox([-78, 35, -77]), null);
     assert.equal(horizontalBbox([]), null);

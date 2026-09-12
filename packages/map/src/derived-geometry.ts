@@ -6,7 +6,12 @@ import convex from "@turf/convex";
 import mask from "@turf/mask";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeometryGeneratorType, LayerStyle } from "@geolibre/core";
-import { bodyLengthToEarth, getActiveBodyRadiusRatio, styleValue } from "@geolibre/core";
+import {
+  bodyLengthToEarth,
+  getActiveBodyRadiusRatio,
+  horizontalBbox,
+  styleValue,
+} from "@geolibre/core";
 
 /**
  * Derived feature collections for the symbology pack (#1323): the inverted
@@ -203,15 +208,10 @@ function deriveFeature(
       case "centroid":
         return centroid(feature);
       case "bounding-box": {
-        const box = bbox(feature);
-        if (!box.every((value) => Number.isFinite(value))) return null;
-        // bbox() returns 6 elements [minX,minY,minZ,maxX,maxY,maxZ] when any
-        // coordinate carries a Z value; normalize to the 2D corners so the
-        // degenerate check and bboxPolygon() see [minX,minY,maxX,maxY].
-        const box2d: [number, number, number, number] =
-          box.length === 6
-            ? [box[0], box[1], box[3], box[4]]
-            : (box as [number, number, number, number]);
+        // A six-element box carries elevation, so reduce it to the 2D corners
+        // the degenerate check and bboxPolygon() expect.
+        const box2d = horizontalBbox(bbox(feature));
+        if (!box2d) return null;
         // A point's bbox is degenerate (zero area) and would render nothing.
         if (box2d[0] === box2d[2] && box2d[1] === box2d[3]) return null;
         return bboxPolygon(box2d);

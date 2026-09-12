@@ -240,6 +240,30 @@ describe("average nearest neighbor", () => {
     const { messages } = run(averageNearestNeighborTool, pointLayer([[0, 0, {}]]), {});
     assert.ok(messages.some((m) => m.includes("at least 2")));
   });
+
+  it("ignores an elevation-carrying bbox when measuring the study area", () => {
+    // A collection's own `bbox` member is taken verbatim, and RFC 7946 §5 lets
+    // it hold six values. Read as four, the study area would be measured over
+    // [west, south, minAltitude, east], so the same points would report a
+    // different ratio depending on whether the file declared its elevation.
+    const points: Array<[number, number, Record<string, unknown>]> = [];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) points.push([c * 0.01, r * 0.01, {}]);
+    }
+    const flat = pointLayer(points);
+    const withElevation: GeoLibreLayer = {
+      ...flat,
+      geojson: {
+        ...(flat.geojson as FeatureCollection),
+        bbox: [0, 0, 120, 0.03, 0.03, 940],
+      },
+    };
+
+    assert.equal(
+      loggedNumber(run(averageNearestNeighborTool, withElevation, {}).messages, "NN ratio:"),
+      loggedNumber(run(averageNearestNeighborTool, flat, {}).messages, "NN ratio:"),
+    );
+  });
 });
 
 describe("kernel density", () => {
