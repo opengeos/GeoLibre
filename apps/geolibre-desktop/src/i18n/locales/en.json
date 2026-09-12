@@ -1400,7 +1400,7 @@
     "shareAnyway": "Share anyway",
     "localWarningTitle_one": "{{count}} layer will be missing from the shared map",
     "localWarningTitle_other": "{{count}} layers will be missing from the shared map",
-    "localWarningBody": "{{shareHost}} stores only the project file, never the files on your computer. Recipients open the project in a browser, which cannot read your disk or your local network, so these layers will be empty for everyone but you.",
+    "localWarningBody": "{{shareHost}} stores only the project file, never the files on your computer. Recipients open the project in a browser, which cannot read your disk, so these layers will be empty for everyone but you.",
     "localWarningAdvice": "To include them, convert rasters to Cloud Optimized GeoTIFF and vectors to PMTiles or GeoParquet, host the files on a public HTTPS server such as GitHub or Hugging Face, add them to the map by URL, then share again. Small local vector layers are embedded in the project automatically.",
     "localWarningLearnMore": "Learn more",
     "readinessChecking": "Checking whether recipients can load your data…",
