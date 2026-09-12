@@ -18,6 +18,7 @@ import {
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { embedEditedGeometry, hasEditedGeometry } from "../lib/edited-geometry-save";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager } from "./usePlugins";
 import { pluginManifestUrlsForIds } from "../lib/external-plugins";
@@ -122,6 +123,8 @@ const SERIALIZATION_TOO_LARGE_PATTERN =
  * otherwise be lost on reopen (the browser exposes no path to re-read them).
  */
 export interface EmbedVectorDataPrompt {
+  /** Whether saving references would lose committed geometry edits. */
+  hasGeometryEdits: boolean;
   /** Number of local-file vector layers that can be embedded. */
   count: number;
   /** Total embedded size in bytes, for the size warning. */
@@ -983,10 +986,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     bytes: number,
     desktop: boolean,
     promptProjectGeneration: number,
+    hasGeometryEdits: boolean,
   ) =>
     new Promise<"embed" | "noembed" | "cancel">((resolve) => {
       setEmbedVectorDataPrompt({
         count,
+        hasGeometryEdits,
         bytes,
         desktop,
         allowFileReferences: canSaveVectorFileReferences(desktop, IS_MAS_BUILD),
@@ -1021,6 +1026,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
     }
     return layers.map((layer) => {
+      if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
       let metadata = layer.metadata;
       const collection = embeddable.get(layer.id);
       if (collection) metadata = { ...metadata, embeddedGeoJSON: collection };
@@ -1045,7 +1051,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       bytes += encoder.encode(JSON.stringify(collection)).length;
     }
     for (const layer of layers) {
-      if (isReloadableLocalFileLayer(layer) && layer.geojson) {
+      if (!embeddable.has(layer.id) && isReloadableLocalFileLayer(layer) && layer.geojson) {
         bytes += encoder.encode(JSON.stringify(layer.geojson)).length;
       }
     }
@@ -1065,7 +1071,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const state = useAppStore.getState();
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
     if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
-    const localFileLayers = isTauri() ? state.layers.filter(isReloadableLocalFileLayer) : [];
+    const editedLayers = state.layers.filter(hasEditedGeometry);
+    for (const layer of editedLayers) embeddable.set(layer.id, layer.geojson!);
+    const localFileLayers = isTauri()
+      ? state.layers.filter(
+          (layer) => isReloadableLocalFileLayer(layer) && !embeddable.has(layer.id),
+        )
+      : [];
     if (embeddable.size === 0 && localFileLayers.length === 0) return {};
 
     const count = embeddable.size + localFileLayers.length;
@@ -1077,13 +1089,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // size that was acknowledged. A remembered Save without data stays silent
     // only for the layers whose data the user accepted losing. Both are
     // material risks that deserve a fresh confirmation even though the ordinary
-    // per-project choice is remembered. On desktop that second case cannot
-    // arise: "without data" writes file references, so nothing is discarded.
-    const discardedLayerIds = isTauri() ? [] : [...embeddable.keys()];
+    // per-project choice is remembered. Geometry edits also need embedding on
+    // desktop: file references would reload the original geometries.
+    const discardedLayerIds = isTauri()
+      ? editedLayers.map((layer) => layer.id)
+      : [...embeddable.keys()];
     const reusableChoice = reusableVectorDataChoice(remembered, {
       embedBytes: bytes,
       warningBytes: LARGE_EMBED_WARNING_BYTES,
       discardedLayerIds,
+      editedLayerIds: editedLayers.map((layer) => layer.id),
     });
     // A remembered choice the durability guard below would have to override is
     // not reusable: silently upgrading it to Embed would skip the prompt, and
@@ -1096,7 +1111,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         : reusableChoice;
     const requestedChoice =
       rememberedVectorChoice ??
-      (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
+      (await askEmbedVectorData(
+        count,
+        bytes,
+        isTauri(),
+        state.projectGeneration,
+        editedLayers.length > 0,
+      ));
     // A Mac App Store app receives temporary access to user-selected files.
     // That access expires when the sandboxed process exits, so a path-only
     // project cannot restore its local vectors after the next launch. Embed is
@@ -1144,6 +1165,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (!isTauri()) return {};
     let changed = false;
     const layers = useAppStore.getState().layers.map((layer) => {
+      if (hasEditedGeometry(layer) && !isReloadableLocalFileLayer(layer)) return layer;
       // Plain GeoJSON with an absolute path → reference (drop the embedded copy).
       if (isReloadableLocalFileLayer(layer)) {
         changed = true;

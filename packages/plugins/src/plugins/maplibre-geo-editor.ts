@@ -16,6 +16,7 @@ import {
   SKETCHES_SOURCE_KIND,
   applySyncedEditorTracking,
   canEditLayerGeometry,
+  geometryEditPatch,
   captureEditedGeometries,
   captureEditedProperties,
   planGeoEditorOverlayOrder,
@@ -802,7 +803,7 @@ function syncEditTargetToStore(): void {
 
   pushingSketchesToStore = true;
   try {
-    store.updateLayer(editTargetLayerId, { geojson: edited });
+    store.updateLayer(editTargetLayerId, geometryEditPatch(layer, edited));
   } finally {
     pushingSketchesToStore = false;
   }

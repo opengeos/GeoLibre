@@ -2937,6 +2937,7 @@
       "saveProjectAsTitle": "Save project as",
       "saveProjectAsDesc": "Enter a file name. The project will download to your browser's downloads folder when you click Save.",
       "embedVectorTitle": "Embed local vector data?",
+      "embedEditedGeometryDesc": "This project contains edited geometries. Embed vector data (about {{size}}) to preserve them. Without embedding, referenced layers reopen with their original geometries and local data may be unavailable.",
       "embedVectorDesc": "This project has {{count}} local vector layer(s) loaded from your computer. The browser cannot re-read them when the project is reopened, so their data must be embedded in the project file to be restored. Embedding adds about {{size}} to the file.",
       "embedVectorDescDesktop": "This project has {{count}} local vector layer(s) loaded from your computer. Embed their data to make the project self-contained (adds about {{size}}), or save file references that reload from disk when the project is reopened. References keep the file small but break if a source file is later moved or deleted.",
       "embedVectorDescMas": "This project has {{count}} local vector layer(s) loaded from your computer. The Mac App Store sandbox cannot retain access to those files after GeoLibre closes, so their data must be embedded in the project file to be restored. Embedding adds about {{size}} to the file.",

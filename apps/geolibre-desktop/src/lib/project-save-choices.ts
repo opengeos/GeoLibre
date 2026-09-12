@@ -42,12 +42,13 @@ export interface ProjectSaveChoices {
 export interface VectorDataSaveRisk {
   /** Estimated size of the data this save would embed. */
   embedBytes: number;
+  /** Edited layers require a fresh confirmation before saving without their edits. */
+  editedLayerIds?: readonly string[];
   /** Threshold at which the large-embed warning applies. */
   warningBytes: number;
   /**
-   * Ids of local vector layers whose data this save would drop outright. Only
-   * the web build can lose data this way: on desktop "Save without data" writes
-   * file references that reload from disk, so nothing is discarded there.
+   * Ids of layers whose data or geometry edits this save would discard.
+   * Desktop references also lose geometry edits made since reading the file.
    */
   discardedLayerIds: readonly string[];
 }
@@ -119,6 +120,7 @@ export function reusableVectorDataChoice(
       : undefined;
   }
   if (remembered.vectorData === "noembed") {
+    if (risk.editedLayerIds?.length) return undefined;
     if (risk.discardedLayerIds.length === 0) return remembered.vectorData;
     const acknowledged = new Set(remembered.discardedVectorLayerIds ?? []);
     return risk.discardedLayerIds.every((id) => acknowledged.has(id))

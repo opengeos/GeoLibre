@@ -172,3 +172,18 @@ describe("project save choices", () => {
     assert.equal(reusableCredentialChoice(strip, risk(["basemapStyleUrl=q7"])), "strip");
   });
 });
+
+it("reconfirms saving without geometry edits even for an acknowledged layer", () => {
+  const choice = rememberProjectSaveChoices(null, 1, {
+    vectorData: "noembed",
+    discardedVectorLayerIds: ["buildings"],
+  });
+  const risk = {
+    embedBytes: 1000,
+    warningBytes: 50000000,
+    discardedLayerIds: ["buildings"],
+    editedLayerIds: ["buildings"],
+  };
+  assert.equal(reusableVectorDataChoice(choice, risk), undefined);
+  assert.equal(reusableVectorDataChoice({ ...choice, vectorData: "embed" }, risk), "embed");
+});

@@ -2840,6 +2840,7 @@
       "saveProjectAsTitle": "Simpan proyek sebagai",
       "saveProjectAsDesc": "Masukkan nama file. Proyek akan diunduh ke folder unduhan browser Anda saat Anda mengklik Simpan.",
       "embedVectorTitle": "Sematkan data vektor lokal?",
+      "embedEditedGeometryDesc": "Proyek ini berisi geometri yang telah diedit. Sematkan data vektor (sekitar {{size}}) untuk mempertahankannya. Tanpa penyematan, layer referensi dibuka kembali dengan geometri aslinya dan data lokal mungkin tidak tersedia.",
       "embedVectorDesc": "Proyek ini memiliki {{count}} layer vektor lokal yang dimuat dari komputer Anda. Browser tidak dapat membaca ulang layer ini saat proyek dibuka kembali, sehingga datanya harus disematkan dalam file proyek untuk dipulihkan. Menyematkan menambah sekitar {{size}} ke file.",
       "embedVectorDescDesktop": "Proyek ini memiliki {{count}} layer vektor lokal yang dimuat dari komputer Anda. Sematkan datanya agar proyek mandiri (menambah sekitar {{size}}), atau simpan referensi file yang dimuat ulang dari disk saat proyek dibuka kembali. Referensi menjaga file tetap kecil tetapi rusak jika file sumber kemudian dipindahkan atau dihapus.",
       "embedVectorDescMas": "Proyek ini memiliki {{count}} layer vektor lokal yang dimuat dari komputer Anda. Sandbox Mac App Store tidak dapat mempertahankan akses ke file tersebut setelah GeoLibre ditutup, sehingga datanya harus disematkan dalam file proyek agar dapat dipulihkan. Penyematan menambah sekitar {{size}} ke file.",

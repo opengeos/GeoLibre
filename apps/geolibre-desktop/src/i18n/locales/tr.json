@@ -2890,6 +2890,7 @@
       "saveProjectAsTitle": "Projeyi farklı kaydet",
       "saveProjectAsDesc": "Bir dosya adı girin. Kaydet'e tıkladığınızda proje tarayıcınızın indirilenler klasörüne indirilir.",
       "embedVectorTitle": "Yerel vektör verisi gömülsün mü?",
+      "embedEditedGeometryDesc": "Bu proje düzenlenmiş geometriler içeriyor. Bunları korumak için vektör verilerini gömün (yaklaşık {{size}}). Gömülmezse referans verilen katmanlar özgün geometrileriyle yeniden açılır ve yerel veriler kullanılamayabilir.",
       "embedVectorDesc": "Bu projede bilgisayarınızdan yüklenmiş {{count}} yerel vektör katmanı var. Tarayıcı, proje yeniden açıldığında bunları yeniden okuyamaz; bu nedenle geri yüklenebilmeleri için verilerinin proje dosyasına gömülmesi gerekir. Gömme, dosyaya yaklaşık {{size}} ekler.",
       "embedVectorDescDesktop": "Bu projede bilgisayarınızdan yüklenmiş {{count}} yerel vektör katmanı var. Projeyi kendi kendine yeterli hale getirmek için verilerini gömün (yaklaşık {{size}} ekler) veya proje yeniden açıldığında diskten yeniden yüklenen dosya referansları kaydedin. Referanslar dosyayı küçük tutar ancak kaynak dosya daha sonra taşınır veya silinirse bozulur.",
       "embedVectorDescMas": "Bu projede bilgisayarınızdan yüklenmiş {{count}} yerel vektör katmanı var. Mac App Store korumalı alanı, GeoLibre kapatıldıktan sonra bu dosyalara erişimi koruyamaz; bu nedenle geri yüklenebilmeleri için verileri proje dosyasına gömülmelidir. Gömme, dosyaya yaklaşık {{size}} ekler.",

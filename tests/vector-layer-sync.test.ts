@@ -371,6 +371,23 @@ describe("syncVectorLayersToStore", () => {
     assert.ok(layers.some((layer) => layer.id === "unrelated"));
   });
 
+  it("preserves geometry edits through control synchronization without repeated updates", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    const layer = useAppStore.getState().layers[0];
+    const edited = { type: "FeatureCollection" as const, features: [] };
+    useAppStore.getState().updateLayer(layer.id, {
+      geojson: edited,
+      metadata: { ...layer.metadata, geometryEdited: true },
+    });
+    syncVectorLayersToStore(control);
+    const after = useAppStore.getState().layers;
+    assert.equal(after[0].metadata.geometryEdited, true);
+    assert.equal(after[0].geojson, edited);
+    syncVectorLayersToStore(control);
+    assert.equal(useAppStore.getState().layers, after);
+  });
+
   it("removes store layers whose vector layers are gone", () => {
     const { control } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);

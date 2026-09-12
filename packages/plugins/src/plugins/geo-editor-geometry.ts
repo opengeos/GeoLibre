@@ -570,3 +570,22 @@ function overlayLayersAlreadyPositioned(
   const after = layers[start + overlayCount];
   return !(after && after.isOverlay);
 }
+
+/** Prepare committed editor data, marking geometry changes for the project save prompt. */
+export function geometryEditPatch(
+  layer: GeoLibreLayer,
+  edited: FeatureCollection,
+): Pick<GeoLibreLayer, "geojson" | "metadata"> {
+  const changed =
+    !layer.geojson ||
+    layer.geojson.features.length !== edited.features.length ||
+    edited.features.some(
+      (feature, index) =>
+        canonicalGeometryKey(feature.geometry) !==
+        canonicalGeometryKey(layer.geojson?.features[index]?.geometry),
+    );
+  return {
+    geojson: edited,
+    metadata: changed ? { ...layer.metadata, geometryEdited: true } : layer.metadata,
+  };
+}

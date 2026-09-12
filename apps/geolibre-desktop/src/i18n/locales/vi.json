@@ -2840,6 +2840,7 @@
       "saveProjectAsTitle": "Lưu dự án dưới dạng",
       "saveProjectAsDesc": "Xuất dưới dạng HTML tương tác",
       "embedVectorTitle": "Nhúng dữ liệu vectơ cục bộ?",
+      "embedEditedGeometryDesc": "Dự án này chứa các hình học đã chỉnh sửa. Nhúng dữ liệu vectơ (khoảng {{size}}) để giữ lại các thay đổi. Nếu không nhúng, các lớp tham chiếu sẽ mở lại với hình học gốc và dữ liệu cục bộ có thể không khả dụng.",
       "embedVectorDesc": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Trình duyệt không thể đọc lại chúng khi dự án được mở lại, do đó dữ liệu của chúng phải được nhúng vào tệp dự án để được khôi phục. Việc nhúng sẽ thêm khoảng {{size}} vào tệp.",
       "embedVectorDescDesktop": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Nhúng dữ liệu của họ để làm cho dự án trở nên độc lập (thêm khoảng {{size}}) hoặc lưu các tham chiếu tệp sẽ tải lại từ đĩa khi dự án được mở lại. Các tham chiếu giữ cho tệp có kích thước nhỏ nhưng sẽ bị hỏng nếu tệp nguồn sau đó bị di chuyển hoặc xóa.",
       "embedVectorDescMas": "Dự án này có {{count}} lớp vectơ cục bộ được tải từ máy tính của bạn. Hộp cát Mac App Store không thể duy trì quyền truy cập vào các tệp đó sau khi GeoLibre đóng, vì vậy dữ liệu phải được nhúng vào tệp dự án để có thể khôi phục. Việc nhúng sẽ thêm khoảng {{size}} vào tệp.",

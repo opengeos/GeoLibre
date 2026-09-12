@@ -285,11 +285,13 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{t("toolbar.item.embedVectorTitle")}</DialogTitle>
             <DialogDescription>
               {t(
-                projectFiles.embedVectorDataPrompt?.allowFileReferences
-                  ? "toolbar.item.embedVectorDescDesktop"
-                  : projectFiles.embedVectorDataPrompt?.desktop
-                    ? "toolbar.item.embedVectorDescMas"
-                    : "toolbar.item.embedVectorDesc",
+                projectFiles.embedVectorDataPrompt?.hasGeometryEdits
+                  ? "toolbar.item.embedEditedGeometryDesc"
+                  : projectFiles.embedVectorDataPrompt?.allowFileReferences
+                    ? "toolbar.item.embedVectorDescDesktop"
+                    : projectFiles.embedVectorDataPrompt?.desktop
+                      ? "toolbar.item.embedVectorDescMas"
+                      : "toolbar.item.embedVectorDesc",
                 {
                   count: projectFiles.embedVectorDataPrompt?.count ?? 0,
                   size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
