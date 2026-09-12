@@ -39,6 +39,8 @@ import {
 } from "../../lib/share-geolibre";
 import {
   checkShareReadiness,
+  findLocalShareSources,
+  type ShareReadinessInput,
   type ShareReadinessItem,
   type ShareReadinessReport,
 } from "../../lib/share-readiness";
@@ -56,6 +58,29 @@ interface ShareProjectDialogProps {
   getProject: (
     title: string,
   ) => Promise<{ content: string; filename: string; redactedCount?: number }>;
+}
+
+/** The user guide section on what a shared project can and cannot carry. */
+const SHARING_LOCAL_DATA_DOCS_URL = "https://geolibre.app/user-guide/projects/#sharing-local-data";
+
+/**
+ * What the readiness checks look at: the live layers plus the project-level
+ * URLs. Read once per dialog open rather than subscribed: the dialog is modal,
+ * so the snapshot it opens on is the project that will be uploaded.
+ */
+function readinessInput(): ShareReadinessInput {
+  const state = useAppStore.getState();
+  return {
+    layers: state.layers,
+    basemapStyleUrl: state.basemapVisible ? state.basemapStyleUrl : null,
+    pluginManifestUrls: state.projectPlugins?.manifestUrls ?? [],
+    // The publish path embeds these layers' features, so their local origin
+    // costs the recipient nothing. Taken from the same predicate that path uses
+    // so the two cannot drift.
+    embeddedLayerIds: new Set(
+      state.layers.filter(isEmbeddableLocalVectorLayer).map((layer) => layer.id),
+    ),
+  };
 }
 
 /**
@@ -133,6 +158,58 @@ function readinessCopyKeys(item: ShareReadinessItem) {
   }
 }
 
+/**
+ * The warning for layers that only exist on the author's machine (issue
+ * #2360). Unlike the advisory list below it, this is the one case with no
+ * "it may still work" reading: the share host stores the project file and
+ * nothing else, so every listed layer is empty for every recipient. It is
+ * shown the moment the dialog opens, before and regardless of the token setup,
+ * because an author without a token may go and upload the saved file by hand.
+ */
+function LocalDataWarning({
+  problems,
+  shareHost,
+}: {
+  problems: readonly ShareReadinessItem[];
+  shareHost: string;
+}) {
+  const { t } = useTranslation();
+  if (problems.length === 0) return null;
+  return (
+    <div
+      role="alert"
+      data-testid="share-local-warning"
+      className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+    >
+      <p className="flex items-center gap-2 font-medium">
+        <TriangleAlert className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        {t("share.localWarningTitle", { count: problems.length })}
+      </p>
+      <p className="text-xs text-muted-foreground">{t("share.localWarningBody", { shareHost })}</p>
+      <ul className="max-h-40 space-y-1 overflow-y-auto">
+        {problems.map((item) => (
+          <li key={`${item.layerId ?? item.field}:${item.url}`} className="space-y-0.5">
+            <p className="truncate font-medium" title={item.url || undefined}>
+              {readinessLabel(item, t)}
+            </p>
+            <p className="text-xs text-muted-foreground">{t(readinessCopyKeys(item).reason)}</p>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        {t("share.localWarningAdvice")}{" "}
+        <button
+          type="button"
+          className="underline underline-offset-2 hover:text-foreground"
+          onClick={() => void openExternalLink(SHARING_LOCAL_DATA_DOCS_URL)}
+        >
+          {t("share.localWarningLearnMore")}
+        </button>
+      </p>
+    </div>
+  );
+}
+
 export function ShareProjectDialog({
   open,
   onOpenChange,
@@ -156,11 +233,17 @@ export function ShareProjectDialog({
   const [redactedCount, setRedactedCount] = useState(0);
   const [readiness, setReadiness] = useState<ShareReadinessReport | null>(null);
   const [readinessState, setReadinessState] = useState<"idle" | "checking" | "failed">("idle");
+  const [localProblems, setLocalProblems] = useState<ShareReadinessItem[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
 
   const hasToken = shareToken.trim().length > 0;
   const titleValid = isShareableTitle(title);
+  // The local verdicts have their own block above the form, so the probe
+  // report only lists what the network settled.
+  const remoteProblems = readiness?.problems.filter((item) => item.status !== "local") ?? [];
+  const remoteItemCount = readiness?.items.filter((item) => item.status !== "local").length ?? 0;
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
   // error never lingers into a new share. Seed the title from the current
@@ -182,6 +265,12 @@ export function ShareProjectDialog({
     }
   }, [open, currentTitle]);
 
+  // Layers that only exist on this machine are settled without the network,
+  // so they are listed the moment the dialog opens, token or no token.
+  useEffect(() => {
+    setLocalProblems(open ? findLocalShareSources(readinessInput()) : []);
+  }, [open]);
+
   // Pre-flight the project's data sources when the dialog opens, so the author
   // learns that a layer will be empty for everyone else *before* the upload
   // rather than when a recipient tells them (if they tell them).
@@ -193,23 +282,7 @@ export function ShareProjectDialog({
     const controller = new AbortController();
     setReadinessState("checking");
     setReadiness(null);
-    // Read the live layers once rather than subscribing: the dialog is modal,
-    // so the snapshot it opens on is the project that will be uploaded.
-    const state = useAppStore.getState();
-    void checkShareReadiness(
-      {
-        layers: state.layers,
-        basemapStyleUrl: state.basemapVisible ? state.basemapStyleUrl : null,
-        pluginManifestUrls: state.projectPlugins?.manifestUrls ?? [],
-        // The publish path embeds these layers' features, so their local origin
-        // costs the recipient nothing. Taken from the same predicate that path
-        // uses so the two cannot drift.
-        embeddedLayerIds: new Set(
-          state.layers.filter(isEmbeddableLocalVectorLayer).map((layer) => layer.id),
-        ),
-      },
-      { signal: controller.signal },
-    )
+    void checkShareReadiness(readinessInput(), { signal: controller.signal })
       .then((report) => {
         if (controller.signal.aborted) return;
         setReadiness(report);
@@ -321,7 +394,17 @@ export function ShareProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className="sm:max-w-lg"
+        // The local-data warning sits above the form and carries a link, which
+        // would otherwise take the dialog's initial focus away from the title.
+        onOpenAutoFocus={(event) => {
+          const input = titleInputRef.current;
+          if (!input) return;
+          event.preventDefault();
+          input.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="h-4 w-4" />
@@ -332,6 +415,7 @@ export function ShareProjectDialog({
 
         {!hasToken ? (
           <div className="space-y-4 text-sm">
+            <LocalDataWarning problems={localProblems} shareHost={shareHost} />
             <p className="text-muted-foreground">{t("share.setupIntro", { shareHost })}</p>
             <ol className="space-y-3">
               <li className="space-y-2 rounded-md border p-3">
@@ -393,16 +477,17 @@ export function ShareProjectDialog({
           </div>
         ) : (
           <div className="space-y-4">
+            <LocalDataWarning problems={localProblems} shareHost={shareHost} />
             <div className="space-y-1.5">
               <Label htmlFor="share-title">{t("share.projectTitle")}</Label>
               <Input
+                ref={titleInputRef}
                 id="share-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t("share.titlePlaceholder")}
                 maxLength={MAX_PROJECT_TITLE_LENGTH}
                 disabled={status === "uploading"}
-                autoFocus={!titleValid}
               />
               {!titleValid && (
                 <p className="text-xs text-muted-foreground">{t("share.titleRequired")}</p>
@@ -429,7 +514,7 @@ export function ShareProjectDialog({
               </p>
             ) : readinessState === "failed" ? (
               <p className="text-xs text-muted-foreground">{t("share.readinessUnavailable")}</p>
-            ) : readiness && readiness.problems.length > 0 ? (
+            ) : remoteProblems.length > 0 ? (
               <div role="status" className="space-y-2 rounded-md border p-3 text-sm">
                 <p className="flex items-center gap-2 font-medium">
                   <TriangleAlert className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -437,7 +522,7 @@ export function ShareProjectDialog({
                 </p>
                 <p className="text-xs text-muted-foreground">{t("share.readinessNote")}</p>
                 <ul className="max-h-48 space-y-2 overflow-y-auto">
-                  {readiness.problems.map((item) => {
+                  {remoteProblems.map((item) => {
                     const copy = readinessCopyKeys(item);
                     return (
                       <li key={`${item.layerId ?? item.field}:${item.url}`} className="space-y-0.5">
@@ -452,16 +537,16 @@ export function ShareProjectDialog({
                     );
                   })}
                 </ul>
-                {readiness.truncated ? (
+                {readiness?.truncated ? (
                   <p className="text-xs text-muted-foreground">
-                    {t("share.readinessTruncated", { count: readiness.probeCount })}
+                    {t("share.readinessTruncated", { count: readiness?.probeCount ?? 0 })}
                   </p>
                 ) : null}
               </div>
-            ) : readiness && readiness.items.length > 0 ? (
+            ) : remoteItemCount > 0 ? (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <CircleCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                {t("share.readinessAllReachable", { count: readiness.items.length })}
+                {t("share.readinessAllReachable", { count: remoteItemCount })}
               </p>
             ) : null}
 
@@ -506,7 +591,7 @@ export function ShareProjectDialog({
                 ) : (
                   <>
                     <Share2 className="me-2 h-3.5 w-3.5" />
-                    {t("share.shareButton")}
+                    {localProblems.length > 0 ? t("share.shareAnyway") : t("share.shareButton")}
                   </>
                 )}
               </Button>

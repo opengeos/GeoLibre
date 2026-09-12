@@ -650,6 +650,21 @@ export function summarizeShareSources(refs: readonly ShareSourceRef[]): ShareRea
   return [...byOwner.values()];
 }
 
+/**
+ * The references that are settled without the network and that a recipient
+ * can never load: files on the author's machine, private-network hosts, and
+ * layers with no source at all. Synchronous, so the Share dialog can show
+ * them the moment it opens rather than after the probes finish, and cheap
+ * enough to run before a token is configured (issue #2360: a project whose
+ * every data layer was a local file uploaded "cleanly" and drew only the
+ * basemap for everyone else).
+ */
+export function findLocalShareSources(input: ShareReadinessInput): ShareReadinessItem[] {
+  return summarizeShareSources(collectShareSources(input)).filter(
+    (item) => item.status === "local",
+  );
+}
+
 /** Collect, probe, and summarize. What the Share dialog calls. */
 export async function checkShareReadiness(
   input: ShareReadinessInput,

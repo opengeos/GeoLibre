@@ -4,6 +4,7 @@ import type { GeoLibreLayer } from "../packages/core/src/types";
 import {
   checkShareReadiness,
   collectShareSources,
+  findLocalShareSources,
   isPrivateHostname,
   probeShareSources,
   probeTargetFor,
@@ -650,5 +651,90 @@ describe("checkShareReadiness", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("findLocalShareSources", () => {
+  it("lists local rasters and unembedded local vectors without touching the network", () => {
+    const original = globalThis.fetch;
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+    try {
+      const problems = findLocalShareSources({
+        layers: [
+          // A COG opened from disk in the desktop app: no URL, the absolute
+          // path, and the desktop app's local bytes URL.
+          layer({
+            id: "cog",
+            name: "dem.tif",
+            type: "cog",
+            source: { type: "raster" },
+            sourcePath: "dem.tif",
+            metadata: {
+              rasterSource: "file",
+              localFilePath: "E:\\rasters\\dem.tif",
+              localBytesUrl: "http://asset.localhost/E%3A%5Crasters%5Cdem.tif",
+            },
+          }),
+          // A vector file saved as a reference instead of embedded.
+          layer({
+            id: "gpkg",
+            name: "waypoints",
+            source: { type: "geojson" },
+            sourcePath: "C:\\data\\waypoints.gpkg",
+            metadata: { vectorSource: "file", localFileReloadable: true },
+          }),
+          layer({
+            id: "hosted",
+            name: "hosted",
+            type: "cog",
+            source: { url: "https://example.org/dem.tif" },
+          }),
+        ],
+        basemapStyleUrl: "https://tiles.openfreemap.org/styles/liberty",
+      });
+      assert.deepEqual(
+        problems.map((item) => [item.layerId, item.reason]),
+        [
+          ["cog", "local-file"],
+          ["gpkg", "local-file"],
+        ],
+      );
+      assert.equal(called, false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("leaves out a local vector the publish path embeds", () => {
+    const problems = findLocalShareSources({
+      layers: [
+        layer({
+          id: "cities",
+          name: "us_cities",
+          source: { type: "geojson" },
+          metadata: { vectorSource: "file", localBytesUrl: "blob:http://localhost/abc" },
+        }),
+      ],
+      embeddedLayerIds: new Set(["cities"]),
+    });
+    assert.deepEqual(problems, []);
+  });
+
+  it("reports a private-network basemap style alongside the layers", () => {
+    const problems = findLocalShareSources({
+      layers: [layer({ id: "sql", name: "PostGIS query", source: {} })],
+      basemapStyleUrl: "http://gis-server:8080/style.json",
+    });
+    assert.deepEqual(
+      problems.map((item) => [item.layerId, item.field, item.reason]),
+      [
+        ["sql", "source", "no-source"],
+        [null, "basemapStyleUrl", "private-host"],
+      ],
+    );
   });
 });
