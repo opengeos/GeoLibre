@@ -5,8 +5,39 @@ import type { Feature, FeatureCollection, GeoJSON, Geometry, Position } from "ge
  * GPX tracks with `<ele>` readings or LineStringZ/PointZ geometries. MapLibre's
  * 2D style layers ignore the third coordinate, so layers that want to render
  * their Z values use these helpers to detect and rescale elevations before
- * handing the data to a deck.gl overlay.
+ * handing the data to a deck.gl overlay. The same data can carry its elevation
+ * in a `bbox` member too, which `horizontalBbox` trims back to two dimensions.
  */
+
+/**
+ * Reduces a bounding box to its horizontal extent, `[west, south, east, north]`.
+ *
+ * RFC 7946 §5 lets a `bbox` member carry elevation, in which case it holds six
+ * values — `[west, south, minAltitude, east, north, maxAltitude]` — and
+ * `@turf/bbox` returns a collection's own member verbatim rather than
+ * recomputing it. A consumer reading such a box as four values takes the
+ * altitude for a longitude and the east edge for a latitude; that is how a 3D
+ * feed reached MapLibre as an out-of-range latitude (#2358).
+ *
+ * Returns null when there is no usable horizontal extent: a box of any other
+ * length, or one carrying a non-finite value — an empty collection, or one
+ * whose features all have a null geometry, bboxes to ±Infinity.
+ *
+ * @param box - A GeoJSON or Turf bounding box, of four or six values.
+ */
+export function horizontalBbox(
+  box: readonly number[] | null | undefined,
+): [number, number, number, number] | null {
+  if (!box) return null;
+  const horizontal =
+    box.length === 4
+      ? [box[0], box[1], box[2], box[3]]
+      : box.length === 6
+        ? [box[0], box[1], box[3], box[4]]
+        : null;
+  if (!horizontal?.every((value) => Number.isFinite(value))) return null;
+  return horizontal as [number, number, number, number];
+}
 
 // Proving the *negative* (no Z anywhere) walks every coordinate, so cache the
 // verdict per GeoJSON object — the map sync, the deck overlay, and the Style

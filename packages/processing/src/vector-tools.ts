@@ -40,6 +40,7 @@ import {
   earthLengthToBody,
   encodePolyline,
   getActiveBodyRadiusRatio,
+  horizontalBbox,
   layerJoinKey,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -2310,7 +2311,12 @@ export const gridTool: ProcessingAlgorithm = {
         ctx.log('Error: parameter "layer" has no GeoJSON features');
         return;
       }
-      bounds = bbox(layer.geojson) as [number, number, number, number];
+      const layerBounds = horizontalBbox(bbox(layer.geojson));
+      if (!layerBounds) {
+        ctx.log('Error: parameter "layer" has no usable extent');
+        return;
+      }
+      bounds = layerBounds;
       // Guard the layer path like the viewport/bbox paths: a zero-area extent
       // (e.g. a single-point layer, west === east) or an antimeridian-spanning
       // one (west > east) would otherwise make cols/rows zero or negative,
@@ -2457,13 +2463,14 @@ export const voronoiTool: ProcessingAlgorithm = {
     // Both diagrams are undefined for collinear/coincident points (a zero-area
     // bounding box). Turf's tin/voronoi would throw or return nothing; bail with
     // a clear message instead. Mirrors the backend guard.
-    const [minX, minY, maxX, maxY] = bbox(pointsFc) as [number, number, number, number];
-    if (minX === maxX || minY === maxY) {
+    const pointsBox = horizontalBbox(bbox(pointsFc));
+    if (!pointsBox || pointsBox[0] === pointsBox[2] || pointsBox[1] === pointsBox[3]) {
       ctx.log(
         "Error: the points are collinear or coincident; Voronoi / Delaunay needs points that span an area",
       );
       return;
     }
+    const [minX, minY, maxX, maxY] = pointsBox;
     if (kind === "delaunay") {
       const result = tin(pointsFc);
       // The bbox guard above catches axis-aligned collinearity; diagonally

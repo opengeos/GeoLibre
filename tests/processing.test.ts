@@ -1396,4 +1396,29 @@ describe("processing registry", () => {
     assert.deepEqual(messages, ["Bounds: [-78.000000, 35.000000, -77.000000, 36.000000]"]);
     assert.deepEqual(fittedBounds, [-78, 35, -77, 36]);
   });
+
+  it("fits the horizontal extent of a layer whose bbox carries elevation", () => {
+    // A collection's own `bbox` member is returned verbatim, and RFC 7946 §5
+    // lets it hold six values. Read as four, the altitude would stand in for a
+    // longitude and the east edge for a latitude.
+    const messages: string[] = [];
+    let fittedBounds: [number, number, number, number] | null = null;
+
+    calculateBoundsAlgorithm.run({
+      layers: [
+        {
+          ...layer,
+          geojson: { ...(layer.geojson as FeatureCollection), bbox: [-78, 35, 0, -77, 36, 1200] },
+        },
+      ],
+      parameters: { layer: "layer-a" },
+      log: (message) => messages.push(message),
+      fitBounds: (bounds) => {
+        fittedBounds = bounds;
+      },
+    });
+
+    assert.deepEqual(messages, ["Bounds: [-78.000000, 35.000000, -77.000000, 36.000000]"]);
+    assert.deepEqual(fittedBounds, [-78, 35, -77, 36]);
+  });
 });

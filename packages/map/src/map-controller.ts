@@ -4,6 +4,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
   getRegionalBasemapByStyleUrl,
+  horizontalBbox,
   isRegionalBasemapSentinel,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
   scaleAltitudeToActiveBody,
@@ -2013,9 +2014,9 @@ export class MapController implements MapEngine {
 
   private fitFeature(featureCollection: FeatureCollection): void {
     if (!this.map || featureCollection.features.length === 0) return;
-    const box = bbox(featureCollection) as [number, number, number, number];
+    const box = horizontalBbox(bbox(featureCollection));
     // fitBounds validates the box and handles point-sized boxes.
-    this.fitBounds(box);
+    if (box) this.fitBounds(box);
   }
 
   private syncHighlight(featureCollection: FeatureCollection): void {
