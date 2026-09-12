@@ -246,10 +246,12 @@ export function ShareProjectDialog({
   // form, so the probe report lists the rest: what the network settled, plus a
   // private-network host, which may still load for the intended recipients.
   // A row already in that block is not repeated here, whatever verdict the
-  // probe summary kept for it.
-  const missingKeys = new Set(localProblems.map((item) => item.layerId ?? item.field));
+  // probe summary kept for it. Keyed the way summarizeShareSources keys its
+  // rows: the layer id, or field plus URL for a project-level reference.
+  const rowKey = (item: ShareReadinessItem) => item.layerId ?? `${item.field}:${item.url}`;
+  const missingKeys = new Set(localProblems.map(rowKey));
   const isRemoteRow = (item: ShareReadinessItem) =>
-    !isMissingForRecipients(item) && !missingKeys.has(item.layerId ?? item.field);
+    !isMissingForRecipients(item) && !missingKeys.has(rowKey(item));
   const remoteProblems = readiness?.problems.filter(isRemoteRow) ?? [];
   const remoteItemCount = readiness?.items.filter(isRemoteRow).length ?? 0;
 
