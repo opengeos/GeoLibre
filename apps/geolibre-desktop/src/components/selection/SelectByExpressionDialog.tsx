@@ -38,7 +38,11 @@ interface ExpressionSummary {
  * stay interactive: run a selection, pan to inspect it, refine, re-run —
  * QGIS style. The four modes combine each run with the current selection.
  */
-export function SelectByExpressionDialog(): ReactElement | null {
+export function SelectByExpressionDialog({
+  canEditLayer,
+}: {
+  canEditLayer: (layerId: string) => boolean;
+}): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.selectByExpressionOpen);
   const setOpen = useAppStore((s) => s.setSelectByExpressionOpen);
@@ -77,6 +81,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   }, [open, preselectedLayerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const targetLayer = eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
+  const layerEditable = targetLayer ? canEditLayer(targetLayer.id) : false;
 
   // Stable identities for the Expression Builder's memoization (see the
   // equivalent comment in StylePanel): fresh arrays every render would defeat
@@ -146,7 +151,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   };
 
   const applyLayerFilter = () => {
-    if (!targetLayer) return;
+    if (!targetLayer || !canEditLayer(targetLayer.id)) return;
     const { zoom: liveZoom, center } = useAppStore.getState().mapView;
     const liveVariables = standardExpressionVariables({
       projectName,
@@ -178,7 +183,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   };
 
   const clearLayerFilter = () => {
-    if (!targetLayer) return;
+    if (!targetLayer || !canEditLayer(targetLayer.id)) return;
     setLayerFilterExpression(targetLayer.id, null);
     setSummary(null);
   };
@@ -278,7 +283,12 @@ export function SelectByExpressionDialog(): ReactElement | null {
               )}
               <div className="flex flex-wrap justify-end gap-2">
                 {hasExpressionFilter && (
-                  <Button type="button" variant="outline" onClick={clearLayerFilter}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearLayerFilter}
+                    disabled={!layerEditable}
+                  >
                     <FilterX className="me-2 h-4 w-4" />
                     {t("selection.clearLayerFilter")}
                   </Button>
@@ -287,7 +297,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   type="button"
                   variant="outline"
                   onClick={applyLayerFilter}
-                  disabled={!canSelect}
+                  disabled={!canSelect || !layerEditable}
                 >
                   <Filter className="me-2 h-4 w-4" />
                   {t("selection.applyLayerFilter")}

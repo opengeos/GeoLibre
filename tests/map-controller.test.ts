@@ -533,6 +533,39 @@ describe("MapController.syncLayers reconciliation", () => {
     );
   });
 
+  it("filters inline point data before building clusters", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const layer = pointLayer(
+      "filtered-clusters",
+      { filterExpression: ["==", ["get", "continent"], "Europe"] },
+      { pointRenderer: "cluster" },
+    );
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { continent: "Europe" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { continent: "Asia" },
+          geometry: { type: "Point", coordinates: [100, 0] },
+        },
+      ],
+    };
+
+    controller.syncLayers([layer]);
+
+    const data = fake.sources.get(srcId(layer.id))?.data as GeoJSON.FeatureCollection;
+    assert.deepEqual(
+      data.features.map((feature) => feature.properties?.continent),
+      ["Europe"],
+    );
+  });
+
   it("applies a visibility toggle as a layout property", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);

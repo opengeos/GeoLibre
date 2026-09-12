@@ -3780,7 +3780,9 @@ export function LayerPanel({
                               the next question does not start from scratch. */}
                           {hasActiveLayerFilter(layer) && (
                             <DropdownMenuItem
+                              disabled={!layerEditable}
                               onSelect={() => {
+                                if (!layerEditable) return;
                                 const quickFilters = clearQuickFilterValues(layer.quickFilters);
                                 updateLayer(layer.id, {
                                   filterExpression: undefined,

@@ -12,6 +12,7 @@ interface MapCall {
 
 function makeMapStub(nativeLayerId: string, nativeType: string) {
   const calls: MapCall[] = [];
+  let filter: unknown;
   const record =
     (method: string) =>
     (...args: unknown[]) => {
@@ -28,8 +29,19 @@ function makeMapStub(nativeLayerId: string, nativeType: string) {
     removeLayer: record("removeLayer"),
     addLayer: record("addLayer"),
     addSource: record("addSource"),
+    getFilter: () => filter,
+    setFilter: (...args: unknown[]) => {
+      filter = args[1];
+      calls.push({ method: "setFilter", args });
+    },
   };
-  return { map, calls };
+  return {
+    map,
+    calls,
+    recreateNativeLayer: () => {
+      filter = undefined;
+    },
+  };
 }
 
 function externalNativeLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
@@ -179,6 +191,29 @@ describe("controlOwnsPaint external native layers", () => {
       !calls.some((c) => c.method === "setPaintProperty"),
       "expected paint to be left untouched",
     );
+  });
+
+  it("reapplies a saved expression filter after the control recreates its native layer", () => {
+    const { map, calls, recreateNativeLayer } = makeMapStub("mub-deliveries", "fill");
+    const filterExpression = ["==", ["get", "continent"], "Europe"];
+    const layer = externalNativeLayer({ filterExpression });
+
+    syncLayer(map as never, layer);
+    assert.deepEqual(calls.findLast((call) => call.method === "setFilter")?.args, [
+      "mub-deliveries",
+      filterExpression,
+    ]);
+
+    // Reopening a project makes the vector control remove and recreate the
+    // native MapLibre layer with the same id and its original, unfiltered spec.
+    recreateNativeLayer();
+    calls.length = 0;
+    syncLayer(map as never, layer);
+
+    assert.deepEqual(calls.findLast((call) => call.method === "setFilter")?.args, [
+      "mub-deliveries",
+      filterExpression,
+    ]);
   });
 
   it("still rebuilds paint for ordinary external native layers", () => {

@@ -1,4 +1,5 @@
 import {
+  compileFeatureExpression,
   compileLayerFilters,
   controlRendersLayer,
   DEFAULT_LAYER_STYLE,
@@ -184,13 +185,11 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * is active. Per-feature layers (fill, line, point, heatmap, text) filter
  * correctly.
  *
- * The corollary, shared by every filter in this set: MapLibre clusters at the
- * *source*, from the layer's raw features, and no layer filter can change what
- * a cluster already aggregated. So while a point layer renders as clusters, the
- * bubbles and their counts describe the unfiltered data even though the
- * unclustered points respect the filter. Filtering a clustered layer by its
- * individual features means either switching the renderer off clustering or
- * narrowing the source data itself, neither of which a per-feature filter does.
+ * MapLibre clusters at the source, before evaluating style-layer filters.
+ * {@link authoredClusterInput} therefore narrows clustered source data by the
+ * persisted expression and Quick Filters so hidden features do not contribute
+ * to bubbles or counts. Transient time, embed, and rule filters remain
+ * per-render-layer filters and cannot change an already-built cluster.
  *
  * Tile-backed layers (vector tiles, vector MBTiles) use this too. The filter is
  * an expression evaluated per feature as each tile decodes, so it needs no local
@@ -238,6 +237,7 @@ function withFeatureFilters(
 interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
+  liveKey: string;
 }
 const externalNativeBaseFilters = new WeakMap<maplibregl.Map, Map<string, NativeFilterState>>();
 
@@ -305,6 +305,17 @@ function combineExternalFilters(
       : ["all", ...extras]) as unknown as maplibregl.FilterSpecification;
 }
 
+function nativeFilterFromMap(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+): maplibregl.FilterSpecification | null {
+  return (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification | undefined) ?? null;
+}
+
+function nativeFilterKey(filter: maplibregl.FilterSpecification | null): string {
+  return JSON.stringify(filter);
+}
+
 /**
  * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window, the
  * embed API's host-set `setFilter` expression, the layer's compiled quick
@@ -338,19 +349,34 @@ function applyExternalNativeFeatureFilters(
     // tracking.
     const state = states.get(nativeLayerId);
     if (state) {
-      map.setFilter(nativeLayerId, state.base ?? undefined);
+      const liveFilter = nativeFilterFromMap(map, nativeLayerId);
+      const liveKey = nativeFilterKey(liveFilter);
+      // A control can remove and recreate a native layer under the same id.
+      // If that happened, its current filter is the new base and must not be
+      // replaced with the stale base captured from the previous layer.
+      if (state.liveKey === liveKey) {
+        map.setFilter(nativeLayerId, state.base ?? undefined);
+      }
       states.delete(nativeLayerId);
     }
     return;
   }
 
+  const liveFilter = nativeFilterFromMap(map, nativeLayerId);
+  const liveKey = nativeFilterKey(liveFilter);
   // Filters active: capture the control's base filter the first time, then
   // keep reusing it so repeated ticks combine rather than nest.
   let state = states.get(nativeLayerId);
   if (!state) {
-    const base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
-    state = { base, appliedKey: "" };
+    state = { base: liveFilter, appliedKey: "", liveKey };
     states.set(nativeLayerId, state);
+  } else if (state.liveKey !== liveKey) {
+    // Project restore and renderer changes recreate control-owned MapLibre
+    // layers without changing their ids. Treat the replacement's live filter
+    // as its new base, then apply the saved extras again.
+    state.base = liveFilter;
+    state.appliedKey = "";
+    state.liveKey = liveKey;
   }
   const combined = combineExternalFilters(state.base, extras)!;
   // Compare against the last filter we applied (not `getFilter`, which MapLibre
@@ -359,6 +385,7 @@ function applyExternalNativeFeatureFilters(
   if (state.appliedKey !== combinedKey) {
     map.setFilter(nativeLayerId, combined);
     state.appliedKey = combinedKey;
+    state.liveKey = nativeFilterKey(nativeFilterFromMap(map, nativeLayerId));
   }
 }
 
@@ -368,6 +395,46 @@ function applyExternalNativeFeatureFilters(
 // back to the full [0, 24] window.
 const managedZoomRangeLayerIds = new Set<string>();
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
+const clusteredFilterInputs = new WeakMap<
+  GeoJSON.FeatureCollection,
+  Map<string, GeoJSON.FeatureCollection>
+>();
+
+/**
+ * Narrow a cluster renderer's source data by the layer's authored filters.
+ * MapLibre clusters before evaluating style-layer filters, so applying the
+ * expression only to the unclustered circle would leave hidden points in
+ * cluster bubbles and counts. Results are cached by source object and compiled
+ * filter so ordinary sync ticks keep a stable data reference.
+ */
+function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
+  const geojson = layer.geojson!;
+  const filter = compileLayerFilters(layer);
+  if (!filter) return geojson;
+
+  const filterKey = JSON.stringify(filter);
+  let cachedByFilter = clusteredFilterInputs.get(geojson);
+  const cached = cachedByFilter?.get(filterKey);
+  if (cached) return cached;
+
+  const compiled = compileFeatureExpression(filterKey, { expectedType: "boolean" });
+  if (!compiled.ok || !compiled.evaluate) return geojson;
+  const evaluate = compiled.evaluate;
+  const features = geojson.features.filter((feature) => {
+    try {
+      return evaluate(feature) === true;
+    } catch {
+      return false;
+    }
+  });
+  const filtered = { ...geojson, features };
+  if (!cachedByFilter) {
+    cachedByFilter = new Map();
+    clusteredFilterInputs.set(geojson, cachedByFilter);
+  }
+  cachedByFilter.set(filterKey, filtered);
+  return filtered;
+}
 
 function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
   const source = map.getSource(sourceId);
@@ -1820,6 +1887,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     layer,
     profile,
   );
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer) : layer.geojson!;
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
   // it), or some other code may have left a non-geojson source under this id.
@@ -1856,7 +1924,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
       wantCluster
         ? {
             type: "geojson",
-            data: layer.geojson!,
+            data: sourceGeoJson,
             cluster: true,
             clusterRadius,
             clusterMaxZoom,
@@ -1864,13 +1932,13 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
           }
         : {
             type: "geojson",
-            data: layer.geojson!,
+            data: sourceGeoJson,
             ...(attribution ? { attribution } : {}),
           },
     );
-    rememberGeoJsonData(map, src, layer.geojson!);
+    rememberGeoJsonData(map, src, sourceGeoJson);
   } else {
-    setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, layer.geojson!);
+    setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, sourceGeoJson);
   }
 
   applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId);
@@ -1890,13 +1958,14 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
     layer,
     profile,
   );
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer) : layer.geojson!;
 
   ensureGeoJsonVtProtocol();
 
   // (Re)build the tile index when the data or clustering config changed. A
   // rebuild also means cached tiles are stale, so drop the source to force
   // MapLibre to refetch them.
-  const rebuilt = registerGeoJsonVtSource(layer.id, layer.geojson!, {
+  const rebuilt = registerGeoJsonVtSource(layer.id, sourceGeoJson, {
     cluster: wantCluster,
     clusterRadius,
     clusterMaxZoom,
