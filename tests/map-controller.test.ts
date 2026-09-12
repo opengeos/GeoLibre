@@ -34,6 +34,10 @@ interface FakeMap {
   calls: { method: string; args: unknown[] }[];
   setDataCalls: { id: string; data: unknown }[];
   queueRenderedFeatures: (features: unknown[]) => void;
+  /** Move the camera without firing anything, as a jump before a sync would. */
+  setZoom: (zoom: number) => void;
+  /** Fire a map event at every handler the controller registered for it. */
+  emit: (event: string) => void;
 }
 
 /**
@@ -54,7 +58,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   const calls: { method: string; args: unknown[] }[] = [];
   const setDataCalls: { id: string; data: unknown }[] = [];
   const images = new Set<string>();
+  const handlers = new Map<string, Set<(event: unknown) => void>>();
   let pendingRenderedFeatures: unknown[] = [];
+  let zoom = 4;
 
   for (const id of initialBasemapLayers) {
     // Background layers participate in basemap visibility/opacity sync.
@@ -176,7 +182,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       getEast: () => -80,
       getNorth: () => 50,
     }),
-    getZoom: () => 4,
+    getZoom: () => zoom,
     getBearing: () => 0,
     getPitch: () => 0,
     getProjection: () => ({ type: "mercator" }),
@@ -195,8 +201,14 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     addControl: record("addControl"),
     removeControl: record("removeControl"),
     once: () => {},
-    on: () => {},
-    off: () => {},
+    on: (event: string, handler: (event: unknown) => void) => {
+      const existing = handlers.get(event) ?? new Set();
+      existing.add(handler);
+      handlers.set(event, existing);
+    },
+    off: (event: string, handler: (event: unknown) => void) => {
+      handlers.get(event)?.delete(handler);
+    },
   };
 
   const fake: FakeMap = {
@@ -207,6 +219,12 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     setDataCalls,
     queueRenderedFeatures: (features) => {
       pendingRenderedFeatures = features;
+    },
+    setZoom: (next) => {
+      zoom = next;
+    },
+    emit: (event) => {
+      for (const handler of [...(handlers.get(event) ?? [])]) handler({ type: event });
     },
   };
   return { map, fake };
@@ -608,6 +626,84 @@ describe("MapController.syncLayers reconciliation", () => {
     assert.deepEqual(continents(), ["Asia"]);
     controller.syncLayers([filteredBy("Europe")]);
     assert.deepEqual(continents(), ["Europe"]);
+  });
+
+  it("re-derives a zoom-dependent clustered filter as the camera moves", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const geojson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "a" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { name: "b" },
+          geometry: { type: "Point", coordinates: [10, 0] },
+        },
+      ],
+    };
+    // MapLibre clusters at the source, so this filter is applied to the source
+    // data rather than by the renderer: nothing re-evaluates it against the
+    // live camera unless the controller resyncs.
+    const layer = pointLayer(
+      "zoom-clusters",
+      { filterExpression: [">=", ["zoom"], 8] },
+      { pointRenderer: "cluster" },
+    );
+    layer.geojson = geojson;
+    const featureCount = () =>
+      (fake.sources.get(srcId("zoom-clusters"))?.data as GeoJSON.FeatureCollection).features.length;
+
+    fake.setZoom(4);
+    controller.syncLayers([layer]);
+    assert.equal(featureCount(), 0, "below the threshold the filter hides both points");
+
+    fake.setZoom(10);
+    fake.emit("zoomend");
+    assert.equal(featureCount(), 2, "crossing the threshold brings them back");
+
+    fake.setZoom(3);
+    fake.emit("zoomend");
+    assert.equal(featureCount(), 0, "and crossing back hides them again");
+  });
+
+  it("leaves no zoom listener behind for a filter that does not read the zoom", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const clustered = (patch: Partial<GeoLibreLayer>) => {
+      const layer = pointLayer("plain-clusters", patch, { pointRenderer: "cluster" });
+      layer.geojson = {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { keep: true },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      };
+      return layer;
+    };
+
+    controller.syncLayers([clustered({ filterExpression: ["==", ["get", "keep"], true] })]);
+    const before = fake.calls.length;
+    fake.emit("zoomend");
+    assert.equal(fake.calls.length, before, "no resync for a zoom-independent filter");
+
+    // Adding one attaches the listener; dropping it again detaches.
+    controller.syncLayers([clustered({ filterExpression: [">=", ["zoom"], 8] })]);
+    fake.setZoom(9);
+    fake.emit("zoomend");
+    assert.ok(fake.calls.length > before, "a zoom-dependent filter resyncs");
+
+    controller.syncLayers([clustered({ filterExpression: ["==", ["get", "keep"], true] })]);
+    const settled = fake.calls.length;
+    fake.emit("zoomend");
+    assert.equal(fake.calls.length, settled, "listener detached with the filter");
   });
 
   it("applies a visibility toggle as a layout property", () => {

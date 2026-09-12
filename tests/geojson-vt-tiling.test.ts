@@ -97,6 +97,9 @@ function makeMap() {
       calls.push({ method: "removeLayer", args: [id] });
     },
     getFilter: (id: string) => layers.get(id)?.filter,
+    // A clustered source is pre-filtered against the live camera, so the
+    // clustering cases need a zoom to evaluate against.
+    getZoom: () => 4,
     setFilter: () => {},
     setPaintProperty: () => {},
     setLayoutProperty: () => {},

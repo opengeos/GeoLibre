@@ -400,6 +400,35 @@ const clusteredFilterInputs = new WeakMap<
   { key: string; value: GeoJSON.FeatureCollection }
 >();
 
+/** Whether an expression reads `["zoom"]`, and so cannot be evaluated once. */
+function expressionUsesZoom(node: unknown): boolean {
+  if (!Array.isArray(node)) return false;
+  if (node[0] === "zoom") return true;
+  return node.some((entry) => expressionUsesZoom(entry));
+}
+
+/**
+ * Whether any layer needs its clustered source re-derived as the camera moves.
+ * Pre-filtering a clustered source is a one-shot evaluation, so a filter that
+ * reads `["zoom"]` only stays truthful if something re-runs it — see
+ * {@link authoredClusterInput}. Callers use this to decide whether a zoom
+ * listener is worth attaching at all; the ordinary layer pays nothing.
+ */
+export function hasZoomDependentClusterFilter(layers: GeoLibreLayer[]): boolean {
+  return layers.some((layer) => {
+    if (!layer.geojson) return false;
+    const { wantCluster } = resolveVectorRenderMode(layer, detectGeometryProfile(layer.geojson));
+    if (!wantCluster) return false;
+    const filter = compileLayerFilters(layer);
+    return filter !== null && expressionUsesZoom(filter);
+  });
+}
+
+/** Whether two feature lists hold the same feature objects in the same order. */
+function sameFeatureList(left: GeoJSON.Feature[], right: GeoJSON.Feature[]): boolean {
+  return left.length === right.length && left.every((feature, index) => feature === right[index]);
+}
+
 /**
  * Narrow a cluster renderer's source data by the layer's authored filters.
  * MapLibre clusters before evaluating style-layer filters, so applying the
@@ -407,17 +436,24 @@ const clusteredFilterInputs = new WeakMap<
  * cluster bubbles and counts. Only the current filter's result is cached per
  * source object, so ordinary sync ticks keep a stable data reference while
  * iterating on a filter does not retain a copy of the dataset per attempt.
+ *
+ * Unlike a style-layer filter, which MapLibre re-evaluates against the live
+ * camera, this runs once per sync, so `zoom` is passed in and joined to the
+ * cache key. A zoom-dependent filter therefore needs a sync per zoom (see
+ * {@link hasZoomDependentClusterFilter}); when the outcome is unchanged the
+ * previous collection is returned so the source is not needlessly re-clustered.
  */
-function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
+function authoredClusterInput(layer: GeoLibreLayer, zoom: number): GeoJSON.FeatureCollection {
   const geojson = layer.geojson!;
   const filter = compileLayerFilters(layer);
   if (!filter) return geojson;
 
-  const filterKey = JSON.stringify(filter);
+  const source = JSON.stringify(filter);
+  const filterKey = expressionUsesZoom(filter) ? `${source}@${zoom}` : source;
   const cached = clusteredFilterInputs.get(geojson);
   if (cached?.key === filterKey) return cached.value;
 
-  const compiled = compileFeatureExpression(filterKey, { expectedType: "boolean" });
+  const compiled = compileFeatureExpression(source, { expectedType: "boolean", zoom });
   if (!compiled.ok || !compiled.evaluate) return geojson;
   const evaluate = compiled.evaluate;
   const features = geojson.features.filter((feature) => {
@@ -427,7 +463,10 @@ function authoredClusterInput(layer: GeoLibreLayer): GeoJSON.FeatureCollection {
       return false;
     }
   });
-  const filtered = { ...geojson, features };
+  // A zoom tick that changes nothing must not hand back a new object: the
+  // inline path would call setData and MapLibre would re-cluster from scratch.
+  const reused = cached && sameFeatureList(cached.value.features, features);
+  const filtered = reused ? cached.value : { ...geojson, features };
   clusteredFilterInputs.set(geojson, { key: filterKey, value: filtered });
   return filtered;
 }
@@ -1883,7 +1922,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     layer,
     profile,
   );
-  const sourceGeoJson = wantCluster ? authoredClusterInput(layer) : layer.geojson!;
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
   // it), or some other code may have left a non-geojson source under this id.
@@ -1954,7 +1993,7 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
     layer,
     profile,
   );
-  const sourceGeoJson = wantCluster ? authoredClusterInput(layer) : layer.geojson!;
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
 
   ensureGeoJsonVtProtocol();
 
