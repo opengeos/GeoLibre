@@ -3780,9 +3780,11 @@ export function LayerPanel({
                               {t("layers.openStylePanel")}
                             </DropdownMenuItem>
                           )}
-                          {/* Clearing keeps the controls the author configured
-                              and only empties what they were answered with, so
-                              the next question does not start from scratch. */}
+                          {/* Clearing drops the persistent expression filter
+                              outright, but keeps the Quick Filter controls the
+                              author configured and only empties what they were
+                              answered with, so the next question does not start
+                              from scratch. */}
                           {hasActiveLayerFilter(layer) && (
                             <DropdownMenuItem
                               disabled={!layerEditable}

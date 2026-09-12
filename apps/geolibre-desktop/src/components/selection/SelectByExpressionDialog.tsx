@@ -1,18 +1,20 @@
 import {
   matchFeaturesByExpression,
   substituteExpressionVariables,
+  type GeoLibreLayer,
   type SelectionMode,
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
 import { Button, Label, Select, Textarea } from "@geolibre/ui";
 import { Filter, FilterX, SquareFunction } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getAttributePropertyNames,
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
+import { retargetExpressionSource } from "../../lib/expression-source";
 import { applyMatchedSelection } from "../../lib/selection-actions";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
@@ -60,6 +62,21 @@ export function SelectByExpressionDialog({
   const [source, setSource] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [summary, setSummary] = useState<ExpressionSummary | null>(null);
+  // The layer whose saved filter currently fills the textarea, or null when the
+  // text is the user's own. Re-running a hand-written expression against
+  // another layer is a normal thing to want, so authored text follows the
+  // target; a seeded filter belongs to one layer and must not, or "Filter
+  // layer" would persist layer A's filter onto layer B.
+  const seededFilterLayerId = useRef<string | null>(null);
+
+  const retargetExpression = (next: GeoLibreLayer | null | undefined): void => {
+    const seeded = retargetExpressionSource(
+      { source, seededFromLayerId: seededFilterLayerId.current },
+      next,
+    );
+    setSource(seeded.source);
+    seededFilterLayerId.current = seeded.seededFromLayerId;
+  };
 
   // Re-seed the target each time the dialog opens: an explicit context-menu
   // target wins, then the active layer (when selectable), then the first
@@ -75,7 +92,7 @@ export function SelectByExpressionDialog({
         .map((id) => eligible.find((layer) => layer.id === id))
         .find((layer) => layer !== undefined) ?? eligible[0];
     setTargetLayerId(target?.id ?? null);
-    if (target?.filterExpression) setSource(JSON.stringify(target.filterExpression, null, 2));
+    retargetExpression(target);
     // targetLayerId is intentionally read only when the panel opens. Including
     // it here would re-run this seed after the user changes the target.
   }, [open, preselectedLayerId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -170,6 +187,7 @@ export function SelectByExpressionDialog({
     // stop tracking the map. `["zoom"]` is the live alternative (docs/user-guide/styling.md).
     const expression = substituteExpressionVariables(checked.parsed, liveVariables) as unknown[];
     setLayerFilterExpression(targetLayer.id, expression);
+    seededFilterLayerId.current = targetLayer.id;
 
     const result = matchFeaturesByExpression(features, source, {
       zoom: liveZoom,
@@ -188,6 +206,7 @@ export function SelectByExpressionDialog({
   const clearLayerFilter = () => {
     if (!targetLayer || !canEditLayer(targetLayer.id)) return;
     setLayerFilterExpression(targetLayer.id, null);
+    seededFilterLayerId.current = null;
     setSummary(null);
   };
 
@@ -215,10 +234,7 @@ export function SelectByExpressionDialog({
                   onChange={(event) => {
                     const nextId = event.target.value || null;
                     setTargetLayerId(nextId);
-                    const nextLayer = eligibleLayers.find((layer) => layer.id === nextId);
-                    if (nextLayer?.filterExpression) {
-                      setSource(JSON.stringify(nextLayer.filterExpression, null, 2));
-                    }
+                    retargetExpression(eligibleLayers.find((layer) => layer.id === nextId));
                     setSummary(null);
                   }}
                 >
@@ -246,7 +262,10 @@ export function SelectByExpressionDialog({
                 <Textarea
                   id="select-expression-source"
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    seededFilterLayerId.current = null;
+                  }}
                   placeholder={t("selection.expressionPlaceholder")}
                   spellCheck={false}
                   className="min-h-20 font-mono text-xs"
@@ -324,7 +343,10 @@ export function SelectByExpressionDialog({
           fieldNames={fieldNames}
           zoom={zoom}
           variables={variables}
-          onApply={(expression) => setSource(expression)}
+          onApply={(expression) => {
+            setSource(expression);
+            seededFilterLayerId.current = null;
+          }}
         />
       )}
     </>
