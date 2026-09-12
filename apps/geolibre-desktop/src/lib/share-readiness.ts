@@ -651,18 +651,28 @@ export function summarizeShareSources(refs: readonly ShareSourceRef[]): ShareRea
 }
 
 /**
- * The references that are settled without the network and that a recipient
- * can never load: files on the author's machine, private-network hosts, and
- * layers with no source at all. Synchronous, so the Share dialog can show
- * them the moment it opens rather than after the probes finish, and cheap
- * enough to run before a token is configured (issue #2360: a project whose
- * every data layer was a local file uploaded "cleanly" and drew only the
- * basemap for everyone else).
+ * Whether a verdict means the layer is empty for every recipient, no matter
+ * who they are: a file on the author's machine, or no source at all. A
+ * private-network host is deliberately not one of these. It is `local` for
+ * the probe report, but an author sharing an intranet map with intranet
+ * colleagues is doing the right thing, and that layer may well load for them.
+ */
+export function isMissingForRecipients(
+  item: Pick<ShareReadinessItem, "status" | "reason">,
+): boolean {
+  return item.status === "local" && item.reason !== "private-host";
+}
+
+/**
+ * The references that are settled without the network and that no recipient
+ * can load (see {@link isMissingForRecipients}). Synchronous, so the Share
+ * dialog can show them the moment it opens rather than after the probes
+ * finish, and cheap enough to run before a token is configured (issue #2360:
+ * a project whose every data layer was a local file uploaded "cleanly" and
+ * drew only the basemap for everyone else).
  */
 export function findLocalShareSources(input: ShareReadinessInput): ShareReadinessItem[] {
-  return summarizeShareSources(collectShareSources(input)).filter(
-    (item) => item.status === "local",
-  );
+  return summarizeShareSources(collectShareSources(input)).filter(isMissingForRecipients);
 }
 
 /** Collect, probe, and summarize. What the Share dialog calls. */

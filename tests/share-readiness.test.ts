@@ -724,17 +724,24 @@ describe("findLocalShareSources", () => {
     assert.deepEqual(problems, []);
   });
 
-  it("reports a private-network basemap style alongside the layers", () => {
+  it("lists a layer with no source, but leaves private-network hosts to the advisory", () => {
+    // An intranet map shared with intranet colleagues may load fine for them,
+    // so a private host is not declared missing; the probe report still
+    // carries it as a local verdict.
     const problems = findLocalShareSources({
-      layers: [layer({ id: "sql", name: "PostGIS query", source: {} })],
+      layers: [
+        layer({ id: "sql", name: "PostGIS query", source: {} }),
+        layer({
+          id: "lan",
+          name: "LAN tiles",
+          source: { tiles: ["http://192.168.1.5/{z}/{x}/{y}.png"] },
+        }),
+      ],
       basemapStyleUrl: "http://gis-server:8080/style.json",
     });
     assert.deepEqual(
       problems.map((item) => [item.layerId, item.field, item.reason]),
-      [
-        ["sql", "source", "no-source"],
-        [null, "basemapStyleUrl", "private-host"],
-      ],
+      [["sql", "source", "no-source"]],
     );
   });
 });

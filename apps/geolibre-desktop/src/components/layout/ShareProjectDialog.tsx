@@ -40,6 +40,7 @@ import {
 import {
   checkShareReadiness,
   findLocalShareSources,
+  isMissingForRecipients,
   type ShareReadinessInput,
   type ShareReadinessItem,
   type ShareReadinessReport,
@@ -236,14 +237,17 @@ export function ShareProjectDialog({
   const [localProblems, setLocalProblems] = useState<ShareReadinessItem[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const getTokenButtonRef = useRef<HTMLButtonElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
 
   const hasToken = shareToken.trim().length > 0;
   const titleValid = isShareableTitle(title);
-  // The local verdicts have their own block above the form, so the probe
-  // report only lists what the network settled.
-  const remoteProblems = readiness?.problems.filter((item) => item.status !== "local") ?? [];
-  const remoteItemCount = readiness?.items.filter((item) => item.status !== "local").length ?? 0;
+  // The verdicts that are missing for everyone have their own block above the
+  // form, so the probe report lists the rest: what the network settled, plus a
+  // private-network host, which may still load for the intended recipients.
+  const remoteProblems = readiness?.problems.filter((item) => !isMissingForRecipients(item)) ?? [];
+  const remoteItemCount =
+    readiness?.items.filter((item) => !isMissingForRecipients(item)).length ?? 0;
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
   // error never lingers into a new share. Seed the title from the current
@@ -265,24 +269,27 @@ export function ShareProjectDialog({
     }
   }, [open, currentTitle]);
 
-  // Layers that only exist on this machine are settled without the network,
-  // so they are listed the moment the dialog opens, token or no token.
-  useEffect(() => {
-    setLocalProblems(open ? findLocalShareSources(readinessInput()) : []);
-  }, [open]);
-
   // Pre-flight the project's data sources when the dialog opens, so the author
   // learns that a layer will be empty for everyone else *before* the upload
   // rather than when a recipient tells them (if they tell them).
   //
-  // Advisory only: it never gates the Share button. An author sharing an
-  // intranet map with intranet colleagues is doing the right thing.
+  // Layers that only exist on this machine are settled without the network,
+  // so they are listed at once, token or no token. The probes need the token
+  // only because there is no upload to pre-flight without one. Advisory only:
+  // neither gates the Share button. An author sharing an intranet map with
+  // intranet colleagues is doing the right thing.
   useEffect(() => {
-    if (!open || !hasToken) return;
+    if (!open) {
+      setLocalProblems([]);
+      return;
+    }
+    const input = readinessInput();
+    setLocalProblems(findLocalShareSources(input));
+    if (!hasToken) return;
     const controller = new AbortController();
     setReadinessState("checking");
     setReadiness(null);
-    void checkShareReadiness(readinessInput(), { signal: controller.signal })
+    void checkShareReadiness(input, { signal: controller.signal })
       .then((report) => {
         if (controller.signal.aborted) return;
         setReadiness(report);
@@ -396,13 +403,14 @@ export function ShareProjectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="sm:max-w-lg"
-        // The local-data warning sits above the form and carries a link, which
-        // would otherwise take the dialog's initial focus away from the title.
+        // The local-data warning sits above both the form and the setup steps
+        // and carries a link, which would otherwise take the dialog's initial
+        // focus away from the title field or the first setup step.
         onOpenAutoFocus={(event) => {
-          const input = titleInputRef.current;
-          if (!input) return;
+          const target = titleInputRef.current ?? getTokenButtonRef.current;
+          if (!target) return;
           event.preventDefault();
-          input.focus();
+          target.focus();
         }}
       >
         <DialogHeader>
@@ -424,6 +432,7 @@ export function ShareProjectDialog({
                   {t("share.step1Description", { shareHost })}
                 </p>
                 <Button
+                  ref={getTokenButtonRef}
                   type="button"
                   variant="outline"
                   onClick={() => void openExternalLink(settingsUrl)}
