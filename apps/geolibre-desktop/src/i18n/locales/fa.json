@@ -347,6 +347,10 @@
       "polyline": {
         "label": "افزودن لایهٔ چندخطی کدگذاری‌شده",
         "description": "وارد کردن رشته‌های چندخطی کدگذاری‌شده (Google، OSRM، Valhalla) از متن یا فایل‌ها به‌صورت خطوط برداری."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "KML یا KMZ را با سبک‌های بومی، هم‌پوشانی‌ها و پیوندهای شبکه روی کره بارگذاری کنید."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} سرویس وارد شد.",
       "importedWithDropped_one": "{{count}} سرویس وارد شد ({{dropped}} مورد رد شد — کتابخانه پر است).",
       "importedWithDropped_other": "{{count}} سرویس وارد شد ({{dropped}} مورد رد شد — کتابخانه پر است)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "نشانی KML / KMZ",
+      "errorSource": "نشانی KML/KMZ را وارد کنید یا یک فایل انتخاب کنید."
     },
     "xyz": {
       "defaultName": "لایهٔ XYZ",

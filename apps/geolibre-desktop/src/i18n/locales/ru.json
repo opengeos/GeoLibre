@@ -351,6 +351,10 @@
       "polyline": {
         "label": "Добавить слой закодированной полилинии",
         "description": "Импорт закодированных строк полилиний (Google, OSRM, Valhalla) из текста или файлов в виде векторных линий."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Загрузите KML или KMZ на глобус с исходными стилями, наложениями и сетевыми ссылками."
       }
     },
     "shared": {
@@ -411,6 +415,11 @@
       "importedWithDropped_few": "Импортировано {{count}} сервиса ({{dropped}} пропущено — библиотека заполнена).",
       "importedWithDropped_many": "Импортировано {{count}} сервисов ({{dropped}} пропущено — библиотека заполнена).",
       "importedWithDropped_other": "Импортировано {{count}} сервиса ({{dropped}} пропущено — библиотека заполнена)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
+      "errorSource": "Введите URL KML/KMZ или выберите файл."
     },
     "xyz": {
       "defaultName": "Слой XYZ",

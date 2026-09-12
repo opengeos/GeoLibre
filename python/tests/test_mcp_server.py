@@ -444,6 +444,8 @@ def test_add_raster_layer_records_its_source(server, project_path):
         ("add_3d_tiles_layer", {"ion_asset_id": 96188}, "3d-tiles"),
         ("add_cesium_ion_layer", {"asset_id": 96188}, "3d-tiles"),
         ("add_cesium_ion_layer", {"asset_id": 2, "kind": "imagery"}, "raster"),
+        ("add_cesium_kml_layer", {"url": "https://example.com/landmarks.kmz"}, "3d-tiles"),
+        ("add_cesium_kml_layer", {"data": "<kml><Document/></kml>"}, "3d-tiles"),
         ("add_czml_layer", {"url": "https://example.com/sat.czml"}, "3d-tiles"),
         ("add_czml_layer", {"data": [{"id": "document", "version": "1.0"}]}, "3d-tiles"),
         ("add_czml_layer", {"data": {"id": "document", "version": "1.0"}}, "3d-tiles"),

@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Kodierte Polyline-Ebene hinzufügen",
         "description": "Kodierte Polyline-Zeichenfolgen (Google, OSRM, Valhalla) aus Text oder Dateien als Vektorlinien importieren."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "KML oder KMZ mit nativen Stilen, Overlays und Netzwerklinks auf dem Globus laden."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} Dienste importiert.",
       "importedWithDropped_one": "{{count}} Dienst importiert ({{dropped}} übersprungen — Bibliothek voll).",
       "importedWithDropped_other": "{{count}} Dienste importiert ({{dropped}} übersprungen — Bibliothek voll)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML-/KMZ-URL",
+      "errorSource": "Geben Sie eine KML/KMZ-URL ein oder wählen Sie eine Datei."
     },
     "xyz": {
       "defaultName": "XYZ-Ebene",

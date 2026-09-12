@@ -26,6 +26,28 @@ here; #2291 describes it as a possible follow-up.
 
 ## Remaining work and ordering
 
+September 11 audit: the open Cesium trackers are #2259, #2261, and #2262.
+The tileset styling requirement of #2290 landed in #2337 and native CZML in
+#2350. Although #2350 closed #2290, several requirements remain.
+Clipping polygons, terrain sampling in the measurement tools,
+Ion terrain assets, and Google Photorealistic 3D Tiles remain outstanding.
+The layer-format gaps listed below also remain, including ArcGIS vector tiles,
+drape picking, Zarr, raw point clouds and splats, and deck.gl visualizations.
+
+The control host now forwards camera and geographic pointer events and reports
+the actual canvas container dimensions. It rejects source mutations as well as
+style-layer mutations. This fixes the facade contract but does not make controls
+that paint through MapLibre compatible; their engine declarations remain gated.
+
+The Vite audit also found that excluding `lerc` from dependency optimization
+externalized Cesium's LERC 2 import to the top-level LERC 4 package, preventing
+the globe from opening. Both versions now remain in their respective dependency
+graphs. The globe's COG loader supplies LERC 4's WASM URL explicitly, as the
+2D raster loader already does. A real single-band Athens LERC DEM in
+EPSG:2100 renders with a terrain colormap in both themes. The Layers panel
+no longer applies its MapLibre-source placeholder warning to native Cesium
+layers.
+
 | Issues | Next work | Required evidence |
 | --- | --- | --- |
 | #2276 | Implemented manual placement and shared extent drawing | Real pin drag and Done, rectangle drawing and Escape in both themes, renderer swaps, and Esri World Imagery extraction to a 22×12 EPSG:4326 GeoTIFF with nonconstant pixels; unit coverage includes antimeridian extents, pointer ownership, sky release, blur, and cancellation |
@@ -41,7 +63,7 @@ here; #2291 describes it as a possible follow-up.
 | #2287 (implemented) | Native environment plugins | Sun clock and lighting on/off, atmosphere/sky box on/off and restore, spin start/stop, cloud imagery add/remove, and flight take-over/teardown verified in the real app in both themes; unit tests cover each Cesium branch against the real Cesium maths with a faked widget |
 | #2288, #2262 | Enforce declared support in activation, URL dispatch, project restore, delayed controls, and command palette | Tests cover unsupported callbacks, renderer round trips, saved settings, and compatible-control remounting. The wider control facade and native plugin implementations remain separate work. |
 | #2289 | Python/MCP/embed renderer authoring | Project round trips, renderer events, pane kinds, invalid inputs, and docs examples |
-| #2290 (Ion assets implemented) | Cesium-native authoring features | Ion assets: Cesium OSM Buildings (asset 96188) and Bing Aerial (asset 2) added from the Add Data dialog on the globe in both themes, the same project reopened on the 2D map showing the "3D only" badge, a missing token surfacing as a layer error; unit tests cover the layer builder, the asset-id parser, the globe's tileset/imagery routing through `IonResource`/`IonImageryProvider`, rebuild on asset change, and the Python/MCP builders. Tileset styling, clipping polygons, KML/CZML, and terrain sampling remain separate follow-ups. |
+| #2290 (Ion assets implemented) | Cesium-native authoring features | Ion assets: Cesium OSM Buildings (asset 96188) and Bing Aerial (asset 2) added from the Add Data dialog on the globe in both themes, the same project reopened on the 2D map showing the "3D only" badge, a missing token surfacing as a layer error; unit tests cover the layer builder, the asset-id parser, the globe's tileset/imagery routing through `IonResource`/`IonImageryProvider`, rebuild on asset change, and the Python/MCP builders. Tileset styling and CZML have merged. Native KML/KMZ and elevation profiles are implemented: a real San Francisco landmarks KMZ retains its billboard styles and labels in both themes; a drawn 3.43 km profile samples World Terrain from -27 m to 74 m. Tests cover document loading, cancellation, opacity, cleanup, Python serialization, and terrain-provider replacement. Clipping polygons, Terrain Measure, Ion terrain assets, and Google Photorealistic 3D Tiles remain follow-ups. |
 | #2261, #2259 | Update umbrella completion only after child requirements are verified | Accurate supported-layer predicates and an explicit record of remaining gaps |
 
 ## Test gates

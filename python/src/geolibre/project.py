@@ -1753,6 +1753,39 @@ def czml_layer(
     return layer
 
 
+def cesium_kml_layer(
+    name: str,
+    *,
+    url: str | None = None,
+    data: str | None = None,
+    source_path: str | None = None,
+    **style: Any,
+) -> dict[str, Any]:
+    """Build a native globe KML/KMZ layer preserving document styling.
+
+    Supply a URL, inline KML XML, or a KMZ data URL. Package local resources
+    inside KMZ archives so they remain available when sharing the project.
+    """
+    url = url.strip() if url else None
+    data = data.strip() if data else None
+    if not url and not data:
+        raise ValueError("Provide a KML/KMZ document or URL.")
+    layer = _layer_base(name, "3d-tiles", **style)
+    layer["source"] = {
+        "type": "3d-tiles",
+        "sourceId": layer["id"],
+        **({"kmlData": data} if data else {"url": url}),
+    }
+    if source_path:
+        layer["sourcePath"] = source_path
+    layer["metadata"] = {
+        "sourceKind": "cesium-kml",
+        "externalNativeLayer": True,
+        "identifiable": False,
+    }
+    return layer
+
+
 def video_layer(
     name: str,
     urls: list[str],

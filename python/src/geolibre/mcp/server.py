@@ -751,6 +751,21 @@ def build_server(workspace: Workspace) -> MCPServer:
         layer = _project.czml_layer(name, url=url, data=data)
         return add(path, layer, index)
 
+    @tool()
+    def add_cesium_kml_layer(
+        path: str,
+        name: str,
+        url: str | None = None,
+        data: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add native KML/KMZ with document styles, overlays, and network links.
+
+        Supply a document URL, inline XML, or a KMZ data URL. Renders on the
+        globe only; set the project's primaryRenderer to "cesium".
+        """
+        return add(path, _project.cesium_kml_layer(name, url=url, data=data), index)
+
     # -- editing layers -------------------------------------------------------
 
     @tool()

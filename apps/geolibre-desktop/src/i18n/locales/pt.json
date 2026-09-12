@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Adicionar camada de polilinha codificada",
         "description": "Importar strings de polilinha codificada (Google, OSRM, Valhalla) de texto ou arquivos como linhas vetoriais."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Carregue KML ou KMZ com estilos nativos, sobreposições e links de rede no globo."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} serviços importados.",
       "importedWithDropped_one": "{{count}} serviço importado ({{dropped}} ignorado — biblioteca cheia).",
       "importedWithDropped_other": "{{count}} serviços importados ({{dropped}} ignorados — biblioteca cheia)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL KML / KMZ",
+      "errorSource": "Insira uma URL KML/KMZ ou escolha um arquivo."
     },
     "xyz": {
       "defaultName": "Camada XYZ",

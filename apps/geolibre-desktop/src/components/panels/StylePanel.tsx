@@ -27,6 +27,7 @@ import {
   collectDiagramData,
   geojsonHasZCoordinates,
   isCzmlLayer,
+  isCesiumKmlLayer,
   isStyleLibraryTargetLayer,
   parseJsonExpression,
   pluginOwnsPaint,
@@ -1781,8 +1782,8 @@ export function StylePanel({
   // `CesiumLayerSync` only toggles its visibility: no `Cesium3DTileStyle` is
   // compiled for it and no feature filter reaches its entities, so the tileset
   // symbology and quick-filter controls would be silent no-ops (#2290).
-  const isCzmlScene = isCzmlLayer(layer);
-  const hasTilesetSymbology = isThreeDTilesLayer && !isCzmlScene;
+  const isNativeDocumentScene = isCzmlLayer(layer) || isCesiumKmlLayer(layer);
+  const hasTilesetSymbology = isThreeDTilesLayer && !isNativeDocumentScene;
   // An external plugin's MapLibre custom (WebGL) layer draws its own pixels and
   // has no MapLibre paint properties, so every paint editor below would be inert
   // for it (#1445). The plugin declares that with `paintMode: "plugin"`; the
@@ -1828,7 +1829,7 @@ export function StylePanel({
     // `type` (a deck GeoJSON layer is still `"geojson"`), so testing the type
     // first would let it through even though a custom layer accepts no filter.
     !hasExternalDeckLayer(layer) &&
-    !isCzmlScene &&
+    !isNativeDocumentScene &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
       layer.type === "mbtiles" ||
@@ -5027,7 +5028,13 @@ export function StylePanel({
         </ScrollArea>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
-          {t("style.selectedLayerType", { type: isCzmlScene ? "czml" : layer.type })}
+          {t("style.selectedLayerType", {
+            type: isCesiumKmlLayer(layer)
+              ? "KML / KMZ"
+              : isNativeDocumentScene
+                ? "czml"
+                : layer.type,
+          })}
         </p>
       </aside>
     );

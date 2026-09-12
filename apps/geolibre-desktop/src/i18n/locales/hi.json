@@ -347,6 +347,10 @@
       "polyline": {
         "label": "एन्कोडेड पॉलीलाइन लेयर जोड़ें",
         "description": "एन्कोडेड पॉलीलाइन स्ट्रिंग (Google, OSRM, Valhalla) को टेक्स्ट या फ़ाइलों से वेक्टर लाइनों के रूप में आयात करें।"
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "ग्लोब पर मूल शैलियों, ओवरले और नेटवर्क लिंक के साथ KML या KMZ लोड करें।"
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} सेवाएँ आयात की गईं।",
       "importedWithDropped_one": "{{count}} सेवा आयात की गई ({{dropped}} छोड़ी गई — लाइब्रेरी भर गई)।",
       "importedWithDropped_other": "{{count}} सेवाएँ आयात की गईं ({{dropped}} छोड़ी गईं — लाइब्रेरी भर गई)।"
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
+      "errorSource": "KML/KMZ URL दर्ज करें या फ़ाइल चुनें।"
     },
     "xyz": {
       "defaultName": "XYZ लेयर",

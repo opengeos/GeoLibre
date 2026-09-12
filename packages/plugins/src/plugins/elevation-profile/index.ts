@@ -1,5 +1,6 @@
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../../types";
 import { ElevationProfileControl } from "./core/ElevationProfileControl";
+import { cesiumProfileMap } from "./cesium";
 import type { ElevationProfileState } from "./core/types";
 import type { LngLat } from "./elevation/geometry";
 import type { UnitSystem } from "./elevation/format";
@@ -11,10 +12,10 @@ import { ELEVATION_LINE_PARAM, maybeHandleDeepLink } from "./utils/deep-link";
  * Adds a map control that lets the user draw a line and charts the elevation
  * profile along it — distance, ascent/descent, and min/max stats, a
  * metric/imperial toggle, hover readout, and CSV/SVG export — sampling
- * elevations from the key-less Open-Meteo API. Ported in-house from the
+ * elevations from the active terrain on Cesium or the key-less Open-Meteo API
+ * on MapLibre. Ported in-house from the
  * external `geolibre-elevation-profile` marketplace plugin so it ships as a
- * first-class built-in; the control code is unchanged, only the plugin entry is
- * rebound onto GeoLibre's built-in `GeoLibrePlugin` contract.
+ * first-class built-in using GeoLibre's `GeoLibrePlugin` contract.
  *
  * The line, unit system, and collapsed state round-trip through the project
  * file, and a `?elevation-line=lng,lat;lng,lat` URL parameter restores a shared
@@ -30,7 +31,9 @@ let position: GeoLibreMapControlPosition = "top-left";
 let pendingState: Partial<ElevationProfileState> | null = null;
 
 function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
+  const globe = app.getCesiumScene?.();
   const next = new ElevationProfileControl({
+    nativeMap: globe ? cesiumProfileMap(globe, app.fitBounds) : undefined,
     // The panel always mounts closed and `activate` opens it a tick later (see
     // there). Mounting it already expanded would show it for a frame before the
     // control's own click-outside handler saw the very click that enabled the
@@ -96,6 +99,7 @@ function isPluginState(value: unknown): value is Partial<ElevationProfileState> 
 
 export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   id: ELEVATION_PROFILE_PLUGIN_ID,
+  engines: ["maplibre", "cesium"],
   name: "Elevation Profile",
   version: "0.1.0",
   urlParameterNames: [ELEVATION_LINE_PARAM],

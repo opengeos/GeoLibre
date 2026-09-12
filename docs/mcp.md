@@ -105,6 +105,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id. |
 | `add_cesium_ion_layer` | Cesium Ion assets (tileset or imagery) by id; rendered by the 3D globe only. |
 | `add_czml_layer` | A CZML (Cesium Language) dynamic 3D scene, by URL or inline packets; rendered by the 3D globe only. |
+| `add_cesium_kml_layer` | Native globe KML/KMZ from a URL, inline XML, or KMZ data URL, preserving document styles and overlays. |
 
 ### Editing
 

@@ -345,6 +345,10 @@
       "polyline": {
         "label": "인코딩된 폴리라인 레이어 추가",
         "description": "인코딩된 폴리라인 문자열(Google, OSRM, Valhalla)을 텍스트 또는 파일에서 벡터 라인으로 가져옵니다."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "원본 스타일, 오버레이 및 네트워크 링크를 유지하여 KML 또는 KMZ를 지구본에 불러옵니다."
       }
     },
     "shared": {
@@ -399,6 +403,11 @@
       "errorRead": "해당 파일을 서비스 라이브러리로 읽을 수 없습니다.",
       "imported_other": "서비스 {{count}}개를 가져왔습니다.",
       "importedWithDropped_other": "서비스 {{count}}개를 가져왔습니다({{dropped}}개는 라이브러리가 가득 차서 건너뜀)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL",
+      "errorSource": "KML/KMZ URL을 입력하거나 파일을 선택하세요."
     },
     "xyz": {
       "defaultName": "XYZ 레이어",

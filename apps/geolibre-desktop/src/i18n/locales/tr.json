@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Kodlanmış Çoklu Çizgi Katmanı Ekle",
         "description": "Kodlanmış çoklu çizgi dizelerini (Google, OSRM, Valhalla) metin veya dosyalardan vektör çizgiler olarak içe aktarın."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "KML veya KMZ dosyalarını özgün stiller, kaplamalar ve ağ bağlantılarıyla küreye yükleyin."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} servis içe aktarıldı.",
       "importedWithDropped_one": "{{count}} servis içe aktarıldı ({{dropped}} tanesi atlandı — kitaplık dolu).",
       "importedWithDropped_other": "{{count}} servis içe aktarıldı ({{dropped}} tanesi atlandı — kitaplık dolu)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML / KMZ URL'si",
+      "errorSource": "Bir KML/KMZ URL’si girin veya dosya seçin."
     },
     "xyz": {
       "defaultName": "XYZ Katmanı",

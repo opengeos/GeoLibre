@@ -1209,8 +1209,9 @@ export default defineConfig({
       // cog-tiler-wasm's mask-aware LERC decoder (lerc-decoder.js) reaches
       // these through dynamic import() the first time a LERC COG opens; they
       // are geotiff's own codec packages, listed here for the same
-      // discover-and-reload reason as above. (`lerc` itself is excluded below:
-      // it locates its .wasm via import.meta.url.)
+      // discover-and-reload reason as above. The raster loader supplies LERC's
+      // WASM URL explicitly, so its ESM decoder can also be pre-bundled.
+      "lerc",
       "pako",
       "zstddec",
       // Cesium (the 3D-globe view). Pre-bundle it up front so esbuild applies
@@ -1266,11 +1267,6 @@ export default defineConfig({
       // breaks that asset reference so the tiler stops rendering. Serve it
       // as-is. (Its plain-JS deps are pre-bundled via optimizeDeps.include.)
       "cog-tiler-wasm",
-      // lerc 4.x (cog-tiler-wasm's mask-aware LERC decoder) fetches
-      // lerc-wasm.wasm via `new URL(..., import.meta.url)`; pre-bundled, that
-      // resolves against the .vite/deps chunk and the request falls through to
-      // index.html ("expected magic word 00 61 73 6d, found 3c 21 64 6f").
-      "lerc",
       // h5wasm (local NetCDF/HDF5 reader) loads its libhdf5 .wasm via
       // `new URL(..., import.meta.url)`; esbuild pre-bundling mangles that
       // asset reference, so serve it as-is. Only reached through the lazy

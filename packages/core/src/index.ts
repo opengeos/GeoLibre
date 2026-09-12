@@ -191,3 +191,10 @@ export {
   readStoredAuthorName,
   setStoredAuthorName,
 } from "./editor-identity";
+export {
+  CESIUM_KML_SOURCE_KIND,
+  isCesiumKmlLayer,
+  cesiumKmlSource,
+  createCesiumKmlLayer,
+  type CesiumKmlLayerOptions,
+} from "./cesium-kml";

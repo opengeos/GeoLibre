@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Añadir capa de polilínea codificada",
         "description": "Importar cadenas de polilínea codificada (Google, OSRM, Valhalla) desde texto o archivos como líneas vectoriales."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Carga KML o KMZ con estilos nativos, superposiciones y enlaces de red en el globo."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "Se importaron {{count}} servicios.",
       "importedWithDropped_one": "Se importó {{count}} servicio ({{dropped}} omitido: biblioteca llena).",
       "importedWithDropped_other": "Se importaron {{count}} servicios ({{dropped}} omitidos: biblioteca llena)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL de KML / KMZ",
+      "errorSource": "Introduce una URL KML/KMZ o elige un archivo."
     },
     "xyz": {
       "defaultName": "Capa XYZ",

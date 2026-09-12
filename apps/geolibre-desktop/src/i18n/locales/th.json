@@ -345,6 +345,10 @@
       "polyline": {
         "label": "เพิ่มเลเยอร์โพลีไลน์ที่เข้ารหัส",
         "description": "นำเข้าสตริงโพลีไลน์ที่เข้ารหัส (Google, OSRM, Valhalla) จากข้อความหรือไฟล์เป็นเส้นเวกเตอร์"
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "โหลด KML หรือ KMZ บนลูกโลกโดยคงรูปแบบต้นฉบับ ภาพซ้อนทับ และลิงก์เครือข่าย"
       }
     },
     "shared": {
@@ -399,6 +403,11 @@
       "errorRead": "ไม่สามารถอ่านไฟล์นั้นเป็นคลังบริการได้",
       "imported_other": "นำเข้าบริการแล้ว {{count}} รายการ",
       "importedWithDropped_other": "นำเข้าบริการแล้ว {{count}} รายการ (ข้าม {{dropped}} รายการ — คลังเต็ม)"
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "URL ของ KML / KMZ",
+      "errorSource": "ป้อน URL ของ KML/KMZ หรือเลือกไฟล์"
     },
     "xyz": {
       "defaultName": "เลเยอร์ XYZ",

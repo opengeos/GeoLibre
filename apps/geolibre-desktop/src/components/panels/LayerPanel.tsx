@@ -3551,9 +3551,16 @@ export function LayerPanel({
                         {layerTypeLabel(layer, t)}
                       </span>
                     </div>
-                    {isPlaceholderLayer(layer) && (
-                      <p className="mt-1 text-[10px] text-amber-600">{placeholderMessage(layer)}</p>
-                    )}
+                    {/* Placeholder detection checks MapLibre source ids, which the
+                        globe's own layers never create. Suppress it only for the
+                        kinds Cesium actually draws — a kind it cannot draw (e.g.
+                        duckdb-query) keeps its message while the globe is primary. */}
+                    {(!cesiumPrimary || !isCesiumSupportedLayerType(layer)) &&
+                      isPlaceholderLayer(layer) && (
+                        <p className="mt-1 text-[10px] text-amber-600">
+                          {placeholderMessage(layer)}
+                        </p>
+                      )}
                     {refreshStatus && (
                       <p
                         title={layer.connection?.lastError ?? layer.connection?.lastSyncedAt ?? ""}

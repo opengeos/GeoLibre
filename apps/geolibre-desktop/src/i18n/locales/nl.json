@@ -347,6 +347,10 @@
       "polyline": {
         "label": "Gecodeerde polylijnlaag toevoegen",
         "description": "Gecodeerde polylijn-tekenreeksen (Google, OSRM, Valhalla) uit tekst of bestanden importeren als vectorlijnen."
+      },
+      "kml": {
+        "label": "KML / KMZ",
+        "description": "Laad KML of KMZ met oorspronkelijke stijlen, overlays en netwerkkoppelingen op de globe."
       }
     },
     "shared": {
@@ -403,6 +407,11 @@
       "imported_other": "{{count}} services geïmporteerd.",
       "importedWithDropped_one": "{{count}} service geïmporteerd ({{dropped}} overgeslagen — bibliotheek vol).",
       "importedWithDropped_other": "{{count}} services geïmporteerd ({{dropped}} overgeslagen — bibliotheek vol)."
+    },
+    "kml": {
+      "defaultName": "KML / KMZ",
+      "url": "KML-/KMZ-URL",
+      "errorSource": "Voer een KML/KMZ-URL in of kies een bestand."
     },
     "xyz": {
       "defaultName": "XYZ-laag",
