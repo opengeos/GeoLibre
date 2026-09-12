@@ -1678,6 +1678,13 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  // This flag describes unsaved changes to the live source, not persisted
+  // project state. A reference-only save reloads the original geometries;
+  // carrying the flag into that project would warn about nonexistent edits.
+  if (layer.metadata.geometryEdited !== undefined) {
+    const { geometryEdited: _geometryEdited, ...metadata } = layer.metadata;
+    layer = { ...layer, metadata };
+  }
   // The live time filter is derived from the Time Slider's current date, so it
   // is transient: strip it before saving so a reopened project never starts
   // with a stale time-window filter hiding most of a layer's features. The

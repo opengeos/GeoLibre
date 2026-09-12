@@ -6,8 +6,16 @@ import {
   projectFromStore,
   serializeProject,
 } from "@geolibre/core";
-import { embedEditedGeometry } from "../apps/geolibre-desktop/src/lib/edited-geometry-save";
-import { geometryEditPatch } from "../packages/plugins/src/plugins/geo-editor-geometry";
+import {
+  embedEditedGeometry,
+  hasEditedGeometry,
+} from "../apps/geolibre-desktop/src/lib/edited-geometry-save";
+import {
+  geometryEditMetadata,
+  tagFeatureKeys,
+  captureEditedGeometries,
+  reconcileEditedFeatures,
+} from "../packages/plugins/src/plugins/geo-editor-geometry";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 for (const vectorControl of [false, true]) {
@@ -75,17 +83,86 @@ it("marks committed changes but not a no-op editor session", () => {
       ],
     },
   });
-  assert.equal(
-    geometryEditPatch(layer, structuredClone(layer.geojson!)).metadata.geometryEdited,
-    undefined,
-  );
-  const edited = structuredClone(layer.geojson!);
+  const baseline = captureEditedGeometries(tagFeatureKeys(layer.geojson!));
+  const unchanged = tagFeatureKeys(layer.geojson!);
+  assert.equal(geometryEditMetadata(layer, unchanged, baseline).geometryEdited, undefined);
+  const edited = structuredClone(unchanged);
   edited.features[0].geometry = { type: "Point", coordinates: [3, 4] };
-  assert.equal(geometryEditPatch(layer, edited).metadata.geometryEdited, true);
+  assert.equal(geometryEditMetadata(layer, edited, baseline).geometryEdited, true);
   assert.equal(
-    geometryEditPatch(layer, { type: "FeatureCollection", features: [] }).metadata.geometryEdited,
+    geometryEditMetadata(layer, { type: "FeatureCollection", features: [] }, baseline)
+      .geometryEdited,
     true,
   );
-  const previouslyEdited = { ...layer, ...geometryEditPatch(layer, edited) };
-  assert.equal(geometryEditPatch(previouslyEdited, edited).metadata.geometryEdited, true);
+  const previouslyEdited = { ...layer, metadata: geometryEditMetadata(layer, edited, baseline) };
+  assert.equal(geometryEditMetadata(previouslyEdited, edited, baseline).geometryEdited, true);
+});
+
+for (const localFile of [false, true]) {
+  it(`does not persist an edit flag when saving ${localFile ? "file" : "URL"} references`, () => {
+    const layer = geojsonLayer({
+      source: {
+        type: "geojson",
+        ...(localFile ? {} : { url: "https://example.com/buildings.geojson" }),
+      },
+      metadata: {
+        geometryEdited: true,
+        externalNativeLayer: !localFile,
+        localFileReloadable: localFile,
+      },
+    });
+    const project = createEmptyProject();
+    const saved = projectFromStore({ ...project, projectName: project.name, layers: [layer] });
+    const restored = parseProject(serializeProject(saved)).layers[0];
+    assert.equal(restored.geojson, undefined);
+    assert.equal(restored.metadata.geometryEdited, undefined);
+    assert.equal(hasEditedGeometry({ ...restored, geojson: layer.geojson }), false);
+    assert.equal(layer.metadata.geometryEdited, true, "saving must retain the live edit warning");
+  });
+}
+
+it("compares reconciled geometry identities independently of editor order", () => {
+  const layer = geojsonLayer({
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 2] } },
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [3, 4] } },
+      ],
+    },
+  });
+  const tagged = tagFeatureKeys(layer.geojson!);
+  const reordered = { ...tagged, features: [...tagged.features].reverse() };
+  const baseline = captureEditedGeometries(tagged);
+  assert.equal(geometryEditMetadata(layer, reordered, baseline).geometryEdited, undefined);
+  // Swapping feature geometries must still count as edits even when their
+  // coordinate array order now happens to match the original collection.
+  [reordered.features[0].geometry, reordered.features[1].geometry] = [
+    reordered.features[1].geometry,
+    reordered.features[0].geometry,
+  ];
+  assert.equal(geometryEditMetadata(layer, reordered, baseline).geometryEdited, true);
+});
+
+it("marks a recreated feature even when reconciliation reuses its id and geometry", () => {
+  const layer = geojsonLayer({
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "original" },
+          geometry: { type: "Point", coordinates: [1, 2] },
+        },
+      ],
+    },
+  });
+  const tagged = tagFeatureKeys(layer.geojson!);
+  const baseline = captureEditedGeometries(tagged);
+  const replacement = structuredClone(layer.geojson!);
+  replacement.features[0].properties = { name: "replacement" };
+  const reconciled = reconcileEditedFeatures(replacement);
+  assert.equal(reconciled.features[0].id, tagged.features[0].id);
+  assert.deepEqual(reconciled.features[0].geometry, tagged.features[0].geometry);
+  assert.equal(geometryEditMetadata(layer, replacement, baseline).geometryEdited, true);
 });

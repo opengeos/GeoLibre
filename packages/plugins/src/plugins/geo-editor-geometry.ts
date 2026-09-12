@@ -571,21 +571,23 @@ function overlayLayersAlreadyPositioned(
   return !(after && after.isOverlay);
 }
 
-/** Prepare committed editor data, marking geometry changes for the project save prompt. */
-export function geometryEditPatch(
+/**
+ * Mark committed geometry edits by comparing the editor's load-time feature
+ * tags before reconciliation strips them or allocates ids for new features.
+ */
+export function geometryEditMetadata(
   layer: GeoLibreLayer,
-  edited: FeatureCollection,
-): Pick<GeoLibreLayer, "geojson" | "metadata"> {
+  tagged: FeatureCollection,
+  originalGeometries: ReadonlyMap<string, string>,
+): GeoLibreLayer["metadata"] {
+  const seen = new Set<string>();
   const changed =
-    !layer.geojson ||
-    layer.geojson.features.length !== edited.features.length ||
-    edited.features.some(
-      (feature, index) =>
-        canonicalGeometryKey(feature.geometry) !==
-        canonicalGeometryKey(layer.geojson?.features[index]?.geometry),
-    );
-  return {
-    geojson: edited,
-    metadata: changed ? { ...layer.metadata, geometryEdited: true } : layer.metadata,
-  };
+    originalGeometries.size !== tagged.features.length ||
+    tagged.features.some((feature) => {
+      const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+      if (tag == null || seen.has(String(tag))) return true;
+      seen.add(String(tag));
+      return canonicalGeometryKey(feature.geometry) !== originalGeometries.get(String(tag));
+    });
+  return changed ? { ...layer.metadata, geometryEdited: true } : layer.metadata;
 }

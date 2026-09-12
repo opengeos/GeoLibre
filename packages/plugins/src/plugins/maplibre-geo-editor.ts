@@ -16,7 +16,7 @@ import {
   SKETCHES_SOURCE_KIND,
   applySyncedEditorTracking,
   canEditLayerGeometry,
-  geometryEditPatch,
+  geometryEditMetadata,
   captureEditedGeometries,
   captureEditedProperties,
   planGeoEditorOverlayOrder,
@@ -795,15 +795,19 @@ function syncEditTargetToStore(): void {
   const layer = store.layers.find((l) => l.id === editTargetLayerId);
   if (!layer) return;
 
+  const tagged = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   const edited = reconcileEditedFeatures(
-    cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
+    tagged,
     editTargetOriginalProperties ?? undefined,
     geometryEditTracking(layer),
   );
 
   pushingSketchesToStore = true;
   try {
-    store.updateLayer(editTargetLayerId, geometryEditPatch(layer, edited));
+    store.updateLayer(editTargetLayerId, {
+      geojson: edited,
+      metadata: geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
+    });
   } finally {
     pushingSketchesToStore = false;
   }

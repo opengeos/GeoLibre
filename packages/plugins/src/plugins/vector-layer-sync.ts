@@ -270,13 +270,19 @@ export function syncVectorLayersToStore(
       let metadata = stacAssetAccess
         ? { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess }
         : layer.metadata;
-      if (existing.metadata.geometryEdited === true) {
-        metadata = { ...metadata, geometryEdited: true };
-      }
       const source = stacAssetAccess
         ? { ...layer.source, url: stacAssetAccess.href }
         : layer.source;
       const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
+      // Render-mode changes keep the same data, but a replacement URL, file,
+      // or source kind must not inherit the previous source's edited snapshot.
+      const sourceChanged =
+        existing.source.url !== source.url ||
+        existing.sourcePath !== sourcePath ||
+        existing.metadata.vectorSource !== metadata.vectorSource;
+      if (!sourceChanged && existing.metadata.geometryEdited === true) {
+        metadata = { ...metadata, geometryEdited: true };
+      }
 
       if (
         existing.type !== layer.type ||
@@ -295,6 +301,7 @@ export function syncVectorLayersToStore(
           // The web Save flow re-materializes embeddedGeoJSON fresh from the
           // control (getLayerGeoJSON), so it intentionally is not preserved.
           metadata,
+          ...(sourceChanged ? { geojson: undefined } : {}),
           opacity,
           source,
           sourcePath,
