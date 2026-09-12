@@ -1,17 +1,20 @@
 import {
   matchFeaturesByExpression,
+  substituteExpressionVariables,
+  type GeoLibreLayer,
   type SelectionMode,
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
 import { Button, Label, Select, Textarea } from "@geolibre/ui";
-import { SquareFunction } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { Filter, FilterX, SquareFunction } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getAttributePropertyNames,
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
+import { retargetExpressionSource } from "../../lib/expression-source";
 import { applyMatchedSelection } from "../../lib/selection-actions";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
@@ -20,8 +23,9 @@ import {
   selectableVectorLayers,
 } from "./selection-dialog-shared";
 
-/** Outcome of the last "Select features" run, shown inline. */
-interface SelectionSummary {
+/** Outcome of the last selection or layer-filter run, shown inline. */
+interface ExpressionSummary {
+  kind: "selection" | "filter";
   matched: number;
   selected: number;
   total: number;
@@ -36,7 +40,11 @@ interface SelectionSummary {
  * stay interactive: run a selection, pan to inspect it, refine, re-run —
  * QGIS style. The four modes combine each run with the current selection.
  */
-export function SelectByExpressionDialog(): ReactElement | null {
+export function SelectByExpressionDialog({
+  canEditLayer,
+}: {
+  canEditLayer: (layerId: string) => boolean;
+}): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.selectByExpressionOpen);
   const setOpen = useAppStore((s) => s.setSelectByExpressionOpen);
@@ -45,6 +53,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
   const projectName = useAppStore((s) => s.projectName);
+  const setLayerFilterExpression = useAppStore((s) => s.setLayerFilterExpression);
 
   const eligibleLayers = useMemo(() => selectableVectorLayers(layers), [layers]);
 
@@ -52,7 +61,23 @@ export function SelectByExpressionDialog(): ReactElement | null {
   const [mode, setMode] = useState<SelectionMode>("new");
   const [source, setSource] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [summary, setSummary] = useState<SelectionSummary | null>(null);
+  const [summary, setSummary] = useState<ExpressionSummary | null>(null);
+  // The layer whose saved filter currently fills the textarea, or null when the
+  // text is the user's own. The two are retargeted differently — authored text
+  // is never overwritten, a seed never follows to an unfiltered layer — so
+  // "Filter layer" cannot persist layer A's filter onto layer B, nor can
+  // switching layers discard a half-written expression. See
+  // retargetExpressionSource.
+  const seededFilterLayerId = useRef<string | null>(null);
+
+  const retargetExpression = (next: GeoLibreLayer | null | undefined): void => {
+    const seeded = retargetExpressionSource(
+      { source, seededFromLayerId: seededFilterLayerId.current },
+      next,
+    );
+    setSource(seeded.source);
+    seededFilterLayerId.current = seeded.seededFromLayerId;
+  };
 
   // Re-seed the target each time the dialog opens: an explicit context-menu
   // target wins, then the active layer (when selectable), then the first
@@ -61,17 +86,20 @@ export function SelectByExpressionDialog(): ReactElement | null {
   useEffect(() => {
     if (!open) return;
     setSummary(null);
-    setTargetLayerId((current) => {
-      const eligible = selectableVectorLayers(useAppStore.getState().layers);
-      const candidates = [preselectedLayerId, current, useAppStore.getState().selectedLayerId];
-      for (const id of candidates) {
-        if (id && eligible.some((layer) => layer.id === id)) return id;
-      }
-      return eligible[0]?.id ?? null;
-    });
-  }, [open, preselectedLayerId]);
+    const eligible = selectableVectorLayers(useAppStore.getState().layers);
+    const candidates = [preselectedLayerId, targetLayerId, useAppStore.getState().selectedLayerId];
+    const target =
+      candidates
+        .map((id) => eligible.find((layer) => layer.id === id))
+        .find((layer) => layer !== undefined) ?? eligible[0];
+    setTargetLayerId(target?.id ?? null);
+    retargetExpression(target);
+    // targetLayerId is intentionally read only when the panel opens. Including
+    // it here would re-run this seed after the user changes the target.
+  }, [open, preselectedLayerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const targetLayer = eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
+  const layerEditable = targetLayer ? canEditLayer(targetLayer.id) : false;
 
   // Stable identities for the Expression Builder's memoization (see the
   // equivalent comment in StylePanel): fresh arrays every render would defeat
@@ -107,6 +135,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
     [source, variables],
   );
   const canSelect = Boolean(targetLayer) && source.trim().length > 0 && validation.ok;
+  const hasExpressionFilter = Boolean(targetLayer?.filterExpression?.length);
   // The combine modes only make sense when the target layer holds the live
   // selection; otherwise remove/intersect would always yield an empty
   // selection, so the mode dropdown falls back to "new".
@@ -131,11 +160,55 @@ export function SelectByExpressionDialog(): ReactElement | null {
     if (!result.ok) return;
     const selected = applyMatchedSelection(targetLayer.id, result.ids, effectiveMode);
     setSummary({
+      kind: "selection",
       matched: result.ids.length,
       selected,
       total: features.length,
       errorCount: result.errorCount,
     });
+  };
+
+  const applyLayerFilter = () => {
+    if (!targetLayer || !canEditLayer(targetLayer.id)) return;
+    const { zoom: liveZoom, center } = useAppStore.getState().mapView;
+    const liveVariables = standardExpressionVariables({
+      projectName,
+      layerName: targetLayer.name,
+      featureCount: features.length,
+      zoom: liveZoom,
+      centerLat: center[1],
+    });
+    const checked = validateMapExpression(source, {
+      variables: liveVariables,
+      expectedType: "boolean",
+    });
+    if (!checked.ok || !checked.parsed) return;
+    // The project stores a plain MapLibre expression, which has no binding for
+    // the builder's `@` variables, so they are resolved to literals here and
+    // stop tracking the map. `["zoom"]` is the live alternative (docs/user-guide/styling.md).
+    const expression = substituteExpressionVariables(checked.parsed, liveVariables) as unknown[];
+    setLayerFilterExpression(targetLayer.id, expression);
+    seededFilterLayerId.current = targetLayer.id;
+
+    const result = matchFeaturesByExpression(features, source, {
+      zoom: liveZoom,
+      variables: liveVariables,
+    });
+    if (!result.ok) return;
+    setSummary({
+      kind: "filter",
+      matched: result.ids.length,
+      selected: selectionCount,
+      total: features.length,
+      errorCount: result.errorCount,
+    });
+  };
+
+  const clearLayerFilter = () => {
+    if (!targetLayer || !canEditLayer(targetLayer.id)) return;
+    setLayerFilterExpression(targetLayer.id, null);
+    seededFilterLayerId.current = null;
+    setSummary(null);
   };
 
   return (
@@ -160,7 +233,9 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   id="select-expression-layer"
                   value={targetLayerId ?? ""}
                   onChange={(event) => {
-                    setTargetLayerId(event.target.value || null);
+                    const nextId = event.target.value || null;
+                    setTargetLayerId(nextId);
+                    retargetExpression(eligibleLayers.find((layer) => layer.id === nextId));
                     setSummary(null);
                   }}
                 >
@@ -188,7 +263,10 @@ export function SelectByExpressionDialog(): ReactElement | null {
                 <Textarea
                   id="select-expression-source"
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    seededFilterLayerId.current = null;
+                  }}
                   placeholder={t("selection.expressionPlaceholder")}
                   spellCheck={false}
                   className="min-h-20 font-mono text-xs"
@@ -206,11 +284,16 @@ export function SelectByExpressionDialog(): ReactElement | null {
               />
               {summary && (
                 <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
-                  {t("selection.summary", {
-                    selected: summary.selected,
-                    total: summary.total,
-                    matched: summary.matched,
-                  })}
+                  {summary.kind === "filter"
+                    ? t("selection.filterSummary", {
+                        matched: summary.matched,
+                        total: summary.total,
+                      })
+                    : t("selection.summary", {
+                        selected: summary.selected,
+                        total: summary.total,
+                        matched: summary.matched,
+                      })}
                   {summary.errorCount > 0 && (
                     <>
                       {" "}
@@ -221,8 +304,28 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   )}
                 </p>
               )}
-              <div className="flex justify-end">
-                <Button onClick={runSelection} disabled={!canSelect}>
+              <div className="flex flex-wrap justify-end gap-2">
+                {hasExpressionFilter && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearLayerFilter}
+                    disabled={!layerEditable}
+                  >
+                    <FilterX className="me-2 h-4 w-4" />
+                    {t("selection.clearLayerFilter")}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={applyLayerFilter}
+                  disabled={!canSelect || !layerEditable}
+                >
+                  <Filter className="me-2 h-4 w-4" />
+                  {t("selection.applyLayerFilter")}
+                </Button>
+                <Button type="button" onClick={runSelection} disabled={!canSelect}>
                   {t("selection.select")}
                 </Button>
               </div>
@@ -241,7 +344,10 @@ export function SelectByExpressionDialog(): ReactElement | null {
           fieldNames={fieldNames}
           zoom={zoom}
           variables={variables}
-          onApply={(expression) => setSource(expression)}
+          onApply={(expression) => {
+            setSource(expression);
+            seededFilterLayerId.current = null;
+          }}
         />
       )}
     </>

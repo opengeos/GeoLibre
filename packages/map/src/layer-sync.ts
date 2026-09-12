@@ -1,5 +1,6 @@
 import {
-  compileQuickFilters,
+  compileFeatureExpression,
+  compileLayerFilters,
   controlRendersLayer,
   DEFAULT_LAYER_STYLE,
   generatorCircleRadiusValue,
@@ -169,9 +170,8 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
  * only renders features inside the current timeline window), the transient
  * {@link GeoLibreLayer.embedFilter} (the embed API's `setFilter`, set by the
- * host page that frames the app), the persisted
- * {@link GeoLibreLayer.quickFilters} compiled by `compileQuickFilters` (the
- * layer's own data-driven filter controls), and the rule-based visibility
+ * host page that frames the app), the persisted expression and Quick Filter
+ * controls compiled by `compileLayerFilters`, and the rule-based visibility
  * filter (a rule-based layer whose else rule is switched off hides features
  * matching no rule — see {@link ruleBasedVisibilityFilter}). They are combined
  * with `all`, so a host page's filter and a user's quick filter narrow the
@@ -185,13 +185,11 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * is active. Per-feature layers (fill, line, point, heatmap, text) filter
  * correctly.
  *
- * The corollary, shared by every filter in this set: MapLibre clusters at the
- * *source*, from the layer's raw features, and no layer filter can change what
- * a cluster already aggregated. So while a point layer renders as clusters, the
- * bubbles and their counts describe the unfiltered data even though the
- * unclustered points respect the filter. Filtering a clustered layer by its
- * individual features means either switching the renderer off clustering or
- * narrowing the source data itself, neither of which a per-feature filter does.
+ * MapLibre clusters at the source, before evaluating style-layer filters.
+ * {@link authoredClusterInput} therefore narrows clustered source data by the
+ * persisted expression and Quick Filters so hidden features do not contribute
+ * to bubbles or counts. Transient time, embed, and rule filters remain
+ * per-render-layer filters and cannot change an already-built cluster.
  *
  * Tile-backed layers (vector tiles, vector MBTiles) use this too. The filter is
  * an expression evaluated per feature as each tile decodes, so it needs no local
@@ -215,8 +213,8 @@ function withFeatureFilters(
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     filters.push(layer.embedFilter);
   }
-  const quickFilter = compileQuickFilters(layer.quickFilters);
-  if (quickFilter) filters.push(quickFilter);
+  const authoredFilter = compileLayerFilters(layer);
+  if (authoredFilter) filters.push(authoredFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
   if (layer.metadata?.sourceKind === "annotation") {
@@ -239,6 +237,7 @@ function withFeatureFilters(
 interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
+  liveKey: string;
 }
 const externalNativeBaseFilters = new WeakMap<maplibregl.Map, Map<string, NativeFilterState>>();
 
@@ -269,8 +268,8 @@ function nativeLayerSupportsFilter(type: string): boolean {
 /**
  * The active per-feature filters GeoLibre applies on top of an external
  * layer's own filters: the transient Time-Slider window, the embed API's
- * host-set `setFilter` expression, the layer's compiled quick filters, and the
- * rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter}).
+ * host-set `setFilter` expression, the layer's persisted authored filters, and
+ * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter}).
  * Empty when none applies.
  */
 function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
@@ -282,8 +281,8 @@ function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
     extras.push(layer.embedFilter);
   }
-  const quickFilter = compileQuickFilters(layer.quickFilters);
-  if (quickFilter) extras.push(quickFilter);
+  const authoredFilter = compileLayerFilters(layer);
+  if (authoredFilter) extras.push(authoredFilter);
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) extras.push(ruleFilter);
   return extras;
@@ -304,6 +303,17 @@ function combineExternalFilters(
     : extras.length === 1
       ? extras[0]
       : ["all", ...extras]) as unknown as maplibregl.FilterSpecification;
+}
+
+function nativeFilterFromMap(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+): maplibregl.FilterSpecification | null {
+  return (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification | undefined) ?? null;
+}
+
+function nativeFilterKey(filter: maplibregl.FilterSpecification | null): string {
+  return JSON.stringify(filter);
 }
 
 /**
@@ -339,19 +349,34 @@ function applyExternalNativeFeatureFilters(
     // tracking.
     const state = states.get(nativeLayerId);
     if (state) {
-      map.setFilter(nativeLayerId, state.base ?? undefined);
+      const liveFilter = nativeFilterFromMap(map, nativeLayerId);
+      const liveKey = nativeFilterKey(liveFilter);
+      // A control can remove and recreate a native layer under the same id.
+      // If that happened, its current filter is the new base and must not be
+      // replaced with the stale base captured from the previous layer.
+      if (state.liveKey === liveKey) {
+        map.setFilter(nativeLayerId, state.base ?? undefined);
+      }
       states.delete(nativeLayerId);
     }
     return;
   }
 
+  const liveFilter = nativeFilterFromMap(map, nativeLayerId);
+  const liveKey = nativeFilterKey(liveFilter);
   // Filters active: capture the control's base filter the first time, then
   // keep reusing it so repeated ticks combine rather than nest.
   let state = states.get(nativeLayerId);
   if (!state) {
-    const base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
-    state = { base, appliedKey: "" };
+    state = { base: liveFilter, appliedKey: "", liveKey };
     states.set(nativeLayerId, state);
+  } else if (state.liveKey !== liveKey) {
+    // Project restore and renderer changes recreate control-owned MapLibre
+    // layers without changing their ids. Treat the replacement's live filter
+    // as its new base, then apply the saved extras again.
+    state.base = liveFilter;
+    state.appliedKey = "";
+    state.liveKey = liveKey;
   }
   const combined = combineExternalFilters(state.base, extras)!;
   // Compare against the last filter we applied (not `getFilter`, which MapLibre
@@ -360,6 +385,7 @@ function applyExternalNativeFeatureFilters(
   if (state.appliedKey !== combinedKey) {
     map.setFilter(nativeLayerId, combined);
     state.appliedKey = combinedKey;
+    state.liveKey = nativeFilterKey(nativeFilterFromMap(map, nativeLayerId));
   }
 }
 
@@ -369,6 +395,81 @@ function applyExternalNativeFeatureFilters(
 // back to the full [0, 24] window.
 const managedZoomRangeLayerIds = new Set<string>();
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
+const clusteredFilterInputs = new WeakMap<
+  GeoJSON.FeatureCollection,
+  { key: string; value: GeoJSON.FeatureCollection }
+>();
+
+/** Whether an expression reads `["zoom"]`, and so cannot be evaluated once. */
+function expressionUsesZoom(node: unknown): boolean {
+  if (!Array.isArray(node)) return false;
+  if (node[0] === "zoom") return true;
+  return node.some((entry) => expressionUsesZoom(entry));
+}
+
+/**
+ * Whether any layer needs its clustered source re-derived as the camera moves.
+ * Pre-filtering a clustered source is a one-shot evaluation, so a filter that
+ * reads `["zoom"]` only stays truthful if something re-runs it — see
+ * {@link authoredClusterInput}. Callers use this to decide whether a zoom
+ * listener is worth attaching at all; the ordinary layer pays nothing.
+ */
+export function hasZoomDependentClusterFilter(layers: GeoLibreLayer[]): boolean {
+  return layers.some((layer) => {
+    if (!layer.geojson) return false;
+    const { wantCluster } = resolveVectorRenderMode(layer, detectGeometryProfile(layer.geojson));
+    if (!wantCluster) return false;
+    const filter = compileLayerFilters(layer);
+    return filter !== null && expressionUsesZoom(filter);
+  });
+}
+
+/** Whether two feature lists hold the same feature objects in the same order. */
+function sameFeatureList(left: GeoJSON.Feature[], right: GeoJSON.Feature[]): boolean {
+  return left.length === right.length && left.every((feature, index) => feature === right[index]);
+}
+
+/**
+ * Narrow a cluster renderer's source data by the layer's authored filters.
+ * MapLibre clusters before evaluating style-layer filters, so applying the
+ * expression only to the unclustered circle would leave hidden points in
+ * cluster bubbles and counts. Only the current filter's result is cached per
+ * source object, so ordinary sync ticks keep a stable data reference while
+ * iterating on a filter does not retain a copy of the dataset per attempt.
+ *
+ * Unlike a style-layer filter, which MapLibre re-evaluates against the live
+ * camera, this runs once per sync, so `zoom` is passed in and joined to the
+ * cache key. A zoom-dependent filter therefore needs a sync per zoom (see
+ * {@link hasZoomDependentClusterFilter}); when the outcome is unchanged the
+ * previous collection is returned so the source is not needlessly re-clustered.
+ */
+function authoredClusterInput(layer: GeoLibreLayer, zoom: number): GeoJSON.FeatureCollection {
+  const geojson = layer.geojson!;
+  const filter = compileLayerFilters(layer);
+  if (!filter) return geojson;
+
+  const source = JSON.stringify(filter);
+  const filterKey = expressionUsesZoom(filter) ? `${source}@${zoom}` : source;
+  const cached = clusteredFilterInputs.get(geojson);
+  if (cached?.key === filterKey) return cached.value;
+
+  const compiled = compileFeatureExpression(source, { expectedType: "boolean", zoom });
+  if (!compiled.ok || !compiled.evaluate) return geojson;
+  const evaluate = compiled.evaluate;
+  const features = geojson.features.filter((feature) => {
+    try {
+      return evaluate(feature) === true;
+    } catch {
+      return false;
+    }
+  });
+  // A zoom tick that changes nothing must not hand back a new object: the
+  // inline path would call setData and MapLibre would re-cluster from scratch.
+  const reused = cached && sameFeatureList(cached.value.features, features);
+  const filtered = reused ? cached.value : { ...geojson, features };
+  clusteredFilterInputs.set(geojson, { key: filterKey, value: filtered });
+  return filtered;
+}
 
 function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
   const source = map.getSource(sourceId);
@@ -1821,6 +1922,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     layer,
     profile,
   );
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
   // it), or some other code may have left a non-geojson source under this id.
@@ -1857,7 +1959,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
       wantCluster
         ? {
             type: "geojson",
-            data: layer.geojson!,
+            data: sourceGeoJson,
             cluster: true,
             clusterRadius,
             clusterMaxZoom,
@@ -1865,13 +1967,13 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
           }
         : {
             type: "geojson",
-            data: layer.geojson!,
+            data: sourceGeoJson,
             ...(attribution ? { attribution } : {}),
           },
     );
-    rememberGeoJsonData(map, src, layer.geojson!);
+    rememberGeoJsonData(map, src, sourceGeoJson);
   } else {
-    setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, layer.geojson!);
+    setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, sourceGeoJson);
   }
 
   applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId);
@@ -1891,13 +1993,14 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
     layer,
     profile,
   );
+  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
 
   ensureGeoJsonVtProtocol();
 
   // (Re)build the tile index when the data or clustering config changed. A
   // rebuild also means cached tiles are stale, so drop the source to force
   // MapLibre to refetch them.
-  const rebuilt = registerGeoJsonVtSource(layer.id, layer.geojson!, {
+  const rebuilt = registerGeoJsonVtSource(layer.id, sourceGeoJson, {
     cluster: wantCluster,
     clusterRadius,
     clusterMaxZoom,
@@ -1964,7 +2067,7 @@ function applyVectorDataRenderLayers(
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
-    compileQuickFilters(layer.quickFilters) !== null ||
+    compileLayerFilters(layer) !== null ||
     ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {

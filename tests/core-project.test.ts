@@ -402,6 +402,36 @@ describe("project parsing", () => {
     assert.deepEqual(reparsed.quickFilters, quickFilters);
   });
 
+  it("keeps an expression layer filter as project state", () => {
+    const filterExpression = [">=", ["get", "population"], 100_000];
+    const project = projectFromStore({
+      projectName: "Filtered cities",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [{ ...geojsonLayer({ id: "cities" }), filterExpression }],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    const reparsed = parseProject(serializeProject(project)).layers[0];
+    assert.deepEqual(reparsed?.filterExpression, filterExpression);
+  });
+
+  it("drops an invalid expression layer filter on project load", () => {
+    const project = createEmptyProject("Invalid filter");
+    project.layers = [
+      {
+        ...geojsonLayer({ id: "cities" }),
+        filterExpression: ["unknown-filter", ["get", "population"]],
+      },
+    ];
+
+    const reparsed = parseProject(JSON.stringify(project));
+    assert.equal(reparsed.layers[0]?.filterExpression, undefined);
+  });
+
   it("round-trips a legend config through projectFromStore", () => {
     const legend = {
       title: "Custom",

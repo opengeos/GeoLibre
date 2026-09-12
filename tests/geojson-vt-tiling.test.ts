@@ -7,6 +7,8 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import { config } from "maplibre-gl";
+import { VectorTile } from "@mapbox/vector-tile";
+import Pbf from "pbf";
 import { syncLayer } from "../packages/map/src/layer-sync";
 import {
   ensureGeoJsonVtProtocol,
@@ -95,6 +97,9 @@ function makeMap() {
       calls.push({ method: "removeLayer", args: [id] });
     },
     getFilter: (id: string) => layers.get(id)?.filter,
+    // A clustered source is pre-filtered against the live camera, so the
+    // clustering cases need a zoom to evaluate against.
+    getZoom: () => 4,
     setFilter: () => {},
     setPaintProperty: () => {},
     setLayoutProperty: () => {},
@@ -223,6 +228,46 @@ describe("syncLayer tiled path", () => {
       const circle = layers.get(`layer-${id}-circle`) as Record<string, unknown>;
       assert.equal(circle.type, "circle");
       assert.equal(circle["source-layer"], "data");
+    } finally {
+      unregisterGeoJsonVtSource(id);
+    }
+  });
+
+  it("excludes filtered-out points from tiled cluster counts", async () => {
+    const { map } = makeMap();
+    const id = `filtered-clusters-${layerIdCounter++}`;
+    const includedCount = Math.floor(LARGE_VECTOR_FEATURE_THRESHOLD / 2) + 1;
+    const excludedCount = LARGE_VECTOR_FEATURE_THRESHOLD + 1 - includedCount;
+    const features: GeoJSON.Feature[] = [
+      ...Array.from({ length: includedCount }, () => ({
+        type: "Feature" as const,
+        properties: { group: "included" },
+        geometry: { type: "Point" as const, coordinates: [0, 0] },
+      })),
+      ...Array.from({ length: excludedCount }, () => ({
+        type: "Feature" as const,
+        properties: { group: "excluded" },
+        geometry: { type: "Point" as const, coordinates: [100, 0] },
+      })),
+    ];
+    const layer = largeLayer(features.length, id, { pointRenderer: "cluster" });
+    layer.geojson = { type: "FeatureCollection", features };
+    layer.filterExpression = ["==", ["get", "group"], "included"];
+
+    try {
+      syncLayer(map as never, layer);
+      const encoded = await protocolHandler()(
+        { url: `${GEOJSONVT_PROTOCOL}://${id}/0/0/0` },
+        new AbortController(),
+      );
+      const tile = new VectorTile(new Pbf(new Uint8Array(encoded.data)));
+      const sourceLayer = tile.layers.data;
+      const clusterCounts = Array.from(
+        { length: sourceLayer.length },
+        (_, index) => sourceLayer.feature(index).properties.point_count,
+      ).filter((value): value is number => typeof value === "number");
+
+      assert.deepEqual(clusterCounts, [includedCount]);
     } finally {
       unregisterGeoJsonVtSource(id);
     }

@@ -53,6 +53,7 @@ import {
 import {
   mbtilesStyleLayerIds,
   externalSourceIdsFor,
+  hasZoomDependentClusterFilter,
   removeLayerFromMap,
   styleValuesEqual,
   syncLayer,
@@ -556,6 +557,7 @@ export class MapController implements MapEngine {
   private layerIds: string[] = [];
   /** This pane's last blend-mode fingerprint; see `blendModeSignature`. */
   private blendSignature = "";
+  private clusterZoomHandler: (() => void) | null = null;
   private styleReady = false;
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -1099,6 +1101,7 @@ export class MapController implements MapEngine {
       this.layerControlStyleRefreshTimer = null;
     }
     this.abortPendingMapboxStyle();
+    this.removeClusterZoomListener();
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -1376,6 +1379,42 @@ export class MapController implements MapEngine {
     this.publishLayerDisplayNames(layers);
     this.refreshLayerControl(layers);
     this.syncLayerControlState();
+    this.syncClusterZoomListener(layers);
+  }
+
+  /**
+   * Keep a `zoomend` resync attached exactly while some clustered layer holds a
+   * zoom-dependent authored filter.
+   *
+   * MapLibre clusters at the source, so such a filter is pre-applied to the
+   * source data once per sync rather than re-evaluated by the renderer with the
+   * live camera. Without this the layer would keep whatever the filter said at
+   * the zoom it was last synced at — a `[">=", ["zoom"], 8]` filter would hide
+   * the layer forever. Nothing is attached for the ordinary layer, and the
+   * pre-filter returns its previous collection when a zoom changes no outcome,
+   * so an attached listener does not re-cluster on every step either.
+   *
+   * @param layers The layers just synced.
+   */
+  private syncClusterZoomListener(layers: GeoLibreLayer[]): void {
+    const wanted = hasZoomDependentClusterFilter(layers);
+    if (wanted === (this.clusterZoomHandler !== null)) return;
+    if (!wanted) {
+      this.removeClusterZoomListener();
+      return;
+    }
+    const handler = () => {
+      if (this.clusterZoomHandler !== handler) return;
+      this.syncLayers(this.syncedLayers);
+    };
+    this.clusterZoomHandler = handler;
+    this.map?.on("zoomend", handler);
+  }
+
+  private removeClusterZoomListener(): void {
+    if (!this.clusterZoomHandler) return;
+    this.map?.off("zoomend", this.clusterZoomHandler);
+    this.clusterZoomHandler = null;
   }
 
   private styleLoadHandler: (() => void) | null = null;

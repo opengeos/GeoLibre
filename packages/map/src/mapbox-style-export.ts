@@ -1,6 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
-  compileQuickFilters,
+  compileLayerFilters,
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   styleValue,
@@ -72,7 +72,7 @@ export interface MapboxStyleExportResult {
  */
 export type ExportableLayer = Pick<
   GeoLibreLayer,
-  "id" | "name" | "type" | "style" | "opacity" | "visible" | "quickFilters"
+  "id" | "name" | "type" | "style" | "opacity" | "visible" | "quickFilters" | "filterExpression"
 >;
 
 export interface MapboxStyleExportOptions {
@@ -298,14 +298,13 @@ export function buildMapboxStyle(
   const zoom = zoomRange(style);
 
   // A rule-based layer whose else rule is switched off hides features matching
-  // no rule, and the layer's quick filters hide whatever they exclude; the live
-  // map does both with a per-feature filter, so fold the same filters into
+  // no rule, and the layer's authored filters hide whatever they exclude; the
+  // live map does both with a per-feature filter, so fold the same filters into
   // every exported render layer or the exported style would draw features
   // GeoLibre hides.
-  const visibilityFilters = [
-    ruleBasedVisibilityFilter(style),
-    compileQuickFilters(layer.quickFilters),
-  ].filter((filter): filter is unknown[] => filter !== null);
+  const visibilityFilters = [ruleBasedVisibilityFilter(style), compileLayerFilters(layer)].filter(
+    (filter): filter is unknown[] => filter !== null,
+  );
   const withRuleVisibility = (geometryFilter: ExpressionSpecification): ExpressionSpecification =>
     visibilityFilters.length > 0
       ? (["all", geometryFilter, ...visibilityFilters] as unknown as ExpressionSpecification)

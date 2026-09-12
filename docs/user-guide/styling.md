@@ -71,9 +71,14 @@ checkboxes instead. Several filters on one layer narrow it together, and they
 combine with a Time Slider window, an embed `setFilter`, and rule-based
 symbology rather than replacing them.
 
-A quick filter hides features; it does not select them. Use **Select by
-Expression** or the selection tools when you want to act on features rather than
-take them off the map.
+A quick filter hides features; it does not select them. **Select by Expression**
+can either build a live selection or apply a persistent expression filter to the
+layer. The latter provides definition-query behavior without creating a copy of
+the matching features. A saved filter keeps the expression itself live but not
+the builder's `@` variables: `@map_zoom`, `@map_scale`, `@feature_count`,
+`@project_name`, and `@layer_name` are replaced by their values when you click
+**Filter layer**. Write `["zoom"]` rather than `@map_zoom` when the filter
+should keep responding to the camera.
 
 A layer with an active filter shows a funnel icon on its row in the Layers
 panel, so a filtered layer is never mistaken for missing data, and its **Layer
@@ -83,20 +88,23 @@ clearing that filter: it shows every value, not none. **Remove all** at the top 
 the section deletes the controls outright.
 
 Filters are saved with the project, so a shared map opens with the same view of
-the data. They also appear in the read-only viewer chrome (`?layout=viewer`) —
-filtering is a way of reading a map, so the person you shared it with can ask it
-questions even though the authoring panels are hidden.
+the data. Quick Filter controls also appear in the read-only viewer chrome
+(`?layout=viewer`), so the person you shared it with can adjust those controls
+even though the authoring panels are hidden.
 
 Tile-backed layers (vector tiles, PMTiles, MBTiles) carry no local features, so
 their value lists are read from the tiles currently loaded and grow as you pan
 and zoom; the section says so under the controls.
 
-One limit is worth knowing: a point layer using the **cluster** renderer builds
-its clusters from the layer's whole dataset before any filter applies, so while
-clustering is on the bubbles and their counts describe the unfiltered data. The
-same is true of a Time Slider window and a rule-based filter. Switch the point
-renderer back to **Single symbol** to see the filtered features drawn
-individually, one circle each, with no cluster counts to misread.
+One limit is worth knowing, and it now cuts two ways. MapLibre builds clusters
+at the source, before the renderer evaluates any filter. A persistent expression
+filter and Quick Filters are applied to a clustered layer's source data first,
+so its bubbles and counts do follow them. A Time Slider window, a rule-based
+filter, and an embed `setFilter` stay per-feature render filters, so while
+clustering is on the bubbles and their counts still describe data those have not
+narrowed. Switch the point renderer back to **Single symbol** to see the
+filtered features drawn individually, one circle each, with no cluster counts to
+misread.
 
 ### Style interchange and URL styles
 

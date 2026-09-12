@@ -6,7 +6,7 @@ import {
   diagramsSuppressedByPointRenderer,
   effectiveVectorRules,
   generatorSizeRange,
-  hasActiveQuickFilter,
+  hasActiveLayerFilter,
   isHexColor,
   normalizeHexColor,
   proportionalSizeRange,
@@ -244,7 +244,7 @@ export function geometryGeneratorLegendParts(
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
-    hasActiveQuickFilter(layer) ||
+    hasActiveLayerFilter(layer) ||
     ruleBasedVisibilityFilter(layer.style) !== null;
   const hasExternalNativeLayers =
     Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;

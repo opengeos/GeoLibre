@@ -2746,7 +2746,7 @@ export function DesktopShell({
             displayName={t("shell.section.selectionPanels")}
           >
             <Suspense fallback={null}>
-              <SelectByExpressionDialog />
+              <SelectByExpressionDialog canEditLayer={collaboration.canEditLayer} />
             </Suspense>
             <Suspense fallback={null}>
               <SelectByLocationDialog />

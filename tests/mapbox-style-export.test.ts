@@ -21,6 +21,7 @@ function layer(patch: Partial<ExportableLayer> & { style?: LayerStyle } = {}): E
     visible: patch.visible ?? true,
     style: patch.style ?? style(),
     ...(patch.quickFilters ? { quickFilters: patch.quickFilters } : {}),
+    ...(patch.filterExpression ? { filterExpression: patch.filterExpression } : {}),
   };
 }
 
@@ -101,6 +102,24 @@ describe("buildMapboxStyle base document", () => {
     assert.equal(circle?.type, "circle");
     const paint = (circle as { paint: Record<string, unknown> }).paint;
     assert.equal(paint["circle-color"], "#ff0000");
+  });
+});
+
+describe("persistent expression filters", () => {
+  it("writes the layer filter into every exported render layer", () => {
+    const filterExpression = [">=", ["get", "value"], 10];
+    const { style: doc } = buildMapboxStyle(layer({ filterExpression }), mixedGeom());
+
+    assert.deepEqual(layerById(doc, "my-layer-fill")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+      filterExpression,
+    ]);
+    assert.deepEqual(layerById(doc, "my-layer-circle")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      filterExpression,
+    ]);
   });
 });
 

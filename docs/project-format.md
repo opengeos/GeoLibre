@@ -392,6 +392,26 @@ compiled output, so a saved filter can always be reopened and changed:
 }
 ```
 
+A vector layer may also carry a persistent boolean MapLibre expression filter.
+This is authored from **Select by Expression → Filter layer** and hides
+non-matching features without changing or copying the source data:
+
+```json
+{
+  "filterExpression": [">=", ["get", "population"], 100000]
+}
+```
+
+The expression is saved with the project and remains active until it is cleared
+from the Select by Expression panel or from the layer's **Clear filters** action.
+It combines with Quick Filters and the transient filters described below.
+
+What is stored is a plain MapLibre expression, so the Expression Builder's `@`
+variables (`@project_name`, `@layer_name`, `@feature_count`, `@map_zoom`,
+`@map_scale`) are resolved to literal values at the moment the filter is
+applied and do not track the map afterwards. Use the MapLibre `["zoom"]`
+operator instead when the filter should follow the current zoom.
+
 `kind` picks the control and the comparison: `categorical` (checkboxes over
 `values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
 open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
@@ -402,11 +422,13 @@ comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
 A control with nothing chosen places no constraint, so an emptied selection
 shows every feature rather than none.
 
-A quick filter narrows the *rendered* features, so a point layer using the
-cluster renderer is an exception worth noting: MapLibre clusters at the source,
-from the layer's whole dataset, so cluster bubbles and their counts describe the
-unfiltered data while clustering is on (as they already do for a Time Slider
-window or a rule filter).
+A point layer using the cluster renderer is worth noting, because MapLibre
+clusters at the source, before the renderer evaluates any filter. GeoLibre
+therefore narrows a clustered layer's source data by the persistent expression
+filter and Quick Filters, so its bubbles and counts follow both. A Time Slider
+window, a rule filter, and an embed `setFilter` remain per-feature render
+filters and cannot change an already-built cluster, so counts stay unnarrowed by
+those while clustering is on.
 
 The compiled filter is combined with the transient `timeFilter` and
 `embedFilter` and with the rule-based renderer's hide-unmatched filter under a

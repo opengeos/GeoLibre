@@ -26,10 +26,12 @@ import {
   isStyleLibraryTargetLayer,
   canSaveLayerToLibrary,
   captureLayerLibraryEntry,
+  activeLayerFilterExpression,
   clearQuickFilterValues,
+  compileQuickFilters,
   createLayerLibraryEntryId,
   copyableLayerStyleKind,
-  hasActiveQuickFilter,
+  hasActiveLayerFilter,
   isCesiumOnlyLayer,
   pluginOwnsPaint,
   supportsBridgedOpacity,
@@ -344,6 +346,19 @@ type LayerRefreshTimer = {
   intervalMs: number;
   timer: number;
 };
+
+/**
+ * Pick the tooltip text for a filtered layer's funnel icon. A persistent
+ * expression and Quick Filters can narrow the same layer at once, so name both
+ * rather than letting the expression wording hide the controls doing half the
+ * work.
+ */
+function layerFilteredHintKey(layer: GeoLibreLayer): ParseKeys {
+  const hasExpression = activeLayerFilterExpression(layer) !== null;
+  const hasQuickFilters = compileQuickFilters(layer.quickFilters) !== null;
+  if (hasExpression && hasQuickFilters) return "selection.layerFilteredBothHint";
+  return hasExpression ? "selection.layerFilteredHint" : "quickFilters.layerFilteredHint";
+}
 
 function layerTypeLabel(layer: GeoLibreLayer, t: TFunction): string {
   if (layer.metadata?.sourceKind === "maplibre-basemap-control") {
@@ -713,7 +728,6 @@ export function LayerPanel({
   }, [selectedPlanet, basemapStyleUrl]);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
-  const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const moveLayersRelative = useAppStore((s) => s.moveLayersRelative);
@@ -3515,13 +3529,13 @@ export function LayerPanel({
                           />
                         </span>
                       )}
-                      {/* A quick filter hides features, so say so on the row:
+                      {/* A layer filter hides features, so say so on the row:
                           without this a filtered layer reads as missing data. */}
-                      {hasActiveQuickFilter(layer) && (
-                        <span title={t("quickFilters.layerFilteredHint")}>
+                      {hasActiveLayerFilter(layer) && (
+                        <span title={t(layerFilteredHintKey(layer))}>
                           <Filter
                             className="h-3 w-3 shrink-0 text-primary"
-                            aria-label={t("quickFilters.layerFilteredHint")}
+                            aria-label={t(layerFilteredHintKey(layer))}
                           />
                         </span>
                       )}
@@ -3766,17 +3780,22 @@ export function LayerPanel({
                               {t("layers.openStylePanel")}
                             </DropdownMenuItem>
                           )}
-                          {/* Clearing keeps the controls the author configured
-                              and only empties what they were answered with, so
-                              the next question does not start from scratch. */}
-                          {hasActiveQuickFilter(layer) && (
+                          {/* Clearing drops the persistent expression filter
+                              outright, but keeps the Quick Filter controls the
+                              author configured and only empties what they were
+                              answered with, so the next question does not start
+                              from scratch. */}
+                          {hasActiveLayerFilter(layer) && (
                             <DropdownMenuItem
-                              onSelect={() =>
-                                setLayerQuickFilters(
-                                  layer.id,
-                                  clearQuickFilterValues(layer.quickFilters),
-                                )
-                              }
+                              disabled={!layerEditable}
+                              onSelect={() => {
+                                if (!layerEditable) return;
+                                const quickFilters = clearQuickFilterValues(layer.quickFilters);
+                                updateLayer(layer.id, {
+                                  filterExpression: undefined,
+                                  quickFilters: quickFilters.length > 0 ? quickFilters : undefined,
+                                });
+                              }}
                             >
                               <Filter className="me-2 h-3.5 w-3.5" />
                               {t("quickFilters.clearAll")}
