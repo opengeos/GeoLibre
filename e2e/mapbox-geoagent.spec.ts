@@ -27,19 +27,6 @@ const PROJECT = {
 test.use({ actionTimeout: 30_000 });
 
 /**
- * Whether a console message is the app's own failure rather than a network one.
- *
- * This spec runs against `MAPBOX_TOKEN` when the environment has one and a
- * placeholder otherwise, so on CI every request to `api.mapbox.com` comes back
- * 401/403 and the browser logs a bare "Failed to load resource" for each. That
- * says nothing about the code under test, which is asserted through the map's
- * own state.
- */
-function isAppError(message: string): boolean {
-  return !/Failed to load resource: the server responded with a status of \d+/.test(message);
-}
-
-/**
  * Bind the live Mapbox engine and the GeoAgent control it hosts.
  *
  * The control is a plain `IControl`, and the Mapbox engine wraps it in an
@@ -47,6 +34,44 @@ function isAppError(message: string): boolean {
  * under its own name — the engine's own `pluginControls` map is where the
  * original lives.
  */
+/**
+ * The browser's own echo of a failed request. It carries no URL, so it says
+ * nothing a response listener does not say better — {@link watchFailedRequests}
+ * records those with their URL and status, and the assertions read that.
+ */
+const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded with a status of \d+/;
+
+/**
+ * Record every failed request except the ones a tokenless run is expected to
+ * produce.
+ *
+ * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
+ * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
+ * nothing about the code under test, which is asserted through the map's own
+ * state. Any other failure is a real one and reaches the assertion with its URL.
+ */
+function watchFailedRequests(page: Page, failures: string[]): void {
+  page.on("response", (response) => {
+    const status = response.status();
+    if (status < 400) return;
+    const { hostname } = new URL(response.url());
+    const mapboxAuth =
+      (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") &&
+      (status === 401 || status === 403);
+    if (mapboxAuth) return;
+    failures.push(`http ${status}: ${response.url()}`);
+  });
+  page.on("requestfailed", (request) => {
+    // A cancelled tile is the camera changing its mind, not a failure: every
+    // pan and projection switch abandons the requests for the view it left.
+    const errorText = request.failure()?.errorText ?? "";
+    if (errorText.includes("ERR_ABORTED")) return;
+    const { hostname } = new URL(request.url());
+    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
+    failures.push(`request failed: ${request.url()} (${errorText})`);
+  });
+}
+
 async function bindAgent(page: Page) {
   await page.waitForFunction(() => {
     const header = document.querySelector("header") as unknown as Record<string, unknown>;
@@ -117,14 +142,22 @@ for (const theme of ["light", "dark"] as const) {
   }, info) => {
     test.setTimeout(240_000);
     const errors: string[] = [];
+    const failures: string[] = [];
     page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
     page.on("console", (message) => {
-      if (message.type() === "error") errors.push(`error: ${message.text()}`);
+      if (message.type() !== "error") return;
+      // Skip the bare resource echo; watchFailedRequests has the URL.
+      if (RESOURCE_FAILURE_ECHO.test(message.text())) return;
+      errors.push(`error: ${message.text()}`);
     });
+    watchFailedRequests(page, failures);
     try {
       await run();
     } finally {
-      await info.attach("console", { body: errors.join("\n"), contentType: "text/plain" });
+      await info.attach("console", {
+        body: [...errors, ...failures].join("\n"),
+        contentType: "text/plain",
+      });
     }
 
     async function run() {
@@ -227,7 +260,8 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByText("agent-points", { exact: false }).first()).toBeVisible();
 
       await page.screenshot({ path: info.outputPath(`mapbox-geoagent-${theme}.png`) });
-      expect(errors.filter(isAppError), "no app errors running the agent's tools").toEqual([]);
+      expect(errors, "no app errors running the agent's tools").toEqual([]);
+      expect(failures, "nothing but the tokenless Mapbox API may fail to load").toEqual([]);
     }
   });
 }

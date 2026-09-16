@@ -74,6 +74,9 @@ const GEOAGENT_OPTIONS = {
 } satisfies Omit<GeoAgentControlOptions, "position">;
 
 let geoAgentControl: GeoAgentControl | null = null;
+/** The dynamic import, shared across activations: the module is engine-neutral. */
+let geoAgentModulePromise: Promise<typeof import("maplibre-gl-geoagent")> | null = null;
+/** A mount in flight, so a second one is not started on top of it. */
 let geoAgentControlPromise: Promise<GeoAgentControl> | null = null;
 let geoAgentActive = false;
 // Bumped on every (re)mount so a slow async mount from an earlier
@@ -189,7 +192,13 @@ async function mountGeoAgentControl(
 async function loadGeoAgentControl(app: GeoLibreAppAPI): Promise<GeoAgentControl> {
   if (geoAgentControl) return geoAgentControl;
   installEarthEngineFunctionInfoFallback();
-  geoAgentControlPromise ??= import("maplibre-gl-geoagent")
+  // Cache the *module*, not the control. A single memoized promise that also
+  // constructed the control would build it from whichever activation started
+  // the import — GeoAgent's chunk is large, so a renderer swap can easily land
+  // inside that window — and every later activation would reuse that instance.
+  // The module is engine-neutral and safe to share; the control is not.
+  geoAgentModulePromise ??= import("maplibre-gl-geoagent");
+  geoAgentControlPromise = geoAgentModulePromise
     .then(({ GeoAgentControl }) => {
       geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions(app));
       return geoAgentControl;

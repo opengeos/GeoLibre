@@ -18,17 +18,37 @@ import type { GeoLibreAppAPI } from "../types";
  * Lives in its own module so it can be unit-tested: the plugin's entry module
  * pulls the Earth Engine browser client in at import time.
  *
- * @param app - The plugin host API, read for the mapbox-gl namespace.
+ * Two deliberate choices about *when* things are read. The engine is decided
+ * from the renderer, which the store flips synchronously, rather than from the
+ * namespace, which only appears once `MapboxEngine` has mounted — and GeoAgent
+ * is built behind a dynamic import, so that window is wide. And the namespace
+ * itself is resolved on access rather than now, so a control constructed while
+ * the engine was still mounting still hands its tools the right library.
+ *
+ * @param app - The plugin host API, read for the renderer and the namespace.
  * @returns The Mapbox engine descriptor on a Mapbox host, else `undefined`,
  *   which leaves the upstream default of this package's own `maplibre-gl`.
  */
 export function geoAgentMapEngine(
-  app: Pick<GeoLibreAppAPI, "getMapboxGl"> | null | undefined,
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null | undefined,
 ): GeoAgentMapEngine | undefined {
-  const mapboxgl = app?.getMapboxGl?.();
-  if (!mapboxgl) return undefined;
-  // The whole namespace, not a narrowed subset: `run_maplibre_script` passes it
-  // straight to the script it runs, so a script reaching for `LngLatBounds`
-  // must find the engine's own.
-  return { kind: "mapbox", namespace: mapboxgl as unknown as GeoAgentMapEngine["namespace"] };
+  const mapbox = app?.getMapRenderer?.() === "mapbox" || !!app?.getMapboxGl?.();
+  if (!mapbox) return undefined;
+  return {
+    kind: "mapbox",
+    // The whole namespace, not a narrowed subset: `run_maplibre_script` passes
+    // it straight to the script it runs, so a script reaching for
+    // `LngLatBounds` must find the engine's own. Read on access: the control
+    // stores this descriptor and its tools only dereference `namespace` when a
+    // tool actually runs, long after the map exists.
+    get namespace(): GeoAgentMapEngine["namespace"] {
+      const mapboxgl = app?.getMapboxGl?.();
+      if (!mapboxgl) {
+        // Unreachable once a tool can run (see above); loud rather than
+        // silently handing the agent MapLibre's classes, which throw later.
+        throw new Error("GeoAgent needs the mapbox-gl namespace to drive a Mapbox map.");
+      }
+      return mapboxgl as unknown as GeoAgentMapEngine["namespace"];
+    },
+  };
 }

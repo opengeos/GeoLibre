@@ -33,6 +33,39 @@ describe("geoAgentMapEngine", () => {
     assert.equal(geoAgentMapEngine(undefined), undefined);
     assert.equal(geoAgentMapEngine({} as GeoLibreAppAPI), undefined);
     assert.equal(geoAgentMapEngine({ getMapboxGl: () => null } as GeoLibreAppAPI), undefined);
+    assert.equal(
+      geoAgentMapEngine({
+        getMapRenderer: () => "maplibre",
+        getMapboxGl: () => null,
+      } as unknown as GeoLibreAppAPI),
+      undefined,
+    );
+  });
+
+  it("commits on the renderer and resolves the namespace on access", () => {
+    // The store flips `primaryRenderer` synchronously, but GeoAgent is built
+    // behind a dynamic import, so its control can be constructed well before
+    // MapboxEngine has mounted. Reading the namespace then would hand the
+    // agent's tools maplibre-gl for the control's whole lifetime.
+    const namespace = { Marker: class {}, Popup: class {} };
+    let mounted: typeof namespace | null = null;
+    const engine = geoAgentMapEngine({
+      getMapRenderer: () => "mapbox",
+      getMapboxGl: () => mounted,
+    } as unknown as GeoLibreAppAPI);
+
+    assert.equal(engine?.kind, "mapbox", "the renderer alone must be enough to commit");
+    mounted = namespace;
+    assert.equal(engine?.namespace, namespace as unknown);
+  });
+
+  it("refuses loudly rather than handing the agent MapLibre's classes", () => {
+    const engine = geoAgentMapEngine({
+      getMapRenderer: () => "mapbox",
+      getMapboxGl: () => null,
+    } as unknown as GeoLibreAppAPI);
+    assert.ok(engine);
+    assert.throws(() => engine!.namespace, /mapbox-gl namespace/);
   });
 
   it("names Mapbox and hands over the whole namespace", () => {
