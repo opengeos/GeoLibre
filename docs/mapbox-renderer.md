@@ -135,6 +135,14 @@ browser against an authenticated Mapbox map):
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
+- **Street View** (Google and Mapillary). Everything the upstream control
+  touches is on the shared surface except the location marker: MapLibre's
+  `Marker` reads `map._camera.transform` on every position update, so it threw
+  on the first map click. `maplibre-gl-streetview` 0.8.0 takes a `createMarker`
+  factory, and the plugin feeds it mapbox-gl's own `Marker` on a Mapbox host —
+  the control still owns the marker element and its direction arrow, and only
+  the positioning changes engine. A renderer swap rebuilds the control, so the
+  marker follows whichever engine is primary.
 - **Overture Maps**. mapbox-gl 3.30+ reads `.pmtiles` archives itself, through
   a tile provider it fetches from `api.mapbox.com` (allowlisted in the desktop
   and web CSPs), so the plugin hands `maplibre-gl-overture-maps` its `nativePmtiles`
@@ -148,8 +156,6 @@ browser against an authenticated Mapbox map):
 
 Still MapLibre-only, each for a concrete reason:
 
-- **Street View**: the upstream control places a `maplibre-gl` `Marker`, whose
-  update path reads `map._camera.transform` and throws on a mapbox-gl map.
 - **GeoAgent**: its tools call `setProjection({ type })`, `setTerrain` and
   MapLibre `Marker` / `Popup`, so agent actions would break mid-run.
 - **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the

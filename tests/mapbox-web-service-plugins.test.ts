@@ -346,15 +346,19 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
     }
   });
 
+  it("runs Street View on both 2D engines now that its marker is supplied", () => {
+    // The one MapLibre class the control built itself — the location `Marker`,
+    // whose update path reads `_camera.transform` — comes from
+    // maplibre-gl-streetview's `createMarker` option, fed mapbox-gl's own.
+    assert.equal(isPluginEngineSupported(maplibreStreetViewPlugin, "mapbox"), true);
+    assert.equal(isPluginEngineSupported(maplibreStreetViewPlugin, "maplibre"), true);
+  });
+
   it("keeps the plugins whose upstream needs MapLibre internals MapLibre-only", () => {
-    // Street View drops a maplibre-gl Marker whose `_update` reads
-    // `_camera.transform`; GeoAgent's tools call setProjection({ type }) and
-    // MapLibre Marker/Popup.
-    for (const plugin of [maplibreStreetViewPlugin]) {
-      assert.equal(isPluginEngineSupported(plugin, "mapbox"), false, `${plugin.id} on mapbox`);
-    }
-    // GeoAgent's module pulls the Earth Engine client in at import time, which
-    // needs a browser window, so its declaration is read off the source.
+    // GeoAgent's tools call setProjection({ type }) and build MapLibre
+    // Marker/Popup, so an agent run would break mid-way on Mapbox. Its module
+    // pulls the Earth Engine client in at import time, which needs a browser
+    // window, so its declaration is read off the source rather than imported.
     const geoagent = readFileSync(
       new URL("../packages/plugins/src/plugins/maplibre-geoagent.ts", import.meta.url),
       "utf8",
