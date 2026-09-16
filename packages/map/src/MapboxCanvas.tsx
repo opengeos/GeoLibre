@@ -5,7 +5,7 @@ import {
   redactUrlCredentials,
   useAppStore,
 } from "@geolibre/core";
-import type { StyleSpecification, Popup } from "mapbox-gl";
+import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
@@ -149,8 +149,13 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
         cleanup = unsubscribe;
         update(state);
         update(useAppStore.getState(), state);
-        map.on("moveend", () => {
+        map.on("moveend", (event: MapEventOf<"moveend"> & { flightCameraToken?: number }) => {
           if (applying || cancelled) return;
+          // The flight simulator owns the camera while it flies and places it
+          // every animation frame, tagging each write. Syncing those into the
+          // store would overwrite the project's saved view ~60 times a second
+          // (MapCanvas skips them the same way).
+          if (event?.flightCameraToken !== undefined) return;
           const next = useAppStore.getState(),
             camera = current.readView();
           // Shared view first (as SecondaryMapCanvas does): each setter notifies

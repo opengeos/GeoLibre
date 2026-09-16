@@ -1884,6 +1884,7 @@
     "only2d": "2D만",
     "only3d": "3D만",
     "noMapbox": "Mapbox 미지원",
+    "noArcgis": "ArcGIS 미지원",
     "cesiumTokenHint": "지형과 Ion 영상을 사용하려면 설정에서 Cesium Ion 토큰을 추가하세요"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "3D 지구본에서는 렌더링되지 않음",
     "layerCesiumOnly": "3D 지구본에서만 렌더링됨",
     "layerMapboxUnsupported": "Mapbox 엔진에서는 렌더링되지 않음",
+    "layerArcgisUnsupported": "ArcGIS 엔진에서는 렌더링되지 않음",
     "resetView": "보기 재설정",
     "scene3D": "3D 지구본",
     "scene2D": "2D 지도",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "전체 화면 종료",
     "fullscreenUnavailable": "전체 화면을 사용할 수 없음",
     "mapboxTokenHint": "이 렌더러를 사용하려면 <settingsLink>설정 → 환경 변수</settingsLink>에 Mapbox 액세스 토큰을 추가하세요.",
+    "arcgisKeyHint": "Esri 배경지도 스타일을 사용하려면 <settingsLink>설정 → 환경 변수</settingsLink>에 ArcGIS API 키를 추가하세요.",
     "pluginUnsupported": "이 플러그인은 선택한 렌더링 엔진을 지원하지 않습니다."
   },
   "mapContextMenu": {
@@ -2168,6 +2171,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Mapbox를 사용하려면 <tokenLink>Mapbox 계정</tokenLink>의 액세스 토큰을 아래에 붙여넣으세요.",
       "mapboxTokenStorageNote": "이 기기에 로컬로 저장되며(프로젝트 파일에는 저장되지 않으므로 공유되지 않음) Mapbox에만 전송됩니다. 웹 빌드에서는 다른 사이트 데이터와 동일한 브라우저 저장소를 공유합니다.",
+      "arcgisKeyTitle": "ArcGIS API 키",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGIS 렌더러는 키 없이도 작동하며, Esri CDN에서 로드되는 ArcGIS Maps SDK for JavaScript를 통해 프로젝트 배경지도와 레이어를 표시합니다. API 키를 추가하면 Esri 배경지도 스타일(도로, 영상, 지형 등)을 사용할 수 있습니다. ArcGIS 계정의 <keyLink>개발자 자격 증명</keyLink>에서 배경지도 권한이 있는 키를 만들어 아래에 붙여넣으세요.",
+      "arcgisKeyStorageNote": "이 기기에 로컬로 저장되며(프로젝트 파일에는 저장되지 않으므로 공유되지 않음) Esri에만 전송됩니다. 웹 빌드에서는 다른 사이트 데이터와 동일한 브라우저 저장소를 공유합니다.",
       "variablesTitle": "환경 변수",
       "variablesCount_other": "활성화된 런타임 변수 {{count}}개.",
       "secretsWarning": "값은 프로젝트 파일에 평문으로 저장되며 프로젝트를 공유할 때 노출될 수 있습니다. 프로젝트 파일이 비공개로 유지되지 않는 한 여기에 비밀 정보를 입력하지 마세요.",
@@ -2358,6 +2365,7 @@
       "imperial": "노트 / 피트",
       "metric": "km/h / 미터",
       "bankCamera": "선회 시 수평선 기울이기",
+      "bankCameraMapbox": "Mapbox GL에는 카메라 롤 축이 없어 여기서는 수평선이 기울지 않습니다. 기체는 그대로 뱅크하며 선회합니다.",
       "invertPitch": "피치 축 반전",
       "knots": "kt",
       "kph": "km/h",
@@ -2761,6 +2769,7 @@
       "renderingEngine": "렌더링 엔진",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google 지도에서 보기",
       "viewInGoogleEarth": "Google Earth에서 보기",

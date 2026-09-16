@@ -1156,10 +1156,13 @@ export function TopToolbar({
   // The globe owns the primary map, so the MapLibre-only entries below are dead
   // while it is active and the View menu becomes the only way back to 2D (#2217).
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
-  // Mapbox publishes its engine only after the initial style loads. Before
-  // that, plugin panels cannot mount and their open requests would be lost.
-  // mapReadyGeneration rerenders this toolbar when the engine is published.
-  const addDataReady = primaryRenderer !== "mapbox" || mapControllerRef.current?.kind === "mapbox";
+  // Mapbox publishes its engine only after the initial style loads, and the
+  // ArcGIS engine once its view is ready. Before that, plugin panels cannot
+  // mount and their open requests would be lost. mapReadyGeneration rerenders
+  // this toolbar when the engine is published.
+  const addDataReady =
+    (primaryRenderer !== "mapbox" && primaryRenderer !== "arcgis") ||
+    mapControllerRef.current?.kind === primaryRenderer;
   const cesiumPrimary = primaryRenderer === "cesium";
   const capabilities = useMapCapabilities(mapControllerRef);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);

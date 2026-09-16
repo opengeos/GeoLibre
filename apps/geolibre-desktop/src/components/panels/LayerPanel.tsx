@@ -82,6 +82,7 @@ import {
   buildQml,
   buildSld,
   isCesiumSupportedLayerType,
+  isArcgisSupportedLayer,
   isMapboxSupportedLayer,
   isPlaceholderLayer,
   mapboxStyleToJson,
@@ -673,6 +674,9 @@ export function LayerPanel({
   // it rejects (a MapLibre custom protocol, deck.gl, COG, ...) is flagged here
   // rather than only reported by the map's error banner once it is visible.
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
+  // And the ArcGIS engine draws through the SDK's own layer classes, so the
+  // layer kinds without a translation are flagged the same way.
+  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
   // The subset panel draws its extract box on the map surface, so it needs an
   // engine the user can draw on — not merely "not the globe".
   const capabilities = useMapCapabilities(mapControllerRef);
@@ -3546,6 +3550,16 @@ export function LayerPanel({
                             className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
                           >
                             {t("mapGrid.noMapbox")}
+                          </span>
+                        )}
+                      {arcgisPrimary &&
+                        !isCesiumOnlyLayer(layer) &&
+                        !isArcgisSupportedLayer(layer) && (
+                          <span
+                            title={t("renderer.layerArcgisUnsupported")}
+                            className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
+                          >
+                            {t("mapGrid.noArcgis")}
                           </span>
                         )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">

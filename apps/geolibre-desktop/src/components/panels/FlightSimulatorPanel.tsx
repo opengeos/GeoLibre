@@ -15,6 +15,7 @@ import {
   subscribeFlightSimulatorPanel,
   toggleFlying,
 } from "@geolibre/plugins";
+import { useAppStore } from "@geolibre/core";
 import { Button, Select, Slider } from "@geolibre/ui";
 import { ChevronDown, ChevronUp, Pause, Plane, Play, TriangleAlert, X } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useState, useSyncExternalStore } from "react";
@@ -52,6 +53,7 @@ function FlightSimulatorCard() {
     getFlightSimulatorSnapshot,
   );
   const hud = useSyncExternalStore(subscribeFlightHud, getFlightHudSnapshot, getFlightHudSnapshot);
+  const renderer = useAppStore((s) => s.primaryRenderer);
   const [collapsed, setCollapsed] = useState(false);
   const [position, setPosition] = useState(() => ({ x: EDGE_MARGIN, y: EDGE_MARGIN }));
 
@@ -249,15 +251,27 @@ function FlightSimulatorCard() {
             </Select>
           </label>
 
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              className="h-3.5 w-3.5 accent-sky-500"
-              checked={settings.bankCamera}
-              onChange={(event) => setFlightSimulatorSettings({ bankCamera: event.target.checked })}
-            />
-            <span className="text-muted-foreground">{t("toolbar.flightSim.bankCamera")}</span>
-          </label>
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-sky-500"
+                checked={settings.bankCamera}
+                onChange={(event) =>
+                  setFlightSimulatorSettings({ bankCamera: event.target.checked })
+                }
+              />
+              <span className="text-muted-foreground">{t("toolbar.flightSim.bankCamera")}</span>
+            </label>
+            {/* mapbox-gl has no roll axis at all, so the setting is kept (it
+                applies again on MapLibre or the globe) but says so here rather
+                than reading as a dead checkbox. */}
+            {renderer === "mapbox" && settings.bankCamera && (
+              <p className="ps-5.5 text-[11px] leading-snug text-muted-foreground/80">
+                {t("toolbar.flightSim.bankCameraMapbox")}
+              </p>
+            )}
+          </div>
 
           <label className="flex items-center gap-2 text-xs">
             <input

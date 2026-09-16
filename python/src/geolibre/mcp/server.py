@@ -964,7 +964,7 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     @tool()
     def set_renderer(path: str, renderer: str, pane_id: str | None = None) -> dict[str, Any]:
-        """Select maplibre, cesium, or mapbox for the primary map or a secondary pane ID."""
+        """Select maplibre, cesium, mapbox, or arcgis for the primary map or a secondary pane ID."""
         with edit(path) as (file, project):
             authoring.set_renderer(project, renderer, pane_id=pane_id)
         return _summarize(file, project, renderer=renderer, paneId=pane_id)

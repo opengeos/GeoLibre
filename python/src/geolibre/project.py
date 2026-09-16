@@ -381,13 +381,13 @@ def build_empty_project(
         center: Optional ``[lng, lat]`` map center.
         zoom: Optional initial zoom level.
         basemap_url: Optional MapLibre style URL; defaults to the app default.
-        renderer: ``"maplibre"`` (default), ``"cesium"``, or ``"mapbox"``.
+        renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or ``"arcgis"``.
 
     Returns:
         A project dict ready to be assigned to the widget's ``project`` trait.
     """
-    if renderer not in {"maplibre", "cesium", "mapbox"}:
-        raise ValueError("renderer must be maplibre, cesium, or mapbox")
+    if renderer not in {"maplibre", "cesium", "mapbox", "arcgis"}:
+        raise ValueError("renderer must be maplibre, cesium, mapbox, or arcgis")
     map_view = default_map_view()
     if center is not None:
         if len(center) != 2:

@@ -166,7 +166,7 @@ export type SettingsSection =
   | "startup";
 
 /** A field a deep-link can ask Settings to focus once the section renders. */
-export type SettingsFocusTarget = "shareToken" | "mapboxToken" | "accentColor";
+export type SettingsFocusTarget = "shareToken" | "mapboxToken" | "arcgisKey" | "accentColor";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
@@ -215,7 +215,8 @@ type SettingsTransProps = {
   i18nKey:
     | "settings.env.tokenDescription"
     | "settings.env.cesiumTokenDescription"
-    | "settings.env.mapboxTokenDescription";
+    | "settings.env.mapboxTokenDescription"
+    | "settings.env.arcgisKeyDescription";
   values?: { shareHost: string };
   components?: TransComponents;
 };
@@ -229,6 +230,17 @@ const mapboxTokenComponents: TransComponents = {
     <a
       className="underline"
       href="https://account.mapbox.com/access-tokens/"
+      target="_blank"
+      rel="noreferrer noopener"
+    />
+  ),
+};
+
+const arcgisKeyComponents: TransComponents = {
+  keyLink: (
+    <a
+      className="underline"
+      href="https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/"
       target="_blank"
       rel="noreferrer noopener"
     />
@@ -308,6 +320,7 @@ interface DraftDesktopSettings {
   shareToken: string;
   cesiumIonToken: string;
   mapboxAccessToken: string;
+  arcgisApiKey: string;
   aiProfiles: AssistantProfile[];
   defaultAiProfileId: string | null;
   uiProfile: UiProfileSettings;
@@ -390,6 +403,7 @@ function cloneDesktopSettings(
       preferences.environmentVariables,
       settings.mapboxAccessToken,
     ).token,
+    arcgisApiKey: settings.arcgisApiKey,
     aiProfiles: settings.aiProfiles.map((p) => ({
       ...p,
       fieldValues: { ...p.fieldValues },
@@ -576,6 +590,7 @@ export function SettingsDialog({
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(null);
   const shareTokenInputRef = useRef<HTMLInputElement>(null);
   const mapboxTokenInputRef = useRef<HTMLInputElement>(null);
+  const arcgisKeyInputRef = useRef<HTMLInputElement>(null);
   const languagePackFileRef = useRef<HTMLInputElement>(null);
   // The native color input in the Appearance pane. The accent-color dropdown's
   // "Custom" entry deep-links here so picking a custom color is reachable
@@ -837,7 +852,9 @@ export function SettingsDialog({
         ? shareTokenInputRef
         : pendingFocus === "mapboxToken"
           ? mapboxTokenInputRef
-          : null;
+          : pendingFocus === "arcgisKey"
+            ? arcgisKeyInputRef
+            : null;
     if (!open || !input) return;
     if (effectiveSection !== "environment") return;
     const id = window.requestAnimationFrame(() => {
@@ -1384,6 +1401,7 @@ export function SettingsDialog({
       shareToken: draftDesktopSettings.shareToken,
       cesiumIonToken: draftDesktopSettings.cesiumIonToken,
       mapboxAccessToken: draftDesktopSettings.mapboxAccessToken,
+      arcgisApiKey: draftDesktopSettings.arcgisApiKey,
       aiProfiles: draftDesktopSettings.aiProfiles,
       defaultAiProfileId: draftDesktopSettings.defaultAiProfileId,
       uiProfile: committedUiProfile,
@@ -2877,6 +2895,32 @@ export function SettingsDialog({
                     />
                     <p className="text-xs text-muted-foreground">
                       {t("settings.env.mapboxTokenStorageNote")}
+                    </p>
+                  </div>
+                  <div className="space-y-2 border-t pt-5">
+                    <h3 className="text-sm font-semibold">{t("settings.env.arcgisKeyTitle")}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      <SettingsTrans
+                        i18nKey="settings.env.arcgisKeyDescription"
+                        components={arcgisKeyComponents}
+                      />
+                    </p>
+                    <Input
+                      ref={arcgisKeyInputRef}
+                      aria-label={t("settings.env.arcgisKeyTitle")}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={t("settings.env.arcgisKeyPlaceholder")}
+                      value={draftDesktopSettings.arcgisApiKey}
+                      onChange={(event) =>
+                        setDraftDesktopSettings((current) => ({
+                          ...current,
+                          arcgisApiKey: event.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.env.arcgisKeyStorageNote")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">

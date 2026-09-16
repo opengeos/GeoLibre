@@ -1930,6 +1930,7 @@
     "only2d": "Solo 2D",
     "only3d": "Solo 3D",
     "noMapbox": "Sin Mapbox",
+    "noArcgis": "Sin ArcGIS",
     "cesiumTokenHint": "Añada un token de Cesium Ion en Configuración para el terreno y las imágenes de Ion"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "No se representa en el globo 3D",
     "layerCesiumOnly": "Se representa solo en el globo 3D",
     "layerMapboxUnsupported": "No se representa en el motor Mapbox",
+    "layerArcgisUnsupported": "No se representa en el motor ArcGIS",
     "resetView": "Restablecer vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mapa 2D",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Salir de pantalla completa",
     "fullscreenUnavailable": "Pantalla completa no disponible",
     "mapboxTokenHint": "Añada su token de acceso de Mapbox en <settingsLink>Configuración → Variables de entorno</settingsLink> para usar este motor.",
+    "arcgisKeyHint": "Añada una clave de API de ArcGIS en <settingsLink>Configuración → Variables de entorno</settingsLink> para usar los estilos de mapa base de Esri.",
     "pluginUnsupported": "Este complemento no admite el motor de renderizado seleccionado."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Para usar Mapbox, pegue abajo un token de acceso de <tokenLink>su cuenta de Mapbox</tokenLink>.",
       "mapboxTokenStorageNote": "Se almacena localmente en este dispositivo (no en el archivo del proyecto, así que nunca se comparte) y solo se envía a Mapbox. En la compilación web, comparte el mismo almacenamiento del navegador que otros datos del sitio.",
+      "arcgisKeyTitle": "Clave de API de ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "El motor ArcGIS funciona sin clave: representa el mapa base del proyecto y sus capas mediante ArcGIS Maps SDK for JavaScript, cargado desde la CDN de Esri. Una clave de API añade los estilos de mapa base de Esri (Calles, Imágenes, Topográfico, …). Cree una en <keyLink>credenciales de desarrollador</keyLink> de su cuenta de ArcGIS con el privilegio de mapas base y péguela a continuación.",
+      "arcgisKeyStorageNote": "Se almacena localmente en este dispositivo (no en el archivo del proyecto, así que nunca se comparte) y solo se envía a Esri. En la compilación web, comparte el mismo almacenamiento del navegador que otros datos del sitio.",
       "variablesTitle": "Variables de entorno",
       "variablesCount_one": "{{count}} variable de tiempo de ejecución activada.",
       "variablesCount_other": "{{count}} variables de tiempo de ejecución activadas.",
@@ -2406,6 +2413,7 @@
       "imperial": "Nudos / pies",
       "metric": "km/h / metros",
       "bankCamera": "Inclinar el horizonte en los virajes",
+      "bankCameraMapbox": "Mapbox GL no tiene alabeo de cámara, así que aquí el horizonte se mantiene nivelado. El avión sigue inclinándose y virando.",
       "invertPitch": "Invertir el eje de cabeceo",
       "knots": "kt",
       "kph": "km/h",
@@ -2809,6 +2817,7 @@
       "renderingEngine": "Motor de renderizado",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Ver en Google Maps",
       "viewInGoogleEarth": "Ver en Google Earth",

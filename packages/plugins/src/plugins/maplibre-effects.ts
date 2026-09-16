@@ -868,6 +868,15 @@ class EffectsEngine {
     const ctx = this.haloCtx;
     const base = parseHex(this.settings.haloColor);
     const outerRadius = disc.radius * haloExtent;
+    // A steeply pitched globe can project a silhouette sample behind the
+    // horizon to a non-finite point — mapbox-gl does, at the pitches the Flight
+    // Simulator flies at — and the under-three-points fallback in
+    // getGeoglifyGlobeCircle projects without checking. `createRadialGradient`
+    // throws on a non-finite argument, which would take the whole render loop
+    // down with it, so skip the halo for that frame instead. `radius < 5` above
+    // does not catch it: every comparison with NaN is false.
+    if (!Number.isFinite(disc.x) || !Number.isFinite(disc.y) || !Number.isFinite(outerRadius))
+      return;
     ctx.save();
     const gradient = ctx.createRadialGradient(
       disc.x,

@@ -2113,6 +2113,7 @@
     "only2d": "ثنائي الأبعاد فقط",
     "only3d": "ثلاثي الأبعاد فقط",
     "noMapbox": "بدون Mapbox",
+    "noArcgis": "بدون ArcGIS",
     "cesiumTokenHint": "أضف رمز Cesium Ion من الإعدادات للحصول على التضاريس وصور Ion"
   },
   "renderer": {
@@ -2122,6 +2123,7 @@
     "layerUnsupported": "لا تُعرَض على الكرة الأرضية ثلاثية الأبعاد",
     "layerCesiumOnly": "تُعرَض على الكرة الأرضية ثلاثية الأبعاد فقط",
     "layerMapboxUnsupported": "لا تُعرَض بمحرّك Mapbox",
+    "layerArcgisUnsupported": "لا تُعرَض بمحرّك ArcGIS",
     "resetView": "إعادة تعيين العرض",
     "scene3D": "كرة أرضية ثلاثية الأبعاد",
     "scene2D": "خريطة ثنائية الأبعاد",
@@ -2130,6 +2132,7 @@
     "fullscreenExit": "إنهاء ملء الشاشة",
     "fullscreenUnavailable": "ملء الشاشة غير متاح",
     "mapboxTokenHint": "أضف رمز وصول Mapbox في <settingsLink>الإعدادات ← متغيرات البيئة</settingsLink> لاستخدام هذا المحرك.",
+    "arcgisKeyHint": "أضف مفتاح ArcGIS API في <settingsLink>الإعدادات ← متغيرات البيئة</settingsLink> لاستخدام أنماط خرائط الأساس من Esri.",
     "pluginUnsupported": "لا تدعم هذه الإضافة محرك العرض المحدد."
   },
   "mapContextMenu": {
@@ -2397,6 +2400,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "لاستخدام Mapbox، الصق أدناه رمز وصول من <tokenLink>حسابك على Mapbox</tokenLink>.",
       "mapboxTokenStorageNote": "يُخزن محليًا على هذا الجهاز (وليس في ملف المشروع، لذا لا تتم مشاركته أبدًا) ويُرسل فقط إلى Mapbox. في نسخة الويب يتشارك مساحة تخزين المتصفح نفسها مع بيانات الموقع الأخرى.",
+      "arcgisKeyTitle": "مفتاح ArcGIS API",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "يعمل محرك ArcGIS من دون مفتاح: فهو يعرض خريطة الأساس الخاصة بالمشروع وطبقاتك عبر ArcGIS Maps SDK for JavaScript المُحمَّل من شبكة Esri. ويضيف مفتاح API أنماط خرائط الأساس من Esri (الشوارع، الصور، الطبوغرافية، …). أنشئ مفتاحًا ضمن <keyLink>بيانات اعتماد المطوّر</keyLink> في حساب ArcGIS الخاص بك مع امتياز خرائط الأساس، ثم الصقه أدناه.",
+      "arcgisKeyStorageNote": "يُخزن محليًا على هذا الجهاز (وليس في ملف المشروع، لذا لا تتم مشاركته أبدًا) ويُرسل فقط إلى Esri. في نسخة الويب يتشارك مساحة تخزين المتصفح نفسها مع بيانات الموقع الأخرى.",
       "variablesTitle": "متغيرات البيئة",
       "variablesCount_one": "{{count}} متغير تشغيل مفعّل.",
       "variablesCount_zero": "{{count}} من متغيرات التشغيل المفعّلة.",
@@ -2597,6 +2604,7 @@
       "imperial": "عقدة / قدم",
       "metric": "كم/س / متر",
       "bankCamera": "إمالة الأفق أثناء الانعطاف",
+      "bankCameraMapbox": "لا يدعم Mapbox GL دوران الكاميرا حول محور النظر (roll)، لذا يبقى الأفق مستوياً هنا. ما زالت الطائرة تميل وتنعطف.",
       "invertPitch": "عكس محور الميل",
       "knots": "عقدة",
       "kph": "كم/س",
@@ -3000,6 +3008,7 @@
       "renderingEngine": "محرك العرض",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "عرض في Google Maps",
       "viewInGoogleEarth": "عرض في Google Earth",

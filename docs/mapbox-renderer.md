@@ -135,6 +135,18 @@ browser against an authenticated Mapbox map):
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
+- **Flight Simulator**. mapbox-gl kept the free camera MapLibre dropped, so the
+  Mapbox adapter places the eye directly — a `MercatorCoordinate` carrying the
+  altitude plus `setPitchBearing` — where MapLibre converts through
+  `calculateCameraOptionsFromCameraLngLatAltRotation`. Terrain, the suspended
+  interaction handlers, the widened pitch ceiling and the exit view all behave
+  as on MapLibre; `setCenterClampedToGround` has no counterpart and needs none,
+  because the free camera positions the eye rather than the map center. One
+  setting does nothing here: mapbox-gl 3 has no camera roll axis at all (its
+  free camera orientation is documented as representable with only pitch and
+  bearing), so **Bank the horizon in turns** leaves the horizon level — the
+  aircraft still banks, and a bank still turns it. The panel says so while the
+  Mapbox renderer is primary.
 - **GeoAgent**. Almost every tool already sits on the shared Style Spec
   surface; four did not, and each broke differently — `add_marker` built
   MapLibre's `Marker`/`Popup`, `set_projection` wrote `{ type }` (Mapbox takes a
@@ -166,9 +178,6 @@ Still MapLibre-only, each for a concrete reason:
   update path reads `map._camera.transform` and throws on a mapbox-gl map.
 - **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the
   comparison pane, and the plugin mirrors COG and raster layers onto it.
-- **Flight Simulator**: flies with `calculateCameraOptionsFromCameraLngLatAltRotation`
-  and `getCenterClampedToGround`, which have no mapbox-gl equivalent (a
-  `FreeCameraOptions` port is a separate job).
 
 Two engine changes came with the port and apply to every plugin: a store
 layer added while a Mapbox source is still loading is now synced when that
