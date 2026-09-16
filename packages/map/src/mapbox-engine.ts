@@ -32,6 +32,13 @@ import {
   type MapboxLayerPlan,
   mapboxPaint,
 } from "./mapbox-layers";
+import {
+  BASEMAP_LABEL_KEY,
+  clearLayerLabels,
+  publishLayerLabels,
+  styleLayerLabel,
+} from "./layer-labels";
+import { mapboxSourceId } from "./style-layer-ids";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
 import { captureEngineImage } from "./map-capture";
@@ -100,6 +107,8 @@ export class MapboxEngine implements MapEngine {
   private map: mapboxgl.Map | null;
   private surface: MapRenderSurface | null;
   private layers: GeoLibreLayer[] = [];
+  /** The Layers panel's name for the basemap row, mirrored into the label bridge. */
+  private backgroundLabel = "Background";
   private plans = new Map<string, MapboxLayerPlan>();
   private previous = new Map<string, GeoLibreLayer>();
   private errors = new Map<string, string>();
@@ -297,6 +306,8 @@ export class MapboxEngine implements MapEngine {
     this.map.off("idle", this.flushLayers);
     this.map.off("styledata", this.onStyleData);
     this.layerControlHost.destroy();
+    // Leave no stale names behind for whichever engine mounts next.
+    clearLayerLabels();
     this.map.remove();
     this.pluginControls.clear();
     this.builtInControls.clear();
@@ -545,8 +556,57 @@ export class MapboxEngine implements MapEngine {
           );
       }
     }
+    this.publishLayerDisplayNames(layers);
     this.layerControlHost.refresh();
     this.layerControlHost.syncState();
+  }
+  /**
+   * Publish what each style layer on this map should be called, so a control
+   * that lists style layers can show the name the Layers panel shows.
+   *
+   * The Layer Swipe panel is the one that needs it: it drives its two sides by
+   * style layer id, and this engine compiles a store layer into
+   * `geolibre-mapbox-<id>-<sourceLayer>-<kind>` rows, which is not a name to
+   * put in front of anyone. MapLibre's controller publishes the same bridge for
+   * its own id scheme — without this the panel fell back to the raw ids on
+   * Mapbox while showing "Counties Polygons" on MapLibre.
+   *
+   * Read off the live style rather than the compile plan, so a plugin-owned row
+   * whose native ids the engine only adopts is named too, and a layer whose
+   * style layers have not landed yet is not named before it exists.
+   */
+  private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
+    const map = this.map;
+    if (!map) return;
+    let styleLayerIds: string[];
+    try {
+      styleLayerIds = (map.getStyle()?.layers ?? []).map((styleLayer) => styleLayer.id);
+    } catch {
+      // getStyle throws while a style is loading; the next sync republishes.
+      return;
+    }
+
+    const entries: Array<readonly [string, string]> = [];
+    for (const layer of layers) {
+      const prefix = `${mapboxSourceId(layer.id)}-`;
+      const native = new Set(
+        Array.isArray(layer.metadata?.nativeLayerIds)
+          ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
+          : [],
+      );
+      const own = styleLayerIds.filter((id) => id.startsWith(prefix) || native.has(id));
+      for (const id of own) {
+        // `geolibre-mapbox-<layerId>-<sourceLayer>-<kind>`: the kind is the
+        // last segment. A plugin's own id follows no scheme, so it takes the
+        // layer name unqualified unless the plugin drew several.
+        const suffix = id.startsWith(prefix) ? id.slice(prefix.length).split("-").pop() : undefined;
+        entries.push([id, styleLayerLabel(layer, suffix, own.length)]);
+      }
+    }
+    // Last, so this synthetic row always wins over a layer that happens to
+    // share the id — the same ordering MapController uses.
+    entries.push([BASEMAP_LABEL_KEY, this.backgroundLabel]);
+    publishLayerLabels(entries);
   }
   /**
    * Apply a plugin-owned store layer's visibility and paint to the native
@@ -1151,7 +1211,13 @@ export class MapboxEngine implements MapEngine {
     this.compassLabel = label;
     this.compassControl?.setLabel(label);
   }
-  setBackgroundLabel(_label: string): void {}
+  setBackgroundLabel(label: string): void {
+    // Kept, not ignored: the swipe panel groups every basemap style layer under
+    // one row and reads its name from the label bridge, so the translated
+    // "Background" has to reach it here as it does on MapLibre.
+    this.backgroundLabel = label;
+    this.publishLayerDisplayNames(this.layers);
+  }
   setTerrainLabel(_label: string): void {}
   isTerrainEnabled(): boolean {
     return this.terrain;

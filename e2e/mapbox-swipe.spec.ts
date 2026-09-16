@@ -282,10 +282,22 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator(".swipe-comparison-map .mapboxgl-canvas")).toBeAttached();
       expect(await page.locator(".swipe-comparison-map .maplibregl-canvas").count()).toBe(0);
 
-      // Both project layers are listed; the deck.gl raster provider contributes
-      // nothing here (it is MapLibre-only) so every row is a native style layer.
-      await expect(panel.getByText("West", { exact: false }).first()).toBeVisible();
-      await expect(panel.getByText("East", { exact: false }).first()).toBeVisible();
+      // Both project layers are listed by the name the Layers panel shows, not
+      // by the style layer id the control actually drives
+      // (`geolibre-mapbox-West-geojson-fill`). The engine publishes that
+      // mapping; without it every row read as a raw id on this renderer while
+      // MapLibre showed friendly names.
+      const leftLabels = await panel
+        .locator(".swipe-layer-list")
+        .first()
+        .locator("label")
+        .allTextContents();
+      expect(leftLabels).toContain("West Polygons");
+      expect(leftLabels).toContain("East Polygons");
+      expect(
+        leftLabels.filter((text) => text.includes("geolibre-mapbox-")),
+        "no row may show a raw style layer id",
+      ).toEqual([]);
 
       // The grouped basemap row is there, which is what `basemapStyle` /
       // `basemapLayerIds` buy: without it every basemap layer would be listed.

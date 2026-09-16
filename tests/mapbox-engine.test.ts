@@ -421,6 +421,76 @@ describe("MapboxEngine.syncLayers", () => {
     assert.deepEqual(engine.getRenderStatus().errors, []);
   });
 
+  /**
+   * Run `body` with a DOM installed, and hand it the names the engine
+   * published on the window. The label bridge is a window global because the
+   * rewrite it feeds happens in the app's DOM, outside the engine.
+   */
+  const withPublishedLabels = (body: (labels: () => Record<string, string>) => void): void => {
+    // The engine names style layers off the live style, so the fake has to
+    // report the ones it was given rather than the fixed background-only stub.
+    map.getStyle = () => ({
+      sources: {},
+      layers: map.layers as { id: string; type: string }[],
+    });
+    const { document, window } = parseHTML("<html><body></body></html>");
+    const previous = { document: globalThis.document, window: globalThis.window };
+    Object.assign(globalThis, { document, window });
+    try {
+      body(
+        () =>
+          (window as unknown as { __GEOLIBRE_LAYER_LABELS__?: Record<string, string> })
+            .__GEOLIBRE_LAYER_LABELS__ ?? {},
+      );
+    } finally {
+      Object.assign(globalThis, previous);
+    }
+  };
+
+  it("publishes friendly names for the style layers it compiles", () => {
+    // The Layer Swipe panel drives its sides by style layer id and would
+    // otherwise list `geolibre-mapbox-layer-a-geojson-fill`. MapLibre's
+    // controller publishes the same bridge for its own id scheme, so a layer
+    // has to read the same whichever engine is drawing it.
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+      assert.equal(labels()[LINE], "Layer A Lines");
+      assert.equal(labels()[CIRCLE], "Layer A Points");
+      // The swipe panel's grouped basemap row, as the Layers panel names it.
+      assert.equal(labels().__basemap__, "Background");
+    });
+  });
+
+  it("names a single-style-layer row without a geometry qualifier", () => {
+    withPublishedLabels((labels) => {
+      engine.syncLayers([
+        geojsonLayer({
+          id: "raster-a",
+          name: "Imagery",
+          type: "xyz",
+          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          geojson: undefined,
+        }),
+      ]);
+      // One style layer, so no "Imagery Raster" — just the layer's own name.
+      assert.deepEqual(
+        Object.entries(labels()).filter(([id]) => id.includes("raster-a")),
+        [["geolibre-mapbox-raster-a-raster", "Imagery"]],
+      );
+    });
+  });
+
+  it("carries the translated basemap label into the bridge", () => {
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      engine.setBackgroundLabel("Hintergrund");
+      assert.equal(labels().__basemap__, "Hintergrund");
+      // The layer names survive the republish.
+      assert.equal(labels()[FILL], "Layer A Polygons");
+    });
+  });
+
   it("defers the sync until the style has loaded and flushes on idle", () => {
     map.setStyleLoaded(false);
     engine.syncLayers([geojsonLayer()]);
