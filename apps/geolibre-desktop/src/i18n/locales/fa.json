@@ -7246,7 +7246,7 @@
     "saveEditsSuccess": "{{count}} عارضه در فایل مبدأ ذخیره شد.",
     "saveEditsNoFeatures": "این لایه هیچ عارضه‌ای برای ذخیره ندارد.",
     "saveEditsError": "ذخیرهٔ ویرایش‌ها در فایل مبدأ ممکن نشد.",
-    "saveEditsPendingDraftsInvalid": "پیش از ذخیرهٔ ویرایش‌ها، مقدارهای نامعتبر جدول ویژگی‌ها را اصلاح کنید.",
+    "pendingTableDraftsBlocked": "جدول ویژگی‌ها ویرایش‌های ذخیره‌نشده‌ای دارد که نمی‌توان آن‌ها را اعمال کرد. آن‌ها را اصلاح یا لغو کنید و دوباره تلاش کنید.",
     "saveEditsToArcgis": "ذخیرهٔ ویرایش‌ها در سرویس ArcGIS",
     "saveEditsArcgisSuccess": "در ArcGIS ذخیره شد: {{inserted}} درج، {{updated}} به‌روزرسانی، {{deleted}} حذف.",
     "saveEditsToPostgis": "ذخیرهٔ ویرایش‌ها در جدول PostGIS",

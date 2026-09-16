@@ -1665,9 +1665,33 @@ export function LayerPanel({
     [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
   );
 
+  // Values typed in the attribute table stay drafts until its own Save runs,
+  // while Export and write-back read the layer from the store. Commit the drafts
+  // first so both include what the table shows instead of silently using the
+  // pre-edit features (#2438, #2439). Returns the up-to-date layer, or null
+  // (with an error status set) when the drafts cannot be applied: invalid
+  // values, form violations, or a revoked update capability.
+  const commitTableDrafts = useCallback(
+    (layer: GeoLibreLayer): GeoLibreLayer | null => {
+      if (commitPendingAttributeDrafts(layer.id) === "blocked") {
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message: t("layers.pendingTableDraftsBlocked") },
+        }));
+        scheduleStatusClear(layer.id);
+        return null;
+      }
+      // A commit replaces the layer's features, so read the layer back.
+      return useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
+    },
+    [scheduleStatusClear, t],
+  );
+
   const handleExportLayer = useCallback(
-    async (layer: GeoLibreLayer, format: VectorExportFormat, precision?: number) => {
-      clearRefreshStatusTimer(layer.id);
+    async (clickedLayer: GeoLibreLayer, format: VectorExportFormat, precision?: number) => {
+      clearRefreshStatusTimer(clickedLayer.id);
+      const layer = commitTableDrafts(clickedLayer);
+      if (!layer) return;
       try {
         const geojson = await resolveLayerGeojson(
           layer,
@@ -1733,7 +1757,7 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+    [clearRefreshStatusTimer, commitTableDrafts, mapControllerRef, scheduleStatusClear, t],
   );
 
   // Shared symbology-export flow: resolve the layer's features, build the style
@@ -2008,20 +2032,8 @@ export function LayerPanel({
     async (clickedLayer: GeoLibreLayer) => {
       if (!canEditLayer(clickedLayer.id)) return;
       clearRefreshStatusTimer(clickedLayer.id);
-      // Values typed in the attribute table stay drafts until its own Save
-      // runs. Commit them first so the write-back includes what the table
-      // shows, instead of reporting success for the pre-edit features.
-      if (commitPendingAttributeDrafts(clickedLayer.id) === "blocked") {
-        setRefreshStatuses((current) => ({
-          ...current,
-          [clickedLayer.id]: { type: "error", message: t("layers.saveEditsPendingDraftsInvalid") },
-        }));
-        scheduleStatusClear(clickedLayer.id);
-        return;
-      }
-      // Read the layer back: a commit above has just replaced its features.
-      const layer =
-        useAppStore.getState().layers.find((l) => l.id === clickedLayer.id) ?? clickedLayer;
+      const layer = commitTableDrafts(clickedLayer);
+      if (!layer) return;
       const isPostgis = isPostgisEditableLayer(layer);
       const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
       if (!isPostgis && !isArcGISWritableLayer(layer) && !path) return;
@@ -2171,7 +2183,15 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [canEditLayer, clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t, updateLayer],
+    [
+      canEditLayer,
+      clearRefreshStatusTimer,
+      commitTableDrafts,
+      mapControllerRef,
+      scheduleStatusClear,
+      t,
+      updateLayer,
+    ],
   );
 
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late

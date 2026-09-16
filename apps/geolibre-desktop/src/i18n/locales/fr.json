@@ -7246,7 +7246,7 @@
     "saveEditsSuccess": "{{count}} entité(s) enregistrée(s) dans le fichier source.",
     "saveEditsNoFeatures": "Cette couche n'a aucune entité à enregistrer.",
     "saveEditsError": "Impossible d'enregistrer les modifications dans le fichier source.",
-    "saveEditsPendingDraftsInvalid": "Corrigez les valeurs non valides de la table attributaire avant d'enregistrer les modifications.",
+    "pendingTableDraftsBlocked": "La table attributaire contient des modifications non enregistrées qui ne peuvent pas être appliquées. Corrigez-les ou annulez-les, puis réessayez.",
     "saveEditsToArcgis": "Enregistrer les modifications dans le service ArcGIS",
     "saveEditsArcgisSuccess": "Enregistré dans ArcGIS : {{inserted}} inséré(s), {{updated}} mis à jour, {{deleted}} supprimé(s).",
     "saveEditsToPostgis": "Enregistrer les modifications dans la table PostGIS",

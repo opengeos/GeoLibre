@@ -7165,7 +7165,7 @@
     "saveEditsSuccess": "Menyimpan {{count}} fitur ke file sumber.",
     "saveEditsNoFeatures": "Layer ini tidak memiliki fitur untuk disimpan.",
     "saveEditsError": "Tidak dapat menyimpan pengeditan ke file sumber.",
-    "saveEditsPendingDraftsInvalid": "Perbaiki nilai yang tidak valid di tabel atribut sebelum menyimpan pengeditan.",
+    "pendingTableDraftsBlocked": "Tabel atribut memiliki pengeditan yang belum disimpan dan tidak dapat diterapkan. Perbaiki atau batalkan, lalu coba lagi.",
     "saveEditsToArcgis": "Simpan perubahan ke layanan ArcGIS",
     "saveEditsArcgisSuccess": "Tersimpan ke ArcGIS: {{inserted}} ditambahkan, {{updated}} diperbarui, {{deleted}} dihapus.",
     "saveEditsToPostgis": "Simpan perubahan ke tabel PostGIS",

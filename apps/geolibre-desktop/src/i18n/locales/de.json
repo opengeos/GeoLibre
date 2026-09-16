@@ -7246,7 +7246,7 @@
     "saveEditsSuccess": "{{count}} Objekt(e) in der Quelldatei gespeichert.",
     "saveEditsNoFeatures": "Diese Ebene enthält keine zu speichernden Objekte.",
     "saveEditsError": "Änderungen konnten nicht in der Quelldatei gespeichert werden.",
-    "saveEditsPendingDraftsInvalid": "Korrigieren Sie die ungültigen Werte in der Attributtabelle, bevor Sie Änderungen speichern.",
+    "pendingTableDraftsBlocked": "Die Attributtabelle enthält nicht gespeicherte Änderungen, die nicht übernommen werden können. Korrigieren oder verwerfen Sie sie und versuchen Sie es erneut.",
     "saveEditsToArcgis": "Änderungen im ArcGIS-Dienst speichern",
     "saveEditsArcgisSuccess": "In ArcGIS gespeichert: {{inserted}} eingefügt, {{updated}} aktualisiert, {{deleted}} gelöscht.",
     "saveEditsToPostgis": "Änderungen in PostGIS-Tabelle speichern",

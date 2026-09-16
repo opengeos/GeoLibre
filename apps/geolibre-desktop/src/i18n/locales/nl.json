@@ -7246,7 +7246,7 @@
     "saveEditsSuccess": "{{count}} object(en) opgeslagen naar het bronbestand.",
     "saveEditsNoFeatures": "Deze laag heeft geen objecten om op te slaan.",
     "saveEditsError": "Bewerkingen konden niet worden opgeslagen naar het bronbestand.",
-    "saveEditsPendingDraftsInvalid": "Corrigeer de ongeldige waarden in de attributentabel voordat je bewerkingen opslaat.",
+    "pendingTableDraftsBlocked": "De attributentabel bevat niet-opgeslagen bewerkingen die niet kunnen worden toegepast. Corrigeer of annuleer ze en probeer het opnieuw.",
     "saveEditsToArcgis": "Bewerkingen opslaan naar ArcGIS-service",
     "saveEditsArcgisSuccess": "Opgeslagen naar ArcGIS: {{inserted}} ingevoegd, {{updated}} bijgewerkt, {{deleted}} verwijderd.",
     "saveEditsToPostgis": "Bewerkingen opslaan naar PostGIS-tabel",
