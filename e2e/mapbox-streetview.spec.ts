@@ -25,6 +25,19 @@ const PROJECT = {
 
 test.use({ actionTimeout: 30_000 });
 
+/**
+ * Whether a console message is the app's own failure rather than a network one.
+ *
+ * This spec runs against `MAPBOX_TOKEN` when the environment has one and a
+ * placeholder otherwise, so on CI every request to `api.mapbox.com` comes back
+ * 401/403 and the browser logs a bare "Failed to load resource" for each. That
+ * says nothing about the marker path under test, which is asserted through the
+ * DOM the control produces.
+ */
+function isAppError(message: string): boolean {
+  return !/Failed to load resource: the server responded with a status of \d+/.test(message);
+}
+
 /** Stand in for Google's metadata and embed endpoints so no key is needed. */
 async function mockStreetViewProvider(page: Page) {
   await page.route("**/maps/api/streetview/metadata**", (route) =>
@@ -134,7 +147,7 @@ for (const theme of ["light", "dark"] as const) {
         .not.toBe(before);
 
       await page.screenshot({ path: info.outputPath(`mapbox-streetview-${theme}.png`) });
-      expect(errors, "no console errors placing the marker").toEqual([]);
+      expect(errors.filter(isAppError), "no app errors placing the marker").toEqual([]);
     }
   });
 }
