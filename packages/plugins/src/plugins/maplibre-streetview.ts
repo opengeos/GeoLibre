@@ -85,13 +85,21 @@ function credentialsSignature(): string {
  * upstream default, which is MapLibre's.
  *
  * Two deliberate choices about *when* things are read. The engine is decided
- * from the renderer, which the store flips synchronously, rather than from the
- * namespace, which only appears once `MapboxEngine` has mounted: a plugin
- * activated inside that window would otherwise be handed `undefined`, keep
- * MapLibre's `Marker` for the control's whole lifetime, and throw on the first
- * map click — the exact bug this is here to prevent. And the namespace itself is
- * read when a marker is built rather than now, which is inside the control's
- * `onAdd`, by which point the map it is being added to necessarily exists.
+ * from the renderer alone, and the namespace is read only when a marker is
+ * actually built — inside the control's `onAdd`, by which point the map it is
+ * being added to necessarily exists.
+ *
+ * Both halves matter because the two signals disagree during a swap, in
+ * opposite directions. The store flips `primaryRenderer` synchronously;
+ * `getMapboxGl()` answers off the engine ref, which changes a beat later. So
+ * while a swap *to* Mapbox is in flight the namespace is still absent — reading
+ * it then would keep MapLibre's `Marker` for the control's whole lifetime and
+ * throw on the first map click, the exact bug this exists to prevent. And while
+ * a swap *away* from Mapbox is in flight the namespace is still present —
+ * accepting it then would commit a control being rebuilt for MapLibre to a
+ * Mapbox marker, which by `onAdd` has no namespace left to build. The renderer
+ * is right in both directions, so it is the only signal consulted; the
+ * namespace is a fallback purely for a host that does not report a renderer.
  *
  * @param app - The plugin host API, read for the renderer and the namespace.
  * @returns A marker factory on a Mapbox host, else `undefined`.
@@ -99,7 +107,8 @@ function credentialsSignature(): string {
 export function streetViewMarkerFactory(
   app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null,
 ): CreateStreetViewMarker | undefined {
-  const mapbox = app?.getMapRenderer?.() === "mapbox" || !!app?.getMapboxGl?.();
+  const renderer = app?.getMapRenderer?.();
+  const mapbox = renderer === undefined ? !!app?.getMapboxGl?.() : renderer === "mapbox";
   if (!mapbox) return undefined;
   return (options) => {
     const mapboxgl = app?.getMapboxGl?.();

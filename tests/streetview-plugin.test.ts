@@ -57,6 +57,30 @@ describe("streetViewMarkerFactory", () => {
     assert.deepEqual(built, [{ element, anchor: "center" }]);
   });
 
+  it("does not commit to Mapbox while a swap away from it is still in flight", () => {
+    // The mirror of the case above. The store flips `primaryRenderer` to
+    // "maplibre" synchronously, but `getMapboxGl()` answers off the engine ref,
+    // which still holds the outgoing MapboxEngine for a beat. Trusting the
+    // namespace there would hand a control being rebuilt for MapLibre a Mapbox
+    // marker factory — which, by the time `onAdd` builds a marker, has no
+    // namespace left and throws.
+    const stale = { Marker: class {} };
+    assert.equal(
+      streetViewMarkerFactory({
+        getMapRenderer: () => "maplibre",
+        getMapboxGl: () => stale,
+      } as unknown as GeoLibreAppAPI),
+      undefined,
+    );
+  });
+
+  it("falls back to the namespace only for a host that reports no renderer", () => {
+    const namespace = { Marker: class {} };
+    assert.ok(
+      streetViewMarkerFactory({ getMapboxGl: () => namespace } as unknown as GeoLibreAppAPI),
+    );
+  });
+
   it("refuses loudly rather than placing a marker that would throw later", () => {
     const create = streetViewMarkerFactory({
       getMapRenderer: () => "mapbox",

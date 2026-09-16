@@ -25,7 +25,6 @@ const PROJECT = {
 
 test.use({ actionTimeout: 30_000 });
 
-/** Stand in for Google's metadata and embed endpoints so no key is needed. */
 /**
  * The browser's own echo of a failed request. It carries no URL, so it says
  * nothing a response listener does not say better — {@link watchFailedRequests}
@@ -34,23 +33,31 @@ test.use({ actionTimeout: 30_000 });
 const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded with a status of \d+/;
 
 /**
- * Record every failed request except the ones a tokenless run is expected to
- * produce.
+ * Mapbox endpoints that carry no map content: usage telemetry and the session
+ * ledger. They reject on their own schedule — `map-sessions` answers 401 for a
+ * perfectly valid token that lacks its scope — and nothing they do reaches what
+ * this spec asserts, so their failures are never interesting.
+ */
+function isMapboxBookkeeping(url: string): boolean {
+  const { hostname, pathname } = new URL(url);
+  return hostname === "events.mapbox.com" || pathname.startsWith("/map-sessions/");
+}
+
+/**
+ * Record every failed request except the ones this run is expected to produce.
  *
- * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
- * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
- * nothing about the code under test, which is asserted through the map's own
- * state. Any other failure is a real one and reaches the assertion with its URL.
+ * Only Mapbox's bookkeeping endpoints are forgiven, and unconditionally —
+ * nothing here is suppressed on the strength of whether a token happens to be
+ * configured. That distinction costs nothing because the project points at a
+ * third-party style: no map content is fetched from Mapbox at all, so a content
+ * request that failed would be a genuine surprise and is reported. Everything
+ * else reaches the assertion with its URL.
  */
 function watchFailedRequests(page: Page, failures: string[]): void {
   page.on("response", (response) => {
     const status = response.status();
     if (status < 400) return;
-    const { hostname } = new URL(response.url());
-    const mapboxAuth =
-      (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") &&
-      (status === 401 || status === 403);
-    if (mapboxAuth) return;
+    if (isMapboxBookkeeping(response.url())) return;
     failures.push(`http ${status}: ${response.url()}`);
   });
   page.on("requestfailed", (request) => {
@@ -58,12 +65,12 @@ function watchFailedRequests(page: Page, failures: string[]): void {
     // pan and projection switch abandons the requests for the view it left.
     const errorText = request.failure()?.errorText ?? "";
     if (errorText.includes("ERR_ABORTED")) return;
-    const { hostname } = new URL(request.url());
-    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
+    if (isMapboxBookkeeping(request.url())) return;
     failures.push(`request failed: ${request.url()} (${errorText})`);
   });
 }
 
+/** Stand in for Google's metadata and embed endpoints so no key is needed. */
 async function mockStreetViewProvider(page: Page) {
   await page.route("**/maps/api/streetview/metadata**", (route) =>
     route.fulfill({
