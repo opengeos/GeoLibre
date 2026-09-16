@@ -287,15 +287,31 @@ for (const theme of ["light", "dark"] as const) {
       // (`geolibre-mapbox-West-geojson-fill`). The engine publishes that
       // mapping; without it every row read as a raw id on this renderer while
       // MapLibre showed friendly names.
-      const leftLabels = await panel
-        .locator(".swipe-layer-list")
-        .first()
-        .locator("label")
-        .allTextContents();
-      expect(leftLabels).toContain("West Polygons");
-      expect(leftLabels).toContain("East Polygons");
+      //
+      // Polled, because the rename is asynchronous by design: the control
+      // builds its rows from style layer ids, and the app rewrites them from
+      // the published names on the animation frame after the panel mutates.
+      // Reading once races that frame, and a slow runner loses.
+      // Wait for the engine to have published the names before reading the
+      // panel. `syncLayers` returns early while the style is still loading and
+      // publishes only on the pass that completes, so the panel can be built
+      // from style layer ids before any name exists for them.
+      await page.waitForFunction(
+        () =>
+          Object.keys(
+            (window as unknown as { __GEOLIBRE_LAYER_LABELS__?: Record<string, string> })
+              .__GEOLIBRE_LAYER_LABELS__ ?? {},
+          ).length > 1,
+        undefined,
+        { timeout: 30_000 },
+      );
+      const leftLabels = () =>
+        panel.locator(".swipe-layer-list").first().locator("label").allTextContents();
+      await expect
+        .poll(leftLabels, { timeout: 30_000 })
+        .toEqual(expect.arrayContaining(["West Polygons", "East Polygons"]));
       expect(
-        leftLabels.filter((text) => text.includes("geolibre-mapbox-")),
+        (await leftLabels()).filter((text) => text.includes("geolibre-mapbox-")),
         "no row may show a raw style layer id",
       ).toEqual([]);
 
