@@ -66,24 +66,30 @@ test.use({ actionTimeout: 30_000 });
 const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded with a status of \d+/;
 
 /**
- * Record every failed request except the ones a tokenless run is expected to
- * produce.
+ * The telemetry and session-tracking calls mapbox-gl makes on its own, for
+ * every map it constructs — two of them here. They carry no map content and
+ * answer 401 or 403 without a real token, which CI does not have.
+ */
+function isMapboxBookkeeping(url: string): boolean {
+  const { hostname, pathname } = new URL(url);
+  return hostname === "events.mapbox.com" || pathname.startsWith("/map-sessions/");
+}
+
+/**
+ * Record every failed request except the ones this run is expected to produce.
  *
- * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
- * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
- * nothing about the code under test, which is asserted through the two maps'
- * own state. Any other failure is a real one and reaches the assertion with its
- * URL.
+ * Only Mapbox's bookkeeping endpoints are forgiven, and only by URL — never by
+ * host alone, which would also swallow a DNS or connection failure, and never
+ * on the strength of whether a token happens to be configured. Both maps point
+ * at a third-party style, so no map content is fetched from Mapbox at all and a
+ * content request that failed would be a genuine surprise. Everything else
+ * reaches the assertion with its URL.
  */
 function watchFailedRequests(page: Page, failures: string[]): void {
   page.on("response", (response) => {
     const status = response.status();
     if (status < 400) return;
-    const { hostname } = new URL(response.url());
-    const mapboxAuth =
-      (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") &&
-      (status === 401 || status === 403);
-    if (mapboxAuth) return;
+    if (isMapboxBookkeeping(response.url())) return;
     failures.push(`http ${status}: ${response.url()}`);
   });
   page.on("requestfailed", (request) => {
@@ -91,8 +97,7 @@ function watchFailedRequests(page: Page, failures: string[]): void {
     // pan and projection switch abandons the requests for the view it left.
     const errorText = request.failure()?.errorText ?? "";
     if (errorText.includes("ERR_ABORTED")) return;
-    const { hostname } = new URL(request.url());
-    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
+    if (isMapboxBookkeeping(request.url())) return;
     failures.push(`request failed: ${request.url()} (${errorText})`);
   });
 }

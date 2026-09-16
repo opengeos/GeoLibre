@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  cancelPendingStyleLoadRebuild,
   getSwipeControlOptions,
   maplibreSwipePlugin as plugin,
+  rebuildOnStyleLoad,
   swipeComparisonMapFactory,
 } from "../packages/plugins/src/plugins/maplibre-swipe";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -141,5 +143,50 @@ describe("swipe control options per engine", () => {
     ] as const) {
       assert.deepEqual(mapbox[key], maplibre[key], `${key} must not differ by engine`);
     }
+  });
+});
+
+describe("rebuildOnStyleLoad", () => {
+  /** A style map that only records who is listening for `style.load`. */
+  function styleMap() {
+    const handlers = new Set<() => void>();
+    return {
+      handlers,
+      map: {
+        on: (event: string, handler: () => void) => {
+          if (event === "style.load") handlers.add(handler);
+        },
+        off: (event: string, handler: () => void) => {
+          if (event === "style.load") handlers.delete(handler);
+        },
+      },
+    };
+  }
+
+  it("keeps at most one rebuild waiting, however many basemaps are clicked", () => {
+    // Two basemap changes before the first style lands used to leave two
+    // handlers on one `style.load`. Both fire in the same tick, so the first
+    // rebuild's control is torn down and replaced by the second before it has
+    // drawn anything.
+    const { handlers, map } = styleMap();
+    const app = host({ getMap: () => map as never });
+    rebuildOnStyleLoad(app);
+    rebuildOnStyleLoad(app);
+    rebuildOnStyleLoad(app);
+    assert.equal(handlers.size, 1);
+    // Firing it leaves nothing behind, so the next change starts clean.
+    for (const handler of [...handlers]) handler();
+    assert.equal(handlers.size, 0);
+    cancelPendingStyleLoadRebuild();
+  });
+
+  it("drops a rebuild that is still waiting when the plugin goes away", () => {
+    // Otherwise the handler outlives the activation it belongs to and rebuilds
+    // a control for a plugin that is no longer active.
+    const { handlers, map } = styleMap();
+    rebuildOnStyleLoad(host({ getMap: () => map as never }));
+    assert.equal(handlers.size, 1);
+    cancelPendingStyleLoadRebuild();
+    assert.equal(handlers.size, 0);
   });
 });

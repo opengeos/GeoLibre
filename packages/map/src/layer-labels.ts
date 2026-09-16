@@ -39,6 +39,7 @@ const SUFFIX_LABELS: Record<string, string> = {
   clusters: "Clusters",
   markers: "Markers",
   text: "Text",
+  raster: "Raster",
 };
 
 /**
@@ -58,8 +59,10 @@ export function styleLayerLabel(
   if (siblings <= 1 || !suffix) return layer.name;
   const qualifier = SUFFIX_LABELS[suffix];
   // An unmapped suffix is still better shown than dropped: a vector-tile source
-  // layer's own name lands here, and it is what distinguishes the rows.
-  return `${layer.name} ${qualifier ?? suffix}`;
+  // layer's own name lands here, and it is what distinguishes the rows. Title
+  // case it so an id-derived word does not read as a stray lowercase token next
+  // to the mapped ones.
+  return `${layer.name} ${qualifier ?? suffix.charAt(0).toUpperCase() + suffix.slice(1)}`;
 }
 
 /**

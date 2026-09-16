@@ -244,9 +244,14 @@ export class MapboxEngine implements MapEngine {
    * map (the Layer Swipe comparison pane) therefore has to pass the token
    * along, or that map refuses to render with "An API access token is
    * required to use Mapbox GL".
+   *
+   * `null` rather than the empty string when the app has no token configured,
+   * so a caller that forwards it into another map's options omits the key
+   * instead of handing mapbox-gl a blank token — the state a plugin has to
+   * distinguish is "there is no token", not "the token is zero characters".
    */
-  getMapboxAccessToken(): string {
-    return this.accessToken;
+  getMapboxAccessToken(): string | null {
+    return this.accessToken || null;
   }
   private onError = (event: { error: Error; sourceId?: string }) => {
     this.errors.set(event.sourceId ?? "map", redactMapboxError(event.error.message));
@@ -597,10 +602,13 @@ export class MapboxEngine implements MapEngine {
         : [];
       const own = [...new Set([...planned, ...native])].filter((id) => present.has(id));
       for (const id of own) {
-        // `geolibre-mapbox-<layerId>-<sourceLayer>-<kind>`: the kind is the
-        // last segment. A plugin's own id follows no scheme, so it takes the
-        // layer name unqualified unless the plugin drew several.
-        const suffix = id.startsWith(prefix) ? id.slice(prefix.length).split("-").pop() : undefined;
+        // The kind is the last segment either way —
+        // `geolibre-mapbox-<layerId>-<sourceLayer>-<kind>` for a layer this
+        // engine compiled, and whatever a plugin named its own rows for one it
+        // only adopted. Taking it from the id in both cases is what lets a
+        // plugin that registered several native layers get a distinct name per
+        // row, as MapLibre's `nativeLayerSuffix` does for the same case.
+        const suffix = (id.startsWith(prefix) ? id.slice(prefix.length) : id).split("-").pop();
         entries.push([id, styleLayerLabel(layer, suffix, own.length)]);
       }
     }

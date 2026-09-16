@@ -239,6 +239,19 @@ describe("MapboxEngine construction", () => {
     engine.removeControl(control);
     assert.ok(!map.controls.includes(adapter));
   });
+  it("hands a second map the token, and nothing at all when there is none", () => {
+    // The Layer Swipe comparison pane builds its own mapbox-gl map and has to
+    // pass the token along, because GeoLibre sets it per map rather than on the
+    // global mapbox-gl reads by default. A blank one is not a token: forwarding
+    // `""` would put an empty `accessToken` in that map's options instead of
+    // leaving the key out, so the accessor reports absence as `null`.
+    const map = makeMap();
+    assert.equal(
+      new MapboxEngine(map as unknown as mapboxgl.Map, gl, "pk.test").getMapboxAccessToken(),
+      "pk.test",
+    );
+    assert.equal(makeEngine().engine.getMapboxAccessToken(), null);
+  });
   it("mounts MapLibre's default controls, in MapLibre's order, and takes the style's layers as the basemap", () => {
     const { engine, map } = makeEngine();
     // Fullscreen, the compass under it, then the globe toggle (MapController
@@ -480,6 +493,32 @@ describe("MapboxEngine.syncLayers", () => {
       ]);
       assert.equal(labels()["geolibre-mapbox-a-raster"], "A");
       assert.equal(labels()["geolibre-mapbox-a-b-geojson-fill"], "A B Polygons");
+    });
+  });
+
+  it("distinguishes the rows of a layer whose ids the engine did not choose", () => {
+    // ArcGIS (and every plugin that hands the engine `nativeLayerIds`) names
+    // its own style layers, so they carry no `geolibre-mapbox-<id>-` prefix.
+    // The kind is still the id's last segment, and taking it from there is
+    // what keeps the two rows apart — without it both are named "Parcels" and
+    // the swipe panel offers the user the same row twice.
+    withPublishedLabels((labels) => {
+      const layer = geojsonLayer({ id: "parcels", name: "Parcels" });
+      layer.type = "arcgis";
+      delete layer.geojson;
+      layer.source = {
+        arcgisSources: {
+          parcels: { type: "vector", tiles: ["https://tiles.test/{z}/{x}/{y}.pbf"] },
+        },
+        arcgisLayers: [
+          { id: "parcels-fill", type: "fill", source: "parcels", "source-layer": "parcels" },
+          { id: "parcels-line", type: "line", source: "parcels", "source-layer": "parcels" },
+        ],
+      };
+      layer.metadata = { nativeLayerIds: ["parcels-fill", "parcels-line"] };
+      engine.syncLayers([layer]);
+      assert.equal(labels()["parcels-fill"], "Parcels Polygons");
+      assert.equal(labels()["parcels-line"], "Parcels Lines");
     });
   });
 

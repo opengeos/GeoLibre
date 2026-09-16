@@ -361,6 +361,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    cancelPendingStyleLoadRebuild();
     stopSwipeIdResolution();
     unsubscribeCogRasterChanges?.();
     unsubscribeCogRasterChanges = null;
@@ -560,17 +561,48 @@ function rebuildSwipeControl(app: GeoLibreAppAPI): void {
   startSwipeIdResolution(app);
 }
 
-/** Rebuild once the engine has the new style, so its basemap ids are current. */
-function rebuildOnStyleLoad(app: GeoLibreAppAPI): void {
+/**
+ * The `style.load` rebuild waiting to happen, so a second basemap change does
+ * not stack another one on top of it and so `deactivate` can drop it.
+ */
+let pendingStyleLoadRebuild: (() => void) | null = null;
+
+/**
+ * Drop a rebuild that has not fired yet. Safe to call when none is pending.
+ *
+ * Exported for the test that pairs it with {@link rebuildOnStyleLoad}.
+ */
+export function cancelPendingStyleLoadRebuild(): void {
+  pendingStyleLoadRebuild?.();
+  pendingStyleLoadRebuild = null;
+}
+
+/**
+ * Rebuild once the engine has the new style, so its basemap ids are current.
+ *
+ * At most one of these is ever outstanding. Clicking through two basemaps
+ * before the first style lands would otherwise leave two handlers on one
+ * `style.load`, and both fire in the same tick: the first rebuild's control is
+ * torn down and replaced by the second before it has drawn anything. And a
+ * handler still waiting when the plugin is deactivated would rebuild a control
+ * for a plugin that is no longer active, so `deactivate` cancels it too.
+ *
+ * Exported for tests; the plugin itself calls this from its basemap
+ * subscription.
+ */
+export function rebuildOnStyleLoad(app: GeoLibreAppAPI): void {
+  cancelPendingStyleLoadRebuild();
   const map = getStyleMap(app);
   if (!map) {
     rebuildSwipeControl(app);
     return;
   }
   const handler = () => {
+    pendingStyleLoadRebuild = null;
     map.off("style.load", handler);
     rebuildSwipeControl(app);
   };
+  pendingStyleLoadRebuild = () => map.off("style.load", handler);
   map.on("style.load", handler);
 }
 

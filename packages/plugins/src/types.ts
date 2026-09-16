@@ -652,8 +652,9 @@ export interface GeoLibreAppAPI {
    */
   getMapboxGl?: () => ReturnType<import("@geolibre/map").MapboxEngine["getMapboxGl"]> | null;
   /**
-   * The Mapbox access token the primary map was built with, or `null` off the
-   * Mapbox renderer. Needed only by a plugin that constructs a *second* Mapbox
+   * The Mapbox access token the primary map was built with — `null` off the
+   * Mapbox renderer, and also on it when the app has no token configured.
+   * Needed only by a plugin that constructs a *second* Mapbox
    * map: mapbox-gl reads its token from the global `mapboxgl.accessToken`
    * unless the constructor is handed one, and GeoLibre passes it per map rather
    * than setting that global, so a second map built without it refuses to
