@@ -338,7 +338,11 @@ export function ViewMenu({
               <DropdownMenuRadioGroup
                 value={primaryRenderer}
                 onValueChange={(value: string) =>
-                  setPrimaryRenderer(value === "cesium" || value === "mapbox" ? value : "maplibre")
+                  setPrimaryRenderer(
+                    value === "cesium" || value === "mapbox" || value === "arcgis"
+                      ? value
+                      : "maplibre",
+                  )
                 }
               >
                 <DropdownMenuRadioItem value="maplibre">
@@ -346,6 +350,9 @@ export function ViewMenu({
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="mapbox">
                   <span className="whitespace-nowrap">{t("toolbar.item.rendererMapbox")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="arcgis">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererArcgis")}</span>
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="cesium">
                   <span className="whitespace-nowrap">{t("toolbar.item.rendererCesium")}</span>

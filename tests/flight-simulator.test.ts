@@ -1080,3 +1080,300 @@ describe("flight simulator engine", () => {
     });
   });
 });
+
+/** What the Mapbox adapter records on the stub map, for the assertions below. */
+interface MapboxStubState {
+  maxPitch: number;
+  pitch: number;
+  terrain: { source: string } | null;
+  cameras: Array<{
+    lngLat: [number, number];
+    altitude: number;
+    pitch: number;
+    bearing: number;
+    eventData?: Record<string, unknown>;
+  }>;
+  jumps: Array<Record<string, unknown>>;
+}
+
+/**
+ * The slice of the mapbox-gl API the flight engine touches — the free camera
+ * rather than MapLibre's `calculateCameraOptionsFromCameraLngLatAltRotation`.
+ */
+function stubMapboxMap() {
+  const handlers: Record<string, StubHandler> = {};
+  for (const key of [
+    "dragPan",
+    "scrollZoom",
+    "boxZoom",
+    "dragRotate",
+    "keyboard",
+    "doubleClickZoom",
+    "touchZoomRotate",
+    "touchPitch",
+  ]) {
+    handlers[key] = stubHandler();
+  }
+  const state: MapboxStubState = {
+    maxPitch: 85,
+    pitch: 30,
+    terrain: null,
+    cameras: [],
+    jumps: [],
+  };
+  // One FreeCameraOptions object, reused as mapbox-gl's own getFreeCameraOptions
+  // does: the adapter overwrites `position` and calls `setPitchBearing` on it.
+  const camera = {
+    position: null as { lngLat: [number, number]; altitude: number } | null,
+    pitch: 0,
+    bearing: 0,
+    setPitchBearing(pitch: number, bearing: number) {
+      camera.pitch = pitch;
+      camera.bearing = bearing;
+    },
+  };
+  return {
+    ...handlers,
+    state,
+    getCenter: () => ({ lng: -121.76, lat: 46.85 }),
+    getZoom: () => 14,
+    getBearing: () => 0,
+    getPitch: () => state.pitch,
+    getCanvas: () => ({ clientHeight: 648 }),
+    getMaxPitch: () => state.maxPitch,
+    setMaxPitch: (value: number) => {
+      state.maxPitch = value;
+    },
+    getTerrain: () => state.terrain,
+    // A flat 1000 m plateau, as the MapLibre stub has.
+    queryTerrainElevation: () => 1000,
+    getFreeCameraOptions: () => camera,
+    setFreeCameraOptions: (options: typeof camera, eventData?: Record<string, unknown>) => {
+      state.cameras.push({
+        lngLat: options.position!.lngLat,
+        altitude: options.position!.altitude,
+        pitch: options.pitch,
+        bearing: options.bearing,
+        eventData,
+      });
+    },
+    jumpTo: (options: Record<string, unknown>) => {
+      state.jumps.push(options);
+    },
+  };
+}
+
+/** The one mapbox-gl class the adapter constructs. */
+const stubMapboxGl = {
+  MercatorCoordinate: {
+    fromLngLat: (lngLat: [number, number], altitude: number) => ({ lngLat, altitude }),
+  },
+};
+
+/** An app whose only mounted 2D engine is Mapbox, as `getMap()` answering null says. */
+function mapboxApp(
+  map: ReturnType<typeof stubMapboxMap>,
+  extra: Partial<GeoLibreAppAPI> = {},
+): GeoLibreAppAPI {
+  return {
+    getMap: () => null,
+    getMapboxMap: () => map,
+    getMapboxGl: () => stubMapboxGl,
+    ...extra,
+  } as unknown as GeoLibreAppAPI;
+}
+
+describe("flight simulator on the Mapbox renderer", () => {
+  it("places the camera through the free camera API, tagged so moveend can skip it", () => {
+    withStubWindow(({ pump }) => {
+      resetStore();
+      const map = stubMapboxMap();
+      openFlightSimulatorPanel(mapboxApp(map));
+      assert.equal(startFlying(), true);
+      for (let i = 0; i < 3; i += 1) pump();
+
+      assert.ok(map.state.cameras.length >= 2, "the engine should have driven the camera");
+      for (const camera of map.state.cameras) {
+        assert.equal(typeof camera.eventData?.[FLIGHT_CAMERA_TOKEN], "number");
+        // The free camera carries the altitude on the MercatorCoordinate, so
+        // the aircraft's own height must reach it rather than a derived zoom.
+        assert.ok(camera.altitude > 1000, "the camera must sit above the 1000 m plateau");
+        assert.ok(
+          camera.pitch <= MAX_CAMERA_PITCH,
+          `camera pitch ${camera.pitch} exceeded the cap`,
+        );
+        assert.ok(camera.pitch >= MIN_CAMERA_PITCH, `camera pitch ${camera.pitch} below the floor`);
+      }
+      // No jumpTo while flying: that path is MapLibre's.
+      assert.deepEqual(map.state.jumps, [], "the free camera must not go through jumpTo");
+
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("steers the camera bearing with the aircraft heading", () => {
+    withStubWindow(({ pump, hold, release }) => {
+      resetStore();
+      const map = stubMapboxMap();
+      openFlightSimulatorPanel(mapboxApp(map));
+      startFlying();
+      pump();
+
+      hold("ArrowRight");
+      for (let i = 0; i < 20; i += 1) pump();
+      release("ArrowRight");
+
+      const hud = getFlightHudSnapshot();
+      assert.ok(hud.rollDeg > 0, "Arrow Right should bank the aircraft right");
+      const bearing = map.state.cameras.at(-1)!.bearing;
+      assert.ok(bearing > 0 && bearing < 180, `a right bank should turn right, got ${bearing}`);
+      assert.equal(
+        bearing,
+        hud.headingDeg,
+        "the camera bearing is the aircraft heading — mapbox-gl has no roll axis",
+      );
+
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("suspends interaction and widens the pitch ceiling, restoring both on exit", () => {
+    withStubWindow(({ pump }) => {
+      resetStore();
+      const map = stubMapboxMap();
+      map.state.maxPitch = 60;
+      openFlightSimulatorPanel(mapboxApp(map));
+      startFlying();
+      pump();
+
+      assert.equal(map.dragPan.enabled, false, "dragging must not fight the flight model");
+      assert.equal(map.keyboard.enabled, false, "MapLibre-style key panning must be suspended");
+      assert.equal(map.state.maxPitch, MAX_CAMERA_PITCH, "the pitch ceiling must be widened");
+
+      stopFlying();
+      assert.equal(map.dragPan.enabled, true, "interaction must be handed back");
+      assert.equal(map.keyboard.enabled, true, "interaction must be handed back");
+      assert.equal(map.state.maxPitch, 60, "the pitch ceiling must be restored");
+      assert.equal(map.state.jumps.at(-1)?.pitch, 30, "the pitch the user started from");
+      resetStore();
+    });
+  });
+
+  it("enables 3D terrain for flight and restores the previous terrain state", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMapboxMap();
+      let terrainEnabled = false;
+      openFlightSimulatorPanel(
+        mapboxApp(map, {
+          setTerrainEnabled: (enabled: boolean) => {
+            terrainEnabled = enabled;
+            return true;
+          },
+          isTerrainEnabled: () => terrainEnabled,
+        }),
+      );
+
+      startFlying();
+      assert.equal(terrainEnabled, true, "takeoff must enable 3D terrain");
+      stopFlying();
+      assert.equal(terrainEnabled, false, "landing must restore terrain to off");
+      resetStore();
+    });
+  });
+
+  it("preserves terrain that was already on before flight", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMapboxMap();
+      const terrainChanges: boolean[] = [];
+      openFlightSimulatorPanel(
+        mapboxApp(map, {
+          setTerrainEnabled: (enabled: boolean) => {
+            terrainChanges.push(enabled);
+            return true;
+          },
+          isTerrainEnabled: () => true,
+        }),
+      );
+
+      startFlying();
+      stopFlying();
+      assert.deepEqual(terrainChanges, [], "pre-existing terrain must not be toggled");
+      resetStore();
+    });
+  });
+
+  it("asks the host whether terrain is on, not the Mapbox Standard style", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMapboxMap();
+      // Mapbox Standard imports its own terrain, so the map reports terrain
+      // while GeoLibre's DEM is off. Reading the map would skip the enable.
+      map.state.terrain = { source: "mapbox-standard-import" };
+      const terrainChanges: boolean[] = [];
+      openFlightSimulatorPanel(
+        mapboxApp(map, {
+          setTerrainEnabled: (enabled: boolean) => {
+            terrainChanges.push(enabled);
+            return true;
+          },
+          isTerrainEnabled: () => false,
+        }),
+      );
+
+      startFlying();
+      stopFlying();
+      assert.deepEqual(terrainChanges, [true, false], "takeoff must turn GeoLibre's DEM on");
+      resetStore();
+    });
+  });
+
+  it("rebinds across a renderer swap rather than flying a map that is gone", () => {
+    withStubWindow(({ pump }) => {
+      resetStore();
+      const mapbox = stubMapboxMap();
+      const app = mapboxApp(mapbox);
+      openFlightSimulatorPanel(app);
+      startFlying();
+      pump();
+      assert.ok(mapbox.state.cameras.length > 0);
+
+      // Same map: the flight continues.
+      reattachFlightSimulator(app);
+      assert.equal(isFlying(), true, "an unchanged Mapbox map must not interrupt the flight");
+
+      // Swapped to MapLibre: the engine must rebind to the new map, and the
+      // next flight must drive it rather than the abandoned Mapbox one.
+      const maplibre = stubMap();
+      reattachFlightSimulator({ getMap: () => maplibre } as unknown as GeoLibreAppAPI);
+      assert.equal(isFlying(), false, "a renderer swap must end the flight");
+      assert.equal(startFlying(), true);
+      pump();
+      assert.ok(
+        maplibre.state.jumps.some((jump) => jump.eventData),
+        "the rebound engine must drive the MapLibre map",
+      );
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("stays idle when only half the Mapbox engine is mounted", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMapboxMap();
+      // The namespace is what builds the MercatorCoordinate; without it the
+      // adapter could not place the camera at all.
+      openFlightSimulatorPanel({
+        getMap: () => null,
+        getMapboxMap: () => map,
+        getMapboxGl: () => null,
+      } as unknown as GeoLibreAppAPI);
+      assert.equal(startFlying(), false, "a half-mounted engine must not take the map over");
+      resetStore();
+    });
+  });
+});

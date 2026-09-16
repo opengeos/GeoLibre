@@ -1424,13 +1424,15 @@ export interface MapGridLayout {
  * `"maplibre"` is the 2D MapLibre GL map that owns the app's plugin, styling,
  * and deck.gl integrations. `"cesium"` is the 3D globe (see `CesiumCanvas`),
  * which renders the same shared store state — camera, basemap, layers, group
- * effects — through CesiumJS.
+ * effects — through CesiumJS. `"mapbox"` is Mapbox GL JS and `"arcgis"` the
+ * ArcGIS Maps SDK for JavaScript, loaded from Esri's CDN at runtime (see
+ * `ArcgisCanvas`); both draw the same store state through their own engines.
  *
  * Used both for secondary panes ({@link SecondaryMapView.viewKind}) and for the
  * primary workspace ({@link GeoLibreProject.primaryRenderer}), so the two never
  * drift apart.
  */
-export type MapRendererKind = "maplibre" | "cesium" | "mapbox";
+export type MapRendererKind = "maplibre" | "cesium" | "mapbox" | "arcgis";
 
 /**
  * The engine that draws the primary map area when a project says nothing. The
@@ -1613,6 +1615,14 @@ export interface MapPreferences {
   terrainEnabled: boolean;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
+  /**
+   * ArcGIS-only basemap: an Esri basemap style id (`arcgis/streets`,
+   * `arcgis/imagery`, `osm/standard`, ...). New projects use Streets. Absent
+   * follows the shared basemap, translated to tiles the SDK can draw; the id
+   * is also set aside when no ArcGIS API key is configured, since Esri's
+   * basemap styles service requires one.
+   */
+  arcgisBasemap?: string;
   /** Cesium imagery override; absent follows the shared project basemap. */
   cesiumBasemap?: import("./cesium-imagery").CesiumBasemapId;
   /**
@@ -1694,6 +1704,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     terrainEnabled: false,
     coordinateFormat: "dd",
     mapboxStyleUrl: "mapbox://styles/mapbox/standard",
+    arcgisBasemap: "arcgis/streets",
   },
   environmentVariables: [],
   geocoding: {

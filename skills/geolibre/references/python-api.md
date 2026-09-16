@@ -267,8 +267,10 @@ m.set_renderer("cesium", pane_id=pane_id)
 assert m.get_renderer() == "cesium"
 ```
 
-Renderer choices are `"maplibre"`, `"cesium"` and `"mapbox"` (Mapbox needs a
-Mapbox access token in the app's Settings; see `docs/mapbox-renderer.md`). Omitting `pane_id` targets the
+Renderer choices are `"maplibre"`, `"cesium"`, `"mapbox"` and `"arcgis"` (Mapbox needs a
+Mapbox access token in the app's Settings; see `docs/mapbox-renderer.md`. ArcGIS
+loads the ArcGIS Maps SDK for JavaScript from Esri's CDN and takes an optional
+ArcGIS API key for Esri basemap styles; see `docs/arcgis-renderer.md`). Omitting `pane_id` targets the
 primary map. Grid dimensions are 1–4; `view_kinds` contains one renderer per
 pane, primary first. Existing pane IDs, cameras, and visibility overrides survive
 layout resizing. Save the project normally to preserve `primaryRenderer` and

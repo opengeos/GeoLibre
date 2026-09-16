@@ -932,11 +932,12 @@ export function normalizeMapLayout(value: unknown): MapGridLayout | null {
  * Returns null for the default 2D map — absent, unknown, or an explicit
  * `"maplibre"` — because the field is only written when it is not the default,
  * so a MapLibre project serializes byte-identically to before this existed.
- * The return type is narrowed to `"cesium" | "mapbox" | null` rather than the full
- * {@link MapRendererKind} for that reason: `"maplibre"` is never a result.
+ * The return type is narrowed to `"cesium" | "mapbox" | "arcgis" | null` rather
+ * than the full {@link MapRendererKind} for that reason: `"maplibre"` is never a
+ * result.
  */
-export function normalizePrimaryRenderer(value: unknown): "cesium" | "mapbox" | null {
-  return value === "cesium" || value === "mapbox" ? value : null;
+export function normalizePrimaryRenderer(value: unknown): "cesium" | "mapbox" | "arcgis" | null {
+  return value === "cesium" || value === "mapbox" || value === "arcgis" ? value : null;
 }
 
 /**
@@ -960,7 +961,8 @@ export function normalizeSecondaryMapViews(value: unknown): SecondaryMapView[] |
     const viewKind =
       candidate.viewKind === "cesium" ||
       candidate.viewKind === "maplibre" ||
-      candidate.viewKind === "mapbox"
+      candidate.viewKind === "mapbox" ||
+      candidate.viewKind === "arcgis"
         ? candidate.viewKind
         : undefined;
     views.push({
@@ -1228,6 +1230,8 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       // new-project Streets default after a user has selected a shared style.
       mapboxStyleUrl:
         normalizeString((map as Partial<ProjectPreferences["map"]>).mapboxStyleUrl) || undefined,
+      arcgisBasemap:
+        normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
       cesiumBasemap: normalizeCesiumBasemap(
         (map as Partial<ProjectPreferences["map"]>).cesiumBasemap,
       ),

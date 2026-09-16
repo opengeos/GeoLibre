@@ -364,7 +364,7 @@ class Map(anywidget.AnyWidget):
             center: Initial ``[lng, lat]`` map center.
             zoom: Initial zoom level.
             basemap: A basemap name or MapLibre style URL for the background.
-            renderer: ``"maplibre"`` (default), ``"cesium"``, or ``"mapbox"``.
+            renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or ``"arcgis"``.
             height: CSS height of the widget (e.g. ``"800px"``).
             layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
                 ``"maponly"`` (map without chrome).
@@ -2828,7 +2828,7 @@ class Map(anywidget.AnyWidget):
     set_center_zoom = set_center
 
     def set_renderer(self, renderer: str, *, pane_id: str | None = None) -> None:
-        """Select ``maplibre``, ``cesium``, or ``mapbox`` for the primary map or a named pane."""
+        """Select maplibre, cesium, mapbox or arcgis for the primary map or a named pane."""
         self._update_project(lambda p: _authoring.set_renderer(p, renderer, pane_id=pane_id))
 
     def get_renderer(self, *, pane_id: str | None = None) -> str:
