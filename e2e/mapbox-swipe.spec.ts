@@ -405,6 +405,25 @@ async function swipeControlToken(page: Page): Promise<string | null> {
   });
 }
 
+/**
+ * The layer ids the control currently has on each side.
+ *
+ * Read off the control rather than the panel's checkboxes: the panel is
+ * collapsed while the basemap is being changed, and this is the state the
+ * rebuild actually carries from one control to the next.
+ */
+async function swipeSides(page: Page): Promise<{ left: string[]; right: string[] }> {
+  return page.evaluate(() => {
+    const engine = (window as any).swipeTestRef.current;
+    let control: any = null;
+    engine.pluginControls?.forEach?.((_adapter: unknown, candidate: any) => {
+      if (typeof candidate?.getComparisonMap === "function") control = candidate;
+    });
+    const state = control?.getState?.();
+    return { left: state?.leftLayers ?? [], right: state?.rightLayers ?? [] };
+  });
+}
+
 // Changing the basemap on this renderer used to leave the previous comparison
 // pane on the map (#2430). The control is rebuilt on the new style's
 // `style.load`, and `maplibre-gl-swipe` read `map.getStyle()` during `onAdd`
@@ -425,6 +444,28 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
   await item.hover();
   await page.getByRole("menuitem", { name: "Activate", exact: true }).click();
   await expect(page.locator(".swipe-comparison-map .mapboxgl-canvas")).toBeAttached();
+
+  // Put East on the right side only, so each rebuild has a non-default
+  // assignment to carry over. Counts alone would pass on a control that came
+  // back with everything reset. The panel is built from the engine's published
+  // layer names, which land after the first completed sync.
+  const panel = page.locator(".swipe-control-panel");
+  await page.waitForFunction(
+    () =>
+      Object.keys(
+        (window as unknown as { __GEOLIBRE_LAYER_LABELS__?: Record<string, string> })
+          .__GEOLIBRE_LAYER_LABELS__ ?? {},
+      ).length > 1,
+    undefined,
+    { timeout: 30_000 },
+  );
+  await setSide(panel, "East", "left", false);
+  await setSide(panel, "East", "right", true);
+  await expect.poll(() => mainMapVisibility(page, "East")).toEqual(["none"]);
+  const sides = await swipeSides(page);
+  expect(sides.right, "East must be on the right side before the first change").toContain(
+    "geolibre-mapbox-East-geojson-fill",
+  );
 
   // Collapse the swipe panel: it and the Basemaps panel share the top-left
   // corner, and the picker has to be clickable.
@@ -451,6 +492,12 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     await expect(page.locator(".swipe-slider")).toHaveCount(1);
     // The throw left the control unmounted, so its button went missing too.
     await expect(page.locator(".swipe-control")).toHaveCount(1);
+
+    // And the rebuilt control carries the old one's sides. Counts alone would
+    // pass on a control that came back with everything reset, which is the
+    // other way this could go wrong: the rebuild reads `getState()` off the
+    // outgoing control and hands it to the new one's options.
+    expect(await swipeSides(page), `sides must survive the change to ${name}`).toEqual(sides);
   }
 
   // Every rebuild constructs and removes a comparison map, and mapbox-gl's
