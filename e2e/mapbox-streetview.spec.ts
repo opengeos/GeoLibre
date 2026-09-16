@@ -25,20 +25,41 @@ const PROJECT = {
 
 test.use({ actionTimeout: 30_000 });
 
+/** Stand in for Google's metadata and embed endpoints so no key is needed. */
 /**
- * Whether a console message is the app's own failure rather than a network one.
- *
- * This spec runs against `MAPBOX_TOKEN` when the environment has one and a
- * placeholder otherwise, so on CI every request to `api.mapbox.com` comes back
- * 401/403 and the browser logs a bare "Failed to load resource" for each. That
- * says nothing about the marker path under test, which is asserted through the
- * DOM the control produces.
+ * The browser's own echo of a failed request. It carries no URL, so it says
+ * nothing a response listener does not say better — {@link watchFailedRequests}
+ * records those with their URL and status, and the assertions read that.
  */
-function isAppError(message: string): boolean {
-  return !/Failed to load resource: the server responded with a status of \d+/.test(message);
+const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded with a status of \d+/;
+
+/**
+ * Record every failed request except the ones a tokenless run is expected to
+ * produce.
+ *
+ * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
+ * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
+ * nothing about the code under test, which is asserted through the map's own
+ * state. Any other failure is a real one and reaches the assertion with its URL.
+ */
+function watchFailedRequests(page: Page, failures: string[]): void {
+  page.on("response", (response) => {
+    const status = response.status();
+    if (status < 400) return;
+    const { hostname } = new URL(response.url());
+    const mapboxAuth =
+      (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") &&
+      (status === 401 || status === 403);
+    if (mapboxAuth) return;
+    failures.push(`http ${status}: ${response.url()}`);
+  });
+  page.on("requestfailed", (request) => {
+    const { hostname } = new URL(request.url());
+    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
+    failures.push(`request failed: ${request.url()} (${request.failure()?.errorText})`);
+  });
 }
 
-/** Stand in for Google's metadata and embed endpoints so no key is needed. */
 async function mockStreetViewProvider(page: Page) {
   await page.route("**/maps/api/streetview/metadata**", (route) =>
     route.fulfill({
@@ -85,14 +106,22 @@ for (const theme of ["light", "dark"] as const) {
   }, info) => {
     test.setTimeout(240_000);
     const errors: string[] = [];
+    const failures: string[] = [];
     page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
     page.on("console", (message) => {
-      if (message.type() === "error") errors.push(`error: ${message.text()}`);
+      if (message.type() !== "error") return;
+      // Skip the bare resource echo; watchFailedRequests has the URL.
+      if (RESOURCE_FAILURE_ECHO.test(message.text())) return;
+      errors.push(`error: ${message.text()}`);
     });
+    watchFailedRequests(page, failures);
     try {
       await run();
     } finally {
-      await info.attach("console", { body: errors.join("\n"), contentType: "text/plain" });
+      await info.attach("console", {
+        body: [...errors, ...failures].join("\n"),
+        contentType: "text/plain",
+      });
     }
 
     async function run() {
@@ -147,7 +176,8 @@ for (const theme of ["light", "dark"] as const) {
         .not.toBe(before);
 
       await page.screenshot({ path: info.outputPath(`mapbox-streetview-${theme}.png`) });
-      expect(errors.filter(isAppError), "no app errors placing the marker").toEqual([]);
+      expect(errors, "no app errors placing the marker").toEqual([]);
+      expect(failures, "nothing but the tokenless Mapbox API may fail to load").toEqual([]);
     }
   });
 }

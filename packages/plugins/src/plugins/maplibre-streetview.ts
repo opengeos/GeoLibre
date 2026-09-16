@@ -84,15 +84,32 @@ function credentialsSignature(): string {
  * `maplibre-gl-streetview`'s `createMarker` option; `undefined` leaves the
  * upstream default, which is MapLibre's.
  *
- * @param app - The plugin host API, read for the mapbox-gl namespace.
+ * Two deliberate choices about *when* things are read. The engine is decided
+ * from the renderer, which the store flips synchronously, rather than from the
+ * namespace, which only appears once `MapboxEngine` has mounted: a plugin
+ * activated inside that window would otherwise be handed `undefined`, keep
+ * MapLibre's `Marker` for the control's whole lifetime, and throw on the first
+ * map click — the exact bug this is here to prevent. And the namespace itself is
+ * read when a marker is built rather than now, which is inside the control's
+ * `onAdd`, by which point the map it is being added to necessarily exists.
+ *
+ * @param app - The plugin host API, read for the renderer and the namespace.
  * @returns A marker factory on a Mapbox host, else `undefined`.
  */
 export function streetViewMarkerFactory(
-  app: Pick<GeoLibreAppAPI, "getMapboxGl"> | null,
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null,
 ): CreateStreetViewMarker | undefined {
-  const mapboxgl = app?.getMapboxGl?.();
-  if (!mapboxgl) return undefined;
-  return (options) => new mapboxgl.Marker(options);
+  const mapbox = app?.getMapRenderer?.() === "mapbox" || !!app?.getMapboxGl?.();
+  if (!mapbox) return undefined;
+  return (options) => {
+    const mapboxgl = app?.getMapboxGl?.();
+    if (!mapboxgl) {
+      // Unreachable in practice (see above); loud rather than silently placing
+      // a MapLibre marker that would throw later with a confusing message.
+      throw new Error("Street View needs the mapbox-gl namespace to place its marker.");
+    }
+    return new mapboxgl.Marker(options);
+  };
 }
 
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
