@@ -1859,7 +1859,18 @@ export class ArcgisEngine implements MapEngine {
  */
 export function viewPlacementState(view: ArcgisView): unknown[] {
   return view.type === "3d"
-    ? [view.extent, view.camera, view.width, view.height]
+    ? [
+        view.extent,
+        // Scalar fields rather than the Camera object, so a camera the SDK
+        // mutates in place is tracked as surely as a replaced one.
+        view.camera?.heading,
+        view.camera?.tilt,
+        view.camera?.position.x,
+        view.camera?.position.y,
+        view.camera?.position.z,
+        view.width,
+        view.height,
+      ]
     : [view.extent, view.rotation, view.width, view.height];
 }
 
