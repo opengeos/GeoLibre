@@ -156,9 +156,19 @@ describe("Mapbox native layer compilation", () => {
       geometries: [{ type: "GeometryCollection", geometries: [polygon] }],
     });
     assert.deepEqual(types(nested), ["fill", "line"]);
-    // With nothing to inspect (an empty editable layer, features without a
-    // geometry) every kind stays, so the first drawn feature has a layer.
+    // An empty editable layer keeps every kind, so the first drawn feature has
+    // a layer to land on.
     assert.deepEqual(types(geojsonLayer({ id: "empty" })), ["fill", "line", "circle"]);
+    // A table without coordinates never draws, so it gets no geometry layers,
+    // as on MapLibre.
+    const table = geojsonLayer({
+      id: "table",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { name: "a" }, geometry: null }],
+      },
+    });
+    assert.deepEqual(types(table), []);
   });
   it("labels with the basemap's font when the engine supplies one", () => {
     const layer = geojsonLayer({ id: "fonts" });

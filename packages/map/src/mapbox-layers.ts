@@ -269,14 +269,14 @@ export function compileMapboxLayer(
   // the layers its data can draw are added, as MapLibre's layer-sync does: a
   // polygon-only layer gets a fill and an outline, not a circle layer that
   // matches nothing but still shows up in every control that lists style layers
-  // (the Layer Swipe panel's "Points" row, #2431). A collection with no geometry
-  // yet (a new, empty editable layer) and tiled or URL-backed data cannot be
-  // inspected here, so they keep all three, each geometry-filtered.
-  const detected = layer.geojson ? detectGeometryProfile(layer.geojson) : null;
-  const profile: GeometryProfile =
-    detected && (detected.hasPoint || detected.hasLine || detected.hasPolygon)
-      ? detected
-      : { hasPoint: true, hasLine: true, hasPolygon: true };
+  // (the Layer Swipe panel's "Points" row, #2431). Features that all lack a
+  // geometry (a delimited-text table without coordinates) get none of them, as
+  // on MapLibre. A collection with no features yet (a new, empty editable
+  // layer) and tiled or URL-backed data cannot be inspected here, so they keep
+  // all three, each geometry-filtered, and the first drawn feature has a layer.
+  const profile: GeometryProfile = layer.geojson?.features?.length
+    ? detectGeometryProfile(layer.geojson)
+    : { hasPoint: true, hasLine: true, hasPolygon: true };
   const vectorLayers = (sourceLayer?: string): LayerSpecification[] => {
     const base = {
       source: sourceId,
