@@ -424,14 +424,20 @@ def test_buffer_dissolve_rejects_a_union_that_came_back_empty(
 
 
 @requires_geopandas
-@pytest.mark.parametrize("field", ["dissolve", "distance"])
-def test_buffer_rejects_an_integer_too_large_for_a_float(field: str) -> None:
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("dissolve", "Buffer dissolve must be true or false"),
+        ("distance", "Buffer distance must be a finite number"),
+    ],
+)
+def test_buffer_rejects_an_integer_too_large_for_a_float(field: str, message: str) -> None:
     # `json.loads` keeps an arbitrarily large integer exact, so a raw payload can
     # carry one; `math.isfinite`/`float` raise OverflowError converting it. The
     # same literal reaches the client as `Infinity`, which it rejects, so both
     # engines must answer with the tool's own message rather than a 500.
     parameters: dict[str, object] = {"distance": 1, field: 10**309}
-    with pytest.raises(ValueError, match="must be (true or false|a finite number)"):
+    with pytest.raises(ValueError, match=message):
         run_vector_tool("buffer", SQUARE, parameters=parameters)
 
 
