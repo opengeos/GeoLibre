@@ -27,14 +27,6 @@ const PROJECT = {
 test.use({ actionTimeout: 30_000 });
 
 /**
- * Bind the live Mapbox engine and the GeoAgent control it hosts.
- *
- * The control is a plain `IControl`, and the Mapbox engine wraps it in an
- * adapter before handing it to `map.addControl`, so it is not on `map._controls`
- * under its own name — the engine's own `pluginControls` map is where the
- * original lives.
- */
-/**
  * The browser's own echo of a failed request. It carries no URL, so it says
  * nothing a response listener does not say better — {@link watchFailedRequests}
  * records those with their URL and status, and the assertions read that.
@@ -48,7 +40,12 @@ const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded wit
  * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
  * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
  * nothing about the code under test, which is asserted through the map's own
- * state. Any other failure is a real one and reaches the assertion with its URL.
+ * state — the project loads a third-party style, so no tile the assertions
+ * depend on comes from Mapbox. The exemption covers a configured token too, and
+ * deliberately: a restricted or rotated token 401s `map-sessions` on a
+ * developer's machine without changing a single thing this spec measures.
+ * A transport-level failure is not exempt at any host — a Mapbox endpoint that
+ * cannot be reached at all is not an auth answer.
  */
 function watchFailedRequests(page: Page, failures: string[]): void {
   page.on("response", (response) => {
@@ -66,12 +63,18 @@ function watchFailedRequests(page: Page, failures: string[]): void {
     // pan and projection switch abandons the requests for the view it left.
     const errorText = request.failure()?.errorText ?? "";
     if (errorText.includes("ERR_ABORTED")) return;
-    const { hostname } = new URL(request.url());
-    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
     failures.push(`request failed: ${request.url()} (${errorText})`);
   });
 }
 
+/**
+ * Bind the live Mapbox engine and the GeoAgent control it hosts.
+ *
+ * The control is a plain `IControl`, and the Mapbox engine wraps it in an
+ * adapter before handing it to `map.addControl`, so it is not on `map._controls`
+ * under its own name — the engine's own `pluginControls` map is where the
+ * original lives.
+ */
 async function bindAgent(page: Page) {
   await page.waitForFunction(() => {
     const header = document.querySelector("header") as unknown as Record<string, unknown>;

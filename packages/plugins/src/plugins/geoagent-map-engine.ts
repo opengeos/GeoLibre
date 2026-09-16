@@ -21,9 +21,11 @@ import type { GeoLibreAppAPI } from "../types";
  * Two deliberate choices about *when* things are read. The engine is decided
  * from the renderer, which the store flips synchronously, rather than from the
  * namespace, which only appears once `MapboxEngine` has mounted — and GeoAgent
- * is built behind a dynamic import, so that window is wide. And the namespace
- * itself is resolved on access rather than now, so a control constructed while
- * the engine was still mounting still hands its tools the right library.
+ * is built behind a dynamic import, so that window is wide. The renderer is
+ * authoritative when the host reports one; the namespace only answers for a
+ * host that does not. And the namespace itself is resolved on access rather
+ * than now, so a control constructed while the engine was still mounting still
+ * hands its tools the right library.
  *
  * @param app - The plugin host API, read for the renderer and the namespace.
  * @returns The Mapbox engine descriptor on a Mapbox host, else `undefined`,
@@ -32,7 +34,13 @@ import type { GeoLibreAppAPI } from "../types";
 export function geoAgentMapEngine(
   app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null | undefined,
 ): GeoAgentMapEngine | undefined {
-  const mapbox = app?.getMapRenderer?.() === "mapbox" || !!app?.getMapboxGl?.();
+  const renderer = app?.getMapRenderer?.();
+  // The renderer decides, and the namespace only stands in for a host that has
+  // no renderer to report. They disagree during a swap: the store flips
+  // `primaryRenderer` first and the outgoing engine is cleared after, so a
+  // `getMapboxGl()` that still answers would otherwise hand a MapLibre host a
+  // Mapbox descriptor — the same wrong-engine failure, in the other direction.
+  const mapbox = renderer ? renderer === "mapbox" : !!app?.getMapboxGl?.();
   if (!mapbox) return undefined;
   return {
     kind: "mapbox",

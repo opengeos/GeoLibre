@@ -32,6 +32,7 @@ import {
   maplibreNaturalEarthPlugin,
   maplibreSourceCoopPlugin,
 } from "../packages/plugins/src/plugins/maplibre-source-coop";
+import { maplibreStreetViewPlugin } from "../packages/plugins/src/plugins/maplibre-streetview";
 import { maplibreOvertureMapsPlugin } from "../packages/plugins/src/plugins/maplibre-overture-maps";
 import { isMapboxPluginLayer } from "../packages/map/src/mapbox-layers";
 

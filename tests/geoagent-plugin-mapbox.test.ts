@@ -25,6 +25,17 @@ describe("maplibreGeoAgentPlugin", () => {
     // wrong namespace — each breaking an agent run partway through.
     assert.match(SOURCE, /mapEngine:\s*geoAgentMapEngine\(app\)/);
   });
+
+  it("lets only the current activation build the shared control", () => {
+    // The module import is shared, and its continuations run in registration
+    // order — so without this check an activation superseded mid-import would
+    // construct the singleton first, with its stale engine baked in, and the
+    // activation that is actually current would mount that instance.
+    assert.match(
+      SOURCE,
+      /if \(!geoAgentActive \|\| activationGeneration !== geoAgentActivationGeneration\) return null;\s*\n\s*geoAgentControl \?\?= new GeoAgentControl/,
+    );
+  });
 });
 
 describe("geoAgentMapEngine", () => {
@@ -37,6 +48,19 @@ describe("geoAgentMapEngine", () => {
       geoAgentMapEngine({
         getMapRenderer: () => "maplibre",
         getMapboxGl: () => null,
+      } as unknown as GeoLibreAppAPI),
+      undefined,
+    );
+  });
+
+  it("lets the renderer overrule a namespace the outgoing engine still answers", () => {
+    // Swapping Mapbox out flips `primaryRenderer` first and clears the engine
+    // after, so the two disagree for a moment. Reading the namespace as a
+    // second vote would build a Mapbox descriptor for a MapLibre host.
+    assert.equal(
+      geoAgentMapEngine({
+        getMapRenderer: () => "maplibre",
+        getMapboxGl: () => ({ Marker: class {} }),
       } as unknown as GeoLibreAppAPI),
       undefined,
     );
