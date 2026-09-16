@@ -7165,6 +7165,7 @@
     "saveEditsSuccess": "{{count}}개의 피처를 원본 파일에 저장했습니다.",
     "saveEditsNoFeatures": "이 레이어에는 저장할 피처가 없습니다.",
     "saveEditsError": "원본 파일에 편집 내용을 저장할 수 없습니다.",
+    "saveEditsPendingDraftsInvalid": "편집 내용을 저장하기 전에 속성 테이블의 잘못된 값을 수정하세요.",
     "saveEditsToArcgis": "ArcGIS 서비스에 편집 저장",
     "saveEditsArcgisSuccess": "ArcGIS에 저장했습니다: {{inserted}}개 삽입, {{updated}}개 수정, {{deleted}}개 삭제.",
     "saveEditsToPostgis": "PostGIS 테이블에 편집 저장",

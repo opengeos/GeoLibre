@@ -7569,6 +7569,7 @@
     "saveEditsSuccess": "تم حفظ {{count}} من المعالم في الملف المصدر.",
     "saveEditsNoFeatures": "لا تحتوي هذه الطبقة على معالم لحفظها.",
     "saveEditsError": "تعذر حفظ التعديلات في الملف المصدر.",
+    "saveEditsPendingDraftsInvalid": "أصلح القيم غير الصالحة في جدول السمات قبل حفظ التعديلات.",
     "saveEditsToArcgis": "حفظ التعديلات في خدمة ArcGIS",
     "saveEditsArcgisSuccess": "تم الحفظ في ArcGIS: {{inserted}} مُدرج، {{updated}} مُحدَّث، {{deleted}} محذوف.",
     "saveEditsToPostgis": "حفظ التعديلات في جدول PostGIS",

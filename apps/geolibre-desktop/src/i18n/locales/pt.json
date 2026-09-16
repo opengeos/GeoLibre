@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "{{count}} feição(ões) salva(s) no arquivo de origem.",
     "saveEditsNoFeatures": "Esta camada não tem feições para salvar.",
     "saveEditsError": "Não foi possível salvar as edições no arquivo de origem.",
+    "saveEditsPendingDraftsInvalid": "Corrija os valores inválidos na tabela de atributos antes de salvar as edições.",
     "saveEditsToArcgis": "Salvar edições no serviço ArcGIS",
     "saveEditsArcgisSuccess": "Salvo em ArcGIS: {{inserted}} inserida(s), {{updated}} atualizada(s), {{deleted}} excluída(s).",
     "saveEditsToPostgis": "Salvar edições na tabela PostGIS",

@@ -114,6 +114,7 @@ import {
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
+import { registerPendingAttributeDrafts } from "../../lib/attribute-draft-commit";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
   AREA_UNITS,
@@ -958,21 +959,22 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
   };
 
-  const saveDrafts = () => {
+  /** Apply the drafts to the layer; returns whether they were committed. */
+  const saveDrafts = (): boolean => {
     // Re-read the capability here rather than trusting the disabled state:
     // edit mode (and the dialogs below) can be open across a project reload or
     // a collaborator's change that revokes the capability, and the commit would
     // otherwise still run.
-    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return;
+    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
       setIsEditing(false);
       setDrafts({});
-      return;
+      return true;
     }
 
-    if (!layer.geojson) return;
+    if (!layer.geojson) return false;
 
     const geojson = {
       ...layer.geojson,
@@ -994,7 +996,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     updateLayer(layer.id, { geojson });
     setIsEditing(false);
     setDrafts({});
+    return true;
   };
+
+  // Offer unsaved drafts to the Layers panel's write-back action, which reads
+  // the layer from the store: without this, Save edits to source/ArcGIS/PostGIS
+  // silently writes the pre-edit values the table no longer shows (#2438, #2439).
+  // Re-registered every render so the committer always sees the latest drafts.
+  const pendingDraftsLayerId = isEditing && hasEdits ? (layer?.id ?? null) : null;
+  useEffect(() => {
+    if (!pendingDraftsLayerId) return;
+    return registerPendingAttributeDrafts(pendingDraftsLayerId, saveDrafts);
+  });
 
   const geojsonWithDrafts = () => {
     if (!layer?.geojson) return null;

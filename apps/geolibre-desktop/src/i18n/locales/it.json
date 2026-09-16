@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "Salvati {{count}} elemento/i nel file sorgente.",
     "saveEditsNoFeatures": "Questo layer non contiene elementi da salvare.",
     "saveEditsError": "Impossibile salvare le modifiche nel file sorgente.",
+    "saveEditsPendingDraftsInvalid": "Correggi i valori non validi nella tabella degli attributi prima di salvare le modifiche.",
     "saveEditsToArcgis": "Salva modifiche nel servizio ArcGIS",
     "saveEditsArcgisSuccess": "Salvato in ArcGIS: {{inserted}} inseriti, {{updated}} aggiornati, {{deleted}} eliminati.",
     "saveEditsToPostgis": "Salva modifiche nella tabella PostGIS",

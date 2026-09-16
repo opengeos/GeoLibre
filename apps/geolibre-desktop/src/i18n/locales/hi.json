@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "{{count}} फ़ीचर स्रोत फ़ाइल में सहेजे गए।",
     "saveEditsNoFeatures": "इस लेयर में सहेजने के लिए कोई फ़ीचर नहीं है।",
     "saveEditsError": "संपादन स्रोत फ़ाइल में सहेजे नहीं जा सके।",
+    "saveEditsPendingDraftsInvalid": "संपादन सहेजने से पहले विशेषता तालिका में अमान्य मान ठीक करें।",
     "saveEditsToArcgis": "संपादन ArcGIS सेवा में सहेजें",
     "saveEditsArcgisSuccess": "ArcGIS में सहेजा गया: {{inserted}} जोड़े गए, {{updated}} अपडेट किए गए, {{deleted}} हटाए गए।",
     "saveEditsToPostgis": "संपादन PostGIS टेबल में सहेजें",

@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "Se guardaron {{count}} entidad(es) en el archivo de origen.",
     "saveEditsNoFeatures": "Esta capa no tiene entidades que guardar.",
     "saveEditsError": "No se pudieron guardar las ediciones en el archivo de origen.",
+    "saveEditsPendingDraftsInvalid": "Corrige los valores no válidos de la tabla de atributos antes de guardar las ediciones.",
     "saveEditsToArcgis": "Guardar ediciones en el servicio ArcGIS",
     "saveEditsArcgisSuccess": "Guardado en ArcGIS: {{inserted}} insertadas, {{updated}} actualizadas, {{deleted}} eliminadas.",
     "saveEditsToPostgis": "Guardar ediciones en la tabla de PostGIS",

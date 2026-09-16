@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "{{count}} öğe kaynak dosyaya kaydedildi.",
     "saveEditsNoFeatures": "Bu katmanda kaydedilecek öğe yok.",
     "saveEditsError": "Düzenlemeler kaynak dosyaya kaydedilemedi.",
+    "saveEditsPendingDraftsInvalid": "Düzenlemeleri kaydetmeden önce öznitelik tablosundaki geçersiz değerleri düzeltin.",
     "saveEditsToArcgis": "Düzenlemeleri ArcGIS servisine kaydet",
     "saveEditsArcgisSuccess": "ArcGIS hizmetine kaydedildi: {{inserted}} eklendi, {{updated}} güncellendi, {{deleted}} silindi.",
     "saveEditsToPostgis": "Düzenlemeleri PostGIS tablosuna kaydet",

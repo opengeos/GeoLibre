@@ -7165,6 +7165,7 @@
     "saveEditsSuccess": "已将 {{count}} 个要素保存到源文件。",
     "saveEditsNoFeatures": "此图层没有可保存的要素。",
     "saveEditsError": "无法将编辑保存到源文件。",
+    "saveEditsPendingDraftsInvalid": "请先修正属性表中的无效值，再保存编辑。",
     "saveEditsToArcgis": "保存编辑到 ArcGIS 服务",
     "saveEditsArcgisSuccess": "已保存到 ArcGIS：新增 {{inserted}} 个，更新 {{updated}} 个，删除 {{deleted}} 个。",
     "saveEditsToPostgis": "保存编辑到 PostGIS 表",

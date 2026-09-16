@@ -7165,6 +7165,7 @@
     "saveEditsSuccess": "{{count}}件のフィーチャを元ファイルに保存しました。",
     "saveEditsNoFeatures": "このレイヤーには保存するフィーチャがありません。",
     "saveEditsError": "編集内容を元ファイルに保存できませんでした。",
+    "saveEditsPendingDraftsInvalid": "編集内容を保存する前に、属性テーブルの無効な値を修正してください。",
     "saveEditsToArcgis": "編集内容をArcGISサービスに保存",
     "saveEditsArcgisSuccess": "ArcGISに保存しました: 挿入{{inserted}}件、更新{{updated}}件、削除{{deleted}}件。",
     "saveEditsToPostgis": "編集内容をPostGISテーブルに保存",

@@ -7246,6 +7246,7 @@
     "saveEditsSuccess": "წყარო ფაილში შენახულია {{count}} ობიექტი.",
     "saveEditsNoFeatures": "ამ შრეს არ აქვს შესანახი ობიექტები.",
     "saveEditsError": "წყარო ფაილში ცვლილებების შენახვა ვერ მოხერხდა.",
+    "saveEditsPendingDraftsInvalid": "ცვლილებების შენახვამდე გაასწორეთ არასწორი მნიშვნელობები ატრიბუტების ცხრილში.",
     "saveEditsToArcgis": "ცვლილებების შენახვა ArcGIS სერვისში",
     "saveEditsArcgisSuccess": "შენახულია ArcGIS-ში: {{inserted}} ჩამატებული, {{updated}} განახლებული, {{deleted}} წაშლილი.",
     "saveEditsToPostgis": "ცვლილებების შენახვა PostGIS ცხრილში",

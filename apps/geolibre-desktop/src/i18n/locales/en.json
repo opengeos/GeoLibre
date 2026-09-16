@@ -7317,6 +7317,7 @@
     "saveEditsSuccess": "Saved {{count}} feature(s) to the source file.",
     "saveEditsNoFeatures": "This layer has no features to save.",
     "saveEditsError": "Could not save edits to the source file.",
+    "saveEditsPendingDraftsInvalid": "Fix the invalid values in the attribute table before saving edits.",
     "saveEditsToArcgis": "Save edits to ArcGIS service",
     "saveEditsArcgisSuccess": "Saved to ArcGIS: {{inserted}} inserted, {{updated}} updated, {{deleted}} deleted.",
     "saveEditsToPostgis": "Save edits to PostGIS table",

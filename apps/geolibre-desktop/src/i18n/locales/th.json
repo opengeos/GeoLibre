@@ -7165,6 +7165,7 @@
     "saveEditsSuccess": "บันทึก {{count}} ฟีเจอร์ลงไฟล์ต้นทางแล้ว",
     "saveEditsNoFeatures": "เลเยอร์นี้ไม่มีฟีเจอร์ให้บันทึก",
     "saveEditsError": "ไม่สามารถบันทึกการแก้ไขลงไฟล์ต้นทางได้",
+    "saveEditsPendingDraftsInvalid": "แก้ไขค่าที่ไม่ถูกต้องในตารางแอตทริบิวต์ก่อนบันทึกการแก้ไข",
     "saveEditsToArcgis": "บันทึกการแก้ไขลงบริการ ArcGIS",
     "saveEditsArcgisSuccess": "บันทึกลง ArcGIS แล้ว: เพิ่ม {{inserted}} แก้ไข {{updated}} ลบ {{deleted}}",
     "saveEditsToPostgis": "บันทึกการแก้ไขลงตาราง PostGIS",

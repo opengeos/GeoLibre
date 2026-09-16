@@ -49,6 +49,7 @@ import {
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import { layerFilteredHintKey } from "../../lib/layer-filter-hint";
+import { commitPendingAttributeDrafts } from "../../lib/attribute-draft-commit";
 import type { FeatureCollection } from "geojson";
 import {
   buildTimeBindingFromRecords,
@@ -2004,9 +2005,23 @@ export function LayerPanel({
   // or diffing against the PostGIS table by primary key. Unlike Export, there
   // is no save dialog: write-back targets the known source.
   const handleSaveEditsToSource = useCallback(
-    async (layer: GeoLibreLayer) => {
-      if (!canEditLayer(layer.id)) return;
-      clearRefreshStatusTimer(layer.id);
+    async (clickedLayer: GeoLibreLayer) => {
+      if (!canEditLayer(clickedLayer.id)) return;
+      clearRefreshStatusTimer(clickedLayer.id);
+      // Values typed in the attribute table stay drafts until its own Save
+      // runs. Commit them first so the write-back includes what the table
+      // shows, instead of reporting success for the pre-edit features.
+      if (commitPendingAttributeDrafts(clickedLayer.id) === "blocked") {
+        setRefreshStatuses((current) => ({
+          ...current,
+          [clickedLayer.id]: { type: "error", message: t("layers.saveEditsPendingDraftsInvalid") },
+        }));
+        scheduleStatusClear(clickedLayer.id);
+        return;
+      }
+      // Read the layer back: a commit above has just replaced its features.
+      const layer =
+        useAppStore.getState().layers.find((l) => l.id === clickedLayer.id) ?? clickedLayer;
       const isPostgis = isPostgisEditableLayer(layer);
       const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
       if (!isPostgis && !isArcGISWritableLayer(layer) && !path) return;

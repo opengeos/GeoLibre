@@ -7408,6 +7408,7 @@
     "saveEditsSuccess": "Сохранено объектов в исходный файл: {{count}}.",
     "saveEditsNoFeatures": "В этом слое нет объектов для сохранения.",
     "saveEditsError": "Не удалось сохранить изменения в исходный файл.",
+    "saveEditsPendingDraftsInvalid": "Исправьте недопустимые значения в таблице атрибутов перед сохранением изменений.",
     "saveEditsToArcgis": "Сохранить изменения в сервис ArcGIS",
     "saveEditsArcgisSuccess": "Сохранено в ArcGIS: добавлено {{inserted}}, обновлено {{updated}}, удалено {{deleted}}.",
     "saveEditsToPostgis": "Сохранить изменения в таблицу PostGIS",

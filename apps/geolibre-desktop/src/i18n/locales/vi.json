@@ -7165,6 +7165,7 @@
     "saveEditsSuccess": "Đã lưu {{count}} tính năng vào tệp nguồn.",
     "saveEditsNoFeatures": "Lớp này không có tính năng để lưu.",
     "saveEditsError": "Không thể lưu các chỉnh sửa vào tệp nguồn.",
+    "saveEditsPendingDraftsInvalid": "Hãy sửa các giá trị không hợp lệ trong bảng thuộc tính trước khi lưu chỉnh sửa.",
     "saveEditsToArcgis": "Lưu các chỉnh sửa vào dịch vụ ArcGIS",
     "saveEditsArcgisSuccess": "Đã lưu vào ArcGIS: {{inserted}} đã chèn, {{updated}} đã cập nhật, {{deleted}} đã xóa.",
     "saveEditsToPostgis": "Lưu các chỉnh sửa vào bảng PostGIS",
