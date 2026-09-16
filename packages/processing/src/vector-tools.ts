@@ -506,7 +506,8 @@ export const bufferTool: ProcessingAlgorithm = {
     // only on success, so a failed dissolve must not leave a "Buffered N" line
     // behind on the client either.
     let output = featureCollection(features);
-    if (dissolveResult && features.length > 0) {
+    const didDissolve = dissolveResult && features.length > 0;
+    if (didDissolve) {
       let merged: Feature | null = null;
       try {
         merged = dissolveBuffers(features);
@@ -531,7 +532,7 @@ export const bufferTool: ProcessingAlgorithm = {
     if (failed > 0) {
       ctx.log(`Skipped ${failed} feature(s) the buffer could not process`);
     }
-    if (dissolveResult && features.length > 0) {
+    if (didDissolve) {
       ctx.log(`Dissolved ${features.length} buffer(s) into 1 feature`);
     }
     ctx.addResultLayer?.("Buffer", output);
