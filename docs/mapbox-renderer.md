@@ -202,7 +202,7 @@ browser against an authenticated Mapbox map):
   MapLibre. The Style panel's 3D extrusion of the buildings theme is a
   MapLibre layer-sync feature and stays MapLibre-only.
 
-No plugin is held back by a MapLibre-internal dependency of its own any more:
+No plugin is held back by a MapLibre-internal dependency of its own:
 GeoAgent, Street View and Layer Swipe were the last three, and each is listed
 above with the seam that made it portable.
 
