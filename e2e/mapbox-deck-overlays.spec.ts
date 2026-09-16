@@ -96,10 +96,20 @@ async function waitForDeckLayer(page: Page, layerName: string) {
 async function switchRenderer(page: Page, name: "MapLibre" | "Mapbox") {
   await page.getByRole("button", { name: "View", exact: true }).click();
   await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
-  await page.getByRole("menuitemradio", { name, exact: true }).click();
+  // Swapping renderers is not a cheap click. `setPrimaryRenderer` is a discrete
+  // React update, so the entire swap runs inside this click's own handler: the
+  // outgoing engine's `map.remove()` drops its WebGL context, taking the deck
+  // overlay (and the DuckDB layer's buffers) with it, and on the way back to
+  // MapLibre `new maplibregl.Map()` builds the replacement, all before the click
+  // event returns. Playwright waits for that event to be acknowledged, so the
+  // whole swap is charged against `actionTimeout`. On CI's software renderer
+  // that outran the 30 s budget on every first attempt of the DuckDB spec, and
+  // `retries: 1` was what made it green (#2432). Budget the swap here instead of
+  // leaving the retry to do the work.
+  await page.getByRole("menuitemradio", { name, exact: true }).click({ timeout: 90_000 });
   await expect(
     page.locator(name === "Mapbox" ? ".mapboxgl-canvas" : ".maplibregl-canvas"),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 90_000 });
   await bindEngine(page, name === "Mapbox" ? "mapbox" : "maplibre");
 }
 
