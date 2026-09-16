@@ -343,17 +343,19 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     // The control reads the basemap style only on construction, so recreate it
     // when the active basemap changes to keep its basemap-layer grouping in
     // sync. The previous slider state is carried over to avoid a visible reset.
-    unsubscribeBasemap = app.onBasemapChange(() => {
+    unsubscribeBasemap = app.onBasemapChange((styleUrl) => {
       if (!swipeControl) return;
-      const previousState = swipeControl.getState();
-      savedSwipeState = previousState;
-      app.removeMapControl(swipeControl);
-      swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
-      app.addMapControl(swipeControl, swipeControlPosition);
-      expandSwipeControl(previousState);
-      // The new style has its own layer set, so any side id still unresolved
-      // gets another chance against it.
-      startSwipeIdResolution(app);
+      // `onBasemapChange` fires the moment the store's URL changes, which is
+      // before the engine has applied it. The control reads the basemap once, at
+      // construction: from the URL it fetches (fine — it fetches the new one) or
+      // from the engine's layer ids, which only refresh when the new style has
+      // loaded. So in the second case wait for that, or the panel would group
+      // the *previous* basemap's ids, which match nothing in the new style.
+      if (isFetchableStyleUrl(styleUrl)) {
+        rebuildSwipeControl(app);
+        return;
+      }
+      rebuildOnStyleLoad(app);
     });
   },
   deactivate: (app: GeoLibreAppAPI) => {
@@ -462,6 +464,18 @@ function isFetchableStyleUrl(url: string): boolean {
 }
 
 /**
+ * The basemap's style layer ids, for a basemap the control cannot fetch.
+ *
+ * `undefined` everywhere else, which leaves the control fetching `basemapStyle`
+ * exactly as it always has.
+ */
+function basemapLayerIdsFor(app: GeoLibreAppAPI, basemapStyleUrl: string): string[] | undefined {
+  if (isFetchableStyleUrl(basemapStyleUrl)) return undefined;
+  const ids = app.getBasemapLayerIds?.() ?? [];
+  return ids.length > 0 ? ids : undefined;
+}
+
+/**
  * The options the control is (re)built with. Exported so a test can assert the
  * per-engine pieces — the comparison-map factory and the raster provider —
  * without standing up a real SwipeControl.
@@ -490,9 +504,13 @@ export function getSwipeControlOptions(
     // the basemap. A `mapbox://` URL has no HTTP form — `fetch` rejects it
     // outright — so hand the ids over instead and skip the request. The engine
     // knows them either way; this only matters where the fetch cannot work.
-    basemapLayerIds: isFetchableStyleUrl(basemapStyleUrl)
-      ? undefined
-      : (app.getBasemapLayerIds?.() ?? undefined),
+    //
+    // Only when there are some: an empty array is truthy upstream, so passing
+    // one would suppress the fetch *and* leave the grouping empty. Mapbox
+    // Standard is exactly that case — it arrives as a style import, so the root
+    // style has no layers of its own to group — and there the fetch fails
+    // harmlessly instead, which is the same outcome the control reaches today.
+    basemapLayerIds: basemapLayerIdsFor(app, basemapStyleUrl),
     // Hide plugin chrome layers (drawing/measure helpers, selection footprints,
     // highlight outlines, Vantor footprints) so they don't clutter the swipe
     // layer list. Shared with the Components control grid via
@@ -510,6 +528,34 @@ export function getSwipeControlOptions(
     // On Mapbox the clipped comparison pane is a mapbox-gl map.
     createMap: swipeComparisonMapFactory(app),
   };
+}
+
+/** Rebuild the control against the live map, carrying the slider state over. */
+function rebuildSwipeControl(app: GeoLibreAppAPI): void {
+  if (!swipeControl) return;
+  const previousState = swipeControl.getState();
+  savedSwipeState = previousState;
+  app.removeMapControl(swipeControl);
+  swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
+  app.addMapControl(swipeControl, swipeControlPosition);
+  expandSwipeControl(previousState);
+  // The new style has its own layer set, so any side id still unresolved gets
+  // another chance against it.
+  startSwipeIdResolution(app);
+}
+
+/** Rebuild once the engine has the new style, so its basemap ids are current. */
+function rebuildOnStyleLoad(app: GeoLibreAppAPI): void {
+  const map = getStyleMap(app);
+  if (!map) {
+    rebuildSwipeControl(app);
+    return;
+  }
+  const handler = () => {
+    map.off("style.load", handler);
+    rebuildSwipeControl(app);
+  };
+  map.on("style.load", handler);
 }
 
 function expandSwipeControl(state?: SwipeState): void {

@@ -113,6 +113,22 @@ describe("swipe control options per engine", () => {
     assert.deepEqual(mapbox.basemapLayerIds, ["basemap-water", "basemap-roads"]);
   });
 
+  it("omits the ids when the engine has none, rather than an empty list", () => {
+    const { gl } = mapboxGl();
+    // Mapbox Standard arrives as a style import, so the root style has no
+    // layers of its own and the engine reports none. An empty array is truthy
+    // upstream: passing one would suppress the fetch *and* leave the grouping
+    // empty, which is strictly worse than letting the fetch fail.
+    const options = getSwipeControlOptions(
+      host({
+        getMapboxGl: () => gl,
+        getActiveBasemap: () => "mapbox://styles/mapbox/standard",
+        getBasemapLayerIds: () => [],
+      }),
+    );
+    assert.equal(options.basemapLayerIds, undefined);
+  });
+
   it("passes the same native-layer configuration on both engines", () => {
     const { gl } = mapboxGl();
     const maplibre = getSwipeControlOptions(host());

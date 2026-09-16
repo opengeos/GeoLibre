@@ -136,9 +136,9 @@ browser against an authenticated Mapbox map):
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
 - **Layer Swipe** for native style layers. The control drives both maps only
-  through the surface the two engines share, so the one MapLibre object it built
-  itself — the clipped comparison pane — comes from `maplibre-gl-swipe` 0.13.0's
-  `createMap`, fed mapbox-gl's `Map`. Two Mapbox specifics come with it: the
+  through the surface the two engines share, so the one map it constructed
+  itself — the clipped comparison pane, until now always a MapLibre one — comes
+  from `maplibre-gl-swipe` 0.13.0's `createMap`, fed mapbox-gl's `Map`. Two Mapbox specifics come with it: the
   pane is handed the access token explicitly (mapbox-gl reads its token from a
   global the app never sets, so a second map built without it renders nothing),
   and the basemap grouping is seeded with `basemapLayerIds` because a

@@ -52,6 +52,39 @@ describe("styleLayerIdsForProjectLayer", () => {
     ]);
   });
 
+  it("finds the style layers the Mapbox engine compiles for the same store layer", () => {
+    // The Mapbox engine names them `geolibre-mapbox-<id>-<sourceLayer>-<kind>`
+    // over a `geolibre-mapbox-<id>` source, nothing like MapLibre's
+    // `layer-<id>-*` over `source-<id>`. A saved project names its swipe sides
+    // by store id, so without this the sides never resolve on Mapbox and the
+    // layer stays drawn across the whole map — the bug #2161 is about.
+    const styleLayers: SwipeStyleLayer[] = [
+      ...basemap,
+      { id: "geolibre-mapbox-red-geojson-fill", source: "geolibre-mapbox-red" },
+      { id: "geolibre-mapbox-red-geojson-line", source: "geolibre-mapbox-red" },
+      { id: "geolibre-mapbox-red-geojson-circle", source: "geolibre-mapbox-red" },
+      { id: "geolibre-mapbox-blue-geojson-fill", source: "geolibre-mapbox-blue" },
+    ];
+
+    assert.deepEqual(styleLayerIdsForProjectLayer("red", styleLayers), [
+      "geolibre-mapbox-red-geojson-fill",
+      "geolibre-mapbox-red-geojson-line",
+      "geolibre-mapbox-red-geojson-circle",
+    ]);
+  });
+
+  it("does not let one store layer's Mapbox ids reach a same-prefixed neighbour", () => {
+    // `geolibre-mapbox-red-` must not match `geolibre-mapbox-redux-…`.
+    const styleLayers: SwipeStyleLayer[] = [
+      { id: "geolibre-mapbox-red-geojson-fill", source: "geolibre-mapbox-red" },
+      { id: "geolibre-mapbox-redux-geojson-fill", source: "geolibre-mapbox-redux" },
+    ];
+
+    assert.deepEqual(styleLayerIdsForProjectLayer("red", styleLayers), [
+      "geolibre-mapbox-red-geojson-fill",
+    ]);
+  });
+
   it("finds a layer's derived label and mask sources", () => {
     const styleLayers: SwipeStyleLayer[] = [
       ...basemap,

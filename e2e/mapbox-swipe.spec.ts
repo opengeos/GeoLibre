@@ -58,6 +58,41 @@ const PROJECT = {
 
 test.use({ actionTimeout: 30_000 });
 
+/**
+ * The browser's own echo of a failed request. It carries no URL, so it says
+ * nothing a response listener does not say better — {@link watchFailedRequests}
+ * records those with their URL and status, and the assertion reads that.
+ */
+const RESOURCE_FAILURE_ECHO = /Failed to load resource: the server responded with a status of \d+/;
+
+/**
+ * Record every failed request except the ones a tokenless run is expected to
+ * produce.
+ *
+ * This spec uses `MAPBOX_TOKEN` when the environment has one and a placeholder
+ * otherwise, so on CI every Mapbox API request comes back 401 or 403. Those say
+ * nothing about the code under test, which is asserted through the two maps'
+ * own state. Any other failure is a real one and reaches the assertion with its
+ * URL.
+ */
+function watchFailedRequests(page: Page, failures: string[]): void {
+  page.on("response", (response) => {
+    const status = response.status();
+    if (status < 400) return;
+    const { hostname } = new URL(response.url());
+    const mapboxAuth =
+      (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") &&
+      (status === 401 || status === 403);
+    if (mapboxAuth) return;
+    failures.push(`http ${status}: ${response.url()}`);
+  });
+  page.on("requestfailed", (request) => {
+    const { hostname } = new URL(request.url());
+    if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
+    failures.push(`request failed: ${request.url()} (${request.failure()?.errorText})`);
+  });
+}
+
 /** Bind the live Mapbox engine through the React shell's own ref. */
 async function bindEngine(page: Page) {
   await page.waitForFunction(() => {
@@ -139,6 +174,35 @@ async function comparisonPaneToken(page: Page): Promise<string | null> {
   });
 }
 
+/**
+ * The distinct visibilities one project layer's style layers carry on the
+ * comparison pane.
+ *
+ * The pane is built from the main map's whole style and then has everything but
+ * the right side hidden, so presence alone proves nothing — the visibility is
+ * the assignment.
+ */
+async function comparisonPaneVisibility(page: Page, layerId: string): Promise<string[]> {
+  return page.evaluate((id) => {
+    const engine = (window as any).swipeTestRef.current;
+    let pane: any = null;
+    engine.pluginControls?.forEach?.((_adapter: unknown, control: any) => {
+      if (typeof control?.getComparisonMap === "function") pane = control.getComparisonMap();
+    });
+    if (!pane) return ["<no pane>"];
+    let layers: { id: string }[] = [];
+    try {
+      layers = pane.getStyle()?.layers ?? [];
+    } catch {
+      return ["<style not ready>"];
+    }
+    const visibilities = layers
+      .filter((layer) => layer.id.startsWith(`geolibre-mapbox-${id}-`))
+      .map((layer) => pane.getLayoutProperty(layer.id, "visibility") ?? "visible");
+    return visibilities.length === 0 ? ["<absent>"] : ([...new Set(visibilities)] as string[]);
+  }, layerId);
+}
+
 async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "dark") {
   await page.addInitScript(
     ({ key, token }) => {
@@ -175,14 +239,22 @@ for (const theme of ["light", "dark"] as const) {
   }, info) => {
     test.setTimeout(240_000);
     const errors: string[] = [];
+    const failures: string[] = [];
     page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
     page.on("console", (message) => {
-      if (message.type() === "error") errors.push(`error: ${message.text()}`);
+      if (message.type() !== "error") return;
+      // Skip the bare resource echo; watchFailedRequests has the URL.
+      if (RESOURCE_FAILURE_ECHO.test(message.text())) return;
+      errors.push(`error: ${message.text()}`);
     });
+    watchFailedRequests(page, failures);
     try {
       await run();
     } finally {
-      await info.attach("console", { body: errors.join("\n"), contentType: "text/plain" });
+      await info.attach("console", {
+        body: [...errors, ...failures].join("\n"),
+        contentType: "text/plain",
+      });
     }
 
     async function run() {
@@ -227,15 +299,17 @@ for (const theme of ["light", "dark"] as const) {
       await expect.poll(() => mainMapVisibility(page, "East")).toEqual(["none"]);
       expect(await mainMapVisibility(page, "West")).toEqual(["visible"]);
 
-      // The comparison pane got a copy of the right-side layer.
+      // And the comparison pane draws it — the other half of the dual-map clip.
+      // A canvas alone would pass with an empty pane, so check the assignment
+      // the control applied there: the right-side layer shown, the left-side one
+      // hidden. Exactly inverted from the main map above.
       await expect
-        .poll(async () =>
-          page.evaluate(() => {
-            const pane = (document.querySelector(".swipe-comparison-map") as HTMLElement) ?? null;
-            return pane ? pane.querySelectorAll("canvas").length : 0;
-          }),
-        )
-        .toBeGreaterThan(0);
+        .poll(() => comparisonPaneVisibility(page, "East"), { timeout: 30_000 })
+        .toEqual(["visible"]);
+      expect(
+        await comparisonPaneVisibility(page, "West"),
+        "a left-only layer must not draw on the comparison side",
+      ).toEqual(["none"]);
 
       // Dragging the slider moves the clip.
       const clip = page.locator(".swipe-clip-container");
@@ -268,6 +342,7 @@ for (const theme of ["light", "dark"] as const) {
       // The `mapbox://` basemap path — where the control cannot fetch the style
       // and takes `basemapLayerIds` instead — is covered by the unit tests; this
       // project points at a third-party style so the spec needs no real token.
+      expect(failures, "nothing but the tokenless Mapbox API may fail to load").toEqual([]);
     }
   });
 }
