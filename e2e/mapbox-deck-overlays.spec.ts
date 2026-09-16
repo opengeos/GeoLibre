@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { layerRow } from "./helpers";
+import { layerRow, RENDERER_SWAP_TIMEOUT } from "./helpers";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 
 // Deck.gl Layer, 3D Model and DuckDB on the Mapbox renderer. These draw through
@@ -23,8 +23,6 @@ const PROJECT = {
   },
 };
 const DUCKDB = "https://data.source.coop/giswqs/opengeos/nyc_data.db";
-/** What one renderer swap is allowed to cost, click and repaint alike. */
-const RENDERER_SWAP_TIMEOUT = 90_000;
 
 test.use({ actionTimeout: 30_000 });
 
@@ -98,16 +96,9 @@ async function waitForDeckLayer(page: Page, layerName: string) {
 async function switchRenderer(page: Page, name: "MapLibre" | "Mapbox") {
   await page.getByRole("button", { name: "View", exact: true }).click();
   await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
-  // Swapping renderers is not a cheap click. `setPrimaryRenderer` is a discrete
-  // React update, so the entire swap runs inside this click's own handler: the
-  // outgoing engine's `map.remove()` drops its WebGL context, taking the deck
-  // overlay (and the DuckDB layer's buffers) with it, and on the way back to
-  // MapLibre `new maplibregl.Map()` builds the replacement, all before the click
-  // event returns. Playwright waits for that event to be acknowledged, so the
-  // whole swap is charged against `actionTimeout`. On CI's software renderer
-  // that outran the 30 s budget on every first attempt of the DuckDB spec, and
-  // `retries: 1` was what made it green (#2432). Budget the swap here instead of
-  // leaving the retry to do the work.
+  // The swap runs inside this click's own handler and is charged against the
+  // action budget, which the DuckDB spec outran on CI every first attempt until
+  // `retries: 1` covered for it. See `RENDERER_SWAP_TIMEOUT` (#2432).
   await page
     .getByRole("menuitemradio", { name, exact: true })
     .click({ timeout: RENDERER_SWAP_TIMEOUT });
