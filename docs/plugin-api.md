@@ -1320,19 +1320,22 @@ only for the shared surface; a mapbox-gl map has none of MapLibre's extensions:
   and a name string (or `{ name }`) on Mapbox. Read both.
 - MapLibre's `Popup` and `Marker` classes imported from `maplibre-gl` do not
   work on a mapbox-gl map: their update path reads `map._camera.transform` and
-  throws on the first move (the Street View control's marker, GeoAgent's tool
-  markers). A plugin that needs markers on both engines positions a DOM element
-  through `map.project` instead, as the Elements panel does. When an upstream
-  library insists on constructing the engine's own classes, `app.getMapboxGl()`
-  hands out the mapbox-gl namespace: the Geo Editor feeds its `Marker` /
-  `LngLatBounds` to Geoman's map adapter and its `Popup` to
-  `maplibre-gl-geo-editor`'s `createPopup` option (`geo-editor-mapbox.ts`), and
-  Layer Swipe feeds its `Map` to `maplibre-gl-swipe`'s `createMap` option, which
-  builds the clipped comparison pane. A plugin that constructs a *second* Mapbox
-  map must also pass `app.getMapboxAccessToken()` in its constructor options:
-  mapbox-gl reads its token from the global `mapboxgl.accessToken` unless handed
-  one, and GeoLibre sets it per map, so a second map built without it renders
-  nothing and logs every frame.
+  throws on the first move (GeoAgent's tool markers still do). A plugin that
+  needs markers on both engines positions a DOM element through `map.project`
+  instead, as the Elements panel does. When an upstream library insists on
+  constructing the engine's own classes, `app.getMapboxGl()` hands out the
+  mapbox-gl namespace: the Geo Editor feeds its `Marker` / `LngLatBounds` to
+  Geoman's map adapter and its `Popup` to `maplibre-gl-geo-editor`'s
+  `createPopup` option (`geo-editor-mapbox.ts`), Street View feeds its `Marker`
+  to `maplibre-gl-streetview`'s `createMarker` option, and Layer Swipe feeds its
+  `Map` to `maplibre-gl-swipe`'s `createMap` option, which builds the clipped
+  comparison pane. The pattern upstream is the same each time: the library keeps
+  the element and its styling and takes only the engine class that positions it.
+  A plugin that constructs a *second* Mapbox map must also pass
+  `app.getMapboxAccessToken()` in its constructor options: mapbox-gl reads its
+  token from the global `mapboxgl.accessToken` unless handed one, and GeoLibre
+  sets it per map, so a second map built without it renders nothing and logs
+  every frame.
 
 The same frontend audit that scans Cesium-capable plugins scans every plugin
 declaring Mapbox support, follows its relative imports, and fails on a read

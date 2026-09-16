@@ -130,7 +130,7 @@ browser against an authenticated Mapbox map):
   Mapbox map (`geo-editor-mapbox.ts`); the toolbar's rotate and
   feature-properties popups come from `maplibre-gl-geo-editor`'s `createPopup`
   option, fed mapbox-gl's `Popup`. Text markers use Mapbox's `Open Sans
-Regular` glyphs when the style has no font to borrow.
+  Regular` glyphs when the style has no font to borrow.
 - **Atmospheric Effects** (its overlay canvases mount in the Mapbox canvas
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
@@ -147,6 +147,14 @@ Regular` glyphs when the style has no font to borrow.
   bearing), so **Bank the horizon in turns** leaves the horizon level — the
   aircraft still banks, and a bank still turns it. The panel says so while the
   Mapbox renderer is primary.
+- **Street View** (Google and Mapillary). Everything the upstream control
+  touches is on the shared surface except the location marker: MapLibre's
+  `Marker` reads `map._camera.transform` on every position update, so it threw
+  on the first map click. `maplibre-gl-streetview` 0.8.0 takes a `createMarker`
+  factory, and the plugin feeds it mapbox-gl's own `Marker` on a Mapbox host —
+  the control still owns the marker element and its direction arrow, and only
+  the positioning changes engine. A renderer swap rebuilds the control, so the
+  marker follows whichever engine is primary.
 - **Layer Swipe** for native style layers. The control drives both maps only
   through the surface the two engines share, so the one map it constructed
   itself — the clipped comparison pane, until now always a MapLibre one — comes
@@ -182,8 +190,6 @@ Regular` glyphs when the style has no font to borrow.
 
 Still MapLibre-only, each for a concrete reason:
 
-- **Street View**: the upstream control places a `maplibre-gl` `Marker`, whose
-  update path reads `map._camera.transform` and throws on a mapbox-gl map.
 - **GeoAgent**: its tools call `setProjection({ type })`, `setTerrain` and
   MapLibre `Marker` / `Popup`, so agent actions would break mid-run.
 
