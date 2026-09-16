@@ -536,8 +536,24 @@ function rebuildSwipeControl(app: GeoLibreAppAPI): void {
   const previousState = swipeControl.getState();
   savedSwipeState = previousState;
   app.removeMapControl(swipeControl);
-  swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
-  app.addMapControl(swipeControl, swipeControlPosition);
+
+  const control = new SwipeControl(getSwipeControlOptions(app, previousState));
+  const added = app.addMapControl(control, swipeControlPosition);
+  if (!added) {
+    // The host refused the add. That is not a transient failure: the app this
+    // subscription closed over belongs to one activation, and the host stops
+    // serving it once a later activation supersedes it. Publishing the refused
+    // control anyway would leave `swipeControl` naming one that was never
+    // mounted — a later remove would not find it, so its comparison map (a live
+    // WebGL context) and its clipped pane would never be torn down. Keep the
+    // module state empty instead; the activation that superseded this one owns
+    // the control now.
+    stopSwipeIdResolution();
+    swipeControl = null;
+    return;
+  }
+
+  swipeControl = control;
   expandSwipeControl(previousState);
   // The new style has its own layer set, so any side id still unresolved gets
   // another chance against it.
