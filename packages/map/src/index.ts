@@ -17,7 +17,6 @@ export {
   type FeatureSelectionRequest,
   type FeatureSelectionShape,
 } from "./feature-selection";
-export { BASEMAP_LABEL_KEY, type GeoLibreLayerLabelWindow } from "./layer-labels";
 export { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "./map-resize";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";

@@ -1,4 +1,7 @@
-import { BASEMAP_LABEL_KEY, type GeoLibreLayerLabelWindow } from "@geolibre/map";
+// Deep import, not the package barrel: this module is a side-effect import from
+// the app entry, and the barrel would drag the MapLibre/Mapbox/Cesium canvases
+// into the boot chunk that each of them works to stay out of.
+import { BASEMAP_LABEL_KEY, type GeoLibreLayerLabelWindow } from "@geolibre/map/layer-labels";
 
 const SWIPE_STYLE_ID = "maplibre-gl-swipe-style-fixes";
 const SWIPE_SELECT_PROXY_CLASS = "swipe-select-proxy";
