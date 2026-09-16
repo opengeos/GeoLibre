@@ -427,7 +427,7 @@ export function ArcgisCanvas({
     [],
   );
   return (
-    <div className="relative h-full w-full" data-testid="arcgis-canvas">
+    <div className="geolibre-arcgis-canvas relative h-full w-full" data-testid="arcgis-canvas">
       <div ref={container} className="relative h-full w-full" />
       {error && (
         <div
