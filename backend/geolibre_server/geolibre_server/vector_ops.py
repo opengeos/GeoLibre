@@ -150,7 +150,15 @@ def _boolean_param(raw: Any) -> Optional[bool]:
     if isinstance(raw, bool):
         return raw
     if isinstance(raw, (int, float)):
-        return raw != 0 if math.isfinite(raw) else None
+        try:
+            finite = math.isfinite(raw)
+        except OverflowError:
+            # `json.loads` keeps an arbitrarily large integer exact, and
+            # `math.isfinite` raises converting it to a float. The same literal
+            # reaches the client as `Infinity`, which `booleanParam` refuses, so
+            # refuse it here too rather than fail the request as a 500.
+            return None
+        return raw != 0 if finite else None
     if isinstance(raw, str):
         text = raw.strip().lower()
         if text in _TRUE_STRINGS:
@@ -220,9 +228,11 @@ def _buffer(
         raise ValueError("Buffer distance must be a finite number")
     try:
         distance = float(raw_distance or 0)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         # Surface the tool's own message rather than `float`'s raw "could not
         # convert string to float: 'abc'", which the client never produces.
+        # OverflowError joins them for an integer too large to convert: the same
+        # literal is `Infinity` on the client, which rejects it the same way.
         raise ValueError("Buffer distance must be a finite number") from exc
     if not math.isfinite(distance):
         # `json.loads` accepts NaN/Infinity, so a raw request payload can carry
