@@ -23,6 +23,8 @@ const PROJECT = {
   },
 };
 const DUCKDB = "https://data.source.coop/giswqs/opengeos/nyc_data.db";
+/** What one renderer swap is allowed to cost, click and repaint alike. */
+const RENDERER_SWAP_TIMEOUT = 90_000;
 
 test.use({ actionTimeout: 30_000 });
 
@@ -106,10 +108,12 @@ async function switchRenderer(page: Page, name: "MapLibre" | "Mapbox") {
   // that outran the 30 s budget on every first attempt of the DuckDB spec, and
   // `retries: 1` was what made it green (#2432). Budget the swap here instead of
   // leaving the retry to do the work.
-  await page.getByRole("menuitemradio", { name, exact: true }).click({ timeout: 90_000 });
+  await page
+    .getByRole("menuitemradio", { name, exact: true })
+    .click({ timeout: RENDERER_SWAP_TIMEOUT });
   await expect(
     page.locator(name === "Mapbox" ? ".mapboxgl-canvas" : ".maplibregl-canvas"),
-  ).toBeVisible({ timeout: 90_000 });
+  ).toBeVisible({ timeout: RENDERER_SWAP_TIMEOUT });
   await bindEngine(page, name === "Mapbox" ? "mapbox" : "maplibre");
 }
 
