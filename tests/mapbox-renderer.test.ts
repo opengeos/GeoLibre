@@ -151,6 +151,11 @@ describe("Mapbox native layer compilation", () => {
       geometries: [point, line],
     });
     assert.deepEqual(types(collection), ["line", "circle"]);
+    const nested = withGeometries("nested", {
+      type: "GeometryCollection",
+      geometries: [{ type: "GeometryCollection", geometries: [polygon] }],
+    });
+    assert.deepEqual(types(nested), ["fill", "line"]);
     // With nothing to inspect (an empty editable layer, features without a
     // geometry) every kind stays, so the first drawn feature has a layer.
     assert.deepEqual(types(geojsonLayer({ id: "empty" })), ["fill", "line", "circle"]);

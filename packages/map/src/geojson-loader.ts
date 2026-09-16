@@ -1,5 +1,5 @@
 import bbox from "@turf/bbox";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry } from "geojson";
 import { type GeoLibreLayer, horizontalBbox } from "@geolibre/core";
 
 export type GeometryKind = "point" | "line" | "polygon";
@@ -17,24 +17,25 @@ export function detectGeometryProfile(fc: FeatureCollection): GeometryProfile {
     hasPolygon: false,
   };
   for (const feature of fc.features) {
-    const type = feature.geometry?.type;
-    if (!type) continue;
-    if (type === "Point" || type === "MultiPoint") profile.hasPoint = true;
-    if (type === "LineString" || type === "MultiLineString") {
-      profile.hasLine = true;
-    }
-    if (type === "Polygon" || type === "MultiPolygon") {
-      profile.hasPolygon = true;
-    }
-    if (type === "GeometryCollection") {
-      for (const g of feature.geometry.geometries) {
-        if (g.type === "Point" || g.type === "MultiPoint") profile.hasPoint = true;
-        if (g.type === "LineString" || g.type === "MultiLineString") profile.hasLine = true;
-        if (g.type === "Polygon" || g.type === "MultiPolygon") profile.hasPolygon = true;
-      }
-    }
+    if (feature.geometry) addGeometryToProfile(profile, feature.geometry);
   }
   return profile;
+}
+
+/**
+ * Record a geometry's kinds on a profile, descending into (nested) collections.
+ *
+ * @param profile - The profile to update in place.
+ * @param geometry - The geometry to inspect.
+ */
+function addGeometryToProfile(profile: GeometryProfile, geometry: Geometry): void {
+  const type = geometry.type;
+  if (type === "Point" || type === "MultiPoint") profile.hasPoint = true;
+  if (type === "LineString" || type === "MultiLineString") profile.hasLine = true;
+  if (type === "Polygon" || type === "MultiPolygon") profile.hasPolygon = true;
+  if (type === "GeometryCollection") {
+    for (const member of geometry.geometries ?? []) addGeometryToProfile(profile, member);
+  }
 }
 
 export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {

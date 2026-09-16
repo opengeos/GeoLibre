@@ -513,16 +513,18 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     // control mounts on `style.load`, before the engine has re-added the
     // project layers, so its first pass has nothing to assign; the assignment
     // has to land once those layers arrive, on the main map and on the pane.
-    // `maplibre-gl-swipe` 0.13.3 re-applies the sides when assigned layers
+    // `maplibre-gl-swipe` 0.13.4 re-applies the sides when assigned layers
     // come or go.
     await expect.poll(() => mainMapVisibility(page, "East"), { timeout: 30_000 }).toEqual(["none"]);
     await expect
       .poll(() => comparisonPaneVisibility(page, "East"), { timeout: 30_000 })
       .toEqual(["visible"]);
-    expect(await mainMapVisibility(page, "West")).toEqual(["visible"]);
+    await expect.poll(() => mainMapVisibility(page, "West")).toEqual(["visible"]);
     // The pane only copies right-side layers, so a pane built before the
     // project layers returned never has West at all; either way it must not draw.
-    expect([["none"], ["<absent>"]]).toContainEqual(await comparisonPaneVisibility(page, "West"));
+    await expect
+      .poll(async () => (await comparisonPaneVisibility(page, "West")).join())
+      .toMatch(/^(none|<absent>)$/);
   }
 
   // Every rebuild constructs and removes a comparison map, and mapbox-gl's
