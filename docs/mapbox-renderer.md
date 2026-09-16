@@ -135,6 +135,20 @@ browser against an authenticated Mapbox map):
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
+- **GeoAgent**. Almost every tool already sits on the shared Style Spec
+  surface; four did not, and each broke differently — `add_marker` built
+  MapLibre's `Marker`/`Popup`, `set_projection` wrote `{ type }` (Mapbox takes a
+  name string), `get_map_state` read `projection.type`, and
+  `run_maplibre_script` handed user-authored code the wrong namespace. That
+  matters more here than in a control that simply fails to mount: an agent run
+  breaks mid-way, after it has already changed the map. `maplibre-gl-geoagent`
+  0.6.1 takes the engine as one option (`mapEngine`) and all four follow it, so
+  the plugin names the host's engine once (`geoagent-map-engine.ts`) and hands
+  over the whole mapbox-gl namespace — `run_maplibre_script` passes it straight
+  to the script it runs. Agent overlays reach the Layers panel as
+  plugin-owned rows the engine adopts, as on MapLibre. `set_sky` / `clear_sky`
+  stay MapLibre-only: mapbox-gl has no `setSky` (it draws sky through a style
+  layer), and the tool reports that instead of failing silently.
 - **Overture Maps**. mapbox-gl 3.30+ reads `.pmtiles` archives itself, through
   a tile provider it fetches from `api.mapbox.com` (allowlisted in the desktop
   and web CSPs), so the plugin hands `maplibre-gl-overture-maps` its `nativePmtiles`
@@ -150,8 +164,6 @@ Still MapLibre-only, each for a concrete reason:
 
 - **Street View**: the upstream control places a `maplibre-gl` `Marker`, whose
   update path reads `map._camera.transform` and throws on a mapbox-gl map.
-- **GeoAgent**: its tools call `setProjection({ type })`, `setTerrain` and
-  MapLibre `Marker` / `Popup`, so agent actions would break mid-run.
 - **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the
   comparison pane, and the plugin mirrors COG and raster layers onto it.
 - **Flight Simulator**: flies with `calculateCameraOptionsFromCameraLngLatAltRotation`

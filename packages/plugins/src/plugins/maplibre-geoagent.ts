@@ -29,6 +29,7 @@ import {
   projectValue as earthEngineProjectValue,
   shouldUseTauriEarthEngineOAuth,
 } from "./earth-engine-auth";
+import { geoAgentMapEngine } from "./geoagent-map-engine";
 import { GEOAGENT_PLUGIN_ID } from "../plugin-ids";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
@@ -89,7 +90,12 @@ export { GEOAGENT_PLUGIN_ID };
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: GEOAGENT_PLUGIN_ID,
   name: "GeoAgent",
-  version: "0.4.2",
+  version: "0.5.0",
+  // Both 2D engines: the tools that cannot stay on the shared Style Spec
+  // surface follow `mapEngine` (see geoAgentMapEngine). A renderer swap tears
+  // every active plugin down and re-activates it, so the rebuilt control is
+  // told the engine that is now primary.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     geoAgentActive = true;
     // Return the mount promise so the host can roll back the Plugins menu when
@@ -144,7 +150,7 @@ async function mountGeoAgentControl(
 ): Promise<boolean> {
   let control: GeoAgentControl;
   try {
-    control = await loadGeoAgentControl();
+    control = await loadGeoAgentControl(app);
   } catch (error) {
     // The dynamic import failed (offline, or a chunk orphaned by a web
     // redeploy). Clear the active flag and report the failure so the host can
@@ -180,12 +186,12 @@ async function mountGeoAgentControl(
   return true;
 }
 
-async function loadGeoAgentControl(): Promise<GeoAgentControl> {
+async function loadGeoAgentControl(app: GeoLibreAppAPI): Promise<GeoAgentControl> {
   if (geoAgentControl) return geoAgentControl;
   installEarthEngineFunctionInfoFallback();
   geoAgentControlPromise ??= import("maplibre-gl-geoagent")
     .then(({ GeoAgentControl }) => {
-      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions());
+      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions(app));
       return geoAgentControl;
     })
     .finally(() => {
@@ -194,10 +200,11 @@ async function loadGeoAgentControl(): Promise<GeoAgentControl> {
   return geoAgentControlPromise;
 }
 
-function getGeoAgentOptions(): GeoAgentControlOptions {
+function getGeoAgentOptions(app: GeoLibreAppAPI | null): GeoAgentControlOptions {
   return {
     ...GEOAGENT_OPTIONS,
     position: geoAgentPosition,
+    mapEngine: geoAgentMapEngine(app),
   };
 }
 
