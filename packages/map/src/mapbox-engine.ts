@@ -9,7 +9,7 @@ import type {
   StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
-import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, controlRendersLayer } from "@geolibre/core";
 import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
 import {
   DEFAULT_BUILT_IN_CONTROL_POSITIONS,
@@ -548,7 +548,11 @@ export class MapboxEngine implements MapEngine {
       const visibility = layer.visible ? "visible" : "none";
       if (map.getLayoutProperty(id, "visibility") !== visibility)
         map.setLayoutProperty(id, "visibility", visibility);
-      if (layer.metadata.controlOwnsPaint === true) continue;
+      // A control that paints its own layers (`controlOwnsPaint`), or renders
+      // them outright from its own panel state (`customLayerType`, the
+      // ordering-only path on MapLibre: Overture Maps), keeps its paint; the
+      // store's opacity reaches it through the plugin's own store sync.
+      if (layer.metadata.controlOwnsPaint === true || controlRendersLayer(layer)) continue;
       const paint =
         native.type === "raster"
           ? rasterPaint(style, layer.opacity)

@@ -135,15 +135,21 @@ browser against an authenticated Mapbox map):
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
+- **Overture Maps**. mapbox-gl 3.30+ reads `.pmtiles` archives itself, through
+  a tile provider it fetches from `api.mapbox.com` (allowlisted in the desktop
+  CSP), so the plugin hands `maplibre-gl-overture-maps` its `nativePmtiles`
+  option and the control adds plain https archive URLs instead of registering
+  MapLibre's `pmtiles://` protocol; the inspection popup comes from the
+  control's `createPopup` option, fed mapbox-gl's `Popup`. The Layers-panel
+  mirrors are plugin-owned rows (the engine neither compiles nor repaints
+  them), so release, visibility, opacity, color and export all work as on
+  MapLibre. The Style panel's 3D extrusion of the buildings theme is a
+  MapLibre layer-sync feature and stays MapLibre-only.
 
 Still MapLibre-only, each for a concrete reason:
 
 - **Street View**: the upstream control places a `maplibre-gl` `Marker`, whose
   update path reads `map._camera.transform` and throws on a mapbox-gl map.
-- **Overture Maps**: the upstream control loads `pmtiles://` archives through
-  `maplibregl.addProtocol`, which Mapbox never sees (mapbox-gl reads `.pmtiles`
-  natively only from a plain https URL; an upstream option to emit those would
-  unlock it).
 - **GeoAgent**: its tools call `setProjection({ type })`, `setTerrain` and
   MapLibre `Marker` / `Popup`, so agent actions would break mid-run.
 - **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the

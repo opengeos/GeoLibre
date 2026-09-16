@@ -93,6 +93,12 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
     // `source: { providerId }`), so the engine could not compile them anyway.
     if (layer.metadata.sourceKind === "time-slider" || layer.metadata.sourceKind === "timelapse")
       return true;
+    // The Overture Maps control adds its PMTiles vector sources and styled
+    // layers to whichever map hosts it (mapbox-gl reads the archives through
+    // its own tile provider). The store rows only mirror those layers for the
+    // Layers panel; their `source.url` names the archive for the record, and
+    // compiling it would draw every theme twice.
+    if (layer.type === "vector-tiles" && layer.metadata.sourceKind === "overture-maps") return true;
     if (
       layer.type === "3d-tiles" &&
       ["3d-tiles-url", "google-photorealistic-3d-tiles", "arcgis-i3s"].includes(

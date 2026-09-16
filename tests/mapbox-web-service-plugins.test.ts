@@ -348,9 +348,9 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
 
   it("keeps the plugins whose upstream needs MapLibre internals MapLibre-only", () => {
     // Street View drops a maplibre-gl Marker whose `_update` reads
-    // `_camera.transform`; Overture loads `pmtiles://` through addProtocol;
-    // GeoAgent's tools call setProjection({ type }) and MapLibre Marker/Popup.
-    for (const plugin of [maplibreStreetViewPlugin, maplibreOvertureMapsPlugin]) {
+    // `_camera.transform`; GeoAgent's tools call setProjection({ type }) and
+    // MapLibre Marker/Popup.
+    for (const plugin of [maplibreStreetViewPlugin]) {
       assert.equal(isPluginEngineSupported(plugin, "mapbox"), false, `${plugin.id} on mapbox`);
     }
     // GeoAgent's module pulls the Earth Engine client in at import time, which
@@ -467,6 +467,80 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
     maplibreUsgsNldiPlugin.deactivate(app);
     assert.equal(map.handlers.get("click")?.size ?? 0, 0);
     assert.equal(map.getCanvas().style.cursor, "");
+  });
+
+  it("runs Overture Maps on Mapbox with plain PMTiles URLs and a mapbox-gl popup", async () => {
+    // mapbox-gl 3.30+ reads `.pmtiles` archives through its own tile provider
+    // but never sees `maplibregl.addProtocol`, so on a Mapbox host the plugin
+    // asks the control for plain https archive URLs (`nativePmtiles`) and for
+    // an inspection popup built from mapbox-gl's `Popup` (`createPopup`).
+    const popups: { options: unknown; addedTo: unknown }[] = [];
+    class FakePopup {
+      record = { options: null as unknown, addedTo: null as unknown };
+      constructor(options: unknown) {
+        this.record.options = options;
+        popups.push(this.record);
+      }
+      setLngLat() {
+        return this;
+      }
+      setDOMContent() {
+        return this;
+      }
+      addTo(target: unknown) {
+        this.record.addedTo = target;
+        return this;
+      }
+      remove() {
+        return this;
+      }
+    }
+    const map = fakeMapboxMap(document);
+    const { app, controls } = mapboxOnlyHost(map, document);
+    (app as { getMapboxGl?: () => unknown }).getMapboxGl = () => ({ Popup: FakePopup });
+    assert.equal(isPluginEngineSupported(maplibreOvertureMapsPlugin, "mapbox"), true);
+    assert.notEqual(maplibreOvertureMapsPlugin.activate(app), false);
+    assert.equal(controls.length, 1, "the control is mounted on the Mapbox map");
+    // The release list is fetched (and fails here), then the fallback release
+    // is applied, which adds the theme sources and layers.
+    const deadline = Date.now() + 5000;
+    while (!map.getSource("overture-buildings") && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const source = map.getSource("overture-buildings") as { url?: string } | undefined;
+    assert.ok(source, "buildings source on the Mapbox map");
+    assert.match(source.url ?? "", /^https:\/\/.+\/buildings\.pmtiles$/, "plain archive URL");
+    assert.ok(map.getLayer("overture-buildings-building-fill"), "buildings fill layer");
+    const stored = useAppStore
+      .getState()
+      .layers.filter((layer) => layer.id.startsWith("overture-maps-buildings-"));
+    assert.ok(stored.length > 0, "Layers-panel mirrors");
+    for (const layer of stored) {
+      assert.equal(isMapboxPluginLayer(layer), true, `${layer.id} is plugin-owned on Mapbox`);
+      assert.doesNotMatch(layer.sourcePath ?? "", /^pmtiles:\/\//, layer.id);
+    }
+    // A click on a rendered feature opens mapbox-gl's popup, not MapLibre's.
+    map.queryRenderedFeatures = () =>
+      [{ sourceLayer: "building", properties: { height: 10 } }] as never;
+    map.fire("click", { point: { x: 1, y: 1 }, lngLat: { lng: -73.9, lat: 40.7 } });
+    assert.equal(popups.length, 1, "one popup constructed");
+    assert.deepEqual(popups[0].options, { maxWidth: "320px", className: "overture-popup" });
+    assert.equal(popups[0].addedTo, map);
+    maplibreOvertureMapsPlugin.deactivate(app);
+    assert.equal(controls.length, 0);
+    assert.equal(
+      useAppStore.getState().layers.filter((layer) => layer.id.startsWith("overture-maps-")).length,
+      0,
+    );
+  });
+
+  it("refuses Overture Maps on a Mapbox host that hides the mapbox-gl namespace", () => {
+    // Without mapbox-gl's Popup the control would open MapLibre popups on the
+    // Mapbox map, which throw on their first update.
+    const map = fakeMapboxMap(document);
+    const { app, controls } = mapboxOnlyHost(map, document);
+    assert.equal(maplibreOvertureMapsPlugin.activate(app), false);
+    assert.equal(controls.length, 0);
   });
 
   it("draws Mapillary's coverage on Mapbox as plugin-owned native layers", () => {
