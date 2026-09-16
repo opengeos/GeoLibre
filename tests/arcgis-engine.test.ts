@@ -8,7 +8,9 @@ import {
   type MapPreferences,
 } from "@geolibre/core";
 import {
+  ARCGIS_WORLD_ELEVATION_URL,
   ArcgisEngine,
+  arcgisSceneMode,
   bearingToRotation,
   geojsonToArcgisGeometry,
   rotationToBearing,
@@ -17,6 +19,7 @@ import type {
   ArcgisLayer,
   ArcgisMap,
   ArcgisMapView,
+  ArcgisSceneSdk,
   ArcgisSdk,
 } from "../packages/map/src/arcgis-sdk";
 import { ARCGIS_ID_FIELD } from "../packages/map/src/arcgis-layers";
@@ -124,6 +127,7 @@ function makeSdk() {
   const layers = collection<FakeLayer>();
   const map = {
     basemap: null as unknown,
+    ground: { layers: collection<unknown>(), surfaceColor: null as unknown },
     layers,
     allLayers: layers,
     add: (layer: FakeLayer, index?: number) => layers.add(layer, index),
@@ -135,7 +139,10 @@ function makeSdk() {
   };
   const uiAdds: { component: unknown; position: unknown }[] = [];
   const view = {
-    type: "2d",
+    type: "2d" as "2d" | "3d",
+    viewingMode: "global" as "global" | "local",
+    camera: null as null | { heading: number; tilt: number; position: { z: number } },
+    environment: {} as Record<string, unknown>,
     container: null as HTMLElement | null,
     map,
     center: { longitude: 10, latitude: 20 },
@@ -176,11 +183,19 @@ function makeSdk() {
     when: () => Promise.resolve(),
     goTo: (target: unknown, options: unknown) => {
       goTo.push({ target, options });
-      const t = target as { center?: [number, number]; zoom?: number; rotation?: number };
+      const t = target as {
+        center?: [number, number];
+        zoom?: number;
+        rotation?: number;
+        heading?: number;
+        tilt?: number;
+      };
       if (t && typeof t === "object" && !("xmin" in t)) {
         if (t.center) [view.center.longitude, view.center.latitude] = t.center;
         if (t.zoom !== undefined) view.zoom = t.zoom;
         if (t.rotation !== undefined) view.rotation = t.rotation;
+        if (view.camera && t.heading !== undefined) view.camera.heading = t.heading;
+        if (view.camera && t.tilt !== undefined) view.camera.tilt = t.tilt;
       }
       return Promise.resolve();
     },
@@ -318,6 +333,67 @@ function makeEngine(options?: ConstructorParameters<typeof ArcgisEngine>[3]) {
   const engine = new ArcgisEngine(fake.sdk, fake.map, fake.view, options);
   return { engine, ...fake };
 }
+
+/** The 3D modules, recording the elevation layers the engine builds. */
+function makeSceneSdk() {
+  const elevations: { props: Record<string, unknown>; destroyed: boolean; exaggerated: boolean }[] =
+    [];
+  const definitions: Record<string, unknown>[] = [];
+  const elevationClass = (exaggerated: boolean) =>
+    class {
+      destroyed = false;
+      exaggerated = exaggerated;
+      constructor(public props: Record<string, unknown> = {}) {
+        elevations.push(this);
+      }
+      destroy() {
+        this.destroyed = true;
+      }
+    };
+  const scene = {
+    SceneView: class {},
+    ElevationLayer: elevationClass(false),
+    BaseElevationLayer: {
+      createSubclass: (definition: Record<string, unknown>) => {
+        definitions.push(definition);
+        return elevationClass(true);
+      },
+    },
+  };
+  return { scene: scene as unknown as ArcgisSceneSdk, elevations, definitions };
+}
+
+/** An engine over a fake `SceneView` looking north-east at a 45 degree tilt. */
+function makeSceneEngine(
+  viewingMode: "global" | "local" = "global",
+  options: ConstructorParameters<typeof ArcgisEngine>[3] = {},
+) {
+  const fake = makeSdk();
+  const sceneSdk = makeSceneSdk();
+  Object.assign(fake.rawView, {
+    type: "3d",
+    viewingMode,
+    camera: { heading: 30, tilt: 45, position: { z: 1500 } },
+    constraints: { tilt: { max: 80 } },
+  });
+  const engine = new ArcgisEngine(fake.sdk, fake.map, fake.view, {
+    scene: sceneSdk.scene,
+    ...options,
+  });
+  return { engine, ...fake, ...sceneSdk };
+}
+
+const PREFERENCES = {
+  minZoom: 0,
+  maxZoom: 24,
+  maxPitch: 60,
+  renderWorldCopies: true,
+  restrictBounds: false,
+  bounds: [-180, -85, 180, 85],
+  projection: "globe",
+  scaleUnit: "metric",
+  terrainEnabled: false,
+} as MapPreferences;
 
 const SQUARE = geojsonLayer({
   geojson: {
@@ -743,6 +819,139 @@ describe("ArcgisEngine lifecycle", () => {
       assert.deepEqual(rawView.background, { type: "color", color: "#123456" });
       engine.setBlankBackgroundColor(null);
       assert.deepEqual(rawView.background, { type: "color", color: "#ffffff" });
+    } finally {
+      (globalThis as { document: unknown }).document = previous;
+    }
+  });
+});
+
+describe("ArcgisEngine 3D scenes", () => {
+  it("picks the view the projection and terrain need", () => {
+    assert.equal(arcgisSceneMode("mercator", false), "2d");
+    assert.equal(arcgisSceneMode("mercator", true), "local");
+    assert.equal(arcgisSceneMode("globe", false), "global");
+    assert.equal(arcgisSceneMode("globe", true), "global");
+  });
+
+  it("reads the camera's heading and tilt as bearing and pitch", () => {
+    const { engine } = makeSceneEngine();
+    const view = engine.readView();
+    assert.deepEqual([view.center, view.zoom, view.bearing, view.pitch], [[10, 20], 5, 30, 45]);
+    assert.equal(engine.readProjection(), "globe");
+    assert.equal(engine.readCameraAltitude(), 1500);
+    assert.equal(makeSceneEngine("local").engine.readProjection(), "mercator");
+    // A MapView has no camera to report.
+    assert.equal(makeEngine().engine.readCameraAltitude(), null);
+    assert.equal(makeEngine().engine.readProjection(), "mercator");
+  });
+
+  it("writes heading and tilt through goTo, clamped to the project's pitch limit", () => {
+    const { engine, goTo, rawView } = makeSceneEngine();
+    engine.applyMapPreferences(PREFERENCES);
+    assert.equal((rawView.constraints as { tilt: { max: number } }).tilt.max, 60);
+    engine.applyView({ center: [1, 2], zoom: 7, bearing: 90, pitch: 75 });
+    const call = goTo.at(-1) as { target: Record<string, unknown> };
+    assert.deepEqual(call.target, { center: [1, 2], zoom: 7, heading: 90, tilt: 60 });
+    // A pitch change alone moves the camera in a scene.
+    const count = goTo.length;
+    engine.applyView({ center: [1, 2], zoom: 7, bearing: 90, pitch: 20 });
+    assert.equal(goTo.length, count + 1);
+    engine.resetNorthPitch();
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 0, tilt: 0 });
+    engine.resetPitch();
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { tilt: 0 });
+    engine.flyTo({ bearing: 10, pitch: 30 });
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 10, tilt: 30 });
+  });
+
+  it("drapes Esri's world elevation for terrain and exaggerates it", async () => {
+    const { engine, map, elevations, definitions } = makeSceneEngine();
+    const ground = (map as unknown as { ground: { layers: { items: unknown[] } } }).ground;
+    assert.equal(engine.capabilities.terrain, true);
+    assert.equal(engine.setTerrainEnabled(true), true);
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.equal(ground.layers.items.length, 1);
+    assert.equal(elevations[0].props.url, ARCGIS_WORLD_ELEVATION_URL);
+    // Re-applying the same preference does not rebuild the layer.
+    engine.applyMapPreferences({ ...PREFERENCES, terrainEnabled: true });
+    assert.equal(elevations.length, 1);
+
+    engine.setTerrainExaggeration(2.5);
+    assert.equal(engine.getTerrainExaggeration(), 2.5);
+    assert.equal(elevations[0].destroyed, true);
+    assert.deepEqual(ground.layers.items, [elevations[1]]);
+    assert.equal(elevations[1].exaggerated, true);
+    assert.equal(elevations[1].props.exaggeration, 2.5);
+
+    // The subclass scales every height of the tile it fetched.
+    const self = {
+      exaggeration: 2.5,
+      source: { fetchTile: async () => ({ values: new Float32Array([1, 2, 4]) }) },
+    };
+    const fetchTile = definitions[0].fetchTile as (
+      this: unknown,
+      ...args: number[]
+    ) => Promise<{ values: Float32Array }>;
+    assert.deepEqual([...(await fetchTile.call(self, 1, 2, 3)).values], [2.5, 5, 10]);
+
+    engine.applyMapPreferences({ ...PREFERENCES, terrainEnabled: false });
+    assert.equal(engine.isTerrainEnabled(), false);
+    assert.deepEqual(ground.layers.items, []);
+    assert.equal(elevations[1].destroyed, true);
+  });
+
+  it("records terrain on a MapView without building elevation", () => {
+    const { engine, map } = makeEngine();
+    const ground = (map as unknown as { ground: { layers: { items: unknown[] } } }).ground;
+    // Success lets the Controls menu write the preference that swaps in a scene.
+    assert.equal(engine.setBuiltInControlVisible("terrain", true), true);
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(ground.layers.items, []);
+  });
+
+  it("extrudes polygons in a scene and passes their elevation info", () => {
+    const { engine, created } = makeSceneEngine();
+    engine.syncLayers([
+      {
+        ...SQUARE,
+        style: { ...DEFAULT_LAYER_STYLE, extrusionEnabled: true, extrusionBase: 3 },
+      },
+    ]);
+    const polygon = created.find((l) => l.props.geometryType === "polygon");
+    const renderer = polygon?.props.renderer as {
+      symbol: { type: string };
+      visualVariables: unknown[];
+    };
+    assert.equal(renderer.symbol.type, "polygon-3d");
+    assert.equal(renderer.visualVariables.length, 1);
+    assert.deepEqual(polygon?.props.elevationInfo, { mode: "relative-to-ground", offset: 3 });
+  });
+
+  it("hosts the globe toggle only with a projection callback, and no scale bar in 3D", () => {
+    const { document } = parseHTML("<html><body></body></html>");
+    const previous = globalThis.document;
+    (globalThis as { document: unknown }).document = document;
+    try {
+      const toggles: string[] = [];
+      const { engine, widgets, uiAdds } = makeSceneEngine("global", {
+        onProjectionToggle: (projection) => toggles.push(projection),
+      });
+      assert.deepEqual(
+        widgets.map((w) => w.kind),
+        ["Fullscreen", "Compass"],
+      );
+      assert.equal(engine.setBuiltInControlVisible("scale", true), false);
+      const globe = uiAdds.find(
+        (entry) => entry.component instanceof document.defaultView!.HTMLElement,
+      )?.component as HTMLElement | undefined;
+      const button = globe?.querySelector("button");
+      assert.ok(button?.classList.contains("maplibregl-ctrl-globe-enabled"));
+      button?.dispatchEvent(new document.defaultView!.Event("click"));
+      assert.deepEqual(toggles, ["mercator"]);
+      assert.equal(engine.setBuiltInControlVisible("globe", false), true);
+      assert.ok(!uiAdds.some((entry) => entry.component === globe));
+      // Without a callback nothing could rebuild the view, so there is no toggle.
+      assert.equal(makeSceneEngine().engine.setBuiltInControlVisible("globe", true), false);
     } finally {
       (globalThis as { document: unknown }).document = previous;
     }

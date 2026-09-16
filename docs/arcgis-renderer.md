@@ -70,7 +70,7 @@ override is set aside and the shared basemap is translated instead.
   rotation, case transform), and the data-driven colour modes — categorized,
   graduated, rule-based, expression and simplestyle — all render. The SDK has no
   MapLibre Style Spec, so the engine evaluates the same MapLibre expressions
-  `@geolibre/core` builds for the 2D map *per feature* with the style-spec
+  `@geolibre/core` builds for the 2D map _per feature_ with the style-spec
   engine and bakes the answers into the features; the layer's renderer is a
   unique-value renderer over the resulting symbol keys. Layer filters, quick
   filters, the time slider's filter and the embed filter are applied the same
@@ -96,8 +96,47 @@ override is set aside and the shared basemap is translated instead.
   drawing, draggable placement, and engine-level image capture.
 - The built-in controls the **Controls** menu governs, as the SDK's own widgets:
   fullscreen, compass (resets rotation), zoom (navigation), locate (geolocate)
-  and the scale bar (metric or imperial). Attribution is drawn by the view
+  and the scale bar (metric or imperial, 2D only), plus a globe/Mercator
+  toggle and terrain (see [2D and 3D](#2d-and-3d)). Attribution is drawn by the view
   itself (`attributionVisible`); Esri requires it and it cannot be hidden.
+
+## 2D and 3D
+
+The SDK draws flat maps and 3D scenes through two different view classes, so
+the ArcGIS pane picks one from the project's map preferences and rebuilds the
+view when the choice changes. The camera (centre, zoom, bearing and pitch)
+carries over.
+
+| Projection | Terrain   | View                               |
+| ---------- | --------- | ---------------------------------- |
+| Globe      | off or on | `SceneView`, global (a 3D globe)   |
+| Mercator   | on        | `SceneView`, local (a flat 3D map) |
+| Mercator   | off       | `MapView` (a flat 2D map)          |
+
+New projects use the globe projection, so an ArcGIS pane opens as a globe.
+The globe button under the compass switches projection (as on MapLibre, a
+split pane's button only switches that pane), and **Controls → Terrain** turns
+terrain on or off. The 3D modules (`views/SceneView` and the elevation
+layers, close to a megabyte) are only fetched the first time a pane needs a
+scene.
+
+In a scene:
+
+- The camera tilts (right-drag, or the project's saved pitch), limited by the
+  project's maximum pitch. The status bar shows the camera's altitude.
+- Terrain drapes the map over Esri's
+  [World Elevation](https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer)
+  service. It needs no API key. **Controls → Terrain exaggeration** scales the
+  heights.
+- Polygon layers whose style extrudes (the Style panel's **3D extrusion**) draw as
+  extruded 3D shapes: the height property (or the advanced height expression)
+  times the height scale, lifted by the base height, in the extrusion colour
+  (or the advanced colour expression). On a 2D `MapView` they stay flat fills.
+- Identify, selection highlighting, extent drawing and capture work as in 2D.
+  The scale bar does not: the SDK's scale bar only measures a `MapView`, so
+  the Controls menu cannot show it in a scene. The project's minimum and
+  maximum zoom still clamp camera moves the app makes, but not the user's own
+  navigation.
 
 ## Adding data
 
@@ -110,8 +149,9 @@ drop the file instead.
 
 ## Not supported yet
 
-- A `MapView` is a flat Web Mercator map: no globe projection, no pitch, no
-  terrain. A `SceneView`-backed 3D mode is the natural follow-up.
+- Custom terrain sources (a COG DEM chosen in **Controls → Terrain exaggeration**): terrain is
+  always Esri's World Elevation. Features with their own Z values
+  (the Style panel's **3D (Z values)** mode) are not placed at their altitude.
 - deck.gl overlays (Deck.gl Layers, 3D Models, DuckDB query layers, 3D Tiles,
   LiDAR), COGs, Zarr, NetCDF, PMTiles and MBTiles archives, Gaussian splats and
   Cesium-only sources. **Add Data** greys these out while ArcGIS is the primary

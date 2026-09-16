@@ -40,7 +40,20 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
     timeout: 60_000,
   });
   await expect(page.locator(".esri-ui .esri-compass")).toBeVisible();
-  await expect(page.locator(".esri-ui .esri-scale-bar")).toBeVisible();
+  // New projects use the globe projection, which the SDK draws as a 3D
+  // SceneView. Its toggle switches to a flat MapView, the only view the SDK's
+  // scale bar measures.
+  const globe = page.locator(".geolibre-arcgis-globe button");
+  await expect(globe).toHaveClass(/maplibregl-ctrl-globe-enabled/);
+  await expect(page.locator(".esri-ui .esri-scale-bar")).toHaveCount(0);
+  await globe.click();
+  await expect(page.locator(".geolibre-arcgis-globe button")).toHaveClass(
+    /maplibregl-ctrl-globe$/,
+    {
+      timeout: 60_000,
+    },
+  );
+  await expect(page.locator(".esri-ui .esri-scale-bar")).toBeVisible({ timeout: 60_000 });
 
   // Sources without an SDK adapter are greyed out while ArcGIS is primary.
   await page.getByRole("button", { name: "Add Data", exact: true }).click();

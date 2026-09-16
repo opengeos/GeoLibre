@@ -142,8 +142,17 @@ export interface ArcgisBasemap {
   destroy(): void;
 }
 
+/** A map's ground: the elevation surface a `SceneView` drapes layers on. */
+export interface ArcgisGround {
+  layers: ArcgisCollection<ArcgisLayer>;
+  /** Colour of the surface where no basemap tile draws. */
+  surfaceColor: unknown;
+}
+
 export interface ArcgisMap {
   basemap: ArcgisBasemap | null;
+  /** Only read by a `SceneView`; a `MapView` ignores it. */
+  ground?: ArcgisGround | null;
   layers: ArcgisCollection<ArcgisLayer>;
   allLayers: ArcgisCollection<ArcgisLayer>;
   add(layer: ArcgisLayer, index?: number): void;
@@ -182,7 +191,12 @@ export interface ArcgisGoToTarget {
   center?: [number, number] | ArcgisPoint;
   zoom?: number;
   scale?: number;
+  /** `MapView` only: clockwise rotation of north from the top of the screen. */
   rotation?: number;
+  /** `SceneView` only: the compass direction the camera looks towards. */
+  heading?: number;
+  /** `SceneView` only: degrees from looking straight down. */
+  tilt?: number;
 }
 
 export interface ArcgisGoToOptions {
@@ -218,14 +232,13 @@ export interface ArcgisConstraints {
   effectiveMinZoom?: number;
 }
 
-export interface ArcgisMapView {
-  type: "2d";
+/** Members a `MapView` and a `SceneView` share, which is most of the engine's surface. */
+interface ArcgisViewBase {
   container: HTMLElement | null;
   map: ArcgisMap;
   center: ArcgisPoint;
   zoom: number;
   scale: number;
-  rotation: number;
   extent: ArcgisExtent;
   spatialReference: ArcgisSpatialReference;
   stationary: boolean;
@@ -235,11 +248,8 @@ export interface ArcgisMapView {
   animation: unknown | null;
   width: number;
   height: number;
-  resolution: number;
   ui: ArcgisUI;
   navigation: ArcgisNavigation;
-  constraints: ArcgisConstraints;
-  background: { type: "color"; color: unknown } | null;
   /**
    * Whether the view should show attribution, and the credits to show: the
    * 5.x replacement for the deprecated Attribution widget. The core SDK only
@@ -288,6 +298,41 @@ export interface ArcgisMapView {
   destroy(): void;
 }
 
+export interface ArcgisMapView extends ArcgisViewBase {
+  type: "2d";
+  rotation: number;
+  resolution: number;
+  constraints: ArcgisConstraints;
+  background: { type: "color"; color: unknown } | null;
+}
+
+export interface ArcgisCamera {
+  /** Compass direction the camera looks towards, clockwise from north. */
+  heading: number;
+  /** Degrees from nadir: 0 looks straight down. */
+  tilt: number;
+  /** The camera's location; `z` is its height in metres. */
+  position: ArcgisPoint & { z?: number };
+}
+
+export interface ArcgisSceneView extends ArcgisViewBase {
+  type: "3d";
+  /** `global` draws a globe; `local` a flat, projected scene. */
+  viewingMode: "global" | "local";
+  camera: ArcgisCamera | null;
+  constraints: {
+    tilt?: { max?: number; mode?: "auto" | "manual" };
+  };
+  environment: {
+    background?: { type: "color"; color: unknown } | null;
+    atmosphereEnabled?: boolean;
+    starsEnabled?: boolean;
+  };
+}
+
+/** Either view the engine can drive. Narrow on `type` before a view-specific member. */
+export type ArcgisView = ArcgisMapView | ArcgisSceneView;
+
 export interface ArcgisReactiveUtils {
   watch<T>(
     getValue: () => T,
@@ -320,7 +365,7 @@ export interface ArcgisConfig {
 
 /** A widget (legacy `@arcgis/core/widgets/*`): mounted through `view.ui`. */
 export interface ArcgisWidget {
-  view?: ArcgisMapView | null;
+  view?: ArcgisView | null;
   destroy(): void;
   /** `ScaleBar`. */
   unit?: string;
@@ -507,6 +552,79 @@ export function loadArcgisSdk(
 /** Test hook: forget a loaded SDK so the next {@link loadArcgisSdk} imports again. */
 export function resetArcgisSdkForTests(): void {
   sdkPromise = null;
+  scenePromise = null;
+}
+
+// -------------------------------------------------------------- 3D modules
+
+/**
+ * An elevation layer: the SDK's tiled elevation service client, or a
+ * `BaseElevationLayer` subclass that post-processes its tiles.
+ */
+export interface ArcgisElevationLayer extends ArcgisLayer {
+  tileInfo?: unknown;
+  spatialReference?: unknown;
+  fetchTile(
+    level: number,
+    row: number,
+    col: number,
+    options?: unknown,
+  ): Promise<{ values: Float32Array | number[]; [key: string]: unknown }>;
+}
+
+/**
+ * The modules only a 3D scene needs. `views/SceneView` alone is ~840 KB of
+ * minified JavaScript (before its own chunks), so they load separately from
+ * {@link loadArcgisSdk}, and only when a pane actually renders in 3D.
+ */
+export interface ArcgisSceneSdk {
+  SceneView: ArcgisClass<ArcgisSceneView>;
+  ElevationLayer: ArcgisClass<ArcgisElevationLayer>;
+  BaseElevationLayer: ArcgisClass<ArcgisElevationLayer> & {
+    /** The SDK's Accessor subclassing, which is how its samples extend layers. */
+    createSubclass(definition: Record<string, unknown>): ArcgisClass<ArcgisElevationLayer>;
+  };
+}
+
+const SCENE_MODULES = {
+  SceneView: "views/SceneView",
+  ElevationLayer: "layers/ElevationLayer",
+  BaseElevationLayer: "layers/BaseElevationLayer",
+} as const;
+
+type SceneModuleKey = keyof typeof SCENE_MODULES;
+
+let scenePromise: Promise<ArcgisSceneSdk> | null = null;
+
+/**
+ * Load the 3D modules from the CDN once per page, after the core SDK (the
+ * scene classes extend it). A failed load is forgotten so the next 3D mount
+ * retries, as with {@link loadArcgisSdk}.
+ */
+export function loadArcgisSceneSdk(
+  importer: ArcgisModuleImporter = defaultImporter,
+): Promise<ArcgisSceneSdk> {
+  if (!scenePromise) {
+    const keys = Object.keys(SCENE_MODULES) as SceneModuleKey[];
+    scenePromise = loadArcgisSdk(importer)
+      .then(() => Promise.all(keys.map((key) => importer(arcgisModuleUrl(SCENE_MODULES[key])))))
+      .then((loaded) => {
+        const scene = Object.fromEntries(
+          keys.map((key, index) => {
+            const value = loaded[index].default;
+            if (value === undefined)
+              throw new Error(`ArcGIS SDK module ${SCENE_MODULES[key]} has no default export`);
+            return [key, value];
+          }),
+        );
+        return scene as unknown as ArcgisSceneSdk;
+      })
+      .catch((error: unknown) => {
+        scenePromise = null;
+        throw error;
+      });
+  }
+  return scenePromise;
 }
 
 // ---------------------------------------------------------------------- CSS

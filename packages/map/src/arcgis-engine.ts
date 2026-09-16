@@ -23,6 +23,7 @@ import {
   type MapRenderSurface,
 } from "./map-engine";
 import {
+  ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
   ARCGIS_SYMBOL_FIELD,
@@ -44,11 +45,14 @@ import {
   type ArcgisGeometryJson,
   type ArcgisGraphic,
   type ArcgisHandle,
+  type ArcgisElevationLayer,
   type ArcgisLayer,
   type ArcgisMap,
-  type ArcgisMapView,
   type ArcgisPoint,
+  type ArcgisSceneSdk,
+  type ArcgisSceneView,
   type ArcgisSdk,
+  type ArcgisView,
   type ArcgisWidget,
 } from "./arcgis-sdk";
 import { getLayerBounds } from "./geojson-loader";
@@ -64,8 +68,8 @@ import { drawExtentOnCanvas } from "./extent-drawing";
  *   not a Mapbox Style document, and there is no `maplibregl.Map` behind it.
  * - `customLayers` / `deckOverlay`: `@deck.gl/arcgis` exists but is not wired
  *   yet; the shared interleaved overlay binds to MapLibre and Mapbox only.
- * - `terrain`: a `MapView` is flat. A `SceneView` would give terrain and a
- *   globe, and is the natural follow-up.
+ * - `terrain` is claimed: the pane renders a `SceneView` over Esri's world
+ *   elevation while terrain is on (see {@link arcgisSceneMode}).
  * - `domControls`: the built-in controls are the SDK's own widgets, mounted
  *   through `view.ui`. MapLibre `IControl` plugin controls expect a MapLibre
  *   map to call into, which this engine cannot offer, so `addControl` reports
@@ -76,21 +80,25 @@ export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   nativeMapInstance: false,
   customLayers: false,
   deckOverlay: false,
-  terrain: false,
+  terrain: true,
   picking: true,
   onMapDrawing: true,
   domControls: false,
 });
 
 /**
- * The built-in controls the SDK has a widget for, plus attribution, which the
- * view draws itself (`attributionVisible`) and which cannot be turned off.
+ * The built-in controls the SDK has a widget for, the globe toggle (a DOM
+ * button), terrain (a scene setting with no button, as on Mapbox and Cesium),
+ * plus attribution, which the view draws itself (`attributionVisible`) and
+ * which cannot be turned off.
  */
 const HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set<BuiltInMapControl>([
   "navigation",
   "fullscreen",
   "compass",
   "geolocate",
+  "globe",
+  "terrain",
   "scale",
   "attribution",
 ]);
@@ -101,8 +109,40 @@ const HOSTED_CONTROL_ORDER: readonly BuiltInMapControl[] = [
   "compass",
   "navigation",
   "geolocate",
+  "globe",
   "scale",
 ];
+
+/**
+ * Esri's global terrain, the same service the SDK's `"world-elevation"` ground
+ * resolves to. Publicly readable: terrain needs no API key.
+ */
+export const ARCGIS_WORLD_ELEVATION_URL =
+  "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer";
+
+/**
+ * How an ArcGIS pane renders: a flat `MapView`, or a `SceneView` that is
+ * either a globe (`global`) or a flat 3D map (`local`).
+ */
+export type ArcgisSceneMode = "2d" | "global" | "local";
+
+/**
+ * The view an ArcGIS pane needs for the project's map preferences.
+ *
+ * The SDK splits what MapLibre does in one map across two view classes: a
+ * `MapView` cannot tilt, draw a globe or drape terrain, and a `SceneView`
+ * does all three. So the globe projection selects a global scene, terrain on
+ * a Mercator map selects a local (projected) scene, and only a Mercator map
+ * without terrain stays a `MapView`. The canvas rebuilds the view when the
+ * answer changes.
+ */
+export function arcgisSceneMode(
+  projection: MapProjection,
+  terrainEnabled: boolean,
+): ArcgisSceneMode {
+  if (projection === "globe") return "global";
+  return terrainEnabled ? "local" : "2d";
+}
 
 /** The SDK's layer instances a plan produced, plus the blob URLs backing them. */
 interface NativePlan {
@@ -128,6 +168,7 @@ const ARCGIS_GEOJSON_FIELDS = [
   { name: ARCGIS_ID_FIELD, type: "string", length: 255 },
   { name: ARCGIS_SYMBOL_FIELD, type: "string", length: 32 },
   { name: ARCGIS_LABEL_FIELD, type: "string", length: 4000 },
+  { name: ARCGIS_HEIGHT_FIELD, type: "double" },
 ];
 
 /**
@@ -139,16 +180,103 @@ function rendererWithFallbackMarkers(renderer: ArcgisRendererJson): ArcgisRender
     isMarkerPlaceholder(symbol)
       ? (symbol as ArcgisMarkerPlaceholder).fallback
       : (symbol as ArcgisSymbolJson);
+  return mapRendererSymbols(renderer, fallback);
+}
+
+/** A renderer with every symbol mapped, its visual variables kept. */
+function mapRendererSymbols(
+  renderer: ArcgisRendererJson,
+  map: (symbol: ArcgisSymbolJson | unknown) => ArcgisSymbolJson,
+): ArcgisRendererJson {
+  const visualVariables = renderer.visualVariables
+    ? { visualVariables: renderer.visualVariables }
+    : {};
   return renderer.type === "simple"
-    ? { type: "simple", symbol: fallback(renderer.symbol) }
+    ? { type: "simple", symbol: map(renderer.symbol), ...visualVariables }
     : {
         type: "unique-value",
         field: renderer.field,
         uniqueValueInfos: renderer.uniqueValueInfos.map((info) => ({
           value: info.value,
-          symbol: fallback(info.symbol),
+          symbol: map(info.symbol),
         })),
+        ...visualVariables,
       };
+}
+
+/**
+ * The on-map globe/Mercator toggle. The SDK has no such widget, so this is a
+ * plain button carrying MapLibre's `GlobeControl` classes, as the Mapbox
+ * engine's toggle does, so the same glyph and "enabled" styling apply.
+ * Toggling rebuilds the view (a `MapView` cannot become a globe), which is the
+ * canvas's job; the button only reports the click.
+ */
+function createGlobeToggle(
+  projection: MapProjection,
+  onToggle: (projection: MapProjection) => void,
+): ArcgisWidget {
+  const container = document.createElement("div");
+  container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-arcgis-globe";
+  const button = document.createElement("button");
+  button.type = "button";
+  const globe = projection === "globe";
+  button.className = globe ? "maplibregl-ctrl-globe-enabled" : "maplibregl-ctrl-globe";
+  const label = globe ? "Disable globe" : "Enable globe";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  const icon = document.createElement("span");
+  icon.className = "maplibregl-ctrl-icon";
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon);
+  button.addEventListener("click", () => onToggle(globe ? "mercator" : "globe"));
+  container.append(button);
+  return { uiComponent: container, destroy: () => container.remove() };
+}
+
+/**
+ * The SDK's tiled elevation layer, optionally exaggerated. The SDK has no
+ * exaggeration setting; its documented route is a `BaseElevationLayer`
+ * subclass that scales each tile's heights, built once per SDK.
+ */
+const exaggeratedElevationClasses = new WeakMap<
+  ArcgisSceneSdk,
+  new (properties?: Record<string, unknown>) => ArcgisElevationLayer
+>();
+
+function createElevationLayer(scene: ArcgisSceneSdk, exaggeration: number): ArcgisElevationLayer {
+  if (exaggeration === 1)
+    return new scene.ElevationLayer({ url: ARCGIS_WORLD_ELEVATION_URL, listMode: "hide" });
+  let Exaggerated = exaggeratedElevationClasses.get(scene);
+  if (!Exaggerated) {
+    type Self = ArcgisElevationLayer & {
+      exaggeration: number;
+      source: ArcgisElevationLayer;
+      addResolvingPromise(promise: Promise<unknown>): void;
+      fullExtent: unknown;
+    };
+    Exaggerated = scene.BaseElevationLayer.createSubclass({
+      properties: { exaggeration: 1 },
+      load(this: Self) {
+        this.source = new scene.ElevationLayer({ url: ARCGIS_WORLD_ELEVATION_URL });
+        this.addResolvingPromise(
+          this.source.load().then(() => {
+            this.tileInfo = this.source.tileInfo;
+            this.spatialReference = this.source.spatialReference;
+            this.fullExtent = this.source.fullExtent;
+          }),
+        );
+      },
+      fetchTile(this: Self, level: number, row: number, col: number, options?: unknown) {
+        return this.source.fetchTile(level, row, col, options).then((data) => {
+          const factor = this.exaggeration;
+          for (let i = 0; i < data.values.length; i++) data.values[i] *= factor;
+          return data;
+        });
+      },
+    });
+    exaggeratedElevationClasses.set(scene, Exaggerated);
+  }
+  return new Exaggerated({ exaggeration, listMode: "hide" });
 }
 
 /** Convert GeoJSON geometry to the SDK's geometry JSON (WGS84). */
@@ -224,7 +352,7 @@ export function rotationToBearing(rotation: number): number {
 export class ArcgisEngine implements MapEngine {
   readonly kind = "arcgis" as const;
   readonly capabilities = ARCGIS_CAPABILITIES;
-  private view: ArcgisMapView | null;
+  private view: ArcgisView | null;
   private map: ArcgisMap | null;
   private surface: MapRenderSurface | null;
   private layers: GeoLibreLayer[] = [];
@@ -251,14 +379,28 @@ export class ArcgisEngine implements MapEngine {
   /** Results of the latest hit test, served by the synchronous identify. */
   private lastHit: { lngLat: [number, number]; features: IdentifiedFeature[] } | null = null;
   private zoomWatch: ArcgisHandle | null = null;
+  private terrain = false;
+  private exaggeration = 1;
+  private elevation: ArcgisElevationLayer | null = null;
 
   constructor(
     private sdk: ArcgisSdk,
     map: ArcgisMap,
-    view: ArcgisMapView,
+    view: ArcgisView,
     private options: {
       /** Whether an API key is configured, so Esri basemap styles are usable. */
       hasApiKey?: boolean;
+      /**
+       * The 3D modules, required when `view` is a `SceneView`: terrain builds
+       * its elevation layers from them.
+       */
+      scene?: ArcgisSceneSdk;
+      /**
+       * Called when the on-map globe toggle is clicked with the projection it
+       * asks for. Without it the toggle is not mounted, since only the canvas
+       * can rebuild the view in the other projection.
+       */
+      onProjectionToggle?: (projection: MapProjection) => void;
       /**
        * Override built-in control visibility before the controls are added.
        * Split/grid panes pass `{ "layer-control": false }` like the other
@@ -279,7 +421,7 @@ export class ArcgisEngine implements MapEngine {
     this.surface = {
       getCanvas: () => this.canvas(),
       getContainer: () => view.container ?? document.createElement("div"),
-      getBearing: () => rotationToBearing(view.rotation),
+      getBearing: () => this.bearing(),
       project: (p) => {
         const screen = this.view?.toScreen(this.point(p));
         return screen ? { x: screen.x, y: screen.y } : { x: 0, y: 0 };
@@ -334,9 +476,42 @@ export class ArcgisEngine implements MapEngine {
   getSdk(): ArcgisSdk {
     return this.sdk;
   }
-  /** The live `MapView`, or `null` once destroyed. */
-  getView(): ArcgisMapView | null {
+  /** The live `MapView` or `SceneView`, or `null` once destroyed. */
+  getView(): ArcgisView | null {
     return this.view;
+  }
+  /** The live view when it is a `SceneView`. */
+  private sceneView(): ArcgisSceneView | null {
+    return this.view?.type === "3d" ? this.view : null;
+  }
+  /** MapLibre bearing of the live view. */
+  private bearing(): number {
+    const view = this.view;
+    if (!view) return 0;
+    return view.type === "3d"
+      ? normalizeBearing(view.camera?.heading ?? 0)
+      : rotationToBearing(view.rotation);
+  }
+  /**
+   * The SDK's camera fields for a MapLibre bearing and pitch: a `MapView`
+   * rotates (and cannot tilt), a `SceneView` takes a heading and tilt.
+   */
+  private orientation(
+    bearing: number | undefined,
+    pitch: number | undefined,
+  ): Record<string, number> {
+    const view = this.view;
+    if (!view) return {};
+    if (view.type === "2d")
+      return bearing === undefined ? {} : { rotation: bearingToRotation(bearing) };
+    return {
+      ...(bearing === undefined ? {} : { heading: normalizeBearing(bearing) }),
+      ...(pitch === undefined ? {} : { tilt: this.clampPitch(pitch) }),
+    };
+  }
+  private clampPitch(pitch: number): number {
+    const max = this.preferences ? Math.min(85, Math.max(0, this.preferences.maxPitch)) : 85;
+    return Math.min(max, Math.max(0, pitch));
   }
   getMap(): null {
     return null;
@@ -373,6 +548,7 @@ export class ArcgisEngine implements MapEngine {
     this.zoomWatch?.remove();
     this.zoomWatch = null;
     this.clearFeatureHighlight();
+    this.removeElevation();
     for (const id of [...this.natives.keys()]) this.removeLayer(id);
     for (const widget of this.builtInControls.values()) widget.destroy();
     this.builtInControls.clear();
@@ -394,34 +570,67 @@ export class ArcgisEngine implements MapEngine {
     return {
       center: [center.longitude, center.latitude],
       zoom: view.zoom >= 0 ? view.zoom : Math.log2(591657527.591555 / view.scale),
-      bearing: rotationToBearing(view.rotation),
+      bearing: this.bearing(),
       // A MapView has no pitch.
-      pitch: 0,
+      pitch: view.type === "3d" ? (view.camera?.tilt ?? 0) : 0,
       ...(bounds ? { bbox: bounds } : {}),
     };
   }
   applyView(view: MapViewState): void {
     const old = this.readView();
     const target = this.constrainView(view);
+    const scene = this.view?.type === "3d";
     if (
       Math.abs(old.center[0] - target.center[0]) < 1e-8 &&
       Math.abs(old.center[1] - target.center[1]) < 1e-8 &&
       Math.abs(old.zoom - target.zoom) < 1e-8 &&
-      Math.abs(normalizeBearing(old.bearing) - normalizeBearing(target.bearing)) < 1e-8
+      Math.abs(normalizeBearing(old.bearing) - normalizeBearing(target.bearing)) < 1e-8 &&
+      // A MapView reads pitch as 0 whatever the store holds.
+      (!scene || Math.abs(old.pitch - this.clampPitch(target.pitch)) < 1e-8)
     )
       return;
     void this.view
       ?.goTo(
-        { center: target.center, zoom: target.zoom, rotation: bearingToRotation(target.bearing) },
+        {
+          center: target.center,
+          zoom: target.zoom,
+          ...this.orientation(target.bearing, target.pitch),
+        },
         { animate: false },
       )
       .catch(reportGoToFailure);
+  }
+  /**
+   * Place the camera at `view` and resolve once it is there. A new view
+   * reports `stationary` at its constructor's default camera before the first
+   * move lands, and a `SceneView` cannot be constructed at a heading and tilt;
+   * the canvas awaits this before it lets camera changes reach the store, or
+   * that default (north-up, untilted) would overwrite the project's view.
+   */
+  async settleView(view: MapViewState): Promise<void> {
+    const target = this.constrainView(view);
+    try {
+      await this.view?.goTo(
+        {
+          center: target.center,
+          zoom: target.zoom,
+          ...this.orientation(target.bearing, target.pitch),
+        },
+        { animate: false },
+      );
+    } catch (error) {
+      reportGoToFailure(error);
+    }
   }
   easeToView(view: MapViewState): void {
     const target = this.constrainView(view);
     void this.view
       ?.goTo(
-        { center: target.center, zoom: target.zoom, rotation: bearingToRotation(target.bearing) },
+        {
+          center: target.center,
+          zoom: target.zoom,
+          ...this.orientation(target.bearing, target.pitch),
+        },
         { duration: 500 },
       )
       .catch(reportGoToFailure);
@@ -431,6 +640,7 @@ export class ArcgisEngine implements MapEngine {
     center: [number, number];
     zoom: number;
     bearing: number;
+    pitch: number;
   } {
     const p = this.preferences;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -443,10 +653,13 @@ export class ArcgisEngine implements MapEngine {
       ],
       zoom: clamp(view.zoom, minZoom, maxZoom),
       bearing: view.bearing,
+      pitch: Number.isFinite(view.pitch) ? view.pitch : 0,
     };
   }
-  readCameraAltitude(): null {
-    return null;
+  readCameraAltitude(): number | null {
+    // A MapView has a scale, not a camera.
+    const z = this.sceneView()?.camera?.position.z;
+    return typeof z === "number" && Number.isFinite(z) ? z : null;
   }
   flyTo(camera: FlyToCamera): void {
     const view = this.view;
@@ -456,7 +669,7 @@ export class ArcgisEngine implements MapEngine {
         {
           ...(camera.center ? { center: camera.center } : {}),
           ...(camera.zoom !== undefined ? { zoom: camera.zoom } : {}),
-          ...(camera.bearing !== undefined ? { rotation: bearingToRotation(camera.bearing) } : {}),
+          ...this.orientation(camera.bearing, camera.pitch),
         },
         { duration: camera.duration ?? 800 },
       )
@@ -478,9 +691,7 @@ export class ArcgisEngine implements MapEngine {
         {
           ...(location.center ? { center: location.center } : {}),
           ...(location.zoom !== undefined ? { zoom: location.zoom } : {}),
-          ...(location.bearing !== undefined
-            ? { rotation: bearingToRotation(location.bearing) }
-            : {}),
+          ...this.orientation(location.bearing, location.pitch),
         },
         { duration: animation === "jumpTo" ? 0 : 800, animate: animation !== "jumpTo" },
       )
@@ -495,8 +706,14 @@ export class ArcgisEngine implements MapEngine {
   private rotate = () => {
     const view = this.view;
     if (!this.rotating || !view) return;
+    // MapLibre's story rotation turns the bearing forward; `rotation` runs
+    // the other way to `heading`.
+    const turn =
+      view.type === "3d"
+        ? { heading: (view.camera?.heading ?? 0) + 120 }
+        : { rotation: view.rotation - 120 };
     void view
-      .goTo({ rotation: view.rotation - 120 }, { duration: 20000, easing: "linear" })
+      .goTo(turn, { duration: 20000, easing: "linear" })
       .then(() => this.rotate())
       .catch(reportGoToFailure);
   };
@@ -509,12 +726,17 @@ export class ArcgisEngine implements MapEngine {
     if (view) void view.goTo({ zoom: view.zoom - 1 }, { duration: 500 }).catch(reportGoToFailure);
   }
   resetNorth(): void {
-    void this.view?.goTo({ rotation: 0 }, { duration: 1000 }).catch(reportGoToFailure);
+    void this.view
+      ?.goTo(this.orientation(0, undefined), { duration: 1000 })
+      .catch(reportGoToFailure);
   }
   resetNorthPitch(): void {
-    this.resetNorth();
+    void this.view?.goTo(this.orientation(0, 0), { duration: 1000 }).catch(reportGoToFailure);
   }
-  resetPitch(): void {}
+  resetPitch(): void {
+    if (this.view?.type === "3d")
+      void this.view.goTo({ tilt: 0 }, { duration: 1000 }).catch(reportGoToFailure);
+  }
   fitBounds(bounds: MapExtent): void {
     const view = this.view;
     if (!view) return;
@@ -562,13 +784,21 @@ export class ArcgisEngine implements MapEngine {
       void this.view?.goTo(native.fullExtent, { duration: 800 }).catch(reportGoToFailure);
   }
   readProjection(): MapProjection {
-    return "mercator";
+    return this.sceneView()?.viewingMode === "global" ? "globe" : "mercator";
   }
   applyMapPreferences(p: MapPreferences): void {
     this.preferences = p;
     const view = this.view;
     if (!view) return;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    this.setTerrainEnabled(p.terrainEnabled);
+    if (view.type === "3d") {
+      // A SceneView's constraints are about the camera (tilt, altitude), not
+      // zoom levels or an extent; `constrainView` still clamps the zoom the
+      // app asks for, and the project's pitch limit becomes the tilt limit.
+      if (view.constraints.tilt) view.constraints.tilt.max = clamp(p.maxPitch, 0, 85);
+      return;
+    }
     const minZoom = clamp(p.minZoom, 0, 24);
     const maxZoom = Math.max(minZoom, clamp(p.maxZoom, 0, 24));
     view.constraints = {
@@ -610,7 +840,10 @@ export class ArcgisEngine implements MapEngine {
         continue;
       }
       try {
-        const plan = compileArcgisLayer(layer, { zoom: this.compiledZoom });
+        const plan = compileArcgisLayer(layer, {
+          zoom: this.compiledZoom,
+          scene: this.view?.type === "3d",
+        });
         const signature = planSignature(plan, layer);
         let entry = this.natives.get(layer.id);
         if (entry && (entry.signature !== signature || entry.geojson !== layer.geojson)) {
@@ -707,6 +940,7 @@ export class ArcgisEngine implements MapEngine {
             // which would clip labels (and once clipped the symbol key).
             fields: part.url ? undefined : ARCGIS_GEOJSON_FIELDS,
             ...(part.labelingInfo ? { labelingInfo: part.labelingInfo, labelsVisible: true } : {}),
+            ...(part.elevationInfo ? { elevationInfo: part.elevationInfo } : {}),
             // The SDK's popup is not used; identify goes through hitTest.
             popupEnabled: false,
             legendEnabled: false,
@@ -930,10 +1164,16 @@ export class ArcgisEngine implements MapEngine {
     this.blankColor = color;
     const view = this.view;
     if (!view) return;
-    view.background = {
-      type: "color",
-      color: color ?? (document.documentElement.classList.contains("dark") ? "#262626" : "#ffffff"),
-    };
+    const fill =
+      color ?? (document.documentElement.classList.contains("dark") ? "#262626" : "#ffffff");
+    if (view.type === "2d") {
+      view.background = { type: "color", color: fill };
+      return;
+    }
+    // A scene has no background behind the map: what shows without a basemap
+    // is the ground's surface. A global scene keeps its sky around the globe.
+    if (this.map?.ground) this.map.ground.surfaceColor = fill;
+    if (view.viewingMode === "local") view.environment.background = { type: "color", color: fill };
   }
 
   // ---------------------------------------------------------- story rendering
@@ -1120,7 +1360,7 @@ export class ArcgisEngine implements MapEngine {
   private degreesPerPixel(latitude: number): number {
     const view = this.view;
     const metersPerPixel =
-      view && Number.isFinite(view.resolution) && view.resolution > 0
+      view?.type === "2d" && Number.isFinite(view.resolution) && view.resolution > 0
         ? view.resolution
         : // Web Mercator ground resolution at the compiled zoom.
           156543.03392804097 / 2 ** this.compiledZoom;
@@ -1170,17 +1410,7 @@ export class ArcgisEngine implements MapEngine {
       const size = `${Math.max(1, sprite.size * marker.scale)}px`;
       return { type: "picture-marker", url: sprite.url, width: size, height: size };
     };
-    native.renderer =
-      part.renderer.type === "simple"
-        ? { type: "simple", symbol: resolve(part.renderer.symbol) }
-        : {
-            type: "unique-value",
-            field: part.renderer.field,
-            uniqueValueInfos: part.renderer.uniqueValueInfos.map((info) => ({
-              value: info.value,
-              symbol: resolve(info.symbol),
-            })),
-          };
+    native.renderer = mapRendererSymbols(part.renderer, resolve);
   }
   highlightFeature(
     layer: GeoLibreLayer | undefined,
@@ -1259,10 +1489,7 @@ export class ArcgisEngine implements MapEngine {
       element.style.top = `${screen.y + offset.y}px`;
     };
     place();
-    const handle = this.sdk.reactiveUtils.watch(
-      () => [view.extent, view.rotation, view.width, view.height],
-      place,
-    );
+    const handle = this.sdk.reactiveUtils.watch(() => viewPlacementState(view), place);
     return () => {
       handle.remove();
       element.remove();
@@ -1478,7 +1705,14 @@ export class ArcgisEngine implements MapEngine {
         });
       case "geolocate":
         return new widgets.Locate({ view });
+      case "globe":
+        // Only the canvas can rebuild the view in the other projection.
+        if (!this.options.onProjectionToggle || typeof document === "undefined") return null;
+        return createGlobeToggle(this.readProjection(), this.options.onProjectionToggle);
       case "scale": {
+        // The SDK's scale bar measures a MapView only; a tilted or globe
+        // scene has no single scale to show.
+        if (view.type === "3d") return null;
         return new widgets.ScaleBar({
           view,
           unit: scaleBarUnit(this.preferences?.scaleUnit),
@@ -1511,6 +1745,16 @@ export class ArcgisEngine implements MapEngine {
       if (this.view) this.view.attributionVisible = true;
       return visible;
     }
+    // Terrain has no button: it is the scene's elevation, and turning it on
+    // over a MapView asks the canvas for a SceneView through the preference
+    // the Controls menu writes once this reports success.
+    if (id === "terrain") {
+      this.controlVisibility.terrain = visible;
+      this.setTerrainEnabled(visible);
+      return true;
+    }
+    if (id === "globe" && !this.options.onProjectionToggle) return false;
+    if (id === "scale" && this.view.type === "3d") return false;
     this.controlVisibility[id] = visible;
     if (visible) this.mountBuiltInControl(id);
     else this.unmountBuiltInControl(id);
@@ -1541,15 +1785,50 @@ export class ArcgisEngine implements MapEngine {
   // ------------------------------------------------------------------ terrain
 
   isTerrainEnabled(): boolean {
-    return false;
+    return this.terrain;
   }
-  setTerrainEnabled(): boolean {
-    return false;
+  /**
+   * Drape the scene over Esri's world elevation. On a MapView the choice is
+   * only recorded: the canvas swaps in a SceneView when the project's terrain
+   * preference changes, and the new engine applies it.
+   */
+  setTerrainEnabled(enabled: boolean): boolean {
+    if (!this.view) return false;
+    this.terrain = enabled;
+    // Preferences re-apply on every change; only a real transition rebuilds.
+    if (enabled && this.canDrape() !== (this.elevation !== null)) this.applyElevation();
+    else if (!enabled && this.elevation) this.removeElevation();
+    return true;
   }
   getTerrainExaggeration(): number {
-    return 1;
+    return this.exaggeration;
   }
-  setTerrainExaggeration(): void {}
+  setTerrainExaggeration(exaggeration: number): void {
+    const next = Math.max(0, Math.min(10, exaggeration));
+    if (next === this.exaggeration) return;
+    this.exaggeration = next;
+    // Tiles already fetched carry the old heights; a new layer refetches them.
+    this.applyElevation();
+  }
+  private canDrape(): boolean {
+    return this.view?.type === "3d" && Boolean(this.map?.ground && this.options.scene);
+  }
+  private applyElevation(): void {
+    this.removeElevation();
+    const ground = this.map?.ground;
+    const scene = this.options.scene;
+    if (!this.terrain || !this.canDrape() || !ground || !scene) return;
+    this.elevation = createElevationLayer(scene, this.exaggeration);
+    ground.layers.add(this.elevation);
+  }
+  private removeElevation(): void {
+    const layer = this.elevation;
+    if (!layer) return;
+    this.elevation = null;
+    const ground = this.map?.ground;
+    if (ground?.layers.includes(layer)) ground.layers.remove(layer);
+    layer.destroy();
+  }
   getTerrainCogSource(): null {
     return null;
   }
@@ -1559,6 +1838,17 @@ export class ArcgisEngine implements MapEngine {
   async setTerrainCogSource(source: string | Blob | null): Promise<boolean> {
     return source === null;
   }
+}
+
+/**
+ * What moves a screen-anchored element: the extent and size for both views,
+ * plus the rotation of a MapView or the camera of a SceneView (a tilt or
+ * heading change moves every screen point without changing the extent much).
+ */
+export function viewPlacementState(view: ArcgisView): unknown[] {
+  return view.type === "3d"
+    ? [view.extent, view.camera, view.width, view.height]
+    : [view.extent, view.rotation, view.width, view.height];
 }
 
 /** Drop the compiler's synthetic attributes from a hit graphic's attributes. */

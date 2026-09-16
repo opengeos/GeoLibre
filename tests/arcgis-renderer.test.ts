@@ -17,6 +17,7 @@ import {
   arcgisModuleUrl,
   ARCGIS_SDK_VERSION,
   assembleArcgisSdk,
+  loadArcgisSceneSdk,
   loadArcgisSdk,
   redactArcgisError,
   resetArcgisSdkForTests,
@@ -91,6 +92,7 @@ describe("ArcGIS project and plugin boundaries", () => {
     assert.equal(ARCGIS_CAPABILITIES.deckOverlay, false);
     assert.equal(ARCGIS_CAPABILITIES.picking, true);
     assert.equal(ARCGIS_CAPABILITIES.onMapDrawing, true);
+    assert.equal(ARCGIS_CAPABILITIES.terrain, true);
     assert.equal(MAPLIBRE_CAPABILITIES.domControls, true);
   });
   it("greys out the Add Data sources the engine has no adapter for", () => {
@@ -195,6 +197,37 @@ describe("ArcGIS SDK loader", () => {
     assert.throws(
       () => assembleArcgisSdk({ config: {}, Map: {} } as never),
       /has no default export/,
+    );
+    resetArcgisSdkForTests();
+  });
+  it("loads the 3D modules separately, after the core SDK", async () => {
+    resetArcgisSdkForTests();
+    const requested: string[] = [];
+    const importer = async (url: string) => {
+      const module = url.split("/@arcgis/core/")[1];
+      requested.push(module);
+      if (module === "config.js") return { default: { apiKey: null } };
+      if (/^(core|geometry\/support)\//.test(module)) return { watch() {} };
+      return { default: class {} };
+    };
+    await loadArcgisSdk(importer);
+    assert.ok(!requested.includes("views/SceneView.js"));
+    const scene = await loadArcgisSceneSdk(importer);
+    assert.equal(typeof scene.SceneView, "function");
+    assert.equal(typeof scene.BaseElevationLayer, "function");
+    assert.deepEqual(requested.slice(-3), [
+      "views/SceneView.js",
+      "layers/ElevationLayer.js",
+      "layers/BaseElevationLayer.js",
+    ]);
+    assert.equal(await loadArcgisSceneSdk(importer), scene);
+    resetArcgisSdkForTests();
+    await assert.rejects(
+      loadArcgisSceneSdk(async (url) => {
+        if (url.includes("SceneView")) return {};
+        return importer(url);
+      }),
+      /views\/SceneView has no default export/,
     );
     resetArcgisSdkForTests();
   });
