@@ -1336,16 +1336,16 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     // Set the persisted projection preference so the host's projection
     // enforcement keeps it (a raw map.setProjection is reverted on idle).
     // deck.gl-backed plugins need mercator; globe breaks deck tile traversal.
-    setMapProjection: (projection: "globe" | "mercator") => {
+    setMapProjection: (projection: "globe" | "mercator" | "equal-earth") => {
       // External plugins call through a JS boundary where TypeScript can't
       // enforce the union, so reject anything else. An invalid value would be
       // persisted and make enforceProjection throw and reschedule on every idle
       // forever.
-      if (projection !== "globe" && projection !== "mercator") {
+      if (projection !== "globe" && projection !== "mercator" && projection !== "equal-earth") {
         console.warn(
           `[GeoLibre] setMapProjection: ignoring unknown projection "${String(
             projection,
-          )}" (expected "globe" or "mercator").`,
+          )}" (expected "globe", "mercator", or "equal-earth").`,
         );
         return;
       }

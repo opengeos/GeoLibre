@@ -1214,9 +1214,11 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         true,
       ),
       projection:
-        (map as Partial<ProjectPreferences["map"]>).projection === "mercator"
-          ? "mercator"
-          : "globe",
+        (map as Partial<ProjectPreferences["map"]>).projection === "equal-earth"
+          ? "equal-earth"
+          : (map as Partial<ProjectPreferences["map"]>).projection === "mercator"
+            ? "mercator"
+            : "globe",
       // Coerce unknown/missing bodies to Earth so measurements never break.
       ellipsoidId: getEllipsoid((map as Partial<ProjectPreferences["map"]>).ellipsoidId).id,
       scaleUnit: normalizeScaleUnit((map as Partial<ProjectPreferences["map"]>).scaleUnit),

@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth overview",
+    "hint": "Equal Earth overview · Pan or zoom to explore. Editing and detailed styles are available at zoom 3.",
+    "omitted": "Some layers are only available in the detailed map.",
+    "detail": "Open detailed map"
+  },
   "projectHistory": {
     "title": "Project History",
     "description": "Browse autosaved snapshots stored on this device.",

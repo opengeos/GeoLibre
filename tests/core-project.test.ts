@@ -241,6 +241,12 @@ describe("project parsing", () => {
     assert.equal(reloaded.preferences.map.projection, "mercator");
   });
 
+  it("round-trips Equal Earth overview mode", () => {
+    const project = createEmptyProject("Equal Earth");
+    project.preferences.map.projection = "equal-earth";
+    assert.equal(parseProject(serializeProject(project)).preferences.map.projection, "equal-earth");
+  });
+
   it("round-trips terrain and defaults legacy projects to terrain off", () => {
     const base = createEmptyProject("Terrain");
     assert.equal(base.preferences.map.terrainEnabled, false);

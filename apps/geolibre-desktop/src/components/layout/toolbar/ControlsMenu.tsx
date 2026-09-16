@@ -128,6 +128,7 @@ export function ControlsMenu({
   // event, so the menu reacts the moment the user switches projections. The
   // Cesium renderer is a globe whatever the 2D projection preference says, and
   // its effects branch drives the native sky box and atmosphere (#2287).
+  const projection = useAppStore((s) => s.preferences.map.projection);
   const globeProjection = useAppStore((s) => s.preferences.map.projection === "globe");
   const globeActive = globeProjection || !capabilities.nativeMapInstance;
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
@@ -202,6 +203,28 @@ export function ControlsMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
+          {capabilities.nativeMapInstance && (
+            <DropdownMenuItem
+              onSelect={() => {
+                const { preferences } = useAppStore.getState();
+                const enabling = preferences.map.projection !== "equal-earth";
+                setPreferences({
+                  ...preferences,
+                  map: { ...preferences.map, projection: enabling ? "equal-earth" : "mercator" },
+                });
+                if (enabling)
+                  useAppStore.getState().setMapView({
+                    center: [0, 0],
+                    zoom: Math.max(preferences.map.minZoom, Math.min(1, preferences.map.maxZoom)),
+                    bearing: 0,
+                    pitch: 0,
+                  });
+              }}
+            >
+              {t("equalEarth.title")}
+              {projection === "equal-earth" ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {MAP_CONTROL_ITEMS.filter(

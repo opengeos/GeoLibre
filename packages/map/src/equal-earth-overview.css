@@ -1,0 +1,7 @@
+.geolibre-equal-earth-active .maplibregl-canvas-container,
+.geolibre-equal-earth-active .maplibregl-popup,
+.geolibre-equal-earth-active .maplibregl-ctrl-scale,
+.geolibre-equal-earth-active .maplibregl-ctrl-terrain,
+.geolibre-equal-earth-active .maplibregl-ctrl-geolocate {
+  visibility: hidden;
+}

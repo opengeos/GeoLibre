@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth 개요",
+    "hint": "Equal Earth 개요 · 이동하거나 확대하여 탐색하세요. 확대 수준 3부터 편집 및 상세 스타일을 사용할 수 있습니다.",
+    "omitted": "일부 레이어는 상세 지도에서만 사용할 수 있습니다.",
+    "detail": "상세 지도 열기"
+  },
   "projectHistory": {
     "title": "프로젝트 기록",
     "description": "이 기기에 저장된 자동 저장 스냅샷을 살펴봅니다.",

@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Visão geral Equal Earth",
+    "hint": "Visão geral Equal Earth · Arraste ou amplie para explorar. A edição e os estilos detalhados estão disponíveis a partir do zoom 3.",
+    "omitted": "Algumas camadas estão disponíveis apenas no mapa detalhado.",
+    "detail": "Abrir mapa detalhado"
+  },
   "projectHistory": {
     "title": "Histórico do projeto",
     "description": "Navegue pelos instantâneos salvos automaticamente neste dispositivo.",

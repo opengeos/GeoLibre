@@ -786,7 +786,7 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
             // Match the in-app projection (globe by default) so the exported
             // story does not silently fall back to 2D Mercator (#917).
             try {
-                map.setProjection({ type: config.projection || 'globe' });
+                map.setProjection({ type: config.projection === 'equal-earth' ? 'mercator' : config.projection || 'globe' });
             } catch (e) {
                 console.error('[GeoLibre] projection failed', e);
             }

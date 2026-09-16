@@ -1,3 +1,5 @@
+import type { EqualEarthLabels } from "./equal-earth-overview";
+import "./equal-earth-overview.css";
 import {
   applyGroupEffects,
   useAppStore,
@@ -10,6 +12,7 @@ import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface SecondaryMapCanvasProps {
+  equalEarthLabels?: EqualEarthLabels;
   /** Id of the `secondaryMapViews` entry this pane renders. */
   viewId: string;
 }
@@ -32,6 +35,7 @@ export interface SecondaryMapCanvasProps {
  * When sync is off, the pane uses its own saved camera (`secondaryMapViews[i]`).
  */
 export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
+  equalEarthLabels,
   viewId,
 }: SecondaryMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -206,6 +210,10 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
     entryView?.bearing,
     entryView?.pitch,
   ]);
+
+  useEffect(() => {
+    if (equalEarthLabels) controller.current?.setEqualEarthLabels(equalEarthLabels);
+  }, [equalEarthLabels]);
 
   return (
     <div

@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Panoramica Equal Earth",
+    "hint": "Panoramica Equal Earth · Sposta o ingrandisci per esplorare. La modifica e gli stili dettagliati sono disponibili dal livello di zoom 3.",
+    "omitted": "Alcuni layer sono disponibili solo nella mappa dettagliata.",
+    "detail": "Apri mappa dettagliata"
+  },
   "projectHistory": {
     "title": "Cronologia del progetto",
     "description": "Sfoglia gli snapshot salvati automaticamente su questo dispositivo.",

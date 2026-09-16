@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal-Earth-Übersicht",
+    "hint": "Equal-Earth-Übersicht · Zum Erkunden verschieben oder zoomen. Bearbeitung und detaillierte Stile sind ab Zoomstufe 3 verfügbar.",
+    "omitted": "Einige Layer sind nur in der Detailkarte verfügbar.",
+    "detail": "Detailkarte öffnen"
+  },
   "projectHistory": {
     "title": "Projektverlauf",
     "description": "Automatisch gespeicherte Snapshots auf diesem Gerät durchsuchen.",

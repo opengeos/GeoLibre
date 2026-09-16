@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Ikhtisar Equal Earth",
+    "hint": "Ikhtisar Equal Earth · Geser atau perbesar untuk menjelajah. Penyuntingan dan gaya terperinci tersedia mulai tingkat zoom 3.",
+    "omitted": "Beberapa lapisan hanya tersedia di peta terperinci.",
+    "detail": "Buka peta terperinci"
+  },
   "projectHistory": {
     "title": "Riwayat Proyek",
     "description": "Telusuri snapshot yang tersimpan otomatis di perangkat ini.",

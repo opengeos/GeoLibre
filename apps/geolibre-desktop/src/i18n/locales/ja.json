@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth 概観",
+    "hint": "Equal Earth 概観 · ドラッグやズームで探索できます。ズームレベル3から編集と詳細なスタイルを利用できます。",
+    "omitted": "一部のレイヤーは詳細地図でのみ表示されます。",
+    "detail": "詳細地図を開く"
+  },
   "projectHistory": {
     "title": "プロジェクト履歴",
     "description": "このデバイスに保存された自動保存スナップショットを閲覧します。",

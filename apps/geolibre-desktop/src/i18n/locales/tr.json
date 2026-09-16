@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth genel görünümü",
+    "hint": "Equal Earth genel görünümü · Keşfetmek için kaydırın veya yakınlaştırın. Düzenleme ve ayrıntılı stiller, yakınlaştırma düzeyi 3’ten itibaren kullanılabilir.",
+    "omitted": "Bazı katmanlar yalnızca ayrıntılı haritada kullanılabilir.",
+    "detail": "Ayrıntılı haritayı aç"
+  },
   "projectHistory": {
     "title": "Proje Geçmişi",
     "description": "Bu cihazda saklanan otomatik kaydedilmiş anlık görüntülere göz atın.",

@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth 全球概览",
+    "hint": "Equal Earth 全球概览 · 拖动或缩放以浏览。缩放级别达到 3 后可编辑并显示详细样式。",
+    "omitted": "部分图层仅在详细地图中显示。",
+    "detail": "打开详细地图"
+  },
   "projectHistory": {
     "title": "项目历史",
     "description": "浏览保存在本设备上的自动保存快照。",

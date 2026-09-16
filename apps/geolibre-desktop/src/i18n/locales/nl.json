@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Equal Earth-overzicht",
+    "hint": "Equal Earth-overzicht · Verschuif of zoom om te verkennen. Bewerken en gedetailleerde stijlen zijn beschikbaar vanaf zoomniveau 3.",
+    "omitted": "Sommige lagen zijn alleen beschikbaar op de gedetailleerde kaart.",
+    "detail": "Gedetailleerde kaart openen"
+  },
   "projectHistory": {
     "title": "Projectgeschiedenis",
     "description": "Blader door automatisch opgeslagen momentopnamen op dit apparaat.",

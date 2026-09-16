@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Tổng quan Equal Earth",
+    "hint": "Tổng quan Equal Earth · Kéo hoặc thu phóng để khám phá. Chỉnh sửa và kiểu hiển thị chi tiết khả dụng từ mức thu phóng 3.",
+    "omitted": "Một số lớp chỉ khả dụng trên bản đồ chi tiết.",
+    "detail": "Mở bản đồ chi tiết"
+  },
   "projectHistory": {
     "title": "Lịch sử dự án",
     "description": "Duyệt các ảnh chụp nhanh được lưu tự động được lưu trữ trên thiết bị này.",

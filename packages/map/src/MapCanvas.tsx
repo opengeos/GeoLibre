@@ -1,3 +1,5 @@
+import type { EqualEarthLabels } from "./equal-earth-overview";
+import "./equal-earth-overview.css";
 import {
   createHoverTooltipElement,
   createIdentifyPopupElement,
@@ -95,6 +97,7 @@ const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
 const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 export interface MapCanvasProps {
+  equalEarthLabels?: EqualEarthLabels;
   controllerRef?: React.MutableRefObject<MapEngine | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
@@ -1116,6 +1119,7 @@ function mapErrorDiagnosticEvent(event: maplibregl.ErrorEvent): MapDiagnosticEve
 }
 
 export const MapCanvas = memo(function MapCanvas({
+  equalEarthLabels,
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
@@ -2500,6 +2504,10 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.applyView(mapView);
   }, [mapView.center[0], mapView.center[1], mapView.zoom, mapView.bearing, mapView.pitch]);
+
+  useEffect(() => {
+    if (equalEarthLabels) controller.current?.setEqualEarthLabels(equalEarthLabels);
+  }, [equalEarthLabels]);
 
   return <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />;
 });

@@ -145,7 +145,14 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         // never take effect on an already-mounted pane.
         <CesiumCanvas key={cesiumToken} viewId={viewId} ionToken={cesiumToken} />
       ) : (
-        <SecondaryMapCanvas viewId={viewId} />
+        <SecondaryMapCanvas
+          viewId={viewId}
+          equalEarthLabels={{
+            hint: t("equalEarth.hint"),
+            omitted: t("equalEarth.omitted"),
+            detail: t("equalEarth.detail"),
+          }}
+        />
       )}
       {/* The globe works without an Ion token — it draws the project basemap —
           so say what a token would add rather than hiding the view. Bottom-end

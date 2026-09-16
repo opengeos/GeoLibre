@@ -1,3 +1,4 @@
+import type { EqualEarthOverview, EqualEarthLabels } from "./equal-earth-overview";
 import {
   BLANK_BASEMAP,
   DEFAULT_BASEMAP,
@@ -389,6 +390,9 @@ export class MapController implements MapEngine {
   private compassLabel = "Reset pitch & bearing";
   private backgroundLabel = "Background";
   private geolocateControl: maplibregl.GeolocateControl | null = null;
+  private equalEarth: EqualEarthOverview | null = null;
+  private equalEarthLoading = false;
+  private equalEarthLabels?: EqualEarthLabels;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
   private terrainSource: maplibregl.RasterDEMSourceSpecification = DEFAULT_TERRAIN_SOURCE;
@@ -962,6 +966,8 @@ export class MapController implements MapEngine {
   }
 
   destroy(): void {
+    this.equalEarth?.destroy();
+    this.equalEarth = null;
     this.extentDrawingDispose?.();
     this.removeNavigationControl();
     this.removeFullscreenControl();
@@ -1090,6 +1096,7 @@ export class MapController implements MapEngine {
 
   setBasemapVisible(visible: boolean): void {
     this.basemapVisible = visible;
+    this.equalEarth?.setBasemap(this.basemapVisible, this.basemapOpacity);
     this.applyBasemapVisibility();
     this.syncLayerControlState();
   }
@@ -1179,7 +1186,10 @@ export class MapController implements MapEngine {
       zoom: this.map.getZoom(),
       bearing: this.map.getBearing(),
       pitch: this.map.getPitch(),
-      bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+      bbox:
+        this.mapPreferences.projection === "equal-earth" && this.map.getZoom() < 3
+          ? undefined
+          : [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
     };
   }
 
@@ -1195,6 +1205,8 @@ export class MapController implements MapEngine {
    * inside a `moveend` handler.
    */
   readCameraAltitude(): number | null {
+    if (this.mapPreferences.projection === "equal-earth" && this.map && this.map.getZoom() < 3)
+      return null;
     const host = this.map as
       | {
           _camera?: { transform?: { getCameraAltitude?: () => number } };
@@ -1241,6 +1253,7 @@ export class MapController implements MapEngine {
     }
     this.layerIds = nextIds;
     this.syncedLayers = layers;
+    void this.equalEarth?.setLayers(layers, (id) => this.getLayerGeoJson(id));
     // Blend modes are read inside the render loop rather than from a paint
     // property, so a mode that changed without any other paint change still
     // needs a frame asking for it. The repaint is gated on THIS controller's
@@ -1388,6 +1401,7 @@ export class MapController implements MapEngine {
   }
 
   private applyBasemapOpacity(): void {
+    this.equalEarth?.setBasemap(this.basemapVisible, this.basemapOpacity);
     if (!this.isStyleReady()) return;
 
     for (const layer of this.getBasemapStyleLayers()) {
@@ -1946,8 +1960,18 @@ export class MapController implements MapEngine {
     this.syncHighlight(EMPTY_HIGHLIGHT);
   }
 
-  /** Current map projection, normalized to the two values we persist. */
+  setEqualEarthLabels(labels: EqualEarthLabels): void {
+    this.equalEarthLabels = labels;
+    this.equalEarth?.setLabels(labels);
+  }
+
+  /** Current logical mode, including the adaptive Equal Earth overview. */
   readProjection(): MapProjection {
+    if (
+      this.mapPreferences.projection === "equal-earth" &&
+      this.map?.getProjection()?.type !== "globe"
+    )
+      return "equal-earth";
     return this.map?.getProjection()?.type === "mercator" ? "mercator" : "globe";
   }
 
@@ -1958,7 +1982,30 @@ export class MapController implements MapEngine {
    */
   private enforceProjection(): void {
     if (!this.map) return;
-    const desired = this.mapPreferences.projection ?? DEFAULT_PROJECTION.type;
+    const overview = this.mapPreferences.projection === "equal-earth";
+    if (!overview && this.equalEarth) {
+      this.equalEarth.destroy();
+      this.equalEarth = null;
+    }
+    if (overview && !this.equalEarth && !this.equalEarthLoading) {
+      this.equalEarthLoading = true;
+      const map = this.map;
+      void import("./equal-earth-overview")
+        .then(({ EqualEarthOverview }) => {
+          if (this.map !== map || this.mapPreferences.projection !== "equal-earth") return;
+          this.equalEarth = new EqualEarthOverview(map);
+          if (this.equalEarthLabels) this.equalEarth.setLabels(this.equalEarthLabels);
+          this.equalEarth.setBasemap(this.basemapVisible, this.basemapOpacity);
+          void this.equalEarth.setLayers(this.syncedLayers, (id) => this.getLayerGeoJson(id));
+        })
+        .catch((error) => console.error("Could not load Equal Earth overview", error))
+        .finally(() => {
+          this.equalEarthLoading = false;
+        });
+    }
+    const desired = overview
+      ? "mercator"
+      : (this.mapPreferences.projection ?? DEFAULT_PROJECTION.type);
     try {
       if (this.map.getProjection()?.type === desired) return;
       this.map.setProjection({ type: desired });

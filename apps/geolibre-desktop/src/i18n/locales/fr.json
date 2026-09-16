@@ -1,4 +1,10 @@
 {
+  "equalEarth": {
+    "title": "Vue d’ensemble Equal Earth",
+    "hint": "Vue d’ensemble Equal Earth · Déplacez ou zoomez pour explorer. La modification et les styles détaillés sont disponibles à partir du zoom 3.",
+    "omitted": "Certaines couches ne sont disponibles que sur la carte détaillée.",
+    "detail": "Ouvrir la carte détaillée"
+  },
   "projectHistory": {
     "title": "Historique du projet",
     "description": "Parcourir les instantanés enregistrés automatiquement sur cet appareil.",

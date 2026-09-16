@@ -797,9 +797,9 @@ export interface GeoLibreAppAPI {
    * app.setMapProjection?.(saved);
    * ```
    */
-  setMapProjection?: (projection: "globe" | "mercator") => void;
+  setMapProjection?: (projection: "globe" | "mercator" | "equal-earth") => void;
   /** Current map projection preference. */
-  getMapProjection?: () => "globe" | "mercator";
+  getMapProjection?: () => "globe" | "mercator" | "equal-earth";
   /**
    * Register a plugin-owned right-sidebar panel that docks beside the built-in
    * Style panel and behaves like a first-class part of the workspace. Returns

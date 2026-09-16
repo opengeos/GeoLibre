@@ -1575,8 +1575,8 @@ export interface CollaborationState {
   error: string | null;
 }
 
-/** Map projection the renderer uses. Mirrors the GlobeControl toggle. */
-export type MapProjection = "globe" | "mercator";
+/** Persisted map mode; Equal Earth is an overview below zoom 3. */
+export type MapProjection = "globe" | "mercator" | "equal-earth";
 
 /**
  * Unit system the scale bar reports distances in. `"metric"` uses m/km,

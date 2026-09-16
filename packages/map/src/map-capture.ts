@@ -40,10 +40,40 @@ export function isFullViewportMapCanvas(
   );
 }
 
+/** The overview replaces the native render surfaces only below its zoom threshold. */
+export function isActiveMapCanvas(canvas: HTMLCanvasElement, container: HTMLElement): boolean {
+  const overview = canvas.closest?.(".geolibre-equal-earth-overview");
+  if (overview?.hasAttribute("hidden")) return false;
+  if (container.classList?.contains("geolibre-equal-earth-active")) return Boolean(overview);
+  return true;
+}
+
+interface EqualEarthCapture {
+  redraw(): void;
+  unproject(point: [number, number]): { lng: number; lat: number };
+}
+const equalEarthCaptures = new WeakMap<HTMLElement, EqualEarthCapture>();
+
+/** Registered by the lazy overview without eagerly importing projection code. */
+export function registerEqualEarthCapture(
+  container: HTMLElement,
+  capture: EqualEarthCapture | null,
+): void {
+  if (capture) equalEarthCaptures.set(container, capture);
+  else equalEarthCaptures.delete(container);
+}
+
+export function getEqualEarthCapture(container: HTMLElement): EqualEarthCapture | undefined {
+  return container.classList?.contains("geolibre-equal-earth-active")
+    ? equalEarthCaptures.get(container)
+    : undefined;
+}
+
 export function compositeMapCanvas(
   surface: Pick<MapRenderSurface, "getCanvas" | "getContainer" | "redraw">,
 ): HTMLCanvasElement {
   surface.redraw();
+  getEqualEarthCapture(surface.getContainer())?.redraw();
   const base = surface.getCanvas();
   if (!base.width || !base.height) throw new Error("The map canvas is empty");
   const out = document.createElement("canvas");
@@ -53,6 +83,7 @@ export function compositeMapCanvas(
   if (!context) throw new Error("Could not create a map capture canvas");
   for (const canvas of surface.getContainer().querySelectorAll("canvas")) {
     if (
+      !isActiveMapCanvas(canvas, surface.getContainer()) ||
       canvas.classList.contains("geolibre-effects-canvas") ||
       !isFullViewportMapCanvas(canvas, base)
     )

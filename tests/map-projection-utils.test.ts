@@ -8,7 +8,7 @@ import {
   releaseMercatorProjectionLock,
 } from "../packages/plugins/src/plugins/map-projection-utils";
 
-type ProjectionType = "globe" | "mercator";
+type ProjectionType = "globe" | "mercator" | "equal-earth";
 
 function fakeProjectionMap(initialProjection: ProjectionType) {
   let projection = initialProjection;
@@ -111,6 +111,13 @@ function fakeProjectionApp(initial: ProjectionType) {
 }
 
 describe("mercator projection lock", () => {
+  it("restores Equal Earth after the last incompatible overlay is removed", () => {
+    const fake = fakeProjectionApp("equal-earth");
+    acquireMercatorProjectionLock("equal-earth-test", fake.app);
+    assert.equal(fake.projection, "mercator");
+    releaseMercatorProjectionLock("equal-earth-test", fake.app);
+    assert.equal(fake.projection, "equal-earth");
+  });
   it("restores the captured projection only after the last holder releases", () => {
     const fake = fakeProjectionApp("globe");
 

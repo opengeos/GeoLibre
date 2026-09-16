@@ -10,7 +10,11 @@ import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
 import { jsPDF } from "jspdf";
 import type { MapEngine } from "@geolibre/map";
-import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
+import {
+  getEqualEarthCapture,
+  isActiveMapCanvas,
+  isFullViewportMapCanvas,
+} from "@geolibre/map/map-capture";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
@@ -158,6 +162,12 @@ export function captureMapImage(
     // A redraw failure (e.g. a transient GL state issue) must not block the
     // capture; fall through and read whatever is in the buffer.
   }
+  const overview = getEqualEarthCapture(map.getContainer());
+  if (overview && clip)
+    throw new Error(
+      "Clear the print extent to capture the Equal Earth overview, or zoom to level 3 to use an extent.",
+    );
+  overview?.redraw();
   const base = map.getCanvas();
   const out = document.createElement("canvas");
   out.width = base.width;
@@ -181,7 +191,11 @@ export function captureMapImage(
     // container -- the raster colorbar/colormap previews, the lidar profile
     // chart -- and stretching one of those over the page would overwrite the
     // map with, for example, a horizontal colormap ramp.
-    if (!captured && !isFullViewportMapCanvas(c, base)) return;
+    if (
+      !captured &&
+      (!isActiveMapCanvas(c, map.getContainer()) || !isFullViewportMapCanvas(c, base))
+    )
+      return;
     try {
       ctx.drawImage(c, 0, 0, out.width, out.height);
     } catch (err) {
@@ -215,8 +229,8 @@ export function captureMapImage(
     centerY = (Math.max(0, rectCss.minY) + Math.min(cssHeight, rectCss.maxY)) / 2;
   }
   const span = Math.min(100, cssWidth / 2);
-  const left = map.unproject([centerX - span / 2, centerY]);
-  const right = map.unproject([centerX + span / 2, centerY]);
+  const left = (overview ?? map).unproject([centerX - span / 2, centerY]);
+  const right = (overview ?? map).unproject([centerX + span / 2, centerY]);
   const metersPerCssPx = haversineMeters(left, right) / span;
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 
@@ -242,7 +256,7 @@ export function captureMapImage(
     height: image.height,
     metersPerPixel,
     pixelRatio: dpr,
-    bearingDeg: map.getBearing(),
+    bearingDeg: overview ? 0 : map.getBearing(),
   };
 }
 
