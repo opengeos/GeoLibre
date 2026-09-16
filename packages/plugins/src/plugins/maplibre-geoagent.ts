@@ -212,7 +212,15 @@ async function loadGeoAgentControl(
   // the import — GeoAgent's chunk is large, so a renderer swap can easily land
   // inside that window — and every later activation would reuse that instance.
   // The module is engine-neutral and safe to share; the control is not.
-  geoAgentModulePromise ??= import("maplibre-gl-geoagent");
+  geoAgentModulePromise ??= import("maplibre-gl-geoagent").catch((error: unknown) => {
+    // A rejected promise is cached like any other, so without this an import
+    // that failed once (offline, or a chunk orphaned by a redeploy) would keep
+    // rejecting every later activation until the page reloads. Forget it and
+    // the next activation retries — which is what the caller's catch, and the
+    // host-side rollback it drives, assume happens.
+    geoAgentModulePromise = null;
+    throw error;
+  });
   geoAgentControlPromise = geoAgentModulePromise
     .then(({ GeoAgentControl }) => {
       // Caching the module is not on its own enough: continuations run in the

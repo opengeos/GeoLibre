@@ -26,6 +26,15 @@ describe("maplibreGeoAgentPlugin", () => {
     assert.match(SOURCE, /mapEngine:\s*geoAgentMapEngine\(app\)/);
   });
 
+  it("forgets an import that failed, so the next activation retries it", () => {
+    // A rejected promise memoizes like any other: without the catch, one
+    // offline activation would reject every later one until a page reload.
+    assert.match(
+      SOURCE,
+      /geoAgentModulePromise \?\?= import\("maplibre-gl-geoagent"\)\.catch\([\s\S]*?geoAgentModulePromise = null;\s*\n\s*throw error;/,
+    );
+  });
+
   it("lets only the current activation build the shared control", () => {
     // The module import is shared, and its continuations run in registration
     // order — so without this check an activation superseded mid-import would
