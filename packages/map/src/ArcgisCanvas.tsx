@@ -13,6 +13,7 @@ import {
   loadArcgisSdk,
   redactArcgisError,
   type ArcgisHandle,
+  type ArcgisSdk,
   type ArcgisView,
 } from "./arcgis-sdk";
 
@@ -356,6 +357,10 @@ export function ArcgisCanvas({
             if (!viewId) useAppStore.getState().setCameraAltitude(current.readCameraAltitude());
             if (engineRef) engineRef.current = current;
             readyCallback.current?.();
+            // A flat map is one click away from a globe; fetch the 3D modules
+            // while the page is idle so that first switch does not also wait
+            // on the network. A failure here is retried by the switch itself.
+            if (!scene) whenIdle(() => void loadArcgisSceneSdk().catch(() => {}));
             return whenDrawn(sdk, mapView);
           })
           .then(() => {
@@ -427,30 +432,52 @@ export function ArcgisCanvas({
   );
 }
 
+/** Run `task` when the page is idle (or soon, where idle callbacks are missing). */
+function whenIdle(task: () => void): void {
+  if (typeof window.requestIdleCallback === "function")
+    window.requestIdleCallback(task, { timeout: 5000 });
+  else window.setTimeout(task, 1000);
+}
+
 /**
- * Resolve once a freshly settled view has drawn its first frames: after the
- * SDK starts updating and settles again, or after `timeoutMs`, since a globe
- * streaming tiles can stay `updating` for a long time and the outgoing view
- * should not outlive a reasonable wait.
+ * Resolve once a freshly settled view shows a map: when its basemap tiles have
+ * drawn, or after `timeoutMs`. Waiting for the whole view to stop updating
+ * held the outgoing view up for another second or so while data layers,
+ * terrain and neighbouring globe tiles streamed in, which read as a slow
+ * button; those fill in on the live view instead. A view with no basemap
+ * layers (the Blank basemap) waits for everything.
  */
-function whenDrawn(
-  sdk: Awaited<ReturnType<typeof loadArcgisSdk>>,
-  view: ArcgisView,
-  timeoutMs = 4000,
+export function whenDrawn(
+  sdk: Pick<ArcgisSdk, "reactiveUtils">,
+  view: Pick<ArcgisView, "basemapView" | "updating">,
+  timeoutMs = 3000,
 ): Promise<void> {
   return new Promise((resolve) => {
     let handle: ArcgisHandle | undefined;
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
       handle?.remove();
       window.clearTimeout(timer);
       resolve();
     };
     const timer = window.setTimeout(done, timeoutMs);
-    // Two frames so the view has scheduled its first layer updates; before
-    // that `updating` can still read false over an empty canvas.
+    // Two frames so the view has scheduled its first tile requests; before
+    // that nothing reads as updating over an empty canvas.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        handle = sdk.reactiveUtils.when(() => !view.updating, done, { initial: true, once: true });
+        if (finished) return;
+        handle = sdk.reactiveUtils.when(
+          () => {
+            const base = view.basemapView?.baseLayerViews;
+            return base && base.length > 0
+              ? base.every((layerView) => !layerView.updating)
+              : !view.updating;
+          },
+          done,
+          { initial: true, once: true },
+        );
       }),
     );
   });

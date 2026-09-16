@@ -219,16 +219,25 @@ function createGlobeToggle(
   container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-arcgis-globe";
   const button = document.createElement("button");
   button.type = "button";
-  const globe = projection === "globe";
-  button.className = globe ? "maplibregl-ctrl-globe-enabled" : "maplibregl-ctrl-globe";
-  const label = globe ? "Disable globe" : "Enable globe";
-  button.title = label;
-  button.setAttribute("aria-label", label);
   const icon = document.createElement("span");
   icon.className = "maplibregl-ctrl-icon";
   icon.setAttribute("aria-hidden", "true");
   button.append(icon);
-  button.addEventListener("click", () => onToggle(globe ? "mercator" : "globe"));
+  let globe = projection === "globe";
+  const paint = () => {
+    button.className = globe ? "maplibregl-ctrl-globe-enabled" : "maplibregl-ctrl-globe";
+    const label = globe ? "Disable globe" : "Enable globe";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  };
+  paint();
+  button.addEventListener("click", () => {
+    // Repaint at once: the rebuilt view takes a moment to appear, and until
+    // then this button (on the outgoing view) is the only sign of the click.
+    globe = !globe;
+    paint();
+    onToggle(globe ? "globe" : "mercator");
+  });
   container.append(button);
   return { uiComponent: container, destroy: () => container.remove() };
 }

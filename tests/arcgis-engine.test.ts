@@ -948,6 +948,9 @@ describe("ArcgisEngine 3D scenes", () => {
       assert.ok(button?.classList.contains("maplibregl-ctrl-globe-enabled"));
       button?.dispatchEvent(new document.defaultView!.Event("click"));
       assert.deepEqual(toggles, ["mercator"]);
+      // The button repaints before the rebuilt view exists.
+      assert.ok(button?.classList.contains("maplibregl-ctrl-globe"));
+      assert.equal(button?.getAttribute("aria-label"), "Enable globe");
       assert.equal(engine.setBuiltInControlVisible("globe", false), true);
       assert.ok(!uiAdds.some((entry) => entry.component === globe));
       // Without a callback nothing could rebuild the view, so there is no toggle.

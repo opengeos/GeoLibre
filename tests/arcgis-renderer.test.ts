@@ -11,6 +11,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import { ARCGIS_CAPABILITIES } from "../packages/map/src/arcgis-engine";
+import { whenDrawn } from "../packages/map/src/ArcgisCanvas";
 import {
   absolutizeCssUrls,
   arcgisCssUrl,
@@ -242,5 +243,78 @@ describe("ArcGIS SDK loader", () => {
     await assert.rejects(loadArcgisSdk(importer), /offline/);
     assert.ok(attempts > 1);
     resetArcgisSdkForTests();
+  });
+});
+
+describe("ArcGIS view swap", () => {
+  /** A reactiveUtils fake whose `when` re-checks its predicate on `tick()`. */
+  function reactive() {
+    let watchers: { get: () => unknown; cb: () => void; removed: boolean }[] = [];
+    return {
+      reactiveUtils: {
+        when: (get: () => unknown, cb: () => void) => {
+          const watcher = { get, cb, removed: false };
+          watchers.push(watcher);
+          if (get()) cb();
+          return { remove: () => (watcher.removed = true) };
+        },
+      } as never,
+      tick: () => {
+        for (const w of watchers) if (!w.removed && w.get()) w.cb();
+        watchers = watchers.filter((w) => !w.removed);
+      },
+    };
+  }
+  const frames = async () => new Promise((resolve) => setTimeout(resolve, 5));
+  const withFrames = async (run: () => Promise<void>) => {
+    const g = globalThis as { requestAnimationFrame?: unknown; window?: unknown };
+    const previous = [g.requestAnimationFrame, g.window];
+    g.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
+    g.window ??= globalThis;
+    try {
+      await run();
+    } finally {
+      [g.requestAnimationFrame, g.window] = previous;
+    }
+  };
+  const layerViews = (items: { updating: boolean }[]) => ({
+    length: items.length,
+    every: (f: (item: { updating: boolean }) => boolean) => items.every(f),
+  });
+
+  it("swaps once the basemap has drawn, without waiting for the rest of the view", async () => {
+    await withFrames(async () => {
+      const { reactiveUtils, tick } = reactive();
+      const base = { updating: true };
+      const view = { updating: true, basemapView: { baseLayerViews: layerViews([base]) } };
+      let resolved = false;
+      void whenDrawn({ reactiveUtils }, view as never).then(() => (resolved = true));
+      await frames();
+      assert.equal(resolved, false);
+      base.updating = false;
+      tick();
+      await frames();
+      // The view as a whole (data layers, terrain) is still loading.
+      assert.equal(view.updating, true);
+      assert.equal(resolved, true);
+    });
+  });
+
+  it("waits for the whole view without basemap layers, and gives up after the timeout", async () => {
+    await withFrames(async () => {
+      const { reactiveUtils, tick } = reactive();
+      const view = { updating: true, basemapView: { baseLayerViews: layerViews([]) } };
+      let resolved = false;
+      void whenDrawn({ reactiveUtils }, view as never).then(() => (resolved = true));
+      await frames();
+      assert.equal(resolved, false);
+      view.updating = false;
+      tick();
+      await frames();
+      assert.equal(resolved, true);
+
+      const stuck = { updating: true, basemapView: null };
+      await whenDrawn(reactive() as never, stuck as never, 20);
+    });
   });
 });

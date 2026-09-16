@@ -104,6 +104,7 @@ export interface ArcgisCollection<T> {
   includes(item: T): boolean;
   toArray(): T[];
   forEach(callback: (item: T, index: number) => void): void;
+  every(callback: (item: T, index: number) => boolean): boolean;
   at(index: number): T | undefined;
   getItemAt(index: number): T | undefined;
 }
@@ -261,6 +262,10 @@ interface ArcgisViewBase {
   popup: { autoOpenEnabled?: boolean } | null;
   popupEnabled: boolean;
   destroyed: boolean;
+  /** The views drawing the basemap's layers; `null` until the view is ready. */
+  basemapView?: {
+    baseLayerViews: ArcgisCollection<{ updating: boolean }>;
+  } | null;
   when(): Promise<unknown>;
   goTo(
     target: ArcgisGoToTarget | ArcgisExtent | ArcgisGraphic[],

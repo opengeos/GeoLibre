@@ -116,10 +116,12 @@ carries over.
 New projects use the globe projection, so an ArcGIS pane opens as a globe.
 The globe button under the compass switches projection (as on MapLibre, a
 split pane's button only switches that pane), and **Controls → Terrain** turns
-terrain on or off. The 3D modules (`views/SceneView` and the elevation
-layers, close to a megabyte) are only fetched the first time a pane needs a
-scene. While a new view loads, the previous one stays on screen, so a switch
-does not flash an empty pane.
+terrain on or off. The 3D modules (`views/SceneView` and the elevation layers, close to a
+megabyte) are not part of the first load: a flat ArcGIS map fetches them in the
+background once the page is idle, so the first switch to a globe does not wait
+on the network. While a new view loads, the previous one stays on screen and is
+swapped out once the new view's basemap has drawn; data layers and terrain
+finish loading on the new view.
 
 In a scene:
 
