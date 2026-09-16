@@ -345,6 +345,14 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
     }
   });
 
+  it("runs Street View on both 2D engines now that its marker is supplied", () => {
+    // The one MapLibre class the control built itself — the location `Marker`,
+    // whose update path reads `_camera.transform` — comes from
+    // maplibre-gl-streetview's `createMarker` option, fed mapbox-gl's own.
+    assert.equal(isPluginEngineSupported(maplibreStreetViewPlugin, "mapbox"), true);
+    assert.equal(isPluginEngineSupported(maplibreStreetViewPlugin, "maplibre"), true);
+  });
+
   it("runs GeoAgent on both 2D engines now that its tools follow the host", () => {
     // Its four engine-specific tools (the marker, both projection tools, and
     // the script runner) take the engine from `mapEngine`. The module pulls the

@@ -33,6 +33,7 @@
     "./pmtiles-layer": "./src/pmtiles-layer.ts",
     "./style-import": "./src/style-import.ts",
     "./style-layer-ids": "./src/style-layer-ids.ts",
+    "./layer-labels": "./src/layer-labels.ts",
     "./map-capture": "./src/map-capture.ts"
   },
   "publishConfig": {
@@ -63,6 +64,10 @@
         "types": "./dist/style-layer-ids.d.mts",
         "import": "./dist/style-layer-ids.mjs"
       },
+      "./layer-labels": {
+        "types": "./dist/layer-labels.d.mts",
+        "import": "./dist/layer-labels.mjs"
+      },
       "./map-capture": {
         "types": "./dist/map-capture.d.mts",
         "import": "./dist/map-capture.mjs"
@@ -71,7 +76,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/map-capture.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts --format esm --dts"
   },
   "dependencies": {
     "@cesium/engine": "^26.3.0",

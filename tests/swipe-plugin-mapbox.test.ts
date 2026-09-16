@@ -1,0 +1,192 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  cancelPendingStyleLoadRebuild,
+  getSwipeControlOptions,
+  maplibreSwipePlugin as plugin,
+  rebuildOnStyleLoad,
+  swipeComparisonMapFactory,
+} from "../packages/plugins/src/plugins/maplibre-swipe";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+
+/** A host with only the doors the swipe options read. */
+function host(overrides: Partial<GeoLibreAppAPI> = {}): GeoLibreAppAPI {
+  return {
+    getMap: () => null,
+    getActiveBasemap: () => "https://example.test/style.json",
+    getBasemapLayerIds: () => ["basemap-water", "basemap-roads"],
+    ...overrides,
+  } as unknown as GeoLibreAppAPI;
+}
+
+/** A mapbox-gl namespace with just the class the factory constructs. */
+function mapboxGl() {
+  const built: unknown[] = [];
+  class FakeMapboxMap {
+    constructor(public options: unknown) {
+      built.push(options);
+    }
+  }
+  return { gl: { Map: FakeMapboxMap } as never, built, FakeMapboxMap };
+}
+
+describe("maplibreSwipePlugin engines", () => {
+  it("declares both 2D engines", () => {
+    assert.deepEqual(plugin.engines, ["maplibre", "mapbox"]);
+  });
+});
+
+describe("swipeComparisonMapFactory", () => {
+  it("leaves the upstream default (a MapLibre pane) on a MapLibre host", () => {
+    // `undefined` is meaningful: maplibre-gl-swipe then builds its own
+    // `new maplibregl.Map(...)`, which is right on MapLibre.
+    assert.equal(swipeComparisonMapFactory(null), undefined);
+    assert.equal(swipeComparisonMapFactory(host()), undefined);
+    assert.equal(swipeComparisonMapFactory(host({ getMapboxGl: () => null })), undefined);
+  });
+
+  it("builds the comparison pane with mapbox-gl on a Mapbox host", () => {
+    const { gl, built, FakeMapboxMap } = mapboxGl();
+    const create = swipeComparisonMapFactory(host({ getMapboxGl: () => gl }));
+    assert.ok(create, "a Mapbox host must get a factory");
+
+    const container = { nodeType: 1 } as unknown as HTMLElement;
+    const options = {
+      container,
+      style: { version: 8 as const, layers: [], sources: {} },
+      center: { lng: 0, lat: 0 },
+      zoom: 4,
+      bearing: 0,
+      pitch: 0,
+      interactive: false as const,
+      attributionControl: false as const,
+    };
+    const map = create!(options as never);
+    assert.ok(map instanceof FakeMapboxMap, "a MapLibre pane cannot overlay a mapbox-gl canvas");
+    assert.deepEqual(built, [options]);
+  });
+});
+
+describe("swipe control options per engine", () => {
+  it("keeps the deck.gl raster provider on MapLibre", () => {
+    const options = getSwipeControlOptions(host());
+    // COG and maplibre-gl-raster layers are custom layers getStyle() omits, so
+    // the panel only sees them through this provider.
+    assert.ok(options.layerProvider, "MapLibre must keep the raster provider");
+    assert.equal(options.createMap, undefined);
+  });
+
+  it("drops it on Mapbox, where neither raster control runs", () => {
+    const { gl } = mapboxGl();
+    const options = getSwipeControlOptions(host({ getMapboxGl: () => gl }));
+    // A project authored on MapLibre can still carry those layers in the store,
+    // but nothing draws them here, so offering sides for them would be a lie.
+    assert.equal(options.layerProvider, undefined);
+    assert.ok(options.createMap, "Mapbox must build its own comparison pane");
+  });
+
+  it("hands the token to the comparison pane, which mapbox-gl needs per map", () => {
+    const { gl, built } = mapboxGl();
+    const create = swipeComparisonMapFactory(
+      host({ getMapboxGl: () => gl, getMapboxAccessToken: () => "pk.test" }),
+    );
+    create!({ container: {} as HTMLElement } as never);
+    // mapbox-gl reads its token from the global `mapboxgl.accessToken` unless
+    // the constructor is handed one, and GeoLibre never sets that global; a
+    // pane built without it renders nothing and logs every frame.
+    assert.equal((built[0] as { accessToken?: string }).accessToken, "pk.test");
+  });
+
+  it("fetches a fetchable basemap style and names the ids when it is not", () => {
+    const { gl } = mapboxGl();
+    // http(s): the control can fetch it, so leave the established path alone.
+    const fetchable = getSwipeControlOptions(host());
+    assert.equal(fetchable.basemapStyle, "https://example.test/style.json");
+    assert.equal(fetchable.basemapLayerIds, undefined);
+
+    // mapbox://: `fetch` rejects the scheme outright, so the control would lose
+    // the basemap grouping (and its default selection) without the ids.
+    const mapbox = getSwipeControlOptions(
+      host({
+        getMapboxGl: () => gl,
+        getActiveBasemap: () => "mapbox://styles/mapbox/standard",
+      }),
+    );
+    assert.deepEqual(mapbox.basemapLayerIds, ["basemap-water", "basemap-roads"]);
+  });
+
+  it("omits the ids when the engine has none, rather than an empty list", () => {
+    const { gl } = mapboxGl();
+    // Mapbox Standard arrives as a style import, so the root style has no
+    // layers of its own and the engine reports none. An empty array is truthy
+    // upstream: passing one would suppress the fetch *and* leave the grouping
+    // empty, which is strictly worse than letting the fetch fail.
+    const options = getSwipeControlOptions(
+      host({
+        getMapboxGl: () => gl,
+        getActiveBasemap: () => "mapbox://styles/mapbox/standard",
+        getBasemapLayerIds: () => [],
+      }),
+    );
+    assert.equal(options.basemapLayerIds, undefined);
+  });
+
+  it("passes the same native-layer configuration on both engines", () => {
+    const { gl } = mapboxGl();
+    const maplibre = getSwipeControlOptions(host());
+    const mapbox = getSwipeControlOptions(host({ getMapboxGl: () => gl }));
+    for (const key of [
+      "excludeLayers",
+      "visibleLayersOnly",
+      "showPanel",
+      "basemapStyle",
+    ] as const) {
+      assert.deepEqual(mapbox[key], maplibre[key], `${key} must not differ by engine`);
+    }
+  });
+});
+
+describe("rebuildOnStyleLoad", () => {
+  /** A style map that only records who is listening for `style.load`. */
+  function styleMap() {
+    const handlers = new Set<() => void>();
+    return {
+      handlers,
+      map: {
+        on: (event: string, handler: () => void) => {
+          if (event === "style.load") handlers.add(handler);
+        },
+        off: (event: string, handler: () => void) => {
+          if (event === "style.load") handlers.delete(handler);
+        },
+      },
+    };
+  }
+
+  it("keeps at most one rebuild waiting, however many basemaps are clicked", () => {
+    // Two basemap changes before the first style lands used to leave two
+    // handlers on one `style.load`. Both fire in the same tick, so the first
+    // rebuild's control is torn down and replaced by the second before it has
+    // drawn anything.
+    const { handlers, map } = styleMap();
+    const app = host({ getMap: () => map as never });
+    rebuildOnStyleLoad(app);
+    rebuildOnStyleLoad(app);
+    rebuildOnStyleLoad(app);
+    assert.equal(handlers.size, 1);
+    // Firing it leaves nothing behind, so the next change starts clean.
+    for (const handler of [...handlers]) handler();
+    assert.equal(handlers.size, 0);
+    cancelPendingStyleLoadRebuild();
+  });
+
+  it("drops a rebuild that is still waiting when the plugin goes away", () => {
+    // Otherwise the handler outlives the activation it belongs to and rebuilds
+    // a control for a plugin that is no longer active.
+    const { handlers, map } = styleMap();
+    rebuildOnStyleLoad(host({ getMap: () => map as never }));
+    assert.equal(handlers.size, 1);
+    cancelPendingStyleLoadRebuild();
+    assert.equal(handlers.size, 0);
+  });
+});

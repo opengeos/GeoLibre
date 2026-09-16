@@ -32,6 +32,13 @@ import {
   type MapboxLayerPlan,
   mapboxPaint,
 } from "./mapbox-layers";
+import {
+  BASEMAP_LABEL_KEY,
+  clearLayerLabels,
+  publishLayerLabels,
+  styleLayerLabel,
+} from "./layer-labels";
+import { mapboxSourceId } from "./style-layer-ids";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
 import { captureEngineImage } from "./map-capture";
@@ -100,6 +107,8 @@ export class MapboxEngine implements MapEngine {
   private map: mapboxgl.Map | null;
   private surface: MapRenderSurface | null;
   private layers: GeoLibreLayer[] = [];
+  /** The Layers panel's name for the basemap row, mirrored into the label bridge. */
+  private backgroundLabel = "Background";
   private plans = new Map<string, MapboxLayerPlan>();
   private previous = new Map<string, GeoLibreLayer>();
   private errors = new Map<string, string>();
@@ -115,6 +124,8 @@ export class MapboxEngine implements MapEngine {
   private preferences: MapPreferences | null = null;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
+  /** See the constructor option of the same name. */
+  private ownsLayerLabels: boolean;
   private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
     ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   };
@@ -177,9 +188,21 @@ export class MapboxEngine implements MapEngine {
        * layer/basemap state back to the global store.
        */
       controlVisibility?: Partial<Record<BuiltInMapControl, boolean>>;
+      /**
+       * Whether this engine publishes the friendly style-layer names the swipe
+       * panel reads (see `./layer-labels`). The bridge is one window global, so
+       * only the primary pane may write it: a secondary (split/grid) pane draws
+       * the same layers under the same style-layer ids but filtered by its own
+       * per-pane visibility, so letting it publish would republish a subset —
+       * changing the sibling count and so the qualifiers — and letting it clear
+       * on teardown would wipe the primary's names until its next sync, leaving
+       * the swipe panel listing raw ids. Secondary panes pass `false`.
+       */
+      ownsLayerLabels?: boolean;
     } = {},
   ) {
     this.map = map;
+    this.ownsLayerLabels = options.ownsLayerLabels ?? true;
     this.controlVisibility = {
       ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
       ...options.controlVisibility,
@@ -225,6 +248,24 @@ export class MapboxEngine implements MapEngine {
    */
   getMapboxGl(): typeof mapboxgl.default {
     return this.gl;
+  }
+  /**
+   * The access token this engine's map was built with.
+   *
+   * mapbox-gl reads its token from the global `mapboxgl.accessToken` unless a
+   * map is handed one in its constructor options, which is what the canvas
+   * does — the global is never set. A plugin that constructs a second Mapbox
+   * map (the Layer Swipe comparison pane) therefore has to pass the token
+   * along, or that map refuses to render with "An API access token is
+   * required to use Mapbox GL".
+   *
+   * `null` rather than the empty string when the app has no token configured,
+   * so a caller that forwards it into another map's options omits the key
+   * instead of handing mapbox-gl a blank token — the state a plugin has to
+   * distinguish is "there is no token", not "the token is zero characters".
+   */
+  getMapboxAccessToken(): string | null {
+    return this.accessToken || null;
   }
   private onError = (event: { error: Error; sourceId?: string }) => {
     this.errors.set(event.sourceId ?? "map", redactMapboxError(event.error.message));
@@ -284,6 +325,9 @@ export class MapboxEngine implements MapEngine {
     this.map.off("idle", this.flushLayers);
     this.map.off("styledata", this.onStyleData);
     this.layerControlHost.destroy();
+    // Leave no stale names behind for whichever engine mounts next — but only
+    // for the pane that owns the bridge; see `ownsLayerLabels`.
+    if (this.ownsLayerLabels) clearLayerLabels();
     this.map.remove();
     this.pluginControls.clear();
     this.builtInControls.clear();
@@ -532,8 +576,61 @@ export class MapboxEngine implements MapEngine {
           );
       }
     }
+    this.publishLayerDisplayNames(layers);
     this.layerControlHost.refresh();
     this.layerControlHost.syncState();
+  }
+  /**
+   * Publish what each style layer on this map should be called, so a control
+   * that lists style layers can show the name the Layers panel shows.
+   *
+   * The Layer Swipe panel is the one that needs it: it drives its two sides by
+   * style layer id, and this engine compiles a store layer into
+   * `geolibre-mapbox-<id>-<sourceLayer>-<kind>` rows, which is not a name to
+   * put in front of anyone. MapLibre's controller publishes the same bridge for
+   * its own id scheme — without this the panel fell back to the raw ids on
+   * Mapbox while showing "Counties Polygons" on MapLibre.
+   *
+   * A layer's style layers are taken from the plan the engine compiled for it,
+   * plus the ids a plugin registered itself — never by matching the
+   * `geolibre-mapbox-<id>-` prefix against the whole style, which would let a
+   * layer named `a` claim the rows of one named `a-b`. Both are then filtered
+   * against the live style, so a layer is not named before its rows exist.
+   */
+  private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
+    const map = this.map;
+    if (!map || !this.ownsLayerLabels) return;
+    let present: Set<string>;
+    try {
+      present = new Set((map.getStyle()?.layers ?? []).map((styleLayer) => styleLayer.id));
+    } catch {
+      // getStyle throws while a style is loading; the next sync republishes.
+      return;
+    }
+
+    const entries: Array<readonly [string, string]> = [];
+    for (const layer of layers) {
+      const prefix = `${mapboxSourceId(layer.id)}-`;
+      const planned = this.plans.get(layer.id)?.layers.map((spec) => spec.id) ?? [];
+      const native = Array.isArray(layer.metadata?.nativeLayerIds)
+        ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const own = [...new Set([...planned, ...native])].filter((id) => present.has(id));
+      for (const id of own) {
+        // The kind is the last segment either way —
+        // `geolibre-mapbox-<layerId>-<sourceLayer>-<kind>` for a layer this
+        // engine compiled, and whatever a plugin named its own rows for one it
+        // only adopted. Taking it from the id in both cases is what lets a
+        // plugin that registered several native layers get a distinct name per
+        // row, as MapLibre's `nativeLayerSuffix` does for the same case.
+        const suffix = (id.startsWith(prefix) ? id.slice(prefix.length) : id).split("-").pop();
+        entries.push([id, styleLayerLabel(layer, suffix, own.length)]);
+      }
+    }
+    // Last, so this synthetic row always wins over a layer that happens to
+    // share the id — the same ordering MapController uses.
+    entries.push([BASEMAP_LABEL_KEY, this.backgroundLabel]);
+    publishLayerLabels(entries);
   }
   /**
    * Apply a plugin-owned store layer's visibility and paint to the native
@@ -1138,7 +1235,13 @@ export class MapboxEngine implements MapEngine {
     this.compassLabel = label;
     this.compassControl?.setLabel(label);
   }
-  setBackgroundLabel(_label: string): void {}
+  setBackgroundLabel(label: string): void {
+    // Kept, not ignored: the swipe panel groups every basemap style layer under
+    // one row and reads its name from the label bridge, so the translated
+    // "Background" has to reach it here as it does on MapLibre.
+    this.backgroundLabel = label;
+    this.publishLayerDisplayNames(this.layers);
+  }
   setTerrainLabel(_label: string): void {}
   isTerrainEnabled(): boolean {
     return this.terrain;

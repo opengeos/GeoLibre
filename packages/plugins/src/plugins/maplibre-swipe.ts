@@ -2,12 +2,14 @@ import { useAppStore } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   SwipeControl,
+  type CreateSwipeComparisonMap,
   type SwipeControlOptions,
   type SwipeLayerProvider,
   type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
@@ -249,7 +251,7 @@ function stopSwipeIdResolution(): void {
 
 function startSwipeIdResolution(app: GeoLibreAppAPI): void {
   stopSwipeIdResolution();
-  const map = app.getMap?.();
+  const map = getStyleMap(app);
   if (!map) return;
 
   const handler = (): void => resolveSwipeProjectLayerIds(map);
@@ -272,7 +274,9 @@ function sameLayerOrder(left: readonly string[], right: readonly string[]): bool
 function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
   if (!swipeControl) return;
 
-  const layerOrder = map.getLayersOrder();
+  // `getLayersOrder` is MapLibre's; a mapbox-gl map has no such method, and the
+  // serialized style's layer array is the same order on both engines.
+  const layerOrder = map.getLayersOrder?.() ?? (map.getStyle()?.layers ?? []).map(({ id }) => id);
   if (lastResolvedLayerOrder && sameLayerOrder(lastResolvedLayerOrder, layerOrder)) return;
   // Recorded before the setLeftLayers/setRightLayers below, whose own
   // `setLayoutProperty` calls re-enter this handler through `styledata`.
@@ -309,7 +313,12 @@ function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
 export const maplibreSwipePlugin: GeoLibrePlugin = {
   id: SWIPE_PLUGIN_ID,
   name: "Layer Swipe",
-  version: "0.9.1",
+  version: "0.10.0",
+  // Both 2D engines: the control drives both maps only through the Style Spec
+  // surface they share, and the one MapLibre object it built itself — the
+  // clipped comparison map — now comes from `createMap`. The deck.gl raster
+  // provider stays MapLibre-only (supportsRasterProvider).
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
 
@@ -323,29 +332,41 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
 
     // Keep the swipe panel's COG raster rows and comparison-map mirror in sync
     // as rasters are added, removed, or restyled while the swipe is active.
-    unsubscribeCogRasterChanges = subscribeSwipeCogChanges(() => {
-      swipeControl?.refreshLayers();
-    });
+    // Only where the provider runs; on Mapbox there are no such rasters to
+    // refresh, and the store subscription would be a standing no-op.
+    if (supportsRasterProvider(app)) {
+      unsubscribeCogRasterChanges = subscribeSwipeCogChanges(() => {
+        swipeControl?.refreshLayers();
+      });
+    }
 
     // The control reads the basemap style only on construction, so recreate it
     // when the active basemap changes to keep its basemap-layer grouping in
     // sync. The previous slider state is carried over to avoid a visible reset.
-    unsubscribeBasemap = app.onBasemapChange(() => {
+    unsubscribeBasemap = app.onBasemapChange((styleUrl) => {
       if (!swipeControl) return;
-      const previousState = swipeControl.getState();
-      savedSwipeState = previousState;
-      app.removeMapControl(swipeControl);
-      swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
-      app.addMapControl(swipeControl, swipeControlPosition);
-      expandSwipeControl(previousState);
-      // The new style has its own layer set, so any side id still unresolved
-      // gets another chance against it.
-      startSwipeIdResolution(app);
+      // Whatever this change needs, a rebuild queued by the *previous* one is
+      // now stale: it would fire on the style this change is about to load and
+      // tear down the control this one just built (and its comparison map's
+      // live WebGL context) to build another.
+      cancelPendingStyleLoadRebuild();
+      // `onBasemapChange` fires the moment the store's URL changes, which is
+      // before the engine has applied it. The control reads the basemap once, at
+      // construction: from the URL it fetches (fine — it fetches the new one) or
+      // from the engine's layer ids, which only refresh when the new style has
+      // loaded. So in the second case wait for that, or the panel would group
+      // the *previous* basemap's ids, which match nothing in the new style.
+      if (isFetchableStyleUrl(styleUrl)) {
+        rebuildSwipeControl(app);
+        return;
+      }
+      rebuildOnStyleLoad(app);
     });
   },
   deactivate: (app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    cancelPendingStyleLoadRebuild();
     stopSwipeIdResolution();
     unsubscribeCogRasterChanges?.();
     unsubscribeCogRasterChanges = null;
@@ -398,10 +419,78 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   },
 };
 
-function getSwipeControlOptions(
+/**
+ * Build the swipe's comparison map with the host's own engine.
+ *
+ * `maplibre-gl-swipe` constructs a second map for the clipped comparison pane,
+ * and until 0.12.0 that was always a MapLibre one — which cannot be layered
+ * over a mapbox-gl map's canvas or fed a `mapbox://` style. The control drives
+ * that map only through the Style Spec surface both engines share, so on a
+ * Mapbox host the pane is a mapbox-gl map instead. `undefined` on MapLibre
+ * leaves the upstream default.
+ *
+ * @param app - The plugin host API, read for the mapbox-gl namespace.
+ * @returns A comparison-map factory on a Mapbox host, else `undefined`.
+ */
+export function swipeComparisonMapFactory(
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapboxAccessToken"> | null,
+): CreateSwipeComparisonMap | undefined {
+  const mapboxgl = app?.getMapboxGl?.();
+  if (!mapboxgl) return undefined;
+  // mapbox-gl reads its token from the global `mapboxgl.accessToken` unless the
+  // constructor is handed one, and GeoLibre passes it per map rather than
+  // setting that global. Without it this second map renders nothing and logs
+  // "An API access token is required to use Mapbox GL" every frame.
+  const accessToken = app?.getMapboxAccessToken?.() ?? undefined;
+  return (options) =>
+    new mapboxgl.Map({
+      ...(options as unknown as ConstructorParameters<typeof mapboxgl.Map>[0]),
+      ...(accessToken ? { accessToken } : {}),
+    }) as unknown as MapLibreMap;
+}
+
+/**
+ * Whether the deck.gl raster provider can run on this host.
+ *
+ * The provider mirrors GeoLibre's COG and `maplibre-gl-raster` rasters onto the
+ * comparison map, and both of those controls are MapLibre-only (their tile
+ * protocols register with `maplibregl.addProtocol`, which Mapbox never sees).
+ * On a Mapbox host the store can still carry such layers — a project authored on
+ * MapLibre — but nothing draws them, so listing them in the swipe panel would
+ * offer sides for rasters that are not on screen. Native style layers swipe
+ * normally either way.
+ */
+function supportsRasterProvider(app: Pick<GeoLibreAppAPI, "getMapboxGl"> | null): boolean {
+  return !app?.getMapboxGl?.();
+}
+
+/** Whether `fetch` can retrieve this style. `mapbox://` and the like cannot. */
+function isFetchableStyleUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/**
+ * The basemap's style layer ids, for a basemap the control cannot fetch.
+ *
+ * `undefined` everywhere else, which leaves the control fetching `basemapStyle`
+ * exactly as it always has.
+ */
+function basemapLayerIdsFor(app: GeoLibreAppAPI, basemapStyleUrl: string): string[] | undefined {
+  if (isFetchableStyleUrl(basemapStyleUrl)) return undefined;
+  const ids = app.getBasemapLayerIds?.() ?? [];
+  return ids.length > 0 ? ids : undefined;
+}
+
+/**
+ * The options the control is (re)built with. Exported so a test can assert the
+ * per-engine pieces — the comparison-map factory and the raster provider —
+ * without standing up a real SwipeControl.
+ */
+export function getSwipeControlOptions(
   app: GeoLibreAppAPI,
   previousState?: SwipeState,
 ): SwipeControlOptions {
+  const basemapStyleUrl = app.getActiveBasemap();
   return {
     orientation: previousState?.orientation ?? "vertical",
     position: previousState?.position ?? 50,
@@ -416,7 +505,18 @@ function getSwipeControlOptions(
     rightLayers: previousState?.rightLayers ?? [],
     // True only on first activation; restoring saved/project state keeps the user's selection.
     selectVisibleByDefault: previousState === undefined,
-    basemapStyle: app.getActiveBasemap(),
+    basemapStyle: basemapStyleUrl,
+    // The control fetches `basemapStyle` only to learn which layer ids make up
+    // the basemap. A `mapbox://` URL has no HTTP form — `fetch` rejects it
+    // outright — so hand the ids over instead and skip the request. The engine
+    // knows them either way; this only matters where the fetch cannot work.
+    //
+    // Only when there are some: an empty array is truthy upstream, so passing
+    // one would suppress the fetch *and* leave the grouping empty. Mapbox
+    // Standard is exactly that case — it arrives as a style import, so the root
+    // style has no layers of its own to group — and there the fetch fails
+    // harmlessly instead, which is the same outcome the control reaches today.
+    basemapLayerIds: basemapLayerIdsFor(app, basemapStyleUrl),
     // Hide plugin chrome layers (drawing/measure helpers, selection footprints,
     // highlight outlines, Vantor footprints) so they don't clutter the swipe
     // layer list. Shared with the Components control grid via
@@ -428,9 +528,87 @@ function getSwipeControlOptions(
     visibleLayersOnly: true,
     // Surface deck.gl COG rasters (invisible to getStyle()) in the panel and
     // render them per side: right/both on the comparison map, right-only hidden
-    // on the main map. See #1240 and swipe-cog-mirror.ts.
-    layerProvider: cogSwipeProvider,
+    // on the main map. See #1240 and swipe-cog-mirror.ts. MapLibre only — see
+    // supportsRasterProvider.
+    layerProvider: supportsRasterProvider(app) ? cogSwipeProvider : undefined,
+    // On Mapbox the clipped comparison pane is a mapbox-gl map.
+    createMap: swipeComparisonMapFactory(app),
   };
+}
+
+/** Rebuild the control against the live map, carrying the slider state over. */
+function rebuildSwipeControl(app: GeoLibreAppAPI): void {
+  if (!swipeControl) return;
+  const previousState = swipeControl.getState();
+  savedSwipeState = previousState;
+  app.removeMapControl(swipeControl);
+
+  const control = new SwipeControl(getSwipeControlOptions(app, previousState));
+  const added = app.addMapControl(control, swipeControlPosition);
+  if (!added) {
+    // The host refused the add. That is not a transient failure: the app this
+    // subscription closed over belongs to one activation, and the host stops
+    // serving it once a later activation supersedes it. Publishing the refused
+    // control anyway would leave `swipeControl` naming one that was never
+    // mounted — a later remove would not find it, so its comparison map (a live
+    // WebGL context) and its clipped pane would never be torn down. Keep the
+    // module state empty instead; the activation that superseded this one owns
+    // the control now.
+    stopSwipeIdResolution();
+    swipeControl = null;
+    return;
+  }
+
+  swipeControl = control;
+  expandSwipeControl(previousState);
+  // The new style has its own layer set, so any side id still unresolved gets
+  // another chance against it.
+  startSwipeIdResolution(app);
+}
+
+/**
+ * The `style.load` rebuild waiting to happen, so a second basemap change does
+ * not stack another one on top of it and so `deactivate` can drop it.
+ */
+let pendingStyleLoadRebuild: (() => void) | null = null;
+
+/**
+ * Drop a rebuild that has not fired yet. Safe to call when none is pending.
+ *
+ * Exported for the test that pairs it with {@link rebuildOnStyleLoad}.
+ */
+export function cancelPendingStyleLoadRebuild(): void {
+  pendingStyleLoadRebuild?.();
+  pendingStyleLoadRebuild = null;
+}
+
+/**
+ * Rebuild once the engine has the new style, so its basemap ids are current.
+ *
+ * At most one of these is ever outstanding. Clicking through two basemaps
+ * before the first style lands would otherwise leave two handlers on one
+ * `style.load`, and both fire in the same tick: the first rebuild's control is
+ * torn down and replaced by the second before it has drawn anything. And a
+ * handler still waiting when the plugin is deactivated would rebuild a control
+ * for a plugin that is no longer active, so `deactivate` cancels it too.
+ *
+ * Exported for tests; the plugin itself calls this from its basemap
+ * subscription.
+ */
+export function rebuildOnStyleLoad(app: GeoLibreAppAPI): void {
+  cancelPendingStyleLoadRebuild();
+  const map = getStyleMap(app);
+  if (!map) {
+    rebuildSwipeControl(app);
+    return;
+  }
+  const handler = () => {
+    pendingStyleLoadRebuild = null;
+    map.off("style.load", handler);
+    rebuildSwipeControl(app);
+  };
+  pendingStyleLoadRebuild = () => map.off("style.load", handler);
+  map.on("style.load", handler);
 }
 
 function expandSwipeControl(state?: SwipeState): void {

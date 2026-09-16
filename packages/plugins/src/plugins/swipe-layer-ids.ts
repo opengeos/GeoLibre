@@ -1,4 +1,4 @@
-import { nativeLayerIdPrefix, sourceId } from "@geolibre/map/style-layer-ids";
+import { mapboxSourceId, nativeLayerIdPrefix, sourceId } from "@geolibre/map/style-layer-ids";
 import { pmtilesIdsForSourceLayers } from "@geolibre/map/pmtiles-layer";
 
 /**
@@ -122,7 +122,12 @@ function pmtilesStyleLayerIds(
  * - the layer's own GeoJSON source and the derived ones beside it
  *   (`source-<id>-label`, `-inverted`, `-generator`), which catch a render layer
  *   named outside the prefix scheme;
- * - {@link pmtilesStyleLayerIds}, for the one scheme none of the above reaches.
+ * - {@link pmtilesStyleLayerIds}, for the one scheme none of the above reaches;
+ * - {@link mapboxSourceId}, because the Mapbox engine compiles the same store
+ *   layer under a scheme of its own (`geolibre-mapbox-<id>` as the source, and
+ *   `geolibre-mapbox-<id>-<sourceLayer>-<kind>` as the style layers). Both are
+ *   checked unconditionally rather than behind an engine flag: the two schemes
+ *   cannot collide, and only one of them is ever on a given map.
  *
  * @param projectLayerId - The store layer id to resolve.
  * @param styleLayers - The style layers currently on the map.
@@ -136,6 +141,8 @@ export function styleLayerIdsForProjectLayer(
 ): string[] {
   const prefix = nativeLayerIdPrefix(projectLayerId);
   const ownSource = sourceId(projectLayerId);
+  const mapboxSource = mapboxSourceId(projectLayerId);
+  const mapboxPrefix = `${mapboxSource}-`;
   const native = new Set(nativeLayerIds(projectLayer));
   const pmtiles = projectLayer ? new Set(pmtilesStyleLayerIds(projectLayer, styleLayers)) : null;
 
@@ -144,7 +151,9 @@ export function styleLayerIdsForProjectLayer(
       (styleLayer) =>
         native.has(styleLayer.id) ||
         styleLayer.id.startsWith(prefix) ||
+        styleLayer.id.startsWith(mapboxPrefix) ||
         styleLayer.source === ownSource ||
+        styleLayer.source === mapboxSource ||
         styleLayer.source?.startsWith(`${ownSource}-`) === true ||
         pmtiles?.has(styleLayer.id) === true,
     )

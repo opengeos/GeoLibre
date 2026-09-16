@@ -51,6 +51,7 @@ import {
   sourceId,
   textLayerId,
 } from "./geojson-loader";
+import { BASEMAP_LABEL_KEY, clearLayerLabels, publishLayerLabels } from "./layer-labels";
 import {
   mbtilesStyleLayerIds,
   externalSourceIdsFor,
@@ -368,10 +369,6 @@ function createPlanetaryMapStyle(basemap: PlanetaryBasemap): maplibregl.StyleSpe
       },
     ],
   };
-}
-
-interface GeoLibreLayerLabelWindow extends Window {
-  __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
 }
 
 // Moved to ./map-engine so MapEngine can reference it without importing this
@@ -2240,10 +2237,7 @@ export class MapController implements MapEngine {
   }
 
   private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
-    if (typeof window === "undefined") return;
-
-    const labelWindow = window as GeoLibreLayerLabelWindow;
-    labelWindow.__GEOLIBRE_LAYER_LABELS__ = Object.fromEntries([
+    publishLayerLabels([
       ...layers
         .flatMap((layer) => this.getNamedStyleLayers(layer))
         .map(({ id, name }): [string, string] => [id, name]),
@@ -2268,9 +2262,8 @@ export class MapController implements MapEngine {
       // always wins over a layer that happens to share the id, matching the
       // sidebar. It is published even with no overlay layers, since the panel
       // always lists the basemap entry.
-      ["__basemap__", this.backgroundLabel],
+      [BASEMAP_LABEL_KEY, this.backgroundLabel],
     ]);
-    window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
   }
 
   /**
@@ -2279,9 +2272,7 @@ export class MapController implements MapEngine {
    * which always re-publishes the basemap entry.
    */
   private clearLayerDisplayNames(): void {
-    if (typeof window === "undefined") return;
-    (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__ = {};
-    window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
+    clearLayerLabels();
   }
 
   private addNavigationControl(): boolean {

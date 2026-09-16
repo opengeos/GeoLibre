@@ -94,7 +94,7 @@ browser against an authenticated Mapbox map):
   docked panels mount on the Mapbox map; the raster layers their controls
   create are adopted by the engine under the controls' own ids (one copy,
   store visibility/opacity/removal apply, rebuilt after a basemap swap).
-  GeoLens *private* rasters need a per-request API key that only MapLibre's
+  GeoLens _private_ rasters need a per-request API key that only MapLibre's
   `setTransformRequest` can inject; the panel reports that they need the
   MapLibre renderer, while public rasters and vector data work.
 - **Gridlines** and the **DGGS** grids (H3, S2, A5, DGGRID, DGGAL, OLC,
@@ -147,6 +147,36 @@ browser against an authenticated Mapbox map):
   bearing), so **Bank the horizon in turns** leaves the horizon level — the
   aircraft still banks, and a bank still turns it. The panel says so while the
   Mapbox renderer is primary.
+- **Street View** (Google and Mapillary). Everything the upstream control
+  touches is on the shared surface except the location marker: MapLibre's
+  `Marker` reads `map._camera.transform` on every position update, so it threw
+  on the first map click. `maplibre-gl-streetview` 0.8.0 takes a `createMarker`
+  factory, and the plugin feeds it mapbox-gl's own `Marker` on a Mapbox host —
+  the control still owns the marker element and its direction arrow, and only
+  the positioning changes engine. A renderer swap rebuilds the control, so the
+  marker follows whichever engine is primary.
+- **Layer Swipe** for native style layers. The control drives both maps only
+  through the surface the two engines share, so the one map it constructed
+  itself — the clipped comparison pane, until now always a MapLibre one — comes
+  from `maplibre-gl-swipe` 0.13.0's `createMap`, fed mapbox-gl's `Map`. Two Mapbox specifics come with it: the
+  pane is handed the access token explicitly (mapbox-gl reads its token from a
+  global the app never sets, so a second map built without it renders nothing),
+  and the basemap grouping is seeded with `basemapLayerIds` because a
+  `mapbox://` style URL cannot be fetched — the same reason the layer control
+  seeds its own. The panel lists each row by the name the Layers panel shows
+  rather than by the style layer id it drives, because the engine publishes the
+  same style-layer-id-to-name bridge MapController does
+  (`packages/map/src/layer-labels.ts`); without it a row read
+  `geolibre-mapbox-<id>-geojson-fill`. The deck.gl **raster provider stays MapLibre-only**: it mirrors
+  COG and `maplibre-gl-raster` layers onto the comparison pane, and both of
+  those controls register MapLibre tile protocols, so neither draws on Mapbox in
+  the first place. A project authored on MapLibre can still carry such layers,
+  and the swipe panel omits them rather than offering sides for layers that are
+  not on screen. One known defect: changing the basemap while the swipe is
+  active leaves the previous comparison pane — and the map inside it, a live
+  WebGL context — orphaned on the Mapbox canvas. The swipe itself keeps working
+  against the new basemap. The same sequence on MapLibre leaves one pane, so it
+  sits in the Mapbox control lifecycle rather than the plugin; tracked in #2430.
 - **GeoAgent**. Almost every tool already sits on the shared Style Spec
   surface; four did not, and each broke differently — `add_marker` built
   MapLibre's `Marker`/`Popup`, `set_projection` wrote `{ type }` (Mapbox takes a
@@ -172,12 +202,9 @@ browser against an authenticated Mapbox map):
   MapLibre. The Style panel's 3D extrusion of the buildings theme is a
   MapLibre layer-sync feature and stays MapLibre-only.
 
-Still MapLibre-only, each for a concrete reason:
-
-- **Street View**: the upstream control places a `maplibre-gl` `Marker`, whose
-  update path reads `map._camera.transform` and throws on a mapbox-gl map.
-- **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the
-  comparison pane, and the plugin mirrors COG and raster layers onto it.
+No plugin is held back by a MapLibre-internal dependency of its own any more:
+GeoAgent, Street View and Layer Swipe were the last three, and each is listed
+above with the seam that made it portable.
 
 Two engine changes came with the port and apply to every plugin: a store
 layer added while a Mapbox source is still loading is now synced when that
@@ -271,45 +298,45 @@ paths below with an authenticated Mapbox map. A mounted panel alone is not a
 successful import; the table records the level of verification. Backend and
 service restrictions are included explicitly.
 
-| Panel | Result |
-| --- | --- |
-| Vector | US states GeoJSON: 52 features imported and rendered |
-| Raster | Public DEM GeoTIFF: GPU raster displayed |
-| Delimited Text | US cities CSV: 109 points imported and rendered |
-| CAD | US states DXF: 58 entities discovered; EPSG:5070 import exercised |
-| File Geodatabase | Panel opens; its local GDAL/sidecar workflow requires Desktop |
-| Geotagged Photos | EXIF sample JPEG: one located photo imported |
-| GPX | Fells Loop: 86 waypoints and one route; both native sources created |
-| Encoded Polyline | Precision-5 sample: one line imported and rendered |
-| MBTiles | Disabled: local custom protocol has no Mapbox adapter |
-| OSM PBF | Monaco extract: 4,249 points, 4,002 lines, and 2,341 polygons imported and displayed |
-| XYZ | USGS imagery sample: native raster source mounted |
-| WMS | USGS NAIP sample: native raster source mounted |
-| CSW Catalog | Open Canada catalog searched; Manitoba Economic Regions imported as eight GeoJSON features |
-| WFS | MapServer continents service imported; the GeoServer sample was blocked by its remote service |
-| WMTS | EOX Sentinel-2 cloudless sample: native raster source mounted |
-| OGC API - Features | pygeoapi lakes sample: 25 features imported and rendered |
-| OGC Vector Tiles | PDOK BGT sample: native vector-tile source mounted |
-| ArcGIS | 4,186 city features rendered; Santa Monica parcels rendered using all seven service style layers |
-| GeoRSS | USGS daily earthquake feed: 34 features imported (the live count changes) |
-| STAC | Earth Search connected; 20 Sentinel-2 search footprints added |
-| Video | Mapbox coastal video sample: native video source mounted |
-| Deck.gl | Scatterplot sample (Manhattan points) rendered through the shared deck.gl overlay; visibility and opacity follow the layer store |
-| GeoParquet | US states: 52 features imported and rendered |
-| FlatGeobuf | Countries: 179 features imported through the shared vector bridge |
-| PMTiles | Remote vector archives use native Mapbox sources; Tilezen’s nine source layers and Mapbox’s earthquake archive rendered |
-| Zarr | CarbonPlan climate sample added through the panel: the custom layer mounts on the Mapbox map and loads its pyramid (6 levels, band/month axes). Checked without a paintable token, so pixel output was not confirmed; the renderer's Mapbox support is upstream's |
-| NetCDF / HDF | Air-temperature file: selected time slice added as a native image |
-| LiDAR | Autzen COPC rendered (10,653,336 archive points); the small PDAL COPC fixture loads 1,065 points |
-| Gaussian Splatting | Panel opens; custom rendering unsupported and entry disabled |
-| 3D Tiles | AGI headquarters tileset renders through deck.gl; altitude placement, visibility and restoration have regression coverage |
-| Cesium Ion | Disabled: Cesium-only |
-| CZML | Disabled: Cesium-only |
-| KML / KMZ | Imported through the host KML importer as GeoJSON, ground-overlay, and model layers, the same path a dropped file takes |
-| 3D Model | Shanghai sample model placed through the scenegraph builder |
-| DuckDB | NYC sample database queried; the result layer rendered and survived a MapLibre → Mapbox renderer swap |
-| PostgreSQL | Panel explains its Desktop/Martin requirement; no database connection tested |
-| Apache Iceberg | Panel opens; no table/catalog connection supplied for an import |
+| Panel              | Result                                                                                                                                                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vector             | US states GeoJSON: 52 features imported and rendered                                                                                                                                                                                                              |
+| Raster             | Public DEM GeoTIFF: GPU raster displayed                                                                                                                                                                                                                          |
+| Delimited Text     | US cities CSV: 109 points imported and rendered                                                                                                                                                                                                                   |
+| CAD                | US states DXF: 58 entities discovered; EPSG:5070 import exercised                                                                                                                                                                                                 |
+| File Geodatabase   | Panel opens; its local GDAL/sidecar workflow requires Desktop                                                                                                                                                                                                     |
+| Geotagged Photos   | EXIF sample JPEG: one located photo imported                                                                                                                                                                                                                      |
+| GPX                | Fells Loop: 86 waypoints and one route; both native sources created                                                                                                                                                                                               |
+| Encoded Polyline   | Precision-5 sample: one line imported and rendered                                                                                                                                                                                                                |
+| MBTiles            | Disabled: local custom protocol has no Mapbox adapter                                                                                                                                                                                                             |
+| OSM PBF            | Monaco extract: 4,249 points, 4,002 lines, and 2,341 polygons imported and displayed                                                                                                                                                                              |
+| XYZ                | USGS imagery sample: native raster source mounted                                                                                                                                                                                                                 |
+| WMS                | USGS NAIP sample: native raster source mounted                                                                                                                                                                                                                    |
+| CSW Catalog        | Open Canada catalog searched; Manitoba Economic Regions imported as eight GeoJSON features                                                                                                                                                                        |
+| WFS                | MapServer continents service imported; the GeoServer sample was blocked by its remote service                                                                                                                                                                     |
+| WMTS               | EOX Sentinel-2 cloudless sample: native raster source mounted                                                                                                                                                                                                     |
+| OGC API - Features | pygeoapi lakes sample: 25 features imported and rendered                                                                                                                                                                                                          |
+| OGC Vector Tiles   | PDOK BGT sample: native vector-tile source mounted                                                                                                                                                                                                                |
+| ArcGIS             | 4,186 city features rendered; Santa Monica parcels rendered using all seven service style layers                                                                                                                                                                  |
+| GeoRSS             | USGS daily earthquake feed: 34 features imported (the live count changes)                                                                                                                                                                                         |
+| STAC               | Earth Search connected; 20 Sentinel-2 search footprints added                                                                                                                                                                                                     |
+| Video              | Mapbox coastal video sample: native video source mounted                                                                                                                                                                                                          |
+| Deck.gl            | Scatterplot sample (Manhattan points) rendered through the shared deck.gl overlay; visibility and opacity follow the layer store                                                                                                                                  |
+| GeoParquet         | US states: 52 features imported and rendered                                                                                                                                                                                                                      |
+| FlatGeobuf         | Countries: 179 features imported through the shared vector bridge                                                                                                                                                                                                 |
+| PMTiles            | Remote vector archives use native Mapbox sources; Tilezen’s nine source layers and Mapbox’s earthquake archive rendered                                                                                                                                           |
+| Zarr               | CarbonPlan climate sample added through the panel: the custom layer mounts on the Mapbox map and loads its pyramid (6 levels, band/month axes). Checked without a paintable token, so pixel output was not confirmed; the renderer's Mapbox support is upstream's |
+| NetCDF / HDF       | Air-temperature file: selected time slice added as a native image                                                                                                                                                                                                 |
+| LiDAR              | Autzen COPC rendered (10,653,336 archive points); the small PDAL COPC fixture loads 1,065 points                                                                                                                                                                  |
+| Gaussian Splatting | Panel opens; custom rendering unsupported and entry disabled                                                                                                                                                                                                      |
+| 3D Tiles           | AGI headquarters tileset renders through deck.gl; altitude placement, visibility and restoration have regression coverage                                                                                                                                         |
+| Cesium Ion         | Disabled: Cesium-only                                                                                                                                                                                                                                             |
+| CZML               | Disabled: Cesium-only                                                                                                                                                                                                                                             |
+| KML / KMZ          | Imported through the host KML importer as GeoJSON, ground-overlay, and model layers, the same path a dropped file takes                                                                                                                                           |
+| 3D Model           | Shanghai sample model placed through the scenegraph builder                                                                                                                                                                                                       |
+| DuckDB             | NYC sample database queried; the result layer rendered and survived a MapLibre → Mapbox renderer swap                                                                                                                                                             |
+| PostgreSQL         | Panel explains its Desktop/Martin requirement; no database connection tested                                                                                                                                                                                      |
+| Apache Iceberg     | Panel opens; no table/catalog connection supplied for an import                                                                                                                                                                                                   |
 
 An opt-in regression suite repeats the FlatGeobuf, ArcGIS vector-tile, STAC,
 and menu-boundary checks in light and dark themes:

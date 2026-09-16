@@ -239,6 +239,19 @@ describe("MapboxEngine construction", () => {
     engine.removeControl(control);
     assert.ok(!map.controls.includes(adapter));
   });
+  it("hands a second map the token, and nothing at all when there is none", () => {
+    // The Layer Swipe comparison pane builds its own mapbox-gl map and has to
+    // pass the token along, because GeoLibre sets it per map rather than on the
+    // global mapbox-gl reads by default. A blank one is not a token: forwarding
+    // `""` would put an empty `accessToken` in that map's options instead of
+    // leaving the key out, so the accessor reports absence as `null`.
+    const map = makeMap();
+    assert.equal(
+      new MapboxEngine(map as unknown as mapboxgl.Map, gl, "pk.test").getMapboxAccessToken(),
+      "pk.test",
+    );
+    assert.equal(makeEngine().engine.getMapboxAccessToken(), null);
+  });
   it("mounts MapLibre's default controls, in MapLibre's order, and takes the style's layers as the basemap", () => {
     const { engine, map } = makeEngine();
     // Fullscreen, the compass under it, then the globe toggle (MapController
@@ -419,6 +432,148 @@ describe("MapboxEngine.syncLayers", () => {
       [FILL, LINE, CIRCLE],
     );
     assert.deepEqual(engine.getRenderStatus().errors, []);
+  });
+
+  /**
+   * Run `body` with a DOM installed, and hand it the names the engine
+   * published on the window. The label bridge is a window global because the
+   * rewrite it feeds happens in the app's DOM, outside the engine.
+   */
+  const withPublishedLabels = (body: (labels: () => Record<string, string>) => void): void => {
+    // The engine names style layers off the live style, so the fake has to
+    // report the ones it was given rather than the fixed background-only stub.
+    map.getStyle = () => ({
+      sources: {},
+      layers: map.layers as { id: string; type: string }[],
+    });
+    const { document, window } = parseHTML("<html><body></body></html>");
+    const previous = { document: globalThis.document, window: globalThis.window };
+    Object.assign(globalThis, { document, window });
+    try {
+      body(
+        () =>
+          (window as unknown as { __GEOLIBRE_LAYER_LABELS__?: Record<string, string> })
+            .__GEOLIBRE_LAYER_LABELS__ ?? {},
+      );
+    } finally {
+      Object.assign(globalThis, previous);
+    }
+  };
+
+  it("publishes friendly names for the style layers it compiles", () => {
+    // The Layer Swipe panel drives its sides by style layer id and would
+    // otherwise list `geolibre-mapbox-layer-a-geojson-fill`. MapLibre's
+    // controller publishes the same bridge for its own id scheme, so a layer
+    // has to read the same whichever engine is drawing it.
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+      assert.equal(labels()[LINE], "Layer A Lines");
+      assert.equal(labels()[CIRCLE], "Layer A Points");
+      // The swipe panel's grouped basemap row, as the Layers panel names it.
+      assert.equal(labels().__basemap__, "Background");
+    });
+  });
+
+  it("does not let one layer claim a same-prefixed neighbour's rows", () => {
+    // `geolibre-mapbox-a-` is a prefix of `geolibre-mapbox-a-b-`, so matching
+    // ids by prefix would hand "A" its neighbour's three rows as well. The
+    // visible consequence is the qualifier: a layer drawing through one style
+    // layer is named bare, and four would wrongly make it "A Raster".
+    withPublishedLabels((labels) => {
+      engine.syncLayers([
+        geojsonLayer({
+          id: "a",
+          name: "A",
+          type: "xyz",
+          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          geojson: undefined,
+        }),
+        geojsonLayer({ id: "a-b", name: "A B" }),
+      ]);
+      assert.equal(labels()["geolibre-mapbox-a-raster"], "A");
+      assert.equal(labels()["geolibre-mapbox-a-b-geojson-fill"], "A B Polygons");
+    });
+  });
+
+  it("distinguishes the rows of a layer whose ids the engine did not choose", () => {
+    // ArcGIS (and every plugin that hands the engine `nativeLayerIds`) names
+    // its own style layers, so they carry no `geolibre-mapbox-<id>-` prefix.
+    // The kind is still the id's last segment, and taking it from there is
+    // what keeps the two rows apart — without it both are named "Parcels" and
+    // the swipe panel offers the user the same row twice.
+    withPublishedLabels((labels) => {
+      const layer = geojsonLayer({ id: "parcels", name: "Parcels" });
+      layer.type = "arcgis";
+      delete layer.geojson;
+      layer.source = {
+        arcgisSources: {
+          parcels: { type: "vector", tiles: ["https://tiles.test/{z}/{x}/{y}.pbf"] },
+        },
+        arcgisLayers: [
+          { id: "parcels-fill", type: "fill", source: "parcels", "source-layer": "parcels" },
+          { id: "parcels-line", type: "line", source: "parcels", "source-layer": "parcels" },
+        ],
+      };
+      layer.metadata = { nativeLayerIds: ["parcels-fill", "parcels-line"] };
+      engine.syncLayers([layer]);
+      assert.equal(labels()["parcels-fill"], "Parcels Polygons");
+      assert.equal(labels()["parcels-line"], "Parcels Lines");
+    });
+  });
+
+  it("names a single-style-layer row without a geometry qualifier", () => {
+    withPublishedLabels((labels) => {
+      engine.syncLayers([
+        geojsonLayer({
+          id: "raster-a",
+          name: "Imagery",
+          type: "xyz",
+          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          geojson: undefined,
+        }),
+      ]);
+      // One style layer, so no "Imagery Raster" — just the layer's own name.
+      assert.deepEqual(
+        Object.entries(labels()).filter(([id]) => id.includes("raster-a")),
+        [["geolibre-mapbox-raster-a-raster", "Imagery"]],
+      );
+    });
+  });
+
+  it("leaves the bridge to the primary pane", () => {
+    // The bridge is one window global. A split/grid pane draws the same layers
+    // under the same style-layer ids but filtered by its own visibility, so
+    // publishing from there would republish a subset — changing the sibling
+    // count and so the qualifiers — and clearing on teardown would wipe the
+    // primary's names until its next sync, leaving the swipe panel on raw ids.
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+
+      const paneMap = makeMap();
+      paneMap.getStyle = () => ({
+        sources: {},
+        layers: paneMap.layers as { id: string; type: string }[],
+      });
+      const pane = new MapboxEngine(paneMap as unknown as mapboxgl.Map, gl, "", {
+        ownsLayerLabels: false,
+      });
+      pane.syncLayers([geojsonLayer({ id: "layer-a", name: "Renamed In The Pane" })]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+      pane.destroy();
+      assert.equal(labels()[FILL], "Layer A Polygons");
+    });
+  });
+
+  it("carries the translated basemap label into the bridge", () => {
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      engine.setBackgroundLabel("Hintergrund");
+      assert.equal(labels().__basemap__, "Hintergrund");
+      // The layer names survive the republish.
+      assert.equal(labels()[FILL], "Layer A Polygons");
+    });
   });
 
   it("defers the sync until the style has loaded and flushes on idle", () => {
