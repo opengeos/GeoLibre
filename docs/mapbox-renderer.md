@@ -135,6 +135,20 @@ browser against an authenticated Mapbox map):
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
   mapbox-gl).
+- **Layer Swipe** for native style layers. The control drives both maps only
+  through the surface the two engines share, so the one MapLibre object it built
+  itself — the clipped comparison pane — comes from `maplibre-gl-swipe` 0.13.0's
+  `createMap`, fed mapbox-gl's `Map`. Two Mapbox specifics come with it: the
+  pane is handed the access token explicitly (mapbox-gl reads its token from a
+  global the app never sets, so a second map built without it renders nothing),
+  and the basemap grouping is seeded with `basemapLayerIds` because a
+  `mapbox://` style URL cannot be fetched — the same reason the layer control
+  seeds its own. The deck.gl **raster provider stays MapLibre-only**: it mirrors
+  COG and `maplibre-gl-raster` layers onto the comparison pane, and both of
+  those controls register MapLibre tile protocols, so neither draws on Mapbox in
+  the first place. A project authored on MapLibre can still carry such layers,
+  and the swipe panel omits them rather than offering sides for layers that are
+  not on screen.
 - **Overture Maps**. mapbox-gl 3.30+ reads `.pmtiles` archives itself, through
   a tile provider it fetches from `api.mapbox.com` (allowlisted in the desktop
   and web CSPs), so the plugin hands `maplibre-gl-overture-maps` its `nativePmtiles`
@@ -152,8 +166,6 @@ Still MapLibre-only, each for a concrete reason:
   update path reads `map._camera.transform` and throws on a mapbox-gl map.
 - **GeoAgent**: its tools call `setProjection({ type })`, `setTerrain` and
   MapLibre `Marker` / `Popup`, so agent actions would break mid-run.
-- **Swipe**: `maplibre-gl-swipe` constructs a second MapLibre `Map` as the
-  comparison pane, and the plugin mirrors COG and raster layers onto it.
 - **Flight Simulator**: flies with `calculateCameraOptionsFromCameraLngLatAltRotation`
   and `getCenterClampedToGround`, which have no mapbox-gl equivalent (a
   `FreeCameraOptions` port is a separate job).

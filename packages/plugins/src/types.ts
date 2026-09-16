@@ -547,6 +547,17 @@ export interface GeoLibreAppAPI {
    */
   unregisterTemporalLayer?: (layerId: string) => void;
   getActiveBasemap: () => string;
+  /**
+   * The style layer ids the active basemap contributes, in paint order.
+   *
+   * The renderer-neutral counterpart to fetching {@link getActiveBasemap} and
+   * reading its `layers`, for a control that needs to tell basemap layers from
+   * project layers. On Mapbox the basemap is often a `mapbox://` style, which
+   * `fetch` rejects outright ("URL scheme \"mapbox\" is not supported"), so a
+   * control that only knows how to fetch silently loses the distinction there.
+   * Empty when no 2D engine is mounted.
+   */
+  getBasemapLayerIds?: () => string[];
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   /** Current layer ids in the project, in their current order. */
   getLayers?: () => string[];
@@ -640,6 +651,15 @@ export interface GeoLibreAppAPI {
    * the Style Spec surface `getStyleMap` presents.
    */
   getMapboxGl?: () => ReturnType<import("@geolibre/map").MapboxEngine["getMapboxGl"]> | null;
+  /**
+   * The Mapbox access token the primary map was built with, or `null` off the
+   * Mapbox renderer. Needed only by a plugin that constructs a *second* Mapbox
+   * map: mapbox-gl reads its token from the global `mapboxgl.accessToken`
+   * unless the constructor is handed one, and GeoLibre passes it per map rather
+   * than setting that global, so a second map built without it refuses to
+   * render.
+   */
+  getMapboxAccessToken?: () => string | null;
   /**
    * The primary Cesium globe's native scene, or `null` when the primary map is
    * not a globe (or is still mounting). The globe's counterpart to

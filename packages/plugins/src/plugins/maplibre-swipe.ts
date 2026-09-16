@@ -2,12 +2,14 @@ import { useAppStore } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   SwipeControl,
+  type CreateSwipeComparisonMap,
   type SwipeControlOptions,
   type SwipeLayerProvider,
   type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
@@ -249,7 +251,7 @@ function stopSwipeIdResolution(): void {
 
 function startSwipeIdResolution(app: GeoLibreAppAPI): void {
   stopSwipeIdResolution();
-  const map = app.getMap?.();
+  const map = getStyleMap(app);
   if (!map) return;
 
   const handler = (): void => resolveSwipeProjectLayerIds(map);
@@ -272,7 +274,9 @@ function sameLayerOrder(left: readonly string[], right: readonly string[]): bool
 function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
   if (!swipeControl) return;
 
-  const layerOrder = map.getLayersOrder();
+  // `getLayersOrder` is MapLibre's; a mapbox-gl map has no such method, and the
+  // serialized style's layer array is the same order on both engines.
+  const layerOrder = map.getLayersOrder?.() ?? (map.getStyle()?.layers ?? []).map(({ id }) => id);
   if (lastResolvedLayerOrder && sameLayerOrder(lastResolvedLayerOrder, layerOrder)) return;
   // Recorded before the setLeftLayers/setRightLayers below, whose own
   // `setLayoutProperty` calls re-enter this handler through `styledata`.
@@ -309,7 +313,12 @@ function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
 export const maplibreSwipePlugin: GeoLibrePlugin = {
   id: SWIPE_PLUGIN_ID,
   name: "Layer Swipe",
-  version: "0.9.1",
+  version: "0.10.0",
+  // Both 2D engines: the control drives both maps only through the Style Spec
+  // surface they share, and the one MapLibre object it built itself — the
+  // clipped comparison map — now comes from `createMap`. The deck.gl raster
+  // provider stays MapLibre-only (supportsRasterProvider).
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
 
@@ -323,9 +332,13 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
 
     // Keep the swipe panel's COG raster rows and comparison-map mirror in sync
     // as rasters are added, removed, or restyled while the swipe is active.
-    unsubscribeCogRasterChanges = subscribeSwipeCogChanges(() => {
-      swipeControl?.refreshLayers();
-    });
+    // Only where the provider runs; on Mapbox there are no such rasters to
+    // refresh, and the store subscription would be a standing no-op.
+    if (supportsRasterProvider(app)) {
+      unsubscribeCogRasterChanges = subscribeSwipeCogChanges(() => {
+        swipeControl?.refreshLayers();
+      });
+    }
 
     // The control reads the basemap style only on construction, so recreate it
     // when the active basemap changes to keep its basemap-layer grouping in
@@ -398,10 +411,66 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   },
 };
 
-function getSwipeControlOptions(
+/**
+ * Build the swipe's comparison map with the host's own engine.
+ *
+ * `maplibre-gl-swipe` constructs a second map for the clipped comparison pane,
+ * and until 0.12.0 that was always a MapLibre one — which cannot be layered
+ * over a mapbox-gl map's canvas or fed a `mapbox://` style. The control drives
+ * that map only through the Style Spec surface both engines share, so on a
+ * Mapbox host the pane is a mapbox-gl map instead. `undefined` on MapLibre
+ * leaves the upstream default.
+ *
+ * @param app - The plugin host API, read for the mapbox-gl namespace.
+ * @returns A comparison-map factory on a Mapbox host, else `undefined`.
+ */
+export function swipeComparisonMapFactory(
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapboxAccessToken"> | null,
+): CreateSwipeComparisonMap | undefined {
+  const mapboxgl = app?.getMapboxGl?.();
+  if (!mapboxgl) return undefined;
+  // mapbox-gl reads its token from the global `mapboxgl.accessToken` unless the
+  // constructor is handed one, and GeoLibre passes it per map rather than
+  // setting that global. Without it this second map renders nothing and logs
+  // "An API access token is required to use Mapbox GL" every frame.
+  const accessToken = app?.getMapboxAccessToken?.() ?? undefined;
+  return (options) =>
+    new mapboxgl.Map({
+      ...(options as unknown as ConstructorParameters<typeof mapboxgl.Map>[0]),
+      ...(accessToken ? { accessToken } : {}),
+    }) as unknown as MapLibreMap;
+}
+
+/**
+ * Whether the deck.gl raster provider can run on this host.
+ *
+ * The provider mirrors GeoLibre's COG and `maplibre-gl-raster` rasters onto the
+ * comparison map, and both of those controls are MapLibre-only (their tile
+ * protocols register with `maplibregl.addProtocol`, which Mapbox never sees).
+ * On a Mapbox host the store can still carry such layers — a project authored on
+ * MapLibre — but nothing draws them, so listing them in the swipe panel would
+ * offer sides for rasters that are not on screen. Native style layers swipe
+ * normally either way.
+ */
+function supportsRasterProvider(app: Pick<GeoLibreAppAPI, "getMapboxGl"> | null): boolean {
+  return !app?.getMapboxGl?.();
+}
+
+/** Whether `fetch` can retrieve this style. `mapbox://` and the like cannot. */
+function isFetchableStyleUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/**
+ * The options the control is (re)built with. Exported so a test can assert the
+ * per-engine pieces — the comparison-map factory and the raster provider —
+ * without standing up a real SwipeControl.
+ */
+export function getSwipeControlOptions(
   app: GeoLibreAppAPI,
   previousState?: SwipeState,
 ): SwipeControlOptions {
+  const basemapStyleUrl = app.getActiveBasemap();
   return {
     orientation: previousState?.orientation ?? "vertical",
     position: previousState?.position ?? 50,
@@ -416,7 +485,14 @@ function getSwipeControlOptions(
     rightLayers: previousState?.rightLayers ?? [],
     // True only on first activation; restoring saved/project state keeps the user's selection.
     selectVisibleByDefault: previousState === undefined,
-    basemapStyle: app.getActiveBasemap(),
+    basemapStyle: basemapStyleUrl,
+    // The control fetches `basemapStyle` only to learn which layer ids make up
+    // the basemap. A `mapbox://` URL has no HTTP form — `fetch` rejects it
+    // outright — so hand the ids over instead and skip the request. The engine
+    // knows them either way; this only matters where the fetch cannot work.
+    basemapLayerIds: isFetchableStyleUrl(basemapStyleUrl)
+      ? undefined
+      : (app.getBasemapLayerIds?.() ?? undefined),
     // Hide plugin chrome layers (drawing/measure helpers, selection footprints,
     // highlight outlines, Vantor footprints) so they don't clutter the swipe
     // layer list. Shared with the Components control grid via
@@ -428,8 +504,11 @@ function getSwipeControlOptions(
     visibleLayersOnly: true,
     // Surface deck.gl COG rasters (invisible to getStyle()) in the panel and
     // render them per side: right/both on the comparison map, right-only hidden
-    // on the main map. See #1240 and swipe-cog-mirror.ts.
-    layerProvider: cogSwipeProvider,
+    // on the main map. See #1240 and swipe-cog-mirror.ts. MapLibre only — see
+    // supportsRasterProvider.
+    layerProvider: supportsRasterProvider(app) ? cogSwipeProvider : undefined,
+    // On Mapbox the clipped comparison pane is a mapbox-gl map.
+    createMap: swipeComparisonMapFactory(app),
   };
 }
 

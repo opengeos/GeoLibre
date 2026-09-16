@@ -226,6 +226,19 @@ export class MapboxEngine implements MapEngine {
   getMapboxGl(): typeof mapboxgl.default {
     return this.gl;
   }
+  /**
+   * The access token this engine's map was built with.
+   *
+   * mapbox-gl reads its token from the global `mapboxgl.accessToken` unless a
+   * map is handed one in its constructor options, which is what the canvas
+   * does — the global is never set. A plugin that constructs a second Mapbox
+   * map (the Layer Swipe comparison pane) therefore has to pass the token
+   * along, or that map refuses to render with "An API access token is
+   * required to use Mapbox GL".
+   */
+  getMapboxAccessToken(): string {
+    return this.accessToken;
+  }
   private onError = (event: { error: Error; sourceId?: string }) => {
     this.errors.set(event.sourceId ?? "map", redactMapboxError(event.error.message));
   };
