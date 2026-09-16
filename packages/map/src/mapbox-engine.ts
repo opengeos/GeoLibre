@@ -124,6 +124,8 @@ export class MapboxEngine implements MapEngine {
   private preferences: MapPreferences | null = null;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
+  /** See the constructor option of the same name. */
+  private ownsLayerLabels: boolean;
   private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
     ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   };
@@ -186,9 +188,21 @@ export class MapboxEngine implements MapEngine {
        * layer/basemap state back to the global store.
        */
       controlVisibility?: Partial<Record<BuiltInMapControl, boolean>>;
+      /**
+       * Whether this engine publishes the friendly style-layer names the swipe
+       * panel reads (see `./layer-labels`). The bridge is one window global, so
+       * only the primary pane may write it: a secondary (split/grid) pane draws
+       * the same layers under the same style-layer ids but filtered by its own
+       * per-pane visibility, so letting it publish would republish a subset —
+       * changing the sibling count and so the qualifiers — and letting it clear
+       * on teardown would wipe the primary's names until its next sync, leaving
+       * the swipe panel listing raw ids. Secondary panes pass `false`.
+       */
+      ownsLayerLabels?: boolean;
     } = {},
   ) {
     this.map = map;
+    this.ownsLayerLabels = options.ownsLayerLabels ?? true;
     this.controlVisibility = {
       ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
       ...options.controlVisibility,
@@ -311,8 +325,9 @@ export class MapboxEngine implements MapEngine {
     this.map.off("idle", this.flushLayers);
     this.map.off("styledata", this.onStyleData);
     this.layerControlHost.destroy();
-    // Leave no stale names behind for whichever engine mounts next.
-    clearLayerLabels();
+    // Leave no stale names behind for whichever engine mounts next — but only
+    // for the pane that owns the bridge; see `ownsLayerLabels`.
+    if (this.ownsLayerLabels) clearLayerLabels();
     this.map.remove();
     this.pluginControls.clear();
     this.builtInControls.clear();
@@ -584,7 +599,7 @@ export class MapboxEngine implements MapEngine {
    */
   private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
     const map = this.map;
-    if (!map) return;
+    if (!map || !this.ownsLayerLabels) return;
     let present: Set<string>;
     try {
       present = new Set((map.getStyle()?.layers ?? []).map((styleLayer) => styleLayer.id));

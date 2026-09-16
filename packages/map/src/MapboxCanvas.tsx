@@ -75,6 +75,9 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
           // Split/grid panes share the primary pane's layer control; a second
           // one would write the same store state back from another map.
           controlVisibility: viewId ? { "layer-control": false } : undefined,
+          // They share the swipe panel's layer-name bridge too, which is a
+          // window global with room for one publisher.
+          ownsLayerLabels: !viewId,
         });
         const current = engine;
         let applying = false;

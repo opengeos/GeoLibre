@@ -345,6 +345,11 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     // sync. The previous slider state is carried over to avoid a visible reset.
     unsubscribeBasemap = app.onBasemapChange((styleUrl) => {
       if (!swipeControl) return;
+      // Whatever this change needs, a rebuild queued by the *previous* one is
+      // now stale: it would fire on the style this change is about to load and
+      // tear down the control this one just built (and its comparison map's
+      // live WebGL context) to build another.
+      cancelPendingStyleLoadRebuild();
       // `onBasemapChange` fires the moment the store's URL changes, which is
       // before the engine has applied it. The control reads the basemap once, at
       // construction: from the URL it fetches (fine — it fetches the new one) or

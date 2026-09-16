@@ -541,6 +541,31 @@ describe("MapboxEngine.syncLayers", () => {
     });
   });
 
+  it("leaves the bridge to the primary pane", () => {
+    // The bridge is one window global. A split/grid pane draws the same layers
+    // under the same style-layer ids but filtered by its own visibility, so
+    // publishing from there would republish a subset — changing the sibling
+    // count and so the qualifiers — and clearing on teardown would wipe the
+    // primary's names until its next sync, leaving the swipe panel on raw ids.
+    withPublishedLabels((labels) => {
+      engine.syncLayers([geojsonLayer()]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+
+      const paneMap = makeMap();
+      paneMap.getStyle = () => ({
+        sources: {},
+        layers: paneMap.layers as { id: string; type: string }[],
+      });
+      const pane = new MapboxEngine(paneMap as unknown as mapboxgl.Map, gl, "", {
+        ownsLayerLabels: false,
+      });
+      pane.syncLayers([geojsonLayer({ id: "layer-a", name: "Renamed In The Pane" })]);
+      assert.equal(labels()[FILL], "Layer A Polygons");
+      pane.destroy();
+      assert.equal(labels()[FILL], "Layer A Polygons");
+    });
+  });
+
   it("carries the translated basemap label into the bridge", () => {
     withPublishedLabels((labels) => {
       engine.syncLayers([geojsonLayer()]);
