@@ -345,9 +345,10 @@ function dissolveBuffers(features: Feature[]): Feature | null {
   const polys = features as Feature<Polygon | MultiPolygon>[];
   // turf's union throws on a single geometry ("Must have at least 2
   // geometries"), and one buffer is already its own dissolve.
-  const merged =
-    polys.length === 1 ? polys[0] : union(featureCollection(polys), { properties: {} });
+  const merged = polys.length === 1 ? polys[0] : union(featureCollection(polys));
   const kept = nonEmptyBuffer(merged as Feature | null);
+  // The single `properties: {}` — the lone-buffer branch carries the source
+  // feature's attributes in, so clearing them has to happen here either way.
   return kept ? { ...kept, properties: {} } : null;
 }
 
