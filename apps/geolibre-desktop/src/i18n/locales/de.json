@@ -1930,6 +1930,7 @@
     "only2d": "Nur 2D",
     "only3d": "Nur 3D",
     "noMapbox": "Kein Mapbox",
+    "noArcgis": "Kein ArcGIS",
     "cesiumTokenHint": "Fügen Sie in den Einstellungen ein Cesium-Ion-Token für Gelände und Ion-Bilder hinzu"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "Wird vom 3D-Globus nicht dargestellt",
     "layerCesiumOnly": "Wird nur vom 3D-Globus dargestellt",
     "layerMapboxUnsupported": "Wird vom Mapbox-Renderer nicht dargestellt",
+    "layerArcgisUnsupported": "Wird vom ArcGIS-Renderer nicht dargestellt",
     "resetView": "Ansicht zurücksetzen",
     "scene3D": "3D-Globus",
     "scene2D": "2D-Karte",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Vollbild beenden",
     "fullscreenUnavailable": "Vollbild nicht verfügbar",
     "mapboxTokenHint": "Fügen Sie Ihr Mapbox-Zugriffstoken unter <settingsLink>Einstellungen → Umgebungsvariablen</settingsLink> hinzu, um diesen Renderer zu verwenden.",
+    "arcgisKeyHint": "Fügen Sie unter <settingsLink>Einstellungen → Umgebungsvariablen</settingsLink> einen ArcGIS-API-Schlüssel hinzu, um Esri-Hintergrundkartenstile zu verwenden.",
     "pluginUnsupported": "Dieses Plugin unterstützt den ausgewählten Renderer nicht."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Fügen Sie unten ein Zugriffstoken aus <tokenLink>Ihrem Mapbox-Konto</tokenLink> ein, um Mapbox zu verwenden.",
       "mapboxTokenStorageNote": "Wird lokal auf diesem Gerät gespeichert (nicht in der Projektdatei, sodass es nie geteilt wird) und nur an Mapbox gesendet. Im Web-Build nutzt es denselben Browser-Speicher wie andere Website-Daten.",
+      "arcgisKeyTitle": "ArcGIS-API-Schlüssel",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Der ArcGIS-Renderer funktioniert ohne Schlüssel: Er stellt die Projekt-Hintergrundkarte und Ihre Ebenen über das ArcGIS Maps SDK for JavaScript dar, das vom Esri-CDN geladen wird. Ein API-Schlüssel ergänzt die Hintergrundkartenstile von Esri (Straßen, Bilder, Topografie, …). Erstellen Sie einen unter <keyLink>Entwickler-Anmeldeinformationen</keyLink> in Ihrem ArcGIS-Konto mit der Berechtigung „Grundkarten“ und fügen Sie ihn unten ein.",
+      "arcgisKeyStorageNote": "Wird lokal auf diesem Gerät gespeichert (nicht in der Projektdatei, sodass er nie geteilt wird) und nur an Esri gesendet. Im Web-Build nutzt er denselben Browser-Speicher wie andere Website-Daten.",
       "variablesTitle": "Umgebungsvariablen",
       "variablesCount_one": "{{count}} aktivierte Laufzeitvariable.",
       "variablesCount_other": "{{count}} aktivierte Laufzeitvariablen.",
@@ -2809,6 +2816,7 @@
       "renderingEngine": "Rendering-Engine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "In Google Maps ansehen",
       "viewInGoogleEarth": "In Google Earth ansehen",

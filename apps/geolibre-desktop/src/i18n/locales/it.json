@@ -1930,6 +1930,7 @@
     "only2d": "Solo 2D",
     "only3d": "Solo 3D",
     "noMapbox": "No Mapbox",
+    "noArcgis": "No ArcGIS",
     "cesiumTokenHint": "Aggiungi un token Cesium Ion nelle Impostazioni per il terreno e le immagini Ion"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "Non visualizzato dal globo 3D",
     "layerCesiumOnly": "Visualizzato solo dal globo 3D",
     "layerMapboxUnsupported": "Non visualizzato dal motore Mapbox",
+    "layerArcgisUnsupported": "Non visualizzato dal motore ArcGIS",
     "resetView": "Ripristina vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mappa 2D",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Esci da schermo intero",
     "fullscreenUnavailable": "Schermo intero non disponibile",
     "mapboxTokenHint": "Aggiungi il token di accesso Mapbox in <settingsLink>Impostazioni → Variabili d’ambiente</settingsLink> per usare questo motore di rendering.",
+    "arcgisKeyHint": "Aggiungi una chiave API ArcGIS in <settingsLink>Impostazioni → Variabili d’ambiente</settingsLink> per usare gli stili di mappa di base Esri.",
     "pluginUnsupported": "Questo plugin non supporta il motore di rendering selezionato."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Per utilizzare Mapbox, incolla qui sotto un token di accesso dal <tokenLink>tuo account Mapbox</tokenLink>.",
       "mapboxTokenStorageNote": "Memorizzato localmente su questo dispositivo (non nel file di progetto, quindi non viene mai condiviso) e inviato solo a Mapbox. Nella build web condivide lo stesso archivio del browser degli altri dati del sito.",
+      "arcgisKeyTitle": "Chiave API ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Il motore ArcGIS funziona senza chiave: mostra la mappa di base del progetto e i tuoi layer tramite l’ArcGIS Maps SDK for JavaScript, caricato dalla CDN di Esri. Una chiave API aggiunge gli stili di mappa di base di Esri (Strade, Immagini, Topografica, …). Creane una in <keyLink>credenziali per sviluppatori</keyLink> nel tuo account ArcGIS con il privilegio Mappe di base e incollala di seguito.",
+      "arcgisKeyStorageNote": "Memorizzata localmente su questo dispositivo (non nel file di progetto, quindi non viene mai condivisa) e inviata solo a Esri. Nella build web condivide lo stesso archivio del browser degli altri dati del sito.",
       "variablesTitle": "Variabili d'ambiente",
       "variablesCount_one": "{{count}} variabile di runtime abilitata.",
       "variablesCount_other": "{{count}} variabili di runtime abilitate.",
@@ -2809,6 +2816,7 @@
       "renderingEngine": "Motore di rendering",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Visualizza in Google Maps",
       "viewInGoogleEarth": "Visualizza in Google Earth",

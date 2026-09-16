@@ -1930,6 +1930,7 @@
     "only2d": "მხოლოდ 2D",
     "only3d": "მხოლოდ 3D",
     "noMapbox": "Mapbox-ის გარეშე",
+    "noArcgis": "ArcGIS-ის გარეშე",
     "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token პარამეტრებში"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "3D გლობუსზე არ ისახება",
     "layerCesiumOnly": "ისახება მხოლოდ 3D გლობუსზე",
     "layerMapboxUnsupported": "Mapbox-ის ძრავით არ ისახება",
+    "layerArcgisUnsupported": "ArcGIS-ის ძრავით არ ისახება",
     "resetView": "ხედის საწყისზე დაბრუნება",
     "scene3D": "3D გლობუსი",
     "scene2D": "2D რუკა",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "სრული ეკრანიდან გასვლა",
     "fullscreenUnavailable": "სრული ეკრანი მიუწვდომელია",
     "mapboxTokenHint": "ამ რენდერერის გამოსაყენებლად დაამატეთ Mapbox-ის წვდომის token <settingsLink>პარამეტრები → გარემოს ცვლადები</settingsLink> განყოფილებაში.",
+    "arcgisKeyHint": "Esri-ს საბაზისო რუკის სტილებისთვის დაამატეთ ArcGIS API გასაღები <settingsLink>პარამეტრები → გარემოს ცვლადები</settingsLink> განყოფილებაში.",
     "pluginUnsupported": "ეს დანამატი არ უჭერს მხარს არჩეულ რენდერის ძრავას."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Mapbox-ის გამოსაყენებლად ქვემოთ ჩასვით წვდომის ტოკენი <tokenLink>თქვენი Mapbox ანგარიშიდან</tokenLink>.",
       "mapboxTokenStorageNote": "ინახება ლოკალურად ამ მოწყობილობაზე (არა პროექტის ფაილში, ამიტომ არასდროს ზიარდება) და იგზავნება მხოლოდ Mapbox-ზე. ვებ-ვერსიაში ის იზიარებს იმავე ბრაუზერის საცავს, რასაც საიტის სხვა მონაცემები.",
+      "arcgisKeyTitle": "ArcGIS API გასაღები",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGIS-ის რენდერერი მუშაობს გასაღების გარეშეც: ის ასახავს პროექტის საბაზისო რუკასა და თქვენს ფენებს ArcGIS Maps SDK for JavaScript-ის მეშვეობით, რომელიც Esri-ს CDN-იდან იტვირთება. API გასაღები ამატებს Esri-ს საბაზისო რუკის სტილებს (ქუჩები, სურათები, ტოპოგრაფიული, …). შექმენით ის თქვენი ArcGIS ანგარიშის <keyLink>დეველოპერის რწმუნებათა სიგელებში</keyLink> საბაზისო რუკების უფლებით და ჩასვით ქვემოთ.",
+      "arcgisKeyStorageNote": "ინახება ლოკალურად ამ მოწყობილობაზე (არა პროექტის ფაილში, ამიტომ არასდროს ზიარდება) და იგზავნება მხოლოდ Esri-ზე. ვებ-ვერსიაში ის იზიარებს იმავე ბრაუზერის საცავს, რასაც საიტის სხვა მონაცემები.",
       "variablesTitle": "გარემოს ცვლადები",
       "variablesCount_one": "{{count}} ჩართული გაშვების ცვლადი.",
       "variablesCount_other": "{{count}} ჩართული გაშვების ცვლადი.",
@@ -2809,6 +2816,7 @@
       "renderingEngine": "რენდერინგის ძრავა",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "ნახვა Google Maps-ში",
       "viewInGoogleEarth": "ნახვა Google Earth-ში",

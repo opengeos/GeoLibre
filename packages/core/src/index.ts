@@ -130,6 +130,7 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getArcgisApiKey,
   getBuildEnvironment,
   getCesiumIonToken,
   getGoogleMapsApiKey,

@@ -1,0 +1,327 @@
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { applyGroupEffects, useAppStore } from "@geolibre/core";
+import type { MapEngine } from "./map-engine";
+import { ArcgisEngine, bearingToRotation } from "./arcgis-engine";
+import {
+  ensureArcgisCss,
+  loadArcgisSdk,
+  redactArcgisError,
+  type ArcgisHandle,
+  type ArcgisMapView,
+} from "./arcgis-sdk";
+
+export interface ArcgisCanvasProps {
+  /**
+   * ArcGIS API key. Optional: the map draws the translated project basemap and
+   * every non-Esri layer without one; a key unlocks Esri's basemap styles and
+   * location services and is required by Esri for those.
+   */
+  apiKey?: string;
+  viewId?: string;
+  engineRef?: RefObject<MapEngine | null>;
+  onEngineReady?: () => void;
+}
+
+/**
+ * The ArcGIS Maps SDK for JavaScript as a map pane (issue #2421).
+ *
+ * The SDK loads from Esri's CDN on first mount (see `arcgis-sdk.ts`), so
+ * nothing ArcGIS-specific is in the app bundle. The component owns
+ * construction — `Map`, `MapView`, the store subscription and the pointer
+ * handlers — and hands everything after that to {@link ArcgisEngine}, the way
+ * `MapboxCanvas` does for Mapbox GL JS.
+ */
+export function ArcgisCanvas({ apiKey, viewId, engineRef, onEngineReady }: ArcgisCanvasProps) {
+  const container = useRef<HTMLDivElement>(null);
+  const readyCallback = useRef(onEngineReady);
+  readyCallback.current = onEngineReady;
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let engine: ArcgisEngine | undefined;
+    let cleanup = () => {};
+    setError(null);
+    const dark = document.documentElement.classList.contains("dark");
+    void Promise.all([loadArcgisSdk(), ensureArcgisCss(dark ? "dark" : "light")])
+      .then(([sdk]) => {
+        if (cancelled || !container.current) return;
+        sdk.config.apiKey = apiKey?.trim() || null;
+        const state = useAppStore.getState();
+        const pane = state.secondaryMapViews.find((p) => p.id === viewId);
+        const view =
+          viewId && !state.mapLayout.syncView ? (pane?.view ?? state.mapView) : state.mapView;
+        const map = new sdk.Map({});
+        const mapView: ArcgisMapView = new sdk.MapView({
+          container: container.current,
+          map,
+          center: view.center,
+          zoom: view.zoom,
+          rotation: bearingToRotation(view.bearing),
+          // The engine mounts the built-in controls the Controls menu governs.
+          ui: { components: [] },
+          // Fractional zooms are what the shared camera carries; snapping
+          // would nudge every synchronized pane to the nearest level.
+          constraints: { snapToZoom: false, rotationEnabled: true },
+          // Identify goes through the engine's hit test, not the SDK popup.
+          popupEnabled: false,
+          highlightOptions: { color: [250, 204, 21, 1] },
+        });
+        engine = new ArcgisEngine(sdk, map, mapView, {
+          hasApiKey: Boolean(apiKey?.trim()),
+          controlVisibility: viewId ? { "layer-control": false } : undefined,
+        });
+        const current = engine;
+        let applying = false;
+        let selectionKey: string | null = null;
+        let popupDispose: (() => void) | null = null;
+        const removePopup = () => {
+          popupDispose?.();
+          popupDispose = null;
+        };
+        const update = (next: typeof state, previous?: typeof state) => {
+          if (cancelled) return;
+          const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
+          const previousPane = previous?.secondaryMapViews.find((p) => p.id === viewId);
+          applying = true;
+          try {
+            if (
+              !previous ||
+              next.basemapStyleUrl !== previous.basemapStyleUrl ||
+              next.preferences.map.arcgisBasemap !== previous.preferences.map.arcgisBasemap
+            )
+              current.setBasemap(next.basemapStyleUrl, next.preferences.map.arcgisBasemap);
+            if (!previous || next.preferences.map !== previous.preferences.map)
+              current.applyMapPreferences(next.preferences.map);
+            if (!previous || next.basemapVisible !== previous.basemapVisible)
+              current.setBasemapVisible(next.basemapVisible);
+            if (!previous || next.basemapOpacity !== previous.basemapOpacity)
+              current.setBasemapOpacity(next.basemapOpacity);
+            if (!previous || next.blankBackgroundColor !== previous.blankBackgroundColor)
+              current.setBlankBackgroundColor(next.blankBackgroundColor);
+            if (
+              !previous ||
+              next.layers !== previous.layers ||
+              next.layerGroups !== previous.layerGroups ||
+              targetPane?.layerVisibility !== previousPane?.layerVisibility
+            ) {
+              const layers = targetPane
+                ? next.layers.map((layer) => ({
+                    ...layer,
+                    visible: targetPane.layerVisibility[layer.id] ?? layer.visible,
+                  }))
+                : next.layers;
+              current.syncLayers(applyGroupEffects(layers, next.layerGroups));
+            }
+            if (
+              !previous ||
+              next.mapView !== previous.mapView ||
+              targetPane?.view !== previousPane?.view ||
+              next.mapLayout.syncView !== previous.mapLayout.syncView
+            ) {
+              current.applyView(
+                viewId && !next.mapLayout.syncView
+                  ? (targetPane?.view ?? next.mapView)
+                  : next.mapView,
+              );
+            }
+            if (
+              !viewId &&
+              (!previous ||
+                next.selectedFeatureId !== previous.selectedFeatureId ||
+                next.selectedFeatureIds !== previous.selectedFeatureIds ||
+                next.selectedLayerId !== previous.selectedLayerId)
+            ) {
+              const ids = next.selectedFeatureIds?.length
+                ? next.selectedFeatureIds
+                : next.selectedFeatureId;
+              // Frame a newly selected feature when the attribute table's
+              // "Zoom to selection" is on, as MapCanvas does; a re-render with
+              // the same selection only redraws the highlight.
+              const key =
+                next.selectedLayerId && ids !== null && (Array.isArray(ids) ? ids.length : true)
+                  ? `${next.selectedLayerId}:${Array.isArray(ids) ? ids.join("\u0000") : ids}`
+                  : null;
+              const fit = Boolean(
+                next.ui.zoomToSelectedFeature && key && key !== selectionKey && previous,
+              );
+              selectionKey = key;
+              current.highlightFeature(
+                next.layers.find((l) => l.id === next.selectedLayerId),
+                ids,
+                { fit },
+              );
+            }
+            if (previous && next.identifyLayerId !== previous.identifyLayerId) removePopup();
+          } finally {
+            applying = false;
+          }
+        };
+        const unsubscribe = useAppStore.subscribe(update);
+        cleanup = unsubscribe;
+        update(state);
+        update(useAppStore.getState(), state);
+        const handles: ArcgisHandle[] = [];
+        // `stationary` flips true at the end of every pan, zoom and rotation,
+        // which is the SDK's `moveend`.
+        handles.push(
+          sdk.reactiveUtils.when(
+            () => mapView.stationary,
+            () => {
+              if (applying || cancelled || !mapView.ready) return;
+              const next = useAppStore.getState(),
+                camera = current.readView();
+              // Shared view first (as the other canvases do), so a synchronized
+              // pane never reads the changed pane against a stale `mapView`.
+              if (!viewId || next.mapLayout.syncView) next.setMapView(camera, true);
+              if (viewId) next.setSecondaryMapView(viewId, camera, true);
+            },
+          ),
+        );
+        handles.push(
+          mapView.on("pointer-move", (event) => {
+            if (viewId) return;
+            const point = mapView.toMap({ x: event.x, y: event.y });
+            useAppStore
+              .getState()
+              .setPointerCoords(point ? [point.longitude, point.latitude] : null);
+          }),
+        );
+        handles.push(
+          mapView.on("pointer-leave", () => {
+            if (!viewId) useAppStore.getState().setPointerCoords(null);
+          }),
+        );
+        handles.push(
+          mapView.on("click", (event) => {
+            if (viewId) return;
+            const next = useAppStore.getState();
+            if (!next.identifyLayerId) return;
+            const layerId = next.layers.some((l) => l.id === next.identifyLayerId)
+              ? next.identifyLayerId
+              : undefined;
+            void current.identifyFeaturesAt({ x: event.x, y: event.y }, layerId).then((matches) => {
+              if (cancelled) return;
+              const match = matches[0];
+              removePopup();
+              const latest = useAppStore.getState();
+              if (!match) {
+                latest.selectFeature(null);
+                return;
+              }
+              latest.selectLayer(match.layerId);
+              latest.selectFeature(match.featureId);
+              const point = mapView.toMap({ x: event.x, y: event.y });
+              if (!point || !mapView.container) return;
+              const content = document.createElement("div");
+              content.className = "geolibre-arcgis-popup";
+              const title = document.createElement("strong");
+              title.textContent = latest.layers.find((l) => l.id === match.layerId)?.name ?? "";
+              content.append(title);
+              for (const [key, value] of Object.entries(match.properties)) {
+                const row = document.createElement("div");
+                row.textContent = `${key}: ${
+                  typeof value === "object" ? JSON.stringify(value) : String(value)
+                }`;
+                content.append(row);
+              }
+              const close = document.createElement("button");
+              close.type = "button";
+              close.className = "geolibre-arcgis-popup-close";
+              close.setAttribute("aria-label", "Close");
+              close.textContent = "×";
+              close.onclick = removePopup;
+              content.prepend(close);
+              popupDispose = anchorPopup(sdk, mapView, content, [point.longitude, point.latitude]);
+            });
+          }),
+        );
+        void mapView.when().then(() => {
+          if (cancelled) return;
+          if (engineRef) engineRef.current = current;
+          readyCallback.current?.();
+        });
+        const status = window.setInterval(() => {
+          if (cancelled) return;
+          const errors = current.getRenderStatus().errors;
+          setError(errors.length ? errors.join("; ") : null);
+        }, 1000);
+        // The SDK ships one stylesheet per theme; follow the app's dark-mode
+        // class so the widgets restyle with the rest of the chrome.
+        const theme = new MutationObserver(() => {
+          void ensureArcgisCss(
+            document.documentElement.classList.contains("dark") ? "dark" : "light",
+          ).catch(() => {});
+        });
+        theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+        cleanup = () => {
+          unsubscribe();
+          for (const handle of handles) handle.remove();
+          window.clearInterval(status);
+          theme.disconnect();
+          removePopup();
+        };
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
+      });
+    return () => {
+      cancelled = true;
+      cleanup();
+      if (engineRef && engineRef.current === engine) engineRef.current = null;
+      engine?.destroy();
+    };
+  }, [apiKey, viewId, engineRef]);
+  return (
+    <div className="relative h-full w-full" data-testid="arcgis-canvas">
+      <div ref={container} className="h-full w-full" />
+      {error && (
+        <div
+          role="alert"
+          className="absolute bottom-10 end-2 z-10 max-h-32 max-w-[75%] overflow-auto rounded border border-input bg-background p-2 text-xs text-foreground shadow"
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Pin a popup element above a location and follow the view. The SDK's own
+ * popup is a web component in 5.x that this pane deliberately leaves out; a
+ * plain element positioned through `toScreen` keeps the identify popup the
+ * same DOM the other engines produce.
+ */
+function anchorPopup(
+  sdk: Awaited<ReturnType<typeof loadArcgisSdk>>,
+  view: ArcgisMapView,
+  element: HTMLElement,
+  lngLat: [number, number],
+): () => void {
+  if (!view.container) return () => {};
+  element.style.position = "absolute";
+  element.style.zIndex = "5";
+  element.style.transform = "translate(-50%, calc(-100% - 12px))";
+  view.container.append(element);
+  const point = new sdk.Point({
+    longitude: lngLat[0],
+    latitude: lngLat[1],
+    spatialReference: { wkid: 4326 },
+  });
+  const place = () => {
+    const screen = view.toScreen(point);
+    if (!screen) return;
+    element.style.left = `${screen.x}px`;
+    element.style.top = `${screen.y}px`;
+  };
+  place();
+  const handle = sdk.reactiveUtils.watch(
+    () => [view.extent, view.rotation, view.width, view.height],
+    place,
+  );
+  return () => {
+    handle.remove();
+    element.remove();
+  };
+}

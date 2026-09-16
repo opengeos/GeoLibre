@@ -347,6 +347,41 @@ renamed view-model observable and the 0x0-button case of a missing stylesheet.
 Neither catches the rest of the CSS regression or the bundle-size one — check
 those by eye and in the build output.
 
+### ArcGIS Maps SDK for JavaScript — loaded from Esri's CDN
+
+The ArcGIS renderer (`docs/arcgis-renderer.md`) has **no npm dependency**.
+`packages/map/src/arcgis-sdk.ts` imports the SDK's ES modules from
+`https://js.arcgis.com/<ARCGIS_SDK_VERSION>/@arcgis/core/…` at runtime and
+types the surface it uses by hand, so nothing here is checked by the compiler
+against Esri's declarations. Bumping `ARCGIS_SDK_VERSION` is therefore a
+manual check, not a Dependabot event:
+
+- **Module paths and default exports.** `SDK_MODULES` in `arcgis-sdk.ts` lists
+  every module the engine loads. `tests/arcgis-renderer.test.ts` only checks the
+  assembly against fakes; probe the real CDN (`curl -sI` each URL returns 200)
+  and mount a pane in a browser — a moved module rejects the whole load and the
+  pane shows the error banner.
+- **The legacy widgets.** `widgets/Zoom`, `Compass`, `ScaleBar`, `Fullscreen`
+  and `Locate` back the built-in controls. Esri deprecated them in 4.32 in
+  favour of web components and still ships them in 5.x with a console warning
+  each; a release that drops them breaks `setBuiltInControlVisible`. The
+  replacement is the `@arcgis/map-components` CDN build. Attribution already
+  uses the 5.x path: the view draws it while `view.attributionVisible` is on,
+  so the deprecated `Attribution` widget is not loaded.
+- **The ESM CDN notice.** The SDK logs "Only use ES modules from ArcGIS CDN for
+  testing" on load; Esri's documented production path is an npm build, which
+  this renderer deliberately avoids (see the size argument in issue #2421). The
+  AMD CDN (`<script src="https://js.arcgis.com/<version>/">`) is the supported
+  alternative if the ESM CDN is ever withdrawn.
+- **Hit-test attributes.** `GeoJSONLayer` graphics only carry the fields the
+  renderer reads unless `outFields: ["*"]` is set; identify depends on the
+  compiler's `gl__id` field arriving. `e2e/arcgis-renderer.spec.ts` (opt-in,
+  `ARCGIS_API_KEY`) is the check.
+- **CSP and caching.** `https://js.arcgis.com/` is allow-listed in `script-src`
+  in `tauri.conf.json` and `docker/nginx.conf`, and cached by the
+  `geolibre-cdn-engines` service-worker rule in `vite.config.ts`. The version is
+  in every URL, so a bump mints new cache entries.
+
 ## Adding a blend mode
 
 **Do not add a blend mode without checking it in the browser.** MapLibre's blend

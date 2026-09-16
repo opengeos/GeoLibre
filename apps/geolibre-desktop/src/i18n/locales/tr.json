@@ -1930,6 +1930,7 @@
     "only2d": "Yalnızca 2B",
     "only3d": "Yalnızca 3B",
     "noMapbox": "Mapbox yok",
+    "noArcgis": "ArcGIS yok",
     "cesiumTokenHint": "Arazi ve Ion görüntüleri için Ayarlar'dan bir Cesium Ion belirteci ekleyin"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "3D küre tarafından çizilmiyor",
     "layerCesiumOnly": "Yalnızca 3B küre tarafından çiziliyor",
     "layerMapboxUnsupported": "Mapbox motoru tarafından çizilmiyor",
+    "layerArcgisUnsupported": "ArcGIS motoru tarafından çizilmiyor",
     "resetView": "Görünümü Sıfırla",
     "scene3D": "3B küre",
     "scene2D": "2B harita",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Tam ekrandan çık",
     "fullscreenUnavailable": "Tam ekran kullanılamıyor",
     "mapboxTokenHint": "Bu çizim motorunu kullanmak için <settingsLink>Ayarlar → Ortam değişkenleri</settingsLink> bölümüne Mapbox erişim belirtecinizi ekleyin.",
+    "arcgisKeyHint": "Esri altlık harita stillerini kullanmak için <settingsLink>Ayarlar → Ortam değişkenleri</settingsLink> bölümüne bir ArcGIS API anahtarı ekleyin.",
     "pluginUnsupported": "Bu eklenti seçilen işleme motorunu desteklemiyor."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Mapbox kullanmak için <tokenLink>Mapbox hesabınızdan</tokenLink> bir erişim belirtecini aşağıya yapıştırın.",
       "mapboxTokenStorageNote": "Bu cihazda yerel olarak saklanır (proje dosyasında değil, bu nedenle asla paylaşılmaz) ve yalnızca Mapbox'a gönderilir. Web derlemesinde diğer site verileriyle aynı tarayıcı deposunu paylaşır.",
+      "arcgisKeyTitle": "ArcGIS API anahtarı",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGIS çizim motoru anahtar olmadan da çalışır: proje altlık haritasını ve katmanlarınızı Esri CDN'inden yüklenen ArcGIS Maps SDK for JavaScript ile görüntüler. Bir API anahtarı Esri'nin altlık harita stillerini (Sokaklar, Görüntü, Topoğrafik, …) ekler. ArcGIS hesabınızdaki <keyLink>geliştirici kimlik bilgileri</keyLink> altında altlık haritalar ayrıcalığıyla bir anahtar oluşturun ve aşağıya yapıştırın.",
+      "arcgisKeyStorageNote": "Bu cihazda yerel olarak saklanır (proje dosyasında değil, bu nedenle asla paylaşılmaz) ve yalnızca Esri'ye gönderilir. Web derlemesinde diğer site verileriyle aynı tarayıcı deposunu paylaşır.",
       "variablesTitle": "Ortam değişkenleri",
       "variablesCount_one": "{{count}} etkin çalışma zamanı değişkeni.",
       "variablesCount_other": "{{count}} etkin çalışma zamanı değişkeni.",
@@ -2809,6 +2816,7 @@
       "renderingEngine": "Çizim motoru",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google Haritalar'da görüntüle",
       "viewInGoogleEarth": "Google Earth'te görüntüle",

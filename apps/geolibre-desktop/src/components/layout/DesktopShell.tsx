@@ -163,6 +163,7 @@ import { KnowledgeCardPanel, type KnowledgePlace } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
 import { MapGrid } from "./MapGrid";
 import { PrimaryMapboxCanvas } from "./PrimaryMapboxCanvas";
+import { PrimaryArcgisCanvas } from "./PrimaryArcgisCanvas";
 import { PrimaryCesiumCanvas } from "./PrimaryCesiumCanvas";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -2665,6 +2666,11 @@ export function DesktopShell({
                   available under either engine. */}
               {primaryRenderer === "mapbox" ? (
                 <PrimaryMapboxCanvas
+                  engineRef={mapControllerRef}
+                  onEngineReady={handleMapControllerReady}
+                />
+              ) : primaryRenderer === "arcgis" ? (
+                <PrimaryArcgisCanvas
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
                 />

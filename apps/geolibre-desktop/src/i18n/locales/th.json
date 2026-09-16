@@ -1884,6 +1884,7 @@
     "only2d": "2 มิติเท่านั้น",
     "only3d": "3 มิติเท่านั้น",
     "noMapbox": "ไม่รองรับ Mapbox",
+    "noArcgis": "ไม่รองรับ ArcGIS",
     "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ในการตั้งค่าเพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "ไม่แสดงผลบนลูกโลก 3 มิติ",
     "layerCesiumOnly": "แสดงผลบนลูกโลก 3 มิติเท่านั้น",
     "layerMapboxUnsupported": "ไม่แสดงผลบนเอนจิน Mapbox",
+    "layerArcgisUnsupported": "ไม่แสดงผลบนเอนจิน ArcGIS",
     "resetView": "รีเซ็ตมุมมอง",
     "scene3D": "ลูกโลก 3 มิติ",
     "scene2D": "แผนที่ 2 มิติ",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "ออกจากเต็มหน้าจอ",
     "fullscreenUnavailable": "ไม่รองรับเต็มหน้าจอ",
     "mapboxTokenHint": "เพิ่มโทเค็นการเข้าถึง Mapbox ใน<settingsLink>การตั้งค่า → ตัวแปรสภาพแวดล้อม</settingsLink> เพื่อใช้เอนจินนี้",
+    "arcgisKeyHint": "เพิ่มคีย์ ArcGIS API ใน<settingsLink>การตั้งค่า → ตัวแปรสภาพแวดล้อม</settingsLink> เพื่อใช้สไตล์แผนที่ฐานของ Esri",
     "pluginUnsupported": "ปลั๊กอินนี้ไม่รองรับเอนจินการเรนเดอร์ที่เลือก"
   },
   "mapContextMenu": {
@@ -2168,6 +2171,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "หากต้องการใช้ Mapbox ให้วางโทเค็นการเข้าถึงจาก<tokenLink>บัญชี Mapbox ของคุณ</tokenLink>ด้านล่าง",
       "mapboxTokenStorageNote": "จัดเก็บไว้ในเครื่องบนอุปกรณ์นี้ (ไม่ได้อยู่ในไฟล์โปรเจกต์ จึงไม่ถูกแชร์ออกไป) และส่งไปยัง Mapbox เท่านั้น บนบิลด์เว็บ โทเค็นจะใช้พื้นที่จัดเก็บของเบราว์เซอร์ร่วมกับข้อมูลอื่นของเว็บไซต์",
+      "arcgisKeyTitle": "คีย์ ArcGIS API",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "เอนจิน ArcGIS ใช้งานได้โดยไม่ต้องมีคีย์ โดยจะแสดงแผนที่ฐานของโปรเจกต์และเลเยอร์ของคุณผ่าน ArcGIS Maps SDK for JavaScript ที่โหลดจาก CDN ของ Esri คีย์ API จะเพิ่มสไตล์แผนที่ฐานของ Esri (ถนน ภาพถ่าย ภูมิประเทศ ฯลฯ) สร้างคีย์ได้ใน<keyLink>ข้อมูลรับรองสำหรับนักพัฒนา</keyLink>ของบัญชี ArcGIS ของคุณพร้อมสิทธิ์แผนที่ฐาน แล้ววางด้านล่าง",
+      "arcgisKeyStorageNote": "จัดเก็บไว้ในเครื่องบนอุปกรณ์นี้ (ไม่ได้อยู่ในไฟล์โปรเจกต์ จึงไม่ถูกแชร์ออกไป) และส่งไปยัง Esri เท่านั้น บนบิลด์เว็บ คีย์จะใช้พื้นที่จัดเก็บของเบราว์เซอร์ร่วมกับข้อมูลอื่นของเว็บไซต์",
       "variablesTitle": "ตัวแปรสภาพแวดล้อม",
       "variablesCount_other": "ตัวแปรขณะทำงานที่เปิดใช้งาน {{count}} รายการ",
       "secretsWarning": "ค่าต่าง ๆ จะถูกเก็บเป็นข้อความธรรมดาในไฟล์โปรเจกต์ และอาจถูกเปิดเผยเมื่อแชร์โปรเจกต์ ควรหลีกเลี่ยงการใส่ข้อมูลลับไว้ที่นี่ เว้นแต่ไฟล์โปรเจกต์จะเก็บเป็นส่วนตัว",
@@ -2761,6 +2768,7 @@
       "renderingEngine": "เอนจินการแสดงผล",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "ดูใน Google Maps",
       "viewInGoogleEarth": "ดูใน Google Earth",

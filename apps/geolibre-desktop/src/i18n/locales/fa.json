@@ -1930,6 +1930,7 @@
     "only2d": "تنها دوبعدی",
     "only3d": "تنها سه‌بعدی",
     "noMapbox": "بدون Mapbox",
+    "noArcgis": "بدون ArcGIS",
     "cesiumTokenHint": "برای زمین و تصاویر Ion، یک توکن Cesium Ion در تنظیمات بیفزایید"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "روی کرهٔ سه‌بعدی ترسیم نمی‌شود",
     "layerCesiumOnly": "تنها روی کرهٔ سه‌بعدی ترسیم می‌شود",
     "layerMapboxUnsupported": "با موتور Mapbox ترسیم نمی‌شود",
+    "layerArcgisUnsupported": "با موتور ArcGIS ترسیم نمی‌شود",
     "resetView": "بازنشانی نما",
     "scene3D": "کرهٔ سه‌بعدی",
     "scene2D": "نقشهٔ دوبعدی",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "خروج از تمام‌صفحه",
     "fullscreenUnavailable": "تمام‌صفحه در دسترس نیست",
     "mapboxTokenHint": "برای استفاده از این موتور، توکن دسترسی Mapbox خود را در <settingsLink>تنظیمات ← متغیرهای محیطی</settingsLink> اضافه کنید.",
+    "arcgisKeyHint": "برای استفاده از سبک‌های نقشهٔ پایهٔ Esri، یک کلید ArcGIS API را در <settingsLink>تنظیمات ← متغیرهای محیطی</settingsLink> اضافه کنید.",
     "pluginUnsupported": "این افزونه از موتور رندر انتخاب‌شده پشتیبانی نمی‌کند."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "برای استفاده از Mapbox، توکن دسترسی <tokenLink>حساب Mapbox خود</tokenLink> را در زیر جای‌گذاری کنید.",
       "mapboxTokenStorageNote": "به‌صورت محلی روی این دستگاه نگهداری می‌شود (نه در فایل پروژه، پس هرگز هم‌رسانی نمی‌شود) و تنها به Mapbox فرستاده می‌شود. در ساخت وب، همان فضای ذخیره‌سازی مرورگر را با دیگر داده‌های سایت به اشتراک می‌گذارد.",
+      "arcgisKeyTitle": "کلید ArcGIS API",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "موتور ArcGIS بدون کلید هم کار می‌کند: نقشهٔ پایهٔ پروژه و لایه‌های شما را از طریق ArcGIS Maps SDK for JavaScript که از CDN شرکت Esri بارگذاری می‌شود ترسیم می‌کند. یک کلید API سبک‌های نقشهٔ پایهٔ Esri (خیابان‌ها، تصاویر، توپوگرافی، …) را می‌افزاید. آن را در بخش <keyLink>اعتبارنامه‌های توسعه‌دهنده</keyLink> حساب ArcGIS خود با مجوز نقشه‌های پایه بسازید و در پایین جای‌گذاری کنید.",
+      "arcgisKeyStorageNote": "به‌صورت محلی روی این دستگاه نگهداری می‌شود (نه در فایل پروژه، پس هرگز هم‌رسانی نمی‌شود) و تنها به Esri فرستاده می‌شود. در ساخت وب، همان فضای ذخیره‌سازی مرورگر را با دیگر داده‌های سایت به اشتراک می‌گذارد.",
       "variablesTitle": "متغیرهای محیطی",
       "variablesCount_one": "{{count}} متغیر زمان اجرای فعال.",
       "variablesCount_other": "{{count}} متغیر زمان اجرای فعال.",
@@ -2809,6 +2816,7 @@
       "renderingEngine": "موتور ترسیم",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "دیدن در Google Maps",
       "viewInGoogleEarth": "دیدن در Google Earth",

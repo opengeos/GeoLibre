@@ -36,3 +36,8 @@ MIT licensed. The optional Mapbox renderer (`MapboxEngine`) depends on
 [Terms of Service](https://www.mapbox.com/legal/tos) rather than an open-source
 license and which requires a Mapbox account and access token; see
 [`docs/mapbox-renderer.md`](https://github.com/opengeos/GeoLibre/blob/main/docs/mapbox-renderer.md#license-and-terms).
+The optional ArcGIS renderer (`ArcgisEngine`) has no package dependency: it
+loads the ArcGIS Maps SDK for JavaScript from Esri's CDN in the browser at
+runtime, under Esri's own terms, and takes an optional ArcGIS API key for Esri
+basemap styles; see
+[`docs/arcgis-renderer.md`](https://github.com/opengeos/GeoLibre/blob/main/docs/arcgis-renderer.md).

@@ -1884,6 +1884,7 @@
     "only2d": "Hanya 2D",
     "only3d": "Hanya 3D",
     "noMapbox": "Tanpa Mapbox",
+    "noArcgis": "Tanpa ArcGIS",
     "cesiumTokenHint": "Tambahkan token Cesium Ion di Pengaturan untuk medan dan citra Ion"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "Tidak dirender oleh bola dunia 3D",
     "layerCesiumOnly": "Hanya dirender oleh bola dunia 3D",
     "layerMapboxUnsupported": "Tidak dirender oleh mesin Mapbox",
+    "layerArcgisUnsupported": "Tidak dirender oleh mesin ArcGIS",
     "resetView": "Atur Ulang Tampilan",
     "scene3D": "Bola dunia 3D",
     "scene2D": "Peta 2D",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "Keluar dari layar penuh",
     "fullscreenUnavailable": "Layar penuh tidak tersedia",
     "mapboxTokenHint": "Tambahkan token akses Mapbox Anda di <settingsLink>Pengaturan → Variabel lingkungan</settingsLink> untuk menggunakan perender ini.",
+    "arcgisKeyHint": "Tambahkan kunci API ArcGIS di <settingsLink>Pengaturan → Variabel lingkungan</settingsLink> untuk gaya peta dasar Esri.",
     "pluginUnsupported": "Plugin ini tidak mendukung mesin perender yang dipilih."
   },
   "mapContextMenu": {
@@ -2168,6 +2171,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Untuk menggunakan Mapbox, tempel token akses dari <tokenLink>akun Mapbox Anda</tokenLink> di bawah.",
       "mapboxTokenStorageNote": "Disimpan secara lokal di perangkat ini (bukan dalam file proyek, sehingga tidak pernah dibagikan) dan hanya dikirim ke Mapbox. Pada build web, token ini berbagi penyimpanan browser yang sama dengan data situs lainnya.",
+      "arcgisKeyTitle": "Kunci API ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Perender ArcGIS berfungsi tanpa kunci: ia menampilkan peta dasar proyek dan layer Anda melalui ArcGIS Maps SDK for JavaScript yang dimuat dari CDN Esri. Kunci API menambahkan gaya peta dasar Esri (Streets, Imagery, Topographic, …). Buat kunci di <keyLink>kredensial pengembang</keyLink> pada akun ArcGIS Anda dengan hak istimewa Basemaps, lalu tempelkan di bawah.",
+      "arcgisKeyStorageNote": "Disimpan secara lokal di perangkat ini (bukan dalam file proyek, sehingga tidak pernah dibagikan) dan hanya dikirim ke Esri. Pada build web, kunci ini berbagi penyimpanan browser yang sama dengan data situs lainnya.",
       "variablesTitle": "Variabel lingkungan",
       "variablesCount_other": "{{count}} variabel runtime diaktifkan.",
       "secretsWarning": "Nilai disimpan dalam teks biasa pada file proyek dan dapat terekspos saat proyek dibagikan. Hindari menaruh rahasia di sini kecuali file proyek tetap privat.",
@@ -2761,6 +2768,7 @@
       "renderingEngine": "Mesin render",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Lihat di Google Maps",
       "viewInGoogleEarth": "Lihat di Google Earth",

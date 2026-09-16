@@ -59,6 +59,8 @@ export interface DesktopSettings {
   cesiumIonToken: string;
   /** Device-local Mapbox access token, excluded from shared project files. */
   mapboxAccessToken: string;
+  /** Device-local ArcGIS API key for the ArcGIS renderer, excluded from shared project files. */
+  arcgisApiKey: string;
   /**
    * AI Assistant provider profiles. Each profile bundles a provider, model, and
    * credential values. Stored here — device-local localStorage, not the shared
@@ -232,6 +234,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   shareToken: "",
   cesiumIonToken: "",
   mapboxAccessToken: "",
+  arcgisApiKey: "",
   aiProfiles: [],
   defaultAiProfileId: null,
   theme: DEFAULT_THEME_SETTINGS,
@@ -265,6 +268,7 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     shareToken: typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
     mapboxAccessToken:
       typeof candidate.mapboxAccessToken === "string" ? candidate.mapboxAccessToken.trim() : "",
+    arcgisApiKey: typeof candidate.arcgisApiKey === "string" ? candidate.arcgisApiKey.trim() : "",
     cesiumIonToken:
       typeof candidate.cesiumIonToken === "string" ? candidate.cesiumIonToken.trim() : "",
     aiProfiles: normalizeAssistantProfiles(

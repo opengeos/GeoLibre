@@ -1884,6 +1884,7 @@
     "only2d": "chỉ 2D",
     "only3d": "chỉ 3D",
     "noMapbox": "không Mapbox",
+    "noArcgis": "không ArcGIS",
     "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "Không được kết xuất trên quả địa cầu 3D",
     "layerCesiumOnly": "Chỉ được kết xuất trên quả địa cầu 3D",
     "layerMapboxUnsupported": "Không được kết xuất bởi công cụ Mapbox",
+    "layerArcgisUnsupported": "Không được kết xuất bởi công cụ ArcGIS",
     "resetView": "Đặt lại chế độ xem",
     "scene3D": "Quả địa cầu 3D",
     "scene2D": "Bản đồ 2D",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "Thoát toàn màn hình",
     "fullscreenUnavailable": "Không hỗ trợ toàn màn hình",
     "mapboxTokenHint": "Thêm mã truy cập Mapbox trong <settingsLink>Cài đặt → Biến môi trường</settingsLink> để sử dụng trình kết xuất này.",
+    "arcgisKeyHint": "Thêm khóa API ArcGIS trong <settingsLink>Cài đặt → Biến môi trường</settingsLink> để dùng các kiểu bản đồ nền của Esri.",
     "pluginUnsupported": "Plugin này không hỗ trợ công cụ kết xuất đã chọn."
   },
   "mapContextMenu": {
@@ -2178,6 +2181,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Để sử dụng Mapbox, hãy dán mã truy cập từ <tokenLink>tài khoản Mapbox của bạn</tokenLink> bên dưới.",
       "mapboxTokenStorageNote": "Được lưu trữ cục bộ trên thiết bị này (không có trong tệp dự án, vì vậy nó không bao giờ được chia sẻ) và chỉ được gửi tới Mapbox. Trên bản dựng web, nó chia sẻ cùng bộ lưu trữ trình duyệt với dữ liệu trang web khác.",
+      "arcgisKeyTitle": "Khóa API ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Trình kết xuất ArcGIS hoạt động mà không cần khóa: nó hiển thị bản đồ nền của dự án và các lớp của bạn thông qua ArcGIS Maps SDK for JavaScript, được tải từ CDN của Esri. Khóa API bổ sung các kiểu bản đồ nền của Esri (Đường phố, Ảnh vệ tinh, Địa hình, …). Tạo một khóa trong <keyLink>thông tin xác thực nhà phát triển</keyLink> của tài khoản ArcGIS với quyền Bản đồ nền và dán vào bên dưới.",
+      "arcgisKeyStorageNote": "Được lưu trữ cục bộ trên thiết bị này (không có trong tệp dự án, vì vậy không bao giờ được chia sẻ) và chỉ được gửi tới Esri. Trên bản dựng web, nó chia sẻ cùng bộ lưu trữ trình duyệt với dữ liệu trang web khác.",
       "variablesTitle": "Biến môi trường",
       "variablesCount_other": "{{count}} đã bật các biến thời gian chạy.",
       "secretsWarning": "Các giá trị được lưu trữ ở dạng văn bản thuần túy trong tệp dự án và có thể bị lộ khi dự án được chia sẻ. Tránh đặt bí mật ở đây trừ khi tệp dự án được giữ ở chế độ riêng tư.",
@@ -2761,6 +2768,7 @@
       "renderingEngine": "Bộ kết xuất",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Xem trên Google Maps",
       "viewInGoogleEarth": "Xem trong Google Earth",

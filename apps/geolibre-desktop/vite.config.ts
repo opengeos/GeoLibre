@@ -90,6 +90,18 @@ if (!process.env.VITE_MAPBOX_ACCESS_TOKEN) {
   }
 }
 
+// ArcGIS API key for the ArcGIS renderer's Esri basemap styles: same
+// bare→prefixed bridge. `ARCGIS_API_KEY` from the shell or an .env file is
+// surfaced as `VITE_ARCGIS_API_KEY`; getArcgisApiKey() then lets a runtime
+// Settings override win over this build-time value.
+if (!process.env.VITE_ARCGIS_API_KEY) {
+  const arcgisApiKey =
+    process.env.ARCGIS_API_KEY || FILE_ENV.VITE_ARCGIS_API_KEY || FILE_ENV.ARCGIS_API_KEY;
+  if (arcgisApiKey) {
+    process.env.VITE_ARCGIS_API_KEY = arcgisApiKey;
+  }
+}
+
 // Earth Engine OAuth client ID: same bare→prefixed bridge as the Google Maps
 // and Cesium keys. The app reads `import.meta.env.VITE_GEE_OAUTH_CLIENT_ID`, so
 // a bare `GEE_OAUTH_CLIENT_ID` (shell/.zshrc or an .env file) is surfaced under
@@ -233,6 +245,7 @@ const BUILD_ENV_KEYS = [
   "VITE_GEOLIBRE_CAPABILITIES",
   "VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY",
   "VITE_GEOLIBRE_CLERK_WAITLIST",
+  "VITE_ARCGIS_API_KEY",
   "VITE_GEOLIBRE_COLLAB_URL",
   "VITE_GEOLIBRE_EMBED_ORIGINS",
   "VITE_GEOLIBRE_GA_MEASUREMENT_ID",
@@ -1071,15 +1084,20 @@ function pwaPlugin(): Plugin[] {
           // bundled under /assets/ instead and this rule simply never matches them
           // (Pyodide is always CDN-loaded regardless).
           urlPattern: ({ url }: { url: URL }) =>
-            url.hostname === "cdn.jsdelivr.net" &&
-            (url.pathname.startsWith("/pyodide/") ||
-              url.pathname.startsWith("/npm/@electric-sql/") ||
-              url.pathname.startsWith("/npm/@cereusdb/") ||
-              // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
-              // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
-              // its own DuckDB from here regardless, so this caches that too.
-              url.pathname.startsWith("/npm/@duckdb/") ||
-              url.pathname.startsWith("/npm/gdal3.js")),
+            // The ArcGIS Maps SDK for JavaScript, imported per module from
+            // Esri's versioned ES-module CDN by the ArcGIS renderer
+            // (packages/map/src/arcgis-sdk.ts). The version is in the path, so
+            // a bump mints new URLs and CacheFirst never serves a stale SDK.
+            url.hostname === "js.arcgis.com" ||
+            (url.hostname === "cdn.jsdelivr.net" &&
+              (url.pathname.startsWith("/pyodide/") ||
+                url.pathname.startsWith("/npm/@electric-sql/") ||
+                url.pathname.startsWith("/npm/@cereusdb/") ||
+                // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
+                // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
+                // its own DuckDB from here regardless, so this caches that too.
+                url.pathname.startsWith("/npm/@duckdb/") ||
+                url.pathname.startsWith("/npm/gdal3.js"))),
           handler: "CacheFirst",
           options: {
             cacheName: "geolibre-cdn-engines",

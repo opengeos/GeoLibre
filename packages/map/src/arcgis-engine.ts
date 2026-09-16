@@ -1,0 +1,1319 @@
+import type * as maplibregl from "maplibre-gl";
+import type { FeatureCollection, Geometry, Position } from "geojson";
+import {
+  compileLayerFilters,
+  type GeoLibreLayer,
+  type MapPreferences,
+  type MapProjection,
+  type MapViewState,
+  type StoryChapterAnimation,
+  type StoryChapterLocation,
+} from "@geolibre/core";
+import {
+  DEFAULT_BUILT_IN_CONTROL_POSITIONS,
+  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  type BuiltInMapControl,
+  type ExtentDrawingOptions,
+  type FlyToCamera,
+  type IdentifiedFeature,
+  type ManualPlacementOptions,
+  type MapEngine,
+  type MapEngineCapabilities,
+  type MapExtent,
+  type MapRenderSurface,
+} from "./map-engine";
+import {
+  ARCGIS_ID_FIELD,
+  compileArcgisLayer,
+  isArcgisPluginLayer,
+  type ArcgisLayerPlan,
+} from "./arcgis-layers";
+import { planArcgisBasemap, type ArcgisBasemapPlan, sameArcgisBasemapPlan } from "./arcgis-basemap";
+import {
+  redactArcgisError,
+  type ArcgisGeometryJson,
+  type ArcgisGraphic,
+  type ArcgisHandle,
+  type ArcgisLayer,
+  type ArcgisMap,
+  type ArcgisMapView,
+  type ArcgisPoint,
+  type ArcgisSdk,
+  type ArcgisWidget,
+} from "./arcgis-sdk";
+import { getLayerBounds } from "./geojson-loader";
+import { drawExtentOnCanvas } from "./extent-drawing";
+
+/**
+ * What the ArcGIS engine can do (issue #2421).
+ *
+ * The `false` flags are the operations the SDK has no equivalent for, or that
+ * this engine deliberately does not claim:
+ *
+ * - `styleSpec` / `nativeMapInstance`: the SDK draws layers with renderers,
+ *   not a Mapbox Style document, and there is no `maplibregl.Map` behind it.
+ * - `customLayers` / `deckOverlay`: `@deck.gl/arcgis` exists but is not wired
+ *   yet; the shared interleaved overlay binds to MapLibre and Mapbox only.
+ * - `terrain`: a `MapView` is flat. A `SceneView` would give terrain and a
+ *   globe, and is the natural follow-up.
+ * - `domControls`: the built-in controls are the SDK's own widgets, mounted
+ *   through `view.ui`. MapLibre `IControl` plugin controls expect a MapLibre
+ *   map to call into, which this engine cannot offer, so `addControl` reports
+ *   that it has nowhere to host them.
+ */
+export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
+  styleSpec: false,
+  nativeMapInstance: false,
+  customLayers: false,
+  deckOverlay: false,
+  terrain: false,
+  picking: true,
+  onMapDrawing: true,
+  domControls: false,
+});
+
+/**
+ * The built-in controls the SDK has a widget for, plus attribution, which the
+ * view draws itself (`attributionVisible`) and which cannot be turned off.
+ */
+const HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set<BuiltInMapControl>([
+  "navigation",
+  "fullscreen",
+  "compass",
+  "geolocate",
+  "scale",
+  "attribution",
+]);
+
+/** Mount order within a corner, matching `MapController.init`. */
+const HOSTED_CONTROL_ORDER: readonly BuiltInMapControl[] = [
+  "fullscreen",
+  "compass",
+  "navigation",
+  "geolocate",
+  "scale",
+];
+
+/** The SDK's layer instances a plan produced, plus the blob URLs backing them. */
+interface NativePlan {
+  plan: ArcgisLayerPlan;
+  /** Serialized plan without the features, for cheap change detection. */
+  signature: string;
+  layers: ArcgisLayer[];
+  urls: string[];
+  /** The store record's GeoJSON the features were baked from, by identity. */
+  geojson: FeatureCollection | undefined;
+}
+
+const HIGHLIGHT_COLOR = [250, 204, 21, 1];
+
+/** Convert GeoJSON geometry to the SDK's geometry JSON (WGS84). */
+export function geojsonToArcgisGeometry(geometry: Geometry): ArcgisGeometryJson | null {
+  const sr = { wkid: 4326 };
+  switch (geometry.type) {
+    case "Point":
+      return {
+        type: "point",
+        x: geometry.coordinates[0],
+        y: geometry.coordinates[1],
+        spatialReference: sr,
+      };
+    case "MultiPoint":
+      return { type: "multipoint", points: geometry.coordinates, spatialReference: sr };
+    case "LineString":
+      return { type: "polyline", paths: [geometry.coordinates], spatialReference: sr };
+    case "MultiLineString":
+      return { type: "polyline", paths: geometry.coordinates, spatialReference: sr };
+    case "Polygon":
+      return { type: "polygon", rings: geometry.coordinates, spatialReference: sr };
+    case "MultiPolygon":
+      return { type: "polygon", rings: geometry.coordinates.flat(), spatialReference: sr };
+    default:
+      return null;
+  }
+}
+
+/**
+ * A rejected `goTo` is worth a warning, not a render error: the SDK rejects
+ * when a later move interrupts this one (routine) but also when a target is
+ * malformed, and the second must not vanish silently.
+ */
+function reportGoToFailure(error: unknown): void {
+  const name = (error as { name?: string } | null)?.name;
+  if (name === "view:goto-interrupted" || name === "AbortError") return;
+  console.warn("[geolibre/arcgis] camera move failed", error);
+}
+
+/** Whether an SDK error is a cancelled request rather than a failure. */
+function isAbortError(error: { name?: string; message?: string } | null | undefined): boolean {
+  return (
+    error?.name === "AbortError" ||
+    error?.name === "view:goto-interrupted" ||
+    /^aborted$/i.test(error?.message?.trim() ?? "")
+  );
+}
+
+/** Normalize a bearing into `[0, 360)`. */
+function normalizeBearing(value: number): number {
+  const wrapped = value % 360;
+  return (wrapped < 0 ? wrapped + 360 : wrapped) + 0;
+}
+
+/**
+ * MapLibre's `bearing` is the compass direction that points up; the SDK's
+ * `rotation` is how far due north has turned clockwise from the top. They are
+ * negatives of each other.
+ */
+export function bearingToRotation(bearing: number): number {
+  return normalizeBearing(-bearing);
+}
+
+export function rotationToBearing(rotation: number): number {
+  return normalizeBearing(-rotation);
+}
+
+/**
+ * The ArcGIS Maps SDK for JavaScript behind the shared {@link MapEngine}
+ * surface. Construction (loading the SDK from the CDN, building the `Map` and
+ * `MapView`) is the canvas component's job; everything after it is here.
+ */
+export class ArcgisEngine implements MapEngine {
+  readonly kind = "arcgis" as const;
+  readonly capabilities = ARCGIS_CAPABILITIES;
+  private view: ArcgisMapView | null;
+  private map: ArcgisMap | null;
+  private surface: MapRenderSurface | null;
+  private layers: GeoLibreLayer[] = [];
+  private natives = new Map<string, NativePlan>();
+  private errors = new Map<string, string>();
+  private preferences: MapPreferences | null = null;
+  private basemapPlan: ArcgisBasemapPlan | null = null;
+  private basemapVisible = true;
+  private basemapOpacity = 1;
+  private blankColor: string | null = null;
+  private storyOpacities = new Map<string, number>();
+  private controlVisibility: Record<BuiltInMapControl, boolean>;
+  private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
+    ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
+  };
+  private builtInControls = new Map<BuiltInMapControl, ArcgisWidget>();
+  private compassLabel: string | undefined;
+  private disposers = new Set<() => void>();
+  private handles = new Set<ArcgisHandle>();
+  private highlight: ArcgisLayer | null = null;
+  private rotating = false;
+  /** Integer zoom the zoom-dependent plans were compiled at. */
+  private compiledZoom: number;
+  /** Results of the latest hit test, served by the synchronous identify. */
+  private lastHit: { lngLat: [number, number]; features: IdentifiedFeature[] } | null = null;
+  private zoomWatch: ArcgisHandle | null = null;
+
+  constructor(
+    private sdk: ArcgisSdk,
+    map: ArcgisMap,
+    view: ArcgisMapView,
+    private options: {
+      /** Whether an API key is configured, so Esri basemap styles are usable. */
+      hasApiKey?: boolean;
+      /**
+       * Override built-in control visibility before the controls are added.
+       * Split/grid panes pass `{ "layer-control": false }` like the other
+       * engines; the layer control is not hosted here yet either way.
+       */
+      controlVisibility?: Partial<Record<BuiltInMapControl, boolean>>;
+    } = {},
+  ) {
+    this.map = map;
+    this.view = view;
+    this.compiledZoom = Math.round(view.zoom);
+    this.controlVisibility = {
+      ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+      ...options.controlVisibility,
+      // Esri's terms require attribution; an override cannot hide it.
+      attribution: true,
+    };
+    this.surface = {
+      getCanvas: () => this.canvas(),
+      getContainer: () => view.container ?? document.createElement("div"),
+      getBearing: () => rotationToBearing(view.rotation),
+      project: (p) => {
+        const screen = this.view?.toScreen(this.point(p));
+        return screen ? { x: screen.x, y: screen.y } : { x: 0, y: 0 };
+      },
+      unproject: (p) => {
+        const point = this.view?.toMap({ x: p[0], y: p[1] });
+        return point ? { lng: point.longitude, lat: point.latitude } : { lng: 0, lat: 0 };
+      },
+      redraw: () => {},
+    };
+    // The SDK's default UI components (zoom on older releases) are replaced by
+    // the built-in set the Controls menu governs. Attribution is not a
+    // component in 5.x: the view draws it itself while `attributionVisible`
+    // is on, which Esri's terms require alongside its basemaps.
+    view.ui.components = [];
+    view.attributionVisible = true;
+    for (const id of HOSTED_CONTROL_ORDER)
+      if (this.controlVisibility[id]) this.mountBuiltInControl(id);
+    this.handles.add(
+      view.on("layerview-create-error", (event) => {
+        const layer = event.layer as ArcgisLayer | undefined;
+        const error = event.error as { message?: string; name?: string } | undefined;
+        // A restyle rebuilds the native layers, and the SDK reports the
+        // outgoing layer's cancelled load as an error ("Aborted") — routine,
+        // not a failure. The same goes for any layer the engine no longer
+        // tracks: it was removed on purpose.
+        if (isAbortError(error)) return;
+        const storeId = layer ? this.storeIdFor(layer) : undefined;
+        if (!storeId) return;
+        this.errors.set(
+          `layer:${storeId}`,
+          `${layer?.title ?? "Layer"}: ${redactArcgisError(error?.message ?? "failed to load")}`,
+        );
+      }),
+    );
+    // Expressions baked at one zoom are re-evaluated when the integer zoom
+    // changes, the way MapLibre would evaluate `["zoom"]` live.
+    this.zoomWatch = sdk.reactiveUtils.when(
+      () => view.stationary,
+      () => {
+        if (!this.view) return;
+        const zoom = Math.round(this.view.zoom);
+        if (zoom === this.compiledZoom) return;
+        this.compiledZoom = zoom;
+        if ([...this.natives.values()].some((n) => n.plan.zoomDependent))
+          this.syncLayers(this.layers);
+      },
+    );
+  }
+
+  /** The SDK the engine was built from, for the canvas and integrations. */
+  getSdk(): ArcgisSdk {
+    return this.sdk;
+  }
+  /** The live `MapView`, or `null` once destroyed. */
+  getView(): ArcgisMapView | null {
+    return this.view;
+  }
+  getMap(): null {
+    return null;
+  }
+
+  private canvas(): HTMLCanvasElement {
+    return (
+      (this.view?.container?.querySelector("canvas") as HTMLCanvasElement | null) ??
+      document.createElement("canvas")
+    );
+  }
+  private point(lngLat: [number, number]): ArcgisPoint {
+    return new this.sdk.Point({
+      longitude: lngLat[0],
+      latitude: lngLat[1],
+      spatialReference: { wkid: 4326 },
+    });
+  }
+  private storeIdFor(native: ArcgisLayer): string | undefined {
+    for (const [id, entry] of this.natives) if (entry.layers.includes(native)) return id;
+    return undefined;
+  }
+
+  // ---------------------------------------------------------------- lifecycle
+
+  destroy(): void {
+    const view = this.view;
+    if (!view) return;
+    this.stopCamera();
+    for (const dispose of this.disposers) dispose();
+    this.disposers.clear();
+    for (const handle of this.handles) handle.remove();
+    this.handles.clear();
+    this.zoomWatch?.remove();
+    this.zoomWatch = null;
+    this.clearFeatureHighlight();
+    for (const id of [...this.natives.keys()]) this.removeLayer(id);
+    for (const widget of this.builtInControls.values()) widget.destroy();
+    this.builtInControls.clear();
+    // Destroying the view does not destroy the map; the map owns the layers.
+    view.destroy();
+    this.map?.destroy();
+    this.view = null;
+    this.map = null;
+    this.surface = null;
+  }
+
+  // ------------------------------------------------------------------- camera
+
+  readView(): MapViewState {
+    const view = this.view;
+    if (!view) return { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 };
+    const center = view.center;
+    const bounds = this.getViewBounds();
+    return {
+      center: [center.longitude, center.latitude],
+      zoom: view.zoom >= 0 ? view.zoom : Math.log2(591657527.591555 / view.scale),
+      bearing: rotationToBearing(view.rotation),
+      // A MapView has no pitch.
+      pitch: 0,
+      ...(bounds ? { bbox: bounds } : {}),
+    };
+  }
+  applyView(view: MapViewState): void {
+    const old = this.readView();
+    const target = this.constrainView(view);
+    if (
+      Math.abs(old.center[0] - target.center[0]) < 1e-8 &&
+      Math.abs(old.center[1] - target.center[1]) < 1e-8 &&
+      Math.abs(old.zoom - target.zoom) < 1e-8 &&
+      Math.abs(normalizeBearing(old.bearing) - normalizeBearing(target.bearing)) < 1e-8
+    )
+      return;
+    void this.view
+      ?.goTo(
+        { center: target.center, zoom: target.zoom, rotation: bearingToRotation(target.bearing) },
+        { animate: false },
+      )
+      .catch(reportGoToFailure);
+  }
+  easeToView(view: MapViewState): void {
+    const target = this.constrainView(view);
+    void this.view
+      ?.goTo(
+        { center: target.center, zoom: target.zoom, rotation: bearingToRotation(target.bearing) },
+        { duration: 500 },
+      )
+      .catch(reportGoToFailure);
+  }
+  /** Clamp a view to the project's zoom and world-copy preferences, as the other engines do. */
+  private constrainView(view: MapViewState): {
+    center: [number, number];
+    zoom: number;
+    bearing: number;
+  } {
+    const p = this.preferences;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const minZoom = p ? clamp(p.minZoom, 0, 24) : 0;
+    const maxZoom = p ? Math.max(minZoom, clamp(p.maxZoom, 0, 24)) : 24;
+    return {
+      center: [
+        !p || p.renderWorldCopies ? view.center[0] : clamp(view.center[0], -180, 180),
+        clamp(view.center[1], -85, 85),
+      ],
+      zoom: clamp(view.zoom, minZoom, maxZoom),
+      bearing: view.bearing,
+    };
+  }
+  readCameraAltitude(): null {
+    return null;
+  }
+  flyTo(camera: FlyToCamera): void {
+    const view = this.view;
+    if (!view) return;
+    void view
+      .goTo(
+        {
+          ...(camera.center ? { center: camera.center } : {}),
+          ...(camera.zoom !== undefined ? { zoom: camera.zoom } : {}),
+          ...(camera.bearing !== undefined ? { rotation: bearingToRotation(camera.bearing) } : {}),
+        },
+        { duration: camera.duration ?? 800 },
+      )
+      .catch(reportGoToFailure);
+  }
+  flyToView(location: StoryChapterLocation): void {
+    this.flyTo(location);
+  }
+  applyStoryChapterCamera(
+    location: StoryChapterLocation,
+    animation: StoryChapterAnimation = "flyTo",
+    rotate = false,
+  ): void {
+    this.stopCamera();
+    const view = this.view;
+    if (!view) return;
+    void view
+      .goTo(
+        {
+          ...(location.center ? { center: location.center } : {}),
+          ...(location.zoom !== undefined ? { zoom: location.zoom } : {}),
+          ...(location.bearing !== undefined
+            ? { rotation: bearingToRotation(location.bearing) }
+            : {}),
+        },
+        { duration: animation === "jumpTo" ? 0 : 800, animate: animation !== "jumpTo" },
+      )
+      .then(() => {
+        if (rotate && this.view) {
+          this.rotating = true;
+          this.rotate();
+        }
+      })
+      .catch(reportGoToFailure);
+  }
+  private rotate = () => {
+    const view = this.view;
+    if (!this.rotating || !view) return;
+    void view
+      .goTo({ rotation: view.rotation - 120 }, { duration: 20000, easing: "linear" })
+      .then(() => this.rotate())
+      .catch(reportGoToFailure);
+  };
+  zoomIn(): void {
+    const view = this.view;
+    if (view) void view.goTo({ zoom: view.zoom + 1 }, { duration: 500 }).catch(reportGoToFailure);
+  }
+  zoomOut(): void {
+    const view = this.view;
+    if (view) void view.goTo({ zoom: view.zoom - 1 }, { duration: 500 }).catch(reportGoToFailure);
+  }
+  resetNorth(): void {
+    void this.view?.goTo({ rotation: 0 }, { duration: 1000 }).catch(reportGoToFailure);
+  }
+  resetNorthPitch(): void {
+    this.resetNorth();
+  }
+  resetPitch(): void {}
+  fitBounds(bounds: MapExtent): void {
+    const view = this.view;
+    if (!view) return;
+    const [w, s, e, n] = bounds;
+    // The 2D map frames with 40 px padding and caps a point-sized extent at
+    // zoom 14; widen a degenerate extent so the SDK has something to fit.
+    const padX = Math.max((e - w) * 0.1, 1e-4);
+    const padY = Math.max((n - s) * 0.1, 1e-4);
+    const extent = new this.sdk.Extent({
+      xmin: w - padX,
+      ymin: Math.max(-85, s - padY),
+      xmax: e + padX,
+      ymax: Math.min(85, n + padY),
+      spatialReference: { wkid: 4326 },
+    });
+    void view
+      .goTo(extent, { duration: 800 })
+      .then(() => {
+        if (this.view && this.view.zoom > 14)
+          return this.view.goTo({ zoom: 14 }, { animate: false });
+      })
+      .catch(reportGoToFailure);
+  }
+  fitLayer(layer: GeoLibreLayer): void {
+    const bounds = getLayerBounds(layer);
+    if (bounds) {
+      this.fitBounds(bounds);
+      return;
+    }
+    const center = layer.metadata.center;
+    if (
+      Array.isArray(center) &&
+      center.length >= 2 &&
+      center.slice(0, 2).every((v) => typeof v === "number" && Number.isFinite(v))
+    ) {
+      this.flyTo({
+        center: [center[0] as number, center[1] as number],
+        zoom: typeof layer.metadata.zoom === "number" ? layer.metadata.zoom : 16,
+      });
+      return;
+    }
+    // A service layer knows its own extent once loaded.
+    const native = this.natives.get(layer.id)?.layers[0];
+    if (native?.fullExtent)
+      void this.view?.goTo(native.fullExtent, { duration: 800 }).catch(reportGoToFailure);
+  }
+  readProjection(): MapProjection {
+    return "mercator";
+  }
+  applyMapPreferences(p: MapPreferences): void {
+    this.preferences = p;
+    const view = this.view;
+    if (!view) return;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const minZoom = clamp(p.minZoom, 0, 24);
+    const maxZoom = Math.max(minZoom, clamp(p.maxZoom, 0, 24));
+    view.constraints = {
+      minZoom,
+      maxZoom,
+      rotationEnabled: true,
+      snapToZoom: false,
+      geometry: p.restrictBounds
+        ? new this.sdk.Extent({
+            xmin: p.bounds[0],
+            ymin: p.bounds[1],
+            xmax: p.bounds[2],
+            ymax: p.bounds[3],
+            spatialReference: { wkid: 4326 },
+          })
+        : null,
+    };
+    const scale = this.builtInControls.get("scale");
+    if (scale) scale.unit = scaleBarUnit(p.scaleUnit);
+  }
+
+  // ------------------------------------------------------------------- layers
+
+  syncLayers(layers: GeoLibreLayer[]): void {
+    this.layers = layers;
+    const map = this.map;
+    if (!map) return;
+    const ids = new Set(layers.map((layer) => layer.id));
+    for (const id of [...this.natives.keys()]) if (!ids.has(id)) this.removeLayer(id);
+    for (const key of [...this.errors.keys()])
+      if (key.startsWith("layer:") && !ids.has(key.slice(6))) this.errors.delete(key);
+    // Store order is topmost first; the SDK draws index 0 at the bottom.
+    const ordered: ArcgisLayer[] = [];
+    for (const original of [...layers].reverse()) {
+      const opacity = this.storyOpacities.get(original.id);
+      const layer = opacity === undefined ? original : { ...original, opacity };
+      if (isArcgisPluginLayer(original)) {
+        this.removeLayer(original.id);
+        continue;
+      }
+      try {
+        const plan = compileArcgisLayer(layer, { zoom: this.compiledZoom });
+        const signature = planSignature(plan, layer);
+        let entry = this.natives.get(layer.id);
+        if (entry && (entry.signature !== signature || entry.geojson !== layer.geojson)) {
+          // Anything but the display fields changed (a re-style, a filter, an
+          // edit to the features): rebuild the native layers.
+          this.removeLayer(layer.id);
+          entry = undefined;
+        }
+        if (!entry) {
+          entry = { plan, signature, layers: [], urls: [], geojson: layer.geojson };
+          for (const native of this.instantiate(plan, entry.urls)) {
+            entry.layers.push(native);
+            map.add(native);
+          }
+          this.natives.set(layer.id, entry);
+        }
+        entry.plan = plan;
+        for (const native of entry.layers) {
+          native.visible = plan.visible;
+          native.opacity = plan.opacity;
+          native.minScale = plan.minScale;
+          native.maxScale = plan.maxScale;
+        }
+        ordered.push(...entry.layers);
+        this.errors.delete(`layer:${layer.id}`);
+      } catch (error) {
+        this.removeLayer(original.id);
+        if (original.visible)
+          this.errors.set(
+            `layer:${original.id}`,
+            `${original.name}: ${redactArcgisError(String((error as Error).message ?? error))}`,
+          );
+      }
+    }
+    ordered.forEach((native, index) => {
+      if (map.layers.indexOf(native) !== index) map.layers.reorder(native, index);
+    });
+    if (this.highlight && map.layers.indexOf(this.highlight) !== map.layers.length - 1)
+      map.layers.reorder(this.highlight, map.layers.length - 1);
+  }
+  /** Build the SDK layers for a plan, recording blob URLs to revoke on removal. */
+  private instantiate(plan: ArcgisLayerPlan, urls: string[]): ArcgisLayer[] {
+    const { layers, media } = this.sdk;
+    const common = {
+      title: plan.title,
+      visible: plan.visible,
+      opacity: plan.opacity,
+      minScale: plan.minScale,
+      maxScale: plan.maxScale,
+    };
+    const fullExtent = plan.bounds
+      ? {
+          fullExtent: new this.sdk.Extent({
+            xmin: plan.bounds[0],
+            ymin: plan.bounds[1],
+            xmax: plan.bounds[2],
+            ymax: plan.bounds[3],
+            spatialReference: { wkid: 4326 },
+          }),
+        }
+      : {};
+    switch (plan.kind) {
+      case "geojson":
+        return plan.parts.map((part) => {
+          let url = part.url;
+          if (!url) {
+            url = URL.createObjectURL(
+              new Blob(
+                [JSON.stringify(part.features ?? { type: "FeatureCollection", features: [] })],
+                {
+                  type: "application/geo+json",
+                },
+              ),
+            );
+            urls.push(url);
+          }
+          return new layers.GeoJSONLayer({
+            ...common,
+            url,
+            geometryType: part.geometryType,
+            renderer: part.renderer,
+            // Hit-test graphics only carry the fields the renderer and labels
+            // read unless every field is requested; identify needs the
+            // compiler's identity field.
+            outFields: ["*"],
+            ...(part.labelingInfo ? { labelingInfo: part.labelingInfo, labelsVisible: true } : {}),
+            // The SDK's popup is not used; identify goes through hitTest.
+            popupEnabled: false,
+            legendEnabled: false,
+          });
+        });
+      case "web-tile":
+        return [
+          new layers.WebTileLayer({
+            ...common,
+            ...fullExtent,
+            urlTemplate: plan.urlTemplate,
+            ...(plan.subDomains ? { subDomains: plan.subDomains } : {}),
+            ...(plan.copyright ? { copyright: plan.copyright } : {}),
+          }),
+        ];
+      case "wms":
+        return [
+          new layers.WMSLayer({
+            ...common,
+            ...fullExtent,
+            url: plan.url,
+            sublayers: plan.sublayers,
+            ...(plan.version ? { version: plan.version } : {}),
+            ...(plan.imageFormat ? { imageFormat: plan.imageFormat } : {}),
+            imageTransparency: plan.imageTransparency,
+            ...(plan.customParameters ? { customParameters: plan.customParameters } : {}),
+          }),
+        ];
+      case "vector-tile":
+        // `fullExtent` is read-only on a VectorTileLayer (it comes from the style).
+        return [new layers.VectorTileLayer({ ...common, style: plan.style })];
+      case "feature-service":
+        return [
+          new layers.FeatureLayer({
+            ...common,
+            url: plan.url,
+            popupEnabled: false,
+            outFields: ["*"],
+          }),
+        ];
+      case "tile-service":
+        return [new layers.TileLayer({ ...common, url: plan.url })];
+      case "map-image":
+        return [new layers.MapImageLayer({ ...common, url: plan.url })];
+      case "imagery":
+        return [new layers.ImageryLayer({ ...common, url: plan.url })];
+      case "media-image":
+        return [
+          new layers.MediaLayer({
+            ...common,
+            source: [
+              new media.ImageElement({
+                image: plan.url,
+                georeference: new media.ExtentAndRotationGeoreference({
+                  extent: new this.sdk.Extent({
+                    xmin: plan.extent[0],
+                    ymin: plan.extent[1],
+                    xmax: plan.extent[2],
+                    ymax: plan.extent[3],
+                    spatialReference: { wkid: 4326 },
+                  }),
+                }),
+              }),
+            ],
+          }),
+        ];
+    }
+  }
+  private removeLayer(id: string): void {
+    const entry = this.natives.get(id);
+    if (entry) {
+      for (const native of entry.layers) {
+        if (this.map?.layers.includes(native)) this.map.remove(native);
+        native.destroy();
+      }
+      for (const url of entry.urls) URL.revokeObjectURL(url);
+    }
+    this.natives.delete(id);
+    this.errors.delete(`layer:${id}`);
+  }
+  waitAndSyncLayers(layers: GeoLibreLayer[]): void {
+    this.syncLayers(layers);
+  }
+  async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
+    return this.layers.find((l) => l.id === id)?.geojson ?? null;
+  }
+  getLayerRasterSource(id: string): Record<string, unknown> | null {
+    const plan = this.natives.get(id)?.plan;
+    if (!plan) return null;
+    if (plan.kind === "web-tile")
+      return { type: "raster", tiles: [plan.urlTemplate], attribution: plan.copyright };
+    if (plan.kind === "media-image") return { type: "image", url: plan.url };
+    return null;
+  }
+
+  // ------------------------------------------------------------------ basemap
+
+  /**
+   * Draw the basemap for the shared project style and the ArcGIS override.
+   * The canvas calls this on mount and whenever either preference changes.
+   */
+  setBasemap(styleUrl: string | undefined, arcgisBasemap: string | undefined): void {
+    const plan = planArcgisBasemap(styleUrl, arcgisBasemap, this.options.hasApiKey === true);
+    if (this.basemapPlan && sameArcgisBasemapPlan(this.basemapPlan, plan)) return;
+    this.basemapPlan = plan;
+    const map = this.map;
+    if (!map) return;
+    this.errors.delete("basemap");
+    const previous = map.basemap;
+    switch (plan.kind) {
+      case "none":
+        map.basemap = null;
+        break;
+      case "esri-style":
+        // A string id autocasts to a basemap styles service basemap.
+        (map as unknown as { basemap: unknown }).basemap = plan.id;
+        break;
+      case "tile-service":
+        map.basemap = new this.sdk.Basemap({
+          baseLayers: [new this.sdk.layers.TileLayer({ url: plan.url })],
+        });
+        break;
+      case "web-tile":
+        map.basemap = new this.sdk.Basemap({
+          baseLayers: [
+            new this.sdk.layers.WebTileLayer({
+              urlTemplate: plan.urlTemplate,
+              ...(plan.subDomains ? { subDomains: plan.subDomains } : {}),
+              copyright: plan.copyright,
+            }),
+            ...(plan.overlay
+              ? [
+                  new this.sdk.layers.WebTileLayer({
+                    urlTemplate: plan.overlay.urlTemplate,
+                    ...(plan.overlay.subDomains ? { subDomains: plan.overlay.subDomains } : {}),
+                    copyright: plan.copyright,
+                  }),
+                ]
+              : []),
+          ],
+        });
+        break;
+    }
+    if (previous && previous !== map.basemap && plan.kind !== "esri-style") previous.destroy?.();
+    this.applyBasemap();
+  }
+  setStyle(url: string): void {
+    this.setBasemap(url, undefined);
+  }
+  getBasemapStyleLayerIds(): string[] {
+    return [];
+  }
+  setBasemapVisible(visible: boolean): void {
+    this.basemapVisible = visible;
+    this.applyBasemap();
+  }
+  setBasemapOpacity(opacity: number): void {
+    this.basemapOpacity = opacity;
+    this.applyBasemap();
+  }
+  private applyBasemap(): void {
+    const basemap = this.map?.basemap;
+    if (!basemap || typeof basemap !== "object" || !basemap.baseLayers) return;
+    const apply = (layer: ArcgisLayer) => {
+      layer.visible = this.basemapVisible;
+      layer.opacity = this.basemapOpacity;
+    };
+    basemap.baseLayers.forEach(apply);
+    basemap.referenceLayers?.forEach(apply);
+  }
+  setBlankBackgroundColor(color: string | null): void {
+    this.blankColor = color;
+    const view = this.view;
+    if (!view) return;
+    view.background = {
+      type: "color",
+      color: color ?? (document.documentElement.classList.contains("dark") ? "#262626" : "#ffffff"),
+    };
+  }
+
+  // ---------------------------------------------------------- story rendering
+
+  setStoryLayerOpacity(id: string, opacity: number): void {
+    this.storyOpacities.set(id, opacity);
+    this.syncLayers(this.layers);
+  }
+  restoreLayerStyles(): void {
+    this.storyOpacities.clear();
+    this.syncLayers(this.layers);
+  }
+
+  // ------------------------------------------------------------------ picking
+
+  /**
+   * Hit-test the map at a screen point. The SDK's picking is asynchronous, so
+   * the canvas awaits this on click and the synchronous {@link identifyFeatures}
+   * answers from the same result for callers that pass the clicked location.
+   */
+  async identifyFeaturesAt(
+    screenPoint: { x: number; y: number },
+    layerId?: string,
+  ): Promise<IdentifiedFeature[]> {
+    const view = this.view;
+    if (!view) return [];
+    const include = [...this.natives]
+      .filter(([id]) => !layerId || id === layerId)
+      .flatMap(([, entry]) => entry.layers);
+    if (!include.length) return [];
+    let hit;
+    try {
+      hit = await view.hitTest(screenPoint, { include });
+    } catch {
+      return [];
+    }
+    const seen = new Set<string>();
+    const features: IdentifiedFeature[] = [];
+    for (const result of hit.results) {
+      if (result.type !== "graphic" || !result.graphic) continue;
+      const native = result.graphic.layer ?? result.layer ?? null;
+      const storeId = native ? this.storeIdFor(native) : undefined;
+      if (!storeId) continue;
+      const attributes = result.graphic.attributes ?? {};
+      const storeLayer = this.layers.find((l) => l.id === storeId);
+      const rawId = attributes[ARCGIS_ID_FIELD];
+      const featureId = rawId != null ? String(rawId) : null;
+      const feature =
+        featureId !== null
+          ? storeLayer?.geojson?.features.find((f, i) => String(f.id ?? i) === featureId)
+          : undefined;
+      const key = `${storeId}:${featureId ?? JSON.stringify(attributes)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      features.push({
+        layerId: storeId,
+        featureId,
+        properties: feature?.properties ?? stripSyntheticFields(attributes),
+        geometry: feature?.geometry ?? null,
+      });
+    }
+    const mapPoint = view.toMap(screenPoint);
+    if (mapPoint) this.lastHit = { lngLat: [mapPoint.longitude, mapPoint.latitude], features };
+    return features;
+  }
+  identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
+    const hit = this.lastHit;
+    if (!hit) return [];
+    if (Math.abs(hit.lngLat[0] - lngLat[0]) > 1e-6 || Math.abs(hit.lngLat[1] - lngLat[1]) > 1e-6)
+      return [];
+    return layerId ? hit.features.filter((f) => f.layerId === layerId) : hit.features;
+  }
+  highlightFeature(
+    layer: GeoLibreLayer | undefined,
+    featureId: string | string[] | null,
+    options?: { fit?: boolean },
+  ): void {
+    this.clearFeatureHighlight();
+    const map = this.map;
+    if (!map || !layer?.geojson || featureId === null) return;
+    const ids = new Set(Array.isArray(featureId) ? featureId : [featureId]);
+    const selected = layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i)));
+    if (!selected.length) return;
+    const graphics: ArcgisGraphic[] = [];
+    for (const feature of selected) {
+      if (!feature.geometry) continue;
+      const geometry = geojsonToArcgisGeometry(feature.geometry);
+      if (!geometry) continue;
+      const isPoint = geometry.type === "point" || geometry.type === "multipoint";
+      graphics.push(
+        new this.sdk.Graphic({
+          geometry,
+          symbol: isPoint
+            ? {
+                type: "simple-marker",
+                style: "circle",
+                color: [250, 204, 21, 0.6],
+                size: "20px",
+                outline: { color: HIGHLIGHT_COLOR, width: "2px" },
+              }
+            : geometry.type === "polygon"
+              ? {
+                  type: "simple-fill",
+                  style: "none",
+                  outline: { color: HIGHLIGHT_COLOR, width: "4px" },
+                }
+              : { type: "simple-line", color: HIGHLIGHT_COLOR, width: "4px" },
+        }),
+      );
+    }
+    this.highlight = new this.sdk.layers.GraphicsLayer({
+      title: "Selection",
+      listMode: "hide",
+      graphics,
+    });
+    map.add(this.highlight);
+    if (options?.fit)
+      this.fitLayer({ ...layer, geojson: { type: "FeatureCollection", features: selected } });
+  }
+  clearFeatureHighlight(): void {
+    if (!this.highlight) return;
+    if (this.map?.layers.includes(this.highlight)) this.map.remove(this.highlight);
+    this.highlight.destroy();
+    this.highlight = null;
+  }
+
+  // ------------------------------------------------------------------ drawing
+
+  /**
+   * Keep a DOM element pinned to a geographic location as the view moves.
+   * Returns the element's teardown.
+   */
+  private anchorElement(
+    element: HTMLElement,
+    lngLat: () => [number, number],
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+  ): () => void {
+    const view = this.view;
+    if (!view?.container) return () => {};
+    element.style.position = "absolute";
+    element.style.zIndex = "5";
+    view.container.append(element);
+    const place = () => {
+      const screen = this.view?.toScreen(this.point(lngLat()));
+      if (!screen) return;
+      element.style.left = `${screen.x + offset.x}px`;
+      element.style.top = `${screen.y + offset.y}px`;
+    };
+    place();
+    const handle = this.sdk.reactiveUtils.watch(
+      () => [view.extent, view.rotation, view.width, view.height],
+      place,
+    );
+    return () => {
+      handle.remove();
+      element.remove();
+    };
+  }
+  startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void {
+    const view = this.view;
+    const map = this.map;
+    if (!view || !map) return () => {};
+    let position: [number, number] = lngLat;
+    const layer = new this.sdk.layers.GraphicsLayer({ listMode: "hide" });
+    const pin = new this.sdk.Graphic({
+      geometry: geojsonToArcgisGeometry({ type: "Point", coordinates: position })!,
+      symbol: {
+        type: "simple-marker",
+        style: "circle",
+        color: [59, 130, 246, 1],
+        size: "16px",
+        outline: { color: [255, 255, 255, 1], width: "2px" },
+      },
+    });
+    layer.graphics!.add(pin);
+    map.add(layer);
+    const content = document.createElement("div");
+    content.className = "geolibre-arcgis-placement";
+    const hint = document.createElement("p");
+    hint.textContent = options.hint;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = options.doneLabel;
+    content.append(hint, button);
+    const unanchor = this.anchorElement(content, () => position, { x: 12, y: -12 });
+    let dragging = false;
+    const drag = view.on("drag", (event) => {
+      if (event.action === "start") {
+        const origin = { x: event.x, y: event.y };
+        const start = view.toScreen(pin.geometry as ArcgisGeometryJson);
+        if (start && Math.hypot(start.x - origin.x, start.y - origin.y) < 16) {
+          dragging = true;
+          event.stopPropagation();
+        }
+        return;
+      }
+      if (!dragging) return;
+      event.stopPropagation();
+      const point = view.toMap({ x: event.x, y: event.y });
+      if (point) {
+        position = [point.longitude, point.latitude];
+        pin.geometry = geojsonToArcgisGeometry({ type: "Point", coordinates: position });
+      }
+      if (event.action === "end") {
+        dragging = false;
+        options.onMove(position);
+      }
+    });
+    const dispose = () => {
+      drag.remove();
+      unanchor();
+      if (this.map?.layers.includes(layer)) this.map.remove(layer);
+      layer.destroy();
+      this.disposers.delete(dispose);
+    };
+    button.onclick = () => {
+      options.onMove(position);
+      dispose();
+      options.onDone?.();
+    };
+    this.disposers.add(dispose);
+    return dispose;
+  }
+  drawExtent(options: ExtentDrawingOptions): () => void {
+    const view = this.view;
+    if (!view) return () => {};
+    const stop = drawExtentOnCanvas(
+      this.canvas(),
+      (p) => {
+        const point = view.toMap({ x: p.x, y: p.y });
+        return point ? [point.longitude, point.latitude] : [0, 0];
+      },
+      () => this.suspendNavigation(),
+      options,
+    );
+    const dispose = () => {
+      stop();
+      this.disposers.delete(dispose);
+    };
+    this.disposers.add(dispose);
+    return dispose;
+  }
+  getViewBounds(): MapExtent | null {
+    const view = this.view;
+    if (!view?.extent) return null;
+    const extent = view.spatialReference?.isWebMercator
+      ? this.sdk.webMercatorUtils.webMercatorToGeographic(view.extent)
+      : view.extent;
+    if (!extent) return null;
+    return [extent.xmin, extent.ymin, extent.xmax, extent.ymax];
+  }
+  showExtent(extent: MapExtent): () => void {
+    const map = this.map;
+    if (!map) return () => {};
+    const [w, s, e, n] = extent;
+    const ring: Position[] = [
+      [w, s],
+      [e, s],
+      [e, n],
+      [w, n],
+      [w, s],
+    ];
+    const layer = new this.sdk.layers.GraphicsLayer({
+      listMode: "hide",
+      graphics: [
+        new this.sdk.Graphic({
+          geometry: geojsonToArcgisGeometry({ type: "LineString", coordinates: ring })!,
+          symbol: { type: "simple-line", color: [245, 158, 11, 1], width: "3px" },
+        }),
+      ],
+    });
+    map.add(layer);
+    const dispose = () => {
+      if (this.map?.layers.includes(layer)) this.map.remove(layer);
+      layer.destroy();
+      this.disposers.delete(dispose);
+    };
+    this.disposers.add(dispose);
+    return dispose;
+  }
+  getRenderSurface(): MapRenderSurface | null {
+    return this.surface;
+  }
+  getRenderStatus(): { pending: string[]; errors: string[] } {
+    const pending: string[] = [];
+    if (!this.view?.ready || this.view.updating) pending.push("ArcGIS map loading");
+    for (const entry of this.natives.values())
+      for (const native of entry.layers)
+        if (native.loadStatus === "failed" && native.loadError && !isAbortError(native.loadError)) {
+          const key = `layer:${entry.plan.id}`;
+          if (!this.errors.has(key))
+            this.errors.set(
+              key,
+              `${entry.plan.title}: ${redactArcgisError(native.loadError.message)}`,
+            );
+        }
+    return { pending, errors: [...this.errors.values()] };
+  }
+  async captureImage(): Promise<Blob> {
+    const view = this.view;
+    if (!view) throw new Error("ArcGIS map is not available");
+    const shot = await view.takeScreenshot({ format: "png", ignorePadding: true });
+    const response = await fetch(shot.dataUrl);
+    return response.blob();
+  }
+  onCameraIdle(listener: () => void): () => void {
+    const view = this.view;
+    if (!view) return () => {};
+    const handle = this.sdk.reactiveUtils.when(
+      () => view.stationary,
+      () => listener(),
+    );
+    this.handles.add(handle);
+    return () => {
+      handle.remove();
+      this.handles.delete(handle);
+    };
+  }
+  stopCamera(): void {
+    this.rotating = false;
+    // Stopping the animation settles an in-flight goTo where it is.
+    (this.view?.animation as { stop?: () => void } | null | undefined)?.stop?.();
+  }
+  suspendNavigation(): () => void {
+    const view = this.view;
+    if (!view) return () => {};
+    const wheel = view.navigation.mouseWheelZoomEnabled;
+    const touch = view.navigation.browserTouchPanEnabled;
+    view.navigation.mouseWheelZoomEnabled = false;
+    view.navigation.browserTouchPanEnabled = false;
+    const swallow = (event: { stopPropagation(): void }) => event.stopPropagation();
+    const handles = [
+      view.on("drag", swallow),
+      view.on("double-click", swallow),
+      view.on("key-down", swallow),
+      view.on("mouse-wheel", swallow),
+    ];
+    return () => {
+      for (const handle of handles) handle.remove();
+      if (this.view) {
+        this.view.navigation.mouseWheelZoomEnabled = wheel;
+        this.view.navigation.browserTouchPanEnabled = touch;
+      }
+    };
+  }
+
+  // ----------------------------------------------------------------- controls
+
+  addControl(): boolean {
+    return false;
+  }
+  removeControl(): void {}
+  private createBuiltInControl(id: BuiltInMapControl): ArcgisWidget | null {
+    const view = this.view;
+    if (!view) return null;
+    const { widgets } = this.sdk;
+    switch (id) {
+      case "navigation":
+        return new widgets.Zoom({ view });
+      case "fullscreen":
+        return new widgets.Fullscreen({ view, element: view.container ?? undefined });
+      case "compass":
+        return new widgets.Compass({
+          view,
+          ...(this.compassLabel ? { label: this.compassLabel } : {}),
+        });
+      case "geolocate":
+        return new widgets.Locate({ view });
+      case "scale": {
+        return new widgets.ScaleBar({
+          view,
+          unit: scaleBarUnit(this.preferences?.scaleUnit),
+          style: "ruler",
+        });
+      }
+      default:
+        return null;
+    }
+  }
+  private mountBuiltInControl(id: BuiltInMapControl): void {
+    if (!this.view || this.builtInControls.has(id)) return;
+    const widget = this.createBuiltInControl(id);
+    if (!widget) return;
+    this.view.ui.add(widget.uiComponent ?? widget, this.controlPositions[id]);
+    this.builtInControls.set(id, widget);
+  }
+  private unmountBuiltInControl(id: BuiltInMapControl): void {
+    const widget = this.builtInControls.get(id);
+    if (!widget) return;
+    this.view?.ui.remove(widget.uiComponent ?? widget);
+    widget.destroy();
+    this.builtInControls.delete(id);
+  }
+  setBuiltInControlVisible(id: BuiltInMapControl, visible: boolean): boolean {
+    if (!this.view) return false;
+    if (!HOSTED_CONTROLS.has(id)) return false;
+    if (id === "attribution") {
+      // Always on; the view renders it from `attributionItems`.
+      if (this.view) this.view.attributionVisible = true;
+      return visible;
+    }
+    this.controlVisibility[id] = visible;
+    if (visible) this.mountBuiltInControl(id);
+    else this.unmountBuiltInControl(id);
+    return true;
+  }
+  getBuiltInControlPosition(id: BuiltInMapControl): maplibregl.ControlPosition {
+    return this.controlPositions[id];
+  }
+  setBuiltInControlPosition(id: BuiltInMapControl, position: maplibregl.ControlPosition): boolean {
+    if (!this.view || !HOSTED_CONTROLS.has(id)) return false;
+    this.controlPositions[id] = position;
+    if (this.builtInControls.has(id)) {
+      this.unmountBuiltInControl(id);
+      this.mountBuiltInControl(id);
+    }
+    return true;
+  }
+  setCompassLabel(label: string): void {
+    this.compassLabel = label;
+    const compass = this.builtInControls.get("compass") as
+      | (ArcgisWidget & { label?: string })
+      | undefined;
+    if (compass) compass.label = label;
+  }
+  setBackgroundLabel(): void {}
+  setTerrainLabel(): void {}
+
+  // ------------------------------------------------------------------ terrain
+
+  isTerrainEnabled(): boolean {
+    return false;
+  }
+  setTerrainEnabled(): boolean {
+    return false;
+  }
+  getTerrainExaggeration(): number {
+    return 1;
+  }
+  setTerrainExaggeration(): void {}
+  getTerrainCogSource(): null {
+    return null;
+  }
+  hasCustomTerrainSource(): boolean {
+    return false;
+  }
+  async setTerrainCogSource(source: string | Blob | null): Promise<boolean> {
+    return source === null;
+  }
+}
+
+/** Drop the compiler's synthetic attributes from a hit graphic's attributes. */
+function stripSyntheticFields(attributes: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([key]) => !key.startsWith("gl__") && key !== "__OBJECTID"),
+  );
+}
+
+/**
+ * Everything about a plan that requires rebuilding the native layers when it
+ * changes: the kind, the source, the symbology. Visibility, opacity and the
+ * scale range are applied in place, so they are left out. For GeoJSON plans
+ * the features themselves are replaced by their count and the store record's
+ * identity, so a re-style rebuilds (the symbols are baked into the data) but
+ * a visibility toggle does not.
+ */
+function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
+  const { visible: _v, opacity: _o, minScale: _mn, maxScale: _mx, ...rest } = plan;
+  if (rest.kind === "geojson") {
+    return JSON.stringify({
+      ...rest,
+      parts: rest.parts.map((part) => ({
+        ...part,
+        features: part.features ? part.features.features.length : undefined,
+      })),
+      style: layer.style,
+      filters: [layer.timeFilter, layer.embedFilter, compileLayerFilters(layer)],
+    });
+  }
+  return JSON.stringify(rest);
+}
+
+/** The SDK's ScaleBar knows metric and "non-metric" (feet and miles). */
+function scaleBarUnit(unit: MapPreferences["scaleUnit"] | undefined): string {
+  return unit === "imperial" ? "non-metric" : "metric";
+}

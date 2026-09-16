@@ -1456,3 +1456,20 @@ def test_mapbox_renderer_roundtrip(m, tmp_path):
     reopened.load_project(path)
     assert reopened.get_renderer() == "mapbox"
     assert reopened.get_renderer(pane_id=pane["id"]) == "mapbox"
+
+
+def test_arcgis_renderer_roundtrip(m, tmp_path):
+    """ArcGIS survives project save/load and mixed renderer split views."""
+    from geolibre import Map
+
+    m.set_renderer("arcgis")
+    m.set_map_layout(1, 2, view_kinds=["arcgis", "maplibre"])
+    assert m.get_renderer() == "arcgis"
+    pane = m.project["secondaryMapViews"][0]
+    m.set_renderer("arcgis", pane_id=pane["id"])
+    path = tmp_path / "arcgis.geolibre.json"
+    m.save_project(path)
+    reopened = Map(renderer="arcgis")
+    reopened.load_project(path)
+    assert reopened.get_renderer() == "arcgis"
+    assert reopened.get_renderer(pane_id=pane["id"]) == "arcgis"

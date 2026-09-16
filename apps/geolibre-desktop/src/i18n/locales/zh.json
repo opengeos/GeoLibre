@@ -1884,6 +1884,7 @@
     "only2d": "仅 2D",
     "only3d": "仅 3D",
     "noMapbox": "不支持 Mapbox",
+    "noArcgis": "不支持 ArcGIS",
     "cesiumTokenHint": "在设置中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "3D 地球不渲染此图层",
     "layerCesiumOnly": "仅由 3D 地球渲染",
     "layerMapboxUnsupported": "Mapbox 引擎不渲染此图层",
+    "layerArcgisUnsupported": "ArcGIS 引擎不渲染此图层",
     "resetView": "重置视图",
     "scene3D": "3D 地球",
     "scene2D": "2D 地图",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "退出全屏",
     "fullscreenUnavailable": "全屏不可用",
     "mapboxTokenHint": "请在<settingsLink>设置 → 环境变量</settingsLink>中添加 Mapbox 访问令牌，以使用此渲染引擎。",
+    "arcgisKeyHint": "请在<settingsLink>设置 → 环境变量</settingsLink>中添加 ArcGIS API 密钥，以使用 Esri 底图样式。",
     "pluginUnsupported": "此插件不支持所选的渲染引擎。"
   },
   "mapContextMenu": {
@@ -2168,6 +2171,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "要使用 Mapbox，请在下方粘贴来自<tokenLink>您的 Mapbox 账户</tokenLink>的访问令牌。",
       "mapboxTokenStorageNote": "仅存储在本设备上（不存储在项目文件中，因此永远不会被共享），并且仅发送到 Mapbox。在 Web 版本中，它与其他站点数据共用同一浏览器存储。",
+      "arcgisKeyTitle": "ArcGIS API 密钥",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGIS 渲染引擎无需密钥即可使用：它通过从 Esri CDN 加载的 ArcGIS Maps SDK for JavaScript 渲染项目底图和您的图层。API 密钥可额外提供 Esri 底图样式（街道、影像、地形等）。请在您的 ArcGIS 账户的<keyLink>开发者凭据</keyLink>中创建一个具有底图权限的密钥，并粘贴到下方。",
+      "arcgisKeyStorageNote": "仅存储在本设备上（不存储在项目文件中，因此永远不会被共享），并且仅发送到 Esri。在 Web 版本中，它与其他站点数据共用同一浏览器存储。",
       "variablesTitle": "环境变量",
       "variablesCount_other": "已启用 {{count}} 个运行时变量。",
       "secretsWarning": "变量值以纯文本形式存储在项目文件中，在共享项目时可能会暴露。除非项目文件保持私有，否则请勿在此放置机密信息。",
@@ -2761,6 +2768,7 @@
       "renderingEngine": "渲染引擎",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "在 Google 地图中查看",
       "viewInGoogleEarth": "在 Google Earth 中查看",

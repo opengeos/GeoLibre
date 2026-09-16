@@ -37,7 +37,7 @@ export interface GeoLibrePlugin {
    * Mapbox renderer" below). The Plugins menu gates options against the active
    * renderer.
    */
-  engines?: ("maplibre" | "mapbox" | "cesium")[];
+  engines?: ("maplibre" | "mapbox" | "cesium" | "arcgis")[];
   /** Plugins in the same group cannot be active at the same time. */
   exclusiveGroup?: string;
   /** At least one name is required for handleUrlParameters to be called. */
@@ -174,7 +174,7 @@ export interface GeoLibreAppAPI {
   getViewBounds?: () => [number, number, number, number] | null;
   getMap?: () => import("maplibre-gl").Map | null;
   // The active primary renderer, including while its canvas is being replaced.
-  getMapRenderer?: () => "maplibre" | "mapbox" | "cesium";
+  getMapRenderer?: () => "maplibre" | "mapbox" | "cesium" | "arcgis";
   // The native mapbox-gl map, only while Mapbox is the primary renderer; null
   // otherwise. Built-in plugins read the 2D map through getStyleMap(app), which
   // falls back to this when getMap() is null — see "Supporting the Mapbox
@@ -1012,7 +1012,7 @@ If instead you want a plugin compiled into the main JS bundle (no `plugin.json`,
 }
 ```
 
-The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium"`, defaulting to `["maplibre"]`); plugins supporting the 3D globe declare `["maplibre", "cesium"]` so users can toggle them when Cesium is active, and plugins that only use the style API both 2D engines share add `"mapbox"` (see "Supporting the Mapbox renderer").
+The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`; no bundled plugin declares `"arcgis"` yet, since that engine hosts no MapLibre controls — see `docs/arcgis-renderer.md`); plugins supporting the 3D globe declare `["maplibre", "cesium"]` so users can toggle them when Cesium is active, and plugins that only use the style API both 2D engines share add `"mapbox"` (see "Supporting the Mapbox renderer").
 
 External plugin entries are executed with `import(URL.createObjectURL(...))`, which is why the desktop CSP in `tauri.conf.json` includes `blob:` in `script-src`. Removing `blob:` from `script-src` breaks external plugin loading. Combined with `'unsafe-eval'`, this means code that can create a blob URL can execute scripts, which is acceptable because external plugins are trusted local files installed by the user.
 

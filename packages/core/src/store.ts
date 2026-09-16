@@ -227,12 +227,16 @@ export interface GpsStatusFix {
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
   const clearMapbox =
     state.primaryRenderer === "mapbox" && state.preferences.map.mapboxStyleUrl !== undefined;
-  if (!clearMapbox && ellipsoidId === state.preferences.map.ellipsoidId) return state.preferences;
+  const clearArcgis =
+    state.primaryRenderer === "arcgis" && state.preferences.map.arcgisBasemap !== undefined;
+  if (!clearMapbox && !clearArcgis && ellipsoidId === state.preferences.map.ellipsoidId)
+    return state.preferences;
   return {
     ...state.preferences,
     map: {
       ...state.preferences.map,
       ...(clearMapbox ? { mapboxStyleUrl: undefined } : {}),
+      ...(clearArcgis ? { arcgisBasemap: undefined } : {}),
       ellipsoidId,
     },
   };
