@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import type * as mapboxgl from "mapbox-gl";
+import type { Geometry } from "geojson";
 import { useAppStore, type MapPreferences } from "@geolibre/core";
 import { MapboxEngine } from "../packages/map/src/mapbox-engine";
 import { isMapboxSupportedLayer } from "../packages/map/src/mapbox-layers";
@@ -741,17 +742,32 @@ describe("MapboxEngine.syncLayers", () => {
 describe("MapboxEngine.identifyFeatures", () => {
   it("maps Mapbox's generated ids back to the layer's own feature identity", () => {
     const { engine, map } = makeEngine();
-    const feature = (id: string | undefined, name: string) => ({
+    // A polygon and a point, so the engine compiles the fill, line and circle
+    // layers the hits below come from; it only adds the ones the data can draw.
+    const feature = (id: string | undefined, name: string, geometry: Geometry) => ({
       type: "Feature" as const,
       ...(id === undefined ? {} : { id }),
       properties: { name },
-      geometry: { type: "Point" as const, coordinates: [0, 0] },
+      geometry,
     });
     engine.syncLayers([
       geojsonLayer({
         geojson: {
           type: "FeatureCollection",
-          features: [feature("ca", "California"), feature(undefined, "Nevada")],
+          features: [
+            feature("ca", "California", {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            }),
+            feature(undefined, "Nevada", { type: "Point", coordinates: [0, 0] }),
+          ],
         },
       }),
     ]);

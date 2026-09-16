@@ -146,7 +146,8 @@ async function mainMapVisibility(page: Page, layerId: string): Promise<string[]>
  * Check or uncheck every panel row for one project layer on one side.
  *
  * The panel lists *style* layers, and the engine compiles each store layer into
- * a fill, a line and a circle row, so a per-layer assignment means all three.
+ * one row per geometry its data has (a fill and a line for these squares), so a
+ * per-layer assignment means every one of them.
  */
 async function setSide(
   panel: Locator,
@@ -319,6 +320,13 @@ for (const theme of ["light", "dark"] as const) {
         (await leftLabels()).filter((text) => text.includes("geolibre-mapbox-")),
         "no row may show a raw style layer id",
       ).toEqual([]);
+      // Both squares are polygons, so neither has a Points row to offer (#2431).
+      // The engine used to compile a circle layer for every GeoJSON layer
+      // whatever its data held, and the panel listed it.
+      expect(
+        (await leftLabels()).filter((text) => text.endsWith(" Points")),
+        "a polygon-only layer must not list a Points row",
+      ).toEqual([]);
 
       // The grouped basemap row is there, which is what `basemapStyle` /
       // `basemapLayerIds` buy: without it every basemap layer would be listed.
@@ -474,7 +482,9 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
 
   // Only a `STYLE` basemap replaces the map's style; a raster one is added as
   // a layer and never reaches `setStyle`, so it cannot reproduce this.
-  for (const name of ["OpenFreeMap Positron", "OpenFreeMap Bright"]) {
+  // Three changes, back to one already visited: the sides stopped reaching the
+  // pane after the first and the main map after the third (#2434).
+  for (const name of ["OpenFreeMap Positron", "OpenFreeMap Bright", "OpenFreeMap Positron"]) {
     const before = await swipeControlToken(page);
     await page.getByPlaceholder("Search basemaps").fill(name.replace("OpenFreeMap ", ""));
     await page.getByText(name, { exact: true }).click();
@@ -498,6 +508,21 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     // other way this could go wrong: the rebuild reads `getState()` off the
     // outgoing control and hands it to the new one's options.
     expect(await swipeSides(page), `sides must survive the change to ${name}`).toEqual(sides);
+
+    // And the carried-over sides still reach both maps (#2434). The rebuilt
+    // control mounts on `style.load`, before the engine has re-added the
+    // project layers, so its first pass has nothing to assign; the assignment
+    // has to land once those layers arrive, on the main map and on the pane.
+    // `maplibre-gl-swipe` 0.13.3 re-applies the sides when assigned layers
+    // come or go.
+    await expect.poll(() => mainMapVisibility(page, "East"), { timeout: 30_000 }).toEqual(["none"]);
+    await expect
+      .poll(() => comparisonPaneVisibility(page, "East"), { timeout: 30_000 })
+      .toEqual(["visible"]);
+    expect(await mainMapVisibility(page, "West")).toEqual(["visible"]);
+    // The pane only copies right-side layers, so a pane built before the
+    // project layers returned never has West at all; either way it must not draw.
+    expect([["none"], ["<absent>"]]).toContainEqual(await comparisonPaneVisibility(page, "West"));
   }
 
   // Every rebuild constructs and removes a comparison map, and mapbox-gl's

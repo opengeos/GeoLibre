@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Geometry } from "geojson";
 import {
   applyProjectToStore,
   BLANK_BASEMAP,
@@ -107,6 +108,52 @@ describe("Mapbox native layer compilation", () => {
     // The line layer draws everything except points, so it must exclude
     // MultiPoint too, or a MultiPoint renders as a line instead of circles.
     assert.match(filterOf("line"), /"Point","MultiPoint"\],false,true/);
+  });
+  it("adds only the geometry layers inline GeoJSON can draw, like MapLibre's layer-sync", () => {
+    const withGeometries = (id: string, ...geometries: Geometry[]) =>
+      geojsonLayer({
+        id,
+        geojson: {
+          type: "FeatureCollection",
+          features: geometries.map((geometry) => ({ type: "Feature", properties: {}, geometry })),
+        },
+      });
+    const polygon: Geometry = {
+      type: "MultiPolygon",
+      coordinates: [
+        [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      ],
+    };
+    const line: Geometry = {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    };
+    const point: Geometry = { type: "Point", coordinates: [0, 0] };
+    const types = (layer: ReturnType<typeof geojsonLayer>) =>
+      compileMapboxLayer(layer).layers.map((s) => s.type);
+    // A polygon keeps its outline; no circle layer that could never match (#2431).
+    assert.deepEqual(types(withGeometries("polygons", polygon)), ["fill", "line"]);
+    assert.deepEqual(types(withGeometries("lines", line)), ["line"]);
+    assert.deepEqual(types(withGeometries("points", point)), ["circle"]);
+    assert.deepEqual(types(withGeometries("mixed", point, polygon)), ["fill", "line", "circle"]);
+    const collection = withGeometries("collection", {
+      type: "GeometryCollection",
+      geometries: [point, line],
+    });
+    assert.deepEqual(types(collection), ["line", "circle"]);
+    // With nothing to inspect (an empty editable layer, features without a
+    // geometry) every kind stays, so the first drawn feature has a layer.
+    assert.deepEqual(types(geojsonLayer({ id: "empty" })), ["fill", "line", "circle"]);
   });
   it("labels with the basemap's font when the engine supplies one", () => {
     const layer = geojsonLayer({ id: "fonts" });

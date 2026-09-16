@@ -15,6 +15,7 @@ import { circlePaint, fillPaint, fillExtrusionPaint, linePaint, rasterPaint } fr
 import { proxyWmsTiles } from "./wms-proxy";
 import { arcgisOpacity, arcgisVectorStyle } from "./arcgis-vector-style";
 import { mapboxFillLayerId, mapboxLineLayerId, mapboxSourceId } from "./style-layer-ids";
+import { detectGeometryProfile, type GeometryProfile } from "./geojson-loader";
 
 export interface MapboxLayerPlan {
   sourceId: string;
@@ -264,6 +265,18 @@ export function compileMapboxLayer(
     return (filter ? ["all", isGeometry, filter] : isGeometry) as FilterSpecification;
   };
   const notPoint = ["match", ["geometry-type"], ["Point", "MultiPoint"], false, true];
+  // Which geometry layers to emit. Inline GeoJSON says what it holds, so only
+  // the layers its data can draw are added, as MapLibre's layer-sync does: a
+  // polygon-only layer gets a fill and an outline, not a circle layer that
+  // matches nothing but still shows up in every control that lists style layers
+  // (the Layer Swipe panel's "Points" row, #2431). A collection with no geometry
+  // yet (a new, empty editable layer) and tiled or URL-backed data cannot be
+  // inspected here, so they keep all three, each geometry-filtered.
+  const detected = layer.geojson ? detectGeometryProfile(layer.geojson) : null;
+  const profile: GeometryProfile =
+    detected && (detected.hasPoint || detected.hasLine || detected.hasPolygon)
+      ? detected
+      : { hasPoint: true, hasLine: true, hasPolygon: true };
   const vectorLayers = (sourceLayer?: string): LayerSpecification[] => {
     const base = {
       source: sourceId,
@@ -275,7 +288,7 @@ export function compileMapboxLayer(
     // The shared paint compiler produces Style Spec expressions. Conversion is
     // confined here; the engine never masquerades as a MapLibre Map instance.
     const result = [
-      {
+      profile.hasPolygon && {
         ...base,
         id: mapboxFillLayerId(layer.id, sourceLayer),
         type: style.extrusionEnabled ? "fill-extrusion" : "fill",
@@ -286,21 +299,21 @@ export function compileMapboxLayer(
             : fillPaint(style, layer.opacity),
         ),
       },
-      {
+      (profile.hasLine || profile.hasPolygon) && {
         ...base,
         id: mapboxLineLayerId(layer.id, sourceLayer),
         type: "line",
         filter: (filter ? ["all", notPoint, filter] : notPoint) as FilterSpecification,
         paint: mapboxPaint(linePaint(style, layer.opacity)),
       },
-      {
+      profile.hasPoint && {
         ...base,
         id: `${id}-circle`,
         type: "circle",
         filter: geometryFilter("Point"),
         paint: mapboxPaint(circlePaint(style, layer.opacity)),
       },
-    ] as LayerSpecification[];
+    ].filter(Boolean) as LayerSpecification[];
     const labels = style.labels;
     if (labels.enabled && (labels.field || labels.expression)) {
       let text: DataDrivenPropertyValueSpecification<string> = labelFieldTextField(
