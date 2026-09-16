@@ -121,6 +121,24 @@ async function setSide(
   }
 }
 
+/**
+ * The access token the swipe's comparison pane was constructed with.
+ *
+ * The control is a plain `IControl` that the Mapbox engine wraps in an adapter,
+ * so the original lives in the engine's `pluginControls` map rather than on
+ * `map._controls`; `getComparisonMap()` then hands out the pane it built.
+ */
+async function comparisonPaneToken(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const engine = (window as any).swipeTestRef.current;
+    let pane: any = null;
+    engine.pluginControls?.forEach?.((_adapter: unknown, control: any) => {
+      if (typeof control?.getComparisonMap === "function") pane = control.getComparisonMap();
+    });
+    return pane?._requestManager?._customAccessToken ?? null;
+  });
+}
+
 async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "dark") {
   await page.addInitScript(
     ({ key, token }) => {
@@ -234,15 +252,22 @@ for (const theme of ["light", "dark"] as const) {
 
       await page.screenshot({ path: info.outputPath(`mapbox-swipe-${theme}.png`) });
 
-      // mapbox-gl reads its token from a global the app never sets, so a
-      // comparison pane built without one renders nothing and logs every frame.
-      // (The `mapbox://` basemap path — where the control cannot fetch the style
+      // mapbox-gl reads its token from the global `mapboxgl.accessToken` unless
+      // the constructor is handed one, and the app sets it per map — so the
+      // comparison pane must carry the same token as the main map or it renders
+      // nothing. Asserted on the pane's own token rather than on console text,
+      // which cannot tell "no token" from "the placeholder CI runs with".
+      expect(await comparisonPaneToken(page), "the pane must carry the main map's token").toBe(
+        await page.evaluate(
+          () =>
+            ((window as any).swipeTestRef.current.getMapboxMap() as any)._requestManager
+              ?._customAccessToken ?? null,
+        ),
+      );
+
+      // The `mapbox://` basemap path — where the control cannot fetch the style
       // and takes `basemapLayerIds` instead — is covered by the unit tests; this
-      // project uses a third-party style so the spec runs without a real token.)
-      expect(
-        errors.filter((message) => message.includes("access token")),
-        "the comparison pane must get the token mapbox-gl needs per map",
-      ).toEqual([]);
+      // project points at a third-party style so the spec needs no real token.
     }
   });
 }
