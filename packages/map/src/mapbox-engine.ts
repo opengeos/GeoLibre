@@ -571,16 +571,18 @@ export class MapboxEngine implements MapEngine {
    * its own id scheme — without this the panel fell back to the raw ids on
    * Mapbox while showing "Counties Polygons" on MapLibre.
    *
-   * Read off the live style rather than the compile plan, so a plugin-owned row
-   * whose native ids the engine only adopts is named too, and a layer whose
-   * style layers have not landed yet is not named before it exists.
+   * A layer's style layers are taken from the plan the engine compiled for it,
+   * plus the ids a plugin registered itself — never by matching the
+   * `geolibre-mapbox-<id>-` prefix against the whole style, which would let a
+   * layer named `a` claim the rows of one named `a-b`. Both are then filtered
+   * against the live style, so a layer is not named before its rows exist.
    */
   private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
     const map = this.map;
     if (!map) return;
-    let styleLayerIds: string[];
+    let present: Set<string>;
     try {
-      styleLayerIds = (map.getStyle()?.layers ?? []).map((styleLayer) => styleLayer.id);
+      present = new Set((map.getStyle()?.layers ?? []).map((styleLayer) => styleLayer.id));
     } catch {
       // getStyle throws while a style is loading; the next sync republishes.
       return;
@@ -589,12 +591,11 @@ export class MapboxEngine implements MapEngine {
     const entries: Array<readonly [string, string]> = [];
     for (const layer of layers) {
       const prefix = `${mapboxSourceId(layer.id)}-`;
-      const native = new Set(
-        Array.isArray(layer.metadata?.nativeLayerIds)
-          ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
-          : [],
-      );
-      const own = styleLayerIds.filter((id) => id.startsWith(prefix) || native.has(id));
+      const planned = this.plans.get(layer.id)?.layers.map((spec) => spec.id) ?? [];
+      const native = Array.isArray(layer.metadata?.nativeLayerIds)
+        ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const own = [...new Set([...planned, ...native])].filter((id) => present.has(id));
       for (const id of own) {
         // `geolibre-mapbox-<layerId>-<sourceLayer>-<kind>`: the kind is the
         // last segment. A plugin's own id follows no scheme, so it takes the

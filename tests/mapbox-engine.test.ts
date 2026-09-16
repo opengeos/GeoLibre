@@ -462,6 +462,27 @@ describe("MapboxEngine.syncLayers", () => {
     });
   });
 
+  it("does not let one layer claim a same-prefixed neighbour's rows", () => {
+    // `geolibre-mapbox-a-` is a prefix of `geolibre-mapbox-a-b-`, so matching
+    // ids by prefix would hand "A" its neighbour's three rows as well. The
+    // visible consequence is the qualifier: a layer drawing through one style
+    // layer is named bare, and four would wrongly make it "A Raster".
+    withPublishedLabels((labels) => {
+      engine.syncLayers([
+        geojsonLayer({
+          id: "a",
+          name: "A",
+          type: "xyz",
+          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          geojson: undefined,
+        }),
+        geojsonLayer({ id: "a-b", name: "A B" }),
+      ]);
+      assert.equal(labels()["geolibre-mapbox-a-raster"], "A");
+      assert.equal(labels()["geolibre-mapbox-a-b-geojson-fill"], "A B Polygons");
+    });
+  });
+
   it("names a single-style-layer row without a geometry qualifier", () => {
     withPublishedLabels((labels) => {
       engine.syncLayers([
