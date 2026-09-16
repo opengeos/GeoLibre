@@ -24,6 +24,8 @@ import {
 } from "./map-engine";
 import {
   ARCGIS_ID_FIELD,
+  ARCGIS_LABEL_FIELD,
+  ARCGIS_SYMBOL_FIELD,
   compileArcgisLayer,
   featurePassesFilters,
   geometryContainsPoint,
@@ -117,6 +119,16 @@ const HIGHLIGHT_COLOR = [250, 204, 21, 1];
 
 /** Pixel radius the synchronous identify accepts around points and lines. */
 const HIT_TOLERANCE_PX = 6;
+
+/**
+ * The schema of the compiler's GeoJSON: only the three synthetic fields (the
+ * SDK adds its object id). Declared widths keep long labels intact.
+ */
+const ARCGIS_GEOJSON_FIELDS = [
+  { name: ARCGIS_ID_FIELD, type: "string", length: 255 },
+  { name: ARCGIS_SYMBOL_FIELD, type: "string", length: 32 },
+  { name: ARCGIS_LABEL_FIELD, type: "string", length: 4000 },
+];
 
 /**
  * A renderer the SDK can take now: marker placeholders swapped for the circle
@@ -690,6 +702,10 @@ export class ArcgisEngine implements MapEngine {
             // read unless every field is requested; identify needs the
             // compiler's identity field.
             outFields: ["*"],
+            // Declared rather than inferred: the SDK sizes an inferred string
+            // field from sampled features and truncates longer values later,
+            // which would clip labels (and once clipped the symbol key).
+            fields: part.url ? undefined : ARCGIS_GEOJSON_FIELDS,
             ...(part.labelingInfo ? { labelingInfo: part.labelingInfo, labelsVisible: true } : {}),
             // The SDK's popup is not used; identify goes through hitTest.
             popupEnabled: false,
@@ -967,9 +983,18 @@ export class ArcgisEngine implements MapEngine {
       const attributes = result.graphic.attributes ?? {};
       const storeLayer = this.layers.find((l) => l.id === storeId);
       const rawId = attributes[ARCGIS_ID_FIELD];
-      const featureId = rawId != null ? String(rawId) : null;
+      // A service layer's features never live in the store; their object id
+      // is the identity the SDK offers.
+      const featureId =
+        rawId != null
+          ? String(rawId)
+          : attributes.OBJECTID != null
+            ? String(attributes.OBJECTID)
+            : attributes.__OBJECTID != null
+              ? String(attributes.__OBJECTID)
+              : null;
       const feature =
-        featureId !== null
+        rawId != null
           ? storeLayer?.geojson?.features.find((f, i) => String(f.id ?? i) === featureId)
           : undefined;
       const key = `${storeId}:${featureId ?? JSON.stringify(attributes)}`;
@@ -979,7 +1004,9 @@ export class ArcgisEngine implements MapEngine {
         layerId: storeId,
         featureId,
         properties: feature?.properties ?? stripSyntheticFields(attributes),
-        geometry: feature?.geometry ?? null,
+        // The store's geometry when the feature is there; otherwise the one
+        // the hit test found (a service layer's), converted from the view.
+        geometry: feature?.geometry ?? this.graphicGeometryToGeoJson(result.graphic.geometry),
       });
     }
     try {
@@ -1028,6 +1055,66 @@ export class ArcgisEngine implements MapEngine {
       });
     }
     return features;
+  }
+  /** An SDK geometry (in the view's spatial reference) as WGS84 GeoJSON, or null. */
+  private graphicGeometryToGeoJson(geometry: ArcgisGraphic["geometry"]): Geometry | null {
+    if (!geometry) return null;
+    let source: ArcgisGraphic["geometry"] = geometry;
+    try {
+      const sr = (geometry as { spatialReference?: { isWebMercator?: boolean; wkid?: number } })
+        .spatialReference;
+      if (sr?.isWebMercator || sr?.wkid === 3857 || sr?.wkid === 102100)
+        source = this.sdk.webMercatorUtils.webMercatorToGeographic(geometry);
+    } catch {
+      return null;
+    }
+    const g = source as unknown as {
+      type: string;
+      x?: number;
+      y?: number;
+      points?: Position[];
+      paths?: Position[][];
+      rings?: Position[][];
+      xmin?: number;
+      ymin?: number;
+      xmax?: number;
+      ymax?: number;
+    };
+    switch (g.type) {
+      case "point":
+        return typeof g.x === "number" && typeof g.y === "number"
+          ? { type: "Point", coordinates: [g.x, g.y] }
+          : null;
+      case "multipoint":
+        return g.points ? { type: "MultiPoint", coordinates: g.points } : null;
+      case "polyline":
+        return !g.paths
+          ? null
+          : g.paths.length === 1
+            ? { type: "LineString", coordinates: g.paths[0] }
+            : { type: "MultiLineString", coordinates: g.paths };
+      case "polygon":
+        // The SDK's rings carry no outer/hole grouping; a single polygon whose
+        // first ring is the exterior is the best faithful reading.
+        return g.rings ? { type: "Polygon", coordinates: g.rings } : null;
+      case "extent":
+        return [g.xmin, g.ymin, g.xmax, g.ymax].every((v) => typeof v === "number")
+          ? {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [g.xmin!, g.ymin!],
+                  [g.xmax!, g.ymin!],
+                  [g.xmax!, g.ymax!],
+                  [g.xmin!, g.ymax!],
+                  [g.xmin!, g.ymin!],
+                ],
+              ],
+            }
+          : null;
+      default:
+        return null;
+    }
   }
   /** Degrees of longitude per screen pixel at `latitude`, from the view's resolution. */
   private degreesPerPixel(latitude: number): number {

@@ -58,6 +58,27 @@ describe("ArcGIS project and plugin boundaries", () => {
     useAppStore.getState().setPrimaryRenderer("arcgis");
     useAppStore.getState().setBasemapStyleUrl("https://tiles.openfreemap.org/styles/liberty");
     assert.equal(useAppStore.getState().preferences.map.arcgisBasemap, undefined);
+    // A split pane on ArcGIS clears it too, whatever the primary renderer.
+    useAppStore.getState().newProject();
+    useAppStore.setState((s) => ({
+      preferences: {
+        ...s.preferences,
+        map: { ...s.preferences.map, arcgisBasemap: "arcgis/streets" },
+      },
+    }));
+    useAppStore.setState({
+      secondaryMapViews: [
+        {
+          id: "pane",
+          view: createEmptyProject().mapView,
+          viewKind: "arcgis",
+          layerVisibility: {},
+        },
+      ],
+    });
+    assert.equal(useAppStore.getState().preferences.map.arcgisBasemap, "arcgis/streets");
+    useAppStore.getState().setBasemapStyleUrl("https://tiles.openfreemap.org/styles/bright");
+    assert.equal(useAppStore.getState().preferences.map.arcgisBasemap, undefined);
   });
   it("keeps MapLibre plugins off the engine and declares what it cannot host", () => {
     assert.equal(isPluginEngineSupported({}, "arcgis"), false);
@@ -75,9 +96,13 @@ describe("ArcGIS project and plugin boundaries", () => {
   it("greys out the Add Data sources the engine has no adapter for", () => {
     assert.equal(supportsAddDataRenderer("mbtiles", "arcgis"), false);
     assert.equal(supportsAddDataRenderer("pmtiles", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("cog", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("deckgl", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("vector", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("deckgl-viz", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("gltf-model", "arcgis"), false);
+    // The Vector and Raster panels are MapLibre controls with nowhere to mount.
+    assert.equal(supportsAddDataRenderer("vector", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("raster", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("xyz", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("flatgeobuf", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("arcgis", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("pmtiles", "mapbox"), true);
     assert.equal(supportsAddDataRenderer("pmtiles", "maplibre"), true);
@@ -115,10 +140,12 @@ describe("ArcGIS API key", () => {
   });
   it("redacts keys and tokens from engine errors", () => {
     const result = redactArcgisError(
-      "Failed https://basemapstyles-api.arcgis.com/x?token=AAPTsecret&f=json AAPTother",
+      "Failed https://basemapstyles-api.arcgis.com/x?token=AAPTsecret&f=json AAPTother AAPKlegacy token=bare",
     );
     assert.ok(!result.includes("secret"));
     assert.ok(!result.includes("AAPTother"));
+    assert.ok(!result.includes("AAPKlegacy"));
+    assert.ok(!result.includes("bare"));
     assert.ok(result.includes("&f=json"));
   });
 });

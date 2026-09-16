@@ -358,6 +358,12 @@ describe("ArcGIS GeoJSON compilation", () => {
     if (plan.kind !== "geojson") throw new Error("expected geojson");
     assert.equal(plan.parts.length, 3);
     assert.ok(plan.parts.every((p) => p.url === "https://example.com/data.geojson" && !p.features));
+    assert.equal(plan.zoomDependent, false);
+    const metres = compileArcgisLayer({
+      ...layer,
+      style: { ...DEFAULT_LAYER_STYLE, strokeWidthUnit: "meters", strokeWidth: 50 },
+    });
+    assert.equal(metres.zoomDependent, true);
   });
 });
 

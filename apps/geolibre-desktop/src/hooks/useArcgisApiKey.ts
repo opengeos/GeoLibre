@@ -1,4 +1,4 @@
-import { getArcgisApiKey } from "@geolibre/core";
+import { getArcgisApiKey, getRuntimeEnvironment } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -23,13 +23,22 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
  *
  * @returns The trimmed key, or `undefined` when none is configured.
  */
+/**
+ * The device key fills in only while the runtime environment says nothing at
+ * all: an explicit (even empty) project or build value is an answer.
+ */
+function resolveArcgisApiKey(deviceKey: string): string | undefined {
+  const env = getRuntimeEnvironment();
+  if (env.VITE_ARCGIS_API_KEY !== undefined || env.ARCGIS_API_KEY !== undefined)
+    return getArcgisApiKey();
+  return deviceKey.trim() || undefined;
+}
+
 export function useArcgisApiKey(): string | undefined {
   const deviceKey = useDesktopSettingsStore((s) => s.desktopSettings.arcgisApiKey);
-  const [key, setKey] = useState<string | undefined>(
-    () => getArcgisApiKey() ?? (deviceKey.trim() || undefined),
-  );
+  const [key, setKey] = useState<string | undefined>(() => resolveArcgisApiKey(deviceKey));
   useEffect(() => {
-    const refresh = () => setKey(getArcgisApiKey() ?? (deviceKey.trim() || undefined));
+    const refresh = () => setKey(resolveArcgisApiKey(deviceKey));
     refresh();
     window.addEventListener("geolibre:runtime-env-change", refresh);
     return () => window.removeEventListener("geolibre:runtime-env-change", refresh);

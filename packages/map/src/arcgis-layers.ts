@@ -1045,6 +1045,7 @@ export function compileArcgisLayer(
     return {
       ...base,
       kind: "geojson",
+      zoomDependent: resolver.zoomDependent,
       parts: probe
         ? []
         : (["polygon", "polyline", "point"] as ArcgisGeometryKind[]).map((kind) => ({

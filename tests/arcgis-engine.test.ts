@@ -654,6 +654,43 @@ describe("ArcgisEngine picking and highlight", () => {
     engine.syncLayers([{ ...SQUARE, embedFilter: ["==", ["get", "name"], "Dot"] }]);
     assert.equal(engine.identifyFeatures([0.25, 0.75]).length, 0);
   });
+  it("takes a service feature's geometry and object id from the hit graphic", async () => {
+    const { engine, layers, setHitResults } = makeEngine();
+    engine.syncLayers([
+      {
+        ...geojsonLayer({ id: "fs", name: "Service", geojson: undefined }),
+        type: "arcgis",
+        source: { type: "geojson", url: "https://h/rest/services/X/FeatureServer/0" },
+      },
+    ]);
+    const service = layers.items[0];
+    setHitResults([
+      {
+        type: "graphic",
+        graphic: {
+          attributes: { OBJECTID: 7, NAME: "Parcel" },
+          layer: service,
+          geometry: {
+            type: "polygon",
+            rings: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+            spatialReference: { wkid: 4326 },
+          },
+        },
+      },
+    ]);
+    const [feature] = await engine.identifyFeaturesAt({ x: 0, y: 0 });
+    assert.equal(feature.layerId, "fs");
+    assert.equal(feature.featureId, "7");
+    assert.deepEqual(feature.properties, { OBJECTID: 7, NAME: "Parcel" });
+    assert.equal(feature.geometry?.type, "Polygon");
+  });
   it("returns nothing from a hit test that outlives the engine", async () => {
     const { engine, setHitResults } = makeEngine();
     engine.syncLayers([SQUARE]);

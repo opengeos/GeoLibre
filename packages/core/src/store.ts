@@ -227,8 +227,12 @@ export interface GpsStatusFix {
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
   const clearMapbox =
     state.primaryRenderer === "mapbox" && state.preferences.map.mapboxStyleUrl !== undefined;
+  // Any ArcGIS pane, not only a primary one: split panes pick the renderer
+  // independently, and a pinned Esri style would otherwise ignore the picker.
   const clearArcgis =
-    state.primaryRenderer === "arcgis" && state.preferences.map.arcgisBasemap !== undefined;
+    state.preferences.map.arcgisBasemap !== undefined &&
+    (state.primaryRenderer === "arcgis" ||
+      state.secondaryMapViews.some((pane) => pane.viewKind === "arcgis"));
   if (!clearMapbox && !clearArcgis && ellipsoidId === state.preferences.map.ellipsoidId)
     return state.preferences;
   return {

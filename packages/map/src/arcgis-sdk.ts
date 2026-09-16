@@ -594,7 +594,10 @@ export function resetArcgisCssForTests(): void {
 
 /** Strip an ArcGIS API key or token from an error message before it reaches the UI. */
 export function redactArcgisError(message: string): string {
-  return message
-    .replace(/((?:^|[?&\s"'])(?:token|apiKey|api_key)=)[^&\s"']+/gi, "$1[redacted]")
-    .replace(/\bAAPT[\w.-]+/g, "[redacted]");
+  return (
+    message
+      .replace(/((?:^|[?&\s"'])(?:token|apiKey|api_key)=)[^&\s"']+/gi, "$1[redacted]")
+      // Esri API keys: `AAPK…` (legacy API keys) and `AAPT…` (API key credentials).
+      .replace(/\bAAP[KT][\w.-]+/g, "[redacted]")
+  );
 }
