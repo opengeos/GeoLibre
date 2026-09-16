@@ -7,8 +7,11 @@ import {
   ARCGIS_SYMBOL_FIELD,
   compileArcgisLayer,
   cssToArcgisColor,
+  featurePassesFilters,
   filterToSql,
+  geometryContainsPoint,
   isArcgisPluginLayer,
+  isMarkerPlaceholder,
   isArcgisSupportedLayer,
   scaleToZoom,
   webTileTemplate,
@@ -242,6 +245,103 @@ describe("ArcGIS GeoJSON compilation", () => {
       style: { ...DEFAULT_LAYER_STYLE, strokeWidthUnit: "meters", strokeWidth: 50 },
     });
     assert.equal(compileArcgisLayer(layer).zoomDependent, true);
+  });
+  it("stands in a marker placeholder for Style-panel markers and uses KML icons directly", () => {
+    const points = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        markerEnabled: true,
+        markerShape: "star",
+        markerColor: "#ff0000",
+      },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+          {
+            type: "Feature",
+            properties: { __geolibre_kml_icon_url: "https://example.com/pin.png" },
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+    const plan = compileArcgisLayer(points);
+    if (plan.kind !== "geojson") throw new Error("expected geojson");
+    const [part] = plan.parts;
+    assert.ok(part.markerStyle, "marker style travels with the part");
+    if (part.renderer.type !== "unique-value") throw new Error("expected two symbols");
+    const [marker, icon] = part.renderer.uniqueValueInfos.map((info) => info.symbol);
+    assert.ok(isMarkerPlaceholder(marker));
+    assert.equal((marker as { color: string }).color, "#ff0000");
+    assert.equal((marker as { fallback: { type: string } }).fallback.type, "simple-marker");
+    assert.equal(icon.type, "picture-marker");
+    assert.equal(icon.url, "https://example.com/pin.png");
+    // Without markers the point symbol is the plain circle.
+    const plain = compileArcgisLayer(mixed);
+    if (plain.kind === "geojson") assert.equal(plain.parts[2].markerStyle, undefined);
+  });
+  it("tests geometry against a point for the synchronous identify", () => {
+    const square: import("geojson").Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 2],
+          [0, 2],
+          [0, 0],
+        ],
+      ],
+    };
+    assert.equal(geometryContainsPoint(square, [1, 1], 0), true);
+    assert.equal(geometryContainsPoint(square, [3, 1], 0), false);
+    const donut: import("geojson").Geometry = {
+      type: "Polygon",
+      coordinates: [
+        square.coordinates[0],
+        [
+          [0.5, 0.5],
+          [1.5, 0.5],
+          [1.5, 1.5],
+          [0.5, 1.5],
+          [0.5, 0.5],
+        ],
+      ],
+    };
+    assert.equal(geometryContainsPoint(donut, [1, 1], 0), false);
+    const line: import("geojson").Geometry = {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [10, 0],
+      ],
+    };
+    assert.equal(geometryContainsPoint(line, [5, 0.05], 0.1), true);
+    assert.equal(geometryContainsPoint(line, [5, 0.5], 0.1), false);
+    assert.equal(
+      geometryContainsPoint(
+        {
+          type: "MultiPoint",
+          coordinates: [
+            [3, 3],
+            [4, 4],
+          ],
+        },
+        [4.01, 4],
+        0.05,
+      ),
+      true,
+    );
+    assert.equal(featurePassesFilters(mixed, mixed.geojson!.features[0], 10), true);
+    assert.equal(
+      featurePassesFilters(
+        { ...mixed, embedFilter: ["==", ["get", "kind"], "road"] },
+        mixed.geojson!.features[0],
+        10,
+      ),
+      false,
+    );
   });
   it("probes support without processing features", () => {
     const plan = compileArcgisLayer(mixed, { probe: true });

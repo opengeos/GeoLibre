@@ -634,6 +634,36 @@ describe("ArcgisEngine picking and highlight", () => {
     assert.equal(engine.identifyFeatures([3, 3]).length, 0);
     assert.equal(engine.identifyFeatures([0.5, 0.5], "other").length, 0);
   });
+  it("answers an arbitrary coordinate synchronously from the store's geometry", () => {
+    const { engine } = makeEngine();
+    engine.syncLayers([SQUARE]);
+    // Inside the polygon, without any prior hit test.
+    const inside = engine.identifyFeatures([0.25, 0.75]);
+    assert.equal(inside.length, 1);
+    assert.equal(inside[0].featureId, "sq");
+    assert.deepEqual(inside[0].properties, { name: "Square" });
+    // The point feature, within the pixel tolerance at the fake view's zoom.
+    const dot = engine.identifyFeatures([5.0001, 5]);
+    assert.equal(dot.length, 1);
+    assert.equal(dot[0].featureId, "1");
+    assert.equal(engine.identifyFeatures([8, 8]).length, 0);
+    assert.equal(engine.identifyFeatures([0.25, 0.75], "other").length, 0);
+    // Hidden layers and filtered-out features are not picked.
+    engine.syncLayers([{ ...SQUARE, visible: false }]);
+    assert.equal(engine.identifyFeatures([0.25, 0.75]).length, 0);
+    engine.syncLayers([{ ...SQUARE, embedFilter: ["==", ["get", "name"], "Dot"] }]);
+    assert.equal(engine.identifyFeatures([0.25, 0.75]).length, 0);
+  });
+  it("returns nothing from a hit test that outlives the engine", async () => {
+    const { engine, setHitResults } = makeEngine();
+    engine.syncLayers([SQUARE]);
+    setHitResults([
+      { type: "graphic", graphic: { attributes: { [ARCGIS_ID_FIELD]: "sq" }, layer: null } },
+    ]);
+    const pending = engine.identifyFeaturesAt({ x: 0.5, y: 0.5 });
+    engine.destroy();
+    assert.deepEqual(await pending, []);
+  });
   it("draws the selection as a graphics layer on top and clears it", () => {
     const { engine, layers } = makeEngine();
     engine.syncLayers([SQUARE]);

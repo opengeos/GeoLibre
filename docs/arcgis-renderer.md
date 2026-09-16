@@ -119,8 +119,9 @@ drop the file instead.
 - Plugin controls. The engine has no MapLibre map for a `maplibre-gl` control
   to call into, so no bundled plugin declares `engines: ["arcgis"]`, and the
   on-map layer control is not mounted.
-- Video overlays, heatmap and cluster point renderers (points draw as circles),
-  SVG markers and fill patterns.
+- Video overlays, heatmap and cluster point renderers (points draw as circles)
+  and fill patterns. Markers (built-in shapes, custom SVG, KML icons) do draw,
+  as picture symbols baked from the same sprites MapLibre uses.
 
 ## Testing
 

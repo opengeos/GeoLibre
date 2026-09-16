@@ -25,9 +25,17 @@ import {
 import {
   ARCGIS_ID_FIELD,
   compileArcgisLayer,
+  featurePassesFilters,
+  geometryContainsPoint,
   isArcgisPluginLayer,
+  isMarkerPlaceholder,
+  type ArcgisGeoJsonPart,
   type ArcgisLayerPlan,
+  type ArcgisMarkerPlaceholder,
+  type ArcgisRendererJson,
+  type ArcgisSymbolJson,
 } from "./arcgis-layers";
+import { renderMarkerCanvas } from "./markers";
 import { planArcgisBasemap, type ArcgisBasemapPlan, sameArcgisBasemapPlan } from "./arcgis-basemap";
 import {
   redactArcgisError,
@@ -106,6 +114,30 @@ interface NativePlan {
 }
 
 const HIGHLIGHT_COLOR = [250, 204, 21, 1];
+
+/** Pixel radius the synchronous identify accepts around points and lines. */
+const HIT_TOLERANCE_PX = 6;
+
+/**
+ * A renderer the SDK can take now: marker placeholders swapped for the circle
+ * each stands in for. `bakeMarkers` replaces them with picture symbols later.
+ */
+function rendererWithFallbackMarkers(renderer: ArcgisRendererJson): ArcgisRendererJson {
+  const fallback = (symbol: ArcgisSymbolJson | unknown): ArcgisSymbolJson =>
+    isMarkerPlaceholder(symbol)
+      ? (symbol as ArcgisMarkerPlaceholder).fallback
+      : (symbol as ArcgisSymbolJson);
+  return renderer.type === "simple"
+    ? { type: "simple", symbol: fallback(renderer.symbol) }
+    : {
+        type: "unique-value",
+        field: renderer.field,
+        uniqueValueInfos: renderer.uniqueValueInfos.map((info) => ({
+          value: info.value,
+          symbol: fallback(info.symbol),
+        })),
+      };
+}
 
 /** Convert GeoJSON geometry to the SDK's geometry JSON (WGS84). */
 export function geojsonToArcgisGeometry(geometry: Geometry): ArcgisGeometryJson | null {
@@ -649,11 +681,11 @@ export class ArcgisEngine implements MapEngine {
             );
             urls.push(url);
           }
-          return new layers.GeoJSONLayer({
+          const native = new layers.GeoJSONLayer({
             ...common,
             url,
             geometryType: part.geometryType,
-            renderer: part.renderer,
+            renderer: rendererWithFallbackMarkers(part.renderer),
             // Hit-test graphics only carry the fields the renderer and labels
             // read unless every field is requested; identify needs the
             // compiler's identity field.
@@ -663,6 +695,8 @@ export class ArcgisEngine implements MapEngine {
             popupEnabled: false,
             legendEnabled: false,
           });
+          if (part.markerStyle) void this.bakeMarkers(native, part);
+          return native;
         });
       case "web-tile":
         return [
@@ -920,6 +954,9 @@ export class ArcgisEngine implements MapEngine {
     } catch {
       return [];
     }
+    // The engine may have been destroyed (a renderer swap, an unmounted pane)
+    // while the hit test was in flight; the captured view is gone with it.
+    if (this.view !== view) return [];
     const seen = new Set<string>();
     const features: IdentifiedFeature[] = [];
     for (const result of hit.results) {
@@ -945,16 +982,118 @@ export class ArcgisEngine implements MapEngine {
         geometry: feature?.geometry ?? null,
       });
     }
-    const mapPoint = view.toMap(screenPoint);
-    if (mapPoint) this.lastHit = { lngLat: [mapPoint.longitude, mapPoint.latitude], features };
+    try {
+      const mapPoint = view.toMap(screenPoint);
+      if (mapPoint) this.lastHit = { lngLat: [mapPoint.longitude, mapPoint.latitude], features };
+    } catch {
+      // A view torn down between the hit test and the conversion has no
+      // location to remember; the features are still the answer.
+    }
     return features;
   }
+  /**
+   * Features under `lngLat`, answered synchronously. The SDK's own hit test is
+   * asynchronous, so the click flow goes through {@link identifyFeaturesAt} and
+   * its result is served here for the same location; any other location (the
+   * scripting, notebook and command bridges) is answered by testing the
+   * store's GeoJSON geometry directly, with a few pixels of tolerance for
+   * points and lines. Service layers, whose features live on the server, are
+   * only reachable through the asynchronous path.
+   */
   identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
     const hit = this.lastHit;
-    if (!hit) return [];
-    if (Math.abs(hit.lngLat[0] - lngLat[0]) > 1e-6 || Math.abs(hit.lngLat[1] - lngLat[1]) > 1e-6)
-      return [];
-    return layerId ? hit.features.filter((f) => f.layerId === layerId) : hit.features;
+    if (
+      hit &&
+      Math.abs(hit.lngLat[0] - lngLat[0]) <= 1e-6 &&
+      Math.abs(hit.lngLat[1] - lngLat[1]) <= 1e-6
+    )
+      return layerId ? hit.features.filter((f) => f.layerId === layerId) : hit.features;
+    const tolerance = this.degreesPerPixel(lngLat[1]) * HIT_TOLERANCE_PX;
+    const zoom = this.compiledZoom;
+    const features: IdentifiedFeature[] = [];
+    // Store order is topmost first, which is the order a click should report.
+    for (const layer of this.layers) {
+      if (layerId && layer.id !== layerId) continue;
+      if (!layer.visible || !layer.geojson || !this.natives.has(layer.id)) continue;
+      layer.geojson.features.forEach((feature, index) => {
+        if (!feature.geometry || !geometryContainsPoint(feature.geometry, lngLat, tolerance))
+          return;
+        if (!featurePassesFilters(layer, feature, zoom)) return;
+        features.push({
+          layerId: layer.id,
+          featureId: String(feature.id ?? index),
+          properties: feature.properties ?? {},
+          geometry: feature.geometry,
+        });
+      });
+    }
+    return features;
+  }
+  /** Degrees of longitude per screen pixel at `latitude`, from the view's resolution. */
+  private degreesPerPixel(latitude: number): number {
+    const view = this.view;
+    const metersPerPixel =
+      view && Number.isFinite(view.resolution) && view.resolution > 0
+        ? view.resolution
+        : // Web Mercator ground resolution at the compiled zoom.
+          156543.03392804097 / 2 ** this.compiledZoom;
+    const cos = Math.max(0.01, Math.cos((latitude * Math.PI) / 180));
+    return metersPerPixel / (111320 * cos);
+  }
+  /**
+   * Replace a part's marker placeholders with picture symbols baked from the
+   * Style panel's marker (shape or custom SVG, tinted per class) once the
+   * sprites exist; until then the layer draws the circle fallback.
+   */
+  private async bakeMarkers(native: ArcgisLayer, part: ArcgisGeoJsonPart): Promise<void> {
+    const style = part.markerStyle;
+    if (!style || typeof document === "undefined") return;
+    const symbols =
+      part.renderer.type === "simple"
+        ? [part.renderer.symbol]
+        : part.renderer.uniqueValueInfos.map((info) => info.symbol);
+    const colors = [
+      ...new Set(
+        symbols.flatMap((symbol) =>
+          isMarkerPlaceholder(symbol) ? [(symbol as ArcgisMarkerPlaceholder).color] : [],
+        ),
+      ),
+    ];
+    const sprites = new Map<string, { url: string; size: number }>();
+    await Promise.all(
+      colors.map(async (color) => {
+        try {
+          const baked = await renderMarkerCanvas(style, color);
+          if (baked)
+            sprites.set(color, {
+              url: baked.canvas.toDataURL("image/png"),
+              size: baked.canvas.width / baked.pixelRatio,
+            });
+        } catch {
+          // A sprite that fails to rasterize keeps its circle fallback.
+        }
+      }),
+    );
+    if (native.destroyed || !sprites.size) return;
+    const resolve = (symbol: ArcgisSymbolJson | unknown): ArcgisSymbolJson => {
+      if (!isMarkerPlaceholder(symbol)) return symbol as ArcgisSymbolJson;
+      const marker = symbol as ArcgisMarkerPlaceholder;
+      const sprite = sprites.get(marker.color);
+      if (!sprite) return marker.fallback;
+      const size = `${Math.max(1, sprite.size * marker.scale)}px`;
+      return { type: "picture-marker", url: sprite.url, width: size, height: size };
+    };
+    native.renderer =
+      part.renderer.type === "simple"
+        ? { type: "simple", symbol: resolve(part.renderer.symbol) }
+        : {
+            type: "unique-value",
+            field: part.renderer.field,
+            uniqueValueInfos: part.renderer.uniqueValueInfos.map((info) => ({
+              value: info.value,
+              symbol: resolve(info.symbol),
+            })),
+          };
   }
   highlightFeature(
     layer: GeoLibreLayer | undefined,

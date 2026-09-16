@@ -211,41 +211,47 @@ export function ArcgisCanvas({
             const layerId = next.layers.some((l) => l.id === next.identifyLayerId)
               ? next.identifyLayerId
               : undefined;
-            void current.identifyFeaturesAt({ x: event.x, y: event.y }, layerId).then((matches) => {
-              if (cancelled) return;
-              const match = matches[0];
-              removePopup();
-              const latest = useAppStore.getState();
-              if (!match) {
-                latest.selectFeature(null);
-                return;
-              }
-              latest.selectLayer(match.layerId);
-              latest.selectFeature(match.featureId);
-              const point = mapView.toMap({ x: event.x, y: event.y });
-              if (!point || !mapView.container) return;
-              const content = document.createElement("div");
-              content.className = "geolibre-arcgis-popup";
-              const title = document.createElement("strong");
-              title.textContent = latest.layers.find((l) => l.id === match.layerId)?.name ?? "";
-              content.append(title);
-              for (const [key, value] of Object.entries(match.properties)) {
-                const row = document.createElement("div");
-                row.textContent = `${key}: ${
-                  typeof value === "object" ? JSON.stringify(value) : String(value)
-                }`;
-                content.append(row);
-              }
-              const close = document.createElement("button");
-              close.type = "button";
-              close.className = "geolibre-arcgis-popup-close";
-              close.setAttribute("aria-label", closeLabelRef.current);
-              close.title = closeLabelRef.current;
-              close.textContent = "×";
-              close.onclick = removePopup;
-              content.prepend(close);
-              popupDispose = anchorPopup(sdk, mapView, content, [point.longitude, point.latitude]);
-            });
+            void current
+              .identifyFeaturesAt({ x: event.x, y: event.y }, layerId)
+              .catch(() => [] as Awaited<ReturnType<typeof current.identifyFeaturesAt>>)
+              .then((matches) => {
+                if (cancelled) return;
+                const match = matches[0];
+                removePopup();
+                const latest = useAppStore.getState();
+                if (!match) {
+                  latest.selectFeature(null);
+                  return;
+                }
+                latest.selectLayer(match.layerId);
+                latest.selectFeature(match.featureId);
+                const point = mapView.toMap({ x: event.x, y: event.y });
+                if (!point || !mapView.container) return;
+                const content = document.createElement("div");
+                content.className = "geolibre-arcgis-popup";
+                const title = document.createElement("strong");
+                title.textContent = latest.layers.find((l) => l.id === match.layerId)?.name ?? "";
+                content.append(title);
+                for (const [key, value] of Object.entries(match.properties)) {
+                  const row = document.createElement("div");
+                  row.textContent = `${key}: ${
+                    typeof value === "object" ? JSON.stringify(value) : String(value)
+                  }`;
+                  content.append(row);
+                }
+                const close = document.createElement("button");
+                close.type = "button";
+                close.className = "geolibre-arcgis-popup-close";
+                close.setAttribute("aria-label", closeLabelRef.current);
+                close.title = closeLabelRef.current;
+                close.textContent = "×";
+                close.onclick = removePopup;
+                content.prepend(close);
+                popupDispose = anchorPopup(sdk, mapView, content, [
+                  point.longitude,
+                  point.latitude,
+                ]);
+              });
           }),
         );
         void mapView.when().then(() => {

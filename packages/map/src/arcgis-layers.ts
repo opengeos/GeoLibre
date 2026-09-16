@@ -11,6 +11,7 @@ import {
 import { createExpression, featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { createFeatureStyleResolver, type FeatureSymbol } from "./cesium-feature-style";
+import { KML_ICON_URL_PROPERTY } from "./markers";
 import { compileMapboxLayer } from "./mapbox-layers";
 import { arcgisVectorStyle } from "./arcgis-vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
@@ -47,6 +48,27 @@ export type ArcgisGeometryKind = "point" | "polyline" | "polygon";
 /** A JSON symbol the SDK autocasts (`simple-fill`, `simple-line`, `simple-marker`, `text`). */
 export type ArcgisSymbolJson = Record<string, unknown> & { type: string };
 
+/**
+ * A marker the engine still has to bake: the Style panel's shape or custom
+ * SVG, tinted per feature. `markers.ts` rasterizes it on a canvas (a DOM
+ * operation the pure compiler cannot do), so the plan carries the colour and
+ * scale and the circle the layer draws until the sprite is ready.
+ */
+export interface ArcgisMarkerPlaceholder {
+  type: "geolibre-marker";
+  color: string;
+  scale: number;
+  fallback: ArcgisSymbolJson;
+}
+
+export function isMarkerPlaceholder(symbol: unknown): symbol is ArcgisMarkerPlaceholder {
+  return (
+    typeof symbol === "object" &&
+    symbol !== null &&
+    (symbol as { type?: unknown }).type === "geolibre-marker"
+  );
+}
+
 /** A JSON renderer the SDK autocasts. */
 export type ArcgisRendererJson =
   | { type: "simple"; symbol: ArcgisSymbolJson }
@@ -74,6 +96,11 @@ export interface ArcgisGeoJsonPart {
   url?: string;
   renderer: ArcgisRendererJson;
   labelingInfo?: ArcgisLabelingJson[];
+  /**
+   * The style whose marker the renderer's {@link ArcgisMarkerPlaceholder}
+   * symbols stand in for; present only when a point part uses markers.
+   */
+  markerStyle?: LayerStyle;
 }
 
 /** Fields every plan shares; applied to each native layer the plan produces. */
@@ -259,6 +286,28 @@ const POINT_PLACEMENT: Record<LabelAnchor, string> = {
   "bottom-left": "above-right",
   "bottom-right": "above-left",
 };
+
+/** A KML feature's own icon, or a marker configured in the Style panel. */
+function pointMarkerSymbol(
+  style: LayerStyle,
+  feature: Feature,
+  symbol: FeatureSymbol,
+  circle: ArcgisSymbolJson,
+): ArcgisSymbolJson | ArcgisMarkerPlaceholder {
+  const icon = feature.properties?.[KML_ICON_URL_PROPERTY];
+  if (typeof icon === "string" && /^(?:https?:|data:image\/)/i.test(icon)) {
+    const size = `${Math.max(1, style.markerSize)}px`;
+    return { type: "picture-marker", url: icon, width: size, height: size };
+  }
+  if (style.markerEnabled)
+    return {
+      type: "geolibre-marker",
+      color: symbol.markerColor,
+      scale: symbol.markerScale,
+      fallback: circle,
+    };
+  return circle;
+}
 
 function symbolForKind(kind: ArcgisGeometryKind, symbol: FeatureSymbol): ArcgisSymbolJson {
   const px = (value: number) => `${Math.max(0, value)}px`;
@@ -453,6 +502,73 @@ export function filterToSql(filter: unknown): string | null {
 }
 
 /**
+ * Whether `feature` passes the layer's active filters at `zoom`, the way the
+ * compiler decides which features reach the SDK. The engine's synchronous
+ * identify uses it so a filtered-out feature cannot be picked.
+ */
+export function featurePassesFilters(
+  layer: GeoLibreLayer,
+  feature: Feature,
+  zoom: number,
+): boolean {
+  const filter = compileFilter(layer);
+  return filter.test ? filter.test(feature, zoom) : true;
+}
+
+/**
+ * Whether `lngLat` is on `geometry`, with `tolerance` in degrees of longitude
+ * (already scaled for latitude by the caller) for points and lines. A pure
+ * geometric test the engine uses for the synchronous identify, which the SDK
+ * can only answer asynchronously.
+ */
+export function geometryContainsPoint(
+  geometry: Geometry,
+  lngLat: [number, number],
+  tolerance: number,
+): boolean {
+  const [x, y] = lngLat;
+  const near = (p: Position) => Math.hypot(p[0] - x, p[1] - y) <= tolerance;
+  const nearSegment = (a: Position, b: Position) => {
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1];
+    const length = dx * dx + dy * dy;
+    const t =
+      length === 0 ? 0 : Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / length));
+    return Math.hypot(a[0] + t * dx - x, a[1] + t * dy - y) <= tolerance;
+  };
+  const nearLine = (line: Position[]) => line.some((p, i) => i > 0 && nearSegment(line[i - 1], p));
+  const inRing = (ring: Position[]) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i],
+        [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  const inPolygon = (rings: Position[][]) =>
+    rings.length > 0 && inRing(rings[0]) && !rings.slice(1).some(inRing);
+  switch (geometry.type) {
+    case "Point":
+      return near(geometry.coordinates);
+    case "MultiPoint":
+      return geometry.coordinates.some(near);
+    case "LineString":
+      return nearLine(geometry.coordinates);
+    case "MultiLineString":
+      return geometry.coordinates.some(nearLine);
+    case "Polygon":
+      return inPolygon(geometry.coordinates);
+    case "MultiPolygon":
+      return geometry.coordinates.some(inPolygon);
+    case "GeometryCollection":
+      return geometry.geometries.some((g) => geometryContainsPoint(g, lngLat, tolerance));
+    default:
+      return false;
+  }
+}
+
+/**
  * Compile the layer's active filters into one predicate, or `null` when the
  * layer has none (or one the style-spec rejects, in which case nothing is
  * filtered rather than everything hidden, matching how MapLibre reports a
@@ -607,7 +723,10 @@ function compileGeoJson(
   // which rendered every class in the first class's colour.
   const parts = new Map<
     ArcgisGeometryKind,
-    { features: Feature[]; symbols: Map<string, { id: string; symbol: ArcgisSymbolJson }> }
+    {
+      features: Feature[];
+      symbols: Map<string, { id: string; symbol: ArcgisSymbolJson | ArcgisMarkerPlaceholder }>;
+    }
   >();
   geojson.features.forEach((feature, index) => {
     if (!feature.geometry) return;
@@ -618,7 +737,8 @@ function compileGeoJson(
     for (const geometry of explodePoints(feature.geometry)) {
       const kind = GEOMETRY_KIND[geometry.type];
       if (!kind) continue;
-      const json = symbolForKind(kind, symbol);
+      const shape = symbolForKind(kind, symbol);
+      const json = kind === "point" ? pointMarkerSymbol(style, feature, symbol, shape) : shape;
       const key = JSON.stringify(json);
       let part = parts.get(kind);
       if (!part) {
@@ -651,19 +771,22 @@ function compileGeoJson(
       .map((kind) => {
         const { features, symbols } = parts.get(kind)!;
         const entries = [...symbols.values()];
-        const renderer: ArcgisRendererJson =
+        const renderer = (
           entries.length === 1
             ? { type: "simple", symbol: entries[0].symbol }
             : {
                 type: "unique-value",
                 field: ARCGIS_SYMBOL_FIELD,
                 uniqueValueInfos: entries.map(({ id, symbol }) => ({ value: id, symbol })),
-              };
+              }
+        ) as ArcgisRendererJson;
+        const markers = entries.some(({ symbol }) => isMarkerPlaceholder(symbol));
         return {
           geometryType: kind,
           features: { type: "FeatureCollection", features },
           renderer,
           ...(label ? { labelingInfo: labelingFor(kind, style, scales) } : {}),
+          ...(markers ? { markerStyle: style } : {}),
         };
       }),
   };
