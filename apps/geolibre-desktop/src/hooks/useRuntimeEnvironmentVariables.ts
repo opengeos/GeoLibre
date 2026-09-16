@@ -16,6 +16,7 @@ export function useRuntimeEnvironmentVariables() {
   // Device-local Cesium Ion token (Settings → Environment). Projected below so
   // getCesiumIonToken() picks it up as a runtime override without a rebuild.
   const mapboxAccessToken = useDesktopSettingsStore((s) => s.desktopSettings.mapboxAccessToken);
+  const arcgisApiKey = useDesktopSettingsStore((s) => s.desktopSettings.arcgisApiKey);
   const cesiumIonToken = useDesktopSettingsStore((s) => s.desktopSettings.cesiumIonToken);
   // Device-local AI Assistant provider credentials (Settings → AI Providers).
   // Projected below so the assistant picks them up after a restart without the
@@ -102,6 +103,7 @@ export function useRuntimeEnvironmentVariables() {
       mapboxEnv: mapboxAccessToken.trim()
         ? { VITE_MAPBOX_ACCESS_TOKEN: mapboxAccessToken.trim() }
         : {},
+      arcgisEnv: arcgisApiKey.trim() ? { VITE_ARCGIS_API_KEY: arcgisApiKey.trim() } : {},
       projectEnv,
     });
 
@@ -127,5 +129,13 @@ export function useRuntimeEnvironmentVariables() {
     lastSerializedEnv.current = serializedEnv;
 
     window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }));
-  }, [environmentVariables, geocoding, cesiumIonToken, mapboxAccessToken, aiProfiles, osEnv]);
+  }, [
+    environmentVariables,
+    geocoding,
+    cesiumIonToken,
+    mapboxAccessToken,
+    arcgisApiKey,
+    aiProfiles,
+    osEnv,
+  ]);
 }

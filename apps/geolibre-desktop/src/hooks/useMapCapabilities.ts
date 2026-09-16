@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  ARCGIS_CAPABILITIES,
   CESIUM_CAPABILITIES,
   MAPBOX_CAPABILITIES,
   MAPLIBRE_CAPABILITIES,
@@ -34,7 +35,9 @@ export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngi
       ? CESIUM_CAPABILITIES
       : primaryRenderer === "mapbox"
         ? MAPBOX_CAPABILITIES
-        : MAPLIBRE_CAPABILITIES;
+        : primaryRenderer === "arcgis"
+          ? ARCGIS_CAPABILITIES
+          : MAPLIBRE_CAPABILITIES;
   const engine = mapControllerRef?.current;
   // Trust the ref only while it agrees with the store about which renderer is
   // live. The store flips `primaryRenderer` during render; the canvases publish

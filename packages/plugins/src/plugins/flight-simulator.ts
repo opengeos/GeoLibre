@@ -8,11 +8,14 @@
  * MapLibre camera is placed to match, so the user steers rather than declares a
  * destination.
  *
- * **How the camera is driven.** MapLibre has no `setFreeCameraOptions` (that is
- * a Mapbox API added after the fork); its equivalent is
+ * **How the camera is driven.** Each renderer places the camera its own way.
+ * MapLibre has no `setFreeCameraOptions` (that is a Mapbox API added after the
+ * fork); its equivalent is
  * `map.calculateCameraOptionsFromCameraLngLatAltRotation()`, which converts a
  * camera position in lng/lat/altitude plus an orientation into the
- * `CameraOptions` that `jumpTo` accepts. The flight model lives in
+ * `CameraOptions` that `jumpTo` accepts. Mapbox uses the free camera it kept:
+ * a `MercatorCoordinate` carrying the altitude plus a pitch/bearing pair.
+ * Cesium's camera is already free. The flight model lives in
  * `flight-simulator-physics.ts` so it can be unit-tested without a map.
  *
  * **Why the camera pitch saturates.** That conversion finds the ground point the
@@ -25,6 +28,7 @@
 
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import type * as mapboxgl from "mapbox-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   DEFAULT_FLIGHT_MODEL,
@@ -262,16 +266,23 @@ const IDLE_HUD: FlightHudState = {
   grounded: false,
 };
 
-/** MapLibre map state saved on entry and restored when flight ends. */
+/** Map state saved on entry and restored when flight ends, on either 2D engine. */
 interface SavedMapState {
   maxPitch: number;
   /** Camera pitch before flight, restored on exit. */
   pitch: number;
-  centerClampedToGround: boolean;
   /** Whether 3D terrain was active before flight took ownership of the map. */
   terrainEnabled: boolean;
   enabledHandlers: boolean[];
 }
+
+/** {@link SavedMapState} plus MapLibre's terrain-following map center. */
+interface SavedMapLibreState extends SavedMapState {
+  centerClampedToGround: boolean;
+}
+
+/** Mapbox saves the same state; its free camera has no center clamping. */
+type SavedMapboxState = SavedMapState;
 
 /** Where the aircraft is seeded from: the camera the user was looking through. */
 interface FlightSeedView {
@@ -315,7 +326,7 @@ interface FlightCameraAdapter {
  * the pitch ceiling widened so the camera is not clamped flat.
  */
 class MapLibreFlightAdapter implements FlightCameraAdapter {
-  private saved: SavedMapState | null = null;
+  private saved: SavedMapLibreState | null = null;
   private cameraToken = 0;
 
   constructor(
@@ -353,6 +364,7 @@ class MapLibreFlightAdapter implements FlightCameraAdapter {
     this.saved = {
       maxPitch: this.map.getMaxPitch(),
       pitch: this.map.getPitch(),
+      // engine-audit-allow: maplibre-only
       centerClampedToGround: this.map.getCenterClampedToGround(),
       terrainEnabled: this.map.getTerrain?.() != null,
       enabledHandlers: handlers.map((handler) => handler.isEnabled()),
@@ -367,11 +379,13 @@ class MapLibreFlightAdapter implements FlightCameraAdapter {
     if (this.map.getMaxPitch() < MAX_CAMERA_PITCH) this.map.setMaxPitch(MAX_CAMERA_PITCH);
     // MapLibre pins the map center to the terrain surface by default, which
     // would drag the camera down with the ground passing beneath it.
+    // engine-audit-allow: maplibre-only
     this.map.setCenterClampedToGround(false);
   }
 
   applyCamera(state: AircraftState, cameraPitch: number, roll: number): void {
     try {
+      // engine-audit-allow: maplibre-only
       const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
         [state.lng, state.lat],
         state.altitude,
@@ -397,7 +411,143 @@ class MapLibreFlightAdapter implements FlightCameraAdapter {
     this.map.jumpTo({ roll: 0, pitch: Math.min(pitch, maxPitch) });
     this.map.setMaxPitch(maxPitch);
     if (!terrainEnabled) this.setTerrainEnabled?.(false);
+    // engine-audit-allow: maplibre-only
     this.map.setCenterClampedToGround(centerClampedToGround);
+    INTERACTION_HANDLERS.forEach((key, index) => {
+      if (enabledHandlers[index]) this.map[key].enable();
+    });
+    this.saved = null;
+  }
+}
+
+/**
+ * The mapbox-gl members the Mapbox adapter needs beyond the shared Style Spec
+ * surface, narrowed from `mapboxgl.Map` so a unit test can stand in a fake.
+ */
+export type MapboxFlightMap = Pick<
+  mapboxgl.Map,
+  | "getCenter"
+  | "getZoom"
+  | "getBearing"
+  | "getPitch"
+  | "getCanvas"
+  | "getMaxPitch"
+  | "setMaxPitch"
+  | "getTerrain"
+  | "queryTerrainElevation"
+  | "getFreeCameraOptions"
+  | "setFreeCameraOptions"
+  | "jumpTo"
+> &
+  Record<
+    (typeof INTERACTION_HANDLERS)[number],
+    { isEnabled(): boolean; enable(): void; disable(): void }
+  >;
+
+/** The one mapbox-gl class the Mapbox adapter constructs. */
+export type MapboxFlightGl = Pick<typeof mapboxgl.default, "MercatorCoordinate">;
+
+/**
+ * The Mapbox adapter: mapbox-gl kept the free camera MapLibre dropped, so the
+ * camera is placed directly rather than converted into a `jumpTo`. Its
+ * `FreeCameraOptions` carries the camera position as a `MercatorCoordinate`
+ * whose `z` encodes the altitude, and `setPitchBearing` writes the orientation;
+ * `setFreeCameraOptions` then derives the map center and zoom from it, which is
+ * exactly what `calculateCameraOptionsFromCameraLngLatAltRotation` computes by
+ * hand on MapLibre. The same {@link MAX_CAMERA_PITCH} cap applies for the same
+ * reason: mapbox-gl's own transform diverges as the camera nears the horizon,
+ * and clamps to `maxPitch` anyway.
+ *
+ * Two MapLibre-only pieces have no counterpart and are simply absent:
+ * `setCenterClampedToGround` (the free camera positions the eye, not the map
+ * center, so nothing drags it down onto the terrain) and camera roll —
+ * mapbox-gl 3 has no roll axis at all and documents the free camera's
+ * orientation as "representable with only pitch and bearing". The aircraft
+ * still banks, and a bank still turns it; only the horizon stays level, so the
+ * `bankCamera` setting has no visible effect on this renderer.
+ */
+class MapboxFlightAdapter implements FlightCameraAdapter {
+  private saved: SavedMapboxState | null = null;
+  private cameraToken = 0;
+
+  constructor(
+    private readonly map: MapboxFlightMap,
+    private readonly gl: MapboxFlightGl,
+    private readonly setTerrainEnabled?: (enabled: boolean) => boolean,
+    private readonly isTerrainEnabled?: () => boolean,
+  ) {}
+
+  drives(target: unknown): boolean {
+    return target === this.map;
+  }
+
+  seedView(): FlightSeedView {
+    const center = this.map.getCenter();
+    return {
+      lng: center.lng,
+      lat: center.lat,
+      zoom: this.map.getZoom(),
+      bearing: this.map.getBearing(),
+      viewportHeightPx: this.map.getCanvas()?.clientHeight ?? 600,
+    };
+  }
+
+  groundElevation(lng: number, lat: number): number {
+    try {
+      // Defaults to the exaggerated height, which is what the aircraft must
+      // clear — the same "as drawn" reading MapLibre's queryTerrainElevation
+      // gives. Answers null until the DEM tile under the position has loaded.
+      const elevation = this.map.queryTerrainElevation([lng, lat]);
+      return typeof elevation === "number" && Number.isFinite(elevation) ? elevation : 0;
+    } catch {
+      // Terrain can be mid-teardown (style reload); sea level is a safe floor.
+      return 0;
+    }
+  }
+
+  takeOver(): void {
+    const handlers = INTERACTION_HANDLERS.map((key) => this.map[key]);
+    this.saved = {
+      maxPitch: this.map.getMaxPitch(),
+      pitch: this.map.getPitch(),
+      // The host's flag, not `map.getTerrain()`: the Mapbox Standard style
+      // imports its own terrain, so the map reports terrain even when
+      // GeoLibre's DEM is off. Reading the map there would skip the enable and
+      // leave the flight measuring its height above a DEM it never turned on.
+      terrainEnabled: this.isTerrainEnabled?.() ?? this.map.getTerrain?.() != null,
+      enabledHandlers: handlers.map((handler) => handler.isEnabled()),
+    };
+    if (!this.saved.terrainEnabled) this.setTerrainEnabled?.(true);
+    for (const handler of handlers) handler.disable();
+    if (this.map.getMaxPitch() < MAX_CAMERA_PITCH) this.map.setMaxPitch(MAX_CAMERA_PITCH);
+  }
+
+  applyCamera(state: AircraftState, cameraPitch: number, _roll: number): void {
+    try {
+      const camera = this.map.getFreeCameraOptions();
+      camera.position = this.gl.MercatorCoordinate.fromLngLat(
+        [state.lng, state.lat],
+        state.altitude,
+      );
+      camera.setPitchBearing(cameraPitch, state.heading);
+      // Tagged like the MapLibre jumps so the app's moveend listeners skip
+      // them; mapbox-gl forwards this eventData onto the move events it fires.
+      this.map.setFreeCameraOptions(camera, { [FLIGHT_CAMERA_TOKEN]: ++this.cameraToken });
+    } catch {
+      // A style/terrain reload can briefly make the transform unavailable.
+      // Keep the simulation alive; the next animation frame will retry.
+    }
+  }
+
+  release(): void {
+    if (!this.saved) return;
+    const { maxPitch, pitch, terrainEnabled, enabledHandlers } = this.saved;
+    // Return to the tilt the user started from, keeping where they flew to.
+    // Before the ceiling is reinstated, as on MapLibre, so the exit view is one
+    // the app considers valid.
+    this.map.jumpTo({ pitch: Math.min(pitch, maxPitch) });
+    this.map.setMaxPitch(maxPitch);
+    if (!terrainEnabled) this.setTerrainEnabled?.(false);
     INTERACTION_HANDLERS.forEach((key, index) => {
       if (enabledHandlers[index]) this.map[key].enable();
     });
@@ -853,24 +1003,51 @@ function publishHud(next: FlightHudState): void {
 }
 
 /**
- * The renderer the simulator should bind to: the MapLibre map when there is
- * one, else the primary Cesium globe. `null` while neither is mounted.
+ * The renderer the simulator is bound to, and the handle its adapter drives.
+ *
+ * Which of the three engines is mounted decides how the camera is placed, so
+ * unlike most plugins this one cannot go through `getStyleMap`: the two 2D
+ * engines need different adapters, not one shared map.
  */
-function flightTarget(app: GeoLibreAppAPI): MapLibreMap | CesiumSceneHandle | null {
+type FlightTarget =
+  | { kind: "maplibre"; handle: MapLibreMap }
+  | { kind: "mapbox"; handle: MapboxFlightMap; gl: MapboxFlightGl }
+  | { kind: "cesium"; handle: CesiumSceneHandle };
+
+/**
+ * The renderer the simulator should bind to: whichever 2D map is mounted, else
+ * the primary Cesium globe. `null` while none is.
+ */
+function flightTarget(app: GeoLibreAppAPI): FlightTarget | null {
+  // A deliberate MapLibre-detection branch: a non-null map here *is* the
+  // MapLibre engine, and the Mapbox and Cesium handles follow below.
+  // engine-audit-allow: getMap-mapbox
   const map = app.getMap?.() ?? null;
-  if (map) return map;
+  if (map) return { kind: "maplibre", handle: map };
+  const mapbox = app.getMapboxMap?.() ?? null;
+  const gl = app.getMapboxGl?.() ?? null;
+  // Both doors are needed: the adapter builds a MercatorCoordinate, and a
+  // half-mounted engine that answers one but not the other is not flyable.
+  if (mapbox && gl) return { kind: "mapbox", handle: mapbox, gl };
   const globe = app.getCesiumScene?.() ?? null;
-  return globe?.primary ? globe : null;
+  return globe?.primary ? { kind: "cesium", handle: globe } : null;
 }
 
 function attachEngine(app: GeoLibreAppAPI): void {
   const target = flightTarget(app);
   if (!target) return;
   if (engine) return;
-  const adapter =
-    "viewer" in target
-      ? new CesiumFlightAdapter(target, app.setTerrainEnabled, app.isTerrainEnabled)
-      : new MapLibreFlightAdapter(target, app.setTerrainEnabled);
+  const adapter: FlightCameraAdapter =
+    target.kind === "cesium"
+      ? new CesiumFlightAdapter(target.handle, app.setTerrainEnabled, app.isTerrainEnabled)
+      : target.kind === "mapbox"
+        ? new MapboxFlightAdapter(
+            target.handle,
+            target.gl,
+            app.setTerrainEnabled,
+            app.isTerrainEnabled,
+          )
+        : new MapLibreFlightAdapter(target.handle, app.setTerrainEnabled);
   engine = new FlightSimulatorEngine(adapter, settings);
 }
 
@@ -926,7 +1103,7 @@ export function reattachFlightSimulator(app: GeoLibreAppAPI): void {
   // flight in progress. The host calls this from an effect that also re-runs on
   // a project load, so skip the work when the map instance has not actually
   // changed — that is the only thing a reattach exists to handle.
-  const bound = target && "viewer" in target ? target.viewer : target;
+  const bound = target?.kind === "cesium" ? target.handle.viewer : (target?.handle ?? null);
   if (bound && engine?.drives(bound)) return;
   detachEngine();
   attachEngine(app);
@@ -1005,9 +1182,9 @@ export function restoreFlightSimulator(app: GeoLibreAppAPI, state: unknown): boo
 export const flightSimulatorPlugin: GeoLibrePlugin = {
   id: FLIGHT_SIMULATOR_PLUGIN_ID,
   name: "Flight Simulator",
-  version: "1.1.0",
+  version: "1.2.0",
   activeByDefault: false,
-  engines: ["maplibre", "cesium"],
+  engines: ["maplibre", "mapbox", "cesium"],
   activate: (app: GeoLibreAppAPI) => openFlightSimulatorPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeFlightSimulatorPanel(app),
   // Persist the panel flag and the handling/HUD preferences, but never the

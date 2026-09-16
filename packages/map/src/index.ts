@@ -1,4 +1,14 @@
 export { MapboxCanvas, type MapboxCanvasProps } from "./MapboxCanvas";
+export { ArcgisCanvas, type ArcgisCanvasProps } from "./ArcgisCanvas";
+export { ArcgisEngine, ARCGIS_CAPABILITIES } from "./arcgis-engine";
+export { isArcgisSupportedLayer } from "./arcgis-layers";
+export {
+  ARCGIS_BASEMAP_STYLES,
+  DEFAULT_ARCGIS_BASEMAP,
+  isArcgisBasemapStyle,
+  planArcgisBasemap,
+} from "./arcgis-basemap";
+export { ARCGIS_SDK_CDN, ARCGIS_SDK_HOST, ARCGIS_SDK_VERSION } from "./arcgis-sdk";
 export { MapboxEngine, MAPBOX_CAPABILITIES } from "./mapbox-engine";
 export { isMapboxSupportedLayer, styleUsesUnsupportedSource } from "./mapbox-layers";
 export {

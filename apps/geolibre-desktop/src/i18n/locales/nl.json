@@ -1930,6 +1930,7 @@
     "only2d": "Alleen 2D",
     "only3d": "Alleen 3D",
     "noMapbox": "Geen Mapbox",
+    "noArcgis": "Geen ArcGIS",
     "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "Niet weergegeven door de 3D-globe",
     "layerCesiumOnly": "Alleen weergegeven door de 3D-globe",
     "layerMapboxUnsupported": "Niet weergegeven door de Mapbox-engine",
+    "layerArcgisUnsupported": "Niet weergegeven door de ArcGIS-engine",
     "resetView": "Weergave herstellen",
     "scene3D": "3D-globe",
     "scene2D": "2D-kaart",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Volledig scherm verlaten",
     "fullscreenUnavailable": "Volledig scherm niet beschikbaar",
     "mapboxTokenHint": "Voeg uw Mapbox-toegangstoken toe via <settingsLink>Instellingen → Omgevingsvariabelen</settingsLink> om deze renderer te gebruiken.",
+    "arcgisKeyHint": "Voeg een ArcGIS-API-sleutel toe via <settingsLink>Instellingen → Omgevingsvariabelen</settingsLink> voor de achtergrondkaartstijlen van Esri.",
     "pluginUnsupported": "Deze plugin ondersteunt de geselecteerde renderer niet."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Plak hieronder een toegangstoken van <tokenLink>uw Mapbox-account</tokenLink> om Mapbox te gebruiken.",
       "mapboxTokenStorageNote": "Lokaal opgeslagen op dit apparaat (niet in het projectbestand, dus nooit gedeeld) en alleen verzonden naar Mapbox. In de webversie wordt dezelfde browseropslag gebruikt als voor andere sitegegevens.",
+      "arcgisKeyTitle": "ArcGIS-API-sleutel",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "De ArcGIS-renderer werkt zonder sleutel: hij toont de achtergrondkaart van het project en uw lagen via de ArcGIS Maps SDK for JavaScript, geladen vanaf het CDN van Esri. Een API-sleutel voegt de achtergrondkaartstijlen van Esri toe (Straten, Beelden, Topografisch, …). Maak er een aan onder <keyLink>ontwikkelaarsreferenties</keyLink> in uw ArcGIS-account met het recht Achtergrondkaarten en plak hem hieronder.",
+      "arcgisKeyStorageNote": "Lokaal opgeslagen op dit apparaat (niet in het projectbestand, dus nooit gedeeld) en alleen verzonden naar Esri. In de webversie wordt dezelfde browseropslag gebruikt als voor andere sitegegevens.",
       "variablesTitle": "Omgevingsvariabelen",
       "variablesCount_one": "{{count}} ingeschakelde runtimevariabele.",
       "variablesCount_other": "{{count}} ingeschakelde runtimevariabelen.",
@@ -2406,6 +2413,7 @@
       "imperial": "Knopen / voet",
       "metric": "km/u / meter",
       "bankCamera": "Horizon kantelen in bochten",
+      "bankCameraMapbox": "Mapbox GL heeft geen camerarol, dus de horizon blijft hier waterpas. Het vliegtuig helt en draait nog steeds.",
       "invertPitch": "Stampas omkeren",
       "knots": "kt",
       "kph": "km/u",
@@ -2809,6 +2817,7 @@
       "renderingEngine": "Renderengine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Bekijken in Google Maps",
       "viewInGoogleEarth": "Bekijken in Google Earth",

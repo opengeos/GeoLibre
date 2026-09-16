@@ -2022,6 +2022,7 @@
     "only2d": "Только 2D",
     "only3d": "Только 3D",
     "noMapbox": "Без Mapbox",
+    "noArcgis": "Без ArcGIS",
     "cesiumTokenHint": "Добавьте токен Cesium Ion в настройках, чтобы получить рельеф и снимки Ion"
   },
   "renderer": {
@@ -2031,6 +2032,7 @@
     "layerUnsupported": "Не отображается на 3D-глобусе",
     "layerCesiumOnly": "Отображается только на 3D-глобусе",
     "layerMapboxUnsupported": "Не отображается движком Mapbox",
+    "layerArcgisUnsupported": "Не отображается движком ArcGIS",
     "resetView": "Сбросить вид",
     "scene3D": "3D-глобус",
     "scene2D": "2D-карта",
@@ -2039,6 +2041,7 @@
     "fullscreenExit": "Выйти из полного экрана",
     "fullscreenUnavailable": "Полный экран недоступен",
     "mapboxTokenHint": "Чтобы использовать этот движок, добавьте токен доступа Mapbox в <settingsLink>Настройки → Переменные среды</settingsLink>.",
+    "arcgisKeyHint": "Чтобы использовать стили подложек Esri, добавьте ключ API ArcGIS в <settingsLink>Настройки → Переменные среды</settingsLink>.",
     "pluginUnsupported": "Этот плагин не поддерживает выбранный движок рендеринга."
   },
   "mapContextMenu": {
@@ -2306,6 +2309,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Чтобы использовать Mapbox, вставьте ниже токен доступа из <tokenLink>своего аккаунта Mapbox</tokenLink>.",
       "mapboxTokenStorageNote": "Хранится локально на этом устройстве (не в файле проекта, поэтому никогда не передаётся) и отправляется только в Mapbox. В веб-сборке используется то же хранилище браузера, что и для других данных сайта.",
+      "arcgisKeyTitle": "Ключ API ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Движок ArcGIS работает и без ключа: он отображает подложку проекта и ваши слои через ArcGIS Maps SDK for JavaScript, загружаемый с CDN Esri. Ключ API добавляет стили подложек Esri (улицы, снимки, топографическая карта, …). Создайте его в разделе <keyLink>учётные данные разработчика</keyLink> своей учётной записи ArcGIS с правом на подложки и вставьте ниже.",
+      "arcgisKeyStorageNote": "Хранится локально на этом устройстве (не в файле проекта, поэтому никогда не передаётся) и отправляется только в Esri. В веб-сборке используется то же хранилище браузера, что и для других данных сайта.",
       "variablesTitle": "Переменные среды",
       "variablesCount_one": "Включена {{count}} переменная времени выполнения.",
       "variablesCount_few": "Включено {{count}} переменные времени выполнения.",
@@ -2502,6 +2509,7 @@
       "imperial": "Узлы / футы",
       "metric": "км/ч / метры",
       "bankCamera": "Наклонять горизонт в виражах",
+      "bankCameraMapbox": "В Mapbox GL нет крена камеры, поэтому здесь горизонт остаётся ровным. Самолёт по-прежнему кренится и разворачивается.",
       "invertPitch": "Инвертировать ось тангажа",
       "knots": "уз",
       "kph": "км/ч",
@@ -2905,6 +2913,7 @@
       "renderingEngine": "Механизм отрисовки",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Открыть в Google Maps",
       "viewInGoogleEarth": "Открыть в Google Earth",

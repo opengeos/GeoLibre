@@ -1884,6 +1884,7 @@
     "only2d": "2Dのみ",
     "only3d": "3Dのみ",
     "noMapbox": "Mapbox非対応",
+    "noArcgis": "ArcGIS非対応",
     "cesiumTokenHint": "地形とIon衛星画像を使うには、設定でCesium Ionトークンを追加してください"
   },
   "renderer": {
@@ -1893,6 +1894,7 @@
     "layerUnsupported": "3D地球儀では描画されません",
     "layerCesiumOnly": "3D地球儀でのみ描画されます",
     "layerMapboxUnsupported": "Mapboxエンジンでは描画されません",
+    "layerArcgisUnsupported": "ArcGISエンジンでは描画されません",
     "resetView": "表示をリセット",
     "scene3D": "3D地球儀",
     "scene2D": "2D地図",
@@ -1901,6 +1903,7 @@
     "fullscreenExit": "全画面表示を終了",
     "fullscreenUnavailable": "全画面表示は利用できません",
     "mapboxTokenHint": "このレンダラーを使用するには、<settingsLink>設定 → 環境変数</settingsLink>にMapboxアクセストークンを追加してください。",
+    "arcgisKeyHint": "Esriのベースマップスタイルを使用するには、<settingsLink>設定 → 環境変数</settingsLink>にArcGIS APIキーを追加してください。",
     "pluginUnsupported": "このプラグインは選択したレンダリングエンジンに対応していません。"
   },
   "mapContextMenu": {
@@ -2168,6 +2171,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Mapbox を使用するには、<tokenLink>Mapbox アカウント</tokenLink>のアクセストークンを下に貼り付けてください。",
       "mapboxTokenStorageNote": "このデバイスにローカルで保存され(プロジェクトファイルには保存されないため、共有されることはありません)、Mapboxにのみ送信されます。Webビルドでは他のサイトデータと同じブラウザストレージを共有します。",
+      "arcgisKeyTitle": "ArcGIS APIキー",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGISレンダラーはキーなしでも動作し、EsriのCDNから読み込まれるArcGIS Maps SDK for JavaScriptを通じてプロジェクトのベースマップとレイヤーを描画します。APIキーを設定すると、Esriのベースマップスタイル(道路、衛星画像、地形図など)が追加されます。ArcGISアカウントの<keyLink>開発者認証情報</keyLink>でベースマップ権限付きのキーを作成し、下に貼り付けてください。",
+      "arcgisKeyStorageNote": "このデバイスにローカルで保存され(プロジェクトファイルには保存されないため、共有されることはありません)、Esriにのみ送信されます。Webビルドでは他のサイトデータと同じブラウザストレージを共有します。",
       "variablesTitle": "環境変数",
       "variablesCount_other": "有効なランタイム変数が {{count}} 件あります。",
       "secretsWarning": "値はプロジェクトファイルにプレーンテキストで保存され、プロジェクトを共有すると露出する可能性があります。プロジェクトファイルを非公開に保てない限り、ここに機密情報を入力しないでください。",
@@ -2358,6 +2365,7 @@
       "imperial": "ノット / フィート",
       "metric": "km/h / メートル",
       "bankCamera": "旋回時に水平線を傾ける",
+      "bankCameraMapbox": "Mapbox GL にはカメラのロール軸がないため、ここでは水平線が傾きません。機体のバンクと旋回はこれまでどおりです。",
       "invertPitch": "ピッチ軸を反転",
       "knots": "kt",
       "kph": "km/h",
@@ -2761,6 +2769,7 @@
       "renderingEngine": "レンダリングエンジン",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google マップで表示",
       "viewInGoogleEarth": "Google Earth で表示",

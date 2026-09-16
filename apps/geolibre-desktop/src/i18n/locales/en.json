@@ -1933,6 +1933,7 @@
     "only2d": "2D only",
     "only3d": "3D only",
     "noMapbox": "No Mapbox",
+    "noArcgis": "No ArcGIS",
     "cesiumTokenHint": "Add a Cesium Ion token in Settings for terrain and Ion imagery"
   },
   "renderer": {
@@ -1942,6 +1943,7 @@
     "layerUnsupported": "Not rendered by the 3D globe",
     "layerCesiumOnly": "Rendered by the 3D globe only",
     "layerMapboxUnsupported": "Not rendered by the Mapbox engine",
+    "layerArcgisUnsupported": "Not rendered by the ArcGIS engine",
     "resetView": "Reset view",
     "scene3D": "3D globe",
     "scene2D": "2D map",
@@ -1950,6 +1952,7 @@
     "fullscreenExit": "Exit fullscreen",
     "fullscreenUnavailable": "Fullscreen unavailable",
     "mapboxTokenHint": "Add your Mapbox access token in <settingsLink>Settings → Environment variables</settingsLink> to use this renderer.",
+    "arcgisKeyHint": "Add an ArcGIS API key in <settingsLink>Settings → Environment variables</settingsLink> for Esri basemap styles.",
     "pluginUnsupported": "This plugin does not support the selected rendering engine."
   },
   "mapContextMenu": {
@@ -2217,6 +2220,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "To use Mapbox, paste an access token from <tokenLink>your Mapbox account</tokenLink> below.",
       "mapboxTokenStorageNote": "Stored locally on this device (not in the project file, so it is never shared) and sent only to Mapbox. On the web build it shares the same browser storage as other site data.",
+      "arcgisKeyTitle": "ArcGIS API key",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "The ArcGIS renderer works without a key: it draws the project basemap and your layers through the ArcGIS Maps SDK for JavaScript, loaded from Esri's CDN. An API key adds Esri's basemap styles (Streets, Imagery, Topographic, …). Create one under <keyLink>developer credentials</keyLink> in your ArcGIS account with the Basemaps privilege and paste it below.",
+      "arcgisKeyStorageNote": "Stored locally on this device (not in the project file, so it is never shared) and sent only to Esri. On the web build it shares the same browser storage as other site data.",
       "variablesTitle": "Environment variables",
       "variablesCount_one": "{{count}} enabled runtime variable.",
       "variablesCount_other": "{{count}} enabled runtime variables.",
@@ -2409,6 +2416,7 @@
       "imperial": "Knots / feet",
       "metric": "km/h / meters",
       "bankCamera": "Bank the horizon in turns",
+      "bankCameraMapbox": "Mapbox GL has no camera roll, so the horizon stays level here. The aircraft still banks and turns.",
       "invertPitch": "Invert pitch axis",
       "knots": "kt",
       "kph": "km/h",
@@ -2812,6 +2820,7 @@
       "renderingEngine": "Rendering engine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "View in Google Maps",
       "viewInGoogleEarth": "View in Google Earth",

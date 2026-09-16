@@ -163,6 +163,7 @@ import { KnowledgeCardPanel, type KnowledgePlace } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
 import { MapGrid } from "./MapGrid";
 import { PrimaryMapboxCanvas } from "./PrimaryMapboxCanvas";
+import { PrimaryArcgisCanvas } from "./PrimaryArcgisCanvas";
 import { PrimaryCesiumCanvas } from "./PrimaryCesiumCanvas";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -2454,6 +2455,7 @@ export function DesktopShell({
   return (
     <div
       ref={shellRef}
+      data-testid="desktop-shell"
       className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
       style={shellStyle}
       onDragEnter={handleDragEnter}
@@ -2665,6 +2667,11 @@ export function DesktopShell({
                   available under either engine. */}
               {primaryRenderer === "mapbox" ? (
                 <PrimaryMapboxCanvas
+                  engineRef={mapControllerRef}
+                  onEngineReady={handleMapControllerReady}
+                />
+              ) : primaryRenderer === "arcgis" ? (
+                <PrimaryArcgisCanvas
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
                 />

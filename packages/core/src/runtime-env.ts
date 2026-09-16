@@ -150,6 +150,28 @@ export function getMapboxAccessToken(env?: Record<string, string | undefined>): 
 }
 
 /**
+ * Resolves the ArcGIS API key from the runtime environment.
+ *
+ * The ArcGIS renderer draws the translated project basemap and non-Esri layers
+ * without a key; Esri's basemap styles and location services require one
+ * (an ArcGIS Location Platform or ArcGIS Online API key credential). It is
+ * supplied via `VITE_ARCGIS_API_KEY` (baked in at build time from the bare
+ * `ARCGIS_API_KEY` env var, which `vite.config.ts` copies into the prefixed
+ * name) or set at runtime through Settings → Environment variables
+ * (`window.__GEOLIBRE_RUNTIME_ENV__`, so a bare `ARCGIS_API_KEY` entry works
+ * there too). Same precedence as {@link getMapboxAccessToken}.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed key, or undefined when unset.
+ */
+export function getArcgisApiKey(env?: Record<string, string | undefined>): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed = runtimeEnv.VITE_ARCGIS_API_KEY?.trim() || runtimeEnv.ARCGIS_API_KEY?.trim();
+  return trimmed || undefined;
+}
+
+/**
  * Resolves the Cesium Ion access token from the runtime environment.
  *
  * Cesium World Terrain and Ion World Imagery need a Cesium Ion token. It is

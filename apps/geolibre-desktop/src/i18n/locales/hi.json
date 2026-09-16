@@ -1930,6 +1930,7 @@
     "only2d": "केवल 2D",
     "only3d": "केवल 3D",
     "noMapbox": "Mapbox नहीं",
+    "noArcgis": "ArcGIS नहीं",
     "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए सेटिंग्स में Cesium Ion टोकन जोड़ें"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "3D ग्लोब द्वारा रेंडर नहीं किया गया",
     "layerCesiumOnly": "केवल 3D ग्लोब द्वारा रेंडर किया गया",
     "layerMapboxUnsupported": "Mapbox इंजन द्वारा रेंडर नहीं किया गया",
+    "layerArcgisUnsupported": "ArcGIS इंजन द्वारा रेंडर नहीं किया गया",
     "resetView": "दृश्य रीसेट करें",
     "scene3D": "3D ग्लोब",
     "scene2D": "2D मानचित्र",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "पूर्ण स्क्रीन से बाहर निकलें",
     "fullscreenUnavailable": "पूर्ण स्क्रीन उपलब्ध नहीं",
     "mapboxTokenHint": "इस रेंडरर का उपयोग करने के लिए <settingsLink>सेटिंग्स → एनवायरनमेंट वेरिएबल</settingsLink> में अपना Mapbox एक्सेस टोकन जोड़ें।",
+    "arcgisKeyHint": "Esri बेसमैप स्टाइल के लिए <settingsLink>सेटिंग्स → एनवायरनमेंट वेरिएबल</settingsLink> में एक ArcGIS API कुंजी जोड़ें।",
     "pluginUnsupported": "यह प्लगइन चयनित रेंडरिंग इंजन का समर्थन नहीं करता है।"
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Mapbox का उपयोग करने के लिए, <tokenLink>अपने Mapbox खाते</tokenLink> से एक्सेस टोकन नीचे पेस्ट करें।",
       "mapboxTokenStorageNote": "इस डिवाइस पर स्थानीय रूप से संग्रहीत (प्रोजेक्ट फ़ाइल में नहीं, इसलिए यह कभी साझा नहीं होता) और केवल Mapbox को भेजा जाता है। वेब बिल्ड पर यह अन्य साइट डेटा के समान ब्राउज़र स्टोरेज साझा करता है।",
+      "arcgisKeyTitle": "ArcGIS API कुंजी",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "ArcGIS रेंडरर कुंजी के बिना भी काम करता है: यह Esri के CDN से लोड किए गए ArcGIS Maps SDK for JavaScript के माध्यम से प्रोजेक्ट का बेसमैप और आपकी लेयर दिखाता है। एक API कुंजी Esri के बेसमैप स्टाइल (Streets, Imagery, Topographic, …) जोड़ती है। अपने ArcGIS खाते में <keyLink>डेवलपर क्रेडेंशियल</keyLink> के अंतर्गत Basemaps अनुमति के साथ एक कुंजी बनाएँ और उसे नीचे पेस्ट करें।",
+      "arcgisKeyStorageNote": "इस डिवाइस पर स्थानीय रूप से संग्रहीत (प्रोजेक्ट फ़ाइल में नहीं, इसलिए यह कभी साझा नहीं होती) और केवल Esri को भेजी जाती है। वेब बिल्ड पर यह अन्य साइट डेटा के समान ब्राउज़र स्टोरेज साझा करती है।",
       "variablesTitle": "एनवायरनमेंट वेरिएबल",
       "variablesCount_one": "{{count}} सक्षम रनटाइम वेरिएबल।",
       "variablesCount_other": "{{count}} सक्षम रनटाइम वेरिएबल।",
@@ -2406,6 +2413,7 @@
       "imperial": "नॉट / फ़ीट",
       "metric": "किमी/घंटा / मीटर",
       "bankCamera": "मोड़ पर क्षितिज झुकाएँ",
+      "bankCameraMapbox": "Mapbox GL में कैमरा रोल नहीं है, इसलिए यहाँ क्षितिज सीधा रहता है। विमान फिर भी झुकता और मुड़ता है।",
       "invertPitch": "पिच अक्ष उलटें",
       "knots": "kt",
       "kph": "किमी/घं",
@@ -2809,6 +2817,7 @@
       "renderingEngine": "रेंडरिंग इंजन",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Google Maps में देखें",
       "viewInGoogleEarth": "Google Earth में देखें",

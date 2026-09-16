@@ -175,6 +175,8 @@ export interface RuntimeEnvSources {
   cesiumEnv: Record<string, string>;
   /** Device-local Mapbox token; explicit project entries still win. */
   mapboxEnv?: Record<string, string>;
+  /** Device-local ArcGIS API key as `VITE_ARCGIS_API_KEY`; project entries still win. */
+  arcgisEnv?: Record<string, string>;
   /** The project's explicit Environment variables. Highest precedence. */
   projectEnv: Record<string, string>;
 }
@@ -196,6 +198,7 @@ export function mergeRuntimeEnv({
   geocoderEnv,
   cesiumEnv,
   mapboxEnv,
+  arcgisEnv,
   projectEnv,
 }: RuntimeEnvSources): RuntimeEnv {
   return {
@@ -204,6 +207,7 @@ export function mergeRuntimeEnv({
     ...geocoderEnv,
     ...cesiumEnv,
     ...mapboxEnv,
+    ...arcgisEnv,
     ...projectEnv,
   };
 }

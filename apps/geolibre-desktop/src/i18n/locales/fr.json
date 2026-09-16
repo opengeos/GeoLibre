@@ -1930,6 +1930,7 @@
     "only2d": "2D uniquement",
     "only3d": "3D uniquement",
     "noMapbox": "Sans Mapbox",
+    "noArcgis": "Sans ArcGIS",
     "cesiumTokenHint": "Ajoutez un jeton Cesium Ion dans les Paramètres pour le relief et l'imagerie Ion"
   },
   "renderer": {
@@ -1939,6 +1940,7 @@
     "layerUnsupported": "Non rendu par le globe 3D",
     "layerCesiumOnly": "Rendu par le globe 3D uniquement",
     "layerMapboxUnsupported": "Non rendu par le moteur Mapbox",
+    "layerArcgisUnsupported": "Non rendu par le moteur ArcGIS",
     "resetView": "Réinitialiser la vue",
     "scene3D": "Globe 3D",
     "scene2D": "Carte 2D",
@@ -1947,6 +1949,7 @@
     "fullscreenExit": "Quitter le plein écran",
     "fullscreenUnavailable": "Plein écran indisponible",
     "mapboxTokenHint": "Ajoutez votre jeton d’accès Mapbox dans <settingsLink>Paramètres → Variables d’environnement</settingsLink> pour utiliser ce moteur de rendu.",
+    "arcgisKeyHint": "Ajoutez une clé d’API ArcGIS dans <settingsLink>Paramètres → Variables d’environnement</settingsLink> pour utiliser les styles de fond de carte Esri.",
     "pluginUnsupported": "Ce plugin ne prend pas en charge le moteur de rendu sélectionné."
   },
   "mapContextMenu": {
@@ -2214,6 +2217,10 @@
       "mapboxTokenPlaceholder": "pk.…",
       "mapboxTokenDescription": "Pour utiliser Mapbox, collez ci-dessous un jeton d’accès de <tokenLink>votre compte Mapbox</tokenLink>.",
       "mapboxTokenStorageNote": "Stocké localement sur cet appareil (pas dans le fichier de projet, il n'est donc jamais partagé) et envoyé uniquement à Mapbox. Dans la version web, il partage le même stockage de navigateur que les autres données du site.",
+      "arcgisKeyTitle": "Clé d’API ArcGIS",
+      "arcgisKeyPlaceholder": "AAPT…",
+      "arcgisKeyDescription": "Le moteur ArcGIS fonctionne sans clé : il affiche le fond de carte du projet et vos couches via l’ArcGIS Maps SDK for JavaScript, chargé depuis le CDN d’Esri. Une clé d’API ajoute les styles de fond de carte d’Esri (Rues, Imagerie, Topographique, …). Créez-en une dans les <keyLink>identifiants de développeur</keyLink> de votre compte ArcGIS avec le privilège Fonds de carte, puis collez-la ci-dessous.",
+      "arcgisKeyStorageNote": "Stockée localement sur cet appareil (pas dans le fichier de projet, elle n’est donc jamais partagée) et envoyée uniquement à Esri. Dans la version web, elle partage le même stockage de navigateur que les autres données du site.",
       "variablesTitle": "Variables d'environnement",
       "variablesCount_one": "{{count}} variable d'exécution activée.",
       "variablesCount_other": "{{count}} variables d'exécution activées.",
@@ -2406,6 +2413,7 @@
       "imperial": "Nœuds / pieds",
       "metric": "km/h / mètres",
       "bankCamera": "Incliner l'horizon dans les virages",
+      "bankCameraMapbox": "Mapbox GL n'a pas de roulis de caméra : l'horizon reste donc à l'horizontale ici. L'avion continue de s'incliner et de virer.",
       "invertPitch": "Inverser l'axe de tangage",
       "knots": "kt",
       "kph": "km/h",
@@ -2809,6 +2817,7 @@
       "renderingEngine": "Moteur de rendu",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
+      "rendererArcgis": "ArcGIS",
       "rendererCesium": "Cesium",
       "viewInGoogleMaps": "Voir dans Google Maps",
       "viewInGoogleEarth": "Voir dans Google Earth",
