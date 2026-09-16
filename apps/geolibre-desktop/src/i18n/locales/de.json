@@ -4672,6 +4672,10 @@
                 "inside": "Innen (verkleinern)",
                 "both": "Beide Seiten"
               }
+            },
+            "dissolve": {
+              "label": "Ergebnis auflösen",
+              "description": "Die Puffer zu einem einzigen Objekt zusammenführen und die Überlappungen dazwischen auflösen. Die zusammengeführte Form gehört zu keinem Eingabeobjekt, daher entfallen die Attribute; zum Auflösen nach einem Attribut das Werkzeug „Auflösen“ auf das Ergebnis anwenden."
             }
           }
         },

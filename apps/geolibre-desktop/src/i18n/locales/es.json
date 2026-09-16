@@ -4672,6 +4672,10 @@
                 "inside": "Interior (reducir)",
                 "both": "Ambos lados"
               }
+            },
+            "dissolve": {
+              "label": "Disolver el resultado",
+              "description": "Fusiona los búferes en una sola entidad y disuelve los solapamientos entre ellos. La forma resultante no pertenece a ninguna entidad de entrada, por lo que se descartan los atributos; para disolver por un atributo, ejecuta la herramienta Disolver sobre el resultado."
             }
           }
         },

@@ -92,7 +92,7 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 
 | Tool | Description |
 | --- | --- |
-| **Buffer** | Create a buffer polygon around each feature by a fixed distance. |
+| **Buffer** | Create a buffer polygon around each feature by a fixed distance. Pick the side (outside, inside, or both), and optionally dissolve the buffers into a single attribute-less feature. |
 | **Centroids** | Compute the centroid point of each feature. |
 | **Convex hull** | Compute the convex hull enclosing all features. |
 | **Dissolve** | Merge polygon features into a single geometry, optionally grouped by a field. |

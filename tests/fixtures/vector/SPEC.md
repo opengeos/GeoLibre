@@ -93,6 +93,10 @@ fixture asserts at the strongest tier the two engines *actually* share:
     extent diverges: `buffer` (Turf is planar, GeoPandas reprojects to UTM),
     `centroids` (vertex-mean vs area centroid), `simplify` (different
     Douglas-Peucker pruning), and `voronoi` (different diagram/clip algorithm).
+    `buffer`'s `dissolve` cases add `properties` to that pair: the merged shape
+    belongs to no single input feature, so both engines must emit exactly one
+    attribute-less feature — the geometry still diverges, the empty attributes
+    must not.
 
 `reproject`'s client `run` is a deliberate no-op that defers to the Python
 engine, so its fixtures are asserted by the Python harness only; the TS harness

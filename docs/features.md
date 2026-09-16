@@ -238,6 +238,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Vector menu
     - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
     - Buffer takes a side: Outside grows each feature, Inside shrinks it, and Both sides keeps only the zone within the distance on either side of its boundary. Inside shrinks polygons only: a point or line has no interior, so the inward buffer empties it and the feature is dropped from the result and reported in the run log
+    - Buffer can also dissolve its result: the buffers merge into one feature with the overlaps between them dissolved away (a multipolygon where they do not touch). The merged shape belongs to no input feature, so it carries no attributes; to dissolve by an attribute instead, run Dissolve on the result
     - **Data management**: merge layers, through a multi-layer parameter picker that unites attribute schemas and can record each feature's source layer
     - **Vertices and sampling**: extract vertices as points carrying their part and vertex index, and generate points along lines and polygon boundaries at a fixed geodesic interval
     - **Data quality**: check validity, fix geometries, and check topology rules

@@ -4599,6 +4599,10 @@
                 "inside": "Dalam (perkecil)",
                 "both": "Kedua sisi"
               }
+            },
+            "dissolve": {
+              "label": "Dissolve hasil",
+              "description": "Menggabungkan buffer menjadi satu fitur dan meleburkan tumpang tindih di antaranya. Bentuk gabungan tidak dimiliki fitur masukan mana pun, sehingga atribut dihapus; untuk melakukan dissolve berdasarkan atribut, jalankan alat Dissolve pada hasilnya."
             }
           }
         },

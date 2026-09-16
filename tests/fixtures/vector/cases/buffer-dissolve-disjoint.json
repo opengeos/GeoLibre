@@ -1,0 +1,50 @@
+{
+  "name": "buffer-dissolve-disjoint",
+  "tool": "buffer",
+  "description": "Buffers too far apart to touch still dissolve to a single feature — one multipolygon, not one polygon per input.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-80.8, 35.2]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-77.9, 34.2]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": 5,
+    "units": "kilometers",
+    "dissolve": true
+  },
+  "expect": {
+    "featureCount": 1,
+    "geometryTypes": ["MultiPolygon"],
+    "properties": [{}]
+  }
+}

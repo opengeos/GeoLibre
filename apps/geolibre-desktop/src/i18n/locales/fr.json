@@ -4672,6 +4672,10 @@
                 "inside": "Intérieur (réduire)",
                 "both": "Les deux côtés"
               }
+            },
+            "dissolve": {
+              "label": "Fusionner le résultat",
+              "description": "Fusionne les zones tampons en une seule entité et supprime les chevauchements entre elles. La forme fusionnée n'appartient à aucune entité en entrée : les attributs sont donc supprimés ; pour fusionner selon un attribut, exécutez l'outil Fusionner sur le résultat."
             }
           }
         },

@@ -4739,6 +4739,10 @@
                 "inside": "Inside (shrink)",
                 "both": "Both sides"
               }
+            },
+            "dissolve": {
+              "label": "Dissolve result",
+              "description": "Merge the buffers into one feature and dissolve the overlaps between them. The merged shape belongs to no input feature, so attributes are dropped; to dissolve by an attribute, run the Dissolve tool on the result."
             }
           }
         },

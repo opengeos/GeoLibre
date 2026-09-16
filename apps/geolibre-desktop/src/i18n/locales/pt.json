@@ -4672,6 +4672,10 @@
                 "inside": "Dentro (reduzir)",
                 "both": "Ambos os lados"
               }
+            },
+            "dissolve": {
+              "label": "Dissolver o resultado",
+              "description": "Mescla os buffers em uma única feição e dissolve as sobreposições entre eles. A forma resultante não pertence a nenhuma feição de entrada, por isso os atributos são descartados; para dissolver por um atributo, execute a ferramenta Dissolver no resultado."
             }
           }
         },

@@ -1,0 +1,28 @@
+{
+  "name": "error-buffer-dissolve-invalid",
+  "tool": "buffer",
+  "description": "A dissolve flag that is neither a boolean nor a word both engines read as one is rejected, rather than coerced by each language's own truthiness.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.0, 35.0]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "distance": 5,
+    "units": "kilometers",
+    "dissolve": "maybe"
+  },
+  "expect": {
+    "error": true
+  }
+}

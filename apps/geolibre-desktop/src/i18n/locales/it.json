@@ -4672,6 +4672,10 @@
                 "inside": "Interno (riduci)",
                 "both": "Entrambi i lati"
               }
+            },
+            "dissolve": {
+              "label": "Dissolvi il risultato",
+              "description": "Unisce i buffer in un unico elemento dissolvendo le sovrapposizioni tra loro. La forma unita non appartiene ad alcun elemento di input, quindi gli attributi vengono eliminati; per dissolvere in base a un attributo, esegui lo strumento Dissolvi sul risultato."
             }
           }
         },

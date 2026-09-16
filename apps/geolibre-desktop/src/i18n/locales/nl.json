@@ -4672,6 +4672,10 @@
                 "inside": "Binnen (verkleinen)",
                 "both": "Beide zijden"
               }
+            },
+            "dissolve": {
+              "label": "Resultaat samenvoegen",
+              "description": "Voeg de buffers samen tot één object en los de overlappingen daartussen op. De samengevoegde vorm hoort bij geen enkel invoerobject, dus attributen vervallen; om op een attribuut samen te voegen, voer je het gereedschap Samenvoegen uit op het resultaat."
             }
           }
         },

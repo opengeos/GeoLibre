@@ -4599,6 +4599,10 @@
                 "inside": "Bên trong (thu nhỏ)",
                 "both": "Cả hai phía"
               }
+            },
+            "dissolve": {
+              "label": "Hòa tan kết quả",
+              "description": "Gộp các vùng đệm thành một đối tượng và hòa tan phần chồng lấn giữa chúng. Hình dạng sau khi gộp không thuộc về đối tượng đầu vào nào nên các thuộc tính bị loại bỏ; để hòa tan theo một thuộc tính, hãy chạy công cụ Hòa tan trên kết quả."
             }
           }
         },

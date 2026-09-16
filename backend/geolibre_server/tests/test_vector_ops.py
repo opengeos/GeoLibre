@@ -292,6 +292,153 @@ def test_buffer_rejects_non_finite_distance(distance: float) -> None:
         run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
 
 
+# --- buffer dissolve ---------------------------------------------------------
+#
+# The shared golden fixtures assert what both engines agree on (overlapping
+# buffers merge into one attribute-less polygon, disjoint ones into a single
+# multipolygon, a non-boolean flag is rejected). These cover this engine's
+# messages and the parameter shapes a JSON fixture cannot carry.
+
+TWO_SQUARES = {
+    "type": "FeatureCollection",
+    "features": [*SQUARE["features"], *OVERLAP["features"]],
+}
+FAR_APART_SQUARES = {
+    "type": "FeatureCollection",
+    "features": [*SQUARE["features"], *DISJOINT["features"]],
+}
+
+
+@requires_geopandas
+def test_buffer_dissolve_merges_overlapping_buffers() -> None:
+    geojson, messages = run_vector_tool(
+        "buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True}
+    )
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["geometry"]["type"] == "Polygon"
+    # The merged ring belongs to no single input feature, so it carries no
+    # attributes — the client engine's union drops them the same way.
+    assert geojson["features"][0]["properties"] == {}
+    assert messages == [
+        "Buffered 2 feature(s) by 1.0 kilometers (outside)",
+        "Dissolved 2 buffer(s) into 1 feature",
+    ]
+
+
+@requires_geopandas
+def test_buffer_dissolve_keeps_disjoint_buffers_as_one_multipolygon() -> None:
+    geojson, _ = run_vector_tool(
+        "buffer", FAR_APART_SQUARES, parameters={"distance": 1, "dissolve": True}
+    )
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["geometry"]["type"] == "MultiPolygon"
+    assert len(geojson["features"][0]["geometry"]["coordinates"]) == 2
+
+
+@requires_geopandas
+def test_buffer_without_dissolve_keeps_one_buffer_per_feature() -> None:
+    geojson, messages = run_vector_tool(
+        "buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": False}
+    )
+    assert len(geojson["features"]) == 2
+    assert geojson["features"][0]["properties"]["name"] == "a"
+    assert not any("Dissolved" in message for message in messages)
+
+
+@requires_geopandas
+def test_buffer_dissolve_is_silent_when_nothing_survived() -> None:
+    # Nothing to merge, so the run produces the same empty layer it would
+    # without the flag rather than an "Unable to dissolve" error.
+    geojson, messages = run_vector_tool(
+        "buffer",
+        POINT_IN_SQUARE,
+        parameters={"distance": 1, "side": "inside", "dissolve": True},
+    )
+    assert geojson["features"] == []
+    assert not any("Dissolved" in message for message in messages)
+
+
+@requires_geopandas
+@pytest.mark.parametrize(
+    ("raw", "dissolved"),
+    [
+        (True, True),
+        (False, False),
+        (None, False),
+        ("true", True),
+        ("false", False),
+        ("  On  ", True),
+        ("1", True),
+        ("0", False),
+        ("", False),
+        (1, True),
+        (0, False),
+    ],
+)
+def test_buffer_dissolve_reads_the_same_words_as_the_client(raw: object, dissolved: bool) -> None:
+    # A checkbox that round-tripped through a query string, a CSV batch row, or
+    # a replayed history entry arrives as a string; `booleanParam` on the client
+    # reads this same set.
+    geojson, _ = run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": raw})
+    assert len(geojson["features"]) == (1 if dissolved else 2)
+
+
+@requires_geopandas
+@pytest.mark.parametrize("raw", ["maybe", "flase", [True], {}, float("nan")])
+def test_buffer_rejects_a_non_boolean_dissolve(raw: object) -> None:
+    # Each language's own truthiness reads these differently (`bool([])` is
+    # False where `Boolean([])` is true), so rejecting is the only shared read.
+    with pytest.raises(ValueError, match="Buffer dissolve must be true or false"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": raw})
+
+
+@requires_geopandas
+def test_buffer_dissolve_reports_a_geos_failure_as_bad_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A GEOS TopologyException must surface as a ValueError (HTTP 400), not as
+    # an unhandled 500 — the client engine answers the same failure by logging
+    # "unable to dissolve" and producing no result layer.
+    import geopandas as gpd
+
+    def boom(self: object, *args: object, **kwargs: object) -> NoReturn:
+        raise RuntimeError("TopologyException: found non-noded intersection")
+
+    monkeypatch.setattr(gpd.GeoSeries, "union_all", boom)
+    with pytest.raises(ValueError, match="Unable to dissolve the buffered features"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True})
+
+
+@requires_geopandas
+def test_buffer_dissolve_rejects_a_union_that_came_back_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An empty geometry serializes to a ring-less polygon no renderer can draw,
+    # the same shape the per-feature `is_empty` filter above exists to drop.
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    monkeypatch.setattr(gpd.GeoSeries, "union_all", lambda self, *a, **k: Polygon())
+    with pytest.raises(ValueError, match="Unable to dissolve the buffered features"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True})
+
+
+@requires_geopandas
+def test_buffer_reports_a_bad_dissolve_before_a_bad_distance() -> None:
+    # units, then side, then dissolve, then the distance — the client engine
+    # validates in this same order.
+    with pytest.raises(ValueError, match="Buffer dissolve must be true or false"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": -5, "dissolve": "maybe"})
+
+
+@requires_geopandas
+def test_buffer_reports_an_unknown_side_before_a_bad_dissolve() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool(
+            "buffer", SQUARE, parameters={"distance": 1, "side": "bogus", "dissolve": "maybe"}
+        )
+
+
 @requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;
