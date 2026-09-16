@@ -894,10 +894,14 @@ describe("ArcgisEngine 3D scenes", () => {
     ) => Promise<{ values: Float32Array }>;
     assert.deepEqual([...(await fetchTile.call(self, 1, 2, 3)).values], [2.5, 5, 10]);
 
+    // The layer the subclass loaded its tiles from goes with it.
+    const source = { destroyed: false, destroy: () => (source.destroyed = true) };
+    Object.assign(elevations[1], { source });
     engine.applyMapPreferences({ ...PREFERENCES, terrainEnabled: false });
     assert.equal(engine.isTerrainEnabled(), false);
     assert.deepEqual(ground.layers.items, []);
     assert.equal(elevations[1].destroyed, true);
+    assert.equal(source.destroyed, true);
   });
 
   it("records terrain on a MapView without building elevation", () => {

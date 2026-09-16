@@ -1,7 +1,8 @@
 import {
-  compileFeatureExpression,
   compileLayerFilters,
   DEFAULT_LAYER_STYLE,
+  extrusionColorValue,
+  extrusionHeightValue,
   labelFieldTextField,
   normalizeHexColor,
   ruleBasedVisibilityFilter,
@@ -728,59 +729,71 @@ function explodePoints(geometry: Geometry): Geometry[] {
  * features carrying their identity, symbol key and label text.
  */
 /**
- * Per-feature extrusion for a 3D scene, following the globe's reading of the
- * same style fields (`cesium-layer-sync.ts`): the height comes from the
- * advanced height expression when it compiles, otherwise from the height
- * property, times the scale; the colour from the advanced colour expression
- * or the extrusion colour. The base is a constant offset for the whole layer.
+ * Per-feature extrusion for a 3D scene. The height and colour are the very
+ * values MapLibre paints (`extrusionHeightValue` / `extrusionColorValue` in
+ * `@geolibre/core`), evaluated per feature: so categorized, graduated and
+ * rule-based colours, the advanced expressions, and an empty height property
+ * (a flat extrusion) behave as on the 2D map. As there, the height is the top
+ * of the extrusion and the base its bottom, both in metres above the ground.
  */
 interface ExtrusionReader {
   base: number;
+  zoomDependent: boolean;
   height(feature: Feature, zoom: number): number;
   symbol(feature: Feature, zoom: number): ArcgisSymbolJson;
 }
 
+/** Compile a constant or MapLibre expression into a per-feature evaluator. */
+function featureValue(
+  value: unknown,
+  type: "number" | "color",
+): { read: (feature: Feature, zoom: number) => unknown; zoomDependent: boolean } {
+  if (!Array.isArray(value)) return { read: () => value, zoomDependent: false };
+  const compiled = createExpression(value, "expression", {
+    type,
+    "property-type": "data-driven",
+    expression: { parameters: ["zoom", "feature"] },
+  } as never);
+  if (compiled.result === "error") return { read: () => undefined, zoomDependent: false };
+  const expression = compiled.value;
+  return {
+    zoomDependent: ZOOM_OPERAND.test(JSON.stringify(value)),
+    read: (feature, zoom) => {
+      try {
+        return expression.evaluate({ zoom }, styleFeature(feature));
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
+
 function compileExtrusion(style: LayerStyle): ExtrusionReader {
-  const heightProperty = style.extrusionHeightProperty?.trim() || "height";
-  const scale = Number.isFinite(style.extrusionHeightScale) ? style.extrusionHeightScale : 1;
   const base = Number.isFinite(style.extrusionBase) ? style.extrusionBase : 0;
   const opacity = Number.isFinite(style.extrusionOpacity) ? style.extrusionOpacity : 0.8;
   const fallbackColor = style.extrusionColor || style.fillColor || "#3b82f6";
-  const advanced = style.extrusionAdvancedStyleEnabled;
-  const heightExpression = advanced
-    ? compileFeatureExpression(style.extrusionHeightExpression ?? "", { expectedType: "number" })
-    : null;
-  const colorExpression = advanced
-    ? compileFeatureExpression(style.extrusionColorExpression ?? "", { expectedType: "color" })
-    : null;
+  const height = featureValue(extrusionHeightValue(style), "number");
+  const color = featureValue(extrusionColorValue(style), "color");
   return {
     base,
+    zoomDependent: height.zoomDependent || color.zoomDependent,
     height(feature, zoom) {
-      let raw: unknown = feature.properties?.[heightProperty];
-      if (heightExpression?.ok && heightExpression.evaluate) {
-        try {
-          raw = heightExpression.evaluate(feature, zoom);
-        } catch {
-          // A feature the expression cannot evaluate keeps its property.
-        }
-      }
-      const value = typeof raw === "number" ? raw : Number(raw);
-      // Never below the base: a negative height would put the roof under the floor.
-      return Math.max(0, Number.isFinite(value) ? value * scale : 0);
+      const value = Number(height.read(feature, zoom));
+      // The SDK extrudes by a size above the base; a top below the base is flat.
+      return Math.max(0, (Number.isFinite(value) ? value : 0) - base);
     },
     symbol(feature, zoom) {
-      let color = fallbackColor;
-      if (colorExpression?.ok && colorExpression.evaluate) {
-        try {
-          const value = colorExpression.evaluate(feature, zoom);
-          if (value != null) color = String(value);
-        } catch {
-          // Fall back to the extrusion colour.
-        }
-      }
+      const value = color.read(feature, zoom);
       return {
         type: "polygon-3d",
-        symbolLayers: [{ type: "extrude", material: { color: cssToArcgisColor(color, opacity) } }],
+        symbolLayers: [
+          {
+            type: "extrude",
+            material: {
+              color: cssToArcgisColor(value == null ? fallbackColor : String(value), opacity),
+            },
+          },
+        ],
       };
     },
   };
@@ -850,7 +863,11 @@ function compileGeoJson(
   // kinds the way the 2D map stacks its fill, line and circle layers.
   const order: ArcgisGeometryKind[] = ["polygon", "polyline", "point"];
   return {
-    zoomDependent: resolver.zoomDependent || filter.zoomDependent || Boolean(label?.zoomDependent),
+    zoomDependent:
+      resolver.zoomDependent ||
+      filter.zoomDependent ||
+      Boolean(label?.zoomDependent) ||
+      Boolean(extrusion?.zoomDependent),
     parts: order
       .filter((kind) => parts.has(kind))
       .map((kind) => {

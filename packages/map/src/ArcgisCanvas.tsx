@@ -117,8 +117,8 @@ export function ArcgisCanvas({
           ? new scene.SceneView({
               ...common,
               viewingMode: sceneMode === "global" ? "global" : "local",
-              // The initial heading and tilt are applied by the engine's first
-              // `applyView` below; a camera needs a position the store lacks.
+              // The initial heading and tilt are applied by `settleView` once
+              // the view is ready; a camera needs a position the store lacks.
               environment: {
                 atmosphereEnabled: true,
                 starsEnabled: sceneMode === "global",
@@ -365,6 +365,13 @@ export function ArcgisCanvas({
           })
           .then(() => {
             if (!cancelled) retire();
+          })
+          .catch((error: unknown) => {
+            // A view that never becomes ready (a lost WebGL context, say)
+            // would otherwise leave the old view frozen over an empty pane.
+            if (cancelled) return;
+            retire();
+            setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
           });
         const status = window.setInterval(() => {
           if (cancelled) return;
@@ -400,7 +407,9 @@ export function ArcgisCanvas({
       if (engine) {
         // Keep the last frame visible above the next view, inert, until that
         // view has drawn (or the canvas unmounts).
-        element.style.zIndex = "1";
+        // Newer frames above older ones when switches overlap, all below the
+        // error banner (z-10).
+        element.style.zIndex = String(Math.min(9, retiring.current.length + 1));
         element.style.pointerEvents = "none";
         retiring.current.push({ element, engine });
       } else element.remove();

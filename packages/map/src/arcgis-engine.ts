@@ -1836,6 +1836,9 @@ export class ArcgisEngine implements MapEngine {
     this.elevation = null;
     const ground = this.map?.ground;
     if (ground?.layers.includes(layer)) ground.layers.remove(layer);
+    // The exaggerated subclass owns the layer it reads its tiles from, and
+    // destroying the outer layer does not destroy it.
+    (layer as { source?: ArcgisElevationLayer }).source?.destroy();
     layer.destroy();
   }
   getTerrainCogSource(): null {
