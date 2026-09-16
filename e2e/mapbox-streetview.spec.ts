@@ -54,9 +54,13 @@ function watchFailedRequests(page: Page, failures: string[]): void {
     failures.push(`http ${status}: ${response.url()}`);
   });
   page.on("requestfailed", (request) => {
+    // A cancelled tile is the camera changing its mind, not a failure: every
+    // pan and projection switch abandons the requests for the view it left.
+    const errorText = request.failure()?.errorText ?? "";
+    if (errorText.includes("ERR_ABORTED")) return;
     const { hostname } = new URL(request.url());
     if (hostname === "api.mapbox.com" || hostname === "events.mapbox.com") return;
-    failures.push(`request failed: ${request.url()} (${request.failure()?.errorText})`);
+    failures.push(`request failed: ${request.url()} (${errorText})`);
   });
 }
 
