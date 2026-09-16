@@ -23,6 +23,10 @@ const PROJECT = {
   },
 };
 const DUCKDB = "https://data.source.coop/giswqs/opengeos/nyc_data.db";
+// Row cap for the DuckDB query below, small enough that tearing the layer's
+// WebGL resources down stays quick on a software-GL runner. See the comment at
+// the query itself.
+const DUCKDB_ROWS = 200;
 
 test.use({ actionTimeout: 30_000 });
 
@@ -225,20 +229,43 @@ test("DuckDB query layers render on Mapbox and the panel remounts after a render
   await expect(page.getByRole("button", { name: "Run query", exact: true })).toBeEnabled({
     timeout: 120_000,
   });
+  // Shrink the control's own generated query (it selects the first table with
+  // `LIMIT 10000`) instead of replacing it, so the reprojection and column list
+  // stay exactly as the control writes them. 10,000 NYC census blocks is a lot
+  // of geometry, and the DuckDB control draws it *interleaved*, into the map's
+  // own WebGL context. `map.remove()` on the swap below ends with
+  // `WEBGL_lose_context.loseContext()`, which frees that geometry synchronously
+  // and does not return until it is done: on a software-GL CI runner that is
+  // 10-50s of blocked main thread, so the swap click never resolved inside the
+  // action timeout (issue #2432). With a few hundred rows the same teardown is
+  // ~2s and every assertion below is unchanged.
+  const sql = page.locator("textarea.duckdb-control-sql");
+  const generatedQuery = await sql.inputValue();
+  expect(generatedQuery).toMatch(/LIMIT \d+/i);
+  await sql.fill(generatedQuery.replace(/LIMIT \d+/i, `LIMIT ${DUCKDB_ROWS}`));
   await page.getByRole("button", { name: "Run query", exact: true }).click();
   await expect(layerRow(page, "nyc_census_blocks")).toBeVisible({
     timeout: 60_000,
   });
   await expect(layerRow(page, "nyc_census_blocks")).not.toContainText("No Mapbox");
-  const duckdbDrawn = async () =>
+  // Count the drawn rows rather than just asserting a loaded layer: an empty
+  // result would also report itself loaded, so the count is what proves the
+  // query ran and, after each swap below, that the panel's cached results came
+  // back rather than an empty redraw. The control hands deck.gl an Arrow table
+  // (`numRows`), so fall back to `length` for a plain row array.
+  const duckdbRowsDrawn = async () =>
     page.evaluate(() => {
       const engine = (window as any).mapboxDeckTestRef.current;
       const map = engine.kind === "mapbox" ? engine.getMapboxMap() : engine.getMap();
-      return (map.__deck?.props.layers ?? []).some(
-        (layer: any) => layer.id.startsWith("duckdb-layer") && layer.isLoaded,
-      );
+      return (map.__deck?.props.layers ?? [])
+        .filter((layer: any) => layer.id.startsWith("duckdb-layer") && layer.isLoaded)
+        .reduce(
+          (rows: number, layer: any) =>
+            rows + (layer.props.data?.numRows ?? layer.props.data?.length ?? 0),
+          0,
+        );
     });
-  await expect.poll(duckdbDrawn, { timeout: 60_000 }).toBe(true);
+  await expect.poll(duckdbRowsDrawn, { timeout: 60_000 }).toBe(DUCKDB_ROWS);
   expect((await deckLayers(page)).projection).toBe("mercator");
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.screenshot({ path: info.outputPath("mapbox-duckdb.png") });
@@ -248,12 +275,12 @@ test("DuckDB query layers render on Mapbox and the panel remounts after a render
   await switchRenderer(page, "MapLibre");
   await openSource(page, "DuckDB Layer");
   await expect(panel).toBeVisible();
-  await expect.poll(duckdbDrawn, { timeout: 60_000 }).toBe(true);
+  await expect.poll(duckdbRowsDrawn, { timeout: 60_000 }).toBe(DUCKDB_ROWS);
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await switchRenderer(page, "Mapbox");
   await openSource(page, "DuckDB Layer");
   await expect(panel).toBeVisible();
-  await expect.poll(duckdbDrawn, { timeout: 60_000 }).toBe(true);
+  await expect.poll(duckdbRowsDrawn, { timeout: 60_000 }).toBe(DUCKDB_ROWS);
   await expect(layerRow(page, "nyc_census_blocks")).not.toContainText("No Mapbox");
   await expect(page.getByRole("alert").filter({ hasText: /^Error:/ })).toHaveCount(0);
 });
