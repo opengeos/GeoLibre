@@ -23,7 +23,7 @@ import type {
   StoryChapterLocation,
 } from "@geolibre/core";
 import bbox from "@turf/bbox";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, Point, Polygon } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import { getLayerMetadataBounds, LayerControlHost } from "./layer-control-host";
 export { layerControlPaintToStyle, restoreControlOrder } from "./layer-control-host";
@@ -962,6 +962,7 @@ export class MapController implements MapEngine {
   }
 
   destroy(): void {
+    for (const dispose of this.searchDisposers) dispose();
     this.extentDrawingDispose?.();
     this.removeNavigationControl();
     this.removeFullscreenControl();
@@ -1593,6 +1594,8 @@ export class MapController implements MapEngine {
     );
   }
 
+  private searchDisposers = new Set<() => void>();
+
   private extentDrawingDispose: (() => void) | null = null;
 
   getRenderSurface() {
@@ -1649,6 +1652,45 @@ export class MapController implements MapEngine {
     return bounds
       ? [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
       : null;
+  }
+
+  showSearchResult(geometry: Point | Polygon): () => void {
+    const map = this.map;
+    if (!map) return () => {};
+    let remove: () => void;
+    if (geometry.type === "Point") {
+      const marker = new maplibregl.Marker({ color: "#ef4444" })
+        .setLngLat([geometry.coordinates[0], geometry.coordinates[1]])
+        .addTo(map);
+      remove = () => marker.remove();
+    } else {
+      if (!map.isStyleLoaded()) return () => {};
+      const id = `geolibre-search-${crypto.randomUUID()}`;
+      map.addSource(id, { type: "geojson", data: { type: "Feature", properties: {}, geometry } });
+      map.addLayer({
+        id: id + "-fill",
+        type: "fill",
+        source: id,
+        paint: { "fill-color": "#ef4444", "fill-opacity": 0.15 },
+      });
+      map.addLayer({
+        id: id + "-line",
+        type: "line",
+        source: id,
+        paint: { "line-color": "#ef4444", "line-width": 2 },
+      });
+      remove = () => {
+        for (const suffix of ["-line", "-fill"])
+          if (map.getLayer(id + suffix)) map.removeLayer(id + suffix);
+        if (map.getSource(id)) map.removeSource(id);
+      };
+    }
+    const dispose = () => {
+      if (!this.searchDisposers.delete(dispose)) return;
+      remove();
+    };
+    this.searchDisposers.add(dispose);
+    return dispose;
   }
 
   showExtent(_extent: MapExtent): () => void {

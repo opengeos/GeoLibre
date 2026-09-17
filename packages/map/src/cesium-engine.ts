@@ -8,7 +8,7 @@ import {
   type StoryChapterLocation,
 } from "@geolibre/core";
 import type { Cartesian2, CesiumWidget } from "@cesium/engine";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import {
   applyMapViewToCamera,
@@ -873,6 +873,59 @@ export class CesiumEngine implements MapEngine {
       east < west ? east + 360 : east,
       degrees(rectangle.north),
     ];
+  }
+
+  showSearchResult(geometry: Point | Polygon): () => void {
+    const viewer = this.live();
+    if (!viewer) return () => {};
+    const C = this.Cesium;
+    const color = C.Color.fromCssColorString("#ef4444");
+    const primitives: unknown[] = [];
+    if (geometry.type === "Point") {
+      const points = new C.PointPrimitiveCollection();
+      points.add({
+        position: C.Cartesian3.fromDegrees(geometry.coordinates[0], geometry.coordinates[1]),
+        color,
+        pixelSize: 12,
+        outlineColor: C.Color.WHITE,
+        outlineWidth: 2,
+      });
+      primitives.push(viewer.scene.primitives.add(points));
+    } else {
+      const positions = geometry.coordinates[0].map((p) => C.Cartesian3.fromDegrees(p[0], p[1]));
+      const fill = new C.Primitive({
+        geometryInstances: new C.GeometryInstance({
+          geometry: new C.PolygonGeometry({
+            polygonHierarchy: new C.PolygonHierarchy(positions),
+            perPositionHeight: true,
+          }),
+          attributes: { color: C.ColorGeometryInstanceAttribute.fromColor(color.withAlpha(0.15)) },
+        }),
+        appearance: new C.PerInstanceColorAppearance({
+          flat: true,
+          translucent: true,
+          closed: true,
+        }),
+      });
+      const outline = new C.Primitive({
+        geometryInstances: new C.GeometryInstance({
+          geometry: new C.PolylineGeometry({ positions, width: 2 }),
+          attributes: { color: C.ColorGeometryInstanceAttribute.fromColor(color) },
+        }),
+        appearance: new C.PolylineColorAppearance({ translucent: true }),
+      });
+      primitives.push(viewer.scene.primitives.add(fill), viewer.scene.primitives.add(outline));
+    }
+    const dispose = () => {
+      if (!this.extentDisposers.delete(dispose)) return;
+      if (!viewer.isDestroyed()) {
+        for (const primitive of primitives) viewer.scene.primitives.remove(primitive);
+        viewer.scene.requestRender();
+      }
+    };
+    this.extentDisposers.add(dispose);
+    viewer.scene.requestRender();
+    return dispose;
   }
 
   showExtent(extent: MapExtent): () => void {

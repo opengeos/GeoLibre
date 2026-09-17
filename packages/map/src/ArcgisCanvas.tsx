@@ -66,6 +66,7 @@ export function ArcgisCanvas({
   const closeLabelRef = useRef(closeLabel);
   closeLabelRef.current = closeLabel;
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const sharedProjection = useAppStore((s) => s.preferences.map.projection);
   const terrainEnabled = useAppStore((s) => s.preferences.map.terrainEnabled);
   // A split pane's toggle overrides the shared projection for that pane only.
@@ -77,6 +78,7 @@ export function ArcgisCanvas({
     let engine: ArcgisEngine | undefined;
     let cleanup = () => {};
     setError(null);
+    setReady(false);
     // Each view gets its own element: the SDK owns its container's contents,
     // and the outgoing view must keep drawing in its own until this one is up.
     const element = document.createElement("div");
@@ -356,6 +358,7 @@ export function ArcgisCanvas({
             settled = true;
             if (!viewId) useAppStore.getState().setCameraAltitude(current.readCameraAltitude());
             if (engineRef) engineRef.current = current;
+            setReady(true);
             readyCallback.current?.();
             // A flat map is one click away from a globe; fetch the 3D modules
             // while the page is idle so that first switch does not also wait
@@ -427,7 +430,11 @@ export function ArcgisCanvas({
     [],
   );
   return (
-    <div className="geolibre-arcgis-canvas relative h-full w-full" data-testid="arcgis-canvas">
+    <div
+      className="geolibre-arcgis-canvas relative h-full w-full"
+      data-testid="arcgis-canvas"
+      aria-busy={!ready}
+    >
       <div ref={container} className="relative h-full w-full" />
       {error && (
         <div

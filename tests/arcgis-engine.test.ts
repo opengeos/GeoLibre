@@ -795,6 +795,40 @@ describe("ArcgisEngine picking and highlight", () => {
     dispose();
     assert.equal(layers.length, 0);
   });
+  it("keeps search graphics separate from feature selection and disposes only their owner", () => {
+    const { engine, layers } = makeEngine();
+    engine.syncLayers([SQUARE]);
+    engine.highlightFeature(SQUARE, "sq");
+    const selection = layers.items.at(-1);
+    const clearPoint = engine.showSearchResult({ type: "Point", coordinates: [-77.0365, 38.8977] });
+    const point = layers.items.at(-1)!;
+    assert.deepEqual(point.graphics!.getItemAt(0).geometry, {
+      type: "point",
+      x: -77.0365,
+      y: 38.8977,
+      spatialReference: { wkid: 4326 },
+    });
+    const ring = [
+      [179, 0],
+      [181, 0],
+      [181, 1],
+      [179, 0],
+    ];
+    const clearCell = engine.showSearchResult({ type: "Polygon", coordinates: [ring] });
+    const cell = layers.items.at(-1)!;
+    assert.equal(cell.graphics!.getItemAt(0).geometry?.type, "polygon");
+    clearPoint();
+    clearPoint();
+    assert.ok(point.destroyed);
+    assert.ok(layers.items.includes(cell));
+    assert.ok(layers.items.includes(selection!));
+    engine.clearFeatureHighlight();
+    assert.ok(layers.items.includes(cell));
+    engine.destroy();
+    assert.ok(cell.destroyed);
+    assert.doesNotThrow(clearCell);
+    assert.doesNotThrow(() => engine.showSearchResult({ type: "Point", coordinates: [0, 0] })());
+  });
 });
 
 describe("ArcgisEngine lifecycle", () => {

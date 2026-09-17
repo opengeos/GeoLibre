@@ -1,5 +1,5 @@
 import type * as maplibregl from "maplibre-gl";
-import type { FeatureCollection, Geometry, Position } from "geojson";
+import type { FeatureCollection, Geometry, Point, Polygon, Position } from "geojson";
 import {
   compileLayerFilters,
   type GeoLibreLayer,
@@ -1476,6 +1476,42 @@ export class ArcgisEngine implements MapEngine {
   }
 
   // ------------------------------------------------------------------ drawing
+
+  showSearchResult(geometry: Point | Polygon): () => void {
+    const map = this.map;
+    if (!map) return () => {};
+    const layer = new this.sdk.layers.GraphicsLayer({
+      listMode: "hide",
+      elevationInfo: { mode: "on-the-ground" },
+      graphics: [
+        new this.sdk.Graphic({
+          geometry: geojsonToArcgisGeometry(geometry)!,
+          symbol:
+            geometry.type === "Point"
+              ? {
+                  type: "simple-marker",
+                  style: "circle",
+                  color: "#ef4444",
+                  size: "12px",
+                  outline: { color: "white", width: "2px" },
+                }
+              : {
+                  type: "simple-fill",
+                  color: [239, 68, 68, 0.15],
+                  outline: { color: "#ef4444", width: "2px" },
+                },
+        }),
+      ],
+    });
+    map.add(layer);
+    const dispose = () => {
+      if (!this.disposers.delete(dispose)) return;
+      if (map.layers.includes(layer)) map.remove(layer);
+      layer.destroy();
+    };
+    this.disposers.add(dispose);
+    return dispose;
+  }
 
   /**
    * Keep a DOM element pinned to a geographic location as the view moves.

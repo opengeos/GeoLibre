@@ -94,6 +94,9 @@ override is set aside and the shared basemap is translated instead.
   independent split-view cameras; the project's zoom and bounds constraints.
 - Feature picking (click identify with a popup), selection highlighting, extent
   drawing, draggable placement, and engine-level image capture.
+- **Search places** flies to places and coordinates with a temporary marker,
+  and frames H3 cells with a filled outline. Clearing the search removes its
+  highlight without removing a selection made elsewhere.
 - The built-in controls the **Controls** menu governs, as the SDK's own widgets:
   fullscreen, compass (resets rotation), zoom (navigation), locate (geolocate)
   and the scale bar (metric or imperial, 2D only), plus a globe/Mercator
@@ -178,8 +181,8 @@ drop the file instead.
 `tests/arcgis-engine.test.ts` drives the engine against a fake SDK, and
 `tests/arcgis-renderer.test.ts` covers the project format, settings and loader
 boundaries. None of them touch the network. `e2e/arcgis-renderer.spec.ts` is
-the opt-in browser check against Esri's real CDN: set `ARCGIS_API_KEY` to run
-it.
+the opt-in browser check against Esri's real CDN: set `ARCGIS_API_KEY` for
+the full suite, or `ARCGIS_E2E=1` for keyless coordinate and H3 search coverage.
 
 ## License and terms
 

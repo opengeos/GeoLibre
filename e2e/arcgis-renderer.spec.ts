@@ -5,12 +5,16 @@ import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/s
 // Opt-in: this drives the ArcGIS Maps SDK for JavaScript from Esri's real CDN
 // and its basemap styles service. ARCGIS_API_KEY is supplied at runtime, never
 // saved in a fixture or project.
-test.skip(!process.env.ARCGIS_API_KEY, "Set ARCGIS_API_KEY to test the ArcGIS renderer");
+test.skip(
+  !process.env.ARCGIS_API_KEY && !process.env.ARCGIS_E2E,
+  "Set ARCGIS_E2E=1 (keyless) or ARCGIS_API_KEY to test the ArcGIS renderer",
+);
 test.use({ actionTimeout: 30_000 });
 
 test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and identifies a feature", async ({
   page,
 }) => {
+  test.skip(!process.env.ARCGIS_API_KEY, "Esri basemap styles require ARCGIS_API_KEY");
   test.setTimeout(180_000);
   await page.addInitScript(
     ({ key, apiKey }) => {
@@ -36,6 +40,9 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
   // in the bundle, so every module arrives from js.arcgis.com.
   const view = page.locator("[data-testid=arcgis-canvas] .esri-view");
   await expect(view).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("arcgis-canvas")).toHaveAttribute("aria-busy", "false", {
+    timeout: 60_000,
+  });
   await expect(page.locator(".esri-attribution__sources")).toContainText("Esri", {
     timeout: 60_000,
   });
@@ -47,6 +54,8 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
   await expect(globe).toHaveClass(/maplibregl-ctrl-globe-enabled/);
   await expect(page.locator(".esri-ui .esri-scale-bar")).toHaveCount(0);
   await globe.click();
+  // A view swap keeps the outgoing canvas until its replacement draws.
+  await expect(globe).toHaveCount(1, { timeout: 60_000 });
   await expect(page.locator(".geolibre-arcgis-globe button")).toHaveClass(
     /maplibregl-ctrl-globe$/,
     {
@@ -80,3 +89,81 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
   await expect(layerRow(page, "smoke")).not.toContainText("No ArcGIS");
   await expect(page.locator("[data-testid=arcgis-canvas] [role=alert]")).toHaveCount(0);
 });
+
+for (const keyed of [false, true]) {
+  test(`ArcGIS place search navigates to coordinates and H3 cells ${keyed ? "with" : "without"} an API key`, async ({
+    page,
+  }) => {
+    test.skip(keyed && !process.env.ARCGIS_API_KEY, "Set ARCGIS_API_KEY for keyed search");
+    test.setTimeout(180_000);
+    await page.addInitScript(
+      ({ key, apiKey }) => {
+        const settings = JSON.parse(localStorage.getItem(key) || "{}");
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            ...settings,
+            arcgisApiKey: apiKey,
+            uiProfile: { onboarded: true, hiddenDataSources: [] },
+          }),
+        );
+      },
+      { key: DESKTOP_SETTINGS_STORAGE_KEY, apiKey: keyed ? process.env.ARCGIS_API_KEY! : "" },
+    );
+    await page.goto("/");
+    // An empty device setting falls back to build-time credentials. Override
+    // both runtime names so this also exercises the keyless path on keyed builds.
+    await page.getByRole("button", { name: "View", exact: true }).waitFor();
+    if (!keyed)
+      await page.evaluate(() => {
+        window.__GEOLIBRE_RUNTIME_ENV__ = {
+          ...window.__GEOLIBRE_RUNTIME_ENV__,
+          VITE_ARCGIS_API_KEY: "",
+          ARCGIS_API_KEY: "",
+        };
+        window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change"));
+      });
+    await page.getByRole("button", { name: "View", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
+    await page.getByRole("menuitemradio", { name: "ArcGIS", exact: true }).click();
+    await expect(page.locator("[data-testid=arcgis-canvas] .esri-view")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("arcgis-canvas")).toHaveAttribute("aria-busy", "false", {
+      timeout: 60_000,
+    });
+    if (!keyed)
+      await expect(page.getByText("Add an ArcGIS API key in", { exact: false })).toBeVisible();
+    const search = page.getByRole("combobox", { name: "Search places", exact: true });
+    await search.fill("38.8977, -77.0365");
+    await page.getByRole("option").first().click();
+    await expect(page.getByText("Zoom: 12.00", { exact: true })).toBeVisible({ timeout: 30_000 });
+    const bounds = page.getByText(/^BBox:/);
+    await expect
+      .poll(async () => {
+        const values = (await bounds.innerText()).replace("BBox:", "").split(",").map(Number);
+        return Math.hypot(
+          (values[0] + values[2]) / 2 + 77.0365,
+          (values[1] + values[3]) / 2 - 38.8977,
+        );
+      })
+      .toBeLessThan(0.02);
+    await search.fill("8928308280fffff");
+    await page.getByRole("option").first().click();
+    await expect
+      .poll(
+        async () => {
+          const values = (await bounds.innerText()).replace("BBox:", "").split(",").map(Number);
+          return Math.hypot(
+            (values[0] + values[2]) / 2 + 122.418,
+            (values[1] + values[3]) / 2 - 37.7767,
+          );
+        },
+        { timeout: 30_000 },
+      )
+      .toBeLessThan(0.02);
+    await search.press("Escape");
+    await expect(search).toHaveValue("");
+    await expect(page.locator("[data-testid=arcgis-canvas] [role=alert]")).toHaveCount(0);
+  });
+}
