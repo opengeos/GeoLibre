@@ -43,7 +43,15 @@ jobs:
         run: npm run audit:ci
 
   e2e:
-    name: E2E smoke (Playwright)
+    # Only the `core` Playwright project gates a PR: the app boots and renders a
+    # map, and the shared UI surfaces still work. The per-feature specs
+    # (mapbox/cesium/stac/export/...) are the `features` project and run in
+    # e2e-full.yml — nightly, on demand, or on a PR labelled `full-e2e`.
+    #
+    # This job was the sole critical path of CI at 29-39 min (everything else
+    # finishes in <= 9 min), and ~35.9 min of that was test execution at one
+    # worker; the build inside it is only ~16 s.
+    name: E2E core (Playwright)
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -80,8 +88,8 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      - name: Run E2E smoke tests
-        run: npm run test:e2e
+      - name: Run E2E core tests
+        run: npm run test:e2e -- --project=core
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 

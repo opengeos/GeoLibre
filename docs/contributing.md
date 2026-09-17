@@ -132,13 +132,30 @@ ci` gate does.
 
 ### End-to-end smoke tests
 
-`npm run test:e2e` runs the Playwright smoke suite in `e2e/` against the built
-web app (it builds, serves it with `vite preview`, and drives a headless
-Chromium). It is a render-path guardrail — it loads a GeoJSON layer, opens the
-attribute table, toggles visibility, and runs an accessibility check — not
-exhaustive coverage. Install the browser once with `npx playwright install
-chromium`. The suite runs as a separate `E2E smoke (Playwright)` job in CI and
-uploads its report as an artifact on failure.
+`npm run test:e2e` runs the Playwright suite in `e2e/` against the built web app
+(it builds, serves it with `vite preview`, and drives a headless Chromium).
+Install the browser once with `npx playwright install chromium`.
+
+The suite is split into two Playwright projects, which together partition
+`e2e/` — a plain `npm run test:e2e` still runs every spec exactly once:
+
+| Project | Command | What it covers | When it runs |
+| --- | --- | --- | --- |
+| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `features` | `npm run test:e2e:features` | Per-feature integration: Mapbox/Cesium engines, STAC, exports, story maps, the scene graph, plugin install. | Nightly and on demand via `e2e-full.yml`, sharded 4x — or on a PR labelled `full-e2e`. |
+
+The split is a wall-clock decision, not a judgement about value: the full suite
+is ~36 min serial on a CI runner and the feature specs are ~27 min of it, which
+made this job the sole critical path of CI while every other job finished in
+under 10 minutes. Most feature specs guard a specific shipped regression, so
+they are still run — just not against every commit.
+
+**Add a new spec to `core` only if it would break for every user.** The list
+lives in `CORE_SPECS` in `playwright.config.ts`; anything not named there is
+automatically part of `features`. If you are touching an area the nightly suite
+covers, label the PR `full-e2e` to get that check before merging.
+
+Both jobs upload their Playwright report as an artifact on failure.
 
 ### Coding conventions
 

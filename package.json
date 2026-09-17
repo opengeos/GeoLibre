@@ -25,6 +25,8 @@
     "test:backend:coverage": "python -m pytest backend/geolibre_server/tests --cov=geolibre_server --cov-report=term-missing --cov-fail-under=55",
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
+    "test:e2e:core": "playwright test --project=core",
+    "test:e2e:features": "playwright test --project=features",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
     "audit:ci": "node scripts/audit-check.mjs",
     "i18n:tools": "node --import tsx scripts/gen-processing-i18n-catalog.mjs",
