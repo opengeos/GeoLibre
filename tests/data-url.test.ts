@@ -54,6 +54,22 @@ describe("serviceUrlParameter", () => {
     );
   });
 
+  it("prefills a WCS endpoint, leaving its braces alone", () => {
+    // WCS is a KVP service, not a tile template, so a vendor parameter that
+    // encodes a brace reaches the server exactly as the link carried it.
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=wcs&serviceUrl=https%3A%2F%2Felevation.example.com%2FWCSServer%3Ftoken%3Da%257Bb%257Dc",
+      ),
+      {
+        kind: "wcs",
+        url: "https://elevation.example.com/WCSServer?token=a%7Bb%7Dc",
+        layer: null,
+        styleUrl: null,
+      },
+    );
+  });
+
   it("restores tile-template braces only for the kinds that use them", () => {
     // A WMS token that legitimately encodes a brace must reach the server as it
     // was signed, not as a literal brace.

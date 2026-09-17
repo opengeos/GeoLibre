@@ -123,6 +123,12 @@ function xmlDocument(xml: string, root: string): Document {
   if (elements(doc, "parsererror").length) throw new WcsError("xml");
   const exception = elements(doc, "ServiceException")[0] ?? elements(doc, "ExceptionText")[0];
   if (exception) throw new WcsError("response", exception.textContent?.trim().slice(0, 500));
+  // The root element name is the version gate: WCS 1.1 and 2.x answer
+  // `GetCapabilities` with `Capabilities` and `DescribeCoverage` with
+  // `CoverageDescriptions`, so they are rejected here. A document rooted at the
+  // 1.0.0 element is taken at its word when it omits the `version` attribute
+  // rather than failed on a detail its own root name already settles; the
+  // coverage, format, and CRS checks below still reject what it cannot serve.
   if (doc.documentElement?.localName.split(":").pop() !== root) throw new WcsError("version");
   const version = doc.documentElement.getAttribute("version");
   if (version && version !== "1.0.0") throw new WcsError("version");

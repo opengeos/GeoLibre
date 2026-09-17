@@ -10,6 +10,7 @@ const SERVICE_KINDS = new Set([
   "wms",
   "wmts",
   "wfs",
+  "wcs",
   "ogc-features",
   "ogc-vector-tiles",
   "arcgis",

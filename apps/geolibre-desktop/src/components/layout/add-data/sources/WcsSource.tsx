@@ -28,10 +28,10 @@ const SAMPLES = [
 ];
 const AXES = ["west", "south", "east", "north"] as const;
 
-export function WcsSource() {
+export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.kind.wcs.label"));
-  const [endpoint, setEndpoint] = useState("");
+  const [endpoint, setEndpoint] = useState(initialUrl);
   const [coverages, setCoverages] = useState<WcsCoverage[]>([]);
   const [coverage, setCoverage] = useState("");
   const [bounds, setBounds] = useState<string[]>(["", "", "", ""]);

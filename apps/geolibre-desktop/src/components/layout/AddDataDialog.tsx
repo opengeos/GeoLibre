@@ -95,7 +95,7 @@ function renderSource(
     case "kml":
       return <KmlSource initialUrl={initialUrl} />;
     case "wcs":
-      return <WcsSource />;
+      return <WcsSource initialUrl={initialUrl} />;
     case "wms":
       return <WmsSource initialUrl={initialUrl} initialLayers={initialLayer} />;
     case "csw":
