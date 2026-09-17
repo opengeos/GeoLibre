@@ -823,9 +823,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
  * already loaded in the control, keyed by layer id. Also re-registers each path
  * so the raster stays restorable when the project is saved again.
  *
- * Resolves to an empty map in the browser (no reader is registered) and skips
- * any file that has since been moved or deleted -- the caller then falls back
- * to dropping that layer with a notice.
+ * Reuses live browser blob URLs, or reopens saved paths through the registered
+ * desktop reader. Skips files that have moved or been deleted; the caller then
+ * falls back to dropping an unavailable layer with a notice.
  *
  * @param control - The mounted raster control.
  * @returns The re-read files, by store layer id.
