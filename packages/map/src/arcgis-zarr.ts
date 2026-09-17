@@ -127,8 +127,8 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
     !source.crs &&
     !source.proj4 &&
     !explicit &&
-    ((/^x$/i.test(names[xDim]) && !/degrees?_east/i.test(xAxis.units)) ||
-      (/^y$/i.test(names[yDim]) && !/degrees?_north/i.test(yAxis.units)))
+    ((!/^(lon|longitude)$/i.test(names[xDim]) && !/degrees?_east/i.test(xAxis.units)) ||
+      (!/^(lat|latitude)$/i.test(names[yDim]) && !/degrees?_north/i.test(yAxis.units)))
   )
     throw new Error("Specify the CRS for Zarr x/y coordinates");
   function selectionFor(selector: Record<string, unknown>) {
