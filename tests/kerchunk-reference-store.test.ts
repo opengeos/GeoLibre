@@ -91,13 +91,55 @@ describe("KerchunkReferenceStore.get", () => {
       return fetchImpl(url, init);
     };
     const store = new KerchunkReferenceStore(
-      { "v/0": ["http://d/x", 0, 2] },
-      { fetchImpl: wrapped, headers: { Authorization: "Bearer t" } },
+      { "v/0": ["https://d.example/x", 0, 2] },
+      {
+        fetchImpl: wrapped,
+        headers: { Authorization: "Bearer t" },
+        sourceUrl: "https://d.example/ref.json",
+      },
     );
     await store.get("v/0");
     assert.equal(captured[0].Authorization, "Bearer t");
     assert.match(captured[0].Range, /^bytes=/);
     assert.ok(calls.length === 1);
+  });
+
+  it("keeps credentials on the HTTPS manifest origin only", async () => {
+    const captured: Array<{ url: string; headers: Record<string, string> }> = [];
+    const fetchImpl = async (url: string, init?: { headers?: Record<string, string> }) => {
+      captured.push({ url, headers: init?.headers ?? {} });
+      return { status: 206, arrayBuffer: async () => new ArrayBuffer(1) };
+    };
+    const store = new KerchunkReferenceStore(
+      {
+        same: ["https://data.example/a.nc", 0, 1],
+        other: ["https://cdn.example/a.nc", 0, 1],
+        cleartext: ["http://data.example/a.nc", 0, 1],
+      },
+      {
+        fetchImpl,
+        headers: { Authorization: "Bearer secret" },
+        sourceUrl: "https://data.example/ref.json",
+      },
+    );
+    await store.get("same");
+    await store.get("other");
+    await store.get("cleartext");
+    assert.equal(captured[0].headers.Authorization, "Bearer secret");
+    assert.equal(captured[1].headers.Authorization, undefined);
+    assert.equal(captured[2].headers.Authorization, undefined);
+    assert.match(captured[2].headers.Range, /^bytes=/);
+    assert.throws(
+      () =>
+        new KerchunkReferenceStore(
+          {},
+          {
+            headers: { Authorization: "Bearer secret" },
+            sourceUrl: "http://data.example/ref.json",
+          },
+        ),
+      /require HTTPS/,
+    );
   });
 });
 

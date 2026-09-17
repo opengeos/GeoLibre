@@ -2368,7 +2368,10 @@ export async function addCloudNetcdfLayer(
     await addNativeArcgisZarrLayer(
       {
         ...options,
-        store: new KerchunkReferenceStore(refs, { headers: options.headers }),
+        store: new KerchunkReferenceStore(refs, {
+          headers: options.headers,
+          sourceUrl: options.url,
+        }),
       },
       refs,
     );
@@ -2397,7 +2400,10 @@ export async function addCloudNetcdfLayer(
 
   const refs =
     options.refs ?? (await loadKerchunkReference(options.url, { headers: options.headers }));
-  const store = new KerchunkReferenceStore(refs, { headers: options.headers });
+  const store = new KerchunkReferenceStore(refs, {
+    headers: options.headers,
+    sourceUrl: options.url,
+  });
 
   // The control is a module-level singleton and may have been torn down (set to
   // null on plugin deactivation) during the await above.
