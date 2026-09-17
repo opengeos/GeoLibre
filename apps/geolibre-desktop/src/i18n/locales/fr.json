@@ -983,6 +983,7 @@
       "errorSource": "Saisissez une URL GeoTIFF ou choisissez un fichier."
     },
     "wcs": {
+      "coverage": "Couverture",
       "retrieve": "Récupérer les couvertures",
       "select": "Sélectionner une couverture",
       "extent": "Utiliser l’emprise de la couverture",

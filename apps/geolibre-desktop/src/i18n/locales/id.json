@@ -962,6 +962,7 @@
       "errorSource": "Masukkan URL GeoTIFF atau pilih berkas."
     },
     "wcs": {
+      "coverage": "Cakupan",
       "retrieve": "Ambil cakupan",
       "select": "Pilih cakupan",
       "extent": "Gunakan batas cakupan",

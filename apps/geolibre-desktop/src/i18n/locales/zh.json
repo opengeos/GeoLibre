@@ -962,6 +962,7 @@
       "errorSource": "输入 GeoTIFF URL 或选择文件。"
     },
     "wcs": {
+      "coverage": "覆盖数据",
       "retrieve": "获取覆盖数据",
       "select": "选择覆盖数据",
       "extent": "使用覆盖范围",

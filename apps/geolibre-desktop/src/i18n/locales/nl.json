@@ -983,6 +983,7 @@
       "errorSource": "Voer een GeoTIFF-URL in of kies een bestand."
     },
     "wcs": {
+      "coverage": "Coverage",
       "retrieve": "Coverages ophalen",
       "select": "Selecteer een coverage",
       "extent": "Coveragebereik gebruiken",

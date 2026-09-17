@@ -962,6 +962,7 @@
       "errorSource": "GeoTIFF の URL を入力するか、ファイルを選択してください。"
     },
     "wcs": {
+      "coverage": "カバレッジ",
       "retrieve": "カバレッジを取得",
       "select": "カバレッジを選択",
       "extent": "カバレッジの範囲を使用",

@@ -983,6 +983,7 @@
       "errorSource": "Bir GeoTIFF URL’si girin veya dosya seçin."
     },
     "wcs": {
+      "coverage": "Kapsam",
       "retrieve": "Kapsamları getir",
       "select": "Bir kapsam seçin",
       "extent": "Kapsam sınırlarını kullan",

@@ -962,6 +962,7 @@
       "errorSource": "GeoTIFF URL을 입력하거나 파일을 선택하세요."
     },
     "wcs": {
+      "coverage": "커버리지",
       "retrieve": "커버리지 조회",
       "select": "커버리지 선택",
       "extent": "커버리지 범위 사용",

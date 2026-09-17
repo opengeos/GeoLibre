@@ -962,6 +962,7 @@
       "errorSource": "Nhập URL GeoTIFF hoặc chọn một tệp."
     },
     "wcs": {
+      "coverage": "Vùng phủ",
       "retrieve": "Lấy các vùng phủ",
       "select": "Chọn vùng phủ",
       "extent": "Dùng phạm vi vùng phủ",

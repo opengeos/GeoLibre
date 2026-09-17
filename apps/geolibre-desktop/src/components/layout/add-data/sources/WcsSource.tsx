@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
 import { describeWcs, discoverWcs, downloadWcs } from "../../../../lib/wcs-fetch";
 import { WcsError, wcsCoverageUrl, type WcsBounds, type WcsCoverage } from "../../../../lib/wcs";
+import { serviceRequestErrorMessage } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 const SAMPLES = [
@@ -53,9 +54,10 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
     error instanceof WcsError
       ? t(`addData.wcs.errors.${error.code}`) +
         (error.code === "response" && error.message !== error.code ? `: ${error.message}` : "")
-      : error instanceof Error
-        ? error.message
-        : t("addData.shared.addError");
+      : // A network, CORS, or timeout failure arrives as an opaque TypeError or
+        // DOMException; route it through the shared classifier so this panel
+        // shows the same localized hint as its WMS/WFS siblings.
+        serviceRequestErrorMessage(error, t, t("addData.shared.addError"));
 
   async function retrieve() {
     controller.current?.abort();
@@ -163,7 +165,7 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="wcs-coverage">{t("printLayout.atlas.coverage")}</Label>
+          <Label htmlFor="wcs-coverage">{t("addData.wcs.coverage")}</Label>
           <Select
             id="wcs-coverage"
             value={coverage}
