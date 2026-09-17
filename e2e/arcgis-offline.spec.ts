@@ -60,12 +60,12 @@ async function openProject(page: Page, waitUntilReady = true) {
 
 test.describe("desktop content security policy", () => {
   test.use({ serviceWorkers: "block" });
-  test("boots the keyless SDK under the production Tauri CSP", async ({ page }) => {
+  test("boots the keyless SDK under the production Tauri CSP", async ({ page, baseURL }) => {
     const config = JSON.parse(
       readFileSync(join(__dirname, "../apps/geolibre-desktop/src-tauri/tauri.conf.json"), "utf8"),
     );
     const csp = config.app.security.csp;
-    await page.route("http://localhost:4173/", async (route) => {
+    await page.route(new URL("/", baseURL).href, async (route) => {
       const response = await route.fetch();
       await route.fulfill({
         response,

@@ -136,6 +136,10 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
     // CDN engines (ArcGIS, Pyodide, etc.) are not deployment chunks. Leave
     // their rejection intact for the feature to report, preserving its project.
     if (isExternalModuleFailure(payload, window.location.origin)) return;
+    // WebKit omits the failed URL. It may be a CDN outage, so leave this
+    // ambiguous failure to the feature instead of reloading the whole project.
+    const message = payload instanceof Error ? payload.message : payload;
+    if (message === "Importing a module script failed.") return;
     let outcome: StaleChunkReloadOutcome = "suppressed-cooldown";
     try {
       outcome = reloadForStaleChunk({

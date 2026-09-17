@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   reloadForStaleChunk,
   isExternalModuleFailure,
+  installStaleChunkReload,
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
 } from "../apps/geolibre-desktop/src/lib/stale-chunk-reload";
 
@@ -91,6 +92,38 @@ describe("reloadForStaleChunk", () => {
     assert.equal(state.reloads, 0);
     assert.equal(state.lastReloadAt, lastReloadAt);
   });
+});
+
+it("preserves the project for WebKit's unattributed import error", () => {
+  const previous = globalThis.window;
+  const target = new EventTarget();
+  let reloads = 0;
+  Object.assign(globalThis, {
+    window: Object.assign(target, {
+      location: { origin: "https://web.geolibre.app", reload: () => reloads++ },
+      sessionStorage: { getItem: () => null, setItem: () => {} },
+    }),
+  });
+  const cleanup = installStaleChunkReload({ enabled: true });
+  try {
+    const ambiguous = Object.assign(new Event("vite:preloadError", { cancelable: true }), {
+      payload: new TypeError("Importing a module script failed."),
+    });
+    target.dispatchEvent(ambiguous);
+    assert.equal(reloads, 0);
+    assert.equal(ambiguous.defaultPrevented, false, "the feature still receives its rejection");
+    const local = Object.assign(new Event("vite:preloadError", { cancelable: true }), {
+      payload: new TypeError(
+        "Failed to fetch dynamically imported module: https://web.geolibre.app/assets/old.js",
+      ),
+    });
+    target.dispatchEvent(local);
+    assert.equal(reloads, 1, "identified local chunks still recover");
+    assert.equal(local.defaultPrevented, true);
+  } finally {
+    cleanup();
+    Object.assign(globalThis, { window: previous });
+  }
 });
 
 it("leaves CDN import errors to their feature while retaining local stale-chunk recovery", () => {
