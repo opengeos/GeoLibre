@@ -10,6 +10,9 @@ import type {
 import type { FeatureCollection, Geometry, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 
+/** Shared search highlight color across rendering engines. */
+export const SEARCH_HIGHLIGHT_COLOR = "#ef4444";
+
 /**
  * The renderer-neutral surface the app drives a map through (issue #2260).
  *

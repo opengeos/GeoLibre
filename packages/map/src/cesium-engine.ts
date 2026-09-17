@@ -1,3 +1,4 @@
+import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
 import {
   useAppStore,
   type GeoLibreLayer,
@@ -879,7 +880,7 @@ export class CesiumEngine implements MapEngine {
     const viewer = this.live();
     if (!viewer) return () => {};
     const C = this.Cesium;
-    const color = C.Color.fromCssColorString("#ef4444");
+    const color = C.Color.fromCssColorString(SEARCH_HIGHLIGHT_COLOR);
     const primitives: unknown[] = [];
     if (geometry.type === "Point") {
       const points = new C.PointPrimitiveCollection();

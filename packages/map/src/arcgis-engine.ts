@@ -1,3 +1,4 @@
+import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
 import type * as maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry, Point, Polygon, Position } from "geojson";
 import {
@@ -1491,14 +1492,14 @@ export class ArcgisEngine implements MapEngine {
               ? {
                   type: "simple-marker",
                   style: "circle",
-                  color: "#ef4444",
+                  color: SEARCH_HIGHLIGHT_COLOR,
                   size: "12px",
                   outline: { color: "white", width: "2px" },
                 }
               : {
                   type: "simple-fill",
                   color: [239, 68, 68, 0.15],
-                  outline: { color: "#ef4444", width: "2px" },
+                  outline: { color: SEARCH_HIGHLIGHT_COLOR, width: "2px" },
                 },
         }),
       ],

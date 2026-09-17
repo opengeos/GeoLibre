@@ -1,3 +1,4 @@
+import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
 import type { Point, Polygon } from "geojson";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import type { Map as MapboxMap } from "mapbox-gl";
@@ -18,7 +19,7 @@ export function showGlSearchResult(
   createMarker: (center: [number, number], color: string) => { remove(): unknown },
   disposers: Set<() => void>,
 ): () => void {
-  const color = "#ef4444";
+  const color = SEARCH_HIGHLIGHT_COLOR;
   let remove: () => void;
   if (geometry.type === "Point") {
     const marker = createMarker([geometry.coordinates[0], geometry.coordinates[1]], color);

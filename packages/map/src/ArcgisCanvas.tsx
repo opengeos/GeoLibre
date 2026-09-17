@@ -374,6 +374,7 @@ export function ArcgisCanvas({
             // would otherwise leave the old view frozen over an empty pane.
             if (cancelled) return;
             retire();
+            setReady(true);
             setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
           });
         const status = window.setInterval(() => {
@@ -401,6 +402,7 @@ export function ArcgisCanvas({
         if (cancelled) return;
         // A frozen old view would hide that the new one failed.
         retire();
+        setReady(true);
         setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
       });
     return () => {
