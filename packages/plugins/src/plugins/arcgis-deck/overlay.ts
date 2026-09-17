@@ -81,13 +81,19 @@ export class ArcgisDeckOverlay {
                 return;
               }
               if (!this.hoverInfo) return;
-              const cleared = { ...this.hoverInfo, picked: false, object: null, index: -1 };
-              this.hoverInfo = null;
-              const handled = cleared.layer?.props.onHover?.(cleared, event as never);
-              if (!handled) this.props.onHover?.(cleared, event as never);
+              this.clearHover(event);
               return;
             }
-            if (callback === "onHover") this.hoverInfo = info;
+            if (callback === "onHover") {
+              if (
+                this.hoverInfo &&
+                (this.hoverInfo.layer !== info.layer ||
+                  this.hoverInfo.object !== info.object ||
+                  this.hoverInfo.index !== info.index)
+              )
+                this.clearHover(event);
+              this.hoverInfo = info;
+            }
             const handled = info.layer?.props[callback]?.(info, event as never);
             if (!handled) this.props[callback]?.(info, event as never);
           };
@@ -196,6 +202,14 @@ export class ArcgisDeckOverlay {
 
   getDeck() {
     return this.resources?.deck ?? this.sceneRenderer?.resources?.deck ?? null;
+  }
+
+  private clearHover(event: unknown): void {
+    if (!this.hoverInfo) return;
+    const cleared = { ...this.hoverInfo, picked: false, object: null, index: -1 };
+    this.hoverInfo = null;
+    const handled = cleared.layer?.props.onHover?.(cleared, event as never);
+    if (!handled) this.props.onHover?.(cleared, event as never);
   }
 
   private clearEvents(): void {
