@@ -9,11 +9,11 @@ import {
 export const OSM_DOWNLOADER_PLUGIN_ID = "geolibre-osm-downloader";
 const PANEL_ID = OSM_DOWNLOADER_PLUGIN_ID;
 
-let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
 let unsubscribeLocale: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let disposePanel: (() => void) | null = null;
+let refreshPanelLabels: (() => void) | null = null;
 
 const CSS = {
   panel:
@@ -68,6 +68,11 @@ function field(labelText: string, control: HTMLElement): HTMLDivElement {
   return wrapper;
 }
 
+function setFieldLabel(wrapper: HTMLDivElement, labelText: string): void {
+  const text = wrapper.querySelector("label")?.firstChild;
+  if (text) text.nodeValue = labelText;
+}
+
 function formatNumber(value: number): string {
   return Number(value.toFixed(6)).toString();
 }
@@ -118,10 +123,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   keyInput.placeholder = tr(app, "tagKeyPlaceholder", "e.g. shop");
   const valueInput = element("input", CSS.input);
   valueInput.placeholder = tr(app, "tagValuePlaceholder", "optional, e.g. bakery");
-  customGrid.append(
-    field(tr(app, "tagKey", "Tag key"), keyInput),
-    field(tr(app, "tagValue", "Tag value"), valueInput),
-  );
+  const keyField = field(tr(app, "tagKey", "Tag key"), keyInput);
+  const valueField = field(tr(app, "tagValue", "Tag value"), valueInput);
+  customGrid.append(keyField, valueField);
   customGrid.hidden = true;
 
   const coordGrid = element("div", CSS.grid);
@@ -138,7 +142,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     tr(app, "east", "East"),
     tr(app, "north", "North"),
   ];
-  coordInputs.forEach((input, index) => coordGrid.append(field(coordLabels[index], input)));
+  const coordFields = coordInputs.map((input, index) => field(coordLabels[index], input));
+  coordGrid.append(...coordFields);
 
   const useView = element("button", CSS.button);
   useView.type = "button";
@@ -164,10 +169,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const resultActions = element("div", CSS.actions);
   resultActions.append(addButton, exportButton);
 
+  const presetField = field(tr(app, "featureType", "Feature type"), preset);
   root.append(
     hint,
     attribution,
-    field(tr(app, "featureType", "Feature type"), preset),
+    presetField,
     customGrid,
     coordGrid,
     queryActions,
@@ -178,8 +184,51 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   let controller: AbortController | null = null;
   let result: FeatureCollection | null = null;
+  let resultPreset: OsmDownloadPreset | null = null;
   let added = false;
   let disposed = false;
+
+  const refreshLabels = () => {
+    hint.textContent = tr(
+      app,
+      "hint",
+      "Download OpenStreetMap features from the current map area with the public Overpass API.",
+    );
+    attribution.textContent = tr(
+      app,
+      "attribution",
+      "Data © OpenStreetMap contributors, available under the ODbL.",
+    );
+    const translatedPresets = [
+      tr(app, "presetBuildings", "Buildings"),
+      tr(app, "presetRoads", "Roads"),
+      tr(app, "presetAmenities", "Amenities"),
+      tr(app, "presetWaterways", "Waterways"),
+      tr(app, "presetLanduse", "Land use"),
+      tr(app, "presetCustom", "Custom tag"),
+      tr(app, "presetAll", "All tagged features"),
+    ];
+    Array.from(preset.options).forEach((option, index) => {
+      option.textContent = translatedPresets[index];
+    });
+    setFieldLabel(presetField, tr(app, "featureType", "Feature type"));
+    setFieldLabel(keyField, tr(app, "tagKey", "Tag key"));
+    setFieldLabel(valueField, tr(app, "tagValue", "Tag value"));
+    const translatedCoords = [
+      tr(app, "west", "West"),
+      tr(app, "south", "South"),
+      tr(app, "east", "East"),
+      tr(app, "north", "North"),
+    ];
+    coordFields.forEach((wrapper, index) => setFieldLabel(wrapper, translatedCoords[index]));
+    keyInput.placeholder = tr(app, "tagKeyPlaceholder", "e.g. shop");
+    valueInput.placeholder = tr(app, "tagValuePlaceholder", "optional, e.g. bakery");
+    useView.textContent = tr(app, "useMapExtent", "Use map extent");
+    downloadButton.textContent = tr(app, "download", "Download OSM data");
+    addButton.textContent = tr(app, "addToMap", "Add to map");
+    exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
+  };
+  refreshPanelLabels = refreshLabels;
 
   const applyViewBounds = () => {
     const bounds = app.getViewBounds?.();
@@ -215,6 +264,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     controller?.abort();
     controller = new AbortController();
     result = null;
+    resultPreset = null;
     added = false;
     addButton.disabled = true;
     exportButton.disabled = true;
@@ -223,6 +273,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     try {
       result = await downloadOsmGeoJson(bbox, filter, { signal: controller.signal });
       if (disposed) return;
+      resultPreset = selectedPreset;
       const count = result.features.length;
       status.textContent = count
         ? tr(app, "downloaded", "Downloaded {{count}} features.", { count })
@@ -241,8 +292,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   });
 
   addButton.addEventListener("click", () => {
-    if (!result || added) return;
-    const name = resultName(app, preset.value as OsmDownloadPreset);
+    if (!result || !resultPreset || added) return;
+    const name = resultName(app, resultPreset);
     app.addGeoJsonLayer(name, result);
     added = true;
     addButton.disabled = true;
@@ -252,9 +303,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   });
 
   exportButton.addEventListener("click", () => {
-    if (!result) return;
+    if (!result || !resultPreset) return;
     const suffix = new Date().toISOString().slice(0, 10);
-    app.exportTextFile?.(`osm-${preset.value}-${suffix}.geojson`, JSON.stringify(result, null, 2), {
+    app.exportTextFile?.(`osm-${resultPreset}-${suffix}.geojson`, JSON.stringify(result, null, 2), {
       description: "GeoJSON",
       extensions: ["geojson"],
     });
@@ -263,6 +314,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   return () => {
     disposed = true;
     controller?.abort();
+    if (refreshPanelLabels === refreshLabels) refreshPanelLabels = null;
     container.replaceChildren();
   };
 }
@@ -280,7 +332,6 @@ export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
   version: "0.1.0",
   engines: ["maplibre", "mapbox", "cesium"],
   activate: (app) => {
-    appRef = app;
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
@@ -298,7 +349,7 @@ export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
       }) ?? null;
     unsubscribeLocale =
       app.onLocaleChange?.(() => {
-        if (panelContainer && appRef) mountPanel(panelContainer, appRef);
+        refreshPanelLabels?.();
       }) ?? null;
     app.openRightPanel?.(PANEL_ID);
   },
@@ -310,8 +361,8 @@ export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
     unregisterPanel = null;
     disposePanel?.();
     disposePanel = null;
+    refreshPanelLabels = null;
     panelContainer = null;
-    appRef = null;
   },
 };
 

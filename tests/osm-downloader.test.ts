@@ -19,8 +19,23 @@ describe("OSM download query", () => {
 
   it("limits the all-features preset to tagged elements", () => {
     assert.match(
-      buildOsmDownloadQuery([0, 1, 2, 3], { preset: "all" }),
-      /nwr\[~"\."~"\."\]\(1,0,3,2\)/,
+      buildOsmDownloadQuery([0, 1, 0.1, 1.1], { preset: "all" }),
+      /nwr\[~"\."~"\."\]\(1,0,1\.1,0\.1\)/,
+    );
+  });
+
+  it("splits antimeridian-crossing view bounds into two selectors", () => {
+    assert.equal(
+      buildOsmDownloadQuery([170, -10, 190, 10], { preset: "buildings" }),
+      '[out:json][timeout:60];(nwr["building"](-10,170,10,180);' +
+        'nwr["building"](-10,-180,10,-170););out geom;',
+    );
+  });
+
+  it("rejects oversized all-feature downloads", () => {
+    assert.throws(
+      () => buildOsmDownloadQuery([0, 0, 1, 1], { preset: "all" }),
+      /limited to 0.25 square degrees/,
     );
   });
 
@@ -128,6 +143,20 @@ describe("Overpass JSON conversion", () => {
     assert.equal(result.features[0].geometry.coordinates.length, 1);
     assert.equal(result.features[0].geometry.coordinates[0].length, 2);
   });
+
+  it("drops a way rather than joining across missing geometry", () => {
+    const result = overpassJsonToGeoJson({
+      elements: [
+        {
+          type: "way",
+          id: 9,
+          tags: { highway: "residential" },
+          geometry: [{ lon: 0, lat: 0 }, null, { lon: 1, lat: 1 }],
+        },
+      ],
+    });
+    assert.equal(result.features.length, 0);
+  });
 });
 
 describe("downloadOsmGeoJson", () => {
@@ -166,6 +195,33 @@ describe("downloadOsmGeoJson", () => {
     await assert.rejects(
       () => downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl }),
       /429.*Please retry later/,
+    );
+  });
+
+  it("rejects partial results carrying an Overpass remark", async () => {
+    const fetchImpl: OverpassFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        remark: "runtime error: Query timed out",
+        elements: [{ type: "node", id: 7, lon: 1, lat: 2 }],
+      }),
+      text: async () => "",
+    });
+    await assert.rejects(
+      () => downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl }),
+      /Query timed out/,
+    );
+  });
+
+  it("aborts a stalled request after the client timeout", async () => {
+    const fetchImpl: OverpassFetch = async (_url, init) =>
+      await new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    await assert.rejects(
+      () => downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl, timeoutMs: 5 }),
+      /timed out/,
     );
   });
 });

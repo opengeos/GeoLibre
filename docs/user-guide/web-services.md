@@ -130,7 +130,7 @@ Downloads current OpenStreetMap vector data through the public Overpass API.
 - Add the result as a normal GeoJSON layer or save it as a `.geojson` file.
 - OSM nodes become points, ways follow OSM's line/area conventions, and multipolygon relations retain their outer and inner rings.
 
-Public Overpass instances are intended for bounded interactive queries. Zoom to the area you need before downloading, especially when selecting **All tagged features**.
+Public Overpass instances are intended for bounded interactive queries. Zoom to the area you need before downloading. To prevent accidentally requesting an enormous result, **All tagged features** is limited to 0.25 square degrees.
 
 The panel identifies the source as © OpenStreetMap contributors and notes the Open Database License (ODbL); keep the required attribution when publishing derived maps or data.
 

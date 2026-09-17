@@ -11,6 +11,8 @@ import type {
 } from "geojson";
 
 export const OVERPASS_DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter";
+export const OVERPASS_REQUEST_TIMEOUT_MS = 75_000;
+export const MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
 
 export type OsmDownloadPreset =
   | "all"
@@ -79,13 +81,21 @@ export function buildOsmDownloadQuery(
   if (
     !bbox.every(Number.isFinite) ||
     west < -180 ||
-    east > 180 ||
+    east > west + 360 ||
     south < -90 ||
     north > 90 ||
     west >= east ||
     south >= north
   ) {
     throw new Error("Invalid bounding box");
+  }
+  if (
+    filter.preset === "all" &&
+    (east - west) * (north - south) > MAX_ALL_QUERY_AREA_SQUARE_DEGREES
+  ) {
+    throw new Error(
+      `All-features downloads are limited to ${MAX_ALL_QUERY_AREA_SQUARE_DEGREES} square degrees`,
+    );
   }
 
   // The "all" option still means all *tagged* features. Selecting bare
@@ -103,9 +113,14 @@ export function buildOsmDownloadQuery(
     tagFilter = `[${PRESET_TAGS[filter.preset]}]`;
   }
 
-  // Overpass expects (south,west,north,east), unlike GeoJSON's bbox order.
-  const overpassBbox = `${south},${west},${north},${east}`;
-  return `[out:json][timeout:60];nwr${tagFilter}(${overpassBbox});out geom;`;
+  // Overpass cannot express an unwrapped longitude above 180. Split a
+  // renderer-neutral antimeridian-crossing view into its east and west halves.
+  const boxes =
+    east <= 180
+      ? [`${south},${west},${north},${east}`]
+      : [`${south},${west},${north},180`, `${south},-180,${north},${east - 360}`];
+  const selectors = boxes.map((box) => `nwr${tagFilter}(${box});`).join("");
+  return `[out:json][timeout:60];${boxes.length > 1 ? `(${selectors});` : selectors}out geom;`;
 }
 
 /** Run a bounded Overpass query and convert its JSON response to GeoJSON. */
@@ -116,41 +131,58 @@ export async function downloadOsmGeoJson(
     endpoint?: string;
     signal?: AbortSignal;
     fetchImpl?: OverpassFetch;
+    timeoutMs?: number;
   } = {},
 ): Promise<FeatureCollection> {
   const query = buildOsmDownloadQuery(bbox, filter);
   const endpoint = options.endpoint ?? OVERPASS_DEFAULT_ENDPOINT;
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as OverpassFetch);
-  const response = await fetchImpl(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    body: `data=${encodeURIComponent(query)}`,
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    let detail = "";
-    try {
-      detail = (await response.text())
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-    } catch {
-      // The status is still useful when a proxy supplies no readable body.
+  const requestController = new AbortController();
+  const abortFromCaller = () => requestController.abort(options.signal?.reason);
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = setTimeout(
+    () => requestController.abort(new DOMException("Overpass request timed out", "TimeoutError")),
+    options.timeoutMs ?? OVERPASS_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: requestController.signal,
+    });
+    if (!response.ok) {
+      let detail = "";
+      try {
+        detail = (await response.text())
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      } catch {
+        // The status is still useful when a proxy supplies no readable body.
+      }
+      throw new Error(`Overpass request failed (${response.status})${detail ? `: ${detail}` : ""}`);
     }
-    throw new Error(`Overpass request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    const payload = (await response.json()) as OverpassResponse;
+    if (payload.remark) throw new Error(payload.remark);
+    return overpassJsonToGeoJson(payload);
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
-  const payload = (await response.json()) as OverpassResponse;
-  if (payload.remark && !payload.elements) throw new Error(payload.remark);
-  return overpassJsonToGeoJson(payload);
 }
 
 function coordinates(geometry: Array<{ lat: number; lon: number } | null> | undefined): Position[] {
-  return (geometry ?? [])
-    .filter(
-      (point): point is { lat: number; lon: number } =>
-        point !== null && Number.isFinite(point.lon) && Number.isFinite(point.lat),
-    )
-    .map((point) => [point.lon, point.lat]);
+  if (!geometry) return [];
+  const complete = geometry.every(
+    (point): point is { lat: number; lon: number } =>
+      point !== null && Number.isFinite(point.lon) && Number.isFinite(point.lat),
+  );
+  if (!complete) {
+    return [];
+  }
+  return geometry.map((point) => [point.lon, point.lat]);
 }
 
 function samePosition(a: Position, b: Position): boolean {
@@ -229,6 +261,14 @@ function pointInRing(point: Position, ring: Position[]): boolean {
   return inside;
 }
 
+function ringArea(ring: Position[]): number {
+  let sum = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    sum += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
+  }
+  return Math.abs(sum / 2);
+}
+
 function relationGeometry(element: OverpassElement): Geometry | null {
   const members = element.members ?? [];
   const relationType = element.tags?.type;
@@ -246,7 +286,12 @@ function relationGeometry(element: OverpassElement): Geometry | null {
     if (outers.length) {
       const polygons: Position[][][] = outers.map((outer) => [outer]);
       for (const inner of inners) {
-        const outerIndex = outers.findIndex((outer) => pointInRing(inner[0], outer));
+        const outerIndex = outers
+          .map((outer, index) => ({ index, area: ringArea(outer) }))
+          .filter(({ index }) => inner.some((point) => pointInRing(point, outers[index])))
+          .sort((a, b) => a.area - b.area)[0]?.index;
+        // A valid multipolygon hole lies inside one outer. Malformed unmatched
+        // inner rings are omitted instead of being attached to unrelated data.
         if (outerIndex >= 0) polygons[outerIndex].push(inner);
       }
       return { type: "MultiPolygon", coordinates: polygons } satisfies MultiPolygon;
