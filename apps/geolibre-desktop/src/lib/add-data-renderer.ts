@@ -13,8 +13,15 @@ const ARCGIS_UNSUPPORTED_SOURCES = new Set([
   ...[...MAPBOX_UNSUPPORTED_SOURCES].filter((id) => id !== "mbtiles"),
 ]);
 
-export function supportsAddDataRenderer(id: string, renderer: MapRendererKind): boolean {
+const ARCGIS_DECK_SOURCES = new Set(["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]);
+
+export function supportsAddDataRenderer(
+  id: string,
+  renderer: MapRendererKind,
+  deckOverlay = true,
+): boolean {
   if (renderer === "mapbox") return !MAPBOX_UNSUPPORTED_SOURCES.has(id);
-  if (renderer === "arcgis") return !ARCGIS_UNSUPPORTED_SOURCES.has(id);
+  if (renderer === "arcgis")
+    return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !ARCGIS_DECK_SOURCES.has(id));
   return true;
 }

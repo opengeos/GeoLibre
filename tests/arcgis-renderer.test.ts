@@ -318,3 +318,12 @@ describe("ArcGIS view swap", () => {
     });
   });
 });
+
+it("keeps the Add Data palette and menu off deck-only sources in ArcGIS global views", () => {
+  for (const id of ["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]) {
+    assert.equal(supportsAddDataRenderer(id, "arcgis", false), false);
+    assert.equal(supportsAddDataRenderer(id, "arcgis", true), true);
+  }
+  assert.equal(supportsAddDataRenderer("vector", "arcgis", false), true);
+  assert.equal(supportsAddDataRenderer("zarr", "arcgis", false), true);
+});

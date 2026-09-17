@@ -52,6 +52,7 @@ export class ArcgisDeckOverlay {
   }
   private async attach(): Promise<void> {
     if (this.disposed || this.native) return;
+    if (this.view.type === "3d" && this.view.viewingMode !== "local") return;
     // Deck uses an offscreen canvas, so ArcGIS owns pointer delivery.
     for (const [eventType, callback] of [
       ["click", "onClick"],
@@ -83,7 +84,6 @@ export class ArcgisDeckOverlay {
       );
     }
     if (this.view.type === "3d") {
-      if (this.view.viewingMode !== "local") return;
       const [module, { default: factory }] = await Promise.all([
         this.loadModule("views/3d/webgl/RenderNode"),
         import("./deck-renderer.js"),

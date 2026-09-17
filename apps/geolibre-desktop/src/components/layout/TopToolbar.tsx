@@ -2115,13 +2115,25 @@ export function TopToolbar({
           commands.filter(
             (command) =>
               !command.id.startsWith("add.") ||
-              (addDataReady && supportsAddDataRenderer(command.id.slice(4), primaryRenderer)),
+              (addDataReady &&
+                supportsAddDataRenderer(
+                  command.id.slice(4),
+                  primaryRenderer,
+                  capabilities.deckOverlay,
+                )),
           ),
           deploymentCapabilities,
         ),
         appPrivileges,
       ),
-    [commands, deploymentCapabilities, appPrivileges, primaryRenderer, addDataReady],
+    [
+      commands,
+      deploymentCapabilities,
+      appPrivileges,
+      primaryRenderer,
+      addDataReady,
+      capabilities.deckOverlay,
+    ],
   );
   const shortcutCommands = useMemo(
     () =>
