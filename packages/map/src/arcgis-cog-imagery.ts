@@ -54,7 +54,10 @@ export function createArcgisCogLayer(
         statistics = await pending.catch(() => null);
       }
       return { source, render: cogRenderOptions(layer, statistics) };
-    })());
+    })().catch((error: unknown) => {
+      ready = undefined;
+      throw error;
+    }));
   const CustomLayer = sdk.layers.BaseTileLayer.createSubclass({
     load(this: ArcgisRasterLayer) {
       this.addResolvingPromise(
