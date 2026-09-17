@@ -1343,7 +1343,7 @@ export class ArcgisEngine implements MapEngine {
     }
     // The engine may have been destroyed (a renderer swap, an unmounted pane)
     // while the hit test was in flight; the captured view is gone with it.
-    if (this.view !== view) return [];
+    if (this.view !== view) return external;
     const seen = new Set<string>();
     const features: IdentifiedFeature[] = [...external];
     for (const result of hit.results) {
