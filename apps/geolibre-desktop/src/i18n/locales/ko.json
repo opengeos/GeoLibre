@@ -3018,6 +3018,7 @@
       "maplibre-gl-esri-wayback": "과거 영상",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
+      "geolibre-osm-downloader": "OSM 다운로더",
       "geolibre-stac-catalogs": "STAC 카탈로그",
       "geolibre-planet-open-data": "Planet 오픈 데이터",
       "maplibre-gl-source-coop": "Source Cooperative",

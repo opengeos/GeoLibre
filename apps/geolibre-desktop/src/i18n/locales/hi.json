@@ -3069,6 +3069,7 @@
       "maplibre-gl-esri-wayback": "ऐतिहासिक इमेजरी",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
+      "geolibre-osm-downloader": "OSM डाउनलोडर",
       "geolibre-stac-catalogs": "STAC कैटलॉग",
       "geolibre-planet-open-data": "Planet खुला डेटा",
       "maplibre-gl-source-coop": "Source Cooperative",

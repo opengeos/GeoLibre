@@ -3272,6 +3272,7 @@
       "maplibre-gl-esri-wayback": "الصور التاريخية",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
+      "geolibre-osm-downloader": "مُنزِّل OSM",
       "geolibre-stac-catalogs": "كتالوجات STAC",
       "geolibre-planet-open-data": "بيانات Planet المفتوحة",
       "maplibre-gl-source-coop": "Source Cooperative",

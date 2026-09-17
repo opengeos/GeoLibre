@@ -166,6 +166,39 @@ describe("Overpass JSON conversion", () => {
     });
     assert.equal(result.features.length, 0);
   });
+
+  it("drops an incomplete multipolygon instead of mixing inner and outer lines", () => {
+    const result = overpassJsonToGeoJson({
+      elements: [
+        {
+          type: "relation",
+          id: 10,
+          tags: { type: "multipolygon", landuse: "forest" },
+          members: [
+            {
+              type: "way",
+              ref: 1,
+              role: "outer",
+              geometry: [
+                { lon: 0, lat: 0 },
+                { lon: 1, lat: 0 },
+              ],
+            },
+            {
+              type: "way",
+              ref: 2,
+              role: "inner",
+              geometry: [
+                { lon: 0.2, lat: 0.2 },
+                { lon: 0.4, lat: 0.2 },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    assert.equal(result.features.length, 0);
+  });
 });
 
 describe("downloadOsmGeoJson", () => {

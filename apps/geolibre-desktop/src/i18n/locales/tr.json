@@ -3069,6 +3069,7 @@
       "maplibre-gl-esri-wayback": "Tarihsel Görüntüler",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
+      "geolibre-osm-downloader": "OSM İndirici",
       "geolibre-stac-catalogs": "STAC Katalogları",
       "geolibre-planet-open-data": "Planet Açık Verileri",
       "maplibre-gl-source-coop": "Source Cooperative",

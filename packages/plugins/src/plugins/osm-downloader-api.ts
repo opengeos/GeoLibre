@@ -302,6 +302,9 @@ function relationGeometry(element: OverpassElement): Geometry | null {
       }
       return { type: "MultiPolygon", coordinates: polygons } satisfies MultiPolygon;
     }
+    // Do not turn an incomplete area relation into misleading mixed-role
+    // linework. Without a closed outer ring there is no valid polygon to show.
+    return null;
   }
 
   const lines = members
