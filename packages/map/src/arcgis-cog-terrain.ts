@@ -1,4 +1,4 @@
-import type { CogDemSourceRegistration } from "./cog-dem-source";
+import { encodeTerrariumDem, type CogDemSourceRegistration } from "./cog-dem-source";
 import type { ArcgisElevationLayer, ArcgisSceneSdk } from "./arcgis-sdk";
 
 const TILE_SIZE = 256;
@@ -15,10 +15,15 @@ export function createCogElevationLayer(
   exaggeration: number,
 ): ArcgisElevationLayer {
   const cache = new Map<string, Promise<Uint8ClampedArray>>();
+  let zeroTile: Uint8ClampedArray | undefined;
   const read = (level: number, col: number, row: number) => {
     const count = 2 ** level;
     const x = ((col % count) + count) % count;
-    const y = Math.max(0, Math.min(count - 1, row));
+    if (row < 0 || row >= count) {
+      zeroTile ??= encodeTerrariumDem(new Float32Array(TILE_SIZE * TILE_SIZE), null);
+      return Promise.resolve(zeroTile);
+    }
+    const y = row;
     const key = `${level}/${x}/${y}`;
     let tile = cache.get(key);
     if (!tile) {

@@ -337,11 +337,12 @@ const SYNC_CLOCK_TICK_MS = 60_000;
  * Data menu order. `openAddData` scopes the layers a source creates to a group,
  * so only the sources the Add Data *dialog* owns qualify — `KIND_I18N_KEY` is
  * keyed by `AddDataKind`, so membership in it is that test. The rest of the
- * catalog (vector/raster file pickers, STAC, PMTiles, …) never routes through
- * the dialog and so has no group-scoped open.
+ * catalog (vector/raster file pickers, STAC, …) has no group-scoped open.
+ * PMTiles also uses the dialog when ArcGIS is the primary renderer.
  */
 const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
-  (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } => entry.id in KIND_I18N_KEY,
+  (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } =>
+    entry.id in KIND_I18N_KEY || entry.id === "pmtiles",
 );
 
 type LayerRefreshStatus = {
@@ -656,15 +657,17 @@ export function LayerPanel({
   // and the mobile-only postgres rule); the user agent is stable for the
   // session, so evaluate it once.
   const mobile = useMemo(() => isMobile(), []);
+  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
   const addDataGroupSources = useMemo(
     () =>
       ADD_DATA_DIALOG_SOURCES.filter(
         (entry) =>
           isDataSourceVisible(uiProfile, entry.id) &&
+          (entry.id !== "pmtiles" || arcgisPrimary) &&
           !(entry.id === "postgres" && mobile) &&
           !masHidesDataSource(entry.id),
       ),
-    [uiProfile, mobile],
+    [uiProfile, mobile, arcgisPrimary],
   );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
@@ -675,9 +678,6 @@ export function LayerPanel({
   // it rejects (a MapLibre custom protocol, deck.gl, COG, ...) is flagged here
   // rather than only reported by the map's error banner once it is visible.
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
-  // And the ArcGIS engine draws through the SDK's own layer classes, so the
-  // layer kinds without a translation are flagged the same way.
-  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
   // The subset panel draws its extract box on the map surface, so it needs an
   // engine the user can draw on — not merely "not the globe".
   const capabilities = useMapCapabilities(mapControllerRef);
