@@ -227,6 +227,20 @@ it("registers ArcGIS kerchunk time units once without an attribute-less HTTP fal
     assert.equal(controlInstance, null, "ArcGIS must not initialize the MapLibre control");
     useAppStore.getState().removeLayer(layer.id);
     assert.equal(getTemporalLayerAdapter(layer.id), undefined);
+
+    await addCloudNetcdfLayer(
+      { ...app, getMapRenderer: () => "arcgis" },
+      { url: "local:decoded.nc", variable: "air", refs },
+    );
+    const localLayer = useAppStore.getState().layers.at(-1)!;
+    assert.equal(
+      "kerchunkRefs" in localLayer.source,
+      false,
+      "inline local raster bytes must stay out of persisted project JSON",
+    );
+    const localAdapter = await waitForAdapter(localLayer.id);
+    assert.deepEqual(localAdapter?.getTimeValues(), [Date.UTC(2020, 0, 1), Date.UTC(2020, 0, 2)]);
+    useAppStore.getState().removeLayer(localLayer.id);
   } finally {
     globalThis.fetch = previousFetch;
     useAppStore.setState({ primaryRenderer: previousRenderer });
