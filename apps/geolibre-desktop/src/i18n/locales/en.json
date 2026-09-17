@@ -8002,5 +8002,10 @@
     "catalogHuc12pp": "HUC12 pour points",
     "catalogNmwdiSt": "New Mexico water sites",
     "catalogFlowlines": "NHDPlus flowlines"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer."
+    }
   }
 }

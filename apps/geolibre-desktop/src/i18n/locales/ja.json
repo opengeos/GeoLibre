@@ -7908,5 +7908,10 @@
     "catalogHuc12pp": "HUC12流出点",
     "catalogNmwdiSt": "ニューメキシコ州の水文観測地点",
     "catalogFlowlines": "NHDPlus流路"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。"
+    }
   }
 }

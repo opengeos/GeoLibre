@@ -698,8 +698,11 @@ function installGooglePhotorealisticTilesPanelHandlers(
         const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
         if (status) {
           status.dataset.status = "error";
+          const message =
+            "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.";
           status.textContent =
-            "Google Photorealistic and I3S tiles require another rendering engine. Use a 3D Tiles tileset.json URL here.";
+            activeThreeDTilesApp?.translate?.("plugin.3d-tiles.arcgisSourceUnsupported", message) ??
+            message;
         }
         return;
       }
