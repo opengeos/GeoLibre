@@ -4,6 +4,23 @@ import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import { getZarrStore } from "./zarr-source";
 import { cssToArcgisColor } from "./arcgis-layers";
 
+async function projectionFromWgs84(crs: string, signal: AbortSignal) {
+  try {
+    return proj4("EPSG:4326", crs);
+  } catch (error) {
+    const epsg = /^EPSG:(\d{3,6})$/i.exec(crs.trim());
+    if (!epsg) throw error;
+    const name = `EPSG:${epsg[1]}`;
+    const response = await fetch(`https://epsg.io/${epsg[1]}.proj4`, { signal });
+    if (!response.ok) throw new Error(`Could not resolve ${name} (${response.status})`);
+    const definition = (await response.text()).trim();
+    if (definition.length > 16_384 || !/(^|\s)\+proj=/.test(definition))
+      throw new Error(`Could not resolve ${name} to a proj4 definition`);
+    proj4.defs(name, definition);
+    return proj4("EPSG:4326", name);
+  }
+}
+
 /** Read regular CF grids through public Zarrita APIs, independent of a map. */
 export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSignal) {
   const zarr = await import("zarrita");
@@ -63,7 +80,7 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   if (xDim < 0 || yDim < 0 || xDim === yDim)
     throw new Error("Zarr requires separate one-dimensional spatial axes");
   const crs = String(source.proj4 || source.crs || "EPSG:4326");
-  const transform = proj4("EPSG:4326", crs);
+  const transform = await projectionFromWgs84(crs, signal);
   const geographicProbe = transform.forward([12.345678, 34.56789]);
   const geographic =
     Math.abs(geographicProbe[0] - 12.345678) < 1e-8 &&
