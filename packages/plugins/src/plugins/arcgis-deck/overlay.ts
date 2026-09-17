@@ -33,6 +33,7 @@ export class ArcgisDeckOverlay {
     private view: ArcgisView,
     props: DeckProps,
     private loadModule = importModule,
+    private createResources = initializeResources,
   ) {
     this.props = props;
     this.map = view.map;
@@ -69,11 +70,23 @@ export class ArcgisDeckOverlay {
       async attach(this: LayerView) {
         const generation = ++overlay.generation;
         overlay.layerView = this;
-        try {
-          const resources = await initializeResources.call(
-            { redraw: () => this.requestRender() },
-            this.context,
-          );
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (overlay.disposed || generation !== overlay.generation) return;
+          let resources: RenderResources;
+          try {
+            resources = await overlay.createResources.call(
+              { redraw: () => this.requestRender() },
+              this.context,
+            );
+          } catch (error) {
+            if (overlay.disposed || generation !== overlay.generation) return;
+            if (attempt === 2) {
+              overlay.props.onError?.(error as Error);
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            continue;
+          }
           if (overlay.disposed || generation !== overlay.generation) {
             finalizeResources(resources);
             return;
@@ -82,8 +95,7 @@ export class ArcgisDeckOverlay {
           resources.deck.setProps(overlay.props);
           overlay.props.onDeviceInitialized?.(resources.model.device);
           this.requestRender();
-        } catch (error) {
-          if (!overlay.disposed) overlay.props.onError?.(error as Error);
+          return;
         }
       },
       detach() {
