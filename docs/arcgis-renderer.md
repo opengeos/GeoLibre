@@ -237,7 +237,9 @@ ascending or descending latitude, 0–360° longitude, CF scale/offset and fill
 values, and integer selectors for other dimensions. The Time Slider uses the
 same selector path. Projected grids require a CRS or proj4 definition through
 the import API. Curvilinear coordinates and automatic multiscale selection are
-not supported; a pyramid level can be selected by its variable path.
+not supported; a pyramid level can be selected by its variable path. The plugin
+`queryZarrLayer` API (point values and region statistics) is not yet supported
+for native ArcGIS grids.
 
 **Add Data → NetCDF** uses the existing file dialog. Image slices render as
 native image overlays; kerchunk-backed grids share the tiled Zarr reader.

@@ -149,6 +149,8 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
     throw new Error("Zarr color limits must increase");
   const scale = Number(array.attrs.scale_factor ?? 1),
     offset = Number(array.attrs.add_offset ?? 0);
+  if (!Number.isFinite(scale) || !Number.isFinite(offset))
+    throw new Error("Zarr scale_factor and add_offset must be finite numbers");
   const fill = array.attrs._FillValue ?? array.fillValue;
   const bounds = [xAxis.min, yAxis.min, xAxis.max, yAxis.max];
   const corners = [
