@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   BLANK_BASEMAP,
   DEFAULT_LAYER_STYLE,
@@ -1312,4 +1313,82 @@ describe("ArcGIS archive interceptor ownership", () => {
     assert.ok(engine.getRenderStatus().errors.some((error) => error.includes("SDK add failed")));
     engine.destroy();
   });
+});
+
+it("hosts DOM controls with instant jumps, navigation events and complete cleanup", () => {
+  const { document, HTMLElement } = parseHTML("<html><body></body></html>").window;
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  Object.assign(globalThis, { document, HTMLElement });
+  const { engine, rawView, goTo, uiAdds, fireWatchers } = makeEngine();
+  rawView.container = document.body;
+  const builtInCount = uiAdds.length;
+  let facade!: MapLibreMap;
+  let removed = 0;
+  const control = {
+    onAdd(map: MapLibreMap) {
+      facade = map;
+      return document.createElement("div");
+    },
+    onRemove() {
+      removed++;
+    },
+  };
+  try {
+    assert.equal(engine.addControl(control, "bottom-right"), true);
+    assert.equal(engine.addControl(control, "bottom-right"), true);
+    assert.equal(uiAdds.length, builtInCount + 1);
+    assert.equal(uiAdds.at(-1)!.position, "bottom-right");
+    assert.ok(
+      (uiAdds.at(-1)!.component as HTMLElement).classList.contains("maplibregl-ctrl-bottom-right"),
+    );
+    assert.equal(facade.hasControl(control), true);
+    facade.jumpTo({ center: { lng: 3, lat: 4 }, zoom: 9 });
+    assert.deepEqual(goTo.at(-1), {
+      target: { center: [3, 4], zoom: 9, rotation: 0 },
+      options: { animate: false },
+    });
+    facade.easeTo({ zoom: 10 });
+    assert.equal((goTo.at(-1) as { options: { duration: number } }).options.duration, 500);
+    const events: string[] = [];
+    for (const event of ["movestart", "moveend", "idle", "remove"])
+      facade.on(event, () => events.push(event));
+    rawView.stationary = false;
+    fireWatchers();
+    rawView.stationary = true;
+    fireWatchers();
+    assert.deepEqual(events, ["movestart", "moveend", "idle"]);
+    engine.removeControl(control);
+    assert.equal(facade.hasControl(control), false);
+    assert.equal(removed, 1);
+    assert.equal(uiAdds.length, builtInCount);
+    let failedCleanup = 0;
+    const broken = {
+      onAdd(): HTMLElement {
+        throw new Error("Control initialization failed");
+      },
+      onRemove() {
+        failedCleanup++;
+      },
+    };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      assert.equal(engine.addControl(broken), false);
+      assert.equal(failedCleanup, 1);
+      assert.equal(facade.hasControl(broken), false);
+      assert.equal(uiAdds.length, builtInCount);
+    } finally {
+      console.warn = warn;
+    }
+    engine.addControl(control);
+    engine.destroy();
+    assert.equal(removed, 2);
+    assert.equal(uiAdds.length, builtInCount);
+    assert.deepEqual(events, ["movestart", "moveend", "idle", "remove"]);
+    fireWatchers();
+    assert.equal(events.length, 4, "destroy removes the SDK event subscriptions");
+  } finally {
+    engine.destroy();
+    Object.assign(globalThis, previous);
+  }
 });

@@ -805,6 +805,7 @@ let geoTiffRasterStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let stacSearchStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
+const arcgisZarrTemporalUnsubscribes = new Map<string, () => void>();
 let lidarStoreUnsubscribe: (() => void) | null = null;
 let splattingStoreUnsubscribe: (() => void) | null = null;
 
@@ -2983,6 +2984,18 @@ function registerZarrTemporalAdapter(
         });
       },
     });
+    if (useAppStore.getState().primaryRenderer === "arcgis") {
+      // Native layers have no Zarr control to own their temporal cleanup.
+      arcgisZarrTemporalUnsubscribes.get(layerId)?.();
+      const unsubscribe = useAppStore.subscribe((state, previous) => {
+        if (state.layers === previous.layers) return;
+        if (state.layers.some((layer) => layer.id === layerId)) return;
+        unregisterTemporalLayer(layerId);
+        unsubscribe();
+        arcgisZarrTemporalUnsubscribes.delete(layerId);
+      });
+      arcgisZarrTemporalUnsubscribes.set(layerId, unsubscribe);
+    }
   })().catch((error) => console.warn("[zarr] Could not register the time axis", error));
 }
 
