@@ -64,7 +64,10 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
     throw new Error("Zarr requires separate one-dimensional spatial axes");
   const crs = String(source.proj4 || source.crs || "EPSG:4326");
   const transform = proj4("EPSG:4326", crs);
-  const geographic = /^(EPSG:4326|WGS84)$/i.test(crs);
+  const geographicProbe = transform.forward([12.345678, 34.56789]);
+  const geographic =
+    Math.abs(geographicProbe[0] - 12.345678) < 1e-8 &&
+    Math.abs(geographicProbe[1] - 34.56789) < 1e-8;
   const explicit = source.bounds as number[] | undefined;
   const parent = variable.includes("/") ? variable.slice(0, variable.lastIndexOf("/") + 1) : "";
   async function axis(dim: number, horizontal: boolean) {
@@ -146,15 +149,18 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   }
   const initialSelector = (source.selector ?? {}) as Record<string, unknown>;
   selectionFor(initialSelector);
-  const colors = (
-    Array.isArray(source.colormap) && source.colormap.length
-      ? source.colormap
-      : interpolateRampColors(String(source.colormap || "viridis"), 256)
-  ) as string[];
-  const ramp = colors.map((color) => cssToArcgisColor(color));
-  const clim = Array.isArray(source.clim) ? source.clim.map(Number) : [0, 1];
-  if (clim.length !== 2 || !clim.every(Number.isFinite) || clim[1] <= clim[0])
-    throw new Error("Zarr color limits must increase");
+  const makeStyle = (next: GeoLibreLayer["source"]) => {
+    const colors = (
+      Array.isArray(next.colormap) && next.colormap.length
+        ? next.colormap
+        : interpolateRampColors(String(next.colormap || "viridis"), 256)
+    ) as string[];
+    const nextClim = Array.isArray(next.clim) ? next.clim.map(Number) : [0, 1];
+    if (nextClim.length !== 2 || !nextClim.every(Number.isFinite) || nextClim[1] <= nextClim[0])
+      throw new Error("Zarr color limits must increase");
+    return { ramp: colors.map((color) => cssToArcgisColor(color)), clim: nextClim };
+  };
+  let { ramp, clim } = makeStyle(source);
   const scale = Number(array.attrs.scale_factor ?? 1),
     offset = Number(array.attrs.add_offset ?? 0);
   if (!Number.isFinite(scale) || !Number.isFinite(offset))
@@ -177,7 +183,7 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
     const shift = Math.round((extent[0] + extent[2]) / 720) * 360;
     extent[0] -= shift;
     extent[2] -= shift;
-    if (extent[0] < -180 || extent[2] > 180) {
+    if (extent[2] - extent[0] >= 360) {
       extent[0] = -180;
       extent[2] = 180;
     }
@@ -186,6 +192,9 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   extent[3] = Math.max(extent[1], Math.min(85.05112878, extent[3]));
   return {
     extent,
+    setStyle(next: GeoLibreLayer["source"]) {
+      ({ ramp, clim } = makeStyle(next));
+    },
     async renderTile(
       z: number,
       x: number,
@@ -260,6 +269,7 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
 
 export interface ArcgisZarrLayer extends ArcgisRasterLayer {
   setSelector(selector: Record<string, unknown>): void;
+  setStyle(source: GeoLibreLayer["source"]): void;
   refresh(): void;
 }
 
@@ -272,6 +282,10 @@ export function createArcgisZarrLayer(
   let sliceLifetime = new AbortController();
   let selector = (layer.source.selector ?? {}) as Record<string, unknown>;
   let selectorKey = JSON.stringify(selector);
+  let styleSource = layer.source;
+  let styleKey = JSON.stringify([styleSource.clim, styleSource.colormap]);
+  let styleVersion = 0;
+  let appliedStyleVersion = 0;
   let ready: ReturnType<typeof openArcgisZarrGrid> | undefined;
   const prepare = () =>
     (ready ??= openArcgisZarrGrid(layer, lifetime.signal).catch((error: unknown) => {
@@ -286,6 +300,14 @@ export function createArcgisZarrLayer(
       selectorKey = key;
       sliceLifetime.abort();
       sliceLifetime = new AbortController();
+      this.refresh();
+    },
+    setStyle(this: ArcgisZarrLayer, next: GeoLibreLayer["source"]) {
+      const key = JSON.stringify([next.clim, next.colormap]);
+      if (key === styleKey) return;
+      styleSource = next;
+      styleKey = key;
+      styleVersion++;
       this.refresh();
     },
     load(this: ArcgisRasterLayer) {
@@ -314,6 +336,10 @@ export function createArcgisZarrLayer(
       signal.throwIfAborted();
       const grid = await prepare();
       signal.throwIfAborted();
+      if (appliedStyleVersion !== styleVersion) {
+        grid.setStyle(styleSource);
+        appliedStyleVersion = styleVersion;
+      }
       const rgba = await grid.renderTile(z, x, y, signal, selected);
       signal.throwIfAborted();
       const canvas = document.createElement("canvas");
