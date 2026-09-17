@@ -2050,13 +2050,15 @@ export class ArcgisEngine implements MapEngine {
   hasCustomTerrainSource(): boolean {
     return this.cogTerrain !== null;
   }
+  private openCogDem = registerCogDemSource;
+
   async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
     if (!this.view) return false;
     const normalized = typeof source === "string" ? source.trim() || null : source;
     const request = ++this.cogTerrainRequest;
     let registration: CogDemSourceRegistration | null;
     try {
-      registration = normalized ? await registerCogDemSource(normalized, band) : null;
+      registration = normalized ? await this.openCogDem(normalized, band) : null;
     } catch (error) {
       if (request !== this.cogTerrainRequest || !this.view) return false;
       throw error;

@@ -1139,3 +1139,86 @@ it("commits native visibility before an unrelated store sync can overwrite the t
   assert.deepEqual(changes, [false]);
   engine.destroy();
 });
+
+describe("ArcGIS custom terrain ownership", () => {
+  function terrainHarness() {
+    const { engine } = makeEngine();
+    type Registration = Awaited<
+      ReturnType<typeof import("../packages/map/src/cog-dem-source").registerCogDemSource>
+    >;
+    const pending = new Map<
+      string,
+      {
+        resolve: (registration: Registration) => void;
+        reject: (error: Error) => void;
+      }
+    >();
+    (
+      engine as unknown as {
+        openCogDem: (source: string) => Promise<Registration>;
+      }
+    ).openCogDem = (source) =>
+      new Promise((resolve, reject) => {
+        pending.set(source, { resolve, reject });
+      });
+    const registration = () => {
+      let disposals = 0;
+      return {
+        tiles: ["unused"],
+        renderTile: async () => new Uint8ClampedArray(256 * 256 * 4),
+        dispose: () => {
+          disposals++;
+        },
+        get disposals() {
+          return disposals;
+        },
+      };
+    };
+    return { engine, pending, registration };
+  }
+
+  it("keeps the newest source and disposes a superseded pending source", async () => {
+    const { engine, pending, registration } = terrainHarness();
+    const first = engine.setTerrainCogSource("first");
+    const second = engine.setTerrainCogSource("second");
+    const old = registration(),
+      latest = registration();
+    pending.get("second")!.resolve(latest);
+    assert.equal(await second, true);
+    pending.get("first")!.resolve(old);
+    assert.equal(await first, false);
+    assert.equal(engine.getTerrainCogSource(), "second");
+    assert.equal(old.disposals, 1);
+    assert.equal(latest.disposals, 0);
+    engine.destroy();
+    assert.equal(latest.disposals, 1);
+  });
+
+  it("preserves working terrain after a failed replacement and disposes on clear", async () => {
+    const { engine, pending, registration } = terrainHarness();
+    const first = engine.setTerrainCogSource("working");
+    const working = registration();
+    pending.get("working")!.resolve(working);
+    await first;
+    const failed = engine.setTerrainCogSource("offline");
+    pending.get("offline")!.reject(new Error("Network unavailable"));
+    await assert.rejects(failed, /Network unavailable/);
+    assert.equal(engine.getTerrainCogSource(), "working");
+    assert.equal(working.disposals, 0);
+    assert.equal(await engine.setTerrainCogSource(null), true);
+    assert.equal(engine.hasCustomTerrainSource(), false);
+    assert.equal(working.disposals, 1);
+    engine.destroy();
+    assert.equal(working.disposals, 1);
+  });
+
+  it("disposes a registration that completes after the view is destroyed", async () => {
+    const { engine, pending, registration } = terrainHarness();
+    const loading = engine.setTerrainCogSource("late");
+    engine.destroy();
+    const late = registration();
+    pending.get("late")!.resolve(late);
+    assert.equal(await loading, false);
+    assert.equal(late.disposals, 1);
+  });
+});
