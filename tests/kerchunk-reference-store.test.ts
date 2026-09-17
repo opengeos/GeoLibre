@@ -105,9 +105,16 @@ describe("KerchunkReferenceStore.get", () => {
   });
 
   it("keeps credentials on the HTTPS manifest origin only", async () => {
-    const captured: Array<{ url: string; headers: Record<string, string> }> = [];
-    const fetchImpl = async (url: string, init?: { headers?: Record<string, string> }) => {
-      captured.push({ url, headers: init?.headers ?? {} });
+    const captured: Array<{
+      url: string;
+      headers: Record<string, string>;
+      redirect?: string;
+    }> = [];
+    const fetchImpl = async (
+      url: string,
+      init?: { headers?: Record<string, string>; redirect?: string },
+    ) => {
+      captured.push({ url, headers: init?.headers ?? {}, redirect: init?.redirect });
       return { status: 206, arrayBuffer: async () => new ArrayBuffer(1) };
     };
     const store = new KerchunkReferenceStore(
@@ -126,6 +133,7 @@ describe("KerchunkReferenceStore.get", () => {
     await store.get("other");
     await store.get("cleartext");
     assert.equal(captured[0].headers.Authorization, "Bearer secret");
+    assert.equal(captured[0].redirect, "error");
     assert.equal(captured[1].headers.Authorization, undefined);
     assert.equal(captured[2].headers.Authorization, undefined);
     assert.match(captured[2].headers.Range, /^bytes=/);
@@ -299,9 +307,15 @@ describe("loadKerchunkReference", () => {
   });
 
   it("forwards custom headers to the manifest fetch", async () => {
-    const seen: Array<Record<string, string> | undefined> = [];
-    const fetchImpl = async (_url: string, init?: { headers?: Record<string, string> }) => {
-      seen.push(init?.headers);
+    const seen: Array<{
+      headers?: Record<string, string>;
+      redirect?: string;
+    }> = [];
+    const fetchImpl = async (
+      _url: string,
+      init?: { headers?: Record<string, string>; redirect?: string },
+    ) => {
+      seen.push(init ?? {});
       return {
         status: 200,
         arrayBuffer: async () =>
@@ -312,7 +326,8 @@ describe("loadKerchunkReference", () => {
       fetchImpl,
       headers: { Authorization: "Bearer t" },
     });
-    assert.equal(seen[0]?.Authorization, "Bearer t");
+    assert.equal(seen[0].headers?.Authorization, "Bearer t");
+    assert.equal(seen[0].redirect, "error");
   });
 
   it("throws on a non-200 response", async () => {
