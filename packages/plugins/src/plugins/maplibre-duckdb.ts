@@ -394,7 +394,9 @@ async function openStandaloneDuckDBControl(app: GeoLibreAppAPI): Promise<boolean
           if (
             !isDuckDBQueryLayer(layer) ||
             (layerId && layer.id !== layerId) ||
-            !effectiveLayerRenderState(layer, groups).visible
+            !effectiveLayerRenderState(layer, groups).visible ||
+            !resolveLayerCapabilities(layer).query ||
+            !isPopupClickEnabled(layer.popup)
           )
             return [];
           const hit = identifyDuckDBLayerAtPoint(layer.id, point);

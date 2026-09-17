@@ -170,9 +170,15 @@ export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
+  const renderer = app.getMapRenderer?.() ?? "";
+  if (renderer === "arcgis") {
+    if (useAppStore.getState().layers.some(isMapboxTilesLayer))
+      void restoreMapboxTiles(app).catch(console.error);
+    return;
+  }
   restoreGooglePhotorealisticTilesLayers(app);
   restoreArcgisI3sTilesLayers(app);
-  if (["mapbox", "arcgis"].includes(app.getMapRenderer?.() ?? "")) {
+  if (renderer === "mapbox") {
     if (useAppStore.getState().layers.some(isMapboxTilesLayer))
       void restoreMapboxTiles(app).catch(console.error);
     return;

@@ -154,7 +154,11 @@ export class ArcgisControlHost {
     const dispose = this.adapted.get(control);
     if (dispose) {
       this.adapted.delete(control);
-      dispose();
+      try {
+        dispose();
+      } catch (error) {
+        console.warn("[ArcGIS] Could not remove adapted control", error);
+      }
       return;
     }
     const element = this.controls.get(control);
