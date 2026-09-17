@@ -263,7 +263,11 @@ export function createArcgisZarrLayer(
   let selector = (layer.source.selector ?? {}) as Record<string, unknown>;
   let selectorKey = JSON.stringify(selector);
   let ready: ReturnType<typeof openArcgisZarrGrid> | undefined;
-  const prepare = () => (ready ??= openArcgisZarrGrid(layer, lifetime.signal));
+  const prepare = () =>
+    (ready ??= openArcgisZarrGrid(layer, lifetime.signal).catch((error: unknown) => {
+      ready = undefined;
+      throw error;
+    }));
   const Native = sdk.layers.BaseTileLayer.createSubclass({
     setSelector(this: ArcgisZarrLayer, next: Record<string, unknown>) {
       const key = JSON.stringify(next);
