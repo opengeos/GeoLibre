@@ -115,11 +115,16 @@ export function createArcgisArchiveLayer(
         );
     },
     async fetchTile(z: number, y: number, x: number, options?: { signal?: AbortSignal }) {
-      maxZoom ??= archive
-        ? archive.getHeader().then((header) => header.maxZoom)
-        : Promise.resolve(
-            typeof plan.tileOptions.maxzoom === "number" ? plan.tileOptions.maxzoom : 24,
-          );
+      maxZoom ??= (
+        archive
+          ? archive.getHeader().then((header) => header.maxZoom)
+          : Promise.resolve(
+              typeof plan.tileOptions.maxzoom === "number" ? plan.tileOptions.maxzoom : 24,
+            )
+      ).catch((error: unknown) => {
+        maxZoom = undefined;
+        throw error;
+      });
       const nativeZoom = Math.min(z, await maxZoom);
       const factor = 2 ** (z - nativeZoom);
       const bytes = await tile(
