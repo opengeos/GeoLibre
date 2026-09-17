@@ -1176,7 +1176,13 @@ let nextZarrManifestId = 0;
 function zarrRenderSignature(source: GeoLibreLayer["source"]): string {
   const cached = zarrSignatures.get(source);
   if (cached !== undefined) return cached;
-  const { selector: _selector, kerchunkRefs, ...gridSource } = source;
+  const {
+    selector: _selector,
+    clim: _clim,
+    colormap: _colormap,
+    kerchunkRefs,
+    ...gridSource
+  } = source;
   let refs = kerchunkRefs;
   if (kerchunkRefs && typeof kerchunkRefs === "object") {
     let id = zarrManifestIds.get(kerchunkRefs);

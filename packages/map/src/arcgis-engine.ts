@@ -960,9 +960,9 @@ export class ArcgisEngine implements MapEngine {
         else this.errors.delete(`filter:${layer.id}`);
         for (const native of entry.layers) {
           if (plan.kind === "zarr") {
-            (native as import("./arcgis-zarr").ArcgisZarrLayer).setSelector(
-              (plan.source.source.selector ?? {}) as Record<string, unknown>,
-            );
+            const zarr = native as import("./arcgis-zarr").ArcgisZarrLayer;
+            zarr.setSelector((plan.source.source.selector ?? {}) as Record<string, unknown>);
+            zarr.setStyle(plan.source.source);
           }
           native.visible = plan.visible;
           native.opacity = plan.opacity;

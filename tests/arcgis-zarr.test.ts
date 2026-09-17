@@ -26,6 +26,11 @@ it("compares kerchunk manifests by identity without serializing their contents",
     signature(layer.source),
     signature({ ...layer.source, kerchunkRefs: { ...refs } }),
   );
+  assert.equal(
+    signature(layer.source),
+    signature({ ...layer.source, clim: [-20, 40], colormap: "magma" }),
+    "cosmetic restyles retain the prepared grid and byte cache",
+  );
 });
 
 it("renders the selected CF slice with north-up orientation, packing and fill masking", async () => {
@@ -133,6 +138,22 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       assert.ok(polar.extent[1] >= -85.05112878);
       assert.ok(polar.extent[3] <= 85.05112878);
     }
+    array("crossLon", [2], ["crossLon"], [170, 190]);
+    array("crossing", [2, 2], ["lat", "crossLon"], [1, 2, 3, 4]);
+    const crossing = await openArcgisZarrGrid(
+      {
+        ...layer,
+        source: {
+          ...layer.source,
+          variable: "crossing",
+          selector: {},
+          spatialDimensions: { lat: "lat", lon: "crossLon" },
+          proj4: "+proj=longlat +datum=WGS84 +no_defs",
+        },
+      },
+      abort.signal,
+    );
+    assert.equal(crossing.extent[2] - crossing.extent[0], 40);
     for (const attribute of ["scale_factor", "add_offset"]) {
       array("invalidPacking", [2, 2], ["lat", "lon"], [1, 2, 3, 4], { [attribute]: "invalid" });
       await assert.rejects(
@@ -163,8 +184,12 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
     // Exercise the native preparation promise against the real Zarr metadata reader.
     class Native {
       pending?: Promise<unknown>;
+      refreshes = 0;
       addResolvingPromise(promise: Promise<unknown>) {
         this.pending = promise;
+      }
+      refresh() {
+        this.refreshes++;
       }
     }
     const sdk = {
@@ -184,7 +209,12 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       webMercatorUtils: { geographicToWebMercator: (extent: object) => extent },
     } as unknown as ArcgisSdk;
     const native = createArcgisZarrLayer(sdk, layer, {});
-    const loading = native.layer as unknown as { load(): void; pending: Promise<unknown> };
+    const loading = native.layer as unknown as {
+      load(): void;
+      pending: Promise<unknown>;
+      refreshes: number;
+      setStyle(source: typeof layer.source): void;
+    };
     try {
       failReads = true;
       loading.load();
@@ -193,6 +223,8 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       loading.load();
       await loading.pending;
       assert.ok(native.layer.fullExtent);
+      loading.setStyle({ ...layer.source, clim: [0, 50] });
+      assert.equal(loading.refreshes, 1);
     } finally {
       native.dispose();
     }
