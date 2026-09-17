@@ -66,7 +66,21 @@ export class ArcgisDeckOverlay {
           const pick = () => {
             const info = this.getDeck()?.pickObject({ x: event.x, y: event.y });
             if (!info) {
-              if (callback !== "onHover" || !this.hoverInfo) return;
+              if (callback === "onClick") {
+                this.props.onClick?.(
+                  {
+                    picked: false,
+                    object: null,
+                    index: -1,
+                    layer: null,
+                    x: event.x,
+                    y: event.y,
+                  } as DeckPickingInfo,
+                  event as never,
+                );
+                return;
+              }
+              if (!this.hoverInfo) return;
               const cleared = { ...this.hoverInfo, picked: false, object: null, index: -1 };
               this.hoverInfo = null;
               const handled = cleared.layer?.props.onHover?.(cleared, event as never);
