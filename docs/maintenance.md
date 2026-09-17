@@ -77,6 +77,15 @@ suite.
 
   See [Adding a blend mode](#adding-a-blend-mode) before extending the list.
 
+### `@deck.gl/mapbox` and `@deck.gl/maplibre`
+
+`bridgeArcgisDeckControl` (`packages/plugins/src/plugins/arcgis-deck/control-adapter.ts`)
+reads each overlay's private `_props` field so ArcGIS can transfer its initial
+layers into a native `ArcgisDeckOverlay` without mounting the MapLibre control.
+The cast hides upstream changes from TypeScript. After either deck.gl package is
+bumped, run `tests/arcgis-control-adapters.test.ts` and confirm the overlay still
+exposes `_props` with the initial `DeckProps` object.
+
 ### `@maplibre/maplibre-gl-style-spec`
 
 `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the

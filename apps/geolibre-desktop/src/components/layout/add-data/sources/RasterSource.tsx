@@ -51,7 +51,7 @@ export function RasterSource() {
       }
     }
     await addRasterToMap(createAppAPI(source.shell.mapControllerRef), input, {
-      name: source.layerName,
+      name: source.layerName.trim() || defaultName,
       localPath: file?.localPath,
       beforeId: source.beforeLayer ?? undefined,
     });

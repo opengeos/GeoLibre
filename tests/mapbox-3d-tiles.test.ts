@@ -112,6 +112,7 @@ it("flies 3D tile panel actions through the ArcGIS view", () => {
   const targets: unknown[] = [];
   const app = {
     getArcgisView: () => ({
+      type: "3d",
       goTo: async (target: unknown) => {
         targets.push(target);
       },
@@ -119,5 +120,18 @@ it("flies 3D tile panel actions through the ArcGIS view", () => {
     getMapboxMap: () => null,
   } as unknown as GeoLibreAppAPI;
   flyToDeckTilesLocation(app, [-73, 40], 15);
-  assert.deepEqual(targets, [{ center: [-73, 40], zoom: 15, tilt: 60 }]);
+  const flatApp = {
+    getArcgisView: () => ({
+      type: "2d",
+      goTo: async (target: unknown) => {
+        targets.push(target);
+      },
+    }),
+    getMapboxMap: () => null,
+  } as unknown as GeoLibreAppAPI;
+  flyToDeckTilesLocation(flatApp, [-72, 41], 14);
+  assert.deepEqual(targets, [
+    { center: [-73, 40], zoom: 15, tilt: 60 },
+    { center: [-72, 41], zoom: 14 },
+  ]);
 });

@@ -404,7 +404,9 @@ async function openStandaloneDuckDBControl(app: GeoLibreAppAPI): Promise<boolean
                   layerId: layer.id,
                   featureId: hit.featureId,
                   properties: hit.properties,
-                  geometry: null,
+                  geometry: hit.coordinate
+                    ? { type: "Point" as const, coordinates: hit.coordinate }
+                    : null,
                 },
               ]
             : [];
