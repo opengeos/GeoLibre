@@ -11,6 +11,7 @@ export function ZarrSource() {
   const source = useAddDataSource(t("toolbar.item.zarrLayer"));
   const [url, setUrl] = useState("");
   const [variable, setVariable] = useState("");
+  const [crs, setCrs] = useState("");
   const [min, setMin] = useState("0"),
     [max, setMax] = useState("1");
   const [colormap, setColormap] = useState("viridis");
@@ -33,6 +34,7 @@ export function ZarrSource() {
       name: source.layerName,
       clim,
       colormap,
+      crs: crs.trim() || undefined,
       beforeLayerId: source.beforeLayer,
     });
     source.shell.closeDialog();
@@ -61,6 +63,15 @@ export function ZarrSource() {
       <div className="space-y-1.5">
         <Label htmlFor="zarr-variable">{t("addData.netcdf.variableLabel")}</Label>
         <Input id="zarr-variable" value={variable} onChange={(e) => setVariable(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="zarr-crs">{t("addData.cad.crs")}</Label>
+        <Input
+          id="zarr-crs"
+          value={crs}
+          onChange={(e) => setCrs(e.target.value)}
+          placeholder={t("addData.cad.crsPlaceholder")}
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
