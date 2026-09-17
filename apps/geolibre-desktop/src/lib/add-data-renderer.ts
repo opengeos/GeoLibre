@@ -15,6 +15,10 @@ const ARCGIS_UNSUPPORTED_SOURCES = new Set([
 
 const ARCGIS_DECK_SOURCES = new Set(["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]);
 
+export function requiresArcgisDeckOverlay(id: string): boolean {
+  return ARCGIS_DECK_SOURCES.has(id);
+}
+
 export function supportsAddDataRenderer(
   id: string,
   renderer: MapRendererKind,
@@ -22,6 +26,6 @@ export function supportsAddDataRenderer(
 ): boolean {
   if (renderer === "mapbox") return !MAPBOX_UNSUPPORTED_SOURCES.has(id);
   if (renderer === "arcgis")
-    return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !ARCGIS_DECK_SOURCES.has(id));
+    return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !requiresArcgisDeckOverlay(id));
   return true;
 }

@@ -25,7 +25,10 @@ import {
 } from "../packages/map/src/arcgis-sdk";
 import { MAPLIBRE_CAPABILITIES } from "../packages/map/src/map-engine";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
-import { supportsAddDataRenderer } from "../apps/geolibre-desktop/src/lib/add-data-renderer";
+import {
+  requiresArcgisDeckOverlay,
+  supportsAddDataRenderer,
+} from "../apps/geolibre-desktop/src/lib/add-data-renderer";
 import { isPluginEngineList } from "../apps/geolibre-desktop/src/lib/plugin-archive-unpack";
 import { normalizeDesktopSettings } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import { mergeRuntimeEnv } from "../apps/geolibre-desktop/src/lib/assistant/provider";
@@ -321,9 +324,11 @@ describe("ArcGIS view swap", () => {
 
 it("keeps the Add Data palette and menu off deck-only sources in ArcGIS global views", () => {
   for (const id of ["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]) {
+    assert.equal(requiresArcgisDeckOverlay(id), true);
     assert.equal(supportsAddDataRenderer(id, "arcgis", false), false);
     assert.equal(supportsAddDataRenderer(id, "arcgis", true), true);
   }
   assert.equal(supportsAddDataRenderer("vector", "arcgis", false), true);
   assert.equal(supportsAddDataRenderer("zarr", "arcgis", false), true);
+  assert.equal(requiresArcgisDeckOverlay("splatting"), false);
 });

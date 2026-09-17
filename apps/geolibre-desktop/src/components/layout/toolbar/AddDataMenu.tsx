@@ -16,7 +16,7 @@ import { isMobile } from "../../../lib/is-mobile";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
-import { supportsAddDataRenderer } from "../../../lib/add-data-renderer";
+import { requiresArcgisDeckOverlay, supportsAddDataRenderer } from "../../../lib/add-data-renderer";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -188,7 +188,9 @@ export function AddDataMenu({
                       ? undefined
                       : t(
                           renderer === "arcgis"
-                            ? "renderer.layerArcgisUnsupported"
+                            ? requiresArcgisDeckOverlay(entry.id)
+                              ? "renderer.layerArcgisViewUnsupported"
+                              : "renderer.layerArcgisUnsupported"
                             : "renderer.layerMapboxUnsupported",
                         )
                   }
