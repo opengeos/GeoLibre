@@ -40,6 +40,7 @@ export class WcsError extends Error {
       | "crs"
       | "bounds"
       | "size"
+      | "metadata"
       | "response",
     message?: string,
   ) {

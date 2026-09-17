@@ -1001,6 +1001,7 @@
         "crs": "The coverage must support EPSG:4326 for both requests and output.",
         "bounds": "Enter a valid box: west/east within -180 to 180, south/north within -90 to 90, with west < east and south < north.",
         "size": "Choose dimensions from 1 to 4096 pixels. Downloads are limited to 128 MB.",
+        "metadata": "The service returned more metadata than GeoLibre can load. Metadata responses are limited to 32 MB.",
         "response": "The service did not return a valid GeoTIFF."
       }
     }

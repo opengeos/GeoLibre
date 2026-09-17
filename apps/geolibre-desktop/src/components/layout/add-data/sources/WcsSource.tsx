@@ -117,6 +117,13 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
         }
         throw error;
       }
+      // Decoding outlives an abort, so a dialog closed mid-decode would other-
+      // wise leave the layer it cancelled behind. Removing it also releases the
+      // raster control's resources and its retained file URL.
+      if (request.signal.aborted) {
+        useAppStore.getState().removeLayer(id);
+        request.signal.throwIfAborted();
+      }
       useAppStore.getState().moveLayerToGroup(id, source.shell.targetGroupId, source.beforeLayer);
       source.shell.closeDialog();
     } catch (error) {

@@ -128,8 +128,9 @@ and 2.x requests are not yet implemented.
 
 The selected extent and pixel dimensions determine output resolution. The
 server may resample values; this is not a guarantee of native-resolution data.
-Each dimension must be 1–4096 pixels, with a 128 MB download limit. The server
-may impose smaller limits. Areas crossing the antimeridian must be split into
+Each dimension must be 1–4096 pixels, with a 128 MB download limit; coverage
+listings and descriptions are capped at 32 MB. The server may impose smaller
+limits. Areas crossing the antimeridian must be split into
 two requests. Each load is a fixed subset; panning does not fetch more coverage.
 
 Downloads become file-backed raster layers and follow the same persistence

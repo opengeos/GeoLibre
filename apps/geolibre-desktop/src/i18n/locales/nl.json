@@ -996,6 +996,7 @@
         "format": "De coverage biedt geen GeoTIFF-uitvoer aan.",
         "crs": "De coverage moet EPSG:4326 ondersteunen voor aanvragen en uitvoer.",
         "size": "Kies afmetingen van 1 tot 4096 pixels. Downloads zijn beperkt tot 128 MB.",
+        "metadata": "De service heeft meer metadata teruggestuurd dan GeoLibre kan laden. Metadata-antwoorden zijn beperkt tot 32 MB.",
         "response": "De service heeft geen geldige GeoTIFF teruggestuurd.",
         "bounds": "Voer een geldig kader in: west/oost binnen -180 tot 180, zuid/noord binnen -90 tot 90, met west < oost en zuid < noord.",
         "url": "Voer een WCS-service-URL in."

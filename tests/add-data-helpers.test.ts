@@ -29,6 +29,7 @@ import {
   parseOptionalNumber,
   parseRequiredNumber,
   parseVideoCorner,
+  readLimitedBody,
   resolveDelimitedTextDelimiter,
   savedPostgresConnectionLabel,
   serviceRequestErrorMessage,
@@ -641,5 +642,39 @@ describe("createBaseLayer", () => {
         .simpleStyleEnabled,
       false,
     );
+  });
+});
+
+describe("readLimitedBody", () => {
+  const streamed = (chunks: string[], headers: Record<string, string> = {}) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+          controller.close();
+        },
+      }),
+      { headers },
+    );
+
+  it("returns a body that fits within the ceiling", async () => {
+    const bytes = await readLimitedBody(streamed(["abcd", "efgh"]), 8);
+    assert.equal(new TextDecoder().decode(bytes), "abcdefgh");
+  });
+
+  it("refuses an advertised length over the ceiling before reading a byte", async () => {
+    await assert.rejects(
+      readLimitedBody(
+        new Response("{}", { headers: { "Content-Length": String(64 * 1024 * 1024) } }),
+        8,
+      ),
+      // Callers match on "download limit" to map either branch — the native
+      // `read_limited_body` or this one — onto their own error.
+      /download limit/,
+    );
+  });
+
+  it("stops a chunked body that streams past the ceiling", async () => {
+    await assert.rejects(readLimitedBody(streamed(["abcd", "efgh", "ijkl"]), 8), /download limit/);
   });
 });

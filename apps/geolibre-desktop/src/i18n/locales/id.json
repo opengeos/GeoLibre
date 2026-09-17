@@ -975,6 +975,7 @@
         "format": "Cakupan tidak menawarkan keluaran GeoTIFF.",
         "crs": "Cakupan harus mendukung EPSG:4326 untuk permintaan dan keluaran.",
         "size": "Pilih dimensi 1 hingga 4096 piksel. Unduhan dibatasi hingga 128 MB.",
+        "metadata": "Layanan mengembalikan metadata lebih banyak daripada yang dapat dimuat GeoLibre. Respons metadata dibatasi hingga 32 MB.",
         "response": "Layanan tidak mengembalikan GeoTIFF yang valid.",
         "bounds": "Masukkan kotak yang valid: barat/timur antara -180 hingga 180, selatan/utara antara -90 hingga 90, dengan barat < timur dan selatan < utara.",
         "url": "Masukkan URL layanan WCS."

@@ -1,4 +1,8 @@
-import { fetchCapabilitiesText, proxyFeedRequestUrl } from "../components/layout/add-data/helpers";
+import {
+  fetchCapabilitiesText,
+  proxyFeedRequestUrl,
+  readLimitedBody,
+} from "../components/layout/add-data/helpers";
 import { WMS_PROXY_PATH } from "../components/layout/add-data/constants";
 import { isTauri } from "./is-tauri";
 import {
@@ -10,8 +14,18 @@ import {
   WcsError,
 } from "./wcs";
 
+// Capabilities and coverage descriptions are XML listings, orders of magnitude
+// smaller than a coverage. Cap them so a defective or hostile endpoint cannot
+// fill memory with a metadata response before parsing even starts.
+const MAX_METADATA_BYTES = 32 * 1024 * 1024;
+
 async function fetchWcsXml(url: string, signal: AbortSignal): Promise<string> {
-  const result = await fetchCapabilitiesText(url, WMS_PROXY_PATH, signal);
+  const result = await fetchCapabilitiesText(url, WMS_PROXY_PATH, signal, MAX_METADATA_BYTES).catch(
+    (error: unknown) => {
+      if (String(error).includes("download limit")) throw new WcsError("metadata");
+      throw error;
+    },
+  );
   if (!result.ok) throw new Error(`WCS HTTP ${result.status}`);
   return result.text;
 }
@@ -56,28 +70,10 @@ export async function downloadWcs(url: string, name: string, signal: AbortSignal
   } else {
     const response = await fetch(proxyFeedRequestUrl(url), { signal: abort });
     if (!response.ok) throw new Error(`WCS HTTP ${response.status}`);
-    const reader = response.body?.getReader();
-    if (!reader) throw new WcsError("response");
-    const chunks: Uint8Array<ArrayBuffer>[] = [];
-    let size = 0;
-    try {
-      if (Number(response.headers.get("content-length")) > MAX_BYTES) throw new WcsError("size");
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > MAX_BYTES) throw new WcsError("size");
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel();
-    }
-    bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
+    bytes = await readLimitedBody(response, MAX_BYTES).catch((error: unknown) => {
+      if (String(error).includes("download limit")) throw new WcsError("size");
+      throw error;
+    });
   }
   assertWcsTiff(bytes);
   return new File([bytes], `${name.replace(/[^\p{L}\p{N}._-]/gu, "_") || "coverage"}.tif`, {

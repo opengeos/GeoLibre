@@ -996,6 +996,7 @@
         "format": "Kapsam GeoTIFF çıktısı bildirmiyor.",
         "crs": "Kapsam hem istekler hem de çıktı için EPSG:4326 desteklemelidir.",
         "size": "1 ile 4096 piksel arasında boyutlar seçin. İndirmeler 128 MB ile sınırlıdır.",
+        "metadata": "Servis GeoLibre'nin yükleyebileceğinden daha fazla meta veri döndürdü. Meta veri yanıtları 32 MB ile sınırlıdır.",
         "response": "Servis geçerli bir GeoTIFF döndürmedi.",
         "bounds": "Geçerli bir kutu girin: batı/doğu -180 ile 180 arasında, güney/kuzey -90 ile 90 arasında, batı < doğu ve güney < kuzey olacak şekilde.",
         "url": "Bir WCS servis URL'si girin."

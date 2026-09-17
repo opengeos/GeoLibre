@@ -975,6 +975,7 @@
         "format": "Vùng phủ không công bố đầu ra GeoTIFF.",
         "crs": "Vùng phủ phải hỗ trợ EPSG:4326 cho cả yêu cầu và đầu ra.",
         "size": "Chọn kích thước từ 1 đến 4096 pixel. Giới hạn tải xuống là 128 MB.",
+        "metadata": "Dịch vụ trả về nhiều siêu dữ liệu hơn mức GeoLibre có thể tải. Giới hạn phản hồi siêu dữ liệu là 32 MB.",
         "response": "Dịch vụ không trả về GeoTIFF hợp lệ.",
         "bounds": "Nhập một ô hợp lệ: tây/đông trong khoảng -180 đến 180, nam/bắc trong khoảng -90 đến 90, với tây < đông và nam < bắc.",
         "url": "Nhập URL dịch vụ WCS."

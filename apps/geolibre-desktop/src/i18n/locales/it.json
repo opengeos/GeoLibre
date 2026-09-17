@@ -996,6 +996,7 @@
         "format": "La copertura non dichiara un output GeoTIFF.",
         "crs": "La copertura deve supportare EPSG:4326 per richieste e output.",
         "size": "Scegli dimensioni da 1 a 4096 pixel. I download sono limitati a 128 MB.",
+        "metadata": "Il servizio ha restituito più metadati di quanti GeoLibre possa caricarne. Le risposte di metadati sono limitate a 32 MB.",
         "response": "Il servizio non ha restituito un GeoTIFF valido.",
         "bounds": "Inserisci un riquadro valido: ovest/est tra -180 e 180, sud/nord tra -90 e 90, con ovest < est e sud < nord.",
         "url": "Inserisci un URL del servizio WCS."
