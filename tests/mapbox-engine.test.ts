@@ -1460,3 +1460,87 @@ describe("MapboxEngine layer control", () => {
     }
   });
 });
+
+describe("MapboxEngine search result lifecycle", () => {
+  it("uses native markers and removes each result exactly once, including on engine teardown", () => {
+    const map = makeMap();
+    const markers: { center?: [number, number]; removals: number; color?: string }[] = [];
+    class Marker {
+      center?: [number, number];
+      removals = 0;
+      color?: string;
+      constructor(options: { color?: string }) {
+        this.color = options.color;
+        markers.push(this);
+      }
+      setLngLat(center: [number, number]) {
+        this.center = center;
+        return this;
+      }
+      addTo(target: unknown) {
+        assert.equal(target, map);
+        return this;
+      }
+      remove() {
+        this.removals++;
+      }
+    }
+    const engine = new MapboxEngine(
+      map as unknown as mapboxgl.Map,
+      { ...gl, Marker } as unknown as typeof mapboxgl.default,
+    );
+    const clearFirst = engine.showSearchResult({ type: "Point", coordinates: [-77.0365, 38.8977] });
+    const clearSecond = engine.showSearchResult({ type: "Point", coordinates: [10, 20] });
+    assert.deepEqual(markers[0].center, [-77.0365, 38.8977]);
+    assert.equal(markers[0].color, "#ef4444");
+    clearFirst();
+    clearFirst();
+    assert.deepEqual(
+      markers.map((m) => m.removals),
+      [1, 0],
+    );
+    engine.destroy();
+    clearSecond();
+    assert.deepEqual(
+      markers.map((m) => m.removals),
+      [1, 1],
+    );
+    engine.showSearchResult({ type: "Point", coordinates: [0, 0] })();
+    assert.equal(markers.length, 2);
+  });
+
+  it("cleans up cell sources without disturbing other results, even after a style reload", () => {
+    const { engine, map } = makeEngine();
+    const cell: import("geojson").Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [179, 0],
+          [181, 0],
+          [181, 1],
+          [179, 0],
+        ],
+      ],
+    };
+    map.setStyleLoaded(false);
+    engine.showSearchResult(cell)();
+    assert.equal(map.sources.size, 0);
+    map.setStyleLoaded(true);
+    const clearFirst = engine.showSearchResult(cell);
+    const clearSecond = engine.showSearchResult(cell);
+    assert.equal(map.sources.size, 2);
+    assert.equal(map.layers.length, 4);
+    clearFirst();
+    clearFirst();
+    assert.equal(map.sources.size, 1);
+    assert.equal(map.layers.length, 2);
+    map.sources.clear();
+    map.layers.length = 0;
+    assert.doesNotThrow(clearSecond);
+    const clearLast = engine.showSearchResult(cell);
+    engine.destroy();
+    assert.equal(map.sources.size, 0);
+    assert.equal(map.layers.length, 0);
+    assert.doesNotThrow(clearLast);
+  });
+});

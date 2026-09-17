@@ -1,3 +1,4 @@
+import { showGlSearchResult } from "./gl-search-result";
 import {
   BLANK_BASEMAP,
   DEFAULT_BASEMAP,
@@ -1657,40 +1658,12 @@ export class MapController implements MapEngine {
   showSearchResult(geometry: Point | Polygon): () => void {
     const map = this.map;
     if (!map) return () => {};
-    let remove: () => void;
-    if (geometry.type === "Point") {
-      const marker = new maplibregl.Marker({ color: "#ef4444" })
-        .setLngLat([geometry.coordinates[0], geometry.coordinates[1]])
-        .addTo(map);
-      remove = () => marker.remove();
-    } else {
-      if (!map.isStyleLoaded()) return () => {};
-      const id = `geolibre-search-${crypto.randomUUID()}`;
-      map.addSource(id, { type: "geojson", data: { type: "Feature", properties: {}, geometry } });
-      map.addLayer({
-        id: id + "-fill",
-        type: "fill",
-        source: id,
-        paint: { "fill-color": "#ef4444", "fill-opacity": 0.15 },
-      });
-      map.addLayer({
-        id: id + "-line",
-        type: "line",
-        source: id,
-        paint: { "line-color": "#ef4444", "line-width": 2 },
-      });
-      remove = () => {
-        for (const suffix of ["-line", "-fill"])
-          if (map.getLayer(id + suffix)) map.removeLayer(id + suffix);
-        if (map.getSource(id)) map.removeSource(id);
-      };
-    }
-    const dispose = () => {
-      if (!this.searchDisposers.delete(dispose)) return;
-      remove();
-    };
-    this.searchDisposers.add(dispose);
-    return dispose;
+    return showGlSearchResult(
+      map,
+      geometry,
+      (center, color) => new maplibregl.Marker({ color }).setLngLat(center).addTo(map),
+      this.searchDisposers,
+    );
   }
 
   showExtent(_extent: MapExtent): () => void {

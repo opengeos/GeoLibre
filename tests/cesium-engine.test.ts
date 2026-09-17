@@ -1379,3 +1379,96 @@ it("remembers a hidden control's corner and refuses unregistered/pane controls",
     resetPrimaryCesiumBuiltInControlState();
   }
 });
+
+describe("CesiumEngine search result lifecycle", () => {
+  async function setup() {
+    // Real CPU-side primitive collections exercise Cesium's destroy-on-remove
+    // behavior without a WebGL render pass.
+    const C = await import("@cesium/engine");
+    const f = makeViewer();
+    const viewer = f.viewer as import("@cesium/engine").CesiumWidget;
+    const primitives = new C.PrimitiveCollection();
+    let destroyed = false;
+    Object.assign(viewer, { isDestroyed: () => destroyed });
+    Object.assign(viewer.scene, {
+      primitives,
+      requestRender: () => {
+        assert.equal(destroyed, false, "cleanup must not touch a destroyed viewer");
+      },
+    });
+    const engine = new CesiumEngine(
+      {
+        ...makeCesium(),
+        Cartesian3: C.Cartesian3,
+        Color: C.Color,
+        PointPrimitiveCollection: C.PointPrimitiveCollection,
+        Primitive: C.Primitive,
+        GeometryInstance: C.GeometryInstance,
+        PolygonGeometry: C.PolygonGeometry,
+        PolygonHierarchy: C.PolygonHierarchy,
+        PolylineGeometry: C.PolylineGeometry,
+        ColorGeometryInstanceAttribute: C.ColorGeometryInstanceAttribute,
+        PerInstanceColorAppearance: C.PerInstanceColorAppearance,
+        PolylineColorAppearance: C.PolylineColorAppearance,
+      },
+      viewer,
+    );
+    return {
+      C,
+      engine,
+      primitives,
+      destroyViewer: () => {
+        primitives.destroy();
+        destroyed = true;
+      },
+    };
+  }
+
+  it("clears only its own primitives and releases remaining results on engine teardown", async () => {
+    const { C, engine, primitives } = await setup();
+    const unrelated = primitives.add(new C.Primitive());
+    const clearPoint = engine.showSearchResult({ type: "Point", coordinates: [-77.0365, 38.8977] });
+    const point = primitives.get(1) as import("@cesium/engine").PointPrimitiveCollection;
+    assert.equal(point.length, 1);
+    assert.ok(point.get(0).position.equals(C.Cartesian3.fromDegrees(-77.0365, 38.8977)));
+    const clearCell = engine.showSearchResult({
+      type: "Polygon",
+      coordinates: [
+        [
+          [179, 0],
+          [181, 0],
+          [181, 1],
+          [179, 0],
+        ],
+      ],
+    });
+    const fill = primitives.get(2) as import("@cesium/engine").Primitive;
+    const line = primitives.get(3) as import("@cesium/engine").Primitive;
+    assert.equal(primitives.length, 4);
+    clearPoint();
+    clearPoint();
+    assert.ok(point.isDestroyed());
+    assert.equal(primitives.length, 3);
+    assert.ok(primitives.contains(unrelated));
+    engine.destroy();
+    assert.ok(fill.isDestroyed());
+    assert.ok(line.isDestroyed());
+    assert.equal(primitives.length, 1);
+    assert.equal(primitives.get(0), unrelated);
+    assert.doesNotThrow(clearCell);
+    engine.showSearchResult({ type: "Point", coordinates: [0, 0] })();
+    assert.equal(primitives.length, 1);
+    primitives.destroy();
+  });
+
+  it("allows late disposal after the viewer has already destroyed its primitives", async () => {
+    const { engine, primitives, destroyViewer } = await setup();
+    const clear = engine.showSearchResult({ type: "Point", coordinates: [0, 0] });
+    const point = primitives.get(0) as import("@cesium/engine").PointPrimitiveCollection;
+    destroyViewer();
+    assert.ok(point.isDestroyed());
+    assert.doesNotThrow(clear);
+    assert.doesNotThrow(clear);
+    assert.doesNotThrow(() => engine.destroy());
+  });
+});

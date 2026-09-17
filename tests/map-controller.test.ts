@@ -2524,3 +2524,68 @@ describe("COG DEM terrain source", () => {
     controller.destroy();
   });
 });
+
+describe("MapController search result lifecycle", () => {
+  it("isolates cell overlays and clears them before map teardown, including after a style reload", () => {
+    const { map, fake } = makeFakeMap();
+    Object.assign(map as object, {
+      isStyleLoaded: () => true,
+      getTerrain: () => null,
+      remove: () => {
+        assert.equal(fake.sources.size, 0, "search sources must be removed before map teardown");
+      },
+    });
+    const controller = controllerWith(map);
+    const cell: import("geojson").Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [179, 0],
+          [181, 0],
+          [181, 1],
+          [179, 0],
+        ],
+      ],
+    };
+    const clearFirst = controller.showSearchResult(cell);
+    const clearSecond = controller.showSearchResult(cell);
+    assert.equal(fake.sources.size, 2);
+    assert.equal(fake.layers.size, 5);
+    clearFirst();
+    clearFirst();
+    assert.equal(fake.sources.size, 1);
+    assert.equal(fake.layers.size, 3);
+    assert.ok(fake.layers.has("basemap-bg"));
+    // A basemap style reload can discard an overlay before the panel clears it.
+    fake.sources.clear();
+    fake.layers.clear();
+    assert.doesNotThrow(clearSecond);
+    const clearLast = controller.showSearchResult(cell);
+    assert.equal(fake.sources.size, 1);
+    controller.destroy();
+    assert.equal(fake.sources.size, 0);
+    assert.equal(fake.layers.size, 0);
+    assert.doesNotThrow(clearLast);
+    controller.showSearchResult(cell)();
+    assert.equal(fake.sources.size, 0);
+  });
+
+  it("does not add a cell to a style that is still loading", () => {
+    const { map, fake } = makeFakeMap();
+    Object.assign(map as object, { isStyleLoaded: () => false });
+    const controller = controllerWith(map);
+    controller.showSearchResult({
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    })();
+    assert.equal(fake.sources.size, 0);
+    assert.equal(fake.layers.size, 1);
+  });
+});

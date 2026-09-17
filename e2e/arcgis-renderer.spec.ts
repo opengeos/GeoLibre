@@ -6,7 +6,7 @@ import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/s
 // and its basemap styles service. ARCGIS_API_KEY is supplied at runtime, never
 // saved in a fixture or project.
 test.skip(
-  !process.env.ARCGIS_API_KEY && !process.env.ARCGIS_E2E,
+  !process.env.ARCGIS_API_KEY && process.env.ARCGIS_E2E !== "1",
   "Set ARCGIS_E2E=1 (keyless) or ARCGIS_API_KEY to test the ArcGIS renderer",
 );
 test.use({ actionTimeout: 30_000 });
