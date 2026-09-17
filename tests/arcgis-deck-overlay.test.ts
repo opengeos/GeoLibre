@@ -124,10 +124,15 @@ it("coalesces hover picks per frame and cancels queued work on disposal", async 
     props: { onHover: (info: { picked: boolean }) => hoverStates.push(info.picked) },
   };
   const pickedObjects = [{ id: 1 }, { id: 2 }];
-  const clickStates: boolean[] = [];
+  const clickStates: Array<{
+    color: Uint8Array | null;
+    picked: boolean;
+    pixel?: [number, number];
+    pixelRatio: number;
+  }> = [];
   const overlay = new ArcgisDeckOverlay(
     f.view,
-    { onClick: (info) => clickStates.push(info.picked) },
+    { onClick: (info) => clickStates.push(info) },
     async () => f.module,
   );
   const picks: { x: number; y: number }[] = [];
@@ -147,7 +152,19 @@ it("coalesces hover picks per frame and cancels queued work on disposal", async 
     assert.equal(frames.size, 1);
     handlers.get("click")!({ x: 7, y: 8 });
     assert.deepEqual(picks, [{ x: 7, y: 8 }]);
-    assert.deepEqual(clickStates, [false]);
+    assert.deepEqual(clickStates, [
+      {
+        color: null,
+        picked: false,
+        object: null,
+        index: -1,
+        layer: null,
+        x: 7,
+        y: 8,
+        pixel: [7, 8],
+        pixelRatio: 1,
+      },
+    ]);
     const frame = [...frames.values()][0];
     frames.clear();
     frame(0);
