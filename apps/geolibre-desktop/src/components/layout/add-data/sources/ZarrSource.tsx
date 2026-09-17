@@ -23,6 +23,7 @@ export function ZarrSource() {
     }
     if (!["http:", "https:"].includes(address.protocol))
       throw new Error(t("addData.zarr.errorUrl"));
+    if (!min.trim() || !max.trim()) throw new Error(t("addData.zarr.errorColorLimits"));
     const clim: [number, number] = [Number(min), Number(max)];
     if (!clim.every(Number.isFinite) || clim[1] <= clim[0])
       throw new Error(t("addData.zarr.errorColorLimits"));
@@ -44,7 +45,9 @@ export function ZarrSource() {
       onBeforeLayerIdChange={source.setBeforeLayerId}
       onSubmit={submit}
       error={source.error}
-      submitDisabled={source.isSubmitting || !url.trim() || !variable.trim()}
+      submitDisabled={
+        source.isSubmitting || !url.trim() || !variable.trim() || !min.trim() || !max.trim()
+      }
     >
       <div className="space-y-1.5">
         <Label htmlFor="zarr-url">{t("toolbar.item.urlLabel")}</Label>
