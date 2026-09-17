@@ -976,7 +976,7 @@
       "errorColorLimits": "El límite máximo de color debe ser mayor que el mínimo."
     },
     "raster": {
-      "errorSource": "Introduce una URL GeoTIFF o elige un archivo."
+      "errorSource": "Introduzca una URL GeoTIFF o elija un archivo."
     }
   },
   "offline": {
@@ -7998,7 +7998,7 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Usa una URL tileset.json de 3D Tiles en esta vista de ArcGIS. Las teselas Google Photorealistic e I3S requieren otro motor de renderizado."
+      "arcgisSourceUnsupported": "Utilice una URL tileset.json de 3D Tiles en esta vista de ArcGIS. Las teselas Google Photorealistic e I3S requieren otro motor de renderizado."
     }
   }
 }

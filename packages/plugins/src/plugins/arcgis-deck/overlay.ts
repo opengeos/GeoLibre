@@ -5,6 +5,7 @@ import { arcgisModuleUrl } from "@geolibre/map/arcgis-sdk";
 import { initializeResources, render, finalizeResources, type RenderResources } from "./commons.js";
 
 type ArcgisView = NonNullable<ReturnType<ArcgisEngine["getView"]>>;
+type DeckPickingInfo = Parameters<NonNullable<DeckProps["onHover"]>>[0];
 type NativeLayer = ArcgisView["map"]["layers"] extends { toArray(): (infer L)[] } ? L : never;
 type Subclass<T> = {
   createSubclass(definition: Record<string, unknown>): new (props: Record<string, unknown>) => T;
@@ -28,6 +29,7 @@ export class ArcgisDeckOverlay {
   private disposed = false;
   private events: { remove(): void }[] = [];
   private hoverFrame: number | null = null;
+  private hoverInfo: DeckPickingInfo | null = null;
   private pendingHover: (() => void) | null = null;
   private props: DeckProps;
   private sceneRenderer: SceneDeckRenderer | null = null;
@@ -63,7 +65,15 @@ export class ArcgisDeckOverlay {
         this.view.on(eventType, (event) => {
           const pick = () => {
             const info = this.getDeck()?.pickObject({ x: event.x, y: event.y });
-            if (!info) return;
+            if (!info) {
+              if (callback !== "onHover" || !this.hoverInfo) return;
+              const cleared = { ...this.hoverInfo, picked: false, object: null, index: -1 };
+              this.hoverInfo = null;
+              const handled = cleared.layer?.props.onHover?.(cleared, event as never);
+              if (!handled) this.props.onHover?.(cleared, event as never);
+              return;
+            }
+            if (callback === "onHover") this.hoverInfo = info;
             const handled = info.layer?.props[callback]?.(info, event as never);
             if (!handled) this.props[callback]?.(info, event as never);
           };
@@ -180,6 +190,7 @@ export class ArcgisDeckOverlay {
     if (this.hoverFrame !== null) cancelAnimationFrame(this.hoverFrame);
     this.hoverFrame = null;
     this.pendingHover = null;
+    this.hoverInfo = null;
   }
 
   finalize(): void {
