@@ -173,6 +173,34 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       ),
       /Specify the CRS/,
     );
+    const originalFetch = globalThis.fetch;
+    let projectionRequests = 0;
+    globalThis.fetch = async (input) => {
+      assert.equal(String(input), "https://epsg.io/26915.proj4");
+      projectionRequests++;
+      return new Response(
+        "+proj=utm +zone=15 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs",
+      );
+    };
+    try {
+      const projected = await openArcgisZarrGrid(
+        {
+          ...layer,
+          source: {
+            ...layer.source,
+            variable: "projected",
+            selector: {},
+            spatialDimensions: { lat: "northing", lon: "easting" },
+            crs: "EPSG:26915",
+          },
+        },
+        abort.signal,
+      );
+      assert.equal(projectionRequests, 1);
+      assert.ok(projected.extent.every(Number.isFinite));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
     for (const attribute of ["scale_factor", "add_offset"]) {
       array("invalidPacking", [2, 2], ["lat", "lon"], [1, 2, 3, 4], { [attribute]: "invalid" });
       await assert.rejects(
