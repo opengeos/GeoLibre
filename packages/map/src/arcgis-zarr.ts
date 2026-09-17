@@ -51,7 +51,10 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
     getZarrStore(layer.id) ??
     referenceStore ??
     new zarr.FetchStore(String(source.url), {
-      overrides: { headers: source.headers as Record<string, string> | undefined },
+      overrides: {
+        headers: source.headers as Record<string, string> | undefined,
+        ...(source.headers && Object.keys(source.headers).length ? { redirect: "error" } : {}),
+      },
     });
   const store = zarr.withByteCaching(base, {
     cache: {

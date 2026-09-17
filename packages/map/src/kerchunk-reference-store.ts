@@ -29,7 +29,11 @@ export interface KerchunkDocument {
 
 type FetchImpl = (
   input: string,
-  init?: { headers?: Record<string, string>; signal?: AbortSignal },
+  init?: {
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
+    redirect?: "error" | "follow" | "manual";
+  },
 ) => Promise<{
   status: number;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -206,9 +210,10 @@ export class KerchunkReferenceStore {
               ...requestHeaders,
               Range: `bytes=${offset}-${(offset as number) + (length as number) - 1}`,
             },
+            ...(requestHeaders ? { redirect: "error" as const } : {}),
           }
         : requestHeaders
-          ? { headers: { ...requestHeaders } }
+          ? { headers: { ...requestHeaders }, redirect: "error" as const }
           : undefined;
     const res = await this.fetchImpl(
       url,
@@ -318,7 +323,12 @@ export async function loadKerchunkReference(
 ): Promise<KerchunkRefs> {
   assertSecureRequestHeaders(url, options.headers);
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
-  const res = await fetchImpl(url, options.headers ? { headers: options.headers } : undefined);
+  const res = await fetchImpl(
+    url,
+    options.headers && Object.keys(options.headers).length
+      ? { headers: options.headers, redirect: "error" }
+      : undefined,
+  );
   if (res.status !== 200) {
     throw new Error(`Failed to fetch kerchunk reference: HTTP ${res.status}`);
   }
