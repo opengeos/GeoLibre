@@ -130,6 +130,7 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
             variable: "polar",
             selector: {},
             spatialDimensions: { lat: "polarLat", lon: "lon" },
+            crs: "EPSG:4326",
           },
         },
         abort.signal,
@@ -154,6 +155,24 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       abort.signal,
     );
     assert.equal(crossing.extent[2] - crossing.extent[0], 40);
+    array("easting", [2], ["easting"], [500_000, 500_100]);
+    array("northing", [2], ["northing"], [4_000_000, 4_000_100]);
+    array("projected", [2, 2], ["northing", "easting"], [1, 2, 3, 4]);
+    await assert.rejects(
+      openArcgisZarrGrid(
+        {
+          ...layer,
+          source: {
+            ...layer.source,
+            variable: "projected",
+            selector: {},
+            spatialDimensions: { lat: "northing", lon: "easting" },
+          },
+        },
+        abort.signal,
+      ),
+      /Specify the CRS/,
+    );
     for (const attribute of ["scale_factor", "add_offset"]) {
       array("invalidPacking", [2, 2], ["lat", "lon"], [1, 2, 3, 4], { [attribute]: "invalid" });
       await assert.rejects(

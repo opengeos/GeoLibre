@@ -806,6 +806,7 @@ let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let stacSearchStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
 const arcgisZarrTemporalUnsubscribes = new Map<string, () => void>();
+const restoredArcgisZarrLayers = new WeakSet<GeoLibreLayer>();
 let lidarStoreUnsubscribe: (() => void) | null = null;
 let splattingStoreUnsubscribe: (() => void) | null = null;
 
@@ -2614,10 +2615,13 @@ async function addNativeArcgisZarrLayer(
     });
   }
   useAppStore.getState().addLayer(layer, options.beforeLayerId);
-  registerZarrTemporalAdapter(id, options.url, {
+  restoredArcgisZarrLayers.add(layer);
+  void registerZarrTemporalAdapter(id, options.url, {
     refs,
     headers: options.headers,
     ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
+  }).then((registered) => {
+    if (!registered) restoredArcgisZarrLayers.delete(layer);
   });
   return id;
 }
@@ -2962,15 +2966,15 @@ function registerZarrTemporalAdapter(
   layerId: string,
   url: string | undefined,
   context: ZarrTemporalContext = {},
-): void {
+): Promise<boolean> {
   const { headers, refs } = context;
   // A folder the panel opened is not something the caller could have passed
   // context for, so fall back to the reader filed under this layer's own url.
   const readAttributes =
     context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
-  void (async () => {
+  return (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
-    if (!dimensionValues) return;
+    if (!dimensionValues) return true;
     const dimension = pickTimeDimension(dimensionValues) ?? "time";
     // Either source of attributes replaces the HTTP metadata walk, which for
     // these layers would only produce a run of failed requests.
@@ -2983,14 +2987,14 @@ function registerZarrTemporalAdapter(
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
-    if (!axis) return;
+    if (!axis) return true;
     // The layer may have been removed while the axis was being resolved.
-    if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return;
+    if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;
     if (
       useAppStore.getState().primaryRenderer !== "arcgis" &&
       !zarrControl?.getLayersMap().has(layerId)
     )
-      return;
+      return true;
     registerTemporalLayer(layerId, {
       dimension: axis.dimension,
       getTimeValues: () => axis.values,
@@ -3016,15 +3020,23 @@ function registerZarrTemporalAdapter(
       });
       arcgisZarrTemporalUnsubscribes.set(layerId, unsubscribe);
     }
-  })().catch((error) => console.warn("[zarr] Could not register the time axis", error));
+    return true;
+  })().catch((error) => {
+    console.warn("[zarr] Could not register the time axis", error);
+    return false;
+  });
 }
 
 export function restoreArcgisZarrLayers(): void {
   for (const layer of useAppStore.getState().layers) {
     if (layer.type !== "zarr") continue;
-    registerZarrTemporalAdapter(layer.id, String(layer.source.url), {
+    if (restoredArcgisZarrLayers.has(layer)) continue;
+    restoredArcgisZarrLayers.add(layer);
+    void registerZarrTemporalAdapter(layer.id, String(layer.source.url), {
       headers: layer.source.headers as Record<string, string> | undefined,
       refs: layer.source.kerchunkRefs as KerchunkRefs | undefined,
+    }).then((registered) => {
+      if (!registered) restoredArcgisZarrLayers.delete(layer);
     });
   }
 }
