@@ -174,13 +174,8 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       /Specify the CRS/,
     );
     const originalFetch = globalThis.fetch;
-    let projectionRequests = 0;
-    globalThis.fetch = async (input) => {
-      assert.equal(String(input), "https://epsg.io/26915.proj4");
-      projectionRequests++;
-      return new Response(
-        "+proj=utm +zone=15 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs",
-      );
+    globalThis.fetch = async () => {
+      throw new Error("EPSG resolution must remain offline");
     };
     try {
       const projected = await openArcgisZarrGrid(
@@ -196,7 +191,6 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
         },
         abort.signal,
       );
-      assert.equal(projectionRequests, 1);
       assert.ok(projected.extent.every(Number.isFinite));
     } finally {
       globalThis.fetch = originalFetch;
