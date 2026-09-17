@@ -1,3 +1,4 @@
+import type { Map as MapLibreMap } from "maplibre-gl";
 import type { Deck, DeckProps } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { MapLibreOverlay } from "@deck.gl/maplibre";
@@ -9,9 +10,9 @@ import { ArcgisDeckOverlay } from "./overlay";
 export function installArcgisDeckControls(app: GeoLibreAppAPI): boolean {
   const view = app.getArcgisView?.();
   if (!view || (view.type === "3d" && view.viewingMode !== "local")) return false;
-  setArcgisControlAdapter(view, (control) => {
+  setArcgisControlAdapter(view, (control, map) => {
     if (!(control instanceof MapboxOverlay) && !(control instanceof MapLibreOverlay)) return null;
-    return bridgeArcgisDeckControl(control, new ArcgisDeckOverlay(view, {}));
+    return bridgeArcgisDeckControl(control, new ArcgisDeckOverlay(view, {}), map);
   });
   return true;
 }
@@ -20,6 +21,7 @@ export function installArcgisDeckControls(app: GeoLibreAppAPI): boolean {
 export function bridgeArcgisDeckControl(
   control: MapboxOverlay | MapLibreOverlay,
   native: ArcgisDeckOverlay,
+  map: MapLibreMap,
 ): () => void {
   const internals = control as unknown as { _props: DeckProps };
   const originals = {
@@ -46,8 +48,16 @@ export function bridgeArcgisDeckControl(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
-    native.finalize();
-    Object.assign(control, originals);
+    // Plugin wrappers use onRemove to clear mounted flags and subscriptions,
+    // even though their deck instance is owned by the native ArcGIS overlay.
+    try {
+      control.onRemove(map);
+    } catch (error) {
+      console.warn("[ArcGIS] Could not remove plugin deck control", error);
+    } finally {
+      native.finalize();
+      Object.assign(control, originals);
+    }
   };
   control.finalize = dispose;
   native.setProps(internals._props);

@@ -122,7 +122,7 @@ export class ArcgisControlHost {
   }
   addControl(control: IControl, position: ControlPosition = "top-left"): boolean {
     if (this.controls.has(control) || this.adapted.has(control)) return true;
-    const dispose = adaptArcgisControl(this.view, control);
+    const dispose = adaptArcgisControl(this.view, control, this.facade as unknown as MapLibreMap);
     if (dispose) {
       this.adapted.set(control, dispose);
       return true;
