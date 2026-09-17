@@ -9,10 +9,10 @@ import { createLayerId } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 /** Host-owned archive import for renderers without a MapLibre control container. */
-export function PmtilesSource() {
+export function PmtilesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("toolbar.item.pmtilesLayer"));
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const submit = source.runSubmit(async () => {
     let address: URL;
     try {
