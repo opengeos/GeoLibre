@@ -84,6 +84,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers, with the cadence, last-synchronized time, last error, and on-failure policy persisted with the project as a `connection` record — so a reopened project keeps refreshing on schedule and the Layers panel can show each live layer's synchronization status
 - ArcGIS Hub, Socrata, and CKAN (Humanitarian Data Exchange) open-data browsers under Plugins → Web Services: search public dataset catalogs by keyword (or restrict the ArcGIS Hub search to the current map area), page through results, and add a dataset to the map or download it
+- OSM Downloader under Plugins → Web Services: query buildings, roads, amenities, waterways, land use, all tagged features, or a custom tag from the current view or typed bounds through Overpass, then add the result as GeoJSON or save it to disk
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - **Open data in GeoLibre**, a [Chrome extension](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj) on the Chrome Web Store, that collects the supported dataset links and map services (WMS, WMTS, WFS, OGC API - Features, ArcGIS Feature Services, XYZ/TMS, and vector tiles) on the page you are viewing and opens the ones you pick together on one GeoLibre map
 

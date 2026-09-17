@@ -4,7 +4,7 @@
 
 They are grouped together because they behave the same way, not because they share a data source: every one of them opens a **docked side panel** rather than a floating on-map control, so it sits alongside the Layers and Style panels, resizes with them, and can be collapsed. That is also why these entries have no "position" submenu — unlike most plugins, there is no on-map control to place in a corner.
 
-![The Plugins menu with the Web Services submenu open, listing all seventeen catalog and service browsers](https://assets.geolibre.app/images/web-services-menu.webp)
+![The Plugins menu with the Web Services submenu open, listing the catalog and service browsers](https://assets.geolibre.app/images/web-services-menu.webp)
 
 ## How the panels behave
 
@@ -26,6 +26,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Planet Open Data](#planet-open-data) | Planet Labs | Planet's disaster data releases, through the STAC browser |
 | [Earthdata GIS](#earthdata-gis) | NASA EOSDIS | ArcGIS image, map, and feature services, and published web maps |
 | [OpenAerialMap](#openaerialmap) | OpenAerialMap | Openly licensed drone and aerial imagery |
+| [OSM Downloader](#osm-downloader) | OpenStreetMap / Overpass | Buildings, roads, amenities, waterways, land use, or custom OSM tags |
 | [ArcGIS Hub](#arcgis-hub) | Esri | Public datasets published to ArcGIS Hub |
 | [Socrata](#socrata) | Socrata | Government open-data portals |
 | [CKAN](#ckan) | HDX | Humanitarian Data Exchange resources |
@@ -119,6 +120,19 @@ Searches [OpenAerialMap](https://openaerialmap.org/), the open catalog of drone 
 - Search by the **current map view**, a **box drawn on the map**, or typed coordinates.
 - Result footprints are drawn on the map as a single entry in the Layers panel, so you can hide or restyle them; the selected footprint is highlighted separately.
 - Add a scene to the map, zoom to its footprint, inspect its metadata, or download the source GeoTIFF.
+
+## OSM Downloader
+
+Downloads current OpenStreetMap vector data through the public Overpass API.
+
+- Start from the current map extent or type west, south, east, and north coordinates.
+- Choose buildings, roads, amenities, waterways, land use, all tagged features, or a custom OSM tag key and optional value.
+- Add the result as a normal GeoJSON layer or save it as a `.geojson` file.
+- OSM nodes become points, ways follow OSM's line/area conventions, and multipolygon relations retain their outer and inner rings.
+
+Public Overpass instances are intended for bounded interactive queries. Zoom to the area you need before downloading, especially when selecting **All tagged features**.
+
+The panel identifies the source as © OpenStreetMap contributors and notes the Open Database License (ODbL); keep the required attribution when publishing derived maps or data.
 
 ## ArcGIS Hub
 
