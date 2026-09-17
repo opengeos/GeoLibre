@@ -35,7 +35,7 @@ export async function addArcgisRaster(
   useAppStore.getState().addLayer(
     {
       id,
-      name: options.name ?? (file ? source.name : source.split("/").pop()?.split("?")[0]) ?? "COG",
+      name: options.name || (file ? source.name : source.split("/").pop()?.split("?")[0]) || "COG",
       type: "cog",
       source: { type: "raster", ...(!local ? { url } : {}) },
       sourcePath: file ? source.name : (options.localPath ?? source),

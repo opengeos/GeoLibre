@@ -84,3 +84,68 @@ it("destroys a local scene RenderNode and does not mount in a global scene", asy
   await globeOverlay.mount();
   assert.equal(imports, 0);
 });
+
+it("retries a failed CDN mount on the same view", async () => {
+  const f = fixture();
+  let unavailable = true;
+  const overlay = new ArcgisDeckOverlay(f.view, {}, async () => {
+    if (unavailable) throw new Error("CDN unavailable");
+    return f.module;
+  });
+  await assert.rejects(overlay.mount(), /CDN unavailable/);
+  unavailable = false;
+  await overlay.mount();
+  assert.equal(f.added.length, 1);
+  overlay.finalize();
+});
+
+it("coalesces hover picks per frame and cancels queued work on disposal", async () => {
+  const f = fixture();
+  const handlers = new Map<string, (event: { x: number; y: number }) => void>();
+  Object.assign(f.view, {
+    on: (type: string, handler: (event: { x: number; y: number }) => void) => {
+      handlers.set(type, handler);
+      return { remove: () => handlers.delete(type) };
+    },
+  });
+  const oldRequest = globalThis.requestAnimationFrame;
+  const oldCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  globalThis.requestAnimationFrame = (callback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  };
+  globalThis.cancelAnimationFrame = (id) => {
+    frames.delete(id);
+  };
+  const overlay = new ArcgisDeckOverlay(f.view, {}, async () => f.module);
+  const picks: { x: number; y: number }[] = [];
+  overlay.getDeck = () =>
+    ({
+      pickObject: (point: { x: number; y: number }) => {
+        picks.push(point);
+        return null;
+      },
+    }) as unknown as ReturnType<typeof overlay.getDeck>;
+  try {
+    await overlay.mount();
+    for (let x = 0; x < 100; x++) handlers.get("pointer-move")!({ x, y: 2 });
+    assert.equal(picks.length, 0);
+    assert.equal(frames.size, 1);
+    handlers.get("click")!({ x: 7, y: 8 });
+    assert.deepEqual(picks, [{ x: 7, y: 8 }]);
+    const frame = [...frames.values()][0];
+    frames.clear();
+    frame(0);
+    assert.deepEqual(picks[1], { x: 99, y: 2 });
+    handlers.get("pointer-move")!({ x: 100, y: 2 });
+    overlay.finalize();
+    assert.equal(frames.size, 0);
+    assert.equal(handlers.size, 0);
+  } finally {
+    overlay.finalize();
+    globalThis.requestAnimationFrame = oldRequest;
+    globalThis.cancelAnimationFrame = oldCancel;
+  }
+});

@@ -1,7 +1,10 @@
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPMTilesArchiveLayers, readRemotePMTilesInfo } from "@geolibre/map/pmtiles-layer";
+import {
+  createArcgisPMTilesArchiveLayers,
+  readRemotePMTilesInfo,
+} from "@geolibre/map/pmtiles-layer";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 /** Host-owned archive import for renderers without a MapLibre control container. */
@@ -10,31 +13,23 @@ export function PmtilesSource() {
   const source = useAddDataSource(t("toolbar.item.pmtilesLayer"));
   const [url, setUrl] = useState("");
   const submit = source.runSubmit(async () => {
-    const address = new URL(url.trim());
+    let address: URL;
+    try {
+      address = new URL(url.trim());
+    } catch {
+      throw new Error(t("addData.pmtiles.errorUrl"));
+    }
     if (!["https:", "http:"].includes(address.protocol))
-      throw new Error("PMTiles requires an HTTP(S) URL");
+      throw new Error(t("addData.pmtiles.errorUrl"));
     const info = await readRemotePMTilesInfo(address.href);
-    if (info.encoding === "mlt") throw new Error("ArcGIS requires MVT vector tiles, not MLT");
-    const layers = createPMTilesArchiveLayers({
+    if (info.encoding === "mlt") throw new Error(t("addData.pmtiles.errorMlt"));
+    const layers = createArcgisPMTilesArchiveLayers({
       id: crypto.randomUUID(),
       name: source.layerName,
       url: address.href,
       ...info,
     });
-    for (const layer of layers)
-      source.shell.addLayer(
-        {
-          ...layer,
-          source: {
-            ...layer.source,
-            bounds: info.bounds,
-            minzoom: info.minZoom,
-            maxzoom: info.maxZoom,
-          },
-          metadata: { ...layer.metadata, bounds: info.bounds },
-        },
-        source.beforeLayer,
-      );
+    for (const layer of layers) source.shell.addLayer(layer, source.beforeLayer);
     if (info.bounds) source.shell.mapControllerRef.current?.fitBounds(info.bounds);
     source.shell.closeDialog();
   });

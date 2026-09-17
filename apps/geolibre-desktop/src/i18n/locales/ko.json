@@ -945,7 +945,15 @@
       "modelTooLarge": "이 모델은 프로젝트에 포함할 수 있는 {{limit}} MB 제한을 초과합니다. 서버에 호스팅한 후 URL로 추가하세요.",
       "modelFileError": "이 모델을 읽을 수 없습니다. 유효한 glTF 2.0 또는 GLB 파일을 선택하세요."
     },
-    "nonGeographicCoordinates": "{{names}}의 좌표가 경위도가 아니므로 지도에 아무것도 그려지지 않습니다. CRS가 잘못 지정되어 있습니다 — 데이터를 재투영하거나 .prj를 수정한 뒤 다시 불러오세요."
+    "nonGeographicCoordinates": "{{names}}의 좌표가 경위도가 아니므로 지도에 아무것도 그려지지 않습니다. CRS가 잘못 지정되어 있습니다 — 데이터를 재투영하거나 .prj를 수정한 뒤 다시 불러오세요.",
+    "pmtiles": {
+      "errorUrl": "유효한 HTTP 또는 HTTPS PMTiles URL을 입력하세요.",
+      "errorMlt": "ArcGIS에는 MLT가 아닌 MVT 벡터 타일이 필요합니다."
+    },
+    "zarr": {
+      "errorUrl": "유효한 HTTP 또는 HTTPS Zarr URL을 입력하세요.",
+      "errorColorLimits": "색상 최댓값은 최솟값보다 커야 합니다."
+    }
   },
   "offline": {
     "title": "오프라인 지역 다운로드",

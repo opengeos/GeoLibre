@@ -966,7 +966,15 @@
       "modelTooLarge": "Este modelo supera el límite de {{limit}} MB para incrustarlo en un proyecto. Alójelo en un servidor y añádalo por URL.",
       "modelFileError": "No se pudo leer este modelo. Elija un archivo glTF 2.0 o GLB válido."
     },
-    "nonGeographicCoordinates": "Las coordenadas de {{names}} no son de longitud/latitud, por lo que no se dibujará nada en el mapa. El CRS está mal declarado: reproyecte los datos (o corrija su .prj) y vuelva a cargarlos."
+    "nonGeographicCoordinates": "Las coordenadas de {{names}} no son de longitud/latitud, por lo que no se dibujará nada en el mapa. El CRS está mal declarado: reproyecte los datos (o corrija su .prj) y vuelva a cargarlos.",
+    "pmtiles": {
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida de PMTiles.",
+      "errorMlt": "ArcGIS requiere teselas vectoriales MVT, no MLT."
+    },
+    "zarr": {
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida de Zarr.",
+      "errorColorLimits": "El límite máximo de color debe ser mayor que el mínimo."
+    }
   },
   "offline": {
     "title": "Descargar área sin conexión",

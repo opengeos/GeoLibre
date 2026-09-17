@@ -966,7 +966,15 @@
       "modelTooLarge": "Dit model is groter dan de limiet van {{limit}} MB voor insluiten in een project. Host het en voeg het via een URL toe.",
       "modelFileError": "Kan dit model niet lezen. Kies een geldig glTF 2.0- of GLB-bestand."
     },
-    "nonGeographicCoordinates": "De coördinaten in {{names}} zijn geen lengte-/breedtegraad, dus er wordt niets op de kaart getekend. Het CRS klopt niet — herprojecteer de gegevens (of corrigeer de .prj) en laad ze opnieuw."
+    "nonGeographicCoordinates": "De coördinaten in {{names}} zijn geen lengte-/breedtegraad, dus er wordt niets op de kaart getekend. Het CRS klopt niet — herprojecteer de gegevens (of corrigeer de .prj) en laad ze opnieuw.",
+    "pmtiles": {
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor PMTiles in.",
+      "errorMlt": "ArcGIS vereist MVT-vectortegels, geen MLT."
+    },
+    "zarr": {
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor Zarr in.",
+      "errorColorLimits": "De maximale kleurgrens moet groter zijn dan de minimale."
+    }
   },
   "offline": {
     "title": "Offline gebied downloaden",

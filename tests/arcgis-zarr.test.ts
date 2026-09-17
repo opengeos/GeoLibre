@@ -1,8 +1,31 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { openArcgisZarrGrid } from "../packages/map/src/arcgis-zarr";
-import { registerZarrStore } from "../packages/map/src/zarr-source";
+import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
+import { registerZarrStore, readNativeZarrDimensions } from "../packages/map/src/zarr-source";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+
+it("compares kerchunk manifests by identity without serializing their contents", () => {
+  const refs = {
+    toJSON() {
+      throw new Error("manifest must not be serialized");
+    },
+  };
+  const layer = geojsonLayer({
+    type: "zarr",
+    source: { url: "https://example.test/data.json", variable: "air", kerchunkRefs: refs },
+  });
+  const signature = (source: typeof layer.source) => {
+    const plan = compileArcgisLayer({ ...layer, source });
+    if (plan.kind !== "zarr") throw new Error("Expected Zarr");
+    return plan.renderSignature;
+  };
+  assert.equal(signature(layer.source), signature({ ...layer.source, selector: { time: 1 } }));
+  assert.notEqual(
+    signature(layer.source),
+    signature({ ...layer.source, kerchunkRefs: { ...refs } }),
+  );
+});
 
 it("renders the selected CF slice with north-up orientation, packing and fill masking", async () => {
   const bytes = new Map<string, Uint8Array>();
@@ -33,6 +56,7 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
   }
   array("lat", [2], ["lat"], [-45, 45]);
   array("lon", [2], ["lon"], [-90, 90]);
+  array("time", [2], ["time"], [0, 1]);
   array("air", [2, 2, 2], ["time", "lat", "lon"], [1, 2, 3, 4, 10, 20, 30, -999], {
     scale_factor: 2,
     add_offset: 10,
@@ -48,7 +72,13 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       colormap: ["#000000", "#ffffff"],
     },
   });
-  const dispose = registerZarrStore(layer.id, { get: async (key) => bytes.get(key) });
+  const reads: string[] = [];
+  const dispose = registerZarrStore(layer.id, {
+    get: async (key) => {
+      reads.push(key);
+      return bytes.get(key);
+    },
+  });
   const abort = new AbortController();
   try {
     const grid = await openArcgisZarrGrid(layer, abort.signal);
@@ -59,6 +89,25 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
     assert.equal(pixel(64, 64)[3], 255);
     assert.ok(Math.abs(pixel(64, 192)[0] - 77) <= 1);
     assert.equal(pixel(192, 64)[3], 0);
+    const previousReads = reads.length;
+    const earlier = await grid.renderTile(0, 0, 0, abort.signal, { time: 0 });
+    assert.notDeepEqual(earlier, rgba);
+    assert.equal(reads.length, previousReads, "time stepping reuses axes and cached chunks");
+    await assert.rejects(grid.renderTile(0, 0, 0, abort.signal, { time: 2 }), /in-range/);
+    array("nj", [2], ["nj"], [-45, 45]);
+    array("ni", [2], ["ni"], [-90, 90]);
+    array("custom", [2, 2, 2], ["time", "nj", "ni"], [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(
+      await readNativeZarrDimensions({
+        ...layer,
+        source: {
+          ...layer.source,
+          variable: "custom",
+          spatialDimensions: { lat: "nj", lon: "ni" },
+        },
+      }),
+      { time: [0, 1] },
+    );
     abort.abort();
     await assert.rejects(grid.renderTile(0, 0, 0, abort.signal), { name: "AbortError" });
   } finally {

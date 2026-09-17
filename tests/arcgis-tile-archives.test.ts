@@ -43,6 +43,10 @@ it("serves archive bytes to the SDK and isolates/cancels interceptor lifetimes",
     second = interceptors[1];
   assert.notEqual(first.urls, second.urls);
   assert.deepEqual(
+    await first.before({ url: first.urls + "source.json?f=json" }),
+    await first.before({ url: first.urls + "source.json" }),
+  );
+  assert.deepEqual(
     new Uint8Array(await first.before({ url: first.urls + "5/2/3.pbf" })),
     new Uint8Array([1, 2, 3]),
   );

@@ -966,7 +966,15 @@
       "modelTooLarge": "Bu model, bir projeye gömme için {{limit}} MB sınırından büyük. Bunun yerine bir sunucuda barındırıp URL ile ekleyin.",
       "modelFileError": "Bu model okunamadı. Geçerli bir glTF 2.0 veya GLB dosyası seçin."
     },
-    "nonGeographicCoordinates": "{{names}} içindeki koordinatlar boylam/enlem değil, bu yüzden haritaya hiçbir şey çizilmeyecek. CRS bilgisi yanlış — verileri yeniden projelendirin (veya .prj dosyasını düzeltin) ve tekrar yükleyin."
+    "nonGeographicCoordinates": "{{names}} içindeki koordinatlar boylam/enlem değil, bu yüzden haritaya hiçbir şey çizilmeyecek. CRS bilgisi yanlış — verileri yeniden projelendirin (veya .prj dosyasını düzeltin) ve tekrar yükleyin.",
+    "pmtiles": {
+      "errorUrl": "Geçerli bir HTTP veya HTTPS PMTiles URL’si girin.",
+      "errorMlt": "ArcGIS, MLT değil MVT vektör karoları gerektirir."
+    },
+    "zarr": {
+      "errorUrl": "Geçerli bir HTTP veya HTTPS Zarr URL’si girin.",
+      "errorColorLimits": "En yüksek renk sınırı en düşük sınırdan büyük olmalıdır."
+    }
   },
   "offline": {
     "title": "Çevrimdışı Alan İndir",

@@ -840,6 +840,40 @@ describe("ArcGIS native point styles and altitude", () => {
     if (zero.kind === "geojson")
       assert.ok(zero.parts[0].features?.features.every((f) => f.properties?.gl__weight === 0));
   });
+  it("skips point symbol evaluation for heatmaps while preserving mixed geometry styles", () => {
+    let symbolReads = 0;
+    const plan = compileArcgisLayer({
+      ...mixed,
+      geojson: {
+        type: "FeatureCollection",
+        features: mixed.geojson!.features.map((feature) => ({
+          ...feature,
+          properties: {
+            ...feature.properties,
+            weight: 3,
+            get size() {
+              if (feature.geometry?.type === "Point") symbolReads++;
+              return 50;
+            },
+          },
+        })),
+      },
+      style: {
+        ...mixed.style,
+        pointRenderer: "heatmap",
+        heatmapWeightProperty: "weight",
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "size",
+      },
+    });
+    if (plan.kind !== "geojson") return assert.fail("expected GeoJSON");
+    assert.equal(symbolReads, 0);
+    assert.deepEqual(
+      plan.parts.map((part) => part.renderer.type),
+      ["simple", "simple", "heatmap"],
+    );
+    assert.equal(plan.parts[2].features?.features[0].properties?.gl__weight, 3);
+  });
   it("clusters in 2D and restores individual symbols in scenes", () => {
     const layer = {
       ...points,
@@ -890,6 +924,32 @@ describe("ArcGIS native point styles and altitude", () => {
     assert.equal(flat.parts[0].patternStyle?.fillPattern, "hatch");
     assert.ok(flat.parts.slice(1).every((part) => !part.patternStyle));
     assert.ok(scene.parts.every((part) => !part.patternStyle));
+  });
+  it("applies an altitude offset to zero-Z coordinates", () => {
+    const plan = compileArcgisLayer(
+      {
+        ...points,
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "Point", coordinates: [10, 20, 0] },
+            },
+          ],
+        },
+        style: { ...points.style, elevation3dEnabled: true, elevation3dOffset: 30 },
+      },
+      { scene: true },
+    );
+    if (plan.kind !== "geojson") return assert.fail("expected GeoJSON");
+    assert.equal(plan.parts[0].hasZ, true);
+    assert.deepEqual(plan.parts[0].elevationInfo, { mode: "absolute-height", offset: 0 });
+    assert.deepEqual(plan.parts[0].features?.features[0].geometry, {
+      type: "Point",
+      coordinates: [10, 20, 30],
+    });
   });
 });
 

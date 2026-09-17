@@ -52,7 +52,7 @@ export function createArcgisArchiveLayer(
         url: string;
         requestOptions?: { signal?: AbortSignal };
       }) => {
-        if (url === prefix + "source.json") {
+        if (url.split("?")[0] === prefix + "source.json") {
           const header = archive ? await archive.getHeader() : undefined;
           lifetime.signal.throwIfAborted();
           return {

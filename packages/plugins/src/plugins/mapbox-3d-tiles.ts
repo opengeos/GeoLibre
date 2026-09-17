@@ -10,6 +10,17 @@ import {
 } from "./map-projection-utils";
 import { THREE_D_TILES_DECK_LOAD_OPTIONS } from "./arcgis-i3s-tiles";
 
+/** Fly panel actions and initial loads through the active native renderer. */
+export function flyToDeckTilesLocation(
+  app: GeoLibreAppAPI,
+  center: [number, number],
+  zoom: number,
+): void {
+  const view = app.getArcgisView?.();
+  if (view) void view.goTo({ center, zoom, tilt: 60 }).catch(() => {});
+  else app.getMapboxMap?.()?.flyTo({ center, zoom, pitch: 60 });
+}
+
 const SOURCE = "mapbox-3d-tiles";
 let unsubscribe: (() => void) | undefined;
 let boundMap: unknown;
@@ -117,16 +128,11 @@ export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string):
               },
             });
             if (center && flyToRequests.delete(layer.id)) {
-              const target = {
-                center: [center[0], center[1]],
-                zoom: Math.max(0, (tileset.zoom ?? 16) - 1),
-                pitch: 60,
-              };
-              if (arcgisView)
-                void arcgisView
-                  .goTo({ center: [center[0], center[1]], zoom: target.zoom, tilt: target.pitch })
-                  .catch(() => {});
-              else app.getMapboxMap?.()?.flyTo({ ...target, center: [center[0], center[1]] });
+              flyToDeckTilesLocation(
+                app,
+                [center[0], center[1]],
+                Math.max(0, (tileset.zoom ?? 16) - 1),
+              );
             }
           },
           onError: (error: Error) => {

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { useAppStore, DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
-import { restoreMapboxTiles } from "../packages/plugins/src/plugins/mapbox-3d-tiles";
+import {
+  restoreMapboxTiles,
+  flyToDeckTilesLocation,
+} from "../packages/plugins/src/plugins/mapbox-3d-tiles";
 
 it("restores Mapbox tiles, applies store changes, reports load errors and disposes on map removal", async () => {
   class Tile {
@@ -103,4 +106,18 @@ it("restores Mapbox tiles, applies store changes, reports load errors and dispos
     removed.forEach((remove) => remove());
     useAppStore.getState().newProject();
   }
+});
+
+it("flies 3D tile panel actions through the ArcGIS view", () => {
+  const targets: unknown[] = [];
+  const app = {
+    getArcgisView: () => ({
+      goTo: async (target: unknown) => {
+        targets.push(target);
+      },
+    }),
+    getMapboxMap: () => null,
+  } as unknown as GeoLibreAppAPI;
+  flyToDeckTilesLocation(app, [-73, 40], 15);
+  assert.deepEqual(targets, [{ center: [-73, 40], zoom: 15, tilt: 60 }]);
 });

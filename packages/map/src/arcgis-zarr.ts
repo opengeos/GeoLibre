@@ -120,20 +120,24 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
       (/^y$/i.test(names[yDim]) && !/degrees?_north/i.test(yAxis.units)))
   )
     throw new Error("Specify the CRS for Zarr x/y coordinates");
-  const selector = (source.selector ?? {}) as Record<string, unknown>;
-  const selection: (number | import("zarrita").Slice)[] = names.map(() => 0);
-  for (let i = 0; i < names.length; i++) {
-    if (i === xDim || i === yDim) continue;
-    const value = selector[names[i]] ?? 0;
-    if (
-      typeof value !== "number" ||
-      !Number.isInteger(value) ||
-      value < 0 ||
-      value >= array.shape[i]
-    )
-      throw new Error(`Zarr selector ${names[i]} must be an in-range integer index`);
-    selection[i] = value;
+  function selectionFor(selector: Record<string, unknown>) {
+    const selection: (number | import("zarrita").Slice)[] = names!.map(() => 0);
+    for (let i = 0; i < names!.length; i++) {
+      if (i === xDim || i === yDim) continue;
+      const value = selector[names![i]] ?? 0;
+      if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value >= array.shape[i]
+      )
+        throw new Error(`Zarr selector ${names![i]} must be an in-range integer index`);
+      selection[i] = value;
+    }
+    return selection;
   }
+  const initialSelector = (source.selector ?? {}) as Record<string, unknown>;
+  selectionFor(initialSelector);
   const colors = (
     Array.isArray(source.colormap) && source.colormap.length
       ? source.colormap
@@ -172,7 +176,14 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   extent[3] = Math.min(85.05112878, extent[3]);
   return {
     extent,
-    async renderTile(z: number, x: number, y: number, requestSignal: AbortSignal) {
+    async renderTile(
+      z: number,
+      x: number,
+      y: number,
+      requestSignal: AbortSignal,
+      selector = initialSelector,
+    ) {
+      const selection = selectionFor(selector);
       requestSignal.throwIfAborted();
       const rgba = new Uint8ClampedArray(256 * 256 * 4);
       const xs = new Int32Array(256 * 256).fill(-1),
@@ -237,15 +248,32 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   };
 }
 
+export interface ArcgisZarrLayer extends ArcgisRasterLayer {
+  setSelector(selector: Record<string, unknown>): void;
+  refresh(): void;
+}
+
 export function createArcgisZarrLayer(
   sdk: ArcgisSdk,
   layer: GeoLibreLayer,
   properties: Record<string, unknown>,
 ) {
   const lifetime = new AbortController();
+  let sliceLifetime = new AbortController();
+  let selector = (layer.source.selector ?? {}) as Record<string, unknown>;
+  let selectorKey = JSON.stringify(selector);
   let ready: ReturnType<typeof openArcgisZarrGrid> | undefined;
   const prepare = () => (ready ??= openArcgisZarrGrid(layer, lifetime.signal));
   const Native = sdk.layers.BaseTileLayer.createSubclass({
+    setSelector(this: ArcgisZarrLayer, next: Record<string, unknown>) {
+      const key = JSON.stringify(next);
+      if (key === selectorKey) return;
+      selector = { ...next };
+      selectorKey = key;
+      sliceLifetime.abort();
+      sliceLifetime = new AbortController();
+      this.refresh();
+    },
     load(this: ArcgisRasterLayer) {
       this.addResolvingPromise(
         prepare().then(({ extent }) => {
@@ -263,13 +291,16 @@ export function createArcgisZarrLayer(
       );
     },
     async fetchTile(z: number, y: number, x: number, options?: { signal?: AbortSignal }) {
-      const signal = options?.signal
-        ? AbortSignal.any([lifetime.signal, options.signal])
-        : lifetime.signal;
+      const selected = selector;
+      const signal = AbortSignal.any([
+        lifetime.signal,
+        sliceLifetime.signal,
+        ...(options?.signal ? [options.signal] : []),
+      ]);
       signal.throwIfAborted();
       const grid = await prepare();
       signal.throwIfAborted();
-      const rgba = await grid.renderTile(z, x, y, signal);
+      const rgba = await grid.renderTile(z, x, y, signal, selected);
       signal.throwIfAborted();
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = 256;

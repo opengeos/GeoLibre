@@ -10,6 +10,9 @@ async function openStyleManager(page: Page) {
 
 for (const theme of ["light", "dark"]) {
   test(`style preset rename preserves styles and persists in ${theme} mode`, async ({ page }) => {
+    // Two app boots plus the full editing/export flow can exceed 60s on CI's
+    // shared software-rendered browser workers. Keep assertion timeouts unchanged.
+    test.setTimeout(120_000);
     // Capture the exported bytes through the browser download fallback.
     await page.addInitScript(() => {
       // @ts-expect-error - removing the optional API selects the fallback path

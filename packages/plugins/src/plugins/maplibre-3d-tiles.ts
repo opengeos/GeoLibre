@@ -1,4 +1,4 @@
-import { restoreMapboxTiles, isMapboxTilesLayer } from "./mapbox-3d-tiles";
+import { restoreMapboxTiles, isMapboxTilesLayer, flyToDeckTilesLocation } from "./mapbox-3d-tiles";
 import {
   DEFAULT_LAYER_STYLE,
   GOOGLE_MAPS_API_KEY_HEADER,
@@ -1163,18 +1163,19 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   title.className = "three-d-tiles-list-title";
   title.type = "button";
   title.textContent = layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
-  title.addEventListener("click", () => {
+  const flyToLayer = () => {
     if (isMapboxTilesLayer(layer)) {
       const current = useAppStore.getState().layers.find(({ id }) => id === layer.id);
       const center = current?.metadata.center;
-      if (Array.isArray(center))
-        activeThreeDTilesApp?.getMapboxMap?.()?.flyTo({
-          center: [Number(center[0]), Number(center[1])],
-          zoom: Number(current?.metadata.zoom ?? 16),
-          pitch: 60,
-        });
+      if (Array.isArray(center) && activeThreeDTilesApp)
+        flyToDeckTilesLocation(
+          activeThreeDTilesApp,
+          [Number(center[0]), Number(center[1])],
+          Number(current?.metadata.zoom ?? 16),
+        );
     } else if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
-  });
+  };
+  title.addEventListener("click", flyToLayer);
 
   const url = document.createElement("span");
   url.className = "three-d-tiles-list-url";
@@ -1219,18 +1220,7 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   });
 
   const flyTo = createGooglePhotorealisticTilesPanelSmallButton("Fly");
-  flyTo.addEventListener("click", () => {
-    if (isMapboxTilesLayer(layer)) {
-      const current = useAppStore.getState().layers.find(({ id }) => id === layer.id);
-      const center = current?.metadata.center;
-      if (Array.isArray(center))
-        activeThreeDTilesApp?.getMapboxMap?.()?.flyTo({
-          center: [Number(center[0]), Number(center[1])],
-          zoom: Number(current?.metadata.zoom ?? 16),
-          pitch: 60,
-        });
-    } else if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
-  });
+  flyTo.addEventListener("click", flyToLayer);
 
   const remove = createGooglePhotorealisticTilesPanelSmallButton("Remove");
   remove.addEventListener("click", () => {

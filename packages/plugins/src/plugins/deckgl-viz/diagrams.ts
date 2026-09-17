@@ -437,6 +437,7 @@ export function declutterEntries<
       const point = project(entry.position);
       return { entry, x: point.x, y: point.y };
     })
+    .filter(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))
     .sort((a, b) => b.entry.height - a.entry.height);
   const cellSize = 64;
   const grid = new Map<string, Placed[]>();
@@ -508,6 +509,8 @@ export function buildDiagramLayers(
   layer: GeoLibreLayer,
   options: {
     zoom?: number;
+    /** Settled camera identity for native views whose reference points may be offscreen. */
+    viewKey?: string;
     project?: ((position: [number, number]) => { x: number; y: number }) | null;
   } = {},
 ): Layer[] {
@@ -520,7 +523,7 @@ export function buildDiagramLayers(
   if (!atlas) return [];
   let entries = atlas.entries;
   if (styleValue(style, "diagramDeclutter") && options.project) {
-    const viewKey = viewSignature(options.project);
+    const viewKey = `${options.viewKey ?? ""}:${viewSignature(options.project)}`;
     const cached = declutterCache.get(atlas.entries);
     if (cached && cached.viewKey === viewKey) {
       entries = cached.result;

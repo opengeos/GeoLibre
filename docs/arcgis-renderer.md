@@ -56,7 +56,8 @@ allotment.
 
 With a key, new projects use **ArcGIS Streets** for the ArcGIS renderer. The
 **Change background** picker offers Esri's Streets, Navigation, Topographic,
-gray, Imagery, Oceans, Outdoor and OpenStreetMap styles when ArcGIS is active
+Light Gray, Dark Gray, Imagery, Imagery (no labels), Oceans, Outdoor and
+OpenStreetMap styles when ArcGIS is active
 and a key is configured. Selecting one preserves the camera. The
 choice is saved as `preferences.map.arcgisBasemap` (an Esri basemap style id
 such as `arcgis/streets`, `arcgis/imagery` or `osm/standard`); selecting a
@@ -111,7 +112,8 @@ override is set aside and the shared basemap is translated instead.
   and the scale bar (metric or imperial, 2D only), plus a globe/Mercator
   toggle and terrain (see [2D and 3D](#2d-and-3d)). Attribution is drawn by the view
   itself (`attributionVisible`); Esri requires it and it cannot be hidden.
-- **Plugins → Layer Control** opens the native ArcGIS layer list. Its visibility
+- **Plugins → Layer Control** toggles the native ArcGIS layer list, enabled by
+  default on the primary map like the shared plugin. Its visibility
   toggles update the project and the sidebar, and sidebar changes update the
   list. Mixed-geometry GeoJSON records have one entry for all their parts.
   Temporary search and selection highlights are omitted. Split panes keep the
@@ -218,6 +220,12 @@ layer is replaced or removed. Tiles are read on demand, including cancellation;
 synthetic tile addresses never go to the network. MLT encoding and archive text
 labels are not supported. The adapter reads PMTiles zoom limits from the archive
 header, including for older projects that omit those limits.
+
+Each vector source layer uses a separate native VectorTileLayer so its style and
+visibility can be controlled independently. The PMTiles reader is shared, but
+the SDK decodes tiles separately for each native layer. Archives with many source
+layers therefore use more decoding work and memory than the shared MapLibre
+source; enable only the layers needed for the current view.
 
 ## Zarr and NetCDF grids
 

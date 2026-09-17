@@ -121,6 +121,7 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
       : s.basemapStyleUrl,
   );
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
+  const setPreferences = useAppStore((s) => s.setPreferences);
   const isArcgis = useAppStore((s) => s.primaryRenderer === "arcgis");
   const arcgisBasemap = useAppStore((s) => s.preferences.map.arcgisBasemap);
   const arcgisApiKey = useArcgisApiKey();
@@ -261,7 +262,9 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
         <form className="space-y-5" onSubmit={applyCustom}>
           {isArcgis && arcgisApiKey ? (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">ArcGIS</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("toolbar.item.rendererArcgis")}
+              </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {ARCGIS_BASEMAP_STYLES.map((basemap) => (
                   <PresetButton
@@ -269,10 +272,11 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
                     name={basemap.name}
                     selected={activeChoice === basemap.id}
                     onSelect={() => {
-                      const store = useAppStore.getState();
-                      store.setPreferences({
-                        ...store.preferences,
-                        map: { ...store.preferences.map, arcgisBasemap: basemap.id },
+                      // Read live state so a concurrent preference change is preserved.
+                      const current = useAppStore.getState().preferences;
+                      setPreferences({
+                        ...current,
+                        map: { ...current.map, arcgisBasemap: basemap.id },
                       });
                       onOpenChange(false);
                     }}

@@ -966,7 +966,15 @@
       "modelTooLarge": "Ce modèle dépasse la limite de {{limit}} Mo pour l'intégration dans un projet. Hébergez-le et ajoutez-le par URL.",
       "modelFileError": "Impossible de lire ce modèle. Choisissez un fichier glTF 2.0 ou GLB valide."
     },
-    "nonGeographicCoordinates": "Les coordonnées de {{names}} ne sont pas des longitudes/latitudes : rien ne sera dessiné sur la carte. Le SCR est mal déclaré — reprojetez les données (ou corrigez le .prj) puis rechargez-les."
+    "nonGeographicCoordinates": "Les coordonnées de {{names}} ne sont pas des longitudes/latitudes : rien ne sera dessiné sur la carte. Le SCR est mal déclaré — reprojetez les données (ou corrigez le .prj) puis rechargez-les.",
+    "pmtiles": {
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de PMTiles.",
+      "errorMlt": "ArcGIS nécessite des tuiles vectorielles MVT, et non MLT."
+    },
+    "zarr": {
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de Zarr.",
+      "errorColorLimits": "La limite maximale de couleur doit être supérieure à la limite minimale."
+    }
   },
   "offline": {
     "title": "Télécharger une zone hors ligne",

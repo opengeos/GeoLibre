@@ -945,7 +945,15 @@
       "localFile": "Tệp cục bộ",
       "urlPlaceholder": "https://example.com/data.csv"
     },
-    "nonGeographicCoordinates": "Tọa độ trong {{names}} không phải là kinh độ/vĩ độ nên sẽ không có gì được vẽ trên bản đồ. CRS bị gắn nhãn sai — chiếu lại dữ liệu (hoặc sửa .prj của nó) và tải lại."
+    "nonGeographicCoordinates": "Tọa độ trong {{names}} không phải là kinh độ/vĩ độ nên sẽ không có gì được vẽ trên bản đồ. CRS bị gắn nhãn sai — chiếu lại dữ liệu (hoặc sửa .prj của nó) và tải lại.",
+    "pmtiles": {
+      "errorUrl": "Hãy nhập URL PMTiles hợp lệ theo HTTP hoặc HTTPS.",
+      "errorMlt": "ArcGIS yêu cầu ô bản đồ vector MVT, không phải MLT."
+    },
+    "zarr": {
+      "errorUrl": "Hãy nhập URL Zarr hợp lệ theo HTTP hoặc HTTPS.",
+      "errorColorLimits": "Giới hạn màu tối đa phải lớn hơn giới hạn tối thiểu."
+    }
   },
   "offline": {
     "title": "Tải xuống khu vực ngoại tuyến",

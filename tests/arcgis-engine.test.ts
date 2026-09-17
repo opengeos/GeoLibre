@@ -44,6 +44,7 @@ function makeSdk() {
   const widgets: { kind: string; props: Record<string, unknown>; destroyed: boolean }[] = [];
   const goTo: unknown[] = [];
   let watchers: (() => void)[] = [];
+  const syncWatchers = new Set<() => void>();
   const layerClass = (kind: string) =>
     class {
       kind = kind;
@@ -52,7 +53,14 @@ function makeSdk() {
       title: string | null;
       type = kind;
       opacity: number;
-      visible: boolean;
+      private visibility = true;
+      get visible() {
+        return this.visibility;
+      }
+      set visible(value: boolean) {
+        this.visibility = value;
+        for (const watch of syncWatchers) watch();
+      }
       minScale: number;
       maxScale: number;
       loaded = true;
@@ -296,9 +304,24 @@ function makeSdk() {
       Expand: widgetClass("Expand"),
     },
     reactiveUtils: {
-      watch: (_get: unknown, cb: () => void) => {
-        watchers.push(cb);
-        return { remove: () => (watchers = watchers.filter((w) => w !== cb)) };
+      watch: (get: () => unknown, cb: () => void, options?: { sync?: boolean }) => {
+        let previous = get();
+        const watch = options?.sync
+          ? () => {
+              const next = get();
+              if (next === previous) return;
+              previous = next;
+              cb();
+            }
+          : cb;
+        watchers.push(watch);
+        if (options?.sync) syncWatchers.add(watch);
+        return {
+          remove: () => {
+            watchers = watchers.filter((w) => w !== watch);
+            syncWatchers.delete(watch);
+          },
+        };
       },
       when: (_get: unknown, cb: () => void) => {
         watchers.push(cb);
@@ -1089,6 +1112,10 @@ describe("ArcgisEngine native style plans", () => {
     )[0];
     assert.equal(graphic.geometry.z, 230);
     assert.equal(graphic.geometry.hasZ, true);
+    const flat = { ...base, style: { ...base.style, elevation3dEnabled: false } };
+    engine.syncLayers([flat]);
+    engine.highlightFeature(flat, "high");
+    assert.deepEqual(created.at(-1)!.props.elevationInfo, { mode: "on-the-ground" });
     engine.destroy();
   });
 });
@@ -1109,4 +1136,58 @@ it("identifies adapted controls when no native SDK layer is present and clears t
   assert.deepEqual(await engine.identifyFeaturesAt({ x: 1, y: 2 }, "other"), []);
   engine.destroy();
   assert.deepEqual(await engine.identifyFeaturesAt({ x: 1, y: 2 }, "query"), []);
+});
+
+it("commits native visibility before an unrelated store sync can overwrite the toggle", () => {
+  let layer = SQUARE;
+  const changes: boolean[] = [];
+  const { engine, created } = makeEngine({
+    onLayerVisibilityChange: (_id, visible) => {
+      changes.push(visible);
+      layer = { ...layer, visible };
+      engine.syncLayers([layer]);
+    },
+  });
+  engine.syncLayers([layer]);
+  const native = created.find((item) => item.kind === "geojson")!;
+  native.visible = false;
+  // No asynchronous watcher flush between the user toggle and another update.
+  engine.syncLayers([{ ...layer, opacity: 0.4 }]);
+  assert.equal(native.visible, false);
+  assert.deepEqual(changes, [false]);
+  engine.destroy();
+});
+
+it("refreshes Zarr time slices without replacing the native layer", () => {
+  const { engine, sdk, created } = makeEngine();
+  let refreshes = 0;
+  sdk.layers.BaseTileLayer = {
+    createSubclass(definition: Record<string, unknown>) {
+      class Native extends sdk.layers.WebTileLayer {
+        refresh() {
+          refreshes++;
+        }
+      }
+      Object.assign(Native.prototype, definition);
+      return Native;
+    },
+  } as unknown as ArcgisSdk["layers"]["BaseTileLayer"];
+  const layer = geojsonLayer({
+    type: "zarr",
+    geojson: undefined,
+    source: { url: "https://example.test/data.zarr", variable: "air", selector: { time: 0 } },
+  });
+  engine.syncLayers([layer]);
+  const native = created.at(-1)!;
+  assert.equal(refreshes, 0);
+  const next = { ...layer, source: { ...layer.source, selector: { time: 1 } } };
+  engine.syncLayers([next]);
+  assert.equal(created.at(-1), native);
+  assert.equal(native.destroyed, false);
+  assert.equal(refreshes, 1);
+  engine.syncLayers([next]);
+  assert.equal(refreshes, 1, "unchanged selectors do not refresh");
+  engine.syncLayers([{ ...next, source: { ...next.source, variable: "other" } }]);
+  assert.equal(native.destroyed, true, "changing the variable rebuilds the grid");
+  engine.destroy();
 });

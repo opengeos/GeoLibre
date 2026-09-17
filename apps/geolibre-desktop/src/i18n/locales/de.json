@@ -966,7 +966,15 @@
       "modelTooLarge": "Dieses Modell überschreitet das Limit von {{limit}} MB für die Einbettung in ein Projekt. Hosten Sie es stattdessen und fügen Sie es per URL hinzu.",
       "modelFileError": "Dieses Modell konnte nicht gelesen werden. Wählen Sie eine gültige glTF-2.0- oder GLB-Datei aus."
     },
-    "nonGeographicCoordinates": "Die Koordinaten in {{names}} sind keine geografische Länge/Breite, daher wird nichts auf der Karte gezeichnet. Das CRS ist falsch angegeben — projizieren Sie die Daten um (oder korrigieren Sie die .prj) und laden Sie sie erneut."
+    "nonGeographicCoordinates": "Die Koordinaten in {{names}} sind keine geografische Länge/Breite, daher wird nichts auf der Karte gezeichnet. Das CRS ist falsch angegeben — projizieren Sie die Daten um (oder korrigieren Sie die .prj) und laden Sie sie erneut.",
+    "pmtiles": {
+      "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL für PMTiles ein.",
+      "errorMlt": "ArcGIS benötigt MVT-Vektorkacheln, nicht MLT."
+    },
+    "zarr": {
+      "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL für Zarr ein.",
+      "errorColorLimits": "Der obere Farbgrenzwert muss größer als der untere sein."
+    }
   },
   "offline": {
     "title": "Offline-Bereich herunterladen",

@@ -327,3 +327,54 @@ describe("a Zarr layer's temporal adapter", () => {
     }
   });
 });
+
+it("registers ArcGIS kerchunk time units once without an attribute-less HTTP fallback", async () => {
+  const refs: Record<string, string> = {};
+  for (const [name, shape, dimensions] of [
+    ["air", [2, 2, 2], ["time", "lat", "lon"]],
+    ["time", [2], ["time"]],
+  ] as const) {
+    refs[`${name}/.zarray`] = JSON.stringify({
+      zarr_format: 2,
+      shape,
+      chunks: shape,
+      dtype: "<f8",
+      fill_value: null,
+      order: "C",
+      filters: null,
+      compressor: null,
+    });
+    refs[`${name}/.zattrs`] = JSON.stringify({
+      _ARRAY_DIMENSIONS: dimensions,
+      ...(name === "time" ? { units: "days since 2020-01-01" } : {}),
+    });
+  }
+  refs["time/0"] = `base64:${Buffer.from(new Float64Array([0, 1]).buffer).toString("base64")}`;
+  const previousRenderer = useAppStore.getState().primaryRenderer;
+  const previousFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = (async () => {
+    requests++;
+    return new Response("Not found", { status: 404 });
+  }) as typeof fetch;
+  useAppStore.setState({ primaryRenderer: "arcgis" });
+  try {
+    await addCloudNetcdfLayer(
+      { ...app, getMapRenderer: () => "arcgis" },
+      {
+        url: "https://example.org/cube.json",
+        variable: "air",
+        refs,
+      },
+    );
+    const layer = useAppStore.getState().layers.at(-1)!;
+    const adapter = await waitForAdapter(layer.id);
+    assert.ok(adapter);
+    assert.deepEqual(adapter.getTimeValues(), [Date.UTC(2020, 0, 1), Date.UTC(2020, 0, 2)]);
+    assert.equal(requests, 0, "the manifest supplies all metadata, including CF units");
+    assert.ok(layer.source.kerchunkRefs);
+  } finally {
+    globalThis.fetch = previousFetch;
+    useAppStore.setState({ primaryRenderer: previousRenderer });
+  }
+});

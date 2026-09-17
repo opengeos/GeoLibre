@@ -362,11 +362,22 @@ export function ArcgisCanvas({
           .when()
           .then(async () => {
             if (cancelled) return;
-            if (terrainSource.current.source) {
-              await current.setTerrainCogSource(
-                terrainSource.current.source,
-                terrainSource.current.band,
-              );
+            if (scene && terrainSource.current.source) {
+              try {
+                await current.setTerrainCogSource(
+                  terrainSource.current.source,
+                  terrainSource.current.band,
+                );
+              } catch (error) {
+                // A failed DEM restore must not prevent the map from opening.
+                if (!cancelled) {
+                  terrainSource.current = { source: null, band: 1 };
+                  console.warn(
+                    "ArcGIS terrain restore failed:",
+                    redactArcgisError(error instanceof Error ? error.message : String(error)),
+                  );
+                }
+              }
               if (cancelled) return;
             }
             const latest = useAppStore.getState();

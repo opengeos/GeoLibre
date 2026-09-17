@@ -15,12 +15,17 @@ export function ZarrSource() {
     [max, setMax] = useState("1");
   const [colormap, setColormap] = useState("viridis");
   const submit = source.runSubmit(async () => {
-    const address = new URL(url.trim());
+    let address: URL;
+    try {
+      address = new URL(url.trim());
+    } catch {
+      throw new Error(t("addData.zarr.errorUrl"));
+    }
     if (!["http:", "https:"].includes(address.protocol))
-      throw new Error("Zarr requires an HTTP(S) URL");
+      throw new Error(t("addData.zarr.errorUrl"));
     const clim: [number, number] = [Number(min), Number(max)];
     if (!clim.every(Number.isFinite) || clim[1] <= clim[0])
-      throw new Error("Color limits must increase");
+      throw new Error(t("addData.zarr.errorColorLimits"));
     await addZarrRasterLayer(createAppAPI(source.shell.mapControllerRef), {
       url: address.href,
       variable: variable.trim(),

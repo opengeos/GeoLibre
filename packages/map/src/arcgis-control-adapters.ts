@@ -4,6 +4,7 @@ import type { ArcgisView } from "./arcgis-sdk";
 
 type Picker = (point: { x: number; y: number }, layerId?: string) => IdentifiedFeature[];
 const pickers = new WeakMap<ArcgisView, Picker>();
+/** One host-owned picker per view; a replacement supersedes the previous registration. */
 export function setArcgisControlPicker(view: ArcgisView, picker: Picker): void {
   pickers.set(view, picker);
 }
@@ -18,6 +19,7 @@ export function identifyArcgisControls(
 type Adapter = (control: IControl) => (() => void) | null;
 const adapters = new WeakMap<ArcgisView, Adapter>();
 const cleanups = new WeakMap<ArcgisView, Set<() => void>>();
+/** One host-owned adapter per view; compose multiple control types inside that adapter. */
 export function setArcgisControlAdapter(view: ArcgisView, adapter: Adapter): void {
   adapters.set(view, adapter);
 }

@@ -945,6 +945,14 @@
       "sampleMultiLine": "多线路线批量（3 段）",
       "unitMeters": "{{value}} 米",
       "unitKm": "{{value}} 千米"
+    },
+    "pmtiles": {
+      "errorUrl": "请输入有效的 HTTP 或 HTTPS PMTiles 地址。",
+      "errorMlt": "ArcGIS 需要 MVT 矢量瓦片，不支持 MLT。"
+    },
+    "zarr": {
+      "errorUrl": "请输入有效的 HTTP 或 HTTPS Zarr 地址。",
+      "errorColorLimits": "颜色上限必须大于下限。"
     }
   },
   "offline": {

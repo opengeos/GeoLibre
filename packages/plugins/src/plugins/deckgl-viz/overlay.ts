@@ -95,7 +95,11 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
     // `ui.storymapLayerOpacity`), so those fades rebuild the overlay too.
     if (
       state.layers !== previous.layers ||
-      state.ui.storymapLayerOpacity !== previous.ui.storymapLayerOpacity
+      state.ui.storymapLayerOpacity !== previous.ui.storymapLayerOpacity ||
+      // ArcgisCanvas publishes its camera when the native view becomes stationary.
+      (appRef?.getArcgisView?.() &&
+        state.mapView !== previous.mapView &&
+        state.layers.some(isDiagramLayer))
     ) {
       renderDeckVizLayers();
     }
@@ -185,10 +189,23 @@ function renderDeckVizLayers(): void {
 
   // Diagram layers need the live view for their min-zoom gate and optional
   // screen-space decluttering, and a rebuild when the view settles. Both
-  // engines' maps expose the same getZoom/project/on/off surface.
+  // Style Spec maps expose getZoom/project/on/off; ArcGIS exposes zoom/toScreen
+  // and uses the settled camera store subscription above.
+  const arcgis = appRef.getArcgisView?.();
   const diagramOptions = {
-    zoom: map?.getZoom(),
-    project: map ? (position: [number, number]) => map.project(position) : null,
+    zoom: map?.getZoom() ?? (arcgis ? state.mapView.zoom : undefined),
+    viewKey: arcgis ? JSON.stringify(state.mapView) : undefined,
+    project: map
+      ? (position: [number, number]) => map.project(position)
+      : arcgis
+        ? (position: [number, number]) =>
+            arcgis.toScreen({
+              type: "point",
+              x: position[0],
+              y: position[1],
+              spatialReference: { wkid: 4326 },
+            }) ?? { x: Number.NaN, y: Number.NaN }
+        : null,
   };
   syncViewListeners(
     diagramLayers.some(

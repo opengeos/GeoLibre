@@ -966,7 +966,15 @@
       "modelTooLarge": "Este modelo excede o limite de {{limit}} MB para incorporação em um projeto. Hospede-o e adicione-o por URL.",
       "modelFileError": "Não foi possível ler este modelo. Escolha um arquivo glTF 2.0 ou GLB válido."
     },
-    "nonGeographicCoordinates": "As coordenadas em {{names}} não são de longitude/latitude, portanto nada será desenhado no mapa. O CRS está incorreto — reprojete os dados (ou corrija o .prj) e carregue novamente."
+    "nonGeographicCoordinates": "As coordenadas em {{names}} não são de longitude/latitude, portanto nada será desenhado no mapa. O CRS está incorreto — reprojete os dados (ou corrija o .prj) e carregue novamente.",
+    "pmtiles": {
+      "errorUrl": "Digite uma URL HTTP ou HTTPS válida de PMTiles.",
+      "errorMlt": "O ArcGIS requer blocos vetoriais MVT, não MLT."
+    },
+    "zarr": {
+      "errorUrl": "Digite uma URL HTTP ou HTTPS válida de Zarr.",
+      "errorColorLimits": "O limite máximo de cor deve ser maior que o mínimo."
+    }
   },
   "offline": {
     "title": "Baixar área offline",

@@ -3,7 +3,6 @@
 // Copyright (c) vis.gl contributors
 import { Deck } from "@deck.gl/core";
 import { Model, Geometry } from "@luma.gl/engine";
-import { GL } from "@luma.gl/webgl/constants";
 import { WebGLDevice } from "@luma.gl/webgl";
 async function createDeckInstance(gl) {
   return new Promise((resolve) => {

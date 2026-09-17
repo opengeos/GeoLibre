@@ -21,6 +21,18 @@ import {
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
+  it("discards session raster URLs on save and on loading older projects", () => {
+    const layer = geojsonLayer({
+      type: "cog",
+      metadata: { localBytesUrl: "blob:expired", localFilePath: "/data/image.tif" },
+    });
+    const project = { ...createEmptyProject(), layers: [layer] };
+    assert.equal(JSON.parse(serializeProject(project)).layers[0].metadata.localBytesUrl, undefined);
+    const reopened = parseProject(JSON.stringify(project)).layers[0];
+    assert.equal(reopened.metadata.localBytesUrl, undefined);
+    assert.equal(reopened.metadata.localFilePath, "/data/image.tif");
+    assert.equal(layer.metadata.localBytesUrl, "blob:expired");
+  });
   it("restores portable WMS URLs when saving a desktop-routed layer", () => {
     const tile = "https://example.com/wms?BBOX={bbox-epsg-3857}";
     const routed = `geolibre-wms://tile?url=${encodeURIComponent(tile).replaceAll(

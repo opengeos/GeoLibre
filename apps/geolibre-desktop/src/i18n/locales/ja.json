@@ -945,7 +945,15 @@
       "modelTooLarge": "このモデルはプロジェクトに埋め込める上限の {{limit}} MB を超えています。サーバーにホストしてURLで追加してください。",
       "modelFileError": "このモデルを読み込めませんでした。有効なglTF 2.0またはGLBファイルを選択してください。"
     },
-    "nonGeographicCoordinates": "{{names}} の座標は経緯度ではないため、地図には何も描画されません。CRS が誤って記録されています — データを再投影する（または .prj を修正する）と読み込み直してください。"
+    "nonGeographicCoordinates": "{{names}} の座標は経緯度ではないため、地図には何も描画されません。CRS が誤って記録されています — データを再投影する（または .prj を修正する）と読み込み直してください。",
+    "pmtiles": {
+      "errorUrl": "有効なHTTPまたはHTTPSのPMTiles URLを入力してください。",
+      "errorMlt": "ArcGISにはMLTではなくMVTベクタータイルが必要です。"
+    },
+    "zarr": {
+      "errorUrl": "有効なHTTPまたはHTTPSのZarr URLを入力してください。",
+      "errorColorLimits": "色の上限値は下限値より大きくしてください。"
+    }
   },
   "offline": {
     "title": "オフラインエリアをダウンロード",

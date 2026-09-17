@@ -28,6 +28,10 @@ export function createCogElevationLayer(
         if (cache.get(key) === tile) cache.delete(key);
       });
       if (cache.size > 64) cache.delete(cache.keys().next().value!);
+    } else {
+      // Keep recently reused neighbours when panning back over tile boundaries.
+      cache.delete(key);
+      cache.set(key, tile);
     }
     return tile;
   };

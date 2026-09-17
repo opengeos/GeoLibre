@@ -36,8 +36,13 @@ export async function readNativeZarrDimensions(
   const array = await zarr.open(root.resolve(variable), { kind: "array" });
   const parent = variable.includes("/") ? variable.slice(0, variable.lastIndexOf("/") + 1) : "";
   const result: Record<string, number[]> = {};
+  const spatial = source.spatialDimensions as { lat?: string; lon?: string } | undefined;
   for (const name of array.dimensionNames ?? []) {
-    if (/^(lat|latitude|y|lon|longitude|x)$/i.test(name)) continue;
+    if (
+      (spatial?.lat ? name === spatial.lat : /^(lat|latitude|y)$/i.test(name)) ||
+      (spatial?.lon ? name === spatial.lon : /^(lon|longitude|x)$/i.test(name))
+    )
+      continue;
     try {
       const coordinate = await zarr.open(root.resolve(parent + name), { kind: "array" });
       if (

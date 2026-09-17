@@ -6,7 +6,7 @@ import { initializeResources, render, finalizeResources } from "./commons.js";
 import { MapView } from "@deck.gl/core";
 // Web Mercator scale at zoom 0 for 256 px tiles; deck.gl uses 512 px tiles,
 // so the final zoom is shifted by -1.
-const ARCGIS_WEB_MERCATOR_SCALE_AT_ZOOM_0 = 591657550.5;
+const ARCGIS_WEB_MERCATOR_SCALE_AT_ZOOM_0 = 591657527.591555;
 const DECK_GROUND_MPP_AT_ZOOM_0 = 78271.484;
 const METERS_PER_DEG_LAT = 111320;
 const ARCGIS_DIAGONAL_FOV_RADIANS = (55 * Math.PI) / 180;

@@ -871,7 +871,7 @@ function compileGeoJson(
   if (probe) return { parts: [], zoomDependent: false };
   const extrusion = scene && style.extrusionEnabled ? compileExtrusion(style) : null;
   const elevated =
-    scene && !extrusion && style.elevation3dEnabled && geojsonHasZCoordinates(geojson);
+    scene && !extrusion && style.elevation3dEnabled && geojsonHasZCoordinates(geojson, true);
   const data = elevated
     ? transformGeojsonElevation(
         geojson,
@@ -898,31 +898,36 @@ function compileGeoJson(
     if (!feature.geometry) return;
     if (filter.test && !filter.test(feature, zoom)) return;
     const id = String(feature.id ?? index);
-    const symbol = resolver.resolve(feature, zoom);
+    let symbol: ReturnType<typeof resolver.resolve> | undefined;
     const text = label ? label.read(feature, zoom) : "";
     for (const geometry of explodePoints(feature.geometry)) {
       const kind = GEOMETRY_KIND[geometry.type];
       if (!kind) continue;
       const extruded = extrusion !== null && kind === "polygon";
-      const shape = extruded ? extrusion.symbol(feature, zoom) : symbolForKind(kind, symbol);
-      const json = kind === "point" ? pointMarkerSymbol(style, feature, symbol, shape) : shape;
-      const key = JSON.stringify(json);
       let part = parts.get(kind);
       if (!part) {
         part = { features: [], symbols: new Map() };
         parts.set(kind, part);
       }
-      let entry = part.symbols.get(key);
-      if (!entry) {
-        entry = { id: `s${part.symbols.size}`, symbol: json };
-        part.symbols.set(key, entry);
+      let symbolId = "heatmap";
+      if (!(kind === "point" && style.pointRenderer === "heatmap")) {
+        symbol ??= resolver.resolve(feature, zoom);
+        const shape = extruded ? extrusion.symbol(feature, zoom) : symbolForKind(kind, symbol);
+        const json = kind === "point" ? pointMarkerSymbol(style, feature, symbol, shape) : shape;
+        const key = JSON.stringify(json);
+        let entry = part.symbols.get(key);
+        if (!entry) {
+          entry = { id: `s${part.symbols.size}`, symbol: json };
+          part.symbols.set(key, entry);
+        }
+        symbolId = entry.id;
       }
       part.features.push({
         type: "Feature",
         geometry,
         properties: {
           [ARCGIS_ID_FIELD]: id,
-          [ARCGIS_SYMBOL_FIELD]: entry.id,
+          [ARCGIS_SYMBOL_FIELD]: symbolId,
           [ARCGIS_LABEL_FIELD]: text,
           ...(kind === "point" && style.pointRenderer === "heatmap"
             ? { [ARCGIS_WEIGHT_FIELD]: heatmapWeight(feature, style) }
@@ -993,6 +998,8 @@ function compileGeoJson(
                   clusterRadius: `${style.clusterRadius}px`,
                   clusterMinSize: "32px",
                   clusterMaxSize: "60px",
+                  // MapLibre clusters through the inclusive integer clusterMaxZoom;
+                  // the native scale cutoff is the start of the next zoom level.
                   maxScale: zoomToScale(style.clusterMaxZoom + 1),
                   labelingInfo: [
                     {
@@ -1170,6 +1177,29 @@ export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true)
 
 const ARCGIS_SERVICE = /\/(FeatureServer|MapServer|ImageServer)(?:\/\d+)?\/?(?:\?|$)/i;
 
+const zarrSignatures = new WeakMap<GeoLibreLayer["source"], string>();
+const zarrManifestIds = new WeakMap<object, number>();
+let nextZarrManifestId = 0;
+
+/** Store sources and kerchunk manifests are immutable; compare manifests by identity. */
+function zarrRenderSignature(source: GeoLibreLayer["source"]): string {
+  const cached = zarrSignatures.get(source);
+  if (cached !== undefined) return cached;
+  const { selector: _selector, kerchunkRefs, ...gridSource } = source;
+  let refs = kerchunkRefs;
+  if (kerchunkRefs && typeof kerchunkRefs === "object") {
+    let id = zarrManifestIds.get(kerchunkRefs);
+    if (id === undefined) {
+      id = ++nextZarrManifestId;
+      zarrManifestIds.set(kerchunkRefs, id);
+    }
+    refs = ["manifest", id];
+  }
+  const signature = JSON.stringify({ ...gridSource, kerchunkRefs: refs });
+  zarrSignatures.set(source, signature);
+  return signature;
+}
+
 /**
  * Compile one store layer. Throws for a layer the SDK has no translation for,
  * naming why; the engine records that against the layer.
@@ -1198,7 +1228,13 @@ export function compileArcgisLayer(
   if (layer.type === "zarr") {
     if (!layer.source.url || !layer.source.variable)
       throw new Error("Zarr requires a source and variable");
-    return { ...base, kind: "zarr", source: layer, renderSignature: JSON.stringify(layer.source) };
+    // Time slices refresh native tiles in place, retaining metadata and byte caches.
+    return {
+      ...base,
+      kind: "zarr",
+      source: layer,
+      renderSignature: zarrRenderSignature(layer.source),
+    };
   }
   if (layer.type === "cog") {
     if (!cogSourceUrl(layer)) throw new Error("The COG layer has no readable source");
