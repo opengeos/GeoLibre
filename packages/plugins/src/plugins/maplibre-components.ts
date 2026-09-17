@@ -806,7 +806,8 @@ let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let stacSearchStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
 const arcgisZarrTemporalUnsubscribes = new Map<string, () => void>();
-const restoredArcgisZarrLayers = new WeakSet<GeoLibreLayer>();
+const restoredArcgisZarrLayerIds = new Set<string>();
+let restoredArcgisZarrStoreUnsubscribe: (() => void) | null = null;
 let lidarStoreUnsubscribe: (() => void) | null = null;
 let splattingStoreUnsubscribe: (() => void) | null = null;
 
@@ -2615,15 +2616,30 @@ async function addNativeArcgisZarrLayer(
     });
   }
   useAppStore.getState().addLayer(layer, options.beforeLayerId);
-  restoredArcgisZarrLayers.add(layer);
+  trackRestoredArcgisZarrLayer(id);
   void registerZarrTemporalAdapter(id, options.url, {
     refs,
     headers: options.headers,
     ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
   }).then((registered) => {
-    if (!registered) restoredArcgisZarrLayers.delete(layer);
+    if (!registered) restoredArcgisZarrLayerIds.delete(id);
   });
   return id;
+}
+
+function trackRestoredArcgisZarrLayer(layerId: string): void {
+  restoredArcgisZarrLayerIds.add(layerId);
+  if (restoredArcgisZarrStoreUnsubscribe) return;
+  restoredArcgisZarrStoreUnsubscribe = useAppStore.subscribe((state, previous) => {
+    if (state.layers === previous.layers) return;
+    const currentIds = new Set(state.layers.map((layer) => layer.id));
+    for (const id of restoredArcgisZarrLayerIds) {
+      if (!currentIds.has(id)) restoredArcgisZarrLayerIds.delete(id);
+    }
+    if (restoredArcgisZarrLayerIds.size) return;
+    restoredArcgisZarrStoreUnsubscribe?.();
+    restoredArcgisZarrStoreUnsubscribe = null;
+  });
 }
 
 // One add at a time: see the queue comment on queueZarrAdd.
@@ -3030,13 +3046,13 @@ function registerZarrTemporalAdapter(
 export function restoreArcgisZarrLayers(): void {
   for (const layer of useAppStore.getState().layers) {
     if (layer.type !== "zarr") continue;
-    if (restoredArcgisZarrLayers.has(layer)) continue;
-    restoredArcgisZarrLayers.add(layer);
+    if (restoredArcgisZarrLayerIds.has(layer.id)) continue;
+    trackRestoredArcgisZarrLayer(layer.id);
     void registerZarrTemporalAdapter(layer.id, String(layer.source.url), {
       headers: layer.source.headers as Record<string, string> | undefined,
       refs: layer.source.kerchunkRefs as KerchunkRefs | undefined,
     }).then((registered) => {
-      if (!registered) restoredArcgisZarrLayers.delete(layer);
+      if (!registered) restoredArcgisZarrLayerIds.delete(layer.id);
     });
   }
 }
