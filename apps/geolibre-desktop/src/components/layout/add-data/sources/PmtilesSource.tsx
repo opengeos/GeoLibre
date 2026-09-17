@@ -5,6 +5,7 @@ import {
   createArcgisPMTilesArchiveLayers,
   readRemotePMTilesInfo,
 } from "@geolibre/map/pmtiles-layer";
+import { createLayerId } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 /** Host-owned archive import for renderers without a MapLibre control container. */
@@ -24,8 +25,8 @@ export function PmtilesSource() {
     const info = await readRemotePMTilesInfo(address.href);
     if (info.encoding === "mlt") throw new Error(t("addData.pmtiles.errorMlt"));
     const layers = createArcgisPMTilesArchiveLayers({
-      id: crypto.randomUUID(),
-      name: source.layerName,
+      id: createLayerId(),
+      name: source.layerName.trim() || t("toolbar.item.pmtilesLayer"),
       url: address.href,
       ...info,
     });
