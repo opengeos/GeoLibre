@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "एक मान्य HTTP या HTTPS Zarr URL दर्ज करें।",
       "errorColorLimits": "रंग की अधिकतम सीमा न्यूनतम सीमा से अधिक होनी चाहिए।"
+    },
+    "raster": {
+      "errorSource": "GeoTIFF URL दर्ज करें या फ़ाइल चुनें।"
     }
   },
   "offline": {

@@ -1016,6 +1016,9 @@
     "zarr": {
       "errorUrl": "Введите корректный URL Zarr по протоколу HTTP или HTTPS.",
       "errorColorLimits": "Верхний предел цвета должен быть больше нижнего."
+    },
+    "raster": {
+      "errorSource": "Введите URL GeoTIFF или выберите файл."
     }
   },
   "offline": {

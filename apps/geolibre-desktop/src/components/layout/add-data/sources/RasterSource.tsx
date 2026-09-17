@@ -34,7 +34,7 @@ export function RasterSource() {
   };
   const submit = source.runSubmit(async () => {
     if (!file && !/^https?:\/\//i.test(url.trim()))
-      throw new Error("Enter an HTTP(S) GeoTIFF URL or choose a file");
+      throw new Error(t("addData.raster.errorSource"));
     await addRasterToMap(createAppAPI(source.shell.mapControllerRef), file?.file ?? url.trim(), {
       name: source.layerName,
       localPath: file?.localPath,

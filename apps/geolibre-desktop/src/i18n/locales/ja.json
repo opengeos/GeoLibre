@@ -953,6 +953,9 @@
     "zarr": {
       "errorUrl": "有効なHTTPまたはHTTPSのZarr URLを入力してください。",
       "errorColorLimits": "色の上限値は下限値より大きくしてください。"
+    },
+    "raster": {
+      "errorSource": "GeoTIFF の URL を入力するか、ファイルを選択してください。"
     }
   },
   "offline": {

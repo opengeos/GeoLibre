@@ -172,8 +172,8 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
       extent[2] = 180;
     }
   }
-  extent[1] = Math.max(-85.05112878, extent[1]);
-  extent[3] = Math.min(85.05112878, extent[3]);
+  extent[1] = Math.min(85.05112878, Math.max(-85.05112878, extent[1]));
+  extent[3] = Math.max(extent[1], Math.min(85.05112878, extent[3]));
   return {
     extent,
     async renderTile(

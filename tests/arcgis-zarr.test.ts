@@ -108,6 +108,28 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       }),
       { time: [0, 1] },
     );
+    for (const latitudes of [
+      [86, 89],
+      [-89, -86],
+    ]) {
+      array("polarLat", [2], ["polarLat"], latitudes);
+      array("polar", [2, 2], ["polarLat", "lon"], [1, 2, 3, 4]);
+      const polar = await openArcgisZarrGrid(
+        {
+          ...layer,
+          source: {
+            ...layer.source,
+            variable: "polar",
+            selector: {},
+            spatialDimensions: { lat: "polarLat", lon: "lon" },
+          },
+        },
+        abort.signal,
+      );
+      assert.ok(polar.extent[1] <= polar.extent[3]);
+      assert.ok(polar.extent[1] >= -85.05112878);
+      assert.ok(polar.extent[3] <= 85.05112878);
+    }
     abort.abort();
     await assert.rejects(grid.renderTile(0, 0, 0, abort.signal), { name: "AbortError" });
   } finally {
