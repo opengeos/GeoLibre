@@ -26,9 +26,9 @@ describe("OSM download query", () => {
 
   it("splits antimeridian-crossing view bounds into two selectors", () => {
     assert.equal(
-      buildOsmDownloadQuery([170, -10, 190, 10], { preset: "buildings" }),
-      '[out:json][timeout:60];(nwr["building"](-10,170,10,180);' +
-        'nwr["building"](-10,-180,10,-170););out geom;',
+      buildOsmDownloadQuery([179.9, -0.1, 180.1, 0.1], { preset: "buildings" }),
+      '[out:json][timeout:60];(nwr["building"](-0.1,179.9,0.1,180);' +
+        'nwr["building"](-0.1,-180,0.1,-179.9););out geom;',
     );
   });
 
@@ -37,6 +37,14 @@ describe("OSM download query", () => {
       () => buildOsmDownloadQuery([0, 0, 1, 1], { preset: "all" }),
       /limited to 0.25 square degrees/,
     );
+  });
+
+  it("rejects oversized filtered downloads and invalid manual longitudes", () => {
+    assert.throws(
+      () => buildOsmDownloadQuery([0, 0, 3, 2], { preset: "roads" }),
+      /limited to 4 square degrees/,
+    );
+    assert.throws(() => buildOsmDownloadQuery([200, 0, 210, 1], { preset: "roads" }));
   });
 
   it("supports key-only and key/value custom filters without query injection", () => {
@@ -172,7 +180,7 @@ describe("downloadOsmGeoJson", () => {
       };
     };
     const result = await downloadOsmGeoJson(
-      [0, 0, 3, 4],
+      [0, 0, 1, 1],
       { preset: "amenities" },
       {
         endpoint: "https://overpass.example/api",

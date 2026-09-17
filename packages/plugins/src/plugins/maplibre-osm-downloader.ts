@@ -262,7 +262,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       value: valueInput.value,
     };
     controller?.abort();
-    controller = new AbortController();
+    const requestController = new AbortController();
+    controller = requestController;
     result = null;
     resultPreset = null;
     added = false;
@@ -271,7 +272,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     downloadButton.disabled = true;
     status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
     try {
-      result = await downloadOsmGeoJson(bbox, filter, { signal: controller.signal });
+      result = await downloadOsmGeoJson(bbox, filter, { signal: requestController.signal });
       if (disposed) return;
       resultPreset = selectedPreset;
       const count = result.features.length;
@@ -287,7 +288,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         message,
       });
     } finally {
-      if (!disposed) downloadButton.disabled = false;
+      if (!disposed && controller === requestController) {
+        controller = null;
+        downloadButton.disabled = false;
+      }
     }
   });
 

@@ -13,6 +13,7 @@ import type {
 export const OVERPASS_DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter";
 export const OVERPASS_REQUEST_TIMEOUT_MS = 75_000;
 export const MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
+export const MAX_QUERY_AREA_SQUARE_DEGREES = 4;
 
 export type OsmDownloadPreset =
   | "all"
@@ -81,6 +82,7 @@ export function buildOsmDownloadQuery(
   if (
     !bbox.every(Number.isFinite) ||
     west < -180 ||
+    west > 180 ||
     east > west + 360 ||
     south < -90 ||
     north > 90 ||
@@ -89,13 +91,12 @@ export function buildOsmDownloadQuery(
   ) {
     throw new Error("Invalid bounding box");
   }
-  if (
-    filter.preset === "all" &&
-    (east - west) * (north - south) > MAX_ALL_QUERY_AREA_SQUARE_DEGREES
-  ) {
-    throw new Error(
-      `All-features downloads are limited to ${MAX_ALL_QUERY_AREA_SQUARE_DEGREES} square degrees`,
-    );
+  const area = (east - west) * (north - south);
+  const areaLimit =
+    filter.preset === "all" ? MAX_ALL_QUERY_AREA_SQUARE_DEGREES : MAX_QUERY_AREA_SQUARE_DEGREES;
+  if (area > areaLimit) {
+    const scope = filter.preset === "all" ? "All-features downloads" : "OSM downloads";
+    throw new Error(`${scope} are limited to ${areaLimit} square degrees`);
   }
 
   // The "all" option still means all *tagged* features. Selecting bare
