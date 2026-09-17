@@ -8,12 +8,13 @@ import type { Feature, FeatureCollection } from "geojson";
 /**
  * Client-engine coverage for the Buffer tool's `dissolve` parameter.
  *
- * The shared golden fixtures in `tests/fixtures/vector/cases` already assert
- * what BOTH engines agree on (overlapping buffers merge into one attribute-less
- * polygon, disjoint ones into one multipolygon, a non-boolean flag is
- * rejected). What they cannot assert is the client engine's log lines, the
- * single-feature path around turf's two-geometry minimum, and the parameter
- * shapes that never survive a JSON fixture. Those live here.
+ * The Python engine's half of the same contract lives in
+ * `backend/geolibre_server/tests/test_vector_ops.py` (see the "buffer dissolve"
+ * block): overlapping buffers merge into one attribute-less polygon, disjoint
+ * ones into a single multipolygon, and a non-boolean flag is rejected. The two
+ * files are kept in step by hand, so a change here needs its counterpart
+ * there. What is client-only — the log lines, the single-feature path around
+ * turf's two-geometry minimum, and `booleanParam` itself — lives here.
  */
 
 /** Two points close enough that 5 km buffers overlap. */

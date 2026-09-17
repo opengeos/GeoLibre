@@ -294,10 +294,11 @@ def test_buffer_rejects_non_finite_distance(distance: float) -> None:
 
 # --- buffer dissolve ---------------------------------------------------------
 #
-# The shared golden fixtures assert what both engines agree on (overlapping
-# buffers merge into one attribute-less polygon, disjoint ones into a single
-# multipolygon, a non-boolean flag is rejected). These cover this engine's
-# messages and the parameter shapes a JSON fixture cannot carry.
+# The client engine's half of the same contract lives in
+# tests/vector-buffer-dissolve.test.ts, and the two are kept in step by hand:
+# overlapping buffers merge into one attribute-less polygon, disjoint ones into
+# a single multipolygon, and a non-boolean flag is rejected on both sides. A
+# change to either file needs its counterpart.
 
 TWO_SQUARES = {
     "type": "FeatureCollection",
