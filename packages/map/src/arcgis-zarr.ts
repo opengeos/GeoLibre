@@ -28,7 +28,13 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   const store = zarr.withByteCaching(base, {
     cache: {
       has: (key) => cache.has(key),
-      get: (key) => cache.get(key),
+      get(key) {
+        if (!cache.has(key)) return undefined;
+        const value = cache.get(key);
+        cache.delete(key);
+        cache.set(key, value);
+        return value;
+      },
       set(key, value) {
         cacheBytes -= cache.get(key)?.byteLength ?? 0;
         cache.delete(key);
@@ -97,6 +103,8 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
       const min = explicit[horizontal ? 0 : 1],
         max = explicit[horizontal ? 2 : 3];
       const step = (max - min) / count;
+      // Raster bounds imply the conventional west-to-east, north-to-south
+      // cell order when the store does not provide coordinate arrays.
       first = horizontal ? min + step / 2 : max - step / 2;
       last = horizontal ? max - step / 2 : min + step / 2;
     }

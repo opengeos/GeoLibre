@@ -2597,13 +2597,16 @@ async function addNativeArcgisZarrLayer(
   });
   layer.source = {
     ...layer.source,
-    ...(refs ? { kerchunkRefs: refs } : {}),
+    // Local NetCDF refs inline the entire decoded raster. Keep those in the
+    // session store so saving a project cannot embed megabytes of base64 data.
+    ...(refs && !options.url.startsWith("local:") ? { kerchunkRefs: refs } : {}),
     headers: options.headers,
     spatialDimensions: options.spatialDimensions,
   };
   if (options.store) {
     const dispose = registerZarrStore(id, options.store);
-    const unsubscribe = useAppStore.subscribe((state) => {
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (state.layers === previous.layers) return;
       if (!state.layers.some((layer) => layer.id === id)) {
         dispose();
         unsubscribe();

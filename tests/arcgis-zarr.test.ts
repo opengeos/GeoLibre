@@ -146,6 +146,20 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
         /scale_factor and add_offset must be finite/,
       );
     }
+    array("bounded", [2, 3], ["y", "x"], [1, 2, 3, 4, 5, 6]);
+    const bounded = await openArcgisZarrGrid(
+      {
+        ...layer,
+        source: {
+          ...layer.source,
+          variable: "bounded",
+          selector: {},
+          bounds: [-10, -20, 20, 40],
+        },
+      },
+      abort.signal,
+    );
+    assert.deepEqual(bounded.extent, [-10, -20, 20, 40]);
     // Exercise the native preparation promise against the real Zarr metadata reader.
     class Native {
       pending?: Promise<unknown>;
