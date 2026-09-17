@@ -1,4 +1,5 @@
 import type { AsyncReadable } from "zarrita";
+import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
 
 // Store objects stay out of project JSON. Local folders and kerchunk manifests
 // register the same reader used by their importer before adding their record.
@@ -22,9 +23,17 @@ export async function readNativeZarrDimensions(
   const referenceStore = source.kerchunkRefs
     ? new (await import("./kerchunk-reference-store")).KerchunkReferenceStore(
         source.kerchunkRefs as import("./kerchunk-reference-store").KerchunkRefs,
-        { headers: source.headers as Record<string, string> | undefined },
+        {
+          headers: source.headers as Record<string, string> | undefined,
+          sourceUrl: String(source.url),
+        },
       )
     : undefined;
+  if (!referenceStore && !getZarrStore(layer.id))
+    assertSecureRequestHeaders(
+      String(source.url),
+      source.headers as Record<string, string> | undefined,
+    );
   const store =
     getZarrStore(layer.id) ??
     referenceStore ??

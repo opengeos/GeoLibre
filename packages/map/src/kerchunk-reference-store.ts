@@ -43,6 +43,20 @@ const BASE64_PREFIX = "base64:";
 // manifest exhausting memory. Honored only when Content-Length is present.
 const MAX_MANIFEST_BYTES = 256 * 1024 * 1024;
 
+export function assertSecureRequestHeaders(
+  url: string,
+  headers: Record<string, string> | undefined,
+): void {
+  if (!headers || Object.keys(headers).length === 0) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Authenticated Zarr requests require an absolute HTTPS URL");
+  }
+  if (parsed.protocol !== "https:") throw new Error("Authenticated Zarr requests require HTTPS");
+}
+
 function decodeBase64(b64: string): Uint8Array {
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
@@ -139,14 +153,23 @@ export class KerchunkReferenceStore {
   private readonly refs: KerchunkRefs;
   private readonly fetchImpl: FetchImpl;
   private readonly headers?: Record<string, string>;
+  private readonly credentialOrigin?: string;
 
   constructor(
     refs: KerchunkRefs,
-    options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {},
+    options: {
+      fetchImpl?: FetchImpl;
+      headers?: Record<string, string>;
+      sourceUrl?: string;
+    } = {},
   ) {
     this.refs = refs;
     this.fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
     this.headers = options.headers;
+    if (options.headers && Object.keys(options.headers).length) {
+      assertSecureRequestHeaders(options.sourceUrl ?? "", options.headers);
+      this.credentialOrigin = new URL(options.sourceUrl!).origin;
+    }
   }
 
   /**
@@ -168,16 +191,24 @@ export class KerchunkReferenceStore {
     }
 
     const [url, offset, length] = value;
+    let requestHeaders: Record<string, string> | undefined;
+    try {
+      const target = new URL(url);
+      if (target.protocol === "https:" && target.origin === this.credentialOrigin)
+        requestHeaders = this.headers;
+    } catch {
+      requestHeaders = undefined;
+    }
     const init =
       value.length >= 3
         ? {
             headers: {
-              ...this.headers,
+              ...requestHeaders,
               Range: `bytes=${offset}-${(offset as number) + (length as number) - 1}`,
             },
           }
-        : this.headers
-          ? { headers: { ...this.headers } }
+        : requestHeaders
+          ? { headers: { ...requestHeaders } }
           : undefined;
     const res = await this.fetchImpl(
       url,
@@ -285,6 +316,7 @@ export async function loadKerchunkReference(
   url: string,
   options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {},
 ): Promise<KerchunkRefs> {
+  assertSecureRequestHeaders(url, options.headers);
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
   const res = await fetchImpl(url, options.headers ? { headers: options.headers } : undefined);
   if (res.status !== 200) {

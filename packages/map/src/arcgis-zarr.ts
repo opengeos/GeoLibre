@@ -1,6 +1,7 @@
 import { interpolateRampColors, type GeoLibreLayer } from "@geolibre/core";
 import proj4 from "proj4";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
+import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
 import { getZarrStore } from "./zarr-source";
 import { cssToArcgisColor } from "./arcgis-layers";
 
@@ -35,9 +36,17 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   const referenceStore = refs
     ? new (await import("./kerchunk-reference-store")).KerchunkReferenceStore(
         refs as import("./kerchunk-reference-store").KerchunkRefs,
-        { headers: source.headers as Record<string, string> | undefined },
+        {
+          headers: source.headers as Record<string, string> | undefined,
+          sourceUrl: String(source.url),
+        },
       )
     : undefined;
+  if (!referenceStore && !getZarrStore(layer.id))
+    assertSecureRequestHeaders(
+      String(source.url),
+      source.headers as Record<string, string> | undefined,
+    );
   const base =
     getZarrStore(layer.id) ??
     referenceStore ??
