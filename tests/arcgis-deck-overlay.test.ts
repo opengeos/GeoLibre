@@ -98,3 +98,129 @@ it("retries a failed CDN mount on the same view", async () => {
   assert.equal(f.added.length, 1);
   overlay.finalize();
 });
+
+it("measures scene camera distance relative to the focal elevation", async () => {
+  const { getCameraDistance } =
+    await import("../packages/plugins/src/plugins/arcgis-deck/deck-renderer.js");
+  const camera = { latitude: 45, longitude: 10, z: 1500 };
+  const focal = { latitude: 45, longitude: 10, z: 1000 };
+  assert.equal(getCameraDistance(camera, focal), 500);
+  assert.equal(getCameraDistance({ ...camera, z: 500 }, { ...focal, z: 0 }), 500);
+  assert.equal(getCameraDistance(camera, { latitude: 45, longitude: 10 }), 1500);
+});
+
+function resourceFixture() {
+  let finalized = 0;
+  let props: unknown;
+  const resources = {
+    deck: {
+      setProps: (value: unknown) => {
+        props = value;
+      },
+      finalize: () => finalized++,
+    },
+    model: { device: {}, destroy() {} },
+    fbo: { destroy() {} },
+    texture: { destroy() {} },
+  } as unknown as import("../packages/plugins/src/plugins/arcgis-deck/commons.js").RenderResources;
+  return {
+    resources,
+    get finalized() {
+      return finalized;
+    },
+    get props() {
+      return props;
+    },
+  };
+}
+
+type TestLayerView = {
+  attach(): Promise<void>;
+  detach(): void;
+  requestRender(): void;
+};
+async function mountLayerView(overlay: ArcgisDeckOverlay, f: ReturnType<typeof fixture>) {
+  await overlay.mount();
+  const layer = f.added[0] as { createLayerView(view: View): TestLayerView };
+  const view = layer.createLayerView(f.view);
+  let renders = 0;
+  view.requestRender = () => {
+    renders++;
+  };
+  return {
+    view,
+    get renders() {
+      return renders;
+    },
+  };
+}
+
+it("recovers resource initialization on the current layer view and applies latest props", async () => {
+  const f = fixture();
+  const r = resourceFixture();
+  let attempts = 0;
+  const errors: Error[] = [];
+  const overlay = new ArcgisDeckOverlay(
+    f.view,
+    { onError: (e) => errors.push(e) },
+    async () => f.module,
+    async () => {
+      if (++attempts === 1) throw new Error("temporary device failure");
+      return r.resources;
+    },
+  );
+  const mounted = await mountLayerView(overlay, f);
+  const attaching = mounted.view.attach();
+  overlay.setProps({ pickingRadius: 7 });
+  await attaching;
+  assert.equal(attempts, 2);
+  assert.equal((r.props as { pickingRadius: number }).pickingRadius, 7);
+  assert.ok(mounted.renders > 0);
+  assert.deepEqual(errors, []);
+  overlay.finalize();
+  assert.equal(r.finalized, 1);
+});
+
+it("bounds resource retries and reports only the exhausted failure", async () => {
+  const f = fixture();
+  let attempts = 0;
+  const errors: Error[] = [];
+  const overlay = new ArcgisDeckOverlay(
+    f.view,
+    { onError: (e) => errors.push(e) },
+    async () => f.module,
+    async () => {
+      attempts++;
+      throw new Error("device unavailable");
+    },
+  );
+  const mounted = await mountLayerView(overlay, f);
+  await mounted.view.attach();
+  assert.equal(attempts, 3);
+  assert.equal(errors.length, 1);
+  overlay.finalize();
+});
+
+for (const action of ["detach", "dispose"] as const) {
+  it(`stops resource retries after ${action}`, async () => {
+    const f = fixture();
+    let attempts = 0;
+    const overlay = new ArcgisDeckOverlay(
+      f.view,
+      {},
+      async () => f.module,
+      async () => {
+        attempts++;
+        throw new Error("temporary device failure");
+      },
+    );
+    const mounted = await mountLayerView(overlay, f);
+    const attaching = mounted.view.attach();
+    await Promise.resolve();
+    if (action === "detach") mounted.view.detach();
+    else overlay.finalize();
+    await attaching;
+    assert.equal(attempts, 1);
+    overlay.finalize();
+  });
+}
