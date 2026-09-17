@@ -338,11 +338,11 @@ const SYNC_CLOCK_TICK_MS = 60_000;
  * so only the sources the Add Data *dialog* owns qualify — `KIND_I18N_KEY` is
  * keyed by `AddDataKind`, so membership in it is that test. The rest of the
  * catalog (vector/raster file pickers, STAC, …) has no group-scoped open.
- * PMTiles also uses the dialog when ArcGIS is the primary renderer.
+ * PMTiles and Zarr also use the dialog when ArcGIS is the primary renderer.
  */
 const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
   (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } =>
-    entry.id in KIND_I18N_KEY || entry.id === "pmtiles",
+    entry.id in KIND_I18N_KEY || entry.id === "pmtiles" || entry.id === "zarr",
 );
 
 type LayerRefreshStatus = {
@@ -663,7 +663,7 @@ export function LayerPanel({
       ADD_DATA_DIALOG_SOURCES.filter(
         (entry) =>
           isDataSourceVisible(uiProfile, entry.id) &&
-          (entry.id !== "pmtiles" || arcgisPrimary) &&
+          (!["pmtiles", "zarr"].includes(entry.id) || arcgisPrimary) &&
           !(entry.id === "postgres" && mobile) &&
           !masHidesDataSource(entry.id),
       ),
