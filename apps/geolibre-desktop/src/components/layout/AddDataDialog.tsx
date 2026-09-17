@@ -125,7 +125,7 @@ function renderSource(
     case "zarr":
       return <ZarrSource />;
     case "pmtiles":
-      return <PmtilesSource />;
+      return <PmtilesSource initialUrl={initialUrl} />;
     case "mbtiles":
       return <MbtilesSource />;
     case "polyline":
