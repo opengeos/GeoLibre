@@ -5,7 +5,8 @@ import { RASTER_SOURCE_KIND } from "./raster-layer-sync";
 
 /** Keep a browser file readable until its store layer is removed or replaced. */
 function retainFile(id: string, url: string): void {
-  const unsubscribe = useAppStore.subscribe((state) => {
+  const unsubscribe = useAppStore.subscribe((state, previous) => {
+    if (state.layers === previous.layers) return;
     const layer = state.layers.find((entry) => entry.id === id);
     if (layer?.metadata.localBytesUrl === url || layer?.source.url === url) return;
     unsubscribe();

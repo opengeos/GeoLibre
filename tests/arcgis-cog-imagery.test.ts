@@ -71,6 +71,31 @@ describe("ArcGIS COG imagery", () => {
       spatialReference: { wkid: 3857 },
     });
   });
+  it("retries preparation after a transient header failure", async () => {
+    let opens = 0;
+    const raster = createArcgisCogLayer(
+      fakeSdk(),
+      layer,
+      {},
+      async () =>
+        ({
+          openCog: async () => {
+            if (++opens === 1) throw new Error("Temporary network failure");
+            return {
+              boundsLonLat: [1, 2, 3, 4],
+              statistics: async () => null,
+            };
+          },
+        }) as unknown as CogTilerModule,
+    );
+    const loading = raster as unknown as { load(): void; pending: Promise<unknown> };
+    loading.load();
+    await assert.rejects(loading.pending, /Temporary network failure/);
+    loading.load();
+    await loading.pending;
+    assert.equal(opens, 2);
+    assert.ok(raster.fullExtent);
+  });
   it("recognizes browser files and includes raster visualization changes in the plan", () => {
     const local = {
       ...layer,
