@@ -11,3 +11,8 @@ export default function createDeckRenderer(Props: unknown, RenderNode: unknown):
   view: NonNullable<ReturnType<ArcgisEngine["getView"]>>,
   props: DeckProps,
 ) => SceneDeckRenderer;
+
+export declare function getCameraDistance(
+  camera: { latitude: number; longitude: number; z: number },
+  focalPoint: { latitude: number; longitude: number; z?: number },
+): number;
