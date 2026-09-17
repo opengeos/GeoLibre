@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Database } from "lucide-react";
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, type MapRendererKind } from "@geolibre/core";
 import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../AddDataDialog";
@@ -40,6 +40,13 @@ interface AddDataMenuProps {
 interface AddDataItem {
   onSelect: () => void;
   disabled?: boolean;
+}
+
+function unsupportedTitleKey(renderer: MapRendererKind, id: string) {
+  if (renderer !== "arcgis") return "renderer.layerMapboxUnsupported";
+  return requiresArcgisDeckOverlay(id)
+    ? "renderer.layerArcgisViewUnsupported"
+    : "renderer.layerArcgisUnsupported";
 }
 
 /** The Add Data menu: files, web services, cloud formats, 3D layers, databases. */
@@ -183,17 +190,7 @@ export function AddDataMenu({
                 <DropdownMenuItem
                   key={entry.id}
                   disabled={item.disabled || !supported}
-                  title={
-                    supported
-                      ? undefined
-                      : t(
-                          renderer === "arcgis"
-                            ? requiresArcgisDeckOverlay(entry.id)
-                              ? "renderer.layerArcgisViewUnsupported"
-                              : "renderer.layerArcgisUnsupported"
-                            : "renderer.layerMapboxUnsupported",
-                        )
-                  }
+                  title={supported ? undefined : t(unsupportedTitleKey(renderer, entry.id))}
                   onSelect={item.onSelect}
                 >
                   {t(entry.labelKey)}

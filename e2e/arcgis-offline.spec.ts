@@ -49,7 +49,7 @@ async function openProject(page: Page, waitUntilReady = true) {
       );
   }, JSON.stringify(project));
   const discard = page.getByRole("button", { name: "Do not save", exact: true });
-  if (await discard.isVisible()) await discard.click();
+  if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click();
   if (!waitUntilReady) return;
   await expect(page.getByTestId("arcgis-canvas")).toHaveAttribute("aria-busy", "false", {
     timeout: 90_000,

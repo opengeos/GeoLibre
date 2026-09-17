@@ -107,7 +107,7 @@ it("preserves the project for WebKit's unattributed import error", () => {
   const cleanup = installStaleChunkReload({ enabled: true });
   try {
     const ambiguous = Object.assign(new Event("vite:preloadError", { cancelable: true }), {
-      payload: new TypeError("Importing a module script failed."),
+      payload: new TypeError("IMPORTING A MODULE SCRIPT FAILED: Load failed"),
     });
     target.dispatchEvent(ambiguous);
     assert.equal(reloads, 0);
@@ -152,6 +152,15 @@ it("leaves CDN import errors to their feature while retaining local stale-chunk 
       origin,
     ),
     false,
+  );
+  assert.equal(
+    isExternalModuleFailure(
+      new Error(
+        "Importing https://js.arcgis.com/5.1/@arcgis/core/Map.js from https://web.geolibre.app/assets/arcgis.js failed",
+      ),
+      origin,
+    ),
+    true,
   );
   assert.equal(
     isExternalModuleFailure(new Error("Importing a module script failed."), origin),
