@@ -836,15 +836,23 @@ describe("ArcgisEngine picking and highlight", () => {
     assert.deepEqual(feature.properties, { OBJECTID: 7, NAME: "Parcel" });
     assert.equal(feature.geometry?.type, "Polygon");
   });
-  it("returns nothing from a hit test that outlives the engine", async () => {
+  it("keeps synchronous control results when a native hit test outlives the engine", async () => {
+    const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");
     const { engine, setHitResults } = makeEngine();
+    const external = {
+      layerId: "query",
+      featureId: "12",
+      properties: { NAME: "station" },
+      geometry: null,
+    };
+    setArcgisControlPicker(engine.getView()!, () => [external]);
     engine.syncLayers([SQUARE]);
     setHitResults([
       { type: "graphic", graphic: { attributes: { [ARCGIS_ID_FIELD]: "sq" }, layer: null } },
     ]);
     const pending = engine.identifyFeaturesAt({ x: 0.5, y: 0.5 });
     engine.destroy();
-    assert.deepEqual(await pending, []);
+    assert.deepEqual(await pending, [external]);
   });
   it("draws the selection as a graphics layer on top and clears it", () => {
     const { engine, layers } = makeEngine();
