@@ -7908,5 +7908,10 @@
     "catalogHuc12pp": "Điểm thoát nước HUC12",
     "catalogNmwdiSt": "Trạm quan trắc nước New Mexico",
     "catalogFlowlines": "Đường dòng chảy NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác."
+    }
   }
 }

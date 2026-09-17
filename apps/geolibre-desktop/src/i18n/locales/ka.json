@@ -7995,5 +7995,10 @@
     "catalogHuc12pp": "HUC12 ჩამონადენის წერტილები",
     "catalogNmwdiSt": "ნიუ-მექსიკოს წყლის პუნქტები",
     "catalogFlowlines": "NHDPlus ნაკადის ხაზები"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა."
+    }
   }
 }

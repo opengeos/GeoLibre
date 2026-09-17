@@ -7995,5 +7995,10 @@
     "catalogHuc12pp": "Puntos de vertido HUC12",
     "catalogNmwdiSt": "Estaciones hídricas de Nuevo México",
     "catalogFlowlines": "Líneas de flujo NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Usa una URL tileset.json de 3D Tiles en esta vista de ArcGIS. Las teselas Google Photorealistic e I3S requieren otro motor de renderizado."
+    }
   }
 }

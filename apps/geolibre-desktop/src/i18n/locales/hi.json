@@ -7995,5 +7995,10 @@
     "catalogHuc12pp": "HUC12 निकास बिंदु",
     "catalogNmwdiSt": "न्यू मैक्सिको जल स्थल",
     "catalogFlowlines": "NHDPlus प्रवाह-रेखाएँ"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।"
+    }
   }
 }

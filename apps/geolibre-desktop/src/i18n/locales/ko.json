@@ -7908,5 +7908,10 @@
     "catalogHuc12pp": "HUC12 유출점",
     "catalogNmwdiSt": "뉴멕시코 수문 관측지점",
     "catalogFlowlines": "NHDPlus 유로"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다."
+    }
   }
 }

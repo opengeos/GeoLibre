@@ -7995,5 +7995,10 @@
     "catalogHuc12pp": "HUC12-uitstroompunten",
     "catalogNmwdiSt": "Waterlocaties in New Mexico",
     "catalogFlowlines": "NHDPlus-stroomlijnen"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Gebruik een 3D Tiles-URL voor tileset.json in deze ArcGIS-weergave. Google Photorealistic- en I3S-tegels vereisen een andere renderer."
+    }
   }
 }

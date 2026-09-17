@@ -7995,5 +7995,10 @@
     "catalogHuc12pp": "Punti di deflusso HUC12",
     "catalogNmwdiSt": "Siti idrici del New Mexico",
     "catalogFlowlines": "Linee di deflusso NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Usa un URL tileset.json di 3D Tiles in questa vista ArcGIS. I tasselli Google Photorealistic e I3S richiedono un altro motore di rendering."
+    }
   }
 }

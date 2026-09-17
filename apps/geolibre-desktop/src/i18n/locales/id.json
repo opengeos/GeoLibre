@@ -7908,5 +7908,10 @@
     "catalogHuc12pp": "Titik keluaran HUC12",
     "catalogNmwdiSt": "Situs air New Mexico",
     "catalogFlowlines": "Garis aliran NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain."
+    }
   }
 }
