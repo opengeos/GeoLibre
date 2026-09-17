@@ -175,7 +175,11 @@ export function AddDataMenu({
             {group.entries.map((entry) => {
               const item = handlers[entry.id];
               if (!item) return null;
-              const supported = supportsAddDataRenderer(entry.id, renderer);
+              const supported = supportsAddDataRenderer(
+                entry.id,
+                renderer,
+                capabilities.deckOverlay,
+              );
               return (
                 <DropdownMenuItem
                   key={entry.id}
