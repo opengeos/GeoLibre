@@ -26,19 +26,23 @@ async function createDeckInstance(gl) {
 }
 export async function initializeResources(gl) {
   const { deckInstance, device } = await createDeckInstance(gl);
-  const texture = device.createTexture({
-    format: "rgba8unorm",
-    width: 1,
-    height: 1,
-    sampler: {
-      minFilter: "linear",
-      magFilter: "linear",
-      addressModeU: "clamp-to-edge",
-      addressModeV: "clamp-to-edge",
-    },
-  });
-  const model = new Model(device, {
-    vs: `\
+  let texture;
+  let model;
+  let fbo;
+  try {
+    texture = device.createTexture({
+      format: "rgba8unorm",
+      width: 1,
+      height: 1,
+      sampler: {
+        minFilter: "linear",
+        magFilter: "linear",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
+      },
+    });
+    model = new Model(device, {
+      vs: `\
 #version 300 es
 in vec2 pos;
 out vec2 v_texcoord;
@@ -47,7 +51,7 @@ void main(void) {
     v_texcoord = (pos + 1.0) / 2.0;
 }
     `,
-    fs: `\
+      fs: `\
 #version 300 es
 precision mediump float;
 uniform sampler2D deckglTexture;
@@ -62,59 +66,77 @@ void main(void) {
     fragColor = imageColor;
 }
     `,
-    bindings: {
-      deckglTexture: texture,
-    },
-    parameters: {
-      depthWriteEnabled: false,
-      depthCompare: "always",
-      blendColorSrcFactor: "one",
-      blendColorDstFactor: "one-minus-src-alpha",
-      blendAlphaSrcFactor: "one",
-      blendAlphaDstFactor: "one-minus-src-alpha",
-      blendColorOperation: "add",
-      blendAlphaOperation: "add",
-    },
-    geometry: new Geometry({
-      topology: "triangle-strip",
-      attributes: {
-        pos: { size: 2, value: new Int8Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, 1, 1, -1]) },
+      bindings: {
+        deckglTexture: texture,
       },
-    }),
-    vertexCount: 6,
-    disableWarnings: true,
-  });
-  const fbo = device.createFramebuffer({
-    id: "deckfbo",
-    width: 1,
-    height: 1,
-    colorAttachments: [texture],
-    depthStencilAttachment: "depth16unorm",
-  });
-  deckInstance.setProps({
-    // This deck renders into an auxiliary framebuffer.
-    _framebuffer: fbo,
-    _customRender: (redrawReason) => {
-      if (redrawReason === "arcgis") {
-        // ArcGIS renders with alphaSrc=ZERO (preserves destination alpha for its
-        // own compositing pipeline). Without resetting this, deck layers inherit
-        // that blend state and write alpha=0 into the FBO, making the composite
-        // shader output (0,0,0,0) everywhere. Reset to standard premultiplied-alpha
-        // blend so the FBO stores correct RGBA for the composite pass.
-        const glCtx = device.gl;
-        glCtx.blendFuncSeparate(
-          glCtx.ONE,
-          glCtx.ONE_MINUS_SRC_ALPHA,
-          glCtx.ONE,
-          glCtx.ONE_MINUS_SRC_ALPHA,
-        );
-        deckInstance._drawLayers(redrawReason);
-      } else {
-        this.redraw();
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: "always",
+        blendColorSrcFactor: "one",
+        blendColorDstFactor: "one-minus-src-alpha",
+        blendAlphaSrcFactor: "one",
+        blendAlphaDstFactor: "one-minus-src-alpha",
+        blendColorOperation: "add",
+        blendAlphaOperation: "add",
+      },
+      geometry: new Geometry({
+        topology: "triangle-strip",
+        attributes: {
+          pos: { size: 2, value: new Int8Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, 1, 1, -1]) },
+        },
+      }),
+      vertexCount: 6,
+      disableWarnings: true,
+    });
+    fbo = device.createFramebuffer({
+      id: "deckfbo",
+      width: 1,
+      height: 1,
+      colorAttachments: [texture],
+      depthStencilAttachment: "depth16unorm",
+    });
+    deckInstance.setProps({
+      // This deck renders into an auxiliary framebuffer.
+      _framebuffer: fbo,
+      _customRender: (redrawReason) => {
+        if (redrawReason === "arcgis") {
+          // ArcGIS renders with alphaSrc=ZERO (preserves destination alpha for its
+          // own compositing pipeline). Without resetting this, deck layers inherit
+          // that blend state and write alpha=0 into the FBO, making the composite
+          // shader output (0,0,0,0) everywhere. Reset to standard premultiplied-alpha
+          // blend so the FBO stores correct RGBA for the composite pass.
+          const glCtx = device.gl;
+          glCtx.blendFuncSeparate(
+            glCtx.ONE,
+            glCtx.ONE_MINUS_SRC_ALPHA,
+            glCtx.ONE,
+            glCtx.ONE_MINUS_SRC_ALPHA,
+          );
+          deckInstance._drawLayers(redrawReason);
+        } else {
+          this.redraw();
+        }
+      },
+    });
+    return { deck: deckInstance, texture, fbo, model };
+  } catch (error) {
+    // A failed attempt may have allocated several GPU objects. Release each
+    // independently so one cleanup failure cannot hide the original error or
+    // prevent cleanup of the remaining objects before the caller retries.
+    for (const release of [
+      () => deckInstance.finalize(),
+      () => model?.destroy(),
+      () => fbo?.destroy(),
+      () => texture?.destroy(),
+    ]) {
+      try {
+        release();
+      } catch {
+        // Preserve the initialization error reported to the caller.
       }
-    },
-  });
-  return { deck: deckInstance, texture, fbo, model };
+    }
+    throw error;
+  }
 }
 export function render(resources, viewport) {
   const { model, deck, fbo } = resources;
