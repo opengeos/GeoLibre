@@ -88,9 +88,8 @@ export function AddDataMenu({
     georss: { onSelect: () => onSetAddDataKind("georss") },
     stac: { onSelect: addLayer.stac },
     video: { onSelect: () => onSetAddDataKind("video") },
-    // deck.gl draws through the shared MapboxOverlay, which MapLibre and Mapbox
-    // both host; there is no Cesium interop, so the builder is offered only
-    // where the engine hosts that overlay.
+    // deck.gl draws through a shared overlay on MapLibre, Mapbox and supported
+    // ArcGIS views. Offer the builder only where the engine hosts that overlay.
     "deckgl-viz": {
       onSelect: () => onSetAddDataKind("deckgl-viz"),
       disabled: !capabilities.deckOverlay,
@@ -184,7 +183,15 @@ export function AddDataMenu({
                 <DropdownMenuItem
                   key={entry.id}
                   disabled={item.disabled || !supported}
-                  title={supported ? undefined : t("renderer.layerMapboxUnsupported")}
+                  title={
+                    supported
+                      ? undefined
+                      : t(
+                          renderer === "arcgis"
+                            ? "renderer.layerArcgisUnsupported"
+                            : "renderer.layerMapboxUnsupported",
+                        )
+                  }
                   onSelect={item.onSelect}
                 >
                   {t(entry.labelKey)}
