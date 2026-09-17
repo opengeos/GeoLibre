@@ -971,6 +971,17 @@
       "modelFileError": "Kan dit model niet lezen. Kies een geldig glTF 2.0- of GLB-bestand."
     },
     "nonGeographicCoordinates": "De coördinaten in {{names}} zijn geen lengte-/breedtegraad, dus er wordt niets op de kaart getekend. Het CRS klopt niet — herprojecteer de gegevens (of corrigeer de .prj) en laad ze opnieuw.",
+    "pmtiles": {
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor PMTiles in.",
+      "errorMlt": "ArcGIS vereist MVT-vectortegels, geen MLT."
+    },
+    "zarr": {
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor Zarr in.",
+      "errorColorLimits": "De maximale kleurgrens moet groter zijn dan de minimale."
+    },
+    "raster": {
+      "errorSource": "Voer een GeoTIFF-URL in of kies een bestand."
+    },
     "wcs": {
       "retrieve": "Coverages ophalen",
       "select": "Selecteer een coverage",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Alleen weergegeven door de 3D-globe",
     "layerMapboxUnsupported": "Niet weergegeven door de Mapbox-engine",
     "layerArcgisUnsupported": "Niet weergegeven door de ArcGIS-engine",
+    "layerArcgisViewUnsupported": "Niet weergegeven in deze ArcGIS-weergave",
     "resetView": "Weergave herstellen",
     "scene3D": "3D-globe",
     "scene2D": "2D-kaart",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "HUC12-uitstroompunten",
     "catalogNmwdiSt": "Waterlocaties in New Mexico",
     "catalogFlowlines": "NHDPlus-stroomlijnen"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Gebruik een 3D Tiles-URL voor tileset.json in deze ArcGIS-weergave. Google Photorealistic- en I3S-tegels vereisen een andere renderer."
+    }
   }
 }

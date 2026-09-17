@@ -252,7 +252,14 @@ function serializeProjectValue(
  * @returns The file contents to write.
  */
 export function serializeProject(project: GeoLibreProject): string {
-  return serializeProjectValue(project, 0, "", new Set()) ?? "null";
+  return (
+    serializeProjectValue(
+      { ...project, layers: project.layers.map(withoutLocalRasterBytes) },
+      0,
+      "",
+      new Set(),
+    ) ?? "null"
+  );
 }
 
 export function parseProject(json: string): GeoLibreProject {
@@ -1450,7 +1457,15 @@ function isPlainObject(value: object): boolean {
   return prototype === Object.prototype || prototype === null;
 }
 
+/** Browser byte URLs belong to the live session, never a saved project. */
+function withoutLocalRasterBytes(layer: GeoLibreLayer): GeoLibreLayer {
+  if (layer.metadata?.localBytesUrl === undefined) return layer;
+  const { localBytesUrl: _localBytesUrl, ...metadata } = layer.metadata;
+  return { ...layer, metadata };
+}
+
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
+  layer = withoutLocalRasterBytes(layer);
   // `capabilities` is split off the spread rather than overwritten: a raw value
   // that normalizes to nothing (`{}`, an array, a string, an object with no
   // boolean flag) must not survive into the normalized layer and be written
@@ -1696,6 +1711,7 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  layer = withoutLocalRasterBytes(layer);
   // This flag describes unsaved changes to the live source, not persisted
   // project state. A reference-only save reloads the original geometries;
   // carrying the flag into that project would warn about nonexistent edits.

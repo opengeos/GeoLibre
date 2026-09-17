@@ -509,12 +509,16 @@ describe("ArcGIS raster, service and media compilation", () => {
       ]);
     }
   });
-  it("rejects archives, custom protocols and plugin-owned mirrors", () => {
+  it("rejects MLT archives, custom protocols and plugin-owned mirrors", () => {
     const base = geojsonLayer({ geojson: undefined });
     assert.throws(
       () =>
-        compileArcgisLayer({ ...base, type: "pmtiles", source: { url: "https://x/a.pmtiles" } }),
-      /not supported/,
+        compileArcgisLayer({
+          ...base,
+          type: "pmtiles",
+          source: { url: "https://x/a.pmtiles", encoding: "mlt" },
+        }),
+      /MVT/,
     );
     assert.throws(
       () =>
@@ -787,4 +791,185 @@ describe("compileArcgisLayer extrusion", () => {
     assert.equal(part.renderer.symbol.type, "simple-fill");
     assert.equal(part.features?.features[0].properties?.[ARCGIS_HEIGHT_FIELD], undefined);
   });
+});
+
+describe("ArcGIS native point styles and altitude", () => {
+  const points = geojsonLayer({
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "a",
+          properties: { weight: "3" },
+          geometry: { type: "Point", coordinates: [10, 20, 100] },
+        },
+        {
+          type: "Feature",
+          id: "b",
+          properties: { weight: -2 },
+          geometry: { type: "Point", coordinates: [11, 21, 200] },
+        },
+      ],
+    },
+  });
+  it("bakes weighted heatmaps with the shared ramp, including zero intensity", () => {
+    const layer = {
+      ...points,
+      style: {
+        ...points.style,
+        pointRenderer: "heatmap" as const,
+        heatmapWeightProperty: "weight",
+        heatmapIntensity: 2,
+      },
+    };
+    const plan = compileArcgisLayer(layer, { scene: true });
+    assert.equal(plan.kind, "geojson");
+    if (plan.kind !== "geojson") return;
+    const part = plan.parts[0];
+    assert.equal(part.renderer.type, "heatmap");
+    assert.deepEqual(
+      part.features?.features.map((f) => f.properties?.gl__weight),
+      [6, 0],
+    );
+    assert.equal(part.markerStyle, undefined);
+    if (part.renderer.type !== "heatmap") return;
+    assert.equal(part.renderer.colorStops[0].color[3], 0);
+    assert.equal(part.renderer.colorStops.at(-1)?.ratio, 1);
+    const zero = compileArcgisLayer({ ...layer, style: { ...layer.style, heatmapIntensity: 0 } });
+    if (zero.kind === "geojson")
+      assert.ok(zero.parts[0].features?.features.every((f) => f.properties?.gl__weight === 0));
+  });
+  it("skips point symbol evaluation for heatmaps while preserving mixed geometry styles", () => {
+    let symbolReads = 0;
+    const plan = compileArcgisLayer({
+      ...mixed,
+      geojson: {
+        type: "FeatureCollection",
+        features: mixed.geojson!.features.map((feature) => ({
+          ...feature,
+          properties: {
+            ...feature.properties,
+            weight: 3,
+            get size() {
+              if (feature.geometry?.type === "Point") symbolReads++;
+              return 50;
+            },
+          },
+        })),
+      },
+      style: {
+        ...mixed.style,
+        pointRenderer: "heatmap",
+        heatmapWeightProperty: "weight",
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "size",
+      },
+    });
+    if (plan.kind !== "geojson") return assert.fail("expected GeoJSON");
+    assert.equal(symbolReads, 0);
+    assert.deepEqual(
+      plan.parts.map((part) => part.renderer.type),
+      ["simple", "simple", "heatmap"],
+    );
+    assert.equal(plan.parts[2].features?.features[0].properties?.gl__weight, 3);
+  });
+  it("clusters in 2D and restores individual symbols in scenes", () => {
+    const layer = {
+      ...points,
+      style: {
+        ...points.style,
+        pointRenderer: "cluster" as const,
+        clusterRadius: 72,
+        clusterMaxZoom: 9,
+      },
+    };
+    const flat = compileArcgisLayer(layer);
+    const scene = compileArcgisLayer(layer, { scene: true });
+    if (flat.kind !== "geojson" || scene.kind !== "geojson") throw new Error("Expected GeoJSON");
+    assert.equal(flat.parts[0].featureReduction?.clusterRadius, "72px");
+    assert.equal(flat.parts[0].featureReduction?.maxScale, zoomToScale(10));
+    assert.equal(scene.parts[0].featureReduction, undefined);
+  });
+  it("applies absolute feature Z, scale and offset without changing source coordinates", () => {
+    const layer = {
+      ...points,
+      style: {
+        ...points.style,
+        elevation3dEnabled: true,
+        elevation3dVerticalScale: 2,
+        elevation3dOffset: 30,
+      },
+    };
+    const scene = compileArcgisLayer(layer, { scene: true });
+    const flat = compileArcgisLayer(layer);
+    if (scene.kind !== "geojson" || flat.kind !== "geojson") throw new Error("Expected GeoJSON");
+    assert.equal(scene.parts[0].hasZ, true);
+    assert.deepEqual(scene.parts[0].elevationInfo, { mode: "absolute-height", offset: 0 });
+    assert.deepEqual(scene.parts[0].features?.features[0].geometry, {
+      type: "Point",
+      coordinates: [10, 20, 230],
+    });
+    assert.deepEqual(points.geojson?.features[0].geometry, {
+      type: "Point",
+      coordinates: [10, 20, 100],
+    });
+    assert.equal(flat.parts[0].hasZ, undefined);
+  });
+  it("only bakes fill patterns for flat polygon parts", () => {
+    const layer = { ...mixed, style: { ...mixed.style, fillPattern: "hatch" as const } };
+    const flat = compileArcgisLayer(layer);
+    const scene = compileArcgisLayer(layer, { scene: true });
+    if (flat.kind !== "geojson" || scene.kind !== "geojson") throw new Error("Expected GeoJSON");
+    assert.equal(flat.parts[0].patternStyle?.fillPattern, "hatch");
+    assert.ok(flat.parts.slice(1).every((part) => !part.patternStyle));
+    assert.ok(scene.parts.every((part) => !part.patternStyle));
+  });
+  it("applies an altitude offset to zero-Z coordinates", () => {
+    const plan = compileArcgisLayer(
+      {
+        ...points,
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "Point", coordinates: [10, 20, 0] },
+            },
+          ],
+        },
+        style: { ...points.style, elevation3dEnabled: true, elevation3dOffset: 30 },
+      },
+      { scene: true },
+    );
+    if (plan.kind !== "geojson") return assert.fail("expected GeoJSON");
+    assert.equal(plan.parts[0].hasZ, true);
+    assert.deepEqual(plan.parts[0].elevationInfo, { mode: "absolute-height", offset: 0 });
+    assert.deepEqual(plan.parts[0].features?.features[0].geometry, {
+      type: "Point",
+      coordinates: [10, 20, 30],
+    });
+  });
+});
+
+it("leaves deck visualizations to the overlay and badges views without a host", () => {
+  const layer = geojsonLayer({ type: "deckgl-viz", metadata: { sourceKind: "deckgl-viz" } });
+  assert.equal(compileArcgisLayer(layer, { scene: true, deckOverlay: true }).kind, "external-deck");
+  assert.throws(() => compileArcgisLayer(layer, { deckOverlay: false }), /local scene/);
+  assert.equal(isArcgisSupportedLayer(layer, true), true);
+  assert.equal(isArcgisSupportedLayer(layer, false), false);
+});
+
+it("accepts adapted plugin layers only when an ArcGIS deck overlay is available", () => {
+  for (const [type, sourceKind] of [
+    ["lidar", "lidar-url"],
+    ["duckdb-query", "duckdb-query"],
+    ["3d-tiles", "3d-tiles-url"],
+  ] as const) {
+    const layer = geojsonLayer({ type, metadata: { sourceKind } });
+    assert.equal(compileArcgisLayer(layer, { deckOverlay: true }).kind, "external-deck");
+    assert.equal(isArcgisSupportedLayer(layer, false), false);
+    assert.throws(() => compileArcgisLayer(layer, { deckOverlay: false }), /flat ArcGIS/);
+  }
 });

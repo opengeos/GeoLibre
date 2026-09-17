@@ -971,6 +971,17 @@
       "modelFileError": "Bu model okunamadı. Geçerli bir glTF 2.0 veya GLB dosyası seçin."
     },
     "nonGeographicCoordinates": "{{names}} içindeki koordinatlar boylam/enlem değil, bu yüzden haritaya hiçbir şey çizilmeyecek. CRS bilgisi yanlış — verileri yeniden projelendirin (veya .prj dosyasını düzeltin) ve tekrar yükleyin.",
+    "pmtiles": {
+      "errorUrl": "Geçerli bir HTTP veya HTTPS PMTiles URL’si girin.",
+      "errorMlt": "ArcGIS, MLT değil MVT vektör karoları gerektirir."
+    },
+    "zarr": {
+      "errorUrl": "Geçerli bir HTTP veya HTTPS Zarr URL’si girin.",
+      "errorColorLimits": "En yüksek renk sınırı en düşük sınırdan büyük olmalıdır."
+    },
+    "raster": {
+      "errorSource": "Bir GeoTIFF URL’si girin veya dosya seçin."
+    },
     "wcs": {
       "retrieve": "Kapsamları getir",
       "select": "Bir kapsam seçin",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Yalnızca 3B küre tarafından çiziliyor",
     "layerMapboxUnsupported": "Mapbox motoru tarafından çizilmiyor",
     "layerArcgisUnsupported": "ArcGIS motoru tarafından çizilmiyor",
+    "layerArcgisViewUnsupported": "Bu ArcGIS görünümünde çizilmiyor",
     "resetView": "Görünümü Sıfırla",
     "scene3D": "3B küre",
     "scene2D": "2B harita",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "HUC12 çıkış noktaları",
     "catalogNmwdiSt": "New Mexico su istasyonları",
     "catalogFlowlines": "NHDPlus akış hatları"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Bu ArcGIS görünümünde bir 3D Tiles tileset.json URL’si kullanın. Google Photorealistic ve I3S karoları başka bir işleme motoru gerektirir."
+    }
   }
 }

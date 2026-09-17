@@ -34,7 +34,11 @@
     "./style-import": "./src/style-import.ts",
     "./style-layer-ids": "./src/style-layer-ids.ts",
     "./layer-labels": "./src/layer-labels.ts",
-    "./map-capture": "./src/map-capture.ts"
+    "./map-capture": "./src/map-capture.ts",
+    "./arcgis-sdk": "./src/arcgis-sdk.ts",
+    "./zarr-source": "./src/zarr-source.ts",
+    "./kerchunk-reference-store": "./src/kerchunk-reference-store.ts",
+    "./arcgis-control-adapters": "./src/arcgis-control-adapters.ts"
   },
   "publishConfig": {
     "main": "./dist/headless.mjs",
@@ -71,12 +75,28 @@
       "./map-capture": {
         "types": "./dist/map-capture.d.mts",
         "import": "./dist/map-capture.mjs"
+      },
+      "./arcgis-sdk": {
+        "types": "./dist/arcgis-sdk.d.mts",
+        "import": "./dist/arcgis-sdk.mjs"
+      },
+      "./zarr-source": {
+        "types": "./dist/zarr-source.d.mts",
+        "import": "./dist/zarr-source.mjs"
+      },
+      "./kerchunk-reference-store": {
+        "types": "./dist/kerchunk-reference-store.d.mts",
+        "import": "./dist/kerchunk-reference-store.mjs"
+      },
+      "./arcgis-control-adapters": {
+        "types": "./dist/arcgis-control-adapters.d.mts",
+        "import": "./dist/arcgis-control-adapters.mjs"
       }
     },
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
   },
   "dependencies": {
     "@cesium/engine": "^26.3.0",
@@ -98,6 +118,7 @@
     "copc": "^0.0.9",
     "fast-xml-parser": "^5.11.1",
     "geotiff": "^3.0.5",
+    "geotiff-geokeys-to-proj4": "^2024.4.13",
     "laz-perf": "^0.0.7",
     "mapbox-gl": "^3.30.0",
     "maplibre-gl": "^6.9.0",
@@ -105,7 +126,8 @@
     "pmtiles": "^4.5.0",
     "proj4": "^2.22.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zarrita": "^0.7.3"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

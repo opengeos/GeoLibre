@@ -950,6 +950,17 @@
       "modelFileError": "このモデルを読み込めませんでした。有効なglTF 2.0またはGLBファイルを選択してください。"
     },
     "nonGeographicCoordinates": "{{names}} の座標は経緯度ではないため、地図には何も描画されません。CRS が誤って記録されています — データを再投影する（または .prj を修正する）と読み込み直してください。",
+    "pmtiles": {
+      "errorUrl": "有効なHTTPまたはHTTPSのPMTiles URLを入力してください。",
+      "errorMlt": "ArcGISにはMLTではなくMVTベクタータイルが必要です。"
+    },
+    "zarr": {
+      "errorUrl": "有効なHTTPまたはHTTPSのZarr URLを入力してください。",
+      "errorColorLimits": "色の上限値は下限値より大きくしてください。"
+    },
+    "raster": {
+      "errorSource": "GeoTIFF の URL を入力するか、ファイルを選択してください。"
+    },
     "wcs": {
       "retrieve": "カバレッジを取得",
       "select": "カバレッジを選択",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "3D地球儀でのみ描画されます",
     "layerMapboxUnsupported": "Mapboxエンジンでは描画されません",
     "layerArcgisUnsupported": "ArcGISエンジンでは描画されません",
+    "layerArcgisViewUnsupported": "この ArcGIS ビューでは描画されません",
     "resetView": "表示をリセット",
     "scene3D": "3D地球儀",
     "scene2D": "2D地図",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "HUC12流出点",
     "catalogNmwdiSt": "ニューメキシコ州の水文観測地点",
     "catalogFlowlines": "NHDPlus流路"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。"
+    }
   }
 }

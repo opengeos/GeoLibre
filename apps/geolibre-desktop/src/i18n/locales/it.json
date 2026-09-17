@@ -971,6 +971,17 @@
       "modelFileError": "Impossibile leggere questo modello. Scegli un file glTF 2.0 o GLB valido."
     },
     "nonGeographicCoordinates": "Le coordinate in {{names}} non sono longitudine/latitudine, quindi non verrà disegnato nulla sulla mappa. Il CRS è errato: riproietta i dati (o correggi il .prj) e ricaricali.",
+    "pmtiles": {
+      "errorUrl": "Inserisci un URL HTTP o HTTPS valido di PMTiles.",
+      "errorMlt": "ArcGIS richiede tile vettoriali MVT, non MLT."
+    },
+    "zarr": {
+      "errorUrl": "Inserisci un URL HTTP o HTTPS valido di Zarr.",
+      "errorColorLimits": "Il limite massimo del colore deve essere maggiore del minimo."
+    },
+    "raster": {
+      "errorSource": "Inserisci un URL GeoTIFF o scegli un file."
+    },
     "wcs": {
       "retrieve": "Recupera coperture",
       "select": "Seleziona una copertura",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Visualizzato solo dal globo 3D",
     "layerMapboxUnsupported": "Non visualizzato dal motore Mapbox",
     "layerArcgisUnsupported": "Non visualizzato dal motore ArcGIS",
+    "layerArcgisViewUnsupported": "Non visualizzato in questa vista ArcGIS",
     "resetView": "Ripristina vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mappa 2D",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "Punti di deflusso HUC12",
     "catalogNmwdiSt": "Siti idrici del New Mexico",
     "catalogFlowlines": "Linee di deflusso NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Usa un URL tileset.json di 3D Tiles in questa vista ArcGIS. I tasselli Google Photorealistic e I3S richiedono un altro motore di rendering."
+    }
   }
 }

@@ -971,6 +971,17 @@
       "modelFileError": "Dieses Modell konnte nicht gelesen werden. Wählen Sie eine gültige glTF-2.0- oder GLB-Datei aus."
     },
     "nonGeographicCoordinates": "Die Koordinaten in {{names}} sind keine geografische Länge/Breite, daher wird nichts auf der Karte gezeichnet. Das CRS ist falsch angegeben — projizieren Sie die Daten um (oder korrigieren Sie die .prj) und laden Sie sie erneut.",
+    "pmtiles": {
+      "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL für PMTiles ein.",
+      "errorMlt": "ArcGIS benötigt MVT-Vektorkacheln, nicht MLT."
+    },
+    "zarr": {
+      "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL für Zarr ein.",
+      "errorColorLimits": "Der obere Farbgrenzwert muss größer als der untere sein."
+    },
+    "raster": {
+      "errorSource": "Geben Sie eine GeoTIFF-URL ein oder wählen Sie eine Datei."
+    },
     "wcs": {
       "retrieve": "Coverages abrufen",
       "select": "Coverage auswählen",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Wird nur vom 3D-Globus dargestellt",
     "layerMapboxUnsupported": "Wird vom Mapbox-Renderer nicht dargestellt",
     "layerArcgisUnsupported": "Wird vom ArcGIS-Renderer nicht dargestellt",
+    "layerArcgisViewUnsupported": "In dieser ArcGIS-Ansicht nicht dargestellt",
     "resetView": "Ansicht zurücksetzen",
     "scene3D": "3D-Globus",
     "scene2D": "2D-Karte",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "HUC12-Abflusspunkte",
     "catalogNmwdiSt": "Wassermessstellen in New Mexico",
     "catalogFlowlines": "NHDPlus-Gewässerlinien"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Verwenden Sie in dieser ArcGIS-Ansicht eine 3D-Tiles-URL für tileset.json. Google Photorealistic- und I3S-Kacheln benötigen eine andere Render-Engine."
+    }
   }
 }

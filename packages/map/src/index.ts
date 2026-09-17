@@ -1,6 +1,6 @@
 export { MapboxCanvas, type MapboxCanvasProps } from "./MapboxCanvas";
 export { ArcgisCanvas, type ArcgisCanvasProps } from "./ArcgisCanvas";
-export { ArcgisEngine, ARCGIS_CAPABILITIES } from "./arcgis-engine";
+export { ArcgisEngine, ARCGIS_CAPABILITIES, ARCGIS_DECK_CAPABILITIES } from "./arcgis-engine";
 export { isArcgisSupportedLayer } from "./arcgis-layers";
 export {
   ARCGIS_BASEMAP_STYLES,

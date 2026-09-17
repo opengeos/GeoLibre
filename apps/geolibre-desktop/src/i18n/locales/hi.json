@@ -971,6 +971,17 @@
       "modelFileError": "यह मॉडल नहीं पढ़ा जा सका। एक मान्य glTF 2.0 या GLB फ़ाइल चुनें।"
     },
     "nonGeographicCoordinates": "{{names}} के निर्देशांक देशांतर/अक्षांश नहीं हैं, इसलिए मानचित्र पर कुछ भी नहीं बनेगा। CRS ग़लत दर्ज है — डेटा को पुनःप्रक्षेपित करें (या .prj ठीक करें) और दोबारा लोड करें।",
+    "pmtiles": {
+      "errorUrl": "एक मान्य HTTP या HTTPS PMTiles URL दर्ज करें।",
+      "errorMlt": "ArcGIS को MVT वेक्टर टाइलों की आवश्यकता है, MLT की नहीं।"
+    },
+    "zarr": {
+      "errorUrl": "एक मान्य HTTP या HTTPS Zarr URL दर्ज करें।",
+      "errorColorLimits": "रंग की अधिकतम सीमा न्यूनतम सीमा से अधिक होनी चाहिए।"
+    },
+    "raster": {
+      "errorSource": "GeoTIFF URL दर्ज करें या फ़ाइल चुनें।"
+    },
     "wcs": {
       "retrieve": "कवरेज प्राप्त करें",
       "select": "कवरेज चुनें",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "केवल 3D ग्लोब द्वारा रेंडर किया गया",
     "layerMapboxUnsupported": "Mapbox इंजन द्वारा रेंडर नहीं किया गया",
     "layerArcgisUnsupported": "ArcGIS इंजन द्वारा रेंडर नहीं किया गया",
+    "layerArcgisViewUnsupported": "इस ArcGIS दृश्य में रेंडर नहीं किया जाता",
     "resetView": "दृश्य रीसेट करें",
     "scene3D": "3D ग्लोब",
     "scene2D": "2D मानचित्र",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "HUC12 निकास बिंदु",
     "catalogNmwdiSt": "न्यू मैक्सिको जल स्थल",
     "catalogFlowlines": "NHDPlus प्रवाह-रेखाएँ"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।"
+    }
   }
 }

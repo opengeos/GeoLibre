@@ -1,3 +1,4 @@
+import { setArcgisControlPicker } from "@geolibre/map/arcgis-control-adapters";
 import {
   DEFAULT_LAYER_STYLE,
   effectiveLayerRenderState,
@@ -365,6 +366,11 @@ export function identifyDuckDBLayerAtPoint(
 }
 
 async function openStandaloneDuckDBControl(app: GeoLibreAppAPI): Promise<boolean> {
+  if (
+    app.getMapRenderer?.() === "arcgis" &&
+    !(await import("./arcgis-deck/control-adapter")).installArcgisDeckControls(app)
+  )
+    return false;
   // The control's deck overlay only aligns under Mercator on both 2D engines.
   ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
@@ -379,6 +385,35 @@ async function openStandaloneDuckDBControl(app: GeoLibreAppAPI): Promise<boolean
       return false;
     }
     duckdbControlMounted = true;
+    const arcgisView = app.getArcgisView?.();
+    if (arcgisView)
+      setArcgisControlPicker(arcgisView, (point, layerId) => {
+        const state = useAppStore.getState();
+        const groups = new Map(state.layerGroups.map((group) => [group.id, group]));
+        return state.layers.flatMap((layer) => {
+          if (
+            !isDuckDBQueryLayer(layer) ||
+            (layerId && layer.id !== layerId) ||
+            !effectiveLayerRenderState(layer, groups).visible ||
+            !resolveLayerCapabilities(layer).query ||
+            !isPopupClickEnabled(layer.popup)
+          )
+            return [];
+          const hit = identifyDuckDBLayerAtPoint(layer.id, point);
+          return hit
+            ? [
+                {
+                  layerId: layer.id,
+                  featureId: hit.featureId,
+                  properties: hit.properties,
+                  geometry: hit.coordinate
+                    ? { type: "Point" as const, coordinates: hit.coordinate }
+                    : null,
+                },
+              ]
+            : [];
+        });
+      });
     // A remount (after a renderer swap or map re-init removed the control)
     // starts without a renderer: the control drops it in onRemove and only
     // rebuilds it, against the new map, inside renderLayer(). Kick that, then

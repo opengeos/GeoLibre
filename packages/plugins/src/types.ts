@@ -641,6 +641,8 @@ export interface GeoLibreAppAPI {
   getMap?: () => MapLibreMap | null;
   /** Active primary renderer, including while its canvas is being replaced. */
   getMapRenderer?: () => MapRendererKind;
+  /** Native ArcGIS view; null while another engine is active. */
+  getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
   /** Native Mapbox map, available only while Mapbox is the primary renderer. */
   getMapboxMap?: () => ReturnType<import("@geolibre/map").MapboxEngine["getMapboxMap"]>;
   /**

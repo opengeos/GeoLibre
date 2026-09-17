@@ -950,6 +950,17 @@
       "modelFileError": "ไม่สามารถอ่านโมเดลนี้ได้ โปรดเลือกไฟล์ glTF 2.0 หรือ GLB ที่ถูกต้อง"
     },
     "nonGeographicCoordinates": "พิกัดใน {{names}} ไม่ใช่ลองจิจูด/ละติจูด จึงจะไม่มีสิ่งใดถูกวาดบนแผนที่ ระบบพิกัดระบุไว้ผิด — โปรดฉายพิกัดข้อมูลใหม่ (หรือแก้ไฟล์ .prj) แล้วโหลดอีกครั้ง",
+    "pmtiles": {
+      "errorUrl": "โปรดป้อน URL ของ PMTiles แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
+      "errorMlt": "ArcGIS ต้องใช้ไทล์เวกเตอร์ MVT ไม่ใช่ MLT"
+    },
+    "zarr": {
+      "errorUrl": "โปรดป้อน URL ของ Zarr แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
+      "errorColorLimits": "ค่าสีสูงสุดต้องมากกว่าค่าสีต่ำสุด"
+    },
+    "raster": {
+      "errorSource": "ป้อน URL ของ GeoTIFF หรือเลือกไฟล์"
+    },
     "wcs": {
       "retrieve": "ดึงข้อมูลคัฟเวอเรจ",
       "select": "เลือกคัฟเวอเรจ",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "แสดงผลบนลูกโลก 3 มิติเท่านั้น",
     "layerMapboxUnsupported": "ไม่แสดงผลบนเอนจิน Mapbox",
     "layerArcgisUnsupported": "ไม่แสดงผลบนเอนจิน ArcGIS",
+    "layerArcgisViewUnsupported": "ไม่แสดงผลในมุมมอง ArcGIS นี้",
     "resetView": "รีเซ็ตมุมมอง",
     "scene3D": "ลูกโลก 3 มิติ",
     "scene2D": "แผนที่ 2 มิติ",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "จุดระบายน้ำ HUC12",
     "catalogNmwdiSt": "สถานีตรวจวัดน้ำในรัฐนิวเม็กซิโก",
     "catalogFlowlines": "เส้นทางน้ำ NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น"
+    }
   }
 }

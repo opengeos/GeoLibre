@@ -77,6 +77,15 @@ suite.
 
   See [Adding a blend mode](#adding-a-blend-mode) before extending the list.
 
+### `@deck.gl/mapbox` and `@deck.gl/maplibre`
+
+`bridgeArcgisDeckControl` (`packages/plugins/src/plugins/arcgis-deck/control-adapter.ts`)
+reads each overlay's private `_props` field so ArcGIS can transfer its initial
+layers into a native `ArcgisDeckOverlay` without mounting the MapLibre control.
+The cast hides upstream changes from TypeScript. After either deck.gl package is
+bumped, run `tests/arcgis-control-adapters.test.ts` and confirm the overlay still
+exposes `_props` with the initial `DeckProps` object.
+
 ### `@maplibre/maplibre-gl-style-spec`
 
 `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the
@@ -360,7 +369,12 @@ manual check, not a Dependabot event:
   every module the engine loads. `tests/arcgis-renderer.test.ts` only checks the
   assembly against fakes; probe the real CDN (`curl -sI` each URL returns 200)
   and mount a pane in a browser — a moved module rejects the whole load and the
-  pane shows the error banner.
+  pane shows the error banner. Also check the deck adapter's lazy imports in
+  `packages/plugins/src/plugins/arcgis-deck/overlay.ts`:
+  `layers/Layer`, `views/2d/layers/BaseLayerViewGL2D`, and
+  `views/3d/webgl/RenderNode`. Mount a deck.gl layer in both a 2D MapView and a
+  local SceneView after a version bump; those imports are outside the engine's
+  module registry.
 - **The legacy widgets.** `widgets/Zoom`, `Compass`, `ScaleBar`, `Fullscreen`
   and `Locate` back the built-in controls. Esri deprecated them in 4.32 in
   favour of web components and still ships them in 5.x with a console warning

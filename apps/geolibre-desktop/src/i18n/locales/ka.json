@@ -971,6 +971,17 @@
       "modelFileError": "ამ მოდელის წაკითხვა ვერ მოხერხდა. აირჩიეთ ვალიდური glTF 2.0 ან GLB ფაილი."
     },
     "nonGeographicCoordinates": "{{names}}-ის კოორდინატები არ არის გრძედი/განედი, ამიტომ რუკაზე არაფერი დაიხატება. CRS არასწორადაა მითითებული — გადააპროექტეთ მონაცემები (ან შეასწორეთ .prj) და ხელახლა ჩატვირთეთ.",
+    "pmtiles": {
+      "errorUrl": "შეიყვანეთ PMTiles-ის სწორი HTTP ან HTTPS URL.",
+      "errorMlt": "ArcGIS საჭიროებს MVT ვექტორულ ფილებს და არა MLT-ს."
+    },
+    "zarr": {
+      "errorUrl": "შეიყვანეთ Zarr-ის სწორი HTTP ან HTTPS URL.",
+      "errorColorLimits": "ფერის მაქსიმალური ზღვარი მინიმალურზე მეტი უნდა იყოს."
+    },
+    "raster": {
+      "errorSource": "შეიყვანეთ GeoTIFF URL ან აირჩიეთ ფაილი."
+    },
     "wcs": {
       "retrieve": "დაფარვების მიღება",
       "select": "აირჩიეთ დაფარვა",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "ისახება მხოლოდ 3D გლობუსზე",
     "layerMapboxUnsupported": "Mapbox-ის ძრავით არ ისახება",
     "layerArcgisUnsupported": "ArcGIS-ის ძრავით არ ისახება",
+    "layerArcgisViewUnsupported": "ArcGIS-ის ამ ხედში არ ისახება",
     "resetView": "ხედის საწყისზე დაბრუნება",
     "scene3D": "3D გლობუსი",
     "scene2D": "2D რუკა",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "HUC12 ჩამონადენის წერტილები",
     "catalogNmwdiSt": "ნიუ-მექსიკოს წყლის პუნქტები",
     "catalogFlowlines": "NHDPlus ნაკადის ხაზები"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა."
+    }
   }
 }

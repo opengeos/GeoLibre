@@ -1,0 +1,92 @@
+import { Button, Input, Label } from "@geolibre/ui";
+import { addRasterToMap } from "@geolibre/plugins";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { createAppAPI } from "../../../../hooks/usePlugins";
+import { isTauri, openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
+import { fileNameFromPath, layerNameFromPath } from "../helpers";
+import { AddDataSourceForm, useAddDataSource } from "../shared";
+
+export function RasterSource() {
+  const { t } = useTranslation();
+  const [defaultName] = useState(() => t("toolbar.item.rasterLayer"));
+  const source = useAddDataSource(defaultName);
+  const [url, setUrl] = useState("");
+  const [file, setFile] = useState<{ file: File; localPath?: string } | null>(null);
+  const choose = async () => {
+    source.setError(null);
+    try {
+      const selected = await openLocalDataFileWithFallback({
+        filters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
+        accept: ".tif,.tiff",
+        readBinary: true,
+      });
+      if (!selected?.data) return;
+      const name = fileNameFromPath(selected.path) || "raster.tif";
+      setFile({
+        file: new File([selected.data], name),
+        localPath: isTauri() ? selected.path : undefined,
+      });
+      setUrl("");
+      source.setLayerName((current) =>
+        current.trim() && current !== defaultName
+          ? current
+          : layerNameFromPath(selected.path, defaultName),
+      );
+    } catch (error) {
+      source.setError(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const submit = source.runSubmit(async () => {
+    let input: File | string;
+    if (file) input = file.file;
+    else {
+      try {
+        const address = new URL(url.trim());
+        if (!["http:", "https:"].includes(address.protocol))
+          throw new Error("Unsupported protocol");
+        input = address.href;
+      } catch {
+        throw new Error(t("addData.raster.errorSource"));
+      }
+    }
+    await addRasterToMap(createAppAPI(source.shell.mapControllerRef), input, {
+      name: source.layerName.trim() || defaultName,
+      localPath: file?.localPath,
+      beforeId: source.beforeLayer ?? undefined,
+    });
+    source.shell.closeDialog();
+  });
+  return (
+    <AddDataSourceForm
+      layerName={source.layerName}
+      onLayerNameChange={source.setLayerName}
+      beforeLayerId={source.beforeLayerId}
+      onBeforeLayerIdChange={source.setBeforeLayerId}
+      onSubmit={submit}
+      error={source.error}
+      submitDisabled={source.isSubmitting || (!file && !url.trim())}
+    >
+      <div>
+        <Button type="button" variant="outline" onClick={choose}>
+          {t("addData.common.chooseFile")}
+        </Button>
+        <span className="ms-2 text-xs">
+          {file?.file.name ?? t("addData.common.noFileSelected")}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="raster-url">{t("toolbar.item.urlLabel")}</Label>
+        <Input
+          id="raster-url"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setFile(null);
+          }}
+          placeholder="https://example.com/image.tif"
+        />
+      </div>
+    </AddDataSourceForm>
+  );
+}

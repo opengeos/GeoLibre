@@ -950,6 +950,17 @@
       "modelFileError": "이 모델을 읽을 수 없습니다. 유효한 glTF 2.0 또는 GLB 파일을 선택하세요."
     },
     "nonGeographicCoordinates": "{{names}}의 좌표가 경위도가 아니므로 지도에 아무것도 그려지지 않습니다. CRS가 잘못 지정되어 있습니다 — 데이터를 재투영하거나 .prj를 수정한 뒤 다시 불러오세요.",
+    "pmtiles": {
+      "errorUrl": "유효한 HTTP 또는 HTTPS PMTiles URL을 입력하세요.",
+      "errorMlt": "ArcGIS에는 MLT가 아닌 MVT 벡터 타일이 필요합니다."
+    },
+    "zarr": {
+      "errorUrl": "유효한 HTTP 또는 HTTPS Zarr URL을 입력하세요.",
+      "errorColorLimits": "색상 최댓값은 최솟값보다 커야 합니다."
+    },
+    "raster": {
+      "errorSource": "GeoTIFF URL을 입력하거나 파일을 선택하세요."
+    },
     "wcs": {
       "retrieve": "커버리지 조회",
       "select": "커버리지 선택",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "3D 지구본에서만 렌더링됨",
     "layerMapboxUnsupported": "Mapbox 엔진에서는 렌더링되지 않음",
     "layerArcgisUnsupported": "ArcGIS 엔진에서는 렌더링되지 않음",
+    "layerArcgisViewUnsupported": "이 ArcGIS 뷰에서는 렌더링되지 않음",
     "resetView": "보기 재설정",
     "scene3D": "3D 지구본",
     "scene2D": "2D 지도",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "HUC12 유출점",
     "catalogNmwdiSt": "뉴멕시코 수문 관측지점",
     "catalogFlowlines": "NHDPlus 유로"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다."
+    }
   }
 }

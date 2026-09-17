@@ -1,3 +1,4 @@
+import { onArcgisViewDestroy } from "@geolibre/map/arcgis-control-adapters";
 import { applyTilesetAltitudeOffset, type PositionedTileset } from "./tiles-altitude-offset";
 import { useAppStore, type GeoLibreLayer, resolveThreeDTilesRequestHeaders } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
@@ -8,6 +9,23 @@ import {
   releaseMercatorProjectionLock,
 } from "./map-projection-utils";
 import { THREE_D_TILES_DECK_LOAD_OPTIONS } from "./arcgis-i3s-tiles";
+
+/** Fly panel actions and initial loads through the active native renderer. */
+export function flyToDeckTilesLocation(
+  app: GeoLibreAppAPI,
+  center: [number, number],
+  zoom: number,
+): void {
+  const view = app.getArcgisView?.();
+  if (view)
+    void view
+      .goTo({ center, zoom, ...(view.type === "3d" ? { tilt: 60 } : {}) })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          console.warn("[3d-tiles] Could not navigate to the tileset", error);
+      });
+  else app.getMapboxMap?.()?.flyTo({ center, zoom, pitch: 60 });
+}
 
 const SOURCE = "mapbox-3d-tiles";
 let unsubscribe: (() => void) | undefined;
@@ -27,14 +45,17 @@ export function isMapboxTilesLayer(layer: GeoLibreLayer): boolean {
 
 /** Bind persisted tilesets to the current engine without storing renderer objects. */
 export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string): Promise<void> {
-  const map = app.getMapboxMap?.();
+  const arcgisView = app.getArcgisView?.();
+  if (arcgisView?.type === "3d" && arcgisView.viewingMode !== "local") return;
+  const getMap = () => app.getMapboxMap?.() ?? app.getArcgisView?.();
+  const map = getMap();
   if (!map || !app.getDeckGL) return;
   if (flyToId) flyToRequests.add(flyToId);
   const currentGeneration = ++generation;
   const deck = await app.getDeckGL();
-  if (currentGeneration !== generation || app.getMapboxMap?.() !== map) return;
+  if (currentGeneration !== generation || getMap() !== map) return;
   await ensureSharedDeckOverlay(app);
-  if (currentGeneration !== generation || app.getMapboxMap?.() !== map) return;
+  if (currentGeneration !== generation || getMap() !== map) return;
   unsubscribe?.();
   const newlyBound = boundMap !== map;
   boundMap = map;
@@ -112,12 +133,13 @@ export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string):
                   : {}),
               },
             });
-            if (center && flyToRequests.delete(layer.id))
-              map.flyTo({
-                center: [center[0], center[1]],
-                zoom: Math.max(0, (tileset.zoom ?? 16) - 1),
-                pitch: 60,
-              });
+            if (center && flyToRequests.delete(layer.id)) {
+              flyToDeckTilesLocation(
+                app,
+                [center[0], center[1]],
+                Math.max(0, (tileset.zoom ?? 16) - 1),
+              );
+            }
           },
           onError: (error: Error) => {
             const current = useAppStore.getState().layers.find(({ id }) => id === layer.id);
@@ -141,8 +163,8 @@ export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string):
   unsubscribe = useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) render();
   });
-  if (newlyBound)
-    map.once("remove", () => {
+  if (newlyBound) {
+    const cleanup = () => {
       if (boundMap !== map) return;
       generation++;
       unsubscribe?.();
@@ -152,6 +174,9 @@ export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string):
       versions.clear();
       setSharedDeckLayers(SOURCE, []);
       releaseMercatorProjectionLock(SOURCE, app);
-    });
+    };
+    if (arcgisView) onArcgisViewDestroy(arcgisView, cleanup);
+    else app.getMapboxMap?.()?.once("remove", cleanup);
+  }
   render();
 }

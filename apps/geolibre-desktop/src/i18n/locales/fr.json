@@ -971,6 +971,17 @@
       "modelFileError": "Impossible de lire ce modèle. Choisissez un fichier glTF 2.0 ou GLB valide."
     },
     "nonGeographicCoordinates": "Les coordonnées de {{names}} ne sont pas des longitudes/latitudes : rien ne sera dessiné sur la carte. Le SCR est mal déclaré — reprojetez les données (ou corrigez le .prj) puis rechargez-les.",
+    "pmtiles": {
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de PMTiles.",
+      "errorMlt": "ArcGIS nécessite des tuiles vectorielles MVT, et non MLT."
+    },
+    "zarr": {
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de Zarr.",
+      "errorColorLimits": "La limite maximale de couleur doit être supérieure à la limite minimale."
+    },
+    "raster": {
+      "errorSource": "Saisissez une URL GeoTIFF ou choisissez un fichier."
+    },
     "wcs": {
       "retrieve": "Récupérer les couvertures",
       "select": "Sélectionner une couverture",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Rendu par le globe 3D uniquement",
     "layerMapboxUnsupported": "Non rendu par le moteur Mapbox",
     "layerArcgisUnsupported": "Non rendu par le moteur ArcGIS",
+    "layerArcgisViewUnsupported": "Non rendu dans cette vue ArcGIS",
     "resetView": "Réinitialiser la vue",
     "scene3D": "Globe 3D",
     "scene2D": "Carte 2D",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "Exutoires HUC12",
     "catalogNmwdiSt": "Stations hydrologiques du Nouveau-Mexique",
     "catalogFlowlines": "Tronçons hydrographiques NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Utilisez une URL tileset.json de 3D Tiles dans cette vue ArcGIS. Les tuiles Google Photorealistic et I3S nécessitent un autre moteur de rendu."
+    }
   }
 }

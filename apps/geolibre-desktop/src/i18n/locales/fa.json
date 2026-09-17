@@ -971,6 +971,17 @@
       "modelFileError": "خواندن این مدل ممکن نشد. یک فایل معتبر glTF 2.0 یا GLB انتخاب کنید."
     },
     "nonGeographicCoordinates": "مختصات در {{names}} طول/عرض جغرافیایی نیستند، بنابراین چیزی روی نقشه ترسیم نمی‌شود. برچسب سیستم مختصات نادرست است — داده را دوباره تصویر کنید (یا فایل ‎.prj آن را درست کنید) و دوباره بارگیری کنید.",
+    "pmtiles": {
+      "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای PMTiles وارد کنید.",
+      "errorMlt": "ArcGIS به کاشی‌های برداری MVT نیاز دارد، نه MLT."
+    },
+    "zarr": {
+      "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای Zarr وارد کنید.",
+      "errorColorLimits": "حد بالای رنگ باید بزرگ‌تر از حد پایین باشد."
+    },
+    "raster": {
+      "errorSource": "نشانی GeoTIFF را وارد کنید یا یک فایل انتخاب کنید."
+    },
     "wcs": {
       "retrieve": "دریافت پوشش‌ها",
       "select": "انتخاب پوشش",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "تنها روی کرهٔ سه‌بعدی ترسیم می‌شود",
     "layerMapboxUnsupported": "با موتور Mapbox ترسیم نمی‌شود",
     "layerArcgisUnsupported": "با موتور ArcGIS ترسیم نمی‌شود",
+    "layerArcgisViewUnsupported": "در این نمای ArcGIS ترسیم نمی‌شود",
     "resetView": "بازنشانی نما",
     "scene3D": "کرهٔ سه‌بعدی",
     "scene2D": "نقشهٔ دوبعدی",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "نقاط خروجی HUC12",
     "catalogNmwdiSt": "ایستگاه‌های آبی نیومکزیکو",
     "catalogFlowlines": "خطوط جریان NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "در این نمای ArcGIS از نشانی tileset.json مربوط به 3D Tiles استفاده کنید. کاشی‌های Google Photorealistic و I3S به موتور نمایش دیگری نیاز دارند."
+    }
   }
 }

@@ -260,6 +260,22 @@ export interface PMTilesArchiveInfo {
   maxZoom: number;
 }
 
+/** Add the native renderer's explicit extent and zoom limits to each archive part. */
+export function createArcgisPMTilesArchiveLayers(
+  options: PMTilesStoreLayerOptions & Pick<PMTilesArchiveInfo, "bounds" | "minZoom" | "maxZoom">,
+): GeoLibreLayer[] {
+  return createPMTilesArchiveLayers(options).map((layer) => ({
+    ...layer,
+    source: {
+      ...layer.source,
+      bounds: options.bounds,
+      minzoom: options.minZoom,
+      maxzoom: options.maxZoom,
+    },
+    metadata: { ...layer.metadata, bounds: options.bounds },
+  }));
+}
+
 /**
  * Reads the header (and, for vector archives, the metadata's `vector_layers`) of an in-memory
  * PMTiles archive, so callers can construct a properly-shaped `pmtiles` store layer for it.

@@ -974,6 +974,17 @@
       "modelFileError": "Could not read this model. Choose a valid glTF 2.0 or GLB file."
     },
     "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again.",
+    "pmtiles": {
+      "errorUrl": "Enter a valid HTTP or HTTPS PMTiles URL.",
+      "errorMlt": "ArcGIS requires MVT vector tiles, not MLT."
+    },
+    "zarr": {
+      "errorUrl": "Enter a valid HTTP or HTTPS Zarr URL.",
+      "errorColorLimits": "The maximum color limit must be greater than the minimum."
+    },
+    "raster": {
+      "errorSource": "Enter a GeoTIFF URL or choose a file."
+    },
     "wcs": {
       "retrieve": "Retrieve coverages",
       "select": "Select a coverage",
@@ -1967,6 +1978,7 @@
     "layerCesiumOnly": "Rendered by the 3D globe only",
     "layerMapboxUnsupported": "Not rendered by the Mapbox engine",
     "layerArcgisUnsupported": "Not rendered by the ArcGIS engine",
+    "layerArcgisViewUnsupported": "Not rendered in this ArcGIS view",
     "resetView": "Reset view",
     "scene3D": "3D globe",
     "scene2D": "2D map",
@@ -8015,5 +8027,10 @@
     "catalogHuc12pp": "HUC12 pour points",
     "catalogNmwdiSt": "New Mexico water sites",
     "catalogFlowlines": "NHDPlus flowlines"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer."
+    }
   }
 }

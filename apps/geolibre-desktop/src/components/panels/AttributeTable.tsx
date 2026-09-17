@@ -1810,9 +1810,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
-              CSV (attributes only)
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>CSV</DropdownMenuItem>
             {layer && layerSupportsPolylineExport(layer) && (
               <>
                 <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>

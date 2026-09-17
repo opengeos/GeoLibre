@@ -28,7 +28,14 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
-import { isOfflineBasemapSentinel, PROTOMAPS_FLAVORS, type ProtomapsFlavor } from "@geolibre/map";
+import {
+  ARCGIS_BASEMAP_STYLES,
+  isArcgisBasemapStyle,
+  isOfflineBasemapSentinel,
+  PROTOMAPS_FLAVORS,
+  type ProtomapsFlavor,
+} from "@geolibre/map";
+import { useArcgisApiKey } from "../../hooks/useArcgisApiKey";
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
@@ -114,6 +121,12 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
       : s.basemapStyleUrl,
   );
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+  const isArcgis = useAppStore((s) => s.primaryRenderer === "arcgis");
+  const arcgisBasemap = useAppStore((s) => s.preferences.map.arcgisBasemap);
+  const arcgisApiKey = useArcgisApiKey();
+  const activeArcgisBasemap =
+    isArcgis && arcgisApiKey && isArcgisBasemapStyle(arcgisBasemap) ? arcgisBasemap : undefined;
   const setMapView = useAppStore((s) => s.setMapView);
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
 
@@ -154,13 +167,14 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
   // style URL; "Liberty 3D" shares Liberty's URL, so the first match (Liberty)
   // wins and only one button highlights.
   const activeChoice = useMemo(() => {
+    if (activeArcgisBasemap) return activeArcgisBasemap;
     if (basemapStyleUrl === BLANK_BASEMAP) return BLANK_CHOICE;
     // An offline/PMTiles basemap is a runtime sentinel, not a real style URL —
     // don't treat it as a custom URL (its sentinel would fail URL validation).
     if (isOfflineBasemapSentinel(basemapStyleUrl)) return OFFLINE_CHOICE;
     const preset = allPresets.find((p) => p.styleUrl === basemapStyleUrl);
     return preset ? preset.id : CUSTOM_CHOICE;
-  }, [allPresets, basemapStyleUrl]);
+  }, [allPresets, basemapStyleUrl, activeArcgisBasemap]);
 
   // Seed the custom URL field when the dialog opens: prefer the active custom
   // style URL, else fall back to the last custom URL the user applied (a PMTiles
@@ -246,6 +260,31 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
         </DialogHeader>
 
         <form className="space-y-5" onSubmit={applyCustom}>
+          {isArcgis && arcgisApiKey ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("toolbar.item.rendererArcgis")}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {ARCGIS_BASEMAP_STYLES.map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={basemap.name}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() => {
+                      // Read live state so a concurrent preference change is preserved.
+                      const current = useAppStore.getState().preferences;
+                      setPreferences({
+                        ...current,
+                        map: { ...current.map, arcgisBasemap: basemap.id },
+                      });
+                      onOpenChange(false);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">
               {t("newProject.sectionOpenFreeMap")}

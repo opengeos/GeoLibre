@@ -950,6 +950,17 @@
       "urlPlaceholder": "https://example.com/data.csv"
     },
     "nonGeographicCoordinates": "Tọa độ trong {{names}} không phải là kinh độ/vĩ độ nên sẽ không có gì được vẽ trên bản đồ. CRS bị gắn nhãn sai — chiếu lại dữ liệu (hoặc sửa .prj của nó) và tải lại.",
+    "pmtiles": {
+      "errorUrl": "Hãy nhập URL PMTiles hợp lệ theo HTTP hoặc HTTPS.",
+      "errorMlt": "ArcGIS yêu cầu ô bản đồ vector MVT, không phải MLT."
+    },
+    "zarr": {
+      "errorUrl": "Hãy nhập URL Zarr hợp lệ theo HTTP hoặc HTTPS.",
+      "errorColorLimits": "Giới hạn màu tối đa phải lớn hơn giới hạn tối thiểu."
+    },
+    "raster": {
+      "errorSource": "Nhập URL GeoTIFF hoặc chọn một tệp."
+    },
     "wcs": {
       "retrieve": "Lấy các vùng phủ",
       "select": "Chọn vùng phủ",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "Chỉ được kết xuất trên quả địa cầu 3D",
     "layerMapboxUnsupported": "Không được kết xuất bởi công cụ Mapbox",
     "layerArcgisUnsupported": "Không được kết xuất bởi công cụ ArcGIS",
+    "layerArcgisViewUnsupported": "Không được kết xuất trong chế độ xem ArcGIS này",
     "resetView": "Đặt lại chế độ xem",
     "scene3D": "Quả địa cầu 3D",
     "scene2D": "Bản đồ 2D",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "Điểm thoát nước HUC12",
     "catalogNmwdiSt": "Trạm quan trắc nước New Mexico",
     "catalogFlowlines": "Đường dòng chảy NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác."
+    }
   }
 }

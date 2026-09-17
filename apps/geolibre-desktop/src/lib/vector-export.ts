@@ -1,5 +1,6 @@
 import { encodePolyline, type GeoLibreLayer } from "@geolibre/core";
-import { csvCell as quoteCsvCell } from "./csv";
+import { geojsonToCsv } from "./vector-csv";
+export { formatAttributeValue } from "./vector-csv";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
@@ -46,13 +47,6 @@ const TEXT_EXPORT_FORMATS: Record<
   },
 };
 
-/** Render an attribute value as the plain string used in CSV cells and inputs. */
-export function formatAttributeValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
 /** Turn a layer name into a filesystem-safe export base filename. */
 export function sanitizeExportFileName(name: string): string {
   const sanitized = name
@@ -62,30 +56,6 @@ export function sanitizeExportFileName(name: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   return sanitized || "layer";
-}
-
-function csvCell(value: unknown): string {
-  return quoteCsvCell(formatAttributeValue(value));
-}
-
-function geojsonToCsv(geojson: FeatureCollection): string {
-  const propertyKeys = new Set<string>();
-  for (const feature of geojson.features) {
-    for (const key of Object.keys(feature.properties ?? {})) {
-      propertyKeys.add(key);
-    }
-  }
-
-  const orderedKeys = Array.from(propertyKeys);
-  const headers = ["feature_id", ...orderedKeys];
-  const rows = geojson.features.map((feature, index) => {
-    const featureId = String(feature.id ?? index);
-    const properties = feature.properties ?? {};
-    const values = [featureId, ...orderedKeys.map((key) => properties[key])];
-    return values.map(csvCell).join(",");
-  });
-
-  return [headers.map(csvCell).join(","), ...rows].join("\n");
 }
 
 function exportFormatLabel(format: BinaryVectorExportFormat): string {

@@ -899,7 +899,7 @@ function createVectorControl(
     },
   });
 
-  if (app.getMapRenderer?.() === "cesium" || app.getMapRenderer?.() === "mapbox")
+  if (["cesium", "mapbox", "arcgis"].includes(app.getMapRenderer?.() ?? ""))
     bridgeVectorControlToStore(control, app);
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {

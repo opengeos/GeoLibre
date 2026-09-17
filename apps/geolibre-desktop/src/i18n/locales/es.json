@@ -971,6 +971,17 @@
       "modelFileError": "No se pudo leer este modelo. Elija un archivo glTF 2.0 o GLB válido."
     },
     "nonGeographicCoordinates": "Las coordenadas de {{names}} no son de longitud/latitud, por lo que no se dibujará nada en el mapa. El CRS está mal declarado: reproyecte los datos (o corrija su .prj) y vuelva a cargarlos.",
+    "pmtiles": {
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida de PMTiles.",
+      "errorMlt": "ArcGIS requiere teselas vectoriales MVT, no MLT."
+    },
+    "zarr": {
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida de Zarr.",
+      "errorColorLimits": "El límite máximo de color debe ser mayor que el mínimo."
+    },
+    "raster": {
+      "errorSource": "Introduzca una URL GeoTIFF o elija un archivo."
+    },
     "wcs": {
       "retrieve": "Obtener coberturas",
       "select": "Seleccionar una cobertura",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Se representa solo en el globo 3D",
     "layerMapboxUnsupported": "No se representa en el motor Mapbox",
     "layerArcgisUnsupported": "No se representa en el motor ArcGIS",
+    "layerArcgisViewUnsupported": "No se representa en esta vista de ArcGIS",
     "resetView": "Restablecer vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mapa 2D",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "Puntos de vertido HUC12",
     "catalogNmwdiSt": "Estaciones hídricas de Nuevo México",
     "catalogFlowlines": "Líneas de flujo NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Utilice una URL tileset.json de 3D Tiles en esta vista de ArcGIS. Las teselas Google Photorealistic e I3S requieren otro motor de renderizado."
+    }
   }
 }

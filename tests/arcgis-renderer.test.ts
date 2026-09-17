@@ -25,7 +25,10 @@ import {
 } from "../packages/map/src/arcgis-sdk";
 import { MAPLIBRE_CAPABILITIES } from "../packages/map/src/map-engine";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
-import { supportsAddDataRenderer } from "../apps/geolibre-desktop/src/lib/add-data-renderer";
+import {
+  requiresArcgisDeckOverlay,
+  supportsAddDataRenderer,
+} from "../apps/geolibre-desktop/src/lib/add-data-renderer";
 import { isPluginEngineList } from "../apps/geolibre-desktop/src/lib/plugin-archive-unpack";
 import { normalizeDesktopSettings } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import { mergeRuntimeEnv } from "../apps/geolibre-desktop/src/lib/assistant/provider";
@@ -97,13 +100,13 @@ describe("ArcGIS project and plugin boundaries", () => {
     assert.equal(MAPLIBRE_CAPABILITIES.domControls, true);
   });
   it("greys out the Add Data sources the engine has no adapter for", () => {
-    assert.equal(supportsAddDataRenderer("mbtiles", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("pmtiles", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("deckgl-viz", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("gltf-model", "arcgis"), false);
-    // The Vector and Raster panels are MapLibre controls with nowhere to mount.
-    assert.equal(supportsAddDataRenderer("vector", "arcgis"), false);
-    assert.equal(supportsAddDataRenderer("raster", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("mbtiles", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("pmtiles", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("deckgl-viz", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("gltf-model", "arcgis"), true);
+    // Vector uses the store bridge; raster uses the host importer.
+    assert.equal(supportsAddDataRenderer("vector", "arcgis"), true);
+    assert.equal(supportsAddDataRenderer("raster", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("xyz", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("flatgeobuf", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("arcgis", "arcgis"), true);
@@ -317,4 +320,15 @@ describe("ArcGIS view swap", () => {
       await whenDrawn(reactive() as never, stuck as never, 20);
     });
   });
+});
+
+it("keeps the Add Data palette and menu off deck-only sources in ArcGIS global views", () => {
+  for (const id of ["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]) {
+    assert.equal(requiresArcgisDeckOverlay(id), true);
+    assert.equal(supportsAddDataRenderer(id, "arcgis", false), false);
+    assert.equal(supportsAddDataRenderer(id, "arcgis", true), true);
+  }
+  assert.equal(supportsAddDataRenderer("vector", "arcgis", false), true);
+  assert.equal(supportsAddDataRenderer("zarr", "arcgis", false), true);
+  assert.equal(requiresArcgisDeckOverlay("splatting"), false);
 });

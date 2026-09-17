@@ -270,7 +270,7 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             const only2d = is3d && !isCesiumSupportedLayerType(layer);
             const only3d = !is3d && isCesiumOnlyLayer(layer);
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
-            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer);
+            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

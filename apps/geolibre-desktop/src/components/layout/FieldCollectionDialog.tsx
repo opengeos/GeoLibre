@@ -1,3 +1,4 @@
+import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -172,7 +173,9 @@ export function FieldCollectionDialog({
   // Opening the tool starts (or resumes) the session, dismissing the dialog (X,
   // Esc, overlay) leaves it running so the quick-open pill stays available, and
   // only Done ends it. Ending a session never touches the layers or features.
-  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionActive, setSessionActive] = useState(() =>
+    readControlPreference("field-collection", false),
+  );
 
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
@@ -237,7 +240,10 @@ export function FieldCollectionDialog({
   // Opening the dialog from anywhere (Controls menu, command palette, the pill)
   // starts or resumes the session.
   useEffect(() => {
-    if (open) setSessionActive(true);
+    if (open) {
+      setSessionActive(true);
+      writeControlPreference("field-collection", true);
+    }
   }, [open]);
 
   // Allow creating again after returning to the "new layer" setup step.
@@ -370,15 +376,12 @@ export function FieldCollectionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // A session belongs to the project it was started in. Loading or creating a
-  // project bumps `projectGeneration`, and this dialog is never remounted (as
-  // PrintLayoutDialog is, via its key), so without this a session started in
-  // the previous project would resurface its pill over the new one, and a
-  // half-finished capture from the old project would still be sitting in the
-  // form. Keep the session only if the dialog is open across the switch, and
-  // re-resolve the target against the project that just loaded.
+  // Project changes discard capture drafts and re-resolve the target. Only the
+  // device-local shortcut preference survives: it never restores an unfinished
+  // capture or starts a GPS request. Projects without collection layers still
+  // hide the shortcut.
   useEffect(() => {
-    setSessionActive(open);
+    setSessionActive(open || readControlPreference("field-collection", false));
     targetChosenRef.current = false;
     // A capture finishing in the same tick as the switch would otherwise have
     // its suppress flag consumed by the open-reset effect below, leaving the
@@ -472,6 +475,7 @@ export function FieldCollectionDialog({
   const handleDone = useCallback(() => {
     invalidateCapture();
     setSessionActive(false);
+    writeControlPreference("field-collection", false);
     onOpenChange(false);
   }, [invalidateCapture, onOpenChange]);
 
@@ -511,6 +515,7 @@ export function FieldCollectionDialog({
         if (collectionLayers.length === 0) {
           invalidateCapture();
           setSessionActive(false);
+          writeControlPreference("field-collection", false);
         } else {
           gpsSeqRef.current += 1;
           if (hasWorkInProgress) suppressResetRef.current = true;

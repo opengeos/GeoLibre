@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import {
   ARCGIS_CAPABILITIES,
+  ARCGIS_DECK_CAPABILITIES,
   CESIUM_CAPABILITIES,
   MAPBOX_CAPABILITIES,
   MAPLIBRE_CAPABILITIES,
@@ -30,13 +31,16 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
  */
 export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngineCapabilities {
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const projection = useAppStore((s) => s.preferences.map.projection);
   const fallback =
     primaryRenderer === "cesium"
       ? CESIUM_CAPABILITIES
       : primaryRenderer === "mapbox"
         ? MAPBOX_CAPABILITIES
         : primaryRenderer === "arcgis"
-          ? ARCGIS_CAPABILITIES
+          ? projection === "globe"
+            ? ARCGIS_CAPABILITIES
+            : ARCGIS_DECK_CAPABILITIES
           : MAPLIBRE_CAPABILITIES;
   const engine = mapControllerRef?.current;
   // Trust the ref only while it agrees with the store about which renderer is
@@ -46,5 +50,9 @@ export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngi
   // capabilities of a renderer that is already gone (#2268 review). `kind` is
   // read here as an identity check on the ref, not to infer behaviour: what is
   // returned is still the engine's own capability object.
+  // ArcGIS projection changes rebuild the view without changing engine.kind.
+  // The ref can still point to the outgoing view until its replacement is ready;
+  // follow the subscribed projection so menus update during that transition too.
+  if (primaryRenderer === "arcgis") return fallback;
   return engine && engine.kind === primaryRenderer ? engine.capabilities : fallback;
 }

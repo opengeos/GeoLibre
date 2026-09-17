@@ -39,6 +39,7 @@ export function horizontalBbox(
 // verdict per GeoJSON object — the map sync, the deck overlay, and the Style
 // panel all ask the same question about the same (immutable) data.
 const hasZCache = new WeakMap<object, boolean>();
+const hasFiniteZCache = new WeakMap<object, boolean>();
 
 /**
  * Returns true when any coordinate in the GeoJSON carries a finite, non-zero
@@ -47,18 +48,23 @@ const hasZCache = new WeakMap<object, boolean>();
  * cached per GeoJSON object, so repeated calls on the same data are free.
  *
  * @param geojson - Any GeoJSON object (geometry, feature, or collection).
+ * @param includeZero - Accept zero elevations when explicit absolute-height placement matters.
  */
-export function geojsonHasZCoordinates(geojson: GeoJSON | null | undefined): boolean {
+export function geojsonHasZCoordinates(
+  geojson: GeoJSON | null | undefined,
+  includeZero = false,
+): boolean {
   if (!geojson) return false;
-  const cached = hasZCache.get(geojson);
+  const cache = includeZero ? hasFiniteZCache : hasZCache;
+  const cached = cache.get(geojson);
   if (cached !== undefined) return cached;
   const result = someGeometry(geojson, (geometry) =>
     somePosition(geometry, (position) => {
       const z = position[2];
-      return typeof z === "number" && Number.isFinite(z) && z !== 0;
+      return typeof z === "number" && Number.isFinite(z) && (includeZero || z !== 0);
     }),
   );
-  hasZCache.set(geojson, result);
+  cache.set(geojson, result);
   return result;
 }
 

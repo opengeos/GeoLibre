@@ -180,6 +180,9 @@ export interface GeoLibreAppAPI {
   // falls back to this when getMap() is null — see "Supporting the Mapbox
   // renderer" below.
   getMapboxMap?: () => import("mapbox-gl").Map | null;
+  // The primary ArcGIS MapView or SceneView, or null on another renderer.
+  // The shared deck overlay hosts flat maps and local scenes only.
+  getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
   // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
   // canvas, readView), or null when the primary map is not a globe. The globe's
   // counterpart to getMap for plugins that declare engines: ["maplibre", "cesium"].

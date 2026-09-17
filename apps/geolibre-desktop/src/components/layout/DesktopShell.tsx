@@ -23,6 +23,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   restoreEffects,
   restoreLidarLayers,
+  restoreArcgisZarrLayers,
   restorePlanetaryComputerLayers,
   reattachSun,
   reattachRouteAnimation,
@@ -1306,7 +1307,7 @@ export function DesktopShell({
     reattachFlightSimulator(appAPI);
     // VectorControl has a Cesium bridge and must restore on either engine.
     restoreVectorLayers(appAPI);
-    if (engine.kind === "mapbox") {
+    if (engine.kind === "mapbox" || (engine.kind === "arcgis" && engine.capabilities.deckOverlay)) {
       restoreThreeDTilesLayers(appAPI);
       void restoreLidarLayers(appAPI).catch(console.error);
     }
@@ -1324,6 +1325,10 @@ export function DesktopShell({
     // has already deactivated it and this only detaches the engine.
     reattachRouteAnimation(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
+      if (engine.kind === "arcgis") {
+        restoreRasterLayers(appAPI);
+        restoreArcgisZarrLayers();
+      }
       void restoreLocalFileLayers();
       return;
     }

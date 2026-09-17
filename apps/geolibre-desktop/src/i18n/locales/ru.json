@@ -1013,6 +1013,17 @@
       "modelFileError": "Не удалось прочитать эту модель. Выберите корректный файл glTF 2.0 или GLB."
     },
     "nonGeographicCoordinates": "Координаты в {{names}} не являются долготой/широтой, поэтому на карте ничего не отобразится. СК указана неверно — перепроецируйте данные (или исправьте .prj) и загрузите снова.",
+    "pmtiles": {
+      "errorUrl": "Введите корректный URL PMTiles по протоколу HTTP или HTTPS.",
+      "errorMlt": "ArcGIS требует векторные тайлы MVT, а не MLT."
+    },
+    "zarr": {
+      "errorUrl": "Введите корректный URL Zarr по протоколу HTTP или HTTPS.",
+      "errorColorLimits": "Верхний предел цвета должен быть больше нижнего."
+    },
+    "raster": {
+      "errorSource": "Введите URL GeoTIFF или выберите файл."
+    },
     "wcs": {
       "retrieve": "Получить покрытия",
       "select": "Выберите покрытие",
@@ -2056,6 +2067,7 @@
     "layerCesiumOnly": "Отображается только на 3D-глобусе",
     "layerMapboxUnsupported": "Не отображается движком Mapbox",
     "layerArcgisUnsupported": "Не отображается движком ArcGIS",
+    "layerArcgisViewUnsupported": "Не отображается в этом виде ArcGIS",
     "resetView": "Сбросить вид",
     "scene3D": "3D-глобус",
     "scene2D": "2D-карта",
@@ -8182,5 +8194,10 @@
     "catalogHuc12pp": "Замыкающие створы HUC12",
     "catalogNmwdiSt": "Водные пункты Нью-Мексико",
     "catalogFlowlines": "Водотоки NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "В этом виде ArcGIS используйте URL tileset.json для 3D Tiles. Для тайлов Google Photorealistic и I3S нужен другой движок отрисовки."
+    }
   }
 }

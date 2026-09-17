@@ -950,6 +950,17 @@
       "unitMeters": "{{value}} 米",
       "unitKm": "{{value}} 千米"
     },
+    "pmtiles": {
+      "errorUrl": "请输入有效的 HTTP 或 HTTPS PMTiles 地址。",
+      "errorMlt": "ArcGIS 需要 MVT 矢量瓦片，不支持 MLT。"
+    },
+    "zarr": {
+      "errorUrl": "请输入有效的 HTTP 或 HTTPS Zarr 地址。",
+      "errorColorLimits": "颜色上限必须大于下限。"
+    },
+    "raster": {
+      "errorSource": "输入 GeoTIFF URL 或选择文件。"
+    },
     "wcs": {
       "retrieve": "获取覆盖数据",
       "select": "选择覆盖数据",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "仅由 3D 地球渲染",
     "layerMapboxUnsupported": "Mapbox 引擎不渲染此图层",
     "layerArcgisUnsupported": "ArcGIS 引擎不渲染此图层",
+    "layerArcgisViewUnsupported": "当前 ArcGIS 视图不渲染此图层",
     "resetView": "重置视图",
     "scene3D": "3D 地球",
     "scene2D": "2D 地图",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "HUC12 出水口",
     "catalogNmwdiSt": "新墨西哥州水文站点",
     "catalogFlowlines": "NHDPlus 河段"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "请在此 ArcGIS 视图中使用 3D Tiles 的 tileset.json URL。Google Photorealistic 和 I3S 瓦片需要其他渲染引擎。"
+    }
   }
 }

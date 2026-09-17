@@ -950,6 +950,17 @@
       "modelFileError": "Tidak dapat membaca model ini. Pilih file glTF 2.0 atau GLB yang valid."
     },
     "nonGeographicCoordinates": "Koordinat pada {{names}} bukan bujur/lintang, sehingga tidak ada yang digambar di peta. CRS salah — proyeksikan ulang data (atau perbaiki .prj-nya) lalu muat kembali.",
+    "pmtiles": {
+      "errorUrl": "Masukkan URL PMTiles HTTP atau HTTPS yang valid.",
+      "errorMlt": "ArcGIS memerlukan ubin vektor MVT, bukan MLT."
+    },
+    "zarr": {
+      "errorUrl": "Masukkan URL Zarr HTTP atau HTTPS yang valid.",
+      "errorColorLimits": "Batas warna maksimum harus lebih besar dari minimum."
+    },
+    "raster": {
+      "errorSource": "Masukkan URL GeoTIFF atau pilih berkas."
+    },
     "wcs": {
       "retrieve": "Ambil cakupan",
       "select": "Pilih cakupan",
@@ -1918,6 +1929,7 @@
     "layerCesiumOnly": "Hanya dirender oleh bola dunia 3D",
     "layerMapboxUnsupported": "Tidak dirender oleh mesin Mapbox",
     "layerArcgisUnsupported": "Tidak dirender oleh mesin ArcGIS",
+    "layerArcgisViewUnsupported": "Tidak dirender dalam tampilan ArcGIS ini",
     "resetView": "Atur Ulang Tampilan",
     "scene3D": "Bola dunia 3D",
     "scene2D": "Peta 2D",
@@ -7921,5 +7933,10 @@
     "catalogHuc12pp": "Titik keluaran HUC12",
     "catalogNmwdiSt": "Situs air New Mexico",
     "catalogFlowlines": "Garis aliran NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain."
+    }
   }
 }

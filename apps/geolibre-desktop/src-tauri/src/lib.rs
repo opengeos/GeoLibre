@@ -4031,6 +4031,17 @@ struct MbtilesMetadata {
 fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
     let connection = open_mbtiles(&path)?;
     let metadata = read_metadata_rows(&connection)?;
+    let metadata_min_zoom = metadata
+        .get("minzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let metadata_max_zoom = metadata
+        .get("maxzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(
+        &connection,
+        metadata_min_zoom.is_none(),
+        metadata_max_zoom.is_none(),
+    )?;
     let fallback_name = Path::new(&path)
         .file_stem()
         .and_then(|name| name.to_str())
@@ -4055,12 +4066,8 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
         format,
         tile_type,
         source_layers: read_vector_source_layers(metadata.get("json")),
-        min_zoom: metadata
-            .get("minzoom")
-            .and_then(|value| value.parse::<i64>().ok()),
-        max_zoom: metadata
-            .get("maxzoom")
-            .and_then(|value| value.parse::<i64>().ok()),
+        min_zoom: metadata_min_zoom.or(tile_min_zoom),
+        max_zoom: metadata_max_zoom.or(tile_max_zoom),
         bounds: metadata.get("bounds").and_then(|value| parse_bounds(value)),
         center: metadata.get("center").and_then(|value| parse_center(value)),
         scheme: metadata
@@ -4068,6 +4075,26 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
             .map(|value| value.to_ascii_lowercase())
             .unwrap_or_else(|| "tms".to_string()),
     })
+}
+
+fn read_mbtiles_zoom_range(
+    connection: &Connection,
+    need_min: bool,
+    need_max: bool,
+) -> Result<(Option<i64>, Option<i64>), String> {
+    let read = |aggregate: &str| {
+        connection
+            .query_row(
+                &format!("SELECT {aggregate}(zoom_level) FROM tiles"),
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Could not read MBTiles zoom range: {error}"))
+    };
+    Ok((
+        if need_min { read("MIN")? } else { None },
+        if need_max { read("MAX")? } else { None },
+    ))
 }
 
 #[tauri::command]
@@ -4478,7 +4505,7 @@ mod tests {
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
         is_image_picker_path, is_persisted_image_file,
         is_safe_absolute_path, is_ssrf_guard_error, path_is_under, project_path_string,
-        project_paths_from_args, resolve_fetch_timeout_secs, tcp_table_port,
+        project_paths_from_args, read_mbtiles_zoom_range, resolve_fetch_timeout_secs, tcp_table_port,
         MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
@@ -4515,6 +4542,30 @@ mod tests {
     // environment must not run concurrently with each other.
     #[cfg(not(feature = "mas"))]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn derives_mbtiles_zoom_range_from_tile_rows() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute("CREATE TABLE tiles (zoom_level INTEGER NOT NULL)", [])
+            .unwrap();
+        for zoom in [4, 9, 6] {
+            connection
+                .execute("INSERT INTO tiles (zoom_level) VALUES (?1)", [zoom])
+                .unwrap();
+        }
+
+        assert_eq!(
+            read_mbtiles_zoom_range(&connection, true, true).unwrap(),
+            (Some(4), Some(9))
+        );
+
+        let no_tiles_table = rusqlite::Connection::open_in_memory().unwrap();
+        assert_eq!(
+            read_mbtiles_zoom_range(&no_tiles_table, false, false).unwrap(),
+            (None, None)
+        );
+    }
 
     #[cfg(not(feature = "mas"))]
     #[test]

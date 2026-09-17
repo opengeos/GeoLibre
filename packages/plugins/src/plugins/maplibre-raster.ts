@@ -387,6 +387,10 @@ export async function addRasterToMap(
     zoomTo?: boolean;
   } = {},
 ): Promise<string> {
+  if (app.getMapRenderer?.() === "arcgis") {
+    const { addArcgisRaster } = await import("./arcgis-raster-import");
+    return addArcgisRaster(app, source, options);
+  }
   const control = await ensureRasterControl(app);
   if (!control) {
     throw new Error("The raster control could not be initialized.");
@@ -657,6 +661,12 @@ export function readRasterWindow(
  * @param app - The GeoLibre app API.
  */
 export function restoreRasterLayers(app: GeoLibreAppAPI): void {
+  if (app.getMapRenderer?.() === "arcgis") {
+    void import("./arcgis-raster-import")
+      .then(({ restoreArcgisRasterFiles }) => restoreArcgisRasterFiles(localRasterFileReader))
+      .catch(console.error);
+    return;
+  }
   const hasRasterLayers = useAppStore.getState().layers.some(isRasterControlStoreLayer);
   if (!hasRasterLayers && !rasterControl) return;
 
@@ -813,9 +823,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
  * already loaded in the control, keyed by layer id. Also re-registers each path
  * so the raster stays restorable when the project is saved again.
  *
- * Resolves to an empty map in the browser (no reader is registered) and skips
- * any file that has since been moved or deleted -- the caller then falls back
- * to dropping that layer with a notice.
+ * Reuses live browser blob URLs, or reopens saved paths through the registered
+ * desktop reader. Skips files that have moved or been deleted; the caller then
+ * falls back to dropping an unavailable layer with a notice.
  *
  * @param control - The mounted raster control.
  * @returns The re-read files, by store layer id.
@@ -823,14 +833,18 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
 async function readLocalRasterFiles(control: RasterControl): Promise<Map<string, File | string>> {
   const files = new Map<string, File | string>();
   const reader = localRasterFileReader;
-  if (!reader) return files;
 
   for (const layer of useAppStore.getState().layers) {
     if (!isRasterControlStoreLayer(layer)) continue;
     if (control.getRaster(layer.id)) continue;
     if (typeof layer.source.url === "string" && layer.source.url) continue;
+    const bytesUrl = layer.metadata.localBytesUrl;
+    if (typeof bytesUrl === "string" && bytesUrl.startsWith("blob:")) {
+      files.set(layer.id, bytesUrl);
+      continue;
+    }
     const path = layer.metadata.localFilePath;
-    if (typeof path !== "string" || !path) continue;
+    if (!reader || typeof path !== "string" || !path) continue;
 
     try {
       files.set(layer.id, await reader(path));
@@ -960,7 +974,9 @@ function patchJpegCogSource(source: unknown): unknown {
     let decoded = windowCache.get(key);
     if (!decoded) {
       decoded = cog._tiffImage!(level).then(async (image) => {
-        const rasters = await image.readRasters({ window: [x, y, x + width, y + height] });
+        const rasters = await image.readRasters({
+          window: [x, y, x + width, y + height],
+        });
         // geotiff.js expands the chroma subsampling but deliberately returns
         // the TIFF's native Y/Cb/Cr samples. The renderer expects RGB bands,
         // like the GPU engine, so perform the TIFF/JPEG color transform once

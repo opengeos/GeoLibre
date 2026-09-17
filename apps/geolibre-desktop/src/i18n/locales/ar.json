@@ -1055,6 +1055,17 @@
       "modelFileError": "تعذرت قراءة هذا النموذج. اختر ملف glTF 2.0 أو GLB صالحًا."
     },
     "nonGeographicCoordinates": "الإحداثيات في {{names}} ليست خط طول/عرض، لذا لن يُرسم أي شيء على الخريطة. نظام الإحداثيات مذكور بشكل خاطئ — أعد إسقاط البيانات (أو صحّح ملف .prj) ثم حمّلها مرة أخرى.",
+    "pmtiles": {
+      "errorUrl": "أدخل عنوان URL صالحًا لـ PMTiles عبر HTTP أو HTTPS.",
+      "errorMlt": "يتطلب ArcGIS بلاطات متجهة بتنسيق MVT وليس MLT."
+    },
+    "zarr": {
+      "errorUrl": "أدخل عنوان URL صالحًا لـ Zarr عبر HTTP أو HTTPS.",
+      "errorColorLimits": "يجب أن يكون الحد الأقصى للألوان أكبر من الحد الأدنى."
+    },
+    "raster": {
+      "errorSource": "أدخل رابط GeoTIFF أو اختر ملفًا."
+    },
     "wcs": {
       "retrieve": "جلب التغطيات",
       "select": "اختر تغطية",
@@ -2147,6 +2158,7 @@
     "layerCesiumOnly": "تُعرَض على الكرة الأرضية ثلاثية الأبعاد فقط",
     "layerMapboxUnsupported": "لا تُعرَض بمحرّك Mapbox",
     "layerArcgisUnsupported": "لا تُعرَض بمحرّك ArcGIS",
+    "layerArcgisViewUnsupported": "لا تُعرَض في عرض ArcGIS هذا",
     "resetView": "إعادة تعيين العرض",
     "scene3D": "كرة أرضية ثلاثية الأبعاد",
     "scene2D": "خريطة ثنائية الأبعاد",
@@ -8355,5 +8367,10 @@
     "catalogHuc12pp": "نقاط المصب HUC12",
     "catalogNmwdiSt": "مواقع المياه في نيومكسيكو",
     "catalogFlowlines": "خطوط مجاري NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر."
+    }
   }
 }

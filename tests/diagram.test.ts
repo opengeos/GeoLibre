@@ -335,6 +335,18 @@ describe("declutterEntries", () => {
     }));
     assert.equal(declutterEntries(entries, project).length, 5);
   });
+  it("omits points a native view cannot project onto the screen", () => {
+    const entries = [
+      { width: 10, height: 10, position: [0, 0] as [number, number] },
+      { width: 10, height: 10, position: [100, 0] as [number, number] },
+    ];
+    assert.deepEqual(
+      declutterEntries(entries, ([x, y]) =>
+        x === 0 ? { x: Number.NaN, y: Number.NaN } : { x, y },
+      ),
+      [entries[1]],
+    );
+  });
 });
 
 describe("diagramPixelSize", () => {

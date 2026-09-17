@@ -1,3 +1,4 @@
+import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import { supportsAddDataRenderer } from "../../lib/add-data-renderer";
 import {
   DEFAULT_PROJECT_NAME,
@@ -1241,27 +1242,23 @@ export function TopToolbar({
   const [controlsVisible, setControlsVisible] = useState<Record<ToolbarMapControl, boolean>>(() =>
     MAP_CONTROL_ITEMS.reduce(
       (acc, { id }) => {
-        acc[id] = DEFAULT_BUILT_IN_CONTROL_VISIBILITY[id];
+        acc[id] =
+          id === "terrain" || id === "maptoolkit-logo"
+            ? DEFAULT_BUILT_IN_CONTROL_VISIBILITY[id]
+            : readControlPreference(id, DEFAULT_BUILT_IN_CONTROL_VISIBILITY[id]);
         return acc;
       },
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
-  // A renderer swap replaces the engine and its controls while this toolbar
-  // keeps its checkbox state. Replay the controls the globe mounts on its own
-  // (fullscreen, Home under compass, the scene-mode picker under globe) once
-  // the new engine is ready, so a control hidden from the Controls menu stays
-  // hidden instead of reappearing with its checkbox still unticked.
+  // Restore optional chrome after startup and renderer replacement. Terrain is
+  // project state and the Maptoolkit logo follows attribution requirements.
   useEffect(() => {
-    for (const control of ["fullscreen", "compass", "globe"] as const)
-      mapControllerRef.current?.setBuiltInControlVisible(control, controlsVisible[control]);
-  }, [
-    mapControllerRef,
-    mapReadyGeneration,
-    controlsVisible.fullscreen,
-    controlsVisible.compass,
-    controlsVisible.globe,
-  ]);
+    for (const { id } of MAP_CONTROL_ITEMS) {
+      if (id !== "terrain" && id !== "maptoolkit-logo")
+        mapControllerRef.current?.setBuiltInControlVisible(id, controlsVisible[id]);
+    }
+  }, [mapControllerRef, mapReadyGeneration, controlsVisible]);
 
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
 
@@ -1404,14 +1401,21 @@ export function TopToolbar({
   // command palette so each panel opens identically from both.
   const addLayer: AddLayerHandlers = {
     vector: () => openVectorLayerPanel(appApi),
-    raster: () => openRasterLayerPanel(appApi),
+    raster: () =>
+      appApi.getMapRenderer?.() === "arcgis"
+        ? openAddDataKind("raster")
+        : openRasterLayerPanel(appApi),
     stac: () => {
       if (isActive(STAC_PLUGIN_ID)) openRightPanel(STAC_PLUGIN_ID);
       else toggle(STAC_PLUGIN_ID, appApi);
     },
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
-    pmtiles: () => openPMTilesLayerPanel(appApi),
-    zarr: () => openZarrLayerPanel(appApi),
+    pmtiles: () =>
+      appApi.getMapRenderer?.() === "arcgis"
+        ? openAddDataKind("pmtiles")
+        : openPMTilesLayerPanel(appApi),
+    zarr: () =>
+      appApi.getMapRenderer?.() === "arcgis" ? openAddDataKind("zarr") : openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
     lidar: () => openLidarLayerPanel(appApi),
     splatting: () => openSplattingLayerPanel(appApi),
@@ -1425,6 +1429,8 @@ export function TopToolbar({
     const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
     if (!updated) return;
     setControlsVisible((current) => ({ ...current, [control]: visible }));
+    if (control !== "terrain" && control !== "maptoolkit-logo")
+      writeControlPreference(control, visible);
     if (control === "terrain") {
       const { preferences, setPreferences } = useAppStore.getState();
       setPreferences({
@@ -2108,13 +2114,25 @@ export function TopToolbar({
           commands.filter(
             (command) =>
               !command.id.startsWith("add.") ||
-              (addDataReady && supportsAddDataRenderer(command.id.slice(4), primaryRenderer)),
+              (addDataReady &&
+                supportsAddDataRenderer(
+                  command.id.slice(4),
+                  primaryRenderer,
+                  capabilities.deckOverlay,
+                )),
           ),
           deploymentCapabilities,
         ),
         appPrivileges,
       ),
-    [commands, deploymentCapabilities, appPrivileges, primaryRenderer, addDataReady],
+    [
+      commands,
+      deploymentCapabilities,
+      appPrivileges,
+      primaryRenderer,
+      addDataReady,
+      capabilities.deckOverlay,
+    ],
   );
   const shortcutCommands = useMemo(
     () =>

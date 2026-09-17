@@ -18,10 +18,10 @@ export const maplibreDeckGlVizPlugin: GeoLibrePlugin = {
   name: "Deck.gl Layer",
   version: "0.1.0",
   activeByDefault: true,
-  // The overlay binds to whichever map `app.getMap()`/`app.getMapboxMap()`
-  // returns, so the plugin stays active across a MapLibre ↔ Mapbox swap (the
+  // The overlay binds to `app.getMap()`, `app.getMapboxMap()` or
+  // `app.getArcgisView()`, so it stays active across renderer swaps (the
   // plugin manager deactivates plugins that omit the new engine).
-  engines: ["maplibre", "mapbox"],
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app) => {
     void activateDeckViz(app);
   },

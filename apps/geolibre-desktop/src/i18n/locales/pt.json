@@ -971,6 +971,17 @@
       "modelFileError": "Não foi possível ler este modelo. Escolha um arquivo glTF 2.0 ou GLB válido."
     },
     "nonGeographicCoordinates": "As coordenadas em {{names}} não são de longitude/latitude, portanto nada será desenhado no mapa. O CRS está incorreto — reprojete os dados (ou corrija o .prj) e carregue novamente.",
+    "pmtiles": {
+      "errorUrl": "Digite uma URL HTTP ou HTTPS válida de PMTiles.",
+      "errorMlt": "O ArcGIS requer blocos vetoriais MVT, não MLT."
+    },
+    "zarr": {
+      "errorUrl": "Digite uma URL HTTP ou HTTPS válida de Zarr.",
+      "errorColorLimits": "O limite máximo de cor deve ser maior que o mínimo."
+    },
+    "raster": {
+      "errorSource": "Insira uma URL GeoTIFF ou escolha um arquivo."
+    },
     "wcs": {
       "retrieve": "Obter coberturas",
       "select": "Selecionar uma cobertura",
@@ -1964,6 +1975,7 @@
     "layerCesiumOnly": "Renderizado somente pelo globo 3D",
     "layerMapboxUnsupported": "Não renderizado pelo motor Mapbox",
     "layerArcgisUnsupported": "Não renderizado pelo motor ArcGIS",
+    "layerArcgisViewUnsupported": "Não renderizado nesta visualização do ArcGIS",
     "resetView": "Redefinir vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mapa 2D",
@@ -8008,5 +8020,10 @@
     "catalogHuc12pp": "Pontos de escoamento HUC12",
     "catalogNmwdiSt": "Estações hídricas do Novo México",
     "catalogFlowlines": "Linhas de fluxo NHDPlus"
+  },
+  "plugin": {
+    "3d-tiles": {
+      "arcgisSourceUnsupported": "Use uma URL tileset.json de 3D Tiles nesta visualização do ArcGIS. Os blocos Google Photorealistic e I3S exigem outro renderizador."
+    }
   }
 }

@@ -8,29 +8,24 @@ import type { MapRendererKind } from "@geolibre/core";
 // the host KML importer, the same path a dropped file takes on any renderer.
 const MAPBOX_UNSUPPORTED_SOURCES = new Set(["mbtiles", "splatting", "cesium-ion", "czml"]);
 
-// The ArcGIS renderer has no deck.gl overlay or custom-layer host yet, so on
-// top of the Mapbox list every source drawn through one of those is out, as are
-// the archives and cloud rasters that need a MapLibre protocol, and the Vector
-// and Raster panels, which are MapLibre plugin controls with nowhere to mount
-// (see packages/map/src/arcgis-layers.ts for what it does draw). Ids are the
-// catalog's (`DATA_SOURCE_CATALOG` in ui-profile.ts).
+// Adapted deck.gl plugins are gated separately by flat/local view capabilities.
 const ARCGIS_UNSUPPORTED_SOURCES = new Set([
-  ...MAPBOX_UNSUPPORTED_SOURCES,
-  "vector",
-  "raster",
-  "wcs",
-  "pmtiles",
-  "zarr",
-  "netcdf",
-  "lidar",
-  "3d-tiles",
-  "deckgl-viz",
-  "gltf-model",
-  "duckdb",
+  ...[...MAPBOX_UNSUPPORTED_SOURCES].filter((id) => id !== "mbtiles"),
 ]);
 
-export function supportsAddDataRenderer(id: string, renderer: MapRendererKind): boolean {
+const ARCGIS_DECK_SOURCES = new Set(["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]);
+
+export function requiresArcgisDeckOverlay(id: string): boolean {
+  return ARCGIS_DECK_SOURCES.has(id);
+}
+
+export function supportsAddDataRenderer(
+  id: string,
+  renderer: MapRendererKind,
+  deckOverlay = true,
+): boolean {
   if (renderer === "mapbox") return !MAPBOX_UNSUPPORTED_SOURCES.has(id);
-  if (renderer === "arcgis") return !ARCGIS_UNSUPPORTED_SOURCES.has(id);
+  if (renderer === "arcgis")
+    return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !requiresArcgisDeckOverlay(id));
   return true;
 }
