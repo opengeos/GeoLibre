@@ -1821,18 +1821,35 @@ export async function addPMTilesLayerFromUrl(
   url: string,
   options: { fit?: boolean } = {},
 ): Promise<boolean> {
+  let address: URL;
+  try {
+    address = new URL(url);
+    if (!["https:", "http:"].includes(address.protocol)) throw new Error("Unsupported protocol");
+  } catch {
+    throw new Error(
+      app.translate?.("addData.pmtiles.errorUrl", "Enter a valid HTTP(S) PMTiles URL") ??
+        "Enter a valid HTTP(S) PMTiles URL",
+    );
+  }
+  const normalizedUrl = address.href;
   if (app.getMapRenderer?.() === "arcgis") {
-    const info = await readRemotePMTilesInfo(url);
+    const info = await readRemotePMTilesInfo(normalizedUrl);
     if (info.encoding === "mlt")
       throw new Error(
         app.translate?.("addData.pmtiles.errorMlt", "ArcGIS requires MVT vector tiles, not MLT") ??
           "ArcGIS requires MVT vector tiles, not MLT",
       );
-    const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "PMTiles");
+    const encodedName = address.pathname.split("/").pop() || "PMTiles";
+    let name = encodedName;
+    try {
+      name = decodeURIComponent(encodedName);
+    } catch {
+      // A valid URL can still contain a malformed percent escape in its path.
+    }
     const layers = createArcgisPMTilesArchiveLayers({
       id: crypto.randomUUID(),
       name,
-      url,
+      url: normalizedUrl,
       ...info,
     });
     addPMTilesArchive(layers, name);
@@ -1891,9 +1908,9 @@ export async function addPMTilesLayerFromUrl(
   cameraEvents?.on("movestart", onMoveStart);
   cameraEvents?.on("moveend", onMoveEnd);
   const control = pmtilesControl;
-  const endAdd = beginProgrammaticPMTilesAdd(url);
+  const endAdd = beginProgrammaticPMTilesAdd(normalizedUrl);
   try {
-    await control.addLayer(url);
+    await control.addLayer(normalizedUrl);
   } finally {
     endAdd();
     // Preserve a host user's camera interaction that happened while the archive
