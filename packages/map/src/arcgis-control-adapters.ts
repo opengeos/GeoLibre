@@ -1,5 +1,5 @@
 import type { IdentifiedFeature } from "./map-engine";
-import type { IControl } from "maplibre-gl";
+import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { ArcgisView } from "./arcgis-sdk";
 
 type Picker = (point: { x: number; y: number }, layerId?: string) => IdentifiedFeature[];
@@ -16,15 +16,19 @@ export function identifyArcgisControls(
   return pickers.get(view)?.(point, layerId) ?? [];
 }
 
-type Adapter = (control: IControl) => (() => void) | null;
+type Adapter = (control: IControl, map: MapLibreMap) => (() => void) | null;
 const adapters = new WeakMap<ArcgisView, Adapter>();
 const cleanups = new WeakMap<ArcgisView, Set<() => void>>();
 /** One host-owned adapter per view; compose multiple control types inside that adapter. */
 export function setArcgisControlAdapter(view: ArcgisView, adapter: Adapter): void {
   adapters.set(view, adapter);
 }
-export function adaptArcgisControl(view: ArcgisView, control: IControl): (() => void) | null {
-  return adapters.get(view)?.(control) ?? null;
+export function adaptArcgisControl(
+  view: ArcgisView,
+  control: IControl,
+  map: MapLibreMap,
+): (() => void) | null {
+  return adapters.get(view)?.(control, map) ?? null;
 }
 export function onArcgisViewDestroy(view: ArcgisView, cleanup: () => void): () => void {
   let listeners = cleanups.get(view);
