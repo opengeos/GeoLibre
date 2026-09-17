@@ -118,6 +118,18 @@ describe("normalizeKerchunkReference", () => {
     assert.deepEqual(refs["air/0.0.0"], ["http://d/air.nc", 0, 5]);
   });
 
+  it("preserves prototype-named manifest keys as ordinary reference entries", () => {
+    const refs = normalizeKerchunkReference(
+      JSON.parse(
+        '{"version":1,"refs":{"__proto__":["https://example.test/a.nc",0,4],"constructor":"metadata"}}',
+      ),
+    );
+    assert.equal(Object.getPrototypeOf(refs), null);
+    assert.equal(Object.hasOwn(refs, "__proto__"), true);
+    assert.deepEqual(refs["__proto__"], ["https://example.test/a.nc", 0, 4]);
+    assert.equal(refs["constructor"], "metadata");
+  });
+
   it("resolves relative chunk URLs against the reference URL", () => {
     const refs = normalizeKerchunkReference(
       { version: 1, refs: { "air/0.0.0": ["air.nc", 10, 20] } },

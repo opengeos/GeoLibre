@@ -133,6 +133,19 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       assert.ok(polar.extent[1] >= -85.05112878);
       assert.ok(polar.extent[3] <= 85.05112878);
     }
+    for (const attribute of ["scale_factor", "add_offset"]) {
+      array("invalidPacking", [2, 2], ["lat", "lon"], [1, 2, 3, 4], { [attribute]: "invalid" });
+      await assert.rejects(
+        openArcgisZarrGrid(
+          {
+            ...layer,
+            source: { ...layer.source, variable: "invalidPacking", selector: {} },
+          },
+          abort.signal,
+        ),
+        /scale_factor and add_offset must be finite/,
+      );
+    }
     // Exercise the native preparation promise against the real Zarr metadata reader.
     class Native {
       pending?: Promise<unknown>;

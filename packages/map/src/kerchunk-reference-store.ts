@@ -83,7 +83,7 @@ export function normalizeKerchunkReference(
     throw new Error("Templated kerchunk references (templates/gen) are not supported.");
   }
 
-  const resolved: KerchunkRefs = {};
+  const resolved: KerchunkRefs = Object.create(null);
   for (const [key, value] of Object.entries(refs)) {
     if (Array.isArray(value) && typeof value[0] === "string") {
       // The declared type is a lie for untrusted input; validate the raw array.
