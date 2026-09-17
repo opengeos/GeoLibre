@@ -273,6 +273,17 @@ describe("adding an archive through the panel with a source layer unticked", () 
  * Face all reach `addPMTilesLayerFromUrl`, and none of them shows a tick UI.
  */
 describe("adding an archive by URL while the panel holds a stale tick", () => {
+  it("rejects malformed and non-HTTP programmatic archive URLs", async () => {
+    const app = {
+      translate: (_key: string, fallback: string) => fallback,
+    } as never;
+    await assert.rejects(addPMTilesLayerFromUrl(app, "not a URL"), /valid HTTP\(S\)/);
+    await assert.rejects(
+      addPMTilesLayerFromUrl(app, "file:///tmp/archive.pmtiles"),
+      /valid HTTP\(S\)/,
+    );
+  });
+
   it("puts the whole archive in the store, not just what was ticked for another one", async () => {
     const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
     const globals = globalThis as Record<string, unknown>;
