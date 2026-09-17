@@ -122,7 +122,7 @@ function renderSource(
     case "photos":
       return <PhotosSource />;
     case "pmtiles":
-      return <PmtilesSource />;
+      return <PmtilesSource initialUrl={initialUrl} />;
     case "mbtiles":
       return <MbtilesSource />;
     case "polyline":

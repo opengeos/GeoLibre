@@ -4012,7 +4012,17 @@ struct MbtilesMetadata {
 fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
     let connection = open_mbtiles(&path)?;
     let metadata = read_metadata_rows(&connection)?;
-    let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(&connection)?;
+    let metadata_min_zoom = metadata
+        .get("minzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let metadata_max_zoom = metadata
+        .get("maxzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(
+        &connection,
+        metadata_min_zoom.is_none(),
+        metadata_max_zoom.is_none(),
+    )?;
     let fallback_name = Path::new(&path)
         .file_stem()
         .and_then(|name| name.to_str())
@@ -4037,14 +4047,8 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
         format,
         tile_type,
         source_layers: read_vector_source_layers(metadata.get("json")),
-        min_zoom: metadata
-            .get("minzoom")
-            .and_then(|value| value.parse::<i64>().ok())
-            .or(tile_min_zoom),
-        max_zoom: metadata
-            .get("maxzoom")
-            .and_then(|value| value.parse::<i64>().ok())
-            .or(tile_max_zoom),
+        min_zoom: metadata_min_zoom.or(tile_min_zoom),
+        max_zoom: metadata_max_zoom.or(tile_max_zoom),
         bounds: metadata.get("bounds").and_then(|value| parse_bounds(value)),
         center: metadata.get("center").and_then(|value| parse_center(value)),
         scheme: metadata
@@ -4054,14 +4058,24 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
     })
 }
 
-fn read_mbtiles_zoom_range(connection: &Connection) -> Result<(Option<i64>, Option<i64>), String> {
-    connection
-        .query_row(
-            "SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .map_err(|error| format!("Could not read MBTiles zoom range: {error}"))
+fn read_mbtiles_zoom_range(
+    connection: &Connection,
+    need_min: bool,
+    need_max: bool,
+) -> Result<(Option<i64>, Option<i64>), String> {
+    let read = |aggregate: &str| {
+        connection
+            .query_row(
+                &format!("SELECT {aggregate}(zoom_level) FROM tiles"),
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Could not read MBTiles zoom range: {error}"))
+    };
+    Ok((
+        if need_min { read("MIN")? } else { None },
+        if need_max { read("MAX")? } else { None },
+    ))
 }
 
 #[tauri::command]
@@ -4523,8 +4537,14 @@ mod tests {
         }
 
         assert_eq!(
-            read_mbtiles_zoom_range(&connection).unwrap(),
+            read_mbtiles_zoom_range(&connection, true, true).unwrap(),
             (Some(4), Some(9))
+        );
+
+        let no_tiles_table = rusqlite::Connection::open_in_memory().unwrap();
+        assert_eq!(
+            read_mbtiles_zoom_range(&no_tiles_table, false, false).unwrap(),
+            (None, None)
         );
     }
 
