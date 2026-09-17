@@ -17,7 +17,11 @@ export function flyToDeckTilesLocation(
   zoom: number,
 ): void {
   const view = app.getArcgisView?.();
-  if (view) void view.goTo({ center, zoom, tilt: 60 }).catch(() => {});
+  if (view)
+    void view.goTo({ center, zoom, tilt: 60 }).catch((error: unknown) => {
+      if (!(error instanceof DOMException && error.name === "AbortError"))
+        console.warn("[3d-tiles] Could not navigate to the tileset", error);
+    });
   else app.getMapboxMap?.()?.flyTo({ center, zoom, pitch: 60 });
 }
 

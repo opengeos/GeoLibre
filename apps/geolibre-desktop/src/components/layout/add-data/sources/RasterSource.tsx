@@ -1,10 +1,9 @@
 import { Button, Input, Label } from "@geolibre/ui";
 import { addRasterToMap } from "@geolibre/plugins";
-import { isTauri } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
-import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
+import { isTauri, openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
@@ -39,9 +38,19 @@ export function RasterSource() {
     }
   };
   const submit = source.runSubmit(async () => {
-    if (!file && !/^https?:\/\//i.test(url.trim()))
-      throw new Error(t("addData.raster.errorSource"));
-    await addRasterToMap(createAppAPI(source.shell.mapControllerRef), file?.file ?? url.trim(), {
+    let input: File | string;
+    if (file) input = file.file;
+    else {
+      try {
+        const address = new URL(url.trim());
+        if (!["http:", "https:"].includes(address.protocol))
+          throw new Error("Unsupported protocol");
+        input = address.href;
+      } catch {
+        throw new Error(t("addData.raster.errorSource"));
+      }
+    }
+    await addRasterToMap(createAppAPI(source.shell.mapControllerRef), input, {
       name: source.layerName,
       localPath: file?.localPath,
       beforeId: source.beforeLayer ?? undefined,
