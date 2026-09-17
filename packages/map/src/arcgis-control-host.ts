@@ -29,20 +29,25 @@ export class ArcgisControlHost {
     const unsupported = () => {
       throw new Error("This control requires a MapLibre rendering bridge");
     };
-    const move = (options: {
-      center?: [number, number] | { lng: number; lat: number };
-      zoom?: number;
-      bearing?: number;
-      pitch?: number;
-    }) => {
+    const move = (
+      options: {
+        center?: [number, number] | { lng: number; lat: number };
+        zoom?: number;
+        bearing?: number;
+        pitch?: number;
+      },
+      animate = true,
+    ) => {
       const center = options.center ? LngLat.convert(options.center) : null;
-      engine.easeToView({
+      const next = {
         ...engine.readView(),
         ...options,
         ...(center
           ? { center: [center.lng, center.lat] as [number, number] }
           : { center: engine.readView().center }),
-      });
+      };
+      if (animate) engine.easeToView(next);
+      else engine.applyView(next);
       return facade;
     };
     Object.assign(facade, {
@@ -84,7 +89,7 @@ export class ArcgisControlHost {
       },
       flyTo: move,
       easeTo: move,
-      jumpTo: move,
+      jumpTo: (options: Parameters<typeof move>[0]) => move(options, false),
       triggerRepaint: () => surface().redraw(),
       addControl: (control: IControl, position?: ControlPosition) =>
         this.addControl(control, position),
