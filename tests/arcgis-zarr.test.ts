@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { openArcgisZarrGrid } from "../packages/map/src/arcgis-zarr";
+import { createArcgisZarrLayer, openArcgisZarrGrid } from "../packages/map/src/arcgis-zarr";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
 import { registerZarrStore, readNativeZarrDimensions } from "../packages/map/src/zarr-source";
+import type { ArcgisSdk } from "../packages/map/src/arcgis-sdk";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 it("compares kerchunk manifests by identity without serializing their contents", () => {
@@ -73,8 +74,10 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
     },
   });
   const reads: string[] = [];
+  let failReads = false;
   const dispose = registerZarrStore(layer.id, {
     get: async (key) => {
+      if (failReads) throw new Error("Temporary store failure");
       reads.push(key);
       return bytes.get(key);
     },
@@ -129,6 +132,42 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
       assert.ok(polar.extent[1] <= polar.extent[3]);
       assert.ok(polar.extent[1] >= -85.05112878);
       assert.ok(polar.extent[3] <= 85.05112878);
+    }
+    // Exercise the native preparation promise against the real Zarr metadata reader.
+    class Native {
+      pending?: Promise<unknown>;
+      addResolvingPromise(promise: Promise<unknown>) {
+        this.pending = promise;
+      }
+    }
+    const sdk = {
+      layers: {
+        BaseTileLayer: {
+          createSubclass(definition: object) {
+            Object.assign(Native.prototype, definition);
+            return Native;
+          },
+        },
+      },
+      Extent: class {
+        constructor(props: object) {
+          Object.assign(this, props);
+        }
+      },
+      webMercatorUtils: { geographicToWebMercator: (extent: object) => extent },
+    } as unknown as ArcgisSdk;
+    const native = createArcgisZarrLayer(sdk, layer, {});
+    const loading = native.layer as unknown as { load(): void; pending: Promise<unknown> };
+    try {
+      failReads = true;
+      loading.load();
+      await assert.rejects(loading.pending);
+      failReads = false;
+      loading.load();
+      await loading.pending;
+      assert.ok(native.layer.fullExtent);
+    } finally {
+      native.dispose();
     }
     abort.abort();
     await assert.rejects(grid.renderTile(0, 0, 0, abort.signal), { name: "AbortError" });
