@@ -1213,7 +1213,7 @@ describe("ArcGIS custom terrain ownership", () => {
       new Promise((resolve, reject) => {
         pending.set(source, { resolve, reject });
       });
-    const registration = () => {
+    const registration = (): Registration & { readonly disposals: number } => {
       let disposals = 0;
       return {
         tiles: ["unused"],
