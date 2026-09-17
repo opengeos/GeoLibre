@@ -65,3 +65,20 @@ test("non-point and empty exports keep attribute-only columns", () => {
     "feature_id,name\n0,line",
   );
 });
+
+test("escapes spreadsheet formulas in text and headers while retaining numeric coordinates", () => {
+  assert.equal(
+    geojsonToCsv({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "=1+1",
+          properties: { "@column": "+SUM(1)", note: "-text", amount: -3 },
+          geometry: { type: "Point", coordinates: [-84, -35] },
+        },
+      ],
+    }),
+    "feature_id,'@column,note,amount,longitude,latitude\n'=1+1,'+SUM(1),'-text,-3,-84,-35",
+  );
+});

@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import { csvCell } from "./csv";
+import { csvCell, spreadsheetSafeText } from "./csv";
 
 /** Render an attribute value as the plain string used in CSV cells and inputs. */
 export function formatAttributeValue(value: unknown): string {
@@ -34,7 +34,15 @@ export function geojsonToCsv(geojson: FeatureCollection): string {
       const coordinates = feature.geometry?.type === "Point" ? feature.geometry.coordinates : [];
       values.push(...[coordinates[0], coordinates[1]].map((n) => (Number.isFinite(n) ? n : "")));
     }
-    return values.map((value) => csvCell(formatAttributeValue(value))).join(",");
+    return values
+      .map((value) =>
+        csvCell(
+          typeof value === "string" ? spreadsheetSafeText(value) : formatAttributeValue(value),
+        ),
+      )
+      .join(",");
   });
-  return [headers.map(csvCell).join(","), ...rows].join("\n");
+  return [headers.map((header) => csvCell(spreadsheetSafeText(header))).join(","), ...rows].join(
+    "\n",
+  );
 }
