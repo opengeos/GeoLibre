@@ -1951,7 +1951,7 @@
     "layerUnsupported": "Non visualizzato dal globo 3D",
     "layerCesiumOnly": "Visualizzato solo dal globo 3D",
     "layerMapboxUnsupported": "Non visualizzato dal motore Mapbox",
-    "layerArcgisUnsupported": "Non visualizzato dal motore ArcGIS",
+    "layerArcgisUnsupported": "Non visualizzato in questa vista ArcGIS",
     "resetView": "Ripristina vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mappa 2D",

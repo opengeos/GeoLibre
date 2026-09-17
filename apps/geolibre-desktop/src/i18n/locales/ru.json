@@ -2043,7 +2043,7 @@
     "layerUnsupported": "Не отображается на 3D-глобусе",
     "layerCesiumOnly": "Отображается только на 3D-глобусе",
     "layerMapboxUnsupported": "Не отображается движком Mapbox",
-    "layerArcgisUnsupported": "Не отображается движком ArcGIS",
+    "layerArcgisUnsupported": "Не отображается в этом виде ArcGIS",
     "resetView": "Сбросить вид",
     "scene3D": "3D-глобус",
     "scene2D": "2D-карта",

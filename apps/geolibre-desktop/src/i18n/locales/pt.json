@@ -1951,7 +1951,7 @@
     "layerUnsupported": "Não renderizado pelo globo 3D",
     "layerCesiumOnly": "Renderizado somente pelo globo 3D",
     "layerMapboxUnsupported": "Não renderizado pelo motor Mapbox",
-    "layerArcgisUnsupported": "Não renderizado pelo motor ArcGIS",
+    "layerArcgisUnsupported": "Não renderizado nesta visualização do ArcGIS",
     "resetView": "Redefinir vista",
     "scene3D": "Globo 3D",
     "scene2D": "Mapa 2D",

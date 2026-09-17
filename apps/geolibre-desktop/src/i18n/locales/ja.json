@@ -1905,7 +1905,7 @@
     "layerUnsupported": "3D地球儀では描画されません",
     "layerCesiumOnly": "3D地球儀でのみ描画されます",
     "layerMapboxUnsupported": "Mapboxエンジンでは描画されません",
-    "layerArcgisUnsupported": "ArcGISエンジンでは描画されません",
+    "layerArcgisUnsupported": "この ArcGIS ビューでは描画されません",
     "resetView": "表示をリセット",
     "scene3D": "3D地球儀",
     "scene2D": "2D地図",
