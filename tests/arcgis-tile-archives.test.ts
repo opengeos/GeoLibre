@@ -3,6 +3,7 @@ import { it } from "node:test";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
 import { createArcgisArchiveLayer } from "../packages/map/src/arcgis-tile-archives";
 import type { ArcgisSdk } from "../packages/map/src/arcgis-sdk";
+import { getPMTilesArchive } from "../packages/map/src/layer-sync";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 it("serves archive bytes to the SDK and isolates/cancels interceptor lifetimes", async () => {
@@ -98,21 +99,7 @@ it("crops the correct parent quadrant when zooming beyond a raster archive", asy
     }),
   });
   try {
-    const sdk = {
-      layers: {
-        BaseTileLayer: {
-          createSubclass: (definition: object) => {
-            class Raster {
-              constructor(props: object) {
-                Object.assign(this, props);
-              }
-            }
-            Object.assign(Raster.prototype, definition);
-            return Raster;
-          },
-        },
-      },
-    } as unknown as ArcgisSdk;
+    const sdk = fakeRasterSdk();
     const bridge = createArcgisArchiveLayer(sdk, plan, {}, async (z, x, y) => {
       reads.push([z, x, y]);
       return new Uint8Array([1]);
@@ -129,5 +116,61 @@ it("crops the correct parent quadrant when zooming beyond a raster archive", asy
     assert.equal(reads.length, 1);
   } finally {
     Object.assign(globalThis, { document: originalDocument, createImageBitmap: originalBitmap });
+  }
+});
+
+function fakeRasterSdk(): ArcgisSdk {
+  return {
+    layers: {
+      BaseTileLayer: {
+        createSubclass: (definition: object) => {
+          class Raster {
+            constructor(props: object) {
+              Object.assign(this, props);
+            }
+          }
+          Object.assign(Raster.prototype, definition);
+          return Raster;
+        },
+      },
+    },
+  } as unknown as ArcgisSdk;
+}
+
+it("retries a raster PMTiles header after a transient failure", async () => {
+  const url = "https://example.test/retry-raster.pmtiles";
+  const archive = getPMTilesArchive(url)!;
+  const originalHeader = archive.getHeader;
+  const originalTile = archive.getZxy;
+  const originalDocument = globalThis.document;
+  let headers = 0;
+  archive.getHeader = async () => {
+    if (++headers === 1) throw new Error("Temporary header failure");
+    return { maxZoom: 2 } as Awaited<ReturnType<typeof archive.getHeader>>;
+  };
+  archive.getZxy = async () => undefined;
+  Object.assign(globalThis, { document: { createElement: () => ({}) } });
+  const plan = compileArcgisLayer(
+    geojsonLayer({
+      geojson: undefined,
+      type: "pmtiles",
+      source: { type: "raster", url },
+    }),
+  );
+  assert.equal(plan.kind, "archive");
+  if (plan.kind !== "archive") throw new Error("Expected archive");
+  const bridge = createArcgisArchiveLayer(fakeRasterSdk(), plan, {});
+  try {
+    const layer = bridge.layer as unknown as {
+      fetchTile(z: number, y: number, x: number): Promise<unknown>;
+    };
+    await assert.rejects(layer.fetchTile(2, 1, 1), /Temporary header failure/);
+    await layer.fetchTile(2, 1, 1);
+    assert.equal(headers, 2);
+  } finally {
+    bridge.dispose();
+    archive.getHeader = originalHeader;
+    archive.getZxy = originalTile;
+    Object.assign(globalThis, { document: originalDocument });
   }
 });
