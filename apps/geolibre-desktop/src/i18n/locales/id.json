@@ -953,6 +953,9 @@
     "zarr": {
       "errorUrl": "Masukkan URL Zarr HTTP atau HTTPS yang valid.",
       "errorColorLimits": "Batas warna maksimum harus lebih besar dari minimum."
+    },
+    "raster": {
+      "errorSource": "Masukkan URL GeoTIFF atau pilih berkas."
     }
   },
   "offline": {

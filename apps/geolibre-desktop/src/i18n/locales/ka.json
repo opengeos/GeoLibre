@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "შეიყვანეთ Zarr-ის სწორი HTTP ან HTTPS URL.",
       "errorColorLimits": "ფერის მაქსიმალური ზღვარი მინიმალურზე მეტი უნდა იყოს."
+    },
+    "raster": {
+      "errorSource": "შეიყვანეთ GeoTIFF URL ან აირჩიეთ ფაილი."
     }
   },
   "offline": {

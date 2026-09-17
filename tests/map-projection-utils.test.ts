@@ -203,3 +203,27 @@ it("keeps ArcGIS local scenes in 3D when a Mercator plugin acquires its lock", (
   releaseMercatorProjectionLock("arcgis-lidar-test", app);
   assert.deepEqual(changes, []);
 });
+
+it("does not restore a captured Mapbox projection after switching to ArcGIS", () => {
+  let renderer = "mapbox";
+  let projection: "globe" | "mercator" = "globe";
+  const changes: string[] = [];
+  const app = {
+    getMapRenderer: () => renderer,
+    getMapProjection: () => projection,
+    setMapProjection: (value: "globe" | "mercator") => {
+      projection = value;
+      changes.push(value);
+    },
+  };
+  acquireMercatorProjectionLock("switch-to-arcgis", app);
+  assert.deepEqual(changes, ["mercator"]);
+  renderer = "arcgis";
+  releaseMercatorProjectionLock("switch-to-arcgis", app);
+  assert.deepEqual(changes, ["mercator"]);
+  // The old capture was cleared; a later Mapbox lock starts from current state.
+  renderer = "mapbox";
+  acquireMercatorProjectionLock("after-arcgis", app);
+  releaseMercatorProjectionLock("after-arcgis", app);
+  assert.deepEqual(changes, ["mercator", "mercator"]);
+});

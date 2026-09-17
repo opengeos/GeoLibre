@@ -953,6 +953,9 @@
     "zarr": {
       "errorUrl": "Hãy nhập URL Zarr hợp lệ theo HTTP hoặc HTTPS.",
       "errorColorLimits": "Giới hạn màu tối đa phải lớn hơn giới hạn tối thiểu."
+    },
+    "raster": {
+      "errorSource": "Nhập URL GeoTIFF hoặc chọn một tệp."
     }
   },
   "offline": {

@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "Geben Sie eine gültige HTTP- oder HTTPS-URL für Zarr ein.",
       "errorColorLimits": "Der obere Farbgrenzwert muss größer als der untere sein."
+    },
+    "raster": {
+      "errorSource": "Geben Sie eine GeoTIFF-URL ein oder wählen Sie eine Datei."
     }
   },
   "offline": {

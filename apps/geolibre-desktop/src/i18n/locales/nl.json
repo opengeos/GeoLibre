@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor Zarr in.",
       "errorColorLimits": "De maximale kleurgrens moet groter zijn dan de minimale."
+    },
+    "raster": {
+      "errorSource": "Voer een GeoTIFF-URL in of kies een bestand."
     }
   },
   "offline": {

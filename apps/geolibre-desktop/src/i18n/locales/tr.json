@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "Geçerli bir HTTP veya HTTPS Zarr URL’si girin.",
       "errorColorLimits": "En yüksek renk sınırı en düşük sınırdan büyük olmalıdır."
+    },
+    "raster": {
+      "errorSource": "Bir GeoTIFF URL’si girin veya dosya seçin."
     }
   },
   "offline": {

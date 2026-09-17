@@ -953,6 +953,9 @@
     "zarr": {
       "errorUrl": "请输入有效的 HTTP 或 HTTPS Zarr 地址。",
       "errorColorLimits": "颜色上限必须大于下限。"
+    },
+    "raster": {
+      "errorSource": "输入 GeoTIFF URL 或选择文件。"
     }
   },
   "offline": {

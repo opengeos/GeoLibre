@@ -974,6 +974,9 @@
     "zarr": {
       "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای Zarr وارد کنید.",
       "errorColorLimits": "حد بالای رنگ باید بزرگ‌تر از حد پایین باشد."
+    },
+    "raster": {
+      "errorSource": "نشانی GeoTIFF را وارد کنید یا یک فایل انتخاب کنید."
     }
   },
   "offline": {

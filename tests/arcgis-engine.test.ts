@@ -593,7 +593,7 @@ describe("ArcgisEngine controls", () => {
     assert.equal(engine.setBuiltInControlPosition("scale", "bottom-right"), true);
     assert.equal(engine.getBuiltInControlPosition("scale"), "bottom-right");
     assert.equal(uiAdds.at(-1)?.position, "bottom-right");
-    // Plugin IControls have no host here.
+    // Missing controls are rejected before consulting the plugin control host.
     assert.equal(engine.addControl(), false);
     assert.equal(engine.capabilities.domControls, true);
   });
