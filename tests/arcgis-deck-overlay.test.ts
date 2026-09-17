@@ -123,6 +123,7 @@ it("coalesces hover picks per frame and cancels queued work on disposal", async 
   const layer = {
     props: { onHover: (info: { picked: boolean }) => hoverStates.push(info.picked) },
   };
+  const pickedObjects = [{ id: 1 }, { id: 2 }];
   const clickStates: boolean[] = [];
   const overlay = new ArcgisDeckOverlay(
     f.view,
@@ -134,7 +135,9 @@ it("coalesces hover picks per frame and cancels queued work on disposal", async 
     ({
       pickObject: (point: { x: number; y: number }) => {
         picks.push(point);
-        return point.x === 99 ? { picked: true, object: {}, index: 0, layer } : null;
+        if (point.x === 99) return { picked: true, object: pickedObjects[0], index: 0, layer };
+        if (point.x === 100) return { picked: true, object: pickedObjects[1], index: 1, layer };
+        return null;
       },
     }) as unknown as ReturnType<typeof overlay.getDeck>;
   try {
@@ -154,8 +157,13 @@ it("coalesces hover picks per frame and cancels queued work on disposal", async 
     const leaveFrame = [...frames.values()][0];
     frames.clear();
     leaveFrame(0);
-    assert.deepEqual(hoverStates, [true, false]);
+    assert.deepEqual(hoverStates, [true, false, true]);
     handlers.get("pointer-move")!({ x: 101, y: 2 });
+    const clearFrame = [...frames.values()][0];
+    frames.clear();
+    clearFrame(0);
+    assert.deepEqual(hoverStates, [true, false, true, false]);
+    handlers.get("pointer-move")!({ x: 102, y: 2 });
     overlay.finalize();
     assert.equal(frames.size, 0);
     assert.equal(handlers.size, 0);
