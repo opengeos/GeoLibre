@@ -8,6 +8,7 @@
  * shared `s3*.amazonaws.com` host) so a redirect cannot jump to another bucket.
  */
 export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
+export const OVERPASS_API_UPSTREAM = "https://overpass-api.de/api/interpreter";
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
@@ -15,6 +16,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3.amazonaws.com/opmbuilder/",
   "https://api.openaerialmap.org/",
   HDX_CKAN_SEARCH_UPSTREAM,
+  OVERPASS_API_UPSTREAM,
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

@@ -35,7 +35,11 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
-import { fetchAllowlistedUpstream, HDX_CKAN_SEARCH_UPSTREAM } from "./allowlisted-fetch";
+import {
+  fetchAllowlistedUpstream,
+  HDX_CKAN_SEARCH_UPSTREAM,
+  OVERPASS_API_UPSTREAM,
+} from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -82,6 +86,13 @@ const OAM_MAX_LIMIT = 100;
 // behavior, so GeoLibre reads this fixed upstream through a named route.
 const CKAN_SEARCH_PATH = "/ckan/search";
 const CKAN_MAX_ROWS = 50;
+
+// The public Overpass endpoint rejects some browser origins (notably Pages
+// previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
+// with a small request-body ceiling and the same origin gate as other service
+// proxies. Responses are never cached because OSM data changes continuously.
+const OVERPASS_PATH = "/overpass";
+const OVERPASS_MAX_BODY_BYTES = 20_000;
 
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
 // at all, so a browser cannot read it; this route fetches it server-side and
@@ -204,10 +215,10 @@ const MAX_WMS_ZOOM = 8;
 
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
   // Allow the Range request header (the /pmtiles route needs it) and expose the
   // response headers a range reader relies on. Harmless for the tile routes.
-  "access-control-allow-headers": "range",
+  "access-control-allow-headers": "content-type, range",
   "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
 };
@@ -413,6 +424,43 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
   });
 }
 
+/** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
+async function handleOverpass(request: Request): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > OVERPASS_MAX_BODY_BYTES) {
+    return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
+  }
+  const body = await request.text();
+  if (new TextEncoder().encode(body).byteLength > OVERPASS_MAX_BODY_BYTES) {
+    return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
+  }
+  const params = new URLSearchParams(body);
+  if (!params.get("data") || [...params.keys()].some((key) => key !== "data")) {
+    return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+  }
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(OVERPASS_API_UPSTREAM, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        referer: "https://geolibre.app/",
+      },
+      body,
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
+  headers.set("cache-control", "no-store");
+  return new Response(originResponse.body, { status: originResponse.status, headers });
+}
+
 interface Env {}
 
 /**
@@ -503,22 +551,25 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
   });
 }
 
-export default {
+export const tilesWorker = {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
-    // Only GET is proxied. MapLibre issues GET for every tile; supporting HEAD
-    // would just complicate the Cache API keying (which requires GET) for no
-    // real consumer.
+    const url = new URL(request.url);
+    if (url.pathname === OVERPASS_PATH && request.method === "POST") {
+      return handleOverpass(request);
+    }
+    // Only GET is proxied outside the explicitly bounded Overpass POST route.
+    // Supporting HEAD would complicate Cache API keying (which requires GET)
+    // for no real consumer.
     if (request.method !== "GET") {
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: { ...CORS_HEADERS, allow: "GET, OPTIONS" },
+        headers: { ...CORS_HEADERS, allow: "GET, POST, OPTIONS" },
       });
     }
 
-    const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "") {
       return new Response(
         "GeoLibre tile + service proxy.\n" +
@@ -528,6 +579,7 @@ export default {
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
+          "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
@@ -743,6 +795,8 @@ export default {
     return response;
   },
 };
+
+export default tilesWorker;
 
 /**
  * Serve one reprojected `/wms/<dataset>/<z>/<x>/<y>.png` tile: request the

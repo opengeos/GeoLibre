@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildOsmDownloadQuery,
   downloadOsmGeoJson,
+  OVERPASS_DEFAULT_ENDPOINT,
   overpassJsonToGeoJson,
   type OverpassFetch,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
@@ -168,6 +169,17 @@ describe("Overpass JSON conversion", () => {
 });
 
 describe("downloadOsmGeoJson", () => {
+  it("uses GeoLibre's CORS-enabled Overpass relay by default", async () => {
+    const calls: string[] = [];
+    const fetchImpl: OverpassFetch = async (url) => {
+      calls.push(url);
+      return { ok: true, status: 200, json: async () => ({ elements: [] }), text: async () => "" };
+    };
+    await downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl });
+    assert.equal(OVERPASS_DEFAULT_ENDPOINT, "https://tiles.geolibre.app/overpass");
+    assert.deepEqual(calls, [OVERPASS_DEFAULT_ENDPOINT]);
+  });
+
   it("posts encoded Overpass QL and converts the response", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl: OverpassFetch = async (url, init) => {
