@@ -195,8 +195,10 @@ MapLibre raster control.
 
 **Add Data → Deck.gl Layer / 3D Model** works on the primary flat map and
 local 3D scene. The shared overlay renders saved visualizations and models,
-follows visibility, opacity and ordering, and releases its GPU resources on a
-renderer switch. Native feature Z rendering stays owned by ArcGIS.
+follows visibility, opacity and ordering among deck.gl layers, and releases
+its GPU resources on a renderer switch. The shared overlay is one native SDK
+layer; deck.gl layers cannot be interleaved individually with native ArcGIS
+layers. Native feature Z rendering stays owned by ArcGIS.
 
 The adapter uses the MIT-licensed compositor from `@deck.gl/arcgis` 9.4.0
 with CDN-loaded SDK classes, avoiding a bundled `@arcgis/core` dependency.
