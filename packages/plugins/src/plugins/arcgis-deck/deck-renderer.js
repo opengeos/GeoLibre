@@ -18,6 +18,10 @@ function getDistanceMeters(a, b) {
   const dLngM = (a.longitude - b.longitude) * METERS_PER_DEG_LAT * Math.cos(midLatRad);
   return Math.sqrt(dLatM * dLatM + dLngM * dLngM);
 }
+export function getCameraDistance(camera, focalPoint) {
+  const verticalMeters = camera.z - (focalPoint.z ?? 0);
+  return Math.hypot(getDistanceMeters(camera, focalPoint), verticalMeters);
+}
 function getZoom(view, longitude, latitude, width, height) {
   const focalPoint = view.toMap({ x: width / 2, y: height / 2 });
   const focalPointRight = view.toMap({ x: width / 2 + 1, y: height / 2 });
@@ -145,12 +149,7 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
           const focalPoint = self.view.toMap({ x: width / 2, y: height / 2 });
           const latitude = focalPoint ? focalPoint.latitude : self.view.center.latitude;
           const longitude = focalPoint ? focalPoint.longitude : self.view.center.longitude;
-          const midLatRad = (((latitude + cameraPos.latitude) / 2) * Math.PI) / 180;
-          const dLatM = (cameraPos.latitude - latitude) * METERS_PER_DEG_LAT;
-          const dLngM =
-            (cameraPos.longitude - longitude) * METERS_PER_DEG_LAT * Math.cos(midLatRad);
-          const horizM = Math.sqrt(dLatM * dLatM + dLngM * dLngM);
-          const slantM = Math.sqrt(horizM * horizM + cameraPos.z * cameraPos.z);
+          const slantM = getCameraDistance(cameraPos, focalPoint ?? self.view.center);
           const zoom = getZoom(self.view, longitude, latitude, width, height);
           const viewportHeightM = height * self.view.resolution;
           const slantAltitude = slantM / viewportHeightM;
