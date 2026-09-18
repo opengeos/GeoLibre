@@ -144,14 +144,34 @@ describe("Tilecode plugin helpers", () => {
     assert.equal(tilecodeParentCell("z8x203y112"), "z7x101y56");
     assert.equal(tilecodeParentCell("z0x0y0"), null);
 
-    const neighbors = tilecodeNeighborCells("z8x203y112");
-    assert.equal(neighbors.length, 5);
-    assert.ok(neighbors.includes("z8x203y112"));
+    // Edge neighbors only (N/S/E/W), plus the cell itself.
+    assert.deepEqual(tilecodeNeighborCells("z8x203y112").sort(), [
+      "z8x202y112",
+      "z8x203y111",
+      "z8x203y112",
+      "z8x203y113",
+      "z8x204y112",
+    ]);
     // The x axis wraps around the world…
-    const wrapped = tilecodeNeighborCells("z4x0y7");
-    assert.ok(wrapped.includes("z4x15y7"));
-    // …but the y axis clips at the top row (no tiles beyond the mercator cap).
-    const topRow = tilecodeNeighborCells("z4x7y0");
-    assert.equal(topRow.length, 4);
+    assert.deepEqual(tilecodeNeighborCells("z4x0y7").sort(), [
+      "z4x0y6",
+      "z4x0y7",
+      "z4x0y8",
+      "z4x15y7",
+      "z4x1y7",
+    ]);
+    // …but the y axis clips at the mercator top and bottom rows.
+    assert.deepEqual(tilecodeNeighborCells("z4x7y0").sort(), [
+      "z4x6y0",
+      "z4x7y0",
+      "z4x7y1",
+      "z4x8y0",
+    ]);
+    assert.deepEqual(tilecodeNeighborCells("z4x7y15").sort(), [
+      "z4x6y15",
+      "z4x7y14",
+      "z4x7y15",
+      "z4x8y15",
+    ]);
   });
 });

@@ -781,7 +781,8 @@ function renderPanel(container: HTMLElement): void {
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     addDetail(labels.pentagon, isPentagon(selectedCell) ? labels.yes : labels.no);
     if (getResolution(selectedCell) > 0) {
-      addDetail(labels.parent, cellToParent(selectedCell, getResolution(selectedCell) - 1));
+      const [parent] = parentCells(selectedCell);
+      if (parent) addDetail(labels.parent, parent);
     }
     if (getResolution(selectedCell) < 15) {
       addDetail(

@@ -760,7 +760,8 @@ function renderPanel(container: HTMLElement): void {
     addDetail(labels.resolution, String(cellResolution));
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     if (cellResolution > 0) {
-      addDetail(labels.parent, u64ToHex(cellToParent(id)));
+      const [parent] = parentCells(selectedCell);
+      if (parent) addDetail(labels.parent, parent);
     }
     if (cellResolution < MAX_RESOLUTION) {
       addDetail(labels.children, String(cellToChildren(id).length));
