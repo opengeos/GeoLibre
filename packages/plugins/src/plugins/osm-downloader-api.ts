@@ -81,7 +81,16 @@ export function escapeOverpassString(value: string): string {
 /** Render WGS84 coordinates without exponent notation rejected by the relay grammar. */
 function formatOverpassCoordinate(value: number): string {
   const rendered = String(value);
-  return /e/i.test(rendered) ? value.toFixed(15).replace(/\.?0+$/, "") : rendered;
+  const match = /^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i.exec(rendered);
+  if (!match) return rendered;
+  const [, sign, integer, fraction = "", exponentText] = match;
+  const digits = integer + fraction;
+  const decimalIndex = integer.length + Number(exponentText);
+  if (decimalIndex <= 0) return `${sign}0.${"0".repeat(-decimalIndex)}${digits}`;
+  if (decimalIndex >= digits.length) {
+    return `${sign}${digits}${"0".repeat(decimalIndex - digits.length)}`;
+  }
+  return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
 }
 
 /** Build a bounded Overpass QL query that returns complete element geometry. */

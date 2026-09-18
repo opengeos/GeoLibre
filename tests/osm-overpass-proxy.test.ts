@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { buildOsmDownloadQuery } from "../packages/plugins/src/plugins/osm-downloader-api";
-import { tilesWorker } from "../workers/tiles/src/index";
+import { isAllowedOverpassQuery, tilesWorker } from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
 
@@ -69,6 +69,18 @@ describe("Overpass edge proxy", () => {
     assert.equal(accepted.status, 200);
     assert.equal(rejected.status, 400);
     await accepted.text();
+  });
+
+  it("accepts distinct exponent-form client bounds after decimal expansion", () => {
+    const positive = buildOsmDownloadQuery([1e-16, 0, 2e-16, 1], {
+      preset: "buildings",
+    });
+    const negative = buildOsmDownloadQuery([-2e-16, 0, -1e-16, 1], {
+      preset: "buildings",
+    });
+
+    assert.equal(isAllowedOverpassQuery(positive), true);
+    assert.equal(isAllowedOverpassQuery(negative), true);
   });
 
   it("rejects untrusted origins and oversized bodies before fetching upstream", async () => {

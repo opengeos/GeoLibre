@@ -41,6 +41,17 @@ describe("OSM download query", () => {
     assert.doesNotMatch(query, /e-/i);
   });
 
+  it("preserves distinct positive and negative coordinates near zero", () => {
+    assert.match(
+      buildOsmDownloadQuery([1e-16, 0, 2e-16, 1], { preset: "buildings" }),
+      /\(0,0\.0000000000000001,1,0\.0000000000000002\)/,
+    );
+    assert.match(
+      buildOsmDownloadQuery([-2e-16, 0, -1e-16, 1], { preset: "buildings" }),
+      /\(0,-0\.0000000000000002,1,-0\.0000000000000001\)/,
+    );
+  });
+
   it("rejects oversized all-feature downloads", () => {
     assert.throws(
       () => buildOsmDownloadQuery([0, 0, 1, 1], { preset: "all" }),
