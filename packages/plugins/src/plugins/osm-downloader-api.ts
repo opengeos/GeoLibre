@@ -17,6 +17,7 @@ import type {
  */
 export const OVERPASS_DEFAULT_ENDPOINT = "https://tiles.geolibre.app/overpass";
 export const OVERPASS_REQUEST_TIMEOUT_MS = 75_000;
+export const OSM_CUSTOM_TAG_MAX_LENGTH = 255;
 // Keep these mirrored limits aligned with isAllowedOverpassQuery in workers/tiles/src/index.ts.
 export const MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
 export const MAX_QUERY_AREA_SQUARE_DEGREES = 4;
@@ -128,6 +129,9 @@ export function buildOsmDownloadQuery(
     const key = filter.key?.trim() ?? "";
     const value = filter.value?.trim() ?? "";
     if (!key) throw new Error("A tag key is required");
+    if (key.length > OSM_CUSTOM_TAG_MAX_LENGTH || value.length > OSM_CUSTOM_TAG_MAX_LENGTH) {
+      throw new Error(`Tag keys and values are limited to ${OSM_CUSTOM_TAG_MAX_LENGTH} characters`);
+    }
     tagFilter = `["${escapeOverpassString(key)}"${
       value ? `="${escapeOverpassString(value)}"` : ""
     }]`;

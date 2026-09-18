@@ -2,6 +2,7 @@ import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   downloadOsmGeoJson,
+  OSM_CUSTOM_TAG_MAX_LENGTH,
   type OsmDownloadFilter,
   type OsmDownloadPreset,
 } from "./osm-downloader-api";
@@ -120,8 +121,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const customGrid = element("div", CSS.grid);
   const keyInput = element("input", CSS.input);
+  keyInput.maxLength = OSM_CUSTOM_TAG_MAX_LENGTH;
   keyInput.placeholder = tr(app, "tagKeyPlaceholder", "e.g. shop");
   const valueInput = element("input", CSS.input);
+  valueInput.maxLength = OSM_CUSTOM_TAG_MAX_LENGTH;
   valueInput.placeholder = tr(app, "tagValuePlaceholder", "optional, e.g. bakery");
   const keyField = field(tr(app, "tagKey", "Tag key"), keyInput);
   const valueField = field(tr(app, "tagValue", "Tag value"), valueInput);

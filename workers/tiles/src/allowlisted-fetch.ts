@@ -8,8 +8,10 @@
  * shared `s3*.amazonaws.com` host) so a redirect cannot jump to another bucket.
  */
 export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
-// Pin the reachable `z` backend instead of the round-robin hostname: requests
-// from Cloudflare's edge currently receive a synthetic 521 from the latter.
+// Intentionally pin the reachable `z` backend instead of the round-robin
+// hostname: requests from Cloudflare's edge currently receive a synthetic 521
+// from the latter. A fixed upstream also keeps this relay's allowlist narrow;
+// availability is preferred over automatic fallback to additional hosts.
 export const OVERPASS_API_UPSTREAM = "https://z.overpass-api.de/api/interpreter";
 
 export const TILES_ALLOWED_URL_PREFIXES = [

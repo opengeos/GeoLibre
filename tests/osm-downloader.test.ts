@@ -87,6 +87,17 @@ describe("OSM download query", () => {
     assert.ok(query.includes('nwr["name\\\"] ; node(0,0,9,9)"="A\\\"B C"]'));
   });
 
+  it("rejects custom tags too long for a useful OSM value", () => {
+    assert.throws(
+      () =>
+        buildOsmDownloadQuery([0, 1, 2, 3], {
+          preset: "custom",
+          key: "x".repeat(256),
+        }),
+      /limited to 255 characters/,
+    );
+  });
+
   it("rejects invalid bounds and missing custom keys", () => {
     assert.throws(() => buildOsmDownloadQuery([2, 1, 0, 3], { preset: "roads" }));
     assert.throws(() => buildOsmDownloadQuery([0, 1, 2, 3], { preset: "custom" }));
