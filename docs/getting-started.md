@@ -871,7 +871,7 @@ Keys set via **Settings → Environment Variables**, or typed directly into the 
 
 ## Optional 3D globe credentials (Cesium Ion)
 
-The optional **Cesium 3D-globe renderer** can own the primary map or any pane in a mixed-engine split layout. It works with no credentials at all: it draws whatever basemap the project is using. A [Cesium Ion](https://ion.cesium.com/) access token is optional, and adds Cesium World Terrain (relief on tilted views) plus Ion World Imagery as the fallback for a basemap that has no raster form. To use one, create a free Ion account, copy your default access token, and set it at build time:
+The optional **Cesium 3D-globe renderer** can own the primary map or any pane in a mixed-engine split layout. It requires a [Cesium Ion](https://ion.cesium.com/) access token. The hosted web version bundles a demo token, so the globe works there out of the box, but the desktop and mobile apps need your own. The token enables Cesium World Terrain (relief on tilted views) plus Ion World Imagery as the fallback for a basemap that has no raster form. To get one, create a free Ion account, copy your default access token, and set it at build time:
 
 ```env
 CESIUM_TOKEN=your_cesium_ion_access_token

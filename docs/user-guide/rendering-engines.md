@@ -9,7 +9,7 @@ JavaScript.
 | --- | --- | --- |
 | **MapLibre GL JS** | The broadest GeoLibre feature and plugin support; vector styles, raster data, terrain, and lightweight 3D content | No credential required; bundled with GeoLibre |
 | **Mapbox GL JS** | Mapbox styles and services, Mapbox globe and terrain, and a Style-Spec-compatible alternative to MapLibre | A Mapbox access token is required; the engine is loaded only when selected |
-| **CesiumJS** | A native 3D globe, terrain, 3D Tiles, CZML, Cesium ion assets, I3S, and globe-oriented analysis | Works without a token; a Cesium ion token adds World Terrain and ion imagery; loaded only when selected |
+| **CesiumJS** | A native 3D globe, terrain, 3D Tiles, CZML, Cesium ion assets, I3S, and globe-oriented analysis | A Cesium ion token is required; the web version bundles a demo token, desktop and mobile need your own; loaded only when selected |
 | **ArcGIS Maps SDK for JavaScript** | Native ArcGIS services, Esri basemaps, and ArcGIS 2D maps or 3D scenes | Works without a key; an ArcGIS API key adds Esri basemap styles; SDK modules load from Esri's CDN when first selected |
 
 ## Switch the primary map
@@ -41,8 +41,9 @@ current device and are not written to the shared project file.
 - MapLibre needs no credential.
 - Mapbox requires an access token and is subject to Mapbox's terms and usage
   pricing.
-- Cesium works without a token by drawing the project basemap on an ellipsoid.
-  A token enables Cesium World Terrain and ion-hosted imagery and assets.
+- Cesium requires a Cesium ion token. The web version bundles a demo token;
+  the desktop and mobile apps need your own. The token enables Cesium World
+  Terrain and ion-hosted imagery and assets.
 - ArcGIS works without a key by translating the project basemap. A key enables
   Esri basemap styles. The renderer itself still needs access to
   `js.arcgis.com` on its first load because the SDK is not bundled.

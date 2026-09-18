@@ -341,7 +341,7 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 
 **四、平台能力不对等。** 见第十节那张表。别拿浏览器版的体验去代表全部。
 
-**五、Cesium 3D 球不强制要求 Ion token。** 无 token 时仍可显示项目底图；token 会启用 Cesium World Terrain 和 ion 影像或资产，团队使用时应留意配额和计费。
+**五、Cesium 3D 球在网页版之外需要 Ion token。** 网页版内置了演示 token，桌面版和移动版需要自己的 token。免费额度够个人玩，团队用要算账。
 
 **六、国内环境。** 底图、地形、Photorealistic 3D Tiles 这些默认源都在墙外；坐标系走标准 WGS84，**GCJ-02 偏移得自己处理**。想认真用得先解决这两件事。这部分暂无可靠的实测信息，留给实际使用者补充。
 

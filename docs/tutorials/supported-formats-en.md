@@ -346,7 +346,7 @@ Having covered the strengths, let's discuss the limitations.
 
 **4. Platform capability asymmetry.** See the table in Section 10. Don't extrapolate the browser version's experience to represent the whole.
 
-**5. Cesium 3D Globe does not require an ion token.** Without one it still draws the project basemap; a token enables Cesium World Terrain and ion imagery or assets. Teams using those services should account for quotas and pricing.
+**5. Cesium 3D Globe requires an ion token outside the web version.** The hosted web version bundles a demo token, but the desktop and mobile apps need your own. The free tier is sufficient for individual use; teams need to budget for quotas and pricing.
 
 **6. The China-specific environment.** Default sources for basemaps, terrain, and Photorealistic 3D Tiles are all outside the firewall; coordinates use standard WGS84 — **GCJ-02 offsets must be handled separately**. These two issues need to be addressed first for serious use. Reliable first-hand data on this is unavailable; further input from actual users is welcome.
 

@@ -7,9 +7,10 @@ other three engines. Primary and pane choices are saved with the project.
 
 ## Credentials
 
-The renderer works without credentials. In that mode it draws the project's
-basemap on an ellipsoid. An optional Cesium ion token adds Cesium World Terrain,
-Ion World Imagery as a fallback, and access to ion-hosted assets.
+The renderer requires a Cesium ion token. The hosted web version bundles a
+demo token, so Cesium works there out of the box; the desktop and mobile apps
+need your own token. The token enables Cesium World Terrain, Ion World Imagery
+as a fallback, and access to ion-hosted assets.
 
 Enter the token under **Settings → Environment Variables → Cesium Ion token**.
 It is stored on the current device rather than in the project file. Developers
