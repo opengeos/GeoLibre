@@ -1860,6 +1860,9 @@ export class ArcgisEngine implements MapEngine {
     const response = await fetch(shot.dataUrl);
     return response.blob();
   }
+  isCameraMoving(): boolean {
+    return this.view ? !this.view.stationary : false;
+  }
   onCameraMove(listener: () => void): () => void {
     const view = this.view;
     if (!view) return () => {};

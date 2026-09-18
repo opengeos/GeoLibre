@@ -1069,6 +1069,9 @@ export class MapboxEngine implements MapEngine {
   captureImage(): Promise<Blob> {
     return captureEngineImage(this);
   }
+  isCameraMoving(): boolean {
+    return this.map?.isMoving() ?? false;
+  }
   onCameraMove(listener: () => void): () => void {
     const map = this.map;
     map?.on("move", listener);

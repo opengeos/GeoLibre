@@ -23,6 +23,8 @@ export function createStoryMapMarker(engine: MapEngine, color: string): StoryMap
     element.style.transform = `translate(-50%, -100%) translate(${point.x}px, ${point.y}px)`;
   };
   const stopMoving = engine.onCameraMove(update);
+  const resize = new ResizeObserver(update);
+  resize.observe(surface.getContainer());
   const marker: StoryMapMarker = {
     setLngLat(lngLat) {
       coordinate = lngLat;
@@ -33,6 +35,7 @@ export function createStoryMapMarker(engine: MapEngine, color: string): StoryMap
       if (removed) return;
       removed = true;
       stopMoving();
+      resize.disconnect();
       element.remove();
     },
   };

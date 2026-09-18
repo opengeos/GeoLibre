@@ -71,7 +71,7 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
     if (!composingId) return;
     const engine = mapControllerRef.current;
     if (!engine) return;
-    setMapMoving(engine.getRenderStatus().pending.length > 0);
+    setMapMoving(engine.isCameraMoving());
     const stopMoving = engine.onCameraMove(() => setMapMoving(true));
     const stopIdle = engine.onCameraIdle(() => setMapMoving(false));
     return () => {
