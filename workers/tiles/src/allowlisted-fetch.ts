@@ -8,7 +8,9 @@
  * shared `s3*.amazonaws.com` host) so a redirect cannot jump to another bucket.
  */
 export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
-export const OVERPASS_API_UPSTREAM = "https://overpass-api.de/api/interpreter";
+// Pin the reachable `z` backend instead of the round-robin hostname: requests
+// from Cloudflare's edge currently receive a synthetic 521 from the latter.
+export const OVERPASS_API_UPSTREAM = "https://z.overpass-api.de/api/interpreter";
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",

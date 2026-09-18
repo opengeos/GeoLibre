@@ -39,7 +39,7 @@ describe("Overpass edge proxy", () => {
     assert.equal(response.headers.get("access-control-allow-origin"), "*");
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].input, "https://overpass-api.de/api/interpreter");
+    assert.equal(calls[0].input, "https://z.overpass-api.de/api/interpreter");
     assert.equal(calls[0].init?.method, "POST");
     assert.equal(calls[0].init?.body, body);
   });
