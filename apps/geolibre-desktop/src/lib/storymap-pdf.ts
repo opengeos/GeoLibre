@@ -150,6 +150,47 @@ function decodeEntities(text: string): string {
 }
 
 /**
+ * Strip complete HTML-like tags in one pass while respecting quoted `>`.
+ *
+ * A regex that retries at every `<` becomes quadratic when no `>` follows.
+ * When another unquoted `<` appears before a closing `>`, keep the malformed
+ * prefix as text and treat the newer `<` as the start of a possible tag.
+ */
+function stripTags(text: string): string {
+  const output: string[] = [];
+  let plainStart = 0;
+  let tagStart = -1;
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (tagStart === -1) {
+      if (character === "<") tagStart = index;
+      continue;
+    }
+
+    if (quote !== null) {
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "<") {
+      output.push(text.slice(plainStart, index));
+      plainStart = index;
+      tagStart = index;
+    } else if (character === ">") {
+      output.push(text.slice(plainStart, tagStart));
+      plainStart = index + 1;
+      tagStart = -1;
+    }
+  }
+
+  output.push(text.slice(plainStart));
+  return output.join("");
+}
+
+/**
  * Reduce an HTML (or plain) chapter description to single-spaced plain text.
  *
  * Block-level tags become line breaks, remaining tags are dropped, and named
@@ -162,16 +203,14 @@ function decodeEntities(text: string): string {
  */
 export function htmlToPlainText(html: string): string {
   return decodeEntities(
-    html
-      // Drop <script>/<style> blocks with their contents first; the generic tag
-      // strip below only removes delimiters and would leave their text behind.
-      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
-      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-      // Strip remaining tags, honouring quoted attribute values so a `>` inside
-      // an attribute (e.g. title="a > b") doesn't end the match early and leak
-      // the rest of the tag as text.
-      .replace(/<[^>"']*(?:"[^"]*"[^>"']*|'[^']*'[^>"']*)*>/g, ""),
+    stripTags(
+      html
+        // Drop <script>/<style> blocks with their contents first; the generic tag
+        // strip below only removes delimiters and would leave their text behind.
+        .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+        .replace(/<\s*br\s*(?:\/\s*)?>/gi, "\n")
+        .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n"),
+    ),
   )
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")

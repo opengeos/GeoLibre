@@ -81,6 +81,23 @@ describe("htmlToPlainText", () => {
   it("strips tags with a '>' inside a quoted attribute value", () => {
     assert.equal(htmlToPlainText('<span title="a > b">text</span>'), "text");
   });
+
+  it("keeps malformed nested '<' text while stripping later complete tags", () => {
+    assert.equal(htmlToPlainText("<<span>ab"), "<ab");
+    assert.equal(htmlToPlainText("x <<b>y"), "x <y");
+    assert.equal(htmlToPlainText("1 < 2"), "1 < 2");
+  });
+
+  it("stays linear on unterminated breaks and tags (#2466)", () => {
+    // Both inputs took several seconds at 100 KB with the old regexes. A wide
+    // bound still catches a quadratic regression without flaking under load.
+    const inputs = [`<br${" ".repeat(100_000)}`, "<".repeat(100_000)];
+    for (const input of inputs) {
+      const started = performance.now();
+      htmlToPlainText(input);
+      assert.ok(performance.now() - started < 5000, `took too long on ${input.length} chars`);
+    }
+  });
 });
 
 describe("hexToRgb", () => {
@@ -234,7 +251,13 @@ describe("buildStoryMapHandoutPdf", () => {
     // A full-bleed slide (start/closing screen) has no title or description and
     // still produces a valid one-page document.
     const bytes = buildStoryMapHandoutPdf(
-      [{ title: "", map: { data: PNG_2X2, width: 1200, height: 900 }, fullBleed: true }],
+      [
+        {
+          title: "",
+          map: { data: PNG_2X2, width: 1200, height: 900 },
+          fullBleed: true,
+        },
+      ],
       opts(),
     );
     assert.ok(bytes.length > 0);
