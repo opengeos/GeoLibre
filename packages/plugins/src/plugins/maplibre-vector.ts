@@ -37,7 +37,7 @@ import {
   wireVectorStoreSync,
 } from "./vector-layer-sync";
 import { bridgeVectorControlToStore, exceedsCesiumVectorLimit } from "./vector-cesium-bridge";
-import { groupVectorContainerImports } from "./vector-container-group";
+import { applyVectorContainerColors, groupVectorContainerImports } from "./vector-container-group";
 import { readableStacLayerHref } from "./stac-signing";
 import type { FeatureCollection } from "geojson";
 
@@ -937,7 +937,8 @@ function createVectorControl(
   const panelStateSyncHandler: VectorControlEventHandler = () => syncVectorLayersToStore(control);
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
-  groupVectorContainerImports(control, (name, ids) => {
+  groupVectorContainerImports(control, (name, ids, style) => {
+    applyVectorContainerColors(ids, style);
     useAppStore.getState().addLayerGroup(name, ids);
   });
   wireVectorStoreSync(control);

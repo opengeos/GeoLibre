@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import type { VectorControl, VectorLayerInfo } from "maplibre-gl-vector";
-import { groupVectorContainerImports } from "../packages/plugins/src/plugins/vector-container-group";
+import {
+  DEFAULT_LAYER_STYLE,
+  LAYER_PALETTE,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import {
+  applyVectorContainerColors,
+  groupVectorContainerImports,
+} from "../packages/plugins/src/plugins/vector-container-group";
 
 function setup() {
   const layers: VectorLayerInfo[] = [];
@@ -32,6 +41,16 @@ describe("vector container groups", () => {
     assert.deepEqual(groups, [{ name: "buildings", ids: ["load-original", "load-reference"] }]);
   });
 
+  it("preserves an explicit display name including dots", async () => {
+    const { control, groups } = setup();
+    await control.addData(new File([], "buildings.gpkg"), {
+      id: "load",
+      name: "Comparison v1.2",
+      sourceLayers: ["original", "reference"],
+    });
+    assert.equal(groups[0].name, "Comparison v1.2");
+  });
+
   it("does not create a group for a single selected table or a cancelled import", async () => {
     const { control, groups } = setup();
     await control.addData(new File([], "buildings.gpkg"), { sourceLayers: ["reference"] });
@@ -60,5 +79,41 @@ describe("vector container groups", () => {
       { name: "fast", ids: ["b-one", "b-two"] },
       { name: "slow", ids: ["a-one", "a-two"] },
     ]);
+  });
+});
+
+describe("container default colors", () => {
+  afterEach(() => useAppStore.setState({ layers: [] }));
+  function layers(): GeoLibreLayer[] {
+    return ["original", "circle", "detail"].map((id) => ({
+      id,
+      name: id,
+      type: "vector-tiles",
+      source: { type: "vector" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE, fillColor: "#3388ff", strokeColor: "#3388ff" },
+      metadata: {},
+    }));
+  }
+  it("assigns distinct palette colors to the store so the map and swatches agree", () => {
+    useAppStore.setState({ layers: layers() });
+    applyVectorContainerColors(["original", "circle", "detail"]);
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.style.fillColor),
+      LAYER_PALETTE.slice(0, 3),
+    );
+    assert.equal(new Set(useAppStore.getState().layers.map((l) => l.style.strokeColor)).size, 3);
+  });
+  it("preserves explicitly supplied colors and color expressions", () => {
+    for (const style of [{ fillColor: "#ffffff" }, { fillColorExpression: ["get", "color"] }]) {
+      const original = layers();
+      useAppStore.setState({ layers: original });
+      applyVectorContainerColors(
+        original.map((l) => l.id),
+        style,
+      );
+      assert.deepEqual(useAppStore.getState().layers, original);
+    }
   });
 });

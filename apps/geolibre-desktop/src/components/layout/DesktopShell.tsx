@@ -96,8 +96,10 @@ import {
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
   readLocalFileText,
+  readLocalFileBytes,
   type DroppedRaster,
 } from "../../lib/tauri-io";
+import { importGeoPackageDrops } from "../../lib/geopackage-drop";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
@@ -1984,7 +1986,16 @@ export function DesktopShell({
 
             if (restPaths.length > 0) {
               const rasterCount = await addDroppedRasters(await loadDroppedRasterPaths(restPaths));
-              const importedLayers = await loadDroppedVectorPaths(restPaths, {
+              const containers = await importGeoPackageDrops(restPaths, {
+                readPath: readLocalFileBytes,
+                addFile: (file, sourcePath) =>
+                  addVectorFileToMap(createAppAPI(mapControllerRef), file, { sourcePath }),
+                onError: (name, error) =>
+                  setDropError(
+                    `${name}: ${error instanceof Error ? error.message : String(error)}`,
+                  ),
+              });
+              const importedLayers = await loadDroppedVectorPaths(containers.remaining, {
                 onLargeDataset: confirmLargeVectorDataset,
               });
               // See the browser handler: skip finishDrop's empty-input error
@@ -1994,9 +2005,12 @@ export function DesktopShell({
               if (
                 importedLayers.length > 0 ||
                 rasterCount > 0 ||
-                (pbfPaths.length === 0 && photoResult === null)
+                containers.layerCount > 0 ||
+                (pbfPaths.length === 0 && photoResult === null && containers.count === 0)
               ) {
-                finishDrop(importedLayers, rasterCount);
+                finishDrop(importedLayers, rasterCount, containers.layerCount);
+              } else if (pbfPaths.length === 0 && photoResult === null) {
+                setDropMessage(null);
               }
             }
           } catch (error) {
@@ -2171,13 +2185,14 @@ export function DesktopShell({
           const rasterCount = await addDroppedRasters(loadDroppedRasterFiles(restFiles));
           // Use the Add Data control so containers share its layer picker,
           // per-table source metadata, and grouped import behavior.
-          const containers = restFiles.filter((file) => /\.gpkg$/i.test(file.name));
-          let containerCount = 0;
-          for (const file of containers) {
-            containerCount += await addVectorFileToMap(createAppAPI(mapControllerRef), file);
-          }
-          const remainingFiles = restFiles.filter((file) => !/\.gpkg$/i.test(file.name));
-          const importedLayers = await loadDroppedVectorFiles(remainingFiles, {
+          const containers = await importGeoPackageDrops(restFiles, {
+            readPath: readLocalFileBytes,
+            addFile: (file, sourcePath) =>
+              addVectorFileToMap(createAppAPI(mapControllerRef), file, { sourcePath }),
+            onError: (name, error) =>
+              setDropError(`${name}: ${error instanceof Error ? error.message : String(error)}`),
+          });
+          const importedLayers = await loadDroppedVectorFiles(containers.remaining, {
             onLargeDataset: confirmLargeVectorDataset,
           });
           // Call finishDrop (which reports success or throws the empty-input
@@ -2191,11 +2206,11 @@ export function DesktopShell({
           if (
             importedLayers.length > 0 ||
             rasterCount > 0 ||
-            containerCount > 0 ||
-            (pbfFiles.length === 0 && photoResult === null && containers.length === 0)
+            containers.layerCount > 0 ||
+            (pbfFiles.length === 0 && photoResult === null && containers.count === 0)
           ) {
-            finishDrop(importedLayers, rasterCount, containerCount);
-          } else {
+            finishDrop(importedLayers, rasterCount, containers.layerCount);
+          } else if (pbfFiles.length === 0 && photoResult === null) {
             setDropMessage(null);
           }
         }
