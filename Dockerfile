@@ -64,7 +64,7 @@ ARG VITE_GEOLIBRE_SHARE_URL=
 ARG VITE_GEOLIBRE_COLLAB_URL=
 # GeoLens catalog default. Also settable at RUN time
 # (-e GEOLIBRE_GEOLENS_URL=...).
-ARG VITE_GEOLENS_DEFAULT_URL=
+ARG VITE_GEOLENS_DEFAULT_URL=same-origin
 # Set to 1 to strip every external CDN reference (unpkg.com, cdn.jsdelivr.net,
 # …) from the build output, for deployments that may not load third-party
 # hosts. Features that depend on CDN-hosted assets are disabled or degraded —

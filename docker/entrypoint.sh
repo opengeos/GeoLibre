@@ -460,9 +460,6 @@ if geolens_url:
         deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
             "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
         )
-else:
-    deployment["VITE_GEOLENS_DEFAULT_URL"] = "same-origin"
-
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))

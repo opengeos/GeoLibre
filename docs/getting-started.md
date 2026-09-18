@@ -494,8 +494,8 @@ docker run --rm -p 8080:80 \
 All three are read at container startup, so a prebuilt image can be repointed by
 restarting it with different values, with no rebuild. (The equivalent build
 arguments, `VITE_GEOLIBRE_SHARE_URL`, `VITE_GEOLIBRE_COLLAB_URL`, and
-`VITE_GEOLENS_DEFAULT_URL`, exist for baking defaults into your own image. Set
-the last one to `same-origin` to mirror the prebuilt container's default.)
+`VITE_GEOLENS_DEFAULT_URL`, exist for baking defaults into your own image. The
+last one defaults to `same-origin` and can be overridden when building.)
 
 When `GEOLIBRE_COLLAB_URL` is set, the entrypoint also adds that relay's origin to
 the container's `Content-Security-Policy` `connect-src`, so the browser is allowed
