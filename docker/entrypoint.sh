@@ -456,6 +456,8 @@ if geolens_url:
     if geolens_setting in ("off", "same-origin"):
         deployment["VITE_GEOLENS_DEFAULT_URL"] = geolens_setting
     else:
+        if re.fullmatch(r"[A-Za-z0-9.-]+(?::[0-9]+)?(?:/.*)?", geolens_url):
+            geolens_url = f"https://{geolens_url}"
         parsed_geolens_url = urlsplit(geolens_url)
         if parsed_geolens_url.query or parsed_geolens_url.fragment:
             raise SystemExit(
