@@ -94,6 +94,8 @@ const CKAN_MAX_ROWS = 50;
 const OVERPASS_PATH = "/overpass";
 const OVERPASS_MAX_BODY_BYTES = 20_000;
 const OVERPASS_UPSTREAM_TIMEOUT_MS = 65_000;
+export const OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
+export const OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES = 4;
 const OVERPASS_QUERY_PREFIX = "[out:json][timeout:60];";
 const OVERPASS_QUERY_SUFFIX = "out geom;";
 const OVERPASS_NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
@@ -225,12 +227,16 @@ const MAX_WMS_ZOOM = 8;
 
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-methods": "GET, OPTIONS",
   // Allow the Range request header (the /pmtiles route needs it) and expose the
   // response headers a range reader relies on. Harmless for the tile routes.
   "access-control-allow-headers": "content-type, range",
   "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
+};
+const OVERPASS_CORS_HEADERS: Record<string, string> = {
+  ...CORS_HEADERS,
+  "access-control-allow-methods": "POST, OPTIONS",
 };
 
 /** `/pmtiles/<name>.pmtiles` range-proxies the Protomaps daily planet builds,
@@ -469,7 +475,9 @@ export function isAllowedOverpassQuery(query: string): boolean {
   const allFeatures = matches.every((match) => match[1] === '[~"."~"."]');
   if (matches.some((match) => (match[1] === '[~"."~"."]') !== allFeatures)) return false;
   // Keep these mirrored limits aligned with osm-downloader-api.ts in packages/plugins.
-  const areaLimit = allFeatures ? 0.25 : 4;
+  const areaLimit = allFeatures
+    ? OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES
+    : OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES;
   let totalArea = 0;
   for (const match of matches) {
     const [, , southText, westText, northText, eastText] = match;
@@ -538,15 +546,15 @@ function streamWithTimeoutCleanup(body: ReadableStream, timeout: ReturnType<type
 
 async function handleOverpass(request: Request): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
-    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+    return new Response("Forbidden", { status: 403, headers: OVERPASS_CORS_HEADERS });
   }
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > OVERPASS_MAX_BODY_BYTES) {
-    return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
+    return new Response("Payload Too Large", { status: 413, headers: OVERPASS_CORS_HEADERS });
   }
   const body = await readRequestBodyWithLimit(request, OVERPASS_MAX_BODY_BYTES);
   if (body === null) {
-    return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
+    return new Response("Payload Too Large", { status: 413, headers: OVERPASS_CORS_HEADERS });
   }
   const params = new URLSearchParams(body);
   const query = params.get("data");
@@ -556,7 +564,7 @@ async function handleOverpass(request: Request): Promise<Response> {
     [...params.keys()].some((key) => key !== "data") ||
     !isAllowedOverpassQuery(query)
   ) {
-    return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+    return new Response("Bad Request", { status: 400, headers: OVERPASS_CORS_HEADERS });
   }
   let originResponse: Response;
   const upstreamController = new AbortController();
@@ -577,12 +585,12 @@ async function handleOverpass(request: Request): Promise<Response> {
     });
   } catch {
     clearTimeout(upstreamTimeout);
-    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+    return new Response("Bad Gateway", { status: 502, headers: OVERPASS_CORS_HEADERS });
   }
   if (!originResponse.body) {
     clearTimeout(upstreamTimeout);
   }
-  const headers = new Headers(CORS_HEADERS);
+  const headers = new Headers(OVERPASS_CORS_HEADERS);
   headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
   headers.set("cache-control", "no-store");
   const responseBody = originResponse.body
@@ -683,10 +691,11 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
 
 export const tilesWorker = {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
-    }
     const url = new URL(request.url);
+    if (request.method === "OPTIONS") {
+      const headers = url.pathname === OVERPASS_PATH ? OVERPASS_CORS_HEADERS : CORS_HEADERS;
+      return new Response(null, { status: 204, headers });
+    }
     if (url.pathname === OVERPASS_PATH && request.method === "POST") {
       return handleOverpass(request);
     }
@@ -694,9 +703,11 @@ export const tilesWorker = {
     // Supporting HEAD would complicate Cache API keying (which requires GET)
     // for no real consumer.
     if (request.method !== "GET") {
+      const overpass = url.pathname === OVERPASS_PATH;
+      const allow = overpass ? "POST, OPTIONS" : "GET, OPTIONS";
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: { ...CORS_HEADERS, allow: "GET, POST, OPTIONS" },
+        headers: { ...(overpass ? OVERPASS_CORS_HEADERS : CORS_HEADERS), allow },
       });
     }
 

@@ -293,6 +293,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     app.exportTextFile?.(`osm-${resultPreset}-${suffix}.geojson`, JSON.stringify(result, null, 2), {
       description: "GeoJSON",
       extensions: ["geojson"],
+      mimeType: "application/geo+json",
+      promptName: true,
     });
   });
 

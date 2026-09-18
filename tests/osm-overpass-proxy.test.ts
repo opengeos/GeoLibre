@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { buildOsmDownloadQuery } from "../packages/plugins/src/plugins/osm-downloader-api";
-import { isAllowedOverpassQuery, tilesWorker } from "../workers/tiles/src/index";
+import {
+  buildOsmDownloadQuery,
+  MAX_ALL_QUERY_AREA_SQUARE_DEGREES,
+  MAX_QUERY_AREA_SQUARE_DEGREES,
+} from "../packages/plugins/src/plugins/osm-downloader-api";
+import {
+  isAllowedOverpassQuery,
+  OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES,
+  OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES,
+  tilesWorker,
+} from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
 
@@ -21,6 +30,27 @@ function request(body: string, origin = "https://preview.geolibre-preview.pages.
 }
 
 describe("Overpass edge proxy", () => {
+  it("keeps Worker area limits aligned with the client", () => {
+    assert.equal(OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES, MAX_ALL_QUERY_AREA_SQUARE_DEGREES);
+    assert.equal(OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES, MAX_QUERY_AREA_SQUARE_DEGREES);
+  });
+
+  it("advertises POST only on the Overpass preflight", async () => {
+    const overpass = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/overpass", { method: "OPTIONS" }),
+      {},
+      {} as ExecutionContext,
+    );
+    const tile = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opm/example/0/0/0.png", { method: "OPTIONS" }),
+      {},
+      {} as ExecutionContext,
+    );
+
+    assert.equal(overpass.headers.get("access-control-allow-methods"), "POST, OPTIONS");
+    assert.equal(tile.headers.get("access-control-allow-methods"), "GET, OPTIONS");
+  });
+
   it("relays a bounded query to the fixed upstream and adds CORS", async () => {
     const calls: Array<{ input: string; init?: RequestInit }> = [];
     globalThis.fetch = async (input, init) => {
