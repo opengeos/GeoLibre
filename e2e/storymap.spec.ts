@@ -5,36 +5,12 @@ import { join } from "node:path";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
-async function waitForMap(page: Page): Promise<void> {
-  await page.goto("/");
+async function waitForMap(page: Page, path = "/"): Promise<void> {
+  await page.goto(path);
   await expect(page.getByTestId("map-canvas")).toBeVisible();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible({
     timeout: 30_000,
   });
-}
-
-/** Wait until React publishes the live renderer and its map is fully loaded. */
-async function waitForRenderer(page: Page, kind: "mapbox" | "maplibre"): Promise<void> {
-  await page.waitForFunction((wanted) => {
-    const header = document.querySelector("header") as unknown as Record<string, unknown>;
-    if (!header) return false;
-    let fiber = header[Object.keys(header).find((key) => key.startsWith("__reactFiber"))!] as any;
-    while (fiber) {
-      for (const side of [fiber, fiber.alternate]) {
-        let hook = side?.memoizedState;
-        while (hook) {
-          const engine = hook.memoizedState?.current;
-          if (engine?.kind === wanted) {
-            const map = wanted === "mapbox" ? engine.getMapboxMap?.() : engine.getMap?.();
-            if (map?.loaded()) return true;
-          }
-          hook = hook.next;
-        }
-      }
-      fiber = fiber.return;
-    }
-    return false;
-  }, kind);
 }
 
 /** Opens Project → Story Map and returns the dialog locator. */
@@ -188,13 +164,15 @@ test("presents and composes a story on Mapbox", async ({ page }) => {
     },
     { key: DESKTOP_SETTINGS_STORAGE_KEY, token: process.env.MAPBOX_TOKEN! },
   );
-  await waitForMap(page);
+  await waitForMap(page, "/?loading=1");
 
   await page.getByRole("button", { name: "View", exact: true }).click();
   await page.getByRole("menuitem", { name: "Rendering engine" }).hover();
   await page.getByRole("menuitemradio", { name: "Mapbox" }).click();
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible({ timeout: 30_000 });
-  await waitForRenderer(page, "mapbox");
+  const root = page.locator("html");
+  await expect(root).toHaveAttribute("data-geolibre-load-state", "loading");
+  await expect(root).toHaveAttribute("data-geolibre-load-state", "ready", { timeout: 30_000 });
 
   let dialog = await openStoryMapPanel(page);
   await dialog.getByRole("button", { name: "Load sample story" }).click();

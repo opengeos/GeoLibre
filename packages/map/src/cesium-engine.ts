@@ -372,7 +372,7 @@ export class CesiumEngine implements MapEngine {
 
   // ------------------------------------------------------------------- camera
 
-  applyView(view: MapViewState): void {
+  applyView(view: MapViewState): void | Promise<void> {
     const viewer = this.live();
     if (!viewer || this.isMorphing()) return;
     this.lastApplied = view;
@@ -380,6 +380,13 @@ export class CesiumEngine implements MapEngine {
     this.userOwnsCamera = false;
     this.lastGroundHeight = groundHeightAt(this.Cesium, viewer, view.center[0], view.center[1]);
     applyMapViewToCamera(this.Cesium, viewer, view);
+    return new Promise((resolve) => {
+      const remove = viewer.scene.postRender.addEventListener(() => {
+        remove();
+        resolve();
+      });
+      viewer.scene.requestRender();
+    });
   }
 
   readView(): MapViewState {
