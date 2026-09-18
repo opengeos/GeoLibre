@@ -33,6 +33,13 @@ describe("OSM download query", () => {
     );
   });
 
+  it("omits a zero-width antimeridian half", () => {
+    assert.equal(
+      buildOsmDownloadQuery([180, -0.1, 180.1, 0.1], { preset: "buildings" }),
+      '[out:json][timeout:60];nwr["building"](-0.1,-180,0.1,-179.9);out geom;',
+    );
+  });
+
   it("renders tiny coordinates without exponent notation", () => {
     const query = buildOsmDownloadQuery([0.0000005, 0, 0.0000015, 0.001], {
       preset: "buildings",

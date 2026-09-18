@@ -143,7 +143,7 @@ export function buildOsmDownloadQuery(
       : [
           [south, west, north, 180],
           [south, -180, north, east - 360],
-        ];
+        ].filter(([, boxWest, , boxEast]) => boxWest < boxEast);
   const formattedBoxes = boxes.map((box) => box.map(formatOverpassCoordinate).join(","));
   const selectors = formattedBoxes.map((box) => `nwr${tagFilter}(${box});`).join("");
   return `[out:json][timeout:60];${formattedBoxes.length > 1 ? `(${selectors});` : selectors}out geom;`;
