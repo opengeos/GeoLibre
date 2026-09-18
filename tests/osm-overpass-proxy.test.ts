@@ -71,6 +71,21 @@ describe("Overpass edge proxy", () => {
     await accepted.text();
   });
 
+  it("rejects two bounded selectors that are not one antimeridian split", () => {
+    assert.equal(
+      isAllowedOverpassQuery(
+        '[out:json][timeout:60];(nwr["building"](0,0,1,1);nwr["building"](2,2,3,3););out geom;',
+      ),
+      false,
+    );
+    assert.equal(
+      isAllowedOverpassQuery(
+        '[out:json][timeout:60];(nwr["building"](0,179,1,180);nwr["highway"](0,-180,1,-179););out geom;',
+      ),
+      false,
+    );
+  });
+
   it("accepts distinct exponent-form client bounds after decimal expansion", () => {
     const positive = buildOsmDownloadQuery([1e-16, 0, 2e-16, 1], {
       preset: "buildings",

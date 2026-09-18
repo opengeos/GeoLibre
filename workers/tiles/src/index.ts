@@ -444,16 +444,31 @@ export function isAllowedOverpassQuery(query: string): boolean {
     return false;
   }
   let selectorsText = query.slice(OVERPASS_QUERY_PREFIX.length, -OVERPASS_QUERY_SUFFIX.length);
-  if (selectorsText.startsWith("(") && selectorsText.endsWith(");")) {
+  const wrapped = selectorsText.startsWith("(") && selectorsText.endsWith(");");
+  if (wrapped) {
     selectorsText = selectorsText.slice(1, -2);
   }
   OVERPASS_SELECTOR.lastIndex = 0;
   const matches = [...selectorsText.matchAll(OVERPASS_SELECTOR)];
   if (matches.length < 1 || matches.length > 2) return false;
   if (matches.map((match) => match[0]).join("") !== selectorsText) return false;
+  // The client wraps exactly two selectors only when splitting one view at the
+  // antimeridian. Reject unrelated multi-region queries forged outside it.
+  if (wrapped !== (matches.length === 2)) return false;
+  if (
+    matches.length === 2 &&
+    (matches[0][1] !== matches[1][1] ||
+      matches[0][2] !== matches[1][2] ||
+      matches[0][4] !== matches[1][4] ||
+      Number(matches[0][5]) !== 180 ||
+      Number(matches[1][3]) !== -180)
+  ) {
+    return false;
+  }
 
   const allFeatures = matches.every((match) => match[1] === '[~"."~"."]');
   if (matches.some((match) => (match[1] === '[~"."~"."]') !== allFeatures)) return false;
+  // Keep these mirrored limits aligned with osm-downloader-api.ts in packages/plugins.
   const areaLimit = allFeatures ? 0.25 : 4;
   let totalArea = 0;
   for (const match of matches) {
