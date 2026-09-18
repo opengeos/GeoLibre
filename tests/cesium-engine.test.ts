@@ -158,6 +158,7 @@ function makeViewer(groundHeight = 0) {
   };
   const state = { lng: 0, lat: 0, range: 1000, heading: 0, pitch: -Math.PI / 2 };
   const lookAtCount = { n: 0 };
+  const postRender = new Set<() => void>();
   const viewer = {
     isDestroyed: () => false,
     canvas,
@@ -210,6 +211,15 @@ function makeViewer(groundHeight = 0) {
       // the scene mid-morph (or in 2D) the way the scene-mode picker does.
       mode: 3,
       morphComplete,
+      // applyView waits on the next rendered frame; Cesium's Event returns
+      // the remover from addEventListener, so the fake does too.
+      postRender: {
+        addEventListener: (fn: () => void) => {
+          postRender.add(fn);
+          return () => postRender.delete(fn);
+        },
+      },
+      requestRender: () => {},
       verticalExaggeration: 1,
       screenSpaceCameraController: {
         minimumZoomDistance: 0,
