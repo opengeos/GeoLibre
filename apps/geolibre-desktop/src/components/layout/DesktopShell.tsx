@@ -2780,7 +2780,10 @@ export function DesktopShell({
               )}
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
-              <StoryMapComposeBar mapControllerRef={mapControllerRef} />
+              <StoryMapComposeBar
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}
@@ -3129,7 +3132,10 @@ export function DesktopShell({
         <SegmentationDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <StoryMapPanel mapControllerRef={mapControllerRef} />
-      <StoryMapPresenter mapControllerRef={mapControllerRef} />
+      <StoryMapPresenter
+        mapControllerRef={mapControllerRef}
+        mapReadyGeneration={mapReadyGeneration}
+      />
       <div
         ref={verticalResizeGuideRef}
         className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"

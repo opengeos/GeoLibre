@@ -7,6 +7,7 @@ import { Check, Frame, X } from "lucide-react";
 
 interface StoryMapComposeBarProps {
   mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /**
@@ -18,7 +19,10 @@ interface StoryMapComposeBarProps {
  * zooms, and tilts the real map, then saves the resulting camera straight into
  * the chapter and returns to the editor, or cancels to discard the changes.
  */
-export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps) {
+export function StoryMapComposeBar({
+  mapControllerRef,
+  mapReadyGeneration,
+}: StoryMapComposeBarProps) {
   const { t } = useTranslation();
   const composingId = useAppStore((s) => s.ui.storymapComposingId);
   const storymap = useAppStore((s) => s.storymap);
@@ -78,7 +82,7 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
       stopMoving();
       stopIdle();
     };
-  }, [composingId, mapControllerRef]);
+  }, [composingId, mapControllerRef, mapReadyGeneration]);
 
   // Escape exits compose mode, mirroring how the presenter handles Escape, so
   // keyboard-only users can dismiss the bar without clicking Cancel.

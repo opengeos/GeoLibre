@@ -32,6 +32,7 @@ import { createStoryMapMarker, type StoryMapMarker } from "./storymap-engine";
 
 interface StoryMapPresenterProps {
   mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */
@@ -95,7 +96,10 @@ const INSET_POSITION_CLASS: Record<string, string> = {
  * mirroring the standalone storytelling template. Rendering nothing unless a
  * presentation is active keeps it inert the rest of the time.
  */
-export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) {
+export function StoryMapPresenter({
+  mapControllerRef,
+  mapReadyGeneration,
+}: StoryMapPresenterProps) {
   const { t } = useTranslation();
   const presenting = useAppStore((s) => s.ui.storymapPresenting);
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
@@ -488,7 +492,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       // Undo any direct opacity changes made during playback.
       controller.restoreLayerStyles();
     };
-  }, [hasChapters, mapControllerRef]);
+  }, [hasChapters, mapControllerRef, mapReadyGeneration]);
 
   // Allow Escape to exit the presentation. The presenter owns the key while it
   // is up: it listens in the capture phase and stops propagation, so on-map
