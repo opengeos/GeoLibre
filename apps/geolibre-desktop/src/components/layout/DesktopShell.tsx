@@ -2776,11 +2776,11 @@ export function DesktopShell({
                   <Suspense fallback={null}>
                     <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
                   </Suspense>
-                  <StoryMapComposeBar mapControllerRef={mapControllerRef} />
                 </>
               )}
-              {/* Renderer-neutral: these read the store rather than a
-                  `MapController`, so they stay available on the 3D globe. */}
+              {/* Renderer-neutral: these use the store or `MapEngine`, so they
+                  stay available on every renderer. */}
+              <StoryMapComposeBar mapControllerRef={mapControllerRef} />
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}

@@ -69,16 +69,14 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
   // Track camera motion so Save can disable itself mid-flight (see mapMoving).
   useEffect(() => {
     if (!composingId) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    setMapMoving(map.isMoving());
-    const onStart = () => setMapMoving(true);
-    const onEnd = () => setMapMoving(false);
-    map.on("movestart", onStart);
-    map.on("moveend", onEnd);
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    setMapMoving(engine.getRenderStatus().pending.length > 0);
+    const stopMoving = engine.onCameraMove(() => setMapMoving(true));
+    const stopIdle = engine.onCameraIdle(() => setMapMoving(false));
     return () => {
-      map.off("movestart", onStart);
-      map.off("moveend", onEnd);
+      stopMoving();
+      stopIdle();
     };
   }, [composingId, mapControllerRef]);
 

@@ -1617,6 +1617,14 @@ export class MapController implements MapEngine {
     return captureEngineImage(this);
   }
 
+  onCameraMove(listener: () => void): () => void {
+    const map = this.map;
+    map?.on("move", listener);
+    return () => {
+      map?.off("move", listener);
+    };
+  }
+
   onCameraIdle(listener: () => void): () => void {
     const map = this.map;
     map?.on("moveend", listener);

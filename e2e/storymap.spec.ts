@@ -148,3 +148,52 @@ test("returns to the editor after exiting a presentation", async ({ page }) => {
   await page.getByRole("button", { name: "Exit" }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { name: "Story Map" })).toBeVisible();
 });
+
+test("presents and composes a story on Mapbox", async ({ page }) => {
+  test.skip(!process.env.MAPBOX_TOKEN, "requires an authenticated Mapbox map");
+  await waitForMap(page);
+
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Rendering engine" }).hover();
+  await page.getByRole("menuitemradio", { name: "Mapbox" }).click();
+  await expect(page.locator(".mapboxgl-canvas")).toBeVisible({ timeout: 30_000 });
+  // The canvas mounts before Mapbox's load event publishes the engine ref that
+  // Story Map drives. Wait for the authenticated style and tiles to settle.
+  await page.waitForTimeout(3_000);
+
+  let dialog = await openStoryMapPanel(page);
+  await dialog.getByRole("button", { name: "Load sample story" }).click();
+  await dialog.getByRole("button", { name: "Present" }).click();
+  await expect(page.locator(".glsm-dark").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Exit" })).toBeVisible();
+  await expect(page.locator(".mapboxgl-marker, .maplibregl-marker")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Exit" }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await dialog.getByRole("combobox").first().selectOption({ label: "Light" });
+  await dialog.getByRole("button", { name: "Present" }).click();
+  await expect(page.locator(".glsm-light").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Exit" }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Compose on map" }).first().click();
+  const compose = page.getByTestId("storymap-compose-bar");
+  await expect(compose).toBeVisible();
+  const save = compose.getByRole("button", { name: /Save view/ });
+  await expect(save).toBeEnabled();
+
+  const canvas = page.locator(".mapboxgl-canvas");
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 30, {
+    steps: 6,
+  });
+  await expect(save).toBeDisabled();
+  await page.mouse.up();
+  await expect(save).toBeEnabled();
+});

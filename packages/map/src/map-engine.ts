@@ -166,6 +166,8 @@ export interface MapEngine {
   getRenderSurface(): MapRenderSurface | null;
   getRenderStatus(): { pending: string[]; errors: string[] };
   captureImage(): Promise<Blob>;
+  /** Subscribe to camera changes while the view is moving. */
+  onCameraMove(listener: () => void): () => void;
   onCameraIdle(listener: () => void): () => void;
   stopCamera(): void;
   suspendNavigation(): () => void;

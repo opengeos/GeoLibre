@@ -1860,6 +1860,19 @@ export class ArcgisEngine implements MapEngine {
     const response = await fetch(shot.dataUrl);
     return response.blob();
   }
+  onCameraMove(listener: () => void): () => void {
+    const view = this.view;
+    if (!view) return () => {};
+    const handle = this.sdk.reactiveUtils.watch(
+      () => viewPlacementState(view),
+      () => listener(),
+    );
+    this.handles.add(handle);
+    return () => {
+      handle.remove();
+      this.handles.delete(handle);
+    };
+  }
   onCameraIdle(listener: () => void): () => void {
     const view = this.view;
     if (!view) return () => {};

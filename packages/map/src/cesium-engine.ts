@@ -822,6 +822,10 @@ export class CesiumEngine implements MapEngine {
     return captureEngineImage(this);
   }
 
+  onCameraMove(listener: () => void): () => void {
+    return this.live()?.camera.changed.addEventListener(listener) ?? (() => {});
+  }
+
   onCameraIdle(listener: () => void): () => void {
     return this.live()?.camera.moveEnd.addEventListener(listener) ?? (() => {});
   }
