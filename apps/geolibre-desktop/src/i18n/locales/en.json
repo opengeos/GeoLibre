@@ -8036,6 +8036,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "Download OpenStreetMap features from the current map area with the public Overpass API.",
+      "attribution": "Data © OpenStreetMap contributors, available under the ODbL.",
+      "featureType": "Feature type",
+      "presetBuildings": "Buildings",
+      "presetRoads": "Roads",
+      "presetAmenities": "Amenities",
+      "presetWaterways": "Waterways",
+      "presetLanduse": "Land use",
+      "presetCustom": "Custom tag",
+      "presetAll": "All tagged features",
+      "tagKey": "Tag key",
+      "tagValue": "Tag value",
+      "tagKeyPlaceholder": "e.g. shop",
+      "tagValuePlaceholder": "optional, e.g. bakery",
+      "west": "West",
+      "south": "South",
+      "east": "East",
+      "north": "North",
+      "useMapExtent": "Use map extent",
+      "download": "Download OSM data",
+      "ready": "Choose an area and feature type.",
+      "addToMap": "Add to map",
+      "exportGeoJson": "Save GeoJSON",
+      "mapUnavailable": "The map extent is not available yet.",
+      "extentApplied": "Map extent applied.",
+      "downloading": "Downloading from OpenStreetMap…",
+      "downloaded": "Downloaded {{count}} features.",
+      "noFeatures": "No matching features were found in this area.",
+      "error": "Could not download OSM data: {{message}}",
+      "added": "Added {{count}} features to the map."
     }
   }
 }

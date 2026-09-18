@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น"
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "ดาวน์โหลดข้อมูล OpenStreetMap จากพื้นที่บนแผนที่ปัจจุบันผ่าน Overpass API สาธารณะ",
+      "attribution": "ข้อมูล © ผู้มีส่วนร่วมใน OpenStreetMap ใช้งานภายใต้สัญญาอนุญาต ODbL",
+      "featureType": "ประเภทฟีเจอร์",
+      "presetBuildings": "อาคาร",
+      "presetRoads": "ถนน",
+      "presetAmenities": "สิ่งอำนวยความสะดวก",
+      "presetWaterways": "ทางน้ำ",
+      "presetLanduse": "การใช้ที่ดิน",
+      "presetCustom": "แท็กกำหนดเอง",
+      "presetAll": "ฟีเจอร์ที่มีแท็กทั้งหมด",
+      "tagKey": "คีย์แท็ก",
+      "tagValue": "ค่าแท็ก",
+      "tagKeyPlaceholder": "เช่น shop",
+      "tagValuePlaceholder": "ไม่บังคับ เช่น bakery",
+      "west": "ทิศตะวันตก",
+      "south": "ทิศใต้",
+      "east": "ทิศตะวันออก",
+      "north": "ทิศเหนือ",
+      "useMapExtent": "ใช้ขอบเขตแผนที่",
+      "download": "ดาวน์โหลดข้อมูล OSM",
+      "ready": "เลือกพื้นที่และประเภทฟีเจอร์",
+      "addToMap": "เพิ่มลงบนแผนที่",
+      "exportGeoJson": "บันทึกเป็น GeoJSON",
+      "mapUnavailable": "ยังไม่มีขอบเขตแผนที่",
+      "extentApplied": "ใช้ขอบเขตแผนที่แล้ว",
+      "downloading": "กำลังดาวน์โหลดจาก OpenStreetMap…",
+      "downloaded": "ดาวน์โหลดฟีเจอร์ {{count}} รายการ",
+      "noFeatures": "ไม่พบฟีเจอร์ที่ตรงกันในพื้นที่นี้",
+      "error": "ไม่สามารถดาวน์โหลดข้อมูล OSM ได้: {{message}}",
+      "added": "เพิ่มฟีเจอร์ {{count}} รายการลงบนแผนที่"
     }
   }
 }

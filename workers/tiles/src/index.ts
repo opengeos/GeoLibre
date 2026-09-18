@@ -93,6 +93,15 @@ const CKAN_MAX_ROWS = 50;
 // proxies. Responses are never cached because OSM data changes continuously.
 const OVERPASS_PATH = "/overpass";
 const OVERPASS_MAX_BODY_BYTES = 20_000;
+const OVERPASS_QUERY_PREFIX = "[out:json][timeout:60];";
+const OVERPASS_QUERY_SUFFIX = "out geom;";
+const OVERPASS_NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+const OVERPASS_QUOTED = '"(?:\\\\.|[^"\\\\])*"';
+const OVERPASS_FILTER = `(?:\\[~"\\."~"\\."\\]|\\[${OVERPASS_QUOTED}(?:=${OVERPASS_QUOTED})?\\])`;
+const OVERPASS_SELECTOR = new RegExp(
+  `nwr(${OVERPASS_FILTER})\\((${OVERPASS_NUMBER}),(${OVERPASS_NUMBER}),(${OVERPASS_NUMBER}),(${OVERPASS_NUMBER})\\);`,
+  "g",
+);
 
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
 // at all, so a browser cannot read it; this route fetches it server-side and
@@ -424,6 +433,47 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
   });
 }
 
+/**
+ * Accept only the exact bounded query grammar emitted by buildOsmDownloadQuery.
+ * This enforces the client's limits at the trust boundary so a forged POST
+ * cannot use GeoLibre's Worker for an unbounded or long-running Overpass query.
+ */
+export function isAllowedOverpassQuery(query: string): boolean {
+  if (!query.startsWith(OVERPASS_QUERY_PREFIX) || !query.endsWith(OVERPASS_QUERY_SUFFIX)) {
+    return false;
+  }
+  let selectorsText = query.slice(OVERPASS_QUERY_PREFIX.length, -OVERPASS_QUERY_SUFFIX.length);
+  if (selectorsText.startsWith("(") && selectorsText.endsWith(");")) {
+    selectorsText = selectorsText.slice(1, -2);
+  }
+  OVERPASS_SELECTOR.lastIndex = 0;
+  const matches = [...selectorsText.matchAll(OVERPASS_SELECTOR)];
+  if (matches.length < 1 || matches.length > 2) return false;
+  if (matches.map((match) => match[0]).join("") !== selectorsText) return false;
+
+  const allFeatures = matches.every((match) => match[1] === '[~"."~"."]');
+  if (matches.some((match) => (match[1] === '[~"."~"."]') !== allFeatures)) return false;
+  const areaLimit = allFeatures ? 0.25 : 4;
+  let totalArea = 0;
+  for (const match of matches) {
+    const [, , southText, westText, northText, eastText] = match;
+    const [south, west, north, east] = [southText, westText, northText, eastText].map(Number);
+    if (
+      ![south, west, north, east].every(Number.isFinite) ||
+      south < -90 ||
+      north > 90 ||
+      west < -180 ||
+      east > 180 ||
+      south >= north ||
+      west >= east
+    ) {
+      return false;
+    }
+    totalArea += (north - south) * (east - west);
+  }
+  return totalArea <= areaLimit;
+}
+
 /** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
 async function handleOverpass(request: Request): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
@@ -438,7 +488,13 @@ async function handleOverpass(request: Request): Promise<Response> {
     return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
   }
   const params = new URLSearchParams(body);
-  if (!params.get("data") || [...params.keys()].some((key) => key !== "data")) {
+  const query = params.get("data");
+  if (
+    !query ||
+    params.getAll("data").length !== 1 ||
+    [...params.keys()].some((key) => key !== "data") ||
+    !isAllowedOverpassQuery(query)
+  ) {
     return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
   }
   let originResponse: Response;

@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।"
+    },
+    "geolibre-osm-downloader": {
+      "title": "ओएसएम डाउनलोडर",
+      "hint": "पब्लिक ओवरपास एपीआई के माध्यम से वर्तमान मैप क्षेत्र से ओपन स्ट्रीट मैप फीचर डाउनलोड करें।",
+      "attribution": "डेटा © ओपन स्ट्रीट मैप के डाटा डोनर्स, ODbL के तहत उपलब्ध है।",
+      "featureType": "फीचर प्रकार",
+      "presetBuildings": "बिल्डिंग्स",
+      "presetRoads": "रोड्स",
+      "presetAmenities": "एमेनिटीज",
+      "presetWaterways": "वॉटरवे",
+      "presetLanduse": "लैंड यूज़",
+      "presetCustom": "कस्टम टैग",
+      "presetAll": "सभी टैग किए गए फीचर",
+      "tagKey": "टैग की",
+      "tagValue": "टैग मूल्य",
+      "tagKeyPlaceholder": "उदाहरण: शॉप",
+      "tagValuePlaceholder": "वैकल्पिक, उदाहरण: बेकरी",
+      "west": "पश्चिम",
+      "south": "दक्षिण",
+      "east": "उत्तर-पूर्व",
+      "north": "उत्तर",
+      "useMapExtent": "मैप एक्सटेंट का उपयोग करें",
+      "download": "ओएसएम डेटा डाउनलोड करें",
+      "ready": "क्षेत्र और फीचर प्रकार का चयन करें।",
+      "addToMap": "मैप में जोड़ें",
+      "exportGeoJson": "जीओजेन बचाएं",
+      "mapUnavailable": "मैप एक्सटेंट अभी उपलब्ध नहीं है।",
+      "extentApplied": "मैप एक्सटेंट लागू किया गया।",
+      "downloading": "ओपन स्ट्रीट मैप से डाउनलोड कर रहे हैं…",
+      "downloaded": "{{count}} फीचर डाउनलोड किए गए।",
+      "noFeatures": "इस क्षेत्र में मेल नहीं खाते फीचर नहीं मिले।",
+      "error": "ओएसएम डेटा डाउनलोड नहीं किया जा सकता: {{message}}",
+      "added": "{{count}} फीचर मैप में जोड़े गए।"
     }
   }
 }

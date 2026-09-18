@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Verwenden Sie in dieser ArcGIS-Ansicht eine 3D-Tiles-URL für tileset.json. Google Photorealistic- und I3S-Kacheln benötigen eine andere Render-Engine."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "Laden Sie OpenStreetMap-Features aus dem aktuellen Kartenbereich über die öffentliche Overpass API herunter.",
+      "attribution": "Daten © OpenStreetMap-Mitwirkende, unter der ODbL verfügbar.",
+      "featureType": "Feature-Typ",
+      "presetBuildings": "Gebäude",
+      "presetRoads": "Straßen",
+      "presetAmenities": "Annehmlichkeiten",
+      "presetWaterways": "Wasserwege",
+      "presetLanduse": "Landnutzung",
+      "presetCustom": "Benutzerdefiniertes Tag",
+      "presetAll": "Alle markierten Features",
+      "tagKey": "Tag-Schlüssel",
+      "tagValue": "Tag-Wert",
+      "tagKeyPlaceholder": "z. B. shop",
+      "tagValuePlaceholder": "optional, z. B. Bäckerei",
+      "west": "Westen",
+      "south": "Süden",
+      "east": "Osten",
+      "north": "Norden",
+      "useMapExtent": "Kartenbereich verwenden",
+      "download": "OSM-Daten herunterladen",
+      "ready": "Wählen Sie einen Bereich und Feature-Typ aus.",
+      "addToMap": "Zur Karte hinzufügen",
+      "exportGeoJson": "GeoJSON speichern",
+      "mapUnavailable": "Der Kartenbereich ist noch nicht verfügbar.",
+      "extentApplied": "Kartenbereich angewendet.",
+      "downloading": "Von OpenStreetMap herunterladen…",
+      "downloaded": "{{count}} Features heruntergeladen.",
+      "noFeatures": "In diesem Bereich wurden keine passenden Features gefunden.",
+      "error": "OSM-Daten konnten nicht heruntergeladen werden: {{message}}",
+      "added": "{{count}} Features zur Karte hinzugefügt."
     }
   }
 }

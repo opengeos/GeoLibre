@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "Unduh fitur OpenStreetMap dari area peta saat ini menggunakan public Overpass API.",
+      "attribution": "Data © OpenStreetMap contributors, tersedia di bawah ODbL.",
+      "featureType": "Jenis fitur",
+      "presetBuildings": "Bangunan",
+      "presetRoads": "Jalan",
+      "presetAmenities": "Fasilitas",
+      "presetWaterways": "Sungai",
+      "presetLanduse": "Penggunaan lahan",
+      "presetCustom": "Tag kustom",
+      "presetAll": "Semua fitur yang ditandai",
+      "tagKey": "Kunci tag",
+      "tagValue": "Nilai tag",
+      "tagKeyPlaceholder": "contoh: shop",
+      "tagValuePlaceholder": "opsional, contoh: bakery",
+      "west": "Barat",
+      "south": "Selatan",
+      "east": "Timur",
+      "north": "Utara",
+      "useMapExtent": "Gunakan batas peta",
+      "download": "Unduh data OSM",
+      "ready": "Pilih area dan jenis fitur.",
+      "addToMap": "Tambahkan ke peta",
+      "exportGeoJson": "Simpan GeoJSON",
+      "mapUnavailable": "Batas peta tidak tersedia saat ini.",
+      "extentApplied": "Batas peta diterapkan.",
+      "downloading": "Mengunduh dari OpenStreetMap…",
+      "downloaded": "Unduh {{count}} fitur.",
+      "noFeatures": "Tidak ada fitur yang cocok ditemukan di area ini.",
+      "error": "Tidak dapat mengunduh data OSM: {{message}}",
+      "added": "Ditambahkan {{count}} fitur ke peta."
     }
   }
 }

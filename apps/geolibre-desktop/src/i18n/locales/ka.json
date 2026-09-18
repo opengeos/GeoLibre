@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM ჩამოტვირთვა",
+      "hint": "OpenStreetMap ობიექტების ჩამოტვირთვა მიმდინარე რუკის არეალიდან საჯარო Overpass API-ს მეშვეობით.",
+      "attribution": "მონაცემები © OpenStreetMap მონაწილეები, ხელმისაწვდომია ODbL-ის ფარგლებში.",
+      "featureType": "ობიექტის ტიპი",
+      "presetBuildings": "შენობები",
+      "presetRoads": "გზები",
+      "presetAmenities": "სერვისები",
+      "presetWaterways": "წყლის ობიექტები",
+      "presetLanduse": "მიწის გამოყენება",
+      "presetCustom": "მორგებული ტეგი",
+      "presetAll": "ყველა მონიშნული ობიექტი",
+      "tagKey": "ტეგის კლავში",
+      "tagValue": "ტეგის მნიშვნელობა",
+      "tagKeyPlaceholder": "მაგ. shop",
+      "tagValuePlaceholder": "არასავალდებულო, მაგ. bakery",
+      "west": "დასავლეთი",
+      "south": "სამხრეთი",
+      "east": "აღმოსავლეთი",
+      "north": "ჩრდილოეთი",
+      "useMapExtent": "რუკის არეალის გამოყენება",
+      "download": "OSM მონაცემების ჩამოტვირთვა",
+      "ready": "აირჩიეთ არეალი და ობიექტის ტიპი.",
+      "addToMap": "რუკაზე დამატება",
+      "exportGeoJson": "GeoJSON-ის შენახვა",
+      "mapUnavailable": "რუკის არეალი ჯერ არ არის ხელმისაწვდომი.",
+      "extentApplied": "რუკის არეალი გამოყენებულია.",
+      "downloading": "OpenStreetMap-დან ჩამოტვირთვა…",
+      "downloaded": "ჩამოტვირთულია {{count}} ობიექტი.",
+      "noFeatures": "ამ არეალში შესაბამისი ობიექტები ვერ მოიძებნა.",
+      "error": "OSM მონაცემების ჩამოტვირთვა ვერ მოხერხდა: {{message}}",
+      "added": "{{count}} ობიექტი დაემატა რუკას."
     }
   }
 }

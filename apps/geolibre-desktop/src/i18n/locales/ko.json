@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM 다운로더",
+      "hint": "공개된 Overpass API를 사용하여 현재 지도 영역의 OpenStreetMap 기능을 다운로드합니다.",
+      "attribution": "데이터 © OpenStreetMap 기여자, ODbL 라이선스 하에 제공.",
+      "featureType": "기능 유형",
+      "presetBuildings": "건물",
+      "presetRoads": "도로",
+      "presetAmenities": "편의 시설",
+      "presetWaterways": "수계",
+      "presetLanduse": "토지 이용",
+      "presetCustom": "사용자 지정 태그",
+      "presetAll": "모든 태그된 기능",
+      "tagKey": "태그 키",
+      "tagValue": "태그 값",
+      "tagKeyPlaceholder": "예: shop",
+      "tagValuePlaceholder": "선택 사항, 예: bakery",
+      "west": "서쪽",
+      "south": "남쪽",
+      "east": "동쪽",
+      "north": "북쪽",
+      "useMapExtent": "지도 범위 사용",
+      "download": "OSM 데이터 다운로드",
+      "ready": "영역과 기능 유형을 선택하세요.",
+      "addToMap": "지도에 추가",
+      "exportGeoJson": "GeoJSON 저장",
+      "mapUnavailable": "아직 지도 범위를 사용할 수 없습니다.",
+      "extentApplied": "지도 범위가 적용되었습니다.",
+      "downloading": "OpenStreetMap에서 다운로드 중…",
+      "downloaded": "{{count}}개 기능을 다운로드했습니다.",
+      "noFeatures": "이 영역에서 일치하는 기능을 찾을 수 없습니다.",
+      "error": "OSM 데이터를 다운로드할 수 없습니다: {{message}}",
+      "added": "{{count}}개 기능을 지도에 추가했습니다."
     }
   }
 }

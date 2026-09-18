@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Utilisez une URL tileset.json de 3D Tiles dans cette vue ArcGIS. Les tuiles Google Photorealistic et I3S nécessitent un autre moteur de rendu."
+    },
+    "geolibre-osm-downloader": {
+      "title": "Téléchargeur OSM",
+      "hint": "Téléchargez des caractéristiques OpenStreetMap à partir de la zone de la carte actuelle via l'API Overpass publique.",
+      "attribution": "Données © contributeurs OpenStreetMap, disponibles sous licence ODbL.",
+      "featureType": "Type de caractéristique",
+      "presetBuildings": "Bâtiments",
+      "presetRoads": "Routes",
+      "presetAmenities": "Équipements",
+      "presetWaterways": "Voies d'eau",
+      "presetLanduse": "Usage des sols",
+      "presetCustom": "Balise personnalisée",
+      "presetAll": "Toutes les caractéristiques balisées",
+      "tagKey": "Clé de balise",
+      "tagValue": "Valeur de balise",
+      "tagKeyPlaceholder": "ex. shop",
+      "tagValuePlaceholder": "optionnel, ex. boulangerie",
+      "west": "Ouest",
+      "south": "Sud",
+      "east": "Est",
+      "north": "Nord",
+      "useMapExtent": "Utiliser l'étendue de la carte",
+      "download": "Télécharger les données OSM",
+      "ready": "Choisissez une zone et un type de caractéristique.",
+      "addToMap": "Ajouter à la carte",
+      "exportGeoJson": "Enregistrer GeoJSON",
+      "mapUnavailable": "L'étendue de la carte n'est pas disponible pour le moment.",
+      "extentApplied": "L'étendue de la carte a été appliquée.",
+      "downloading": "Téléchargement depuis OpenStreetMap…",
+      "downloaded": "Téléchargé {{count}} caractéristiques.",
+      "noFeatures": "Aucune caractéristique correspondante n'a été trouvée dans cette zone.",
+      "error": "Impossible de télécharger les données OSM : {{message}}",
+      "added": "Ajouté {{count}} caractéristiques à la carte."
     }
   }
 }

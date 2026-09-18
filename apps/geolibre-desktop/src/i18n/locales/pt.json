@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Use uma URL tileset.json de 3D Tiles nesta visualização do ArcGIS. Os blocos Google Photorealistic e I3S exigem outro renderizador."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "Baixe recursos do OpenStreetMap da área atual do mapa usando a Overpass API pública.",
+      "attribution": "Dados © colaboradores do OpenStreetMap, disponíveis sob a licença ODbL.",
+      "featureType": "Tipo de recurso",
+      "presetBuildings": "Edifícios",
+      "presetRoads": "Estradas",
+      "presetAmenities": "Serviços",
+      "presetWaterways": "Corpos d'água",
+      "presetLanduse": "Uso do solo",
+      "presetCustom": "Tag personalizada",
+      "presetAll": "Todos os recursos com tags",
+      "tagKey": "Chave da tag",
+      "tagValue": "Valor da tag",
+      "tagKeyPlaceholder": "ex.: shop",
+      "tagValuePlaceholder": "opcional, ex.: bakery",
+      "west": "Oeste",
+      "south": "Sul",
+      "east": "Leste",
+      "north": "Norte",
+      "useMapExtent": "Usar extensão do mapa",
+      "download": "Baixar dados OSM",
+      "ready": "Escolha uma área e um tipo de recurso.",
+      "addToMap": "Adicionar ao mapa",
+      "exportGeoJson": "Salvar GeoJSON",
+      "mapUnavailable": "A extensão do mapa ainda não está disponível.",
+      "extentApplied": "Extensão do mapa aplicada.",
+      "downloading": "Baixando do OpenStreetMap…",
+      "downloaded": "Baixados {{count}} recursos.",
+      "noFeatures": "Nenhum recurso correspondente foi encontrado nesta área.",
+      "error": "Não foi possível baixar os dados OSM: {{message}}",
+      "added": "Adicionados {{count}} recursos ao mapa."
     }
   }
 }

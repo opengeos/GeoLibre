@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。"
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSMダウンローダー",
+      "hint": "現在の地図領域からパブリックのOverpass APIを使用してOpenStreetMapの特徴をダウンロードします。",
+      "attribution": "データ © OpenStreetMapの貢献者、ODbLの下で利用可能。",
+      "featureType": "特徴タイプ",
+      "presetBuildings": "建物",
+      "presetRoads": "道路",
+      "presetAmenities": "施設",
+      "presetWaterways": "水路",
+      "presetLanduse": "土地利用",
+      "presetCustom": "カスタムタグ",
+      "presetAll": "すべてのタグされた特徴",
+      "tagKey": "タグキー",
+      "tagValue": "タグ値",
+      "tagKeyPlaceholder": "例: shop",
+      "tagValuePlaceholder": "オプション、例: bakery",
+      "west": "西",
+      "south": "南",
+      "east": "東",
+      "north": "北",
+      "useMapExtent": "地図の範囲を使用",
+      "download": "OSMデータをダウンロード",
+      "ready": "エリアと特徴タイプを選択してください。",
+      "addToMap": "地図に追加",
+      "exportGeoJson": "GeoJSONを保存",
+      "mapUnavailable": "地図の範囲はまだ利用できません。",
+      "extentApplied": "地図範囲が適用されました。",
+      "downloading": "OpenStreetMapからダウンロード中…",
+      "downloaded": "{{count}}個の特徴をダウンロードしました。",
+      "noFeatures": "このエリアには一致する特徴が見つかりませんでした。",
+      "error": "OSMデータをダウンロードできませんでした: {{message}}",
+      "added": "{{count}}個の特徴を地図に追加しました。"
     }
   }
 }

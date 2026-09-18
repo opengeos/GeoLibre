@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { buildOsmDownloadQuery } from "../packages/plugins/src/plugins/osm-downloader-api";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
@@ -30,7 +31,8 @@ describe("Overpass edge proxy", () => {
       });
     };
 
-    const body = "data=" + encodeURIComponent('[out:json];node["amenity"](0,0,1,1);out;');
+    const body =
+      "data=" + encodeURIComponent(buildOsmDownloadQuery([0, 0, 1, 1], { preset: "amenities" }));
     const response = await tilesWorker.fetch(request(body), {}, {} as ExecutionContext);
 
     assert.equal(response.status, 200);
@@ -62,6 +64,32 @@ describe("Overpass edge proxy", () => {
 
     assert.equal(forbidden.status, 403);
     assert.equal(oversized.status, 413);
+    assert.equal(fetched, false);
+  });
+
+  it("rejects forged unbounded queries before fetching upstream", async () => {
+    let fetched = false;
+    globalThis.fetch = async () => {
+      fetched = true;
+      return new Response();
+    };
+
+    const unbounded = await tilesWorker.fetch(
+      request("data=" + encodeURIComponent('[out:json][timeout:60];way["building"];out geom;')),
+      {},
+      {} as ExecutionContext,
+    );
+    const oversized = await tilesWorker.fetch(
+      request(
+        "data=" +
+          encodeURIComponent('[out:json][timeout:60];nwr["building"](-80,-170,80,170);out geom;'),
+      ),
+      {},
+      {} as ExecutionContext,
+    );
+
+    assert.equal(unbounded.status, 400);
+    assert.equal(oversized.status, 400);
     assert.equal(fetched, false);
   });
 });

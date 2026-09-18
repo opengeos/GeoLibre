@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác."
+    },
+    "geolibre-osm-downloader": {
+      "title": "Trình tải xuống OSM",
+      "hint": "Tải các đối tượng OpenStreetMap từ khu vực bản đồ hiện tại bằng Overpass API công khai.",
+      "attribution": "Dữ liệu © các cộng tác viên OpenStreetMap, có sẵn theo giấy phép ODbL.",
+      "featureType": "Loại đối tượng",
+      "presetBuildings": "Công trình",
+      "presetRoads": "Đường",
+      "presetAmenities": "Tiện ích",
+      "presetWaterways": "Thủy lộ",
+      "presetLanduse": "Sử dụng đất",
+      "presetCustom": "Thẻ tùy chỉnh",
+      "presetAll": "Tất cả đối tượng có thẻ",
+      "tagKey": "Khóa thẻ",
+      "tagValue": "Giá trị thẻ",
+      "tagKeyPlaceholder": "vd. shop",
+      "tagValuePlaceholder": "tùy chọn, vd. bakery",
+      "west": "Tây",
+      "south": "Nam",
+      "east": "Đông",
+      "north": "Bắc",
+      "useMapExtent": "Dùng phạm vi bản đồ",
+      "download": "Tải dữ liệu OSM",
+      "ready": "Chọn khu vực và loại đối tượng.",
+      "addToMap": "Thêm vào bản đồ",
+      "exportGeoJson": "Lưu GeoJSON",
+      "mapUnavailable": "Phạm vi bản đồ chưa khả dụng.",
+      "extentApplied": "Đã áp dụng phạm vi bản đồ.",
+      "downloading": "Đang tải từ OpenStreetMap…",
+      "downloaded": "Đã tải {{count}} đối tượng.",
+      "noFeatures": "Không tìm thấy đối tượng phù hợp trong khu vực này.",
+      "error": "Không thể tải dữ liệu OSM: {{message}}",
+      "added": "Đã thêm {{count}} đối tượng vào bản đồ."
     }
   }
 }

@@ -8376,6 +8376,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر."
+    },
+    "geolibre-osm-downloader": {
+      "title": "مُتَّحَدٌ OSM",
+      "hint": "تنزيل ميزات OpenStreetMap من المنطقة الحالية على الخريطة باستخدام واجهة Overpass العامة.",
+      "attribution": "البيانات © مُساهِمِي OpenStreetMap، متاحة تحت ترخيص ODbL.",
+      "featureType": "نوع الميزة",
+      "presetBuildings": "المباني",
+      "presetRoads": "الطرق",
+      "presetAmenities": "المرافق",
+      "presetWaterways": "القنوات المائية",
+      "presetLanduse": "استخدام الأراضي",
+      "presetCustom": "مُلَصَّق مخصص",
+      "presetAll": "جميع الميزات المُلَصَّقة",
+      "tagKey": "مفتاح الملصق",
+      "tagValue": "قيمة الملصق",
+      "tagKeyPlaceholder": "مثال: متجر",
+      "tagValuePlaceholder": "اختياري، مثال: خبز",
+      "west": "الغرب",
+      "south": "الجنوب",
+      "east": "الشرق",
+      "north": "الشمال",
+      "useMapExtent": "استخدام مدى الخريطة",
+      "download": "تنزيل بيانات OSM",
+      "ready": "اختر منطقة ونوع ميزة.",
+      "addToMap": "إضافة إلى الخريطة",
+      "exportGeoJson": "حفظ GeoJSON",
+      "mapUnavailable": "مدى الخريطة غير متوفر بعد.",
+      "extentApplied": "تم تطبيق مدى الخريطة.",
+      "downloading": "تنزيل من OpenStreetMap...",
+      "downloaded": "تم تنزيل {{count}} ميزات.",
+      "noFeatures": "لم تُعثر على أي ميزات تطابق في هذه المنطقة.",
+      "error": "لم يتم تنزيل بيانات OSM: {{message}}",
+      "added": "تم إضافة {{count}} ميزات إلى الخريطة."
     }
   }
 }

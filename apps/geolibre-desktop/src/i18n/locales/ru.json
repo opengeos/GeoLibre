@@ -8203,6 +8203,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "В этом виде ArcGIS используйте URL tileset.json для 3D Tiles. Для тайлов Google Photorealistic и I3S нужен другой движок отрисовки."
+    },
+    "geolibre-osm-downloader": {
+      "title": "Загрузчик OSM",
+      "hint": "Загрузите объекты OpenStreetMap из текущей области карты через публичный Overpass API.",
+      "attribution": "Данные © участники OpenStreetMap, доступны по лицензии ODbL.",
+      "featureType": "Тип объекта",
+      "presetBuildings": "Здания",
+      "presetRoads": "Дороги",
+      "presetAmenities": "Объекты инфраструктуры",
+      "presetWaterways": "Водные объекты",
+      "presetLanduse": "Использование земли",
+      "presetCustom": "Пользовательский тег",
+      "presetAll": "Все объекты с тегами",
+      "tagKey": "Ключ тега",
+      "tagValue": "Значение тега",
+      "tagKeyPlaceholder": "напр. shop",
+      "tagValuePlaceholder": "необязательно, напр. bakery",
+      "west": "Запад",
+      "south": "Юг",
+      "east": "Восток",
+      "north": "Север",
+      "useMapExtent": "Использовать границы карты",
+      "download": "Загрузить данные OSM",
+      "ready": "Выберите область и тип объекта.",
+      "addToMap": "Добавить на карту",
+      "exportGeoJson": "Сохранить GeoJSON",
+      "mapUnavailable": "Границы карты пока недоступны.",
+      "extentApplied": "Границы карты применены.",
+      "downloading": "Загрузка из OpenStreetMap…",
+      "downloaded": "Загружено объектов: {{count}}.",
+      "noFeatures": "В этой области не найдено подходящих объектов.",
+      "error": "Не удалось загрузить данные OSM: {{message}}",
+      "added": "Добавлено объектов на карту: {{count}}."
     }
   }
 }

@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Usa un URL tileset.json di 3D Tiles in questa vista ArcGIS. I tasselli Google Photorealistic e I3S richiedono un altro motore di rendering."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM Downloader",
+      "hint": "Scarica le caratteristiche OpenStreetMap dall'area della mappa corrente utilizzando l'Overpass API pubblica.",
+      "attribution": "Dati © contribuenti OpenStreetMap, disponibili sotto la ODbL.",
+      "featureType": "Tipo di caratteristica",
+      "presetBuildings": "Edifici",
+      "presetRoads": "Strade",
+      "presetAmenities": "Servizi",
+      "presetWaterways": "Corpi idrici",
+      "presetLanduse": "Utilizzo del suolo",
+      "presetCustom": "Tag personalizzato",
+      "presetAll": "Tutte le caratteristiche taggiate",
+      "tagKey": "Chiave tag",
+      "tagValue": "Valore tag",
+      "tagKeyPlaceholder": "es. shop",
+      "tagValuePlaceholder": "opzionale, es. panetteria",
+      "west": "Ovest",
+      "south": "Sud",
+      "east": "Est",
+      "north": "Nord",
+      "useMapExtent": "Usa l'estensione della mappa",
+      "download": "Scarica i dati OSM",
+      "ready": "Scegli un'area e un tipo di caratteristica.",
+      "addToMap": "Aggiungi alla mappa",
+      "exportGeoJson": "Salva GeoJSON",
+      "mapUnavailable": "L'estensione della mappa non è ancora disponibile.",
+      "extentApplied": "Estensione della mappa applicata.",
+      "downloading": "Scaricamento da OpenStreetMap…",
+      "downloaded": "Scaricati {{count}} elementi.",
+      "noFeatures": "Non sono state trovate caratteristiche corrispondenti in questa area.",
+      "error": "Impossibile scaricare i dati OSM: {{message}}",
+      "added": "Aggiunti {{count}} elementi alla mappa."
     }
   }
 }

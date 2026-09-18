@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "در این نمای ArcGIS از نشانی tileset.json مربوط به 3D Tiles استفاده کنید. کاشی‌های Google Photorealistic و I3S به موتور نمایش دیگری نیاز دارند."
+    },
+    "geolibre-osm-downloader": {
+      "title": "بارگیر OSM",
+      "hint": "بارگیری عوارض OpenStreetMap از محدوده فعلی نقشه با استفاده از Overpass API عمومی.",
+      "attribution": "داده‌ها © مشارکت‌کنندگان OpenStreetMap، تحت مجوز ODbL در دسترس است.",
+      "featureType": "نوع عارضه",
+      "presetBuildings": "ساختمان‌ها",
+      "presetRoads": "راه‌ها",
+      "presetAmenities": "امکانات",
+      "presetWaterways": "آبراه‌ها",
+      "presetLanduse": "استفاده از زمین",
+      "presetCustom": "برچسب سفارشی",
+      "presetAll": "تمام عوارض برچسب‌دار",
+      "tagKey": "کلید برچسب",
+      "tagValue": "مقدار برچسب",
+      "tagKeyPlaceholder": "مثلاً shop",
+      "tagValuePlaceholder": "اختیاری، مثلاً bakery",
+      "west": "غرب",
+      "south": "جنوب",
+      "east": "شرق",
+      "north": "شمال",
+      "useMapExtent": "استفاده از محدوده نقشه",
+      "download": "دانلود داده OSM",
+      "ready": "یک محدوده و نوع عارضه انتخاب کنید.",
+      "addToMap": "افزودن به نقشه",
+      "exportGeoJson": "ذخیره فایل GeoJSON",
+      "mapUnavailable": "محدوده نقشه هنوز در دسترس نیست.",
+      "extentApplied": "محدوده نقشه اعمال شد.",
+      "downloading": "در حال دانلود از OpenStreetMap…",
+      "downloaded": "{{count}} عارضه بارگیری شد.",
+      "noFeatures": "هیچ عارضه منطبقی در این محدوده یافت نشد.",
+      "error": "بارگیری داده‌های OSM انجام نشد: {{message}}",
+      "added": "{{count}} عارضه به نقشه افزوده شد."
     }
   }
 }

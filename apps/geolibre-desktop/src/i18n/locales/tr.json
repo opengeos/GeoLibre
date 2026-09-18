@@ -8029,6 +8029,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Bu ArcGIS görünümünde bir 3D Tiles tileset.json URL’si kullanın. Google Photorealistic ve I3S karoları başka bir işleme motoru gerektirir."
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM İndirici",
+      "hint": "Güncel harita alanındaki OpenStreetMap özelliklerini genel Overpass API ile indirin.",
+      "attribution": "Veri © OpenStreetMap katkıda bulunanlar, ODbL altında kullanılabilir.",
+      "featureType": "Özellik türü",
+      "presetBuildings": "Binalar",
+      "presetRoads": "Yollar",
+      "presetAmenities": "Tesisler",
+      "presetWaterways": "Su yolları",
+      "presetLanduse": "Arazi kullanımı",
+      "presetCustom": "Özel etiket",
+      "presetAll": "Tüm etiketli özellikler",
+      "tagKey": "Etiket anahtarı",
+      "tagValue": "Etiket değeri",
+      "tagKeyPlaceholder": "örn. shop",
+      "tagValuePlaceholder": "isteğe bağlı, örn. bakery",
+      "west": "Batı",
+      "south": "Güney",
+      "east": "Doğu",
+      "north": "Kuzey",
+      "useMapExtent": "Harita kapsamını kullan",
+      "download": "OSM verilerini indir",
+      "ready": "Bir alan ve özellik türü seçin.",
+      "addToMap": "Haritaya ekle",
+      "exportGeoJson": "GeoJSON olarak kaydet",
+      "mapUnavailable": "Harita kapsamı henüz kullanılamıyor.",
+      "extentApplied": "Harita kapsamı uygulandı.",
+      "downloading": "OpenStreetMap'ten indiriliyor…",
+      "downloaded": "{{count}} özellik indirildi.",
+      "noFeatures": "Bu alanda eşleşen özellik bulunamadı.",
+      "error": "OSM verileri indirilemedi: {{message}}",
+      "added": "{{count}} özellik haritaya eklendi."
     }
   }
 }

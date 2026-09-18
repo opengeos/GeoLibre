@@ -7942,6 +7942,39 @@
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "请在此 ArcGIS 视图中使用 3D Tiles 的 tileset.json URL。Google Photorealistic 和 I3S 瓦片需要其他渲染引擎。"
+    },
+    "geolibre-osm-downloader": {
+      "title": "OSM 下载器",
+      "hint": "使用公共 Overpass API 下载当前地图区域的 OpenStreetMap 要素。",
+      "attribution": "数据 © OpenStreetMap 贡献者，基于 ODbL 许可提供。",
+      "featureType": "要素类型",
+      "presetBuildings": "建筑物",
+      "presetRoads": "道路",
+      "presetAmenities": "设施",
+      "presetWaterways": "水系",
+      "presetLanduse": "土地利用",
+      "presetCustom": "自定义标签",
+      "presetAll": "所有带标签的要素",
+      "tagKey": "标签键",
+      "tagValue": "标签值",
+      "tagKeyPlaceholder": "例如 shop",
+      "tagValuePlaceholder": "可选，例如 bakery",
+      "west": "西",
+      "south": "南",
+      "east": "东",
+      "north": "北",
+      "useMapExtent": "使用地图范围",
+      "download": "下载 OSM 数据",
+      "ready": "请选择区域和要素类型。",
+      "addToMap": "添加到地图",
+      "exportGeoJson": "保存 GeoJSON",
+      "mapUnavailable": "地图范围尚不可用。",
+      "extentApplied": "已应用地图范围。",
+      "downloading": "正在从 OpenStreetMap 下载…",
+      "downloaded": "已下载 {{count}} 个要素。",
+      "noFeatures": "在此区域内未找到匹配的要素。",
+      "error": "无法下载 OSM 数据：{{message}}",
+      "added": "已将 {{count}} 个要素添加到地图。"
     }
   }
 }
