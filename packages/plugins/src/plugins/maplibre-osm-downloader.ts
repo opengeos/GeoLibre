@@ -78,7 +78,12 @@ function formatNumber(value: number): string {
   return Number(value.toFixed(6)).toString();
 }
 
-function resultName(app: GeoLibreAppAPI, preset: OsmDownloadPreset): string {
+function resultName(app: GeoLibreAppAPI, filter: OsmDownloadFilter): string {
+  if (filter.preset === "custom") {
+    const key = filter.key?.trim();
+    const value = filter.value?.trim();
+    if (key) return `OSM ${key}${value ? `=${value}` : ""}`;
+  }
   const labels: Record<OsmDownloadPreset, string> = {
     all: tr(app, "presetAll", "all features"),
     buildings: tr(app, "presetBuildings", "buildings"),
@@ -88,7 +93,7 @@ function resultName(app: GeoLibreAppAPI, preset: OsmDownloadPreset): string {
     landuse: tr(app, "presetLanduse", "land use"),
     custom: tr(app, "presetCustom", "custom tags"),
   };
-  return `OSM ${labels[preset]}`;
+  return `OSM ${labels[filter.preset]}`;
 }
 
 function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
@@ -268,7 +273,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       resultPreset = selectedPreset;
       const count = result.features.length;
       if (count) {
-        app.addGeoJsonLayer(resultName(app, selectedPreset), result);
+        app.addGeoJsonLayer(resultName(app, filter), result);
         status.textContent = tr(app, "added", "Added {{count}} features to the map.", {
           count,
         });
