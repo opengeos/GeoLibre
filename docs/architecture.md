@@ -2,15 +2,18 @@
 
 ## Overview
 
-GeoLibre is a free and open-source, lightweight, cloud-native GIS platform that runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all from a single npm workspaces monorepo. The UI is a React app that ships as a native desktop app hosted by Tauri v2 and as a browser-based web app, adapting responsively to mobile and small screens. Map rendering uses MapLibre GL JS in the browser webview, with deck.gl used for advanced raster, point cloud, and 3D overlays, and an optional [CesiumJS](https://cesium.com/platform/cesiumjs/) 3D-globe view (see [3D globe view (CesiumJS)](#3d-globe-view-cesiumjs)) that can render a split pane or the whole workspace. Application state lives in a Zustand store (`@geolibre/core`).
+GeoLibre is a free and open-source, lightweight, cloud-native GIS platform that runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all from a single npm workspaces monorepo. The UI is a React app that ships as a native desktop app hosted by Tauri v2 and as a browser-based web app, adapting responsively to mobile and small screens. Four engines can render a map: MapLibre GL JS (the default), Mapbox GL JS, CesiumJS, and the ArcGIS Maps SDK for JavaScript. deck.gl supplies advanced raster, point-cloud, and 3D overlays where an engine supports them. Application state lives in a Zustand store (`@geolibre/core`). See the user-facing [rendering-engine guide](user-guide/rendering-engines.md) and the detailed [MapLibre](maplibre-renderer.md), [Mapbox](mapbox-renderer.md), [Cesium](cesium-renderer.md), and [ArcGIS](arcgis-renderer.md) references.
 
 ```mermaid
 flowchart LR
   UI[React UI] --> Store[Zustand Store]
-  Store --> MapPkg[MapController]
-  MapPkg --> ML[MapLibre GL JS]
+  Store --> Engine[MapEngine interface]
+  Engine --> ML[MapLibre GL JS]
+  Engine --> MB[Mapbox GL JS]
+  Engine --> CZ[CesiumJS]
+  Engine --> AG[ArcGIS Maps SDK]
   Plugins[Built-in plugins] --> Store
-  Plugins --> ML
+  Plugins --> Engine
   UI --> Tauri[Tauri Plugins]
   Tauri --> FS[File System]
   Proc[Processing] --> Store
@@ -22,7 +25,7 @@ flowchart LR
 | Package                | Responsibility                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------------- |
 | `@geolibre/core`       | Domain types, project JSON schema, global store                                                |
-| `@geolibre/map`        | MapLibre lifecycle, layer sync, GeoJSON, raster, tile, MBTiles, control, and selection styling |
+| `@geolibre/map`        | Rendering-engine lifecycles and adapters, layer sync, GeoJSON, raster, tile, MBTiles, controls, and selection styling |
 | `@geolibre/ui`         | Shared UI primitives (shadcn-style)                                                            |
 | `@geolibre/processing` | Client-side algorithm registry                                                                 |
 | `@geolibre/plugins`    | Plugin interface and built-in plugins                                                          |
@@ -34,18 +37,34 @@ flowchart LR
 1. User adds data through the Add Data menu, the Tauri dialog, browser file picker, drag and drop, or a built-in plugin control.
 2. Local vector data is parsed directly or converted to GeoJSON with DuckDB-WASM Spatial, then passed to `addGeoJsonLayer` in the store.
 3. Tile, service, raster, ArcGIS, MBTiles, and plugin-backed layers create `GeoLibreLayer` records with source metadata and native MapLibre layer ids when applicable.
-4. `MapCanvas` subscribes to `layers`, then `MapController.syncLayers` updates MapLibre sources and layers and keeps the layer control in sync. The layer control glue (store-backed adapter, rebuild signature, in-place state mirroring, style-editor round trip) lives in `packages/map/src/layer-control-host.ts`, shared by `MapController` and `MapboxEngine`; each engine only supplies its map, native layer ids and basemap.
+4. The selected `MapEngine` subscribes to `layers` and reconciles them with its SDK. MapLibre uses `MapController.syncLayers`; Mapbox, Cesium, and ArcGIS use their engine-specific adapters. The layer-control glue shared by the two Style-Spec engines lives in `packages/map/src/layer-control-host.ts`.
 5. Style panel and layer panel updates change layer state, then map sync updates paint, visibility, opacity, ordering, and removal.
 6. Attribute table selections update the highlighted feature source and can zoom the map to the selected feature.
 7. Desktop save uses `projectFromStore` and writes `.geolibre` to disk. The earlier `.geolibre.json` name remains readable.
 
+## Rendering-engine model
+
+The Zustand store is renderer-neutral: it contains plain `GeoLibreLayer`
+records, preferences, and `MapViewState` values rather than objects owned by a
+mapping SDK. MapLibre, Mapbox, Cesium, and ArcGIS each implement the shared
+`MapEngine` interface for camera operations, capability checks, picking,
+controls, placement, extent drawing, and capture. `primaryRenderer` selects the
+main canvas, while each `SecondaryMapView.viewKind` selects the engine for a
+split pane. Changing either value unmounts the previous engine and connects the
+replacement to the same project state.
+
+Capabilities are explicit rather than assumed. The shell gates commands against
+the active `MapEngine`; layers report engine compatibility; and plugins declare
+an `engines` list. This lets a project retain an unsupported layer or suspended
+plugin across a switch without asking every SDK to emulate every feature.
+
 ## 3D globe view (CesiumJS)
 
-The 2D MapLibre map can be joined by — or replaced with — a 3D globe rendered with [CesiumJS](https://cesium.com/platform/cesiumjs/). Because the store (`@geolibre/core`) is engine-agnostic — it holds plain `GeoLibreLayer` records and a `MapViewState`, not MapLibre objects — a second renderer plugs in by subscribing to the same store, exactly as the 2D `SecondaryMapCanvas` panes do. Both renderers implement `MapEngine`, which provides camera operations, capability flags, picking, controls, manual placement, and extent drawing. MapLibre remains the default. Plugins declare supported engines; integrations that paint through the MapLibre style API still require MapLibre.
+The default MapLibre map can be joined by — or replaced with — a 3D globe rendered with [CesiumJS](https://cesium.com/platform/cesiumjs/). Cesium subscribes to the same engine-neutral store described above, whether it owns the primary canvas or one pane in a mixed-engine grid. MapLibre remains the default; integrations that paint directly through the MapLibre style API still require MapLibre.
 
 - **Where it renders.** Two places, both drawing the same store state:
   - **As a secondary pane.** Each pane in the map grid carries a 2D/3D toggle (`SecondaryMapView.viewKind`), so a globe sits beside the 2D map for comparison.
-  - **As the primary map** (issue #2217). **View → Rendering engine** switches the whole workspace between _MapLibre 2D_ and _Cesium 3D_ through the store's `primaryRenderer`. `DesktopShell` mounts `PrimaryCesiumCanvas` in place of `MapCanvas`, so the MapLibre map is not merely hidden — it is unmounted and stops consuming GPU resources. Switching adds or removes no panes, and a multi-pane grid can still mix the two engines. `CesiumCanvas` distinguishes the two roles by whether it is given a `viewId`: with one it is a pane backed by a `secondaryMapViews` record (own camera, own visibility overrides); without one it _is_ the primary map, reading and writing the shared `mapView` directly and ignoring the `syncView` toggle (which exists to make panes follow the primary camera). Because both engines read the same store, the camera, basemap, layers, groups, visibility, and opacity survive the switch untouched.
+  - **As the primary map** (issue #2217). **View → Rendering engine → Cesium** selects the globe through the store's `primaryRenderer`. `DesktopShell` mounts `PrimaryCesiumCanvas` in place of the previous engine's canvas, so that renderer is not merely hidden — it is unmounted and stops consuming GPU resources. Switching adds or removes no panes, and a multi-pane grid can still mix all four engines. `CesiumCanvas` distinguishes the two roles by whether it is given a `viewId`: with one it is a pane backed by a `secondaryMapViews` record (own camera, own visibility overrides); without one it _is_ the primary map, reading and writing the shared `mapView` directly and ignoring the `syncView` toggle (which exists to make panes follow the primary camera). Because every engine reads the same store, the camera, basemap, layers, groups, visibility, and opacity survive the switch untouched where supported.
 - **What the globe cannot do (yet).** Every tool that drives a `MapController` — the map context menu, legend, comments, story map, terrain settings, the ML panels, and the MapLibre-typed plugin API — is MapLibre-only. Rather than leave them broken, `DesktopShell` does not mount them while the globe owns the primary area, and the View menu greys out the items that drive a controller (zoom, viewport history, Reset Orientation, Set View, the Google Maps/Earth hand-offs) instead of letting them silently do nothing. Renderer-neutral, store-driven surfaces (the Layers panel, Style Manager, the attribute table, processing, the Dashboard) stay available. Layer kinds the globe cannot draw stay in the project and are tagged "2D only" in the Layers panel, and come back when MapLibre does. A renderer-neutral controller interface is the follow-up milestone in #2217.
 - **Enabling it.** The 2D/3D pane toggle and the Rendering engine menu are both offered whether or not a Cesium Ion token is configured — the globe draws the project basemap, which needs no token. A token adds Cesium World Terrain and supplies Ion World Imagery as the fallback for a basemap with no raster form; without one the view shows a one-line hint saying so. The token is resolved through `getCesiumIonToken()` (`@geolibre/core`), which reads `VITE_CESIUM_TOKEN`/`CESIUM_TOKEN` from the build **or** from a runtime override, so it can be set at build time (`CESIUM_TOKEN`; see [Optional 3D globe credentials](getting-started.md#optional-3d-globe-credentials-cesium-ion)) or at runtime with no rebuild. Settings → Environment Variables has a dedicated masked **Cesium Ion token** field backed by device-local `DesktopSettings` (localStorage, never the shared project file); `useRuntimeEnvironmentVariables` projects it into `VITE_CESIUM_TOKEN` on the `window.__GEOLIBRE_RUNTIME_ENV__` global (empty values are not projected, so they cannot blank a build-time token). The shared `useCesiumIonToken()` hook re-resolves the token on the `geolibre:runtime-env-change` event and both mount sites key the globe on it, so a newly entered token takes effect without a reload.
 - **Basemap.** `basemapToCesiumImagery()` (`@geolibre/core`) translates the project's `basemapStyleUrl` into a plain descriptor of what the globe should draw, and `applyBasemapImagery()` (`packages/map/src/cesium-basemap.ts`) turns that into imagery layers. The split keeps the decision engine-free and beside the basemap catalogs it reads, so the 2D and 3D renderers share one source of truth. Planetary and regional basemaps are already raster tile sets and carry straight over (TMS sources get `{y}` swapped for Cesium's `{reverseY}`, and a hybrid basemap's labels overlay rides directly above its imagery); GeoLibre's own vector styles map to a keyless raster basemap of matching tone, so a dark project basemap gives a dark globe; the blank basemap leaves a bare ellipsoid. Anything else — a provider style, a custom URL, an offline archive — has no raster form, and the renderer falls back to Ion World Imagery when a token is configured and OpenStreetMap when not. The basemap layers are inserted at the bottom of the imagery stack (index 0, the overlay at 1), which is what keeps them below the data layers `CesiumLayerSync` appends and raises to the top.

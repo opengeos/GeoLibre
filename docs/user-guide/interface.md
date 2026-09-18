@@ -12,7 +12,7 @@ The toolbar across the top of the window groups every action into nine menus:
 | --- | --- |
 | **Project** | Create, open, save, share, import, and print projects. See [Projects](projects.md). |
 | **Edit** | Undo and redo, and the feature-selection tools: Select by Expression, Select by Location, zoom to / invert / clear the selection, and Export Selected Features as Layer. |
-| **View** | Zoom in and out, step back and forward through the viewport history, reset the camera orientation, Set View… (type an exact center, zoom, bearing, and pitch), Split View, and View in Google Maps / Google Earth. |
+| **View** | Choose one of the [four rendering engines](rendering-engines.md), zoom in and out, step through viewport history, reset the camera orientation, set an exact view, create a split view, or open the location in Google Maps / Google Earth. |
 | **Add Data** | Add layers from files, web services, cloud formats, 3D data, and databases. See [Adding Data](adding-data.md). |
 | **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools, plus the [AI Assistant](ai-assistant.md). The menu holds [two separate toolboxes](processing.md#two-toolboxes-in-one-menu), so some category names appear twice. See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |

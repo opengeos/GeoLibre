@@ -25,6 +25,13 @@ It also ships **1,000+ geoprocessing tools** that run *entirely in your browser*
 
 GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, native Android and iOS apps, in any modern web browser, and adapts responsively to mobile and small screens.
 
+One project can be viewed through **four rendering engines**: MapLibre GL JS (the
+default), Mapbox GL JS, CesiumJS, or the ArcGIS Maps SDK for JavaScript. Switch
+the primary map from **View → Rendering engine**, or mix engines in synchronized
+split panes, without duplicating the project or its layers. See the
+[rendering-engine guide](https://geolibre.app/user-guide/rendering-engines/) for
+capabilities, credentials, and current compatibility.
+
 - **[Launch GeoLibre Web](https://web.geolibre.app/)** — the full app in your browser, nothing to install
 - **[Download the desktop app](https://geolibre.app/downloads/)** — Windows, macOS, and Linux installers
 - **[Get it on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769)** — the sandboxed macOS build
@@ -36,6 +43,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - **[1,000+ geoprocessing tools](https://geolibre.app/user-guide/processing/#whitebox-toolbox)** — the full toolbox, in the browser
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
+- **[Rendering engines](https://geolibre.app/user-guide/rendering-engines/)** — compare MapLibre, Mapbox, Cesium, and ArcGIS and learn how to switch or combine them.
 
 ## Demos
 

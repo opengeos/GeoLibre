@@ -193,4 +193,5 @@ Use `set_renderer(path, "cesium")` to open a project on the globe.
 `set_map_layout(path, 1, 2, view_kinds=["cesium", "maplibre"])` creates a mixed
 grid and returns the secondary pane IDs. Pass one as `pane_id` to `set_renderer`
 to change only that pane. Camera tools continue to use longitude/latitude and
-the shared zoom, bearing, and pitch convention.
+the shared zoom, bearing, and pitch convention. The accepted renderer names are
+`maplibre`, `mapbox`, `cesium`, and `arcgis`.

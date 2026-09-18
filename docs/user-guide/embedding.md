@@ -549,8 +549,9 @@ await client.setRenderer("cesium");
 const renderer = await client.getRenderer();
 ```
 
-Both methods accept or return `"maplibre"` or `"cesium"`. The change event reports
+Both methods accept or return `"maplibre"`, `"mapbox"`, `"cesium"`, or
+`"arcgis"`. The change event reports
 the selected renderer. `setRenderer` acknowledges the selection; the new canvas
 mounts asynchronously. Wait for the next `ready` event before issuing camera or
-capture commands. `exportImage()` supports either renderer and waits for its
+capture commands. `exportImage()` supports all four renderers and waits for the
 visible layers to settle before returning a PNG data URL.

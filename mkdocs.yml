@@ -50,6 +50,7 @@ nav:
   - Launch GeoLibre Web: https://web.geolibre.app
   - User Guide:
       - Interface Overview: user-guide/interface.md
+      - Rendering Engines: user-guide/rendering-engines.md
       - Projects: user-guide/projects.md
       - Adding Data: user-guide/adding-data.md
       - Supported Data Formats: data-formats.md
@@ -85,6 +86,10 @@ nav:
       - Source Code Deep Dive (中文): tutorials/source-code-deep-dive-zh.md
   - Reference:
       - Architecture: architecture.md
+      - MapLibre Renderer: maplibre-renderer.md
+      - Mapbox Renderer: mapbox-renderer.md
+      - Cesium Renderer: cesium-renderer.md
+      - ArcGIS Renderer: arcgis-renderer.md
       - Self-Hosting: self-hosting.md
       - Server API: server-api.md
       - Android: android.md

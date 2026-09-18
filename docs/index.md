@@ -12,7 +12,8 @@ hide:
       GeoLibre runs everywhere you do, in the web browser, on the desktop, on
       mobile, and inside Jupyter notebooks, all while keeping your data local
       and private. It is built with Tauri, React, TypeScript, MapLibre GL JS,
-      DuckDB-WASM Spatial, and deck.gl, with fast local and cloud-native data
+      DuckDB-WASM Spatial, and deck.gl, with four interchangeable rendering
+      engines, fast local and cloud-native data
       work, project files, styling, plugins, and modern geospatial workflows.
     </p>
     <div class="hero__actions">
@@ -201,8 +202,8 @@ full release history and what comes next, see the [Roadmap](roadmap.md).
 - **SQL and scripting** — the SQL Workspace for DuckDB Spatial SQL (with PGlite PostGIS and Apache Sedona engines), a docked Notebook panel running Jupyter beside the map (JupyterLite on the web, a JupyterLab server on desktop), a natural-language AI assistant, and an in-app Python Console.
 - **Field and collaboration** — a Field Collection tool for point, line, and polygon observations, real-time multi-user collaboration, and a scroll-driven story map builder.
 - **Map surface** — multi-provider geocoding, the Time Slider plugin, a Controls menu (Measure, Bookmark, Minimap, View State), Layout settings, runtime environment variables, and diagnostics.
-- **Rendering engines** — MapLibre GL JS by default, with Mapbox GL JS and the ArcGIS Maps SDK for JavaScript (loaded from Esri's CDN, nothing bundled) as optional engines for the primary map or any split pane, drawing the same project.
-- **3D and planetary** — a CesiumJS 3D globe view for any secondary map pane, a multi-map grid of synchronized views, a free-flight camera, and planetary mapping for the Moon, Mars, Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, with a per-project ellipsoid driving measurements.
+- **[Four rendering engines](user-guide/rendering-engines.md)** — MapLibre GL JS by default, plus Mapbox GL JS, CesiumJS, and the ArcGIS Maps SDK for JavaScript. Any engine can draw the primary map or an individual split pane, and the same project state follows each switch.
+- **3D and planetary** — native Cesium globes and ArcGIS 3D scenes, globe projections in MapLibre and Mapbox, a multi-map grid of synchronized views, a free-flight camera, and planetary mapping for the Moon, Mars, Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, with a per-project ellipsoid driving measurements.
 - **Styling and labeling** — a rule-based renderer with per-rule symbol properties and scale-dependent visibility, a Style Manager preset library, diagram symbology, an auto-generated on-map Legend, a shared Expression Builder driving data-defined labeling and Select by Expression, and symbology interchange as OGC SLD, QGIS QML, Mapbox GL, and GeoLibre URL style JSON.
 - **Attribute depth** — virtual fields, persistent attribute joins, an attribute form designer, a Raster Attribute Table, and editable source layers that write vector edits back to GeoPackage, GeoJSON, and PostGIS.
 - **Catalog browsers** — a QGIS-style Browser panel (Data Source Manager) plus panels for STAC, NASA Earthdata, Hugging Face, GeoLens, Natural Earth, Source Cooperative, ArcGIS Hub, Socrata, and CKAN.
