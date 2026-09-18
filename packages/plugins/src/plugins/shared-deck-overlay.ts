@@ -1,3 +1,4 @@
+import type { ArcgisDeckOverlay } from "./arcgis-deck/overlay";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
@@ -32,10 +33,17 @@ type DeviceListener = (device: unknown) => void;
  * position stays visible above the 3D track it rides (see #1210).
  * Ordering WITHIN a source is whatever order that source supplies.
  */
-const SOURCE_DRAW_ORDER = ["raster", "google-3d-tiles", "deckviz", "route-anim"] as const;
+const SOURCE_DRAW_ORDER = [
+  "raster",
+  "stac-search",
+  "google-3d-tiles",
+  "mapbox-3d-tiles",
+  "deckviz",
+  "route-anim",
+] as const;
 export type SharedDeckSource = (typeof SOURCE_DRAW_ORDER)[number];
 
-let overlay: MapboxOverlay | null = null;
+let overlay: MapboxOverlay | ArcgisDeckOverlay | null = null;
 let overlayMounted = false;
 let deckGL: GeoLibreDeckGL | null = null;
 let appRef: GeoLibreAppAPI | null = null;
@@ -45,10 +53,30 @@ let boundMap: unknown;
 // Serialises concurrent setup calls: several producers (deckgl-viz, Google,
 // raster) can all race to ensure the overlay before the first getDeckGL()
 // resolves, and only one overlay may exist per map.
-let ensureInFlight: Promise<MapboxOverlay | null> | null = null;
+let ensureInFlight: Promise<MapboxOverlay | ArcgisDeckOverlay | null> | null = null;
 
 // The per-source layer lists, aggregated into one setProps on every render.
 const layersBySource = new Map<SharedDeckSource, Layer[]>();
+const loadErrors = new Map<string, string>();
+
+/** Inspect live deck layers, including their asynchronous tile sublayers. */
+export function getSharedDeckLoadState(layerId: string) {
+  const layers = aggregatedLayers().filter((layer) => layer.id === layerId);
+  const loading = !overlayMounted || layers.some((layer) => !layer.isLoaded);
+  // A recorded error deliberately outlives isLoaded flipping back to true: a
+  // failed tile still resolves as loaded and leaves a hole in the raster. It
+  // must not outlive the layer's NEXT fetch though -- a top-level layer id is
+  // stable for the layer's whole life, so a one-off network blip would
+  // otherwise pin readiness at `error` forever. Once the layer is loading
+  // again a retry is in flight, so drop the stale error and let `onError`
+  // re-record it if that attempt fails too.
+  if (loading && layers.length > 0) loadErrors.delete(layerId);
+  return {
+    found: layers.length > 0,
+    loading,
+    error: loadErrors.get(layerId) ?? null,
+  };
+}
 
 // The luma device from the shared Deck, forwarded to producers that need it to
 // allocate GPU resources (the raster control's classification colormap
@@ -74,7 +102,9 @@ let mountGaveUp = false;
  * @param app - The host application API.
  * @returns The shared overlay, or null when deck.gl is unavailable.
  */
-export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
+export function ensureSharedDeckOverlay(
+  app: GeoLibreAppAPI,
+): Promise<MapboxOverlay | ArcgisDeckOverlay | null> {
   if (ensureInFlight) return ensureInFlight;
   ensureInFlight = runEnsureSharedDeckOverlay(app).finally(() => {
     ensureInFlight = null;
@@ -82,12 +112,15 @@ export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOver
   return ensureInFlight;
 }
 
-async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
+async function runEnsureSharedDeckOverlay(
+  app: GeoLibreAppAPI,
+): Promise<MapboxOverlay | ArcgisDeckOverlay | null> {
   appRef = app;
   if (!app.getDeckGL) return null;
   deckGL ??= await app.getDeckGL();
 
-  const map = app.getMap?.() ?? null;
+  const arcgisView = app.getArcgisView?.() ?? null;
+  const map = app.getMap?.() ?? app.getMapboxMap?.() ?? arcgisView;
   if (overlay && boundMap === map) {
     // Already bound to this map; just refresh the rendered layers.
     renderSharedDeckOverlay();
@@ -97,7 +130,9 @@ async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOv
   // First attach, or the map was reinitialised (e.g. a projection/globe
   // toggle). Drop the stale overlay before building a fresh one so its Deck
   // cannot leak onto the new map.
-  if (overlay && overlayMounted) {
+  if (overlay && "mount" in overlay) {
+    overlay.finalize();
+  } else if (overlay && overlayMounted) {
     try {
       app.removeMapControl(overlay);
     } catch (error) {
@@ -106,10 +141,23 @@ async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOv
     }
   }
   boundMap = map;
+  loadErrors.clear();
   device = null;
-  overlay = new deckGL.mapbox.MapboxOverlay({
-    interleaved: true,
-    layers: [],
+  if (arcgisView?.type === "3d" && arcgisView.viewingMode !== "local") {
+    overlay = null;
+    overlayMounted = false;
+    return null;
+  }
+  const props = {
+    layers: [] as Layer[],
+    onError: (error: Error, layer?: Layer) => {
+      // A tile error can leave isLoaded=true with a hole in the raster.
+      // Attribute sublayer errors to the producer's top-level layer.
+      let root = layer;
+      while (root?.parent) root = root.parent;
+      if (root) loadErrors.set(root.id, error.message);
+      console.error("[GeoLibre] deck layer failed", error);
+    },
     onDeviceInitialized: (initializedDevice: unknown) => {
       device = initializedDevice;
       for (const listener of deviceListeners) {
@@ -120,7 +168,10 @@ async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOv
         }
       }
     },
-  });
+  };
+  overlay = arcgisView
+    ? new (await import("./arcgis-deck/overlay")).ArcgisDeckOverlay(arcgisView, props)
+    : new deckGL.mapbox.MapboxOverlay({ ...props, interleaved: true });
   overlayMounted = false;
   mountRetries = 0;
   mountGaveUp = false;
@@ -142,6 +193,10 @@ async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOv
  * @param layers - That producer's deck layers, in its own draw order.
  */
 export function setSharedDeckLayers(source: SharedDeckSource, layers: Layer[]): void {
+  const ids = new Set(layers.map((layer) => layer.id));
+  for (const previous of layersBySource.get(source) ?? []) {
+    if (!ids.has(previous.id)) loadErrors.delete(previous.id);
+  }
   if (layers.length > 0) layersBySource.set(source, layers);
   else layersBySource.delete(source);
   renderSharedDeckOverlay();
@@ -183,6 +238,19 @@ function renderSharedDeckOverlay(): void {
   if (!overlay || !deckGL || !appRef) return;
 
   const layers = aggregatedLayers();
+  if ("mount" in overlay) {
+    const current = overlay;
+    current.setProps({ layers });
+    if (layers.length && !overlayMounted) {
+      void current
+        .mount()
+        .then(() => {
+          if (overlay === current) overlayMounted = true;
+        })
+        .catch((error: unknown) => console.error("[GeoLibre] ArcGIS deck overlay failed", error));
+    }
+    return;
+  }
 
   // Mount lazily: the map must be ready for addMapControl to succeed, and there
   // is nothing to show until a producer registers layers. Once mounted the
@@ -201,7 +269,7 @@ function renderSharedDeckOverlay(): void {
     // The successful mount can happen on a later retry, after the map became
     // ready; record the map it actually bound to so a subsequent ensure() does
     // not see a stale value and needlessly rebind.
-    boundMap = appRef.getMap?.() ?? boundMap;
+    boundMap = appRef.getMap?.() ?? appRef.getMapboxMap?.() ?? boundMap;
   }
 
   overlay.setProps({ layers });

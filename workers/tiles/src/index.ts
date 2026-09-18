@@ -35,7 +35,11 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
-import { fetchAllowlistedUpstream, HDX_CKAN_SEARCH_UPSTREAM } from "./allowlisted-fetch";
+import {
+  fetchAllowlistedUpstream,
+  HDX_CKAN_SEARCH_UPSTREAM,
+  OVERPASS_API_UPSTREAM,
+} from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -82,6 +86,25 @@ const OAM_MAX_LIMIT = 100;
 // behavior, so GeoLibre reads this fixed upstream through a named route.
 const CKAN_SEARCH_PATH = "/ckan/search";
 const CKAN_MAX_ROWS = 50;
+
+// The public Overpass endpoint rejects some browser origins (notably Pages
+// previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
+// with a small request-body ceiling and the same origin gate as other service
+// proxies. Responses are never cached because OSM data changes continuously.
+const OVERPASS_PATH = "/overpass";
+const OVERPASS_MAX_BODY_BYTES = 20_000;
+const OVERPASS_UPSTREAM_TIMEOUT_MS = 65_000;
+export const OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
+export const OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES = 4;
+const OVERPASS_QUERY_PREFIX = "[out:json][timeout:60];";
+const OVERPASS_QUERY_SUFFIX = "out geom;";
+const OVERPASS_NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+const OVERPASS_QUOTED = '"(?:\\\\.|[^"\\\\])*"';
+const OVERPASS_FILTER = `(?:\\[~"\\."~"\\."\\]|\\[${OVERPASS_QUOTED}(?:=${OVERPASS_QUOTED})?\\])`;
+const OVERPASS_SELECTOR = new RegExp(
+  `nwr(${OVERPASS_FILTER})\\((${OVERPASS_NUMBER}),(${OVERPASS_NUMBER}),(${OVERPASS_NUMBER}),(${OVERPASS_NUMBER})\\);`,
+  "g",
+);
 
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
 // at all, so a browser cannot read it; this route fetches it server-side and
@@ -207,9 +230,13 @@ const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-methods": "GET, OPTIONS",
   // Allow the Range request header (the /pmtiles route needs it) and expose the
   // response headers a range reader relies on. Harmless for the tile routes.
-  "access-control-allow-headers": "range",
+  "access-control-allow-headers": "content-type, range",
   "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
+};
+const OVERPASS_CORS_HEADERS: Record<string, string> = {
+  ...CORS_HEADERS,
+  "access-control-allow-methods": "POST, OPTIONS",
 };
 
 /** `/pmtiles/<name>.pmtiles` range-proxies the Protomaps daily planet builds,
@@ -413,6 +440,165 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
   });
 }
 
+/**
+ * Accept only the exact bounded query grammar emitted by buildOsmDownloadQuery.
+ * This enforces the client's limits at the trust boundary so a forged POST
+ * cannot use GeoLibre's Worker for an unbounded or long-running Overpass query.
+ */
+export function isAllowedOverpassQuery(query: string): boolean {
+  if (!query.startsWith(OVERPASS_QUERY_PREFIX) || !query.endsWith(OVERPASS_QUERY_SUFFIX)) {
+    return false;
+  }
+  let selectorsText = query.slice(OVERPASS_QUERY_PREFIX.length, -OVERPASS_QUERY_SUFFIX.length);
+  const wrapped = selectorsText.startsWith("(") && selectorsText.endsWith(");");
+  if (wrapped) {
+    selectorsText = selectorsText.slice(1, -2);
+  }
+  OVERPASS_SELECTOR.lastIndex = 0;
+  const matches = [...selectorsText.matchAll(OVERPASS_SELECTOR)];
+  if (matches.length < 1 || matches.length > 2) return false;
+  if (matches.map((match) => match[0]).join("") !== selectorsText) return false;
+  // The client wraps exactly two selectors only when splitting one view at the
+  // antimeridian. Reject unrelated multi-region queries forged outside it.
+  if (wrapped !== (matches.length === 2)) return false;
+  if (
+    matches.length === 2 &&
+    (matches[0][1] !== matches[1][1] ||
+      matches[0][2] !== matches[1][2] ||
+      matches[0][4] !== matches[1][4] ||
+      Number(matches[0][5]) !== 180 ||
+      Number(matches[1][3]) !== -180)
+  ) {
+    return false;
+  }
+
+  const allFeatures = matches.every((match) => match[1] === '[~"."~"."]');
+  if (matches.some((match) => (match[1] === '[~"."~"."]') !== allFeatures)) return false;
+  // Keep these mirrored limits aligned with osm-downloader-api.ts in packages/plugins.
+  const areaLimit = allFeatures
+    ? OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES
+    : OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES;
+  let totalArea = 0;
+  for (const match of matches) {
+    const [, , southText, westText, northText, eastText] = match;
+    const [south, west, north, east] = [southText, westText, northText, eastText].map(Number);
+    if (
+      ![south, west, north, east].every(Number.isFinite) ||
+      south < -90 ||
+      north > 90 ||
+      west < -180 ||
+      east > 180 ||
+      south >= north ||
+      west >= east
+    ) {
+      return false;
+    }
+    totalArea += (north - south) * (east - west);
+  }
+  return totalArea <= areaLimit;
+}
+
+/** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
+async function readRequestBodyWithLimit(request: Request, limit: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > limit) {
+      await reader.cancel();
+      return null;
+    }
+    body += decoder.decode(value, { stream: true });
+  }
+  return body + decoder.decode();
+}
+
+/** Clear the upstream deadline only once its response body closes or is cancelled. */
+function streamWithTimeoutCleanup(body: ReadableStream, timeout: ReturnType<typeof setTimeout>) {
+  const reader = body.getReader();
+  const finish = () => clearTimeout(timeout);
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      await reader.cancel(reason);
+    },
+  });
+}
+
+async function handleOverpass(request: Request): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: OVERPASS_CORS_HEADERS });
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > OVERPASS_MAX_BODY_BYTES) {
+    return new Response("Payload Too Large", { status: 413, headers: OVERPASS_CORS_HEADERS });
+  }
+  const body = await readRequestBodyWithLimit(request, OVERPASS_MAX_BODY_BYTES);
+  if (body === null) {
+    return new Response("Payload Too Large", { status: 413, headers: OVERPASS_CORS_HEADERS });
+  }
+  const params = new URLSearchParams(body);
+  const query = params.get("data");
+  if (
+    !query ||
+    params.getAll("data").length !== 1 ||
+    [...params.keys()].some((key) => key !== "data") ||
+    !isAllowedOverpassQuery(query)
+  ) {
+    return new Response("Bad Request", { status: 400, headers: OVERPASS_CORS_HEADERS });
+  }
+  let originResponse: Response;
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(
+    () => upstreamController.abort(),
+    OVERPASS_UPSTREAM_TIMEOUT_MS,
+  );
+  try {
+    originResponse = await fetchAllowlistedUpstream(OVERPASS_API_UPSTREAM, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        referer: "https://geolibre.app/",
+      },
+      body,
+      signal: upstreamController.signal,
+    });
+  } catch {
+    clearTimeout(upstreamTimeout);
+    return new Response("Bad Gateway", { status: 502, headers: OVERPASS_CORS_HEADERS });
+  }
+  if (!originResponse.body) {
+    clearTimeout(upstreamTimeout);
+  }
+  const headers = new Headers(OVERPASS_CORS_HEADERS);
+  headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
+  headers.set("cache-control", "no-store");
+  const responseBody = originResponse.body
+    ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout)
+    : null;
+  return new Response(responseBody, { status: originResponse.status, headers });
+}
+
 interface Env {}
 
 /**
@@ -503,22 +689,28 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
   });
 }
 
-export default {
+export const tilesWorker = {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      const headers = url.pathname === OVERPASS_PATH ? OVERPASS_CORS_HEADERS : CORS_HEADERS;
+      return new Response(null, { status: 204, headers });
     }
-    // Only GET is proxied. MapLibre issues GET for every tile; supporting HEAD
-    // would just complicate the Cache API keying (which requires GET) for no
-    // real consumer.
+    if (url.pathname === OVERPASS_PATH && request.method === "POST") {
+      return handleOverpass(request);
+    }
+    // Only GET is proxied outside the explicitly bounded Overpass POST route.
+    // Supporting HEAD would complicate Cache API keying (which requires GET)
+    // for no real consumer.
     if (request.method !== "GET") {
+      const overpass = url.pathname === OVERPASS_PATH;
+      const allow = overpass ? "POST, OPTIONS" : "GET, OPTIONS";
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: { ...CORS_HEADERS, allow: "GET, OPTIONS" },
+        headers: { ...(overpass ? OVERPASS_CORS_HEADERS : CORS_HEADERS), allow },
       });
     }
 
-    const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "") {
       return new Response(
         "GeoLibre tile + service proxy.\n" +
@@ -528,6 +720,7 @@ export default {
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
+          "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
@@ -743,6 +936,8 @@ export default {
     return response;
   },
 };
+
+export default tilesWorker;
 
 /**
  * Serve one reprojected `/wms/<dataset>/<z>/<x>/<y>.png` tile: request the

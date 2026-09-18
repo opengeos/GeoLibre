@@ -9,3 +9,8 @@ export async function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
     pthreadWorker: null,
   };
 }
+
+/** A worker running the bundled script; see the web variant for why this exists. */
+export function createDuckDbWorker(bundle: duckdb.DuckDBBundle): Worker {
+  return new Worker(bundle.mainWorker!, { type: "module" });
+}

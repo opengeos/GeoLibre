@@ -1,7 +1,24 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type { VectorLayerInfo, VectorLayerStyle } from "maplibre-gl-vector";
+import {
+  DEFAULT_LAYER_STYLE,
+  createEmptyProject,
+  projectFromStore,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
+import type {
+  VectorControl,
+  VectorLayerInfo,
+  VectorLayerOptions,
+  VectorLayerStyle,
+} from "maplibre-gl-vector";
+import { embedEditedGeometry } from "../apps/geolibre-desktop/src/lib/edited-geometry-save";
+import {
+  preserveUnsavedVectorLayers,
+  replayVectorLayer,
+} from "../packages/plugins/src/plugins/maplibre-vector";
+import { STAC_ASSET_ACCESS_METADATA_KEY } from "../packages/plugins/src/plugins/stac-signing";
 import {
   createVectorStoreLayer,
   isEmbeddableLocalVectorLayer,
@@ -122,6 +139,54 @@ describe("isEmbeddableLocalVectorLayer", () => {
   });
 });
 
+describe("preserveUnsavedVectorLayers", () => {
+  afterEach(() => useAppStore.setState({ layers: [] }));
+
+  it("reads a browser-picked layer out of the departing control and skips the rest", async () => {
+    const collection = { type: "FeatureCollection" as const, features: [] };
+    const infos = [
+      vectorInfo({ id: "picked", source: { kind: "file", fileName: "picked.gpkg" } }),
+      vectorInfo({
+        id: "streamed",
+        source: { kind: "file", fileName: "streamed.parquet" },
+        ingestMode: "stream",
+      }),
+      vectorInfo({
+        id: "on-disk",
+        source: { kind: "file", fileName: "disk.gpkg", path: "/home/user/disk.gpkg" },
+      }),
+      vectorInfo({ id: "remote" }),
+    ];
+    useAppStore.setState({
+      layers: [
+        ...infos.map((info) => createVectorStoreLayer(info)),
+        {
+          ...createVectorStoreLayer(
+            vectorInfo({ id: "embedded", source: { kind: "file", fileName: "e.gpkg" } }),
+          ),
+          geojson: collection,
+        },
+        otherStoreLayer(),
+      ],
+    });
+    const read: string[] = [];
+    await preserveUnsavedVectorLayers({
+      getLayer: (id) => infos.find((info) => info.id === id),
+      getLayerGeoJSON: async (id) => {
+        read.push(id);
+        return collection;
+      },
+    });
+    assert.deepEqual(read, ["picked"]);
+    const byId = new Map(useAppStore.getState().layers.map((layer) => [layer.id, layer]));
+    assert.equal(byId.get("picked")?.geojson, collection);
+    assert.equal(byId.get("streamed")?.geojson, undefined);
+    assert.equal(byId.get("on-disk")?.geojson, undefined);
+    assert.equal(byId.get("remote")?.geojson, undefined);
+    assert.equal(byId.get("embedded")?.geojson, collection);
+  });
+});
+
 describe("createVectorStoreLayer", () => {
   it("mirrors a URL layer as an external custom layer", () => {
     const layer = createVectorStoreLayer(vectorInfo({ opacity: 0.5, visible: false }));
@@ -135,7 +200,9 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.sourcePath, "https://example.com/countries.geojson");
     assert.equal(layer.metadata.externalNativeLayer, true);
     assert.equal(layer.metadata.customLayerType, "fill");
-    assert.equal(layer.metadata.identifiable, false);
+    // Identify (and so the Style panel's Popup design) owns feature inspection
+    // for these layers; the control's own attribute popup is off by default.
+    assert.equal(layer.metadata.identifiable, true);
     assert.equal(layer.metadata.panelCollapsed, true);
     assert.equal(layer.metadata.sourceKind, "maplibre-gl-vector");
     assert.equal(layer.metadata.vectorSource, "url");
@@ -362,6 +429,45 @@ describe("syncVectorLayersToStore", () => {
     assert.ok(layers.some((layer) => layer.id === "unrelated"));
   });
 
+  it("preserves geometry edits through control synchronization without repeated updates", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    const layer = useAppStore.getState().layers[0];
+    const edited = { type: "FeatureCollection" as const, features: [] };
+    useAppStore.getState().updateLayer(layer.id, {
+      geojson: edited,
+      metadata: { ...layer.metadata, geometryEdited: true },
+    });
+    syncVectorLayersToStore(control);
+    const after = useAppStore.getState().layers;
+    assert.equal(after[0].metadata.geometryEdited, true);
+    assert.equal(after[0].geojson, edited);
+    syncVectorLayersToStore(control);
+    assert.equal(useAppStore.getState().layers, after);
+  });
+
+  it("drops stale edits when a vector source is replaced under the same id", () => {
+    syncVectorLayersToStore(fakeControl([vectorInfo()]).control);
+    const old = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer(old.id, {
+      geojson: { type: "FeatureCollection", features: [] },
+      metadata: { ...old.metadata, geometryEdited: true },
+    });
+    const url = "https://example.com/replacement.geojson";
+    syncVectorLayersToStore(fakeControl([vectorInfo({ source: { kind: "url", url } })]).control);
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.metadata.geometryEdited, undefined);
+    assert.equal(layer.geojson, undefined);
+    const project = createEmptyProject();
+    const saved = projectFromStore({
+      ...project,
+      projectName: project.name,
+      layers: [embedEditedGeometry(layer)],
+    });
+    assert.equal(saved.layers[0].source.url, url);
+    assert.equal(saved.layers[0].metadata.embeddedGeoJSON, undefined);
+  });
+
   it("removes store layers whose vector layers are gone", () => {
     const { control } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);
@@ -369,6 +475,40 @@ describe("syncVectorLayersToStore", () => {
 
     syncVectorLayersToStore(fakeControl([]).control);
     assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
+  // Restore replays each layer of a multi-layer container independently, so one
+  // unreachable feed used to delete those layers from the project outright
+  // (opengeos/GeoLibre discussion #1757). A failed replay is not a removal.
+  it("keeps preserved layers the control does not have", () => {
+    const { control } = fakeControl([vectorInfo(), vectorInfo({ id: "vector-2", name: "cities" })]);
+    syncVectorLayersToStore(control);
+    assert.equal(useAppStore.getState().layers.length, 2);
+
+    // vector-2 failed to replay: absent from the control, but still the user's.
+    syncVectorLayersToStore(fakeControl([vectorInfo()]).control, {
+      preserveLayerIds: new Set(["vector-2"]),
+    });
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["vector-1", "vector-2"],
+    );
+  });
+
+  it("still prunes layers outside the preserved set", () => {
+    const { control } = fakeControl([vectorInfo(), vectorInfo({ id: "vector-2", name: "cities" })]);
+    syncVectorLayersToStore(control);
+
+    // Only vector-2 failed; vector-1 was genuinely removed at the control.
+    syncVectorLayersToStore(fakeControl([]).control, {
+      preserveLayerIds: new Set(["vector-2"]),
+    });
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["vector-2"],
+    );
   });
 
   it("refreshes changed fields but preserves panel renames", () => {
@@ -394,6 +534,49 @@ describe("syncVectorLayersToStore", () => {
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
     assert.equal(layer.source.type, "vector");
     assert.equal(layer.type, "vector-tiles");
+  });
+
+  it("keeps STAC access metadata across repeated syncs", () => {
+    const access = {
+      catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      collectionId: "private-parquet",
+      href: "https://example.blob.core.windows.net/private-parquet/data.parquet",
+    };
+    const signedSource = {
+      kind: "url" as const,
+      url: `${access.href}?sp=r&sig=old`,
+    };
+    syncVectorLayersToStore(fakeControl([vectorInfo({ source: signedSource })]).control);
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: access },
+    });
+
+    syncVectorLayersToStore(
+      fakeControl([vectorInfo({ source: signedSource, opacity: 0.4 })]).control,
+    );
+
+    assert.deepEqual(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      access,
+    );
+    assert.equal(useAppStore.getState().layers[0].source.url, access.href);
+    assert.equal(useAppStore.getState().layers[0].sourcePath, access.href);
+
+    syncVectorLayersToStore(
+      fakeControl([
+        vectorInfo({
+          source: {
+            kind: "url",
+            url: "https://example.blob.core.windows.net/private-parquet/different.parquet",
+          },
+        }),
+      ]).control,
+    );
+    assert.equal(
+      useAppStore.getState().layers[0].metadata[STAC_ASSET_ACCESS_METADATA_KEY],
+      undefined,
+    );
   });
 
   it("refreshes the saved panel collapsed state", () => {
@@ -561,6 +744,9 @@ describe("wireVectorStoreSync", () => {
       labelHaloWidth: 1.5,
       labelPlacement: "point",
       labelAllowOverlap: false,
+      labelNumberFormat: false,
+      labelNumberDecimals: 0,
+      labelNumberLocale: "",
       // Extrusion fields default through from DEFAULT_LAYER_STYLE; the height is
       // the chosen property scaled (default property "height", scale 1) and the
       // color resolves to a flat value so its expression field is undefined.
@@ -679,6 +865,52 @@ describe("wireVectorStoreSync", () => {
     assert.equal(pushed.labelSize, 18);
   });
 
+  it("pushes the label number format through the control", () => {
+    const { control, calls } = fakeControl([
+      vectorInfo({ style: vectorStyle({ labelField: "pop" }) }),
+    ]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    // A GeoParquet layer is rendered by the control, not by layer-sync, so the
+    // number-format settings only reach the map through this mapping.
+    useAppStore.getState().setLayerStyle("vector-1", {
+      labels: {
+        ...DEFAULT_LAYER_STYLE.labels,
+        enabled: true,
+        field: "pop",
+        numberFormatEnabled: true,
+        numberDecimals: 2,
+        numberLocale: "de-DE",
+      },
+    });
+
+    assert.equal(calls.length, 1);
+    const pushed = calls[0].args[1] as VectorLayerStyle;
+    assert.equal(pushed.labelNumberFormat, true);
+    assert.equal(pushed.labelNumberDecimals, 2);
+    assert.equal(pushed.labelNumberLocale, "de-DE");
+  });
+
+  it("seeds the panel number format from the control's label style", () => {
+    const { control } = fakeControl([
+      vectorInfo({
+        style: vectorStyle({
+          labelField: "pop",
+          labelNumberFormat: true,
+          labelNumberDecimals: 3,
+          labelNumberLocale: "en-US",
+        }),
+      }),
+    ]);
+    syncVectorLayersToStore(control);
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.style.labels.numberFormatEnabled, true);
+    assert.equal(layer.style.labels.numberDecimals, 3);
+    assert.equal(layer.style.labels.numberLocale, "en-US");
+  });
+
   it("clears the control label field when labels are disabled", () => {
     const { control, calls } = fakeControl([
       vectorInfo({ style: vectorStyle({ labelField: "name" }) }),
@@ -744,6 +976,307 @@ describe("wireVectorStoreSync", () => {
   });
 });
 
+describe("wireVectorStoreSync with layer groups", () => {
+  beforeEach(() => {
+    useAppStore.setState({ layers: [], layerGroups: [] });
+  });
+
+  afterEach(() => {
+    unwireVectorStoreSync();
+    resetVectorStoreSyncSuspension();
+    useAppStore.setState({ layerGroups: [] });
+  });
+
+  it("multiplies the layer and parent group opacities", () => {
+    const { control, calls } = fakeControl([vectorInfo({ opacity: 0.5 })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.2] }]);
+  });
+
+  it("updates the control from both opacity sliders in a nested group chain", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const childId = useAppStore.getState().addLayerGroup("Child", ["vector-1"]);
+    const parentId = useAppStore.getState().addLayerGroup("Parent");
+    useAppStore.getState().moveLayerGroupToGroup(childId, parentId);
+    calls.length = 0;
+
+    useAppStore.getState().setLayerGroupOpacity(childId, 0.5);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.5] }]);
+
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(parentId, 0.4);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.2] }]);
+
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(childId, 0.25);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.1] }]);
+  });
+
+  it("keeps the layer opacity when the control echoes a group fold", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.4 })]).control);
+
+    assert.equal(useAppStore.getState().layers[0].opacity, 1);
+  });
+
+  it("keeps the layer visibility when the control echoes a group fold", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupVisibility(groupId, false);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ visible: false })]).control);
+
+    assert.equal(useAppStore.getState().layers[0].visible, true);
+  });
+
+  it("records a control-side opacity edit made under a faded group", () => {
+    const { control } = fakeControl([vectorInfo({ opacity: 0.5 })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    const edited = fakeControl([vectorInfo({ opacity: 0.9 })]);
+    syncVectorLayersToStore(edited.control);
+
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.9);
+    assert.equal(edited.calls.length, 1);
+    assert.equal(edited.calls[0].method, "setLayerOpacity");
+    assert.equal(edited.calls[0].args[0], "vector-1");
+    assert.ok(Math.abs((edited.calls[0].args[1] as number) - 0.36) < 1e-9);
+  });
+
+  it("reapplies a hidden parent after a control-side visibility edit", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupVisibility(groupId, false);
+
+    const edited = fakeControl([vectorInfo({ visible: true })]);
+    syncVectorLayersToStore(edited.control);
+
+    assert.equal(useAppStore.getState().layers[0].visible, true);
+    assert.deepEqual(edited.calls, [{ method: "setLayerVisibility", args: ["vector-1", false] }]);
+  });
+
+  it("hides and shows a vector through a nested parent group", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const childId = useAppStore.getState().addLayerGroup("Child", ["vector-1"]);
+    const parentId = useAppStore.getState().addLayerGroup("Parent");
+    useAppStore.getState().moveLayerGroupToGroup(childId, parentId);
+    calls.length = 0;
+
+    useAppStore.getState().setLayerGroupVisibility(parentId, false);
+    useAppStore.getState().setLayerGroupVisibility(parentId, true);
+
+    assert.deepEqual(calls, [
+      { method: "setLayerVisibility", args: ["vector-1", false] },
+      { method: "setLayerVisibility", args: ["vector-1", true] },
+    ]);
+  });
+});
+
+describe("replayVectorLayer with layer groups", () => {
+  const groups = new Map([
+    [
+      "child-group",
+      {
+        id: "child-group",
+        name: "Child",
+        parentId: "parent-group",
+        collapsed: false,
+        visible: true,
+        opacity: 0.5,
+      },
+    ],
+    [
+      "parent-group",
+      {
+        id: "parent-group",
+        name: "Parent",
+        collapsed: false,
+        visible: false,
+        opacity: 0.25,
+      },
+    ],
+  ]);
+  const embedded = {
+    type: "FeatureCollection" as const,
+    features: [],
+  };
+  const cases = [
+    {
+      name: "URL",
+      info: vectorInfo(),
+      source: "https://example.com/countries.geojson",
+      options: {},
+    },
+    {
+      name: "local file",
+      info: vectorInfo({
+        source: {
+          kind: "file",
+          fileName: "countries.geojson",
+          path: "/data/countries.geojson",
+        },
+      }),
+      source: new File([""], "countries.geojson", { type: "application/geo+json" }),
+      options: { localPath: "/data/countries.geojson" },
+    },
+    {
+      name: "embedded GeoJSON",
+      info: vectorInfo({
+        source: { kind: "file", fileName: "countries.geojson" },
+      }),
+      source: embedded,
+      options: {},
+    },
+  ] as const;
+
+  beforeEach(() => {
+    unwireVectorStoreSync();
+    useAppStore.setState({ layers: [], layerGroups: [] });
+  });
+
+  afterEach(() => {
+    unwireVectorStoreSync();
+    resetVectorStoreSyncSuspension();
+    useAppStore.setState({ layers: [], layerGroups: [] });
+  });
+
+  for (const restoreCase of cases) {
+    it(`restores folded opacity and visibility for a ${restoreCase.name} source`, async () => {
+      const layer = {
+        ...createVectorStoreLayer(restoreCase.info),
+        groupId: "child-group",
+        opacity: 0.8,
+        visible: true,
+      };
+      useAppStore.setState({ layers: [layer], layerGroups: [...groups.values()] });
+      let addDataCall:
+        | {
+            source: unknown;
+            options: VectorLayerOptions | undefined;
+          }
+        | undefined;
+      const control = {
+        addData: async (source: unknown, options?: VectorLayerOptions) => {
+          addDataCall = { source, options };
+          return restoreCase.info;
+        },
+      } as unknown as VectorControl;
+
+      await replayVectorLayer(control, layer, restoreCase.source, groups, restoreCase.options);
+
+      assert.ok(addDataCall);
+      assert.equal(addDataCall.source, restoreCase.source);
+      assert.equal(addDataCall.options?.opacity, 0.1);
+      assert.equal(addDataCall.options?.visible, false);
+
+      // The control's first post-restore snapshot echoes the folded render
+      // values. The child's own settings must remain ready for its groups to
+      // be shown or unfaded later.
+      syncVectorLayersToStore(
+        fakeControl([
+          {
+            ...restoreCase.info,
+            opacity: 0.1,
+            visible: false,
+          },
+        ]).control,
+      );
+      assert.equal(useAppStore.getState().layers[0].opacity, 0.8);
+      assert.equal(useAppStore.getState().layers[0].visible, true);
+    });
+  }
+
+  it("replays materialized GeoJSON with its effective format instead of the original file format", async () => {
+    const info = vectorInfo({
+      format: "geopackage",
+      source: { kind: "file", fileName: "countries.gpkg" },
+    });
+    const layer = createVectorStoreLayer(info);
+    const cases = [
+      { source: embedded, expectedFormat: "geojson" },
+      {
+        source: new File([JSON.stringify(embedded)], "countries.geojson", {
+          type: "application/geo+json",
+        }),
+        expectedFormat: "geojson",
+      },
+      {
+        source: new File(["geopackage"], "countries.gpkg"),
+        expectedFormat: "geopackage",
+      },
+    ];
+
+    for (const restoreCase of cases) {
+      let addDataOptions: VectorLayerOptions | undefined;
+      const control = {
+        addData: async (_source: unknown, options?: VectorLayerOptions) => {
+          addDataOptions = options;
+          return info;
+        },
+      } as unknown as VectorControl;
+
+      await replayVectorLayer(control, layer, restoreCase.source, groups);
+
+      assert.equal((layer.metadata.vectorState as { format?: string }).format, "geopackage");
+      assert.equal(addDataOptions?.format, restoreCase.expectedFormat);
+    }
+  });
+
+  it("clears restored render tracking after group overrides are removed", async () => {
+    const info = vectorInfo();
+    const layer = {
+      ...createVectorStoreLayer(info),
+      groupId: "child-group",
+      opacity: 0.8,
+      visible: true,
+    };
+    useAppStore.setState({ layers: [layer], layerGroups: [...groups.values()] });
+    const control = {
+      addData: async () => info,
+    } as unknown as VectorControl;
+    await replayVectorLayer(control, layer, "https://example.com/countries.geojson", groups);
+
+    // With the groups gone, this genuine edit needs no render override. It
+    // clears the old folded value (0.1) from the echo tracker.
+    useAppStore.setState({ layerGroups: [] });
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.6 })]).control);
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.6);
+
+    // Returning to the former folded value is still a genuine edit and must
+    // reach the child's store state instead of being swallowed as an echo.
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.1 })]).control);
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.1);
+  });
+});
+
 describe("removeVectorStoreLayers", () => {
   beforeEach(() => {
     useAppStore.setState({ layers: [] });
@@ -770,6 +1303,40 @@ describe("removeVectorStoreLayers", () => {
 });
 
 describe("savedVectorState", () => {
+  it("persists and restores the label number format across a reload", () => {
+    // savedVectorState feeds restoreVectorLayers, so a field missing from
+    // savedVectorStyle is a setting silently lost when the project is reopened.
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        style: vectorStyle({
+          labelField: "pop",
+          labelNumberFormat: true,
+          labelNumberDecimals: 2,
+          labelNumberLocale: "de-DE",
+        }),
+      }),
+    );
+
+    const restored = savedVectorState(layer);
+    assert.equal(restored.style?.labelNumberFormat, true);
+    assert.equal(restored.style?.labelNumberDecimals, 2);
+    assert.equal(restored.style?.labelNumberLocale, "de-DE");
+  });
+
+  it("drops an out-of-range decimals value from a hand-edited project file", () => {
+    for (const bad of [2.5, -1, 99, Number.NaN, "2"]) {
+      const layer = createVectorStoreLayer(
+        vectorInfo({ style: vectorStyle({ labelField: "pop" }) }),
+      );
+      // Reach past the typed builder the way a hand-edited project file would.
+      (layer.metadata.vectorState as { style: Record<string, unknown> }).style.labelNumberDecimals =
+        bad;
+
+      const restored = savedVectorState(layer);
+      assert.equal(restored.style?.labelNumberDecimals, undefined, String(bad));
+    }
+  });
+
   it("round-trips the state persisted by createVectorStoreLayer", () => {
     const layer = createVectorStoreLayer(
       vectorInfo({

@@ -35,6 +35,9 @@ function pointCoordinates(geometry: GeoJSON.Geometry | null): [number, number] |
  * @param geojson - The layer's source features.
  * @param field - The attribute whose value labels each feature.
  * @param mode - `"unique"` or `"concatenate"`; `"off"` returns null.
+ * @param format - Optional value formatter (label number formatting); it runs
+ *   before grouping, so `"unique"` and `"concatenate"` see the same text the
+ *   map draws and two values that format alike collapse together.
  * @returns A point FeatureCollection of aggregated labels, or null when the mode
  *   is off, the field is empty, or nothing is left to label.
  */
@@ -42,6 +45,7 @@ export function buildDedupedLabelFeatures(
   geojson: GeoJSON.FeatureCollection,
   field: string,
   mode: LabelDedupe,
+  format?: (value: unknown) => string | null,
 ): GeoJSON.FeatureCollection | null {
   if (mode === "off" || !field) return null;
   const groups = new Map<string, { coordinates: [number, number]; values: Set<string> }>();
@@ -49,7 +53,7 @@ export function buildDedupedLabelFeatures(
     const point = pointCoordinates(feature.geometry ?? null);
     if (!point) continue;
     const raw = feature.properties?.[field];
-    const value = raw == null ? "" : String(raw);
+    const value = raw == null ? "" : (format?.(raw) ?? String(raw));
     const key = `${point[0].toFixed(7)},${point[1].toFixed(7)}`;
     let group = groups.get(key);
     if (!group) {

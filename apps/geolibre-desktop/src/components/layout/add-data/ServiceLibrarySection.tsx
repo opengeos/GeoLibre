@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
 import {
   createServiceEntry,
+  isManagedService,
   listServices,
   mergeImportedServices,
   parseImportedServices,
@@ -25,7 +26,6 @@ import {
   type ServiceFields,
   type ServiceLibraryEntry,
   type ServiceLibraryKind,
-  UNCATEGORIZED_LABEL,
   upsertServiceEntry,
   writeUserServices,
 } from "./service-library";
@@ -53,15 +53,15 @@ interface CategoryGroup {
 function groupByCategory(entries: ServiceLibraryEntry[]): CategoryGroup[] {
   const groups = new Map<string, ServiceLibraryEntry[]>();
   for (const entry of entries) {
-    const label = entry.category || UNCATEGORIZED_LABEL;
+    const label = entry.category || "";
     const group = groups.get(label);
     if (group) group.push(entry);
     else groups.set(label, [entry]);
   }
   return Array.from(groups.entries())
     .sort(([a], [b]) => {
-      if (a === UNCATEGORIZED_LABEL) return 1;
-      if (b === UNCATEGORIZED_LABEL) return -1;
+      if (!a) return 1;
+      if (!b) return -1;
       return a.localeCompare(b);
     })
     .map(([label, entries]) => ({ label, entries }));
@@ -88,7 +88,7 @@ export function ServiceLibrarySection({
   const groups = useMemo(() => groupByCategory(entries), [entries]);
   const categories = useMemo(() => serviceCategories(entries), [entries]);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
-  const canDeleteSelected = Boolean(selectedEntry && !selectedEntry.builtin);
+  const canDeleteSelected = Boolean(selectedEntry && !isManagedService(selectedEntry));
 
   const persist = (next: ServiceLibraryEntry[]) => {
     setUserEntries(next);
@@ -118,9 +118,9 @@ export function ServiceLibrarySection({
       return;
     }
     // Update the selected entry in place when it's a user-owned service;
-    // otherwise (nothing or a built-in selected) mint a new one.
+    // otherwise (nothing or a managed service selected) mint a new one.
     const entry = createServiceEntry({
-      id: selectedEntry && !selectedEntry.builtin ? selectedEntry.id : undefined,
+      id: selectedEntry && !isManagedService(selectedEntry) ? selectedEntry.id : undefined,
       name,
       category: saveCategory,
       kind,
@@ -144,7 +144,7 @@ export function ServiceLibrarySection({
   };
 
   const handleDelete = () => {
-    if (!selectedEntry || selectedEntry.builtin) return;
+    if (!selectedEntry || isManagedService(selectedEntry)) return;
     persist(removeServiceEntry(userEntries, selectedEntry.id));
     setSelectedId("");
     setError(null);
@@ -261,17 +261,15 @@ export function ServiceLibrarySection({
             {groups.map((group) => (
               <optgroup
                 key={group.label}
-                label={
-                  group.label === UNCATEGORIZED_LABEL
-                    ? t("addData.serviceLibrary.uncategorized")
-                    : group.label
-                }
+                label={group.label || t("addData.serviceLibrary.uncategorized")}
               >
                 {group.entries.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {entry.builtin
-                      ? t("addData.serviceLibrary.builtin", { name: entry.name })
-                      : entry.name}
+                    {entry.deployment
+                      ? t("addData.serviceLibrary.config", { name: entry.name })
+                      : entry.builtin
+                        ? t("addData.serviceLibrary.builtin", { name: entry.name })
+                        : entry.name}
                   </option>
                 ))}
               </optgroup>

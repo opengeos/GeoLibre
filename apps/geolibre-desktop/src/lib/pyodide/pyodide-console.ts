@@ -1,4 +1,4 @@
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import consoleApiSource from "./console_api.py?raw";
 import { getPyodideIndexUrl, isDefaultPyodideIndexUrl } from "./pyodide-config";
 import { createScriptingHandlers, type ScriptingDeps } from "../scripting/scriptingApi";
@@ -329,6 +329,6 @@ export async function completeConsoleCode(
 }
 
 /** Convenience for the panel: pull a controller accessor into the deps shape. */
-export function consoleDeps(getController: () => MapController | null): ScriptingDeps {
+export function consoleDeps(getController: () => MapEngine | null): ScriptingDeps {
   return { getController };
 }

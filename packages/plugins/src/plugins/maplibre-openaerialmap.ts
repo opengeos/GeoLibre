@@ -8,6 +8,7 @@ import type {
   MapMouseEvent,
 } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 import {
   buildSearchUrl,
   footprintFeature,
@@ -45,6 +46,8 @@ const FOOTPRINT_FILL_LAYER_ID = "geolibre-oam-footprints-fill";
 const FOOTPRINT_LINE_LAYER_ID = "geolibre-oam-footprints-line";
 // The Layers-panel entry id (distinct from the map source/layer ids above).
 const FOOTPRINT_STORE_LAYER_ID = "geolibre-oam-footprints-layer";
+/** `metadata.sourceKind` of the footprints entry (see `isMapboxPluginLayer`). */
+const FOOTPRINT_SOURCE_KIND = "openaerialmap-footprints";
 // The selection outline lives in its own source so removing the footprints
 // store layer (which drops FOOTPRINT_SOURCE_ID) never leaves a layer pointing at
 // a deleted source — MapLibre throws on that.
@@ -269,7 +272,7 @@ function normalizeLon(lon: number): number {
 
 /** Reads the current map view as a valid [w, s, e, n] bbox. */
 function currentBbox(): [number, number, number, number] | null {
-  const map = appRef?.getMap?.();
+  const map = getStyleMap(appRef);
   if (!map) return null;
   const bounds = map.getBounds();
   const clampLat = (n: number): number => Math.max(-90, Math.min(90, n));
@@ -485,6 +488,10 @@ function syncFootprintStoreLayer(
     nativeLayerIds: [FOOTPRINT_FILL_LAYER_ID, FOOTPRINT_LINE_LAYER_ID],
     sourceIds: [FOOTPRINT_SOURCE_ID],
     geojson: { type: "FeatureCollection", features } as FeatureCollection,
+    // Names the layer for the Mapbox engine's plugin-owned list: this plugin
+    // draws the fill/line natively on either engine, so the engine must not
+    // compile a second copy of the GeoJSON under its own ids there.
+    metadata: { sourceKind: FOOTPRINT_SOURCE_KIND },
     ...(footprintsRegistered
       ? {}
       : {
@@ -939,7 +946,7 @@ function buildPanel(container: HTMLElement): () => void {
       const card = buildCard(image, {
         openMetadata: () => openMetadataModal(image),
         onHover: (hovered) => {
-          const map = appRef?.getMap?.();
+          const map = getStyleMap(appRef);
           if (map) setSelectedFootprint(map, hovered ? image.id : selectedId);
         },
       });
@@ -951,7 +958,7 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const renderFootprints = (): void => {
-    const map = appRef?.getMap?.();
+    const map = getStyleMap(appRef);
     if (map) setFootprints(map, images);
   };
 
@@ -969,7 +976,7 @@ function buildPanel(container: HTMLElement): () => void {
       footprintsRegistered = false;
       footprintById.clear();
       selectedId = null;
-      const map = appRef?.getMap?.();
+      const map = getStyleMap(appRef);
       if (map) {
         if (map.getLayer(SELECT_LINE_LAYER_ID)) map.removeLayer(SELECT_LINE_LAYER_ID);
         if (map.getSource(SELECT_SOURCE_ID)) map.removeSource(SELECT_SOURCE_ID);
@@ -985,7 +992,7 @@ function buildPanel(container: HTMLElement): () => void {
     const image = images.find((candidate) => candidate.id === id);
     if (!image) return;
     selectedId = id;
-    const map = appRef?.getMap?.();
+    const map = getStyleMap(appRef);
     if (map) setSelectedFootprint(map, id);
     const card = cardEls.get(id);
     if (card) {
@@ -1020,7 +1027,7 @@ function buildPanel(container: HTMLElement): () => void {
         results.innerHTML = "";
         cardEls.clear();
         moreButton.hidden = true;
-        const map = appRef?.getMap?.();
+        const map = getStyleMap(appRef);
         if (map) setFootprints(map, []);
         setStatus(labels.hint);
       }
@@ -1130,13 +1137,13 @@ function buildPanel(container: HTMLElement): () => void {
       setStatus(labels.bboxInvalid, true);
       return;
     }
-    const map = appRef?.getMap?.();
+    const map = getStyleMap(appRef);
     if (map) setDrawBox(map, parsed); // reuse the box preview for typed bounds
     void runSearch(true, parsed);
   });
 
   drawButton.addEventListener("click", () => {
-    const map = appRef?.getMap?.();
+    const map = getStyleMap(appRef);
     if (!map) return;
     if (cancelDraw) {
       stopDrawing();
@@ -1170,7 +1177,7 @@ function buildPanel(container: HTMLElement): () => void {
     stopDrawing();
     closeMetadataDialog?.();
     if (onFootprintSelect) onFootprintSelect = null;
-    const map = appRef?.getMap?.();
+    const map = getStyleMap(appRef);
     if (map) {
       removeFootprintLayers(map);
       removeDrawLayers(map);
@@ -1326,6 +1333,9 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
   id: OPENAERIALMAP_PLUGIN_ID,
   name: "OpenAerialMap",
   version: "0.1.0",
+  // Footprints, the bbox preview and the imagery tile layers are all Style
+  // Spec sources and layers, so both 2D engines host them.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =
@@ -1351,7 +1361,7 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
     unregisterPanel = null;
     // Safety net: drop the footprints Layers-panel entry and map overlays even
     // if the panel's own cleanup did not run (or ran after appRef was cleared).
-    const map = app.getMap?.();
+    const map = getStyleMap(app);
     if (map) {
       removeFootprintLayers(map);
       removeDrawLayers(map);

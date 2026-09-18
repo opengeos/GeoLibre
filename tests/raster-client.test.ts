@@ -140,6 +140,12 @@ describe("raster-client compute", () => {
     assert.ok(Math.abs(out.bands[0][1] - (6 - 2) / (6 + 2)) < 1e-6);
   });
 
+  it("converts comparison results to a numeric raster mask", () => {
+    const raster = makeRaster([[100, 200, 201, 300]], 4, 1);
+    const out = rasterCalc(raster, { expression: "A > 200" });
+    assert.deepEqual([...out.bands[0]], [0, 0, 1, 1]);
+  });
+
   it("rejects multi-raster references in client band math", () => {
     const raster = makeRaster([[1, 2]], 2, 1);
     assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /single input/);

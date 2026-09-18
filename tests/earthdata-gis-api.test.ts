@@ -140,6 +140,27 @@ describe("earthdata gis api", () => {
       assert.equal(plainText(null), "");
       assert.equal(plainText(undefined), "");
     });
+
+    it("keeps text after an unclosed '<' and drops only complete tags", () => {
+      assert.equal(plainText("a < b <i>c</i>"), "a c");
+      assert.equal(plainText("x <<b>y"), "x y");
+      assert.equal(plainText("1 < 2"), "1 < 2");
+    });
+
+    it("stays linear on whitespace runs and unclosed tags (#2400)", () => {
+      // Each input took seconds when the newline patterns ran before the
+      // horizontal-whitespace collapse, or when tags were stripped with
+      // /<[^>]*>/g (17-37 s each at 200 KB). They now take ~1 ms, so a 5 s bound
+      // still catches a regression without flaking on a contended CI runner.
+      const half = " ".repeat(100_000);
+      const inputs = [`${half}\n${half}`, "\t".repeat(200_000), "<".repeat(200_000)];
+      for (const input of inputs) {
+        const started = performance.now();
+        plainText(input);
+        assert.ok(performance.now() - started < 5000, `took too long on ${input.length} chars`);
+      }
+      assert.equal(plainText(`a${half}\n${half}b`), "a b");
+    });
   });
 
   describe("kindFromPortalType", () => {

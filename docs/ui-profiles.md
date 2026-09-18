@@ -6,6 +6,12 @@ interface for beginners or to standardize a deployment across a team. Hiding is
 time. Profile preferences are stored locally in the browser/app and never travel
 inside a saved `.geolibre.json` project.
 
+!!! tip "Looking to lock a deployment down?"
+    Profiles declutter; the user can undo them. To pin what a deployment is
+    *permitted* to do — a kiosk, a classroom instance — see
+    [Deployment Capabilities](deployment-capabilities.md), which is never
+    surfaced in the UI. The two are independent and can be combined.
+
 ## For users
 
 ### Onboarding

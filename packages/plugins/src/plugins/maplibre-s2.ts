@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 import { geojson as s2geojson, s1, s2 } from "s2js";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 
 export const S2_PLUGIN_ID = "maplibre-s2-grid";
 
@@ -125,7 +126,10 @@ let unsubscribeBasemap: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let selectedCell: string | null = null;
 
-let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", features: [] };
+let currentGrid: FeatureCollection<Polygon> = {
+  type: "FeatureCollection",
+  features: [],
+};
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
@@ -372,7 +376,10 @@ export function s2GridForBounds(
     remaining -= step;
   }
 
-  const coverer = new s2geojson.RegionCoverer({ minLevel: level, maxLevel: level });
+  const coverer = new s2geojson.RegionCoverer({
+    minLevel: level,
+    maxLevel: level,
+  });
   const cells = new Set<string>();
   for (const [left, right] of chunks) {
     const polygon: Polygon = {
@@ -426,13 +433,19 @@ function ensureLayers(): void {
       id: FILL_LAYER_ID,
       type: "fill",
       source: SOURCE_ID,
-      paint: { "fill-color": settings.fillColor, "fill-opacity": settings.fillOpacity },
+      paint: {
+        "fill-color": settings.fillColor,
+        "fill-opacity": settings.fillOpacity,
+      },
     });
     map.addLayer({
       id: LINE_LAYER_ID,
       type: "line",
       source: SOURCE_ID,
-      paint: { "line-color": settings.lineColor, "line-width": settings.lineWidth },
+      paint: {
+        "line-color": settings.lineColor,
+        "line-width": settings.lineWidth,
+      },
     });
     map.addLayer({
       id: LABEL_LAYER_ID,
@@ -843,8 +856,12 @@ export const maplibreS2Plugin: GeoLibrePlugin = {
   id: S2_PLUGIN_ID,
   name: "S2 Grid",
   version: "1.0.0",
+  // Draws the grid through the Style Spec surface both 2D engines share
+  // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
+  // through getStyleMap so the Mapbox renderer hosts it as well.
+  engines: ["maplibre", "mapbox"],
   activate: (app) => {
-    const activeMap = app.getMap?.();
+    const activeMap = getStyleMap(app);
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;
@@ -884,7 +901,14 @@ export const maplibreS2Plugin: GeoLibrePlugin = {
     if (map && clickHandler) map.off("click", clickHandler);
     unsubscribeBasemap?.();
     unregisterPanel?.();
-    if (map) removeLayers(map);
+    // A renderer swap deactivates this plugin after the old map was removed;
+    // a removed mapbox-gl map throws from getLayer (its style is gone), and
+    // there is nothing left to remove.
+    try {
+      if (map) removeLayers(map);
+    } catch {
+      // Already torn down with the map.
+    }
     moveHandler = null;
     clickHandler = null;
     unsubscribeBasemap = null;

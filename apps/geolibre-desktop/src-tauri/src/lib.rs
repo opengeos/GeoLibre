@@ -1,3 +1,4 @@
+mod arcgis_http;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -56,6 +57,8 @@ mod native_duckdb {
 #[cfg(all(feature = "mas", feature = "native-duckdb"))]
 compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`: DuckDB loads its spatial extension as unsigned native code at runtime, which App Sandbox and App Store guideline 2.5.2 forbid.");
 
+mod http_body;
+
 use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
 use earth_engine_oauth::EarthEngineOAuthState;
@@ -63,7 +66,6 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(not(feature = "mas"))]
 use std::collections::{HashSet, VecDeque};
 use std::env;
 #[cfg(not(feature = "mas"))]
@@ -82,12 +84,74 @@ use std::process::{Child, Command, Stdio};
 #[cfg(not(feature = "mas"))]
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tauri_plugin_dialog::DialogExt;
+
+const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
+const PERSISTED_PHOTO_EXTENSIONS: [&str; 6] =
+    [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+const IMAGE_PICKER_EXTENSIONS: [&str; 8] =
+    ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff"];
+
+#[derive(Deserialize, Serialize)]
+struct PersistedScopeState {
+    allowed_paths: Vec<String>,
+    forbidden_patterns: Vec<String>,
+}
+
+#[derive(Default)]
+struct SelectedImagePaths(Mutex<HashSet<PathBuf>>);
+
+fn is_persisted_image_file(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    PERSISTED_PHOTO_EXTENSIONS
+        .iter()
+        .any(|extension| lower.ends_with(extension))
+}
+
+fn is_image_picker_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            IMAGE_PICKER_EXTENSIONS
+                .iter()
+                .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+        })
+}
+
+/// Remove legacy per-image grants before persisted-scope synchronously replays
+/// them. Photo workflows consume or embed image bytes during the current
+/// session, so these grants are not needed after restart.
+fn prune_persisted_image_scopes(app: &tauri::AppHandle) {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    for file_name in PERSISTED_SCOPE_FILES {
+        let path = app_data_dir.join(file_name);
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(mut state) = bincode::deserialize::<PersistedScopeState>(&bytes) else {
+            continue;
+        };
+        let original_len = state.allowed_paths.len();
+        state
+            .allowed_paths
+            .retain(|allowed| !is_persisted_image_file(allowed));
+        if state.allowed_paths.len() == original_len {
+            continue;
+        }
+        if let Ok(compacted) = bincode::serialize(&state) {
+            let _ = fs::write(path, compacted);
+        }
+    }
+}
 #[cfg(not(feature = "mas"))]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 #[cfg(not(feature = "mas"))]
 use std::thread;
 use std::time::Duration;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 // OAuth popups are a desktop-only, multi-window concept; Android/iOS have no
@@ -134,8 +198,17 @@ const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
 #[cfg(not(feature = "mas"))]
 const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
+const MAX_HTTP_REDIRECTS: usize = 10;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
 const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
+/// Ceiling for a caller-supplied `fetch_url_bytes` budget. The default suits a
+/// tile; callers that download a whole dataset (Add Vector Layer) ask for more,
+/// but not without bound, so a bad value cannot wedge a request indefinitely.
+const MAX_FETCH_TIMEOUT_SECS: u64 = 600;
+const OPEN_PROJECT_FILES_EVENT: &str = "open-project-files";
+
+#[derive(Default)]
+struct PendingProjectPaths(Mutex<VecDeque<String>>);
 
 #[cfg(all(unix, not(feature = "mas")))]
 const SIGTERM: i32 = 15;
@@ -266,9 +339,40 @@ impl Drop for JupyterProcess {
 pub fn run() {
     configure_linux_webkit();
 
-    let builder = tauri::Builder::default()
+    let pending_project_paths = PendingProjectPaths(Mutex::new(VecDeque::from(
+        project_paths_from_args(env::args_os().skip(1), &current_working_directory()),
+    )));
+    let builder = tauri::Builder::default();
+
+    // Windows and Linux deliver a file-association launch by starting another
+    // process with the document path in argv. Keep one workspace and forward
+    // that path to it. Register this first, as required by the plugin.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        let paths = project_paths_from_args(
+            args.into_iter().skip(1).map(std::ffi::OsString::from),
+            Path::new(&cwd),
+        );
+        enqueue_project_paths(app, paths);
+        focus_main_window(app);
+    }));
+
+    let builder = builder
+        .manage(pending_project_paths)
+        .manage(SelectedImagePaths::default())
+        .manage(arcgis_http::ArcGISRequests::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Runs before persisted-scope's setup hook so legacy photo grants are
+        // removed before its synchronous restore can delay window creation.
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("photo-scope-cleanup")
+                .setup(|app, _api| {
+                    prune_persisted_image_scopes(app);
+                    Ok(())
+                })
+                .build(),
+        )
         // Must init after the fs plugin: it restores previously-granted fs
         // scope (e.g. Browser-panel pinned folders) so they survive a restart.
         //
@@ -283,7 +387,8 @@ pub fn run() {
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_geolocation::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     // The Earth Engine OAuth loopback listener is compiled out of the Apple App
     // Store builds (see the module gate at the top of this file); the stub
@@ -308,17 +413,22 @@ pub fn run() {
             startup: Mutex::new(()),
         });
 
-    builder
+    let app = builder
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
             native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,
             fetch_url_bytes,
+            arcgis_http::fetch_arcgis_response,
+            arcgis_http::cancel_arcgis_request,
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
+            pick_image_paths,
+            read_selected_image,
             read_admin_profile,
             read_env_vars,
+            take_pending_project_paths,
             allow_raster_asset,
             read_local_file,
             read_project_file,
@@ -339,8 +449,108 @@ pub fn run() {
             create_main_window(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running GeoLibre Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building GeoLibre Desktop");
+
+    app.run(|_app, _event| {
+        // macOS delivers associated files as native open events instead
+        // of argv. Queue them through the same path as a second desktop launch.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            let paths = project_paths_from_args(
+                urls.into_iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(std::ffi::OsString::from),
+                Path::new("/"),
+            );
+            enqueue_project_paths(_app, paths);
+            focus_main_window(_app);
+        }
+    });
+}
+
+fn current_working_directory() -> PathBuf {
+    env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn has_geolibre_project_extension(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_ascii_lowercase();
+    lower.ends_with(".geolibre") || lower.ends_with(".geolibre.json")
+}
+
+fn project_path_string(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    #[cfg(target_os = "windows")]
+    if let Some(unprefixed) = value.strip_prefix(r"\\?\") {
+        return unprefixed.to_string();
+    }
+    value.into_owned()
+}
+
+/// Resolve existing GeoLibre project files supplied by the operating system.
+///
+/// Other CLI flags are deliberately ignored. Resolving the path before it
+/// reaches the webview both handles a relative command-line path correctly and
+/// prevents a symlink with a project-looking name from bypassing the existing
+/// `read_project_file` extension check.
+fn project_paths_from_args<I>(args: I, cwd: &Path) -> Vec<String>
+where
+    I: IntoIterator<Item = std::ffi::OsString>,
+{
+    args.into_iter()
+        .filter_map(|argument| {
+            let candidate = PathBuf::from(argument);
+            if !has_geolibre_project_extension(&candidate) {
+                return None;
+            }
+            let absolute = if candidate.is_absolute() {
+                candidate
+            } else {
+                cwd.join(candidate)
+            };
+            let canonical = fs::canonicalize(absolute).ok()?;
+            if !canonical.is_file() || !has_geolibre_project_extension(&canonical) {
+                return None;
+            }
+            let path = project_path_string(&canonical);
+            is_allowed_project_path(&path).then_some(path)
+        })
+        .collect()
+}
+
+fn enqueue_project_paths(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+    app.state::<PendingProjectPaths>()
+        .0
+        .lock()
+        .expect("pending project path lock poisoned")
+        .extend(paths);
+    let _ = app.emit(OPEN_PROJECT_FILES_EVENT, ());
+}
+
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        // `unminimize` is desktop-only in Tauri v2: there is no minimized state
+        // on mobile, and referencing it fails to compile for both
+        // aarch64-linux-android and aarch64-apple-ios.
+        #[cfg(desktop)]
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Drain project paths that arrived through argv or an OS file-open event.
+#[tauri::command]
+fn take_pending_project_paths(state: tauri::State<'_, PendingProjectPaths>) -> Vec<String> {
+    state
+        .0
+        .lock()
+        .expect("pending project path lock poisoned")
+        .drain(..)
+        .collect()
 }
 
 /// Whether `read_project_file` may read `path`: an absolute local path (POSIX
@@ -488,6 +698,67 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
     fs::read(&path)
         .map(tauri::ipc::Response::new)
         .map_err(|error| format!("Could not read local file: {error}"))
+}
+
+/// Pick images without adding them to Tauri's filesystem or asset scopes. The
+/// returned paths enter a short-lived native allowlist and can only be consumed
+/// by `read_selected_image`.
+#[tauri::command]
+async fn pick_image_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let dialog_app = app.clone();
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("Images", &IMAGE_PICKER_EXTENSIONS)
+            .blocking_pick_files()
+    })
+    .await
+    .map_err(|error| format!("Could not open the image picker: {error}"))?
+    .unwrap_or_default();
+
+    let mut paths = Vec::with_capacity(selected.len());
+    for file in selected {
+        let path = file
+            .into_path()
+            .map_err(|error| format!("Could not resolve a selected image path: {error}"))?;
+        if is_image_picker_path(&path) {
+            paths.push(path);
+        }
+    }
+    app.state::<SelectedImagePaths>()
+        .0
+        .lock()
+        .map_err(|_| "Could not lock the selected-image allowlist".to_string())?
+        .extend(paths.iter().cloned());
+    Ok(paths
+        .into_iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect())
+}
+
+/// Read one image explicitly selected by `pick_image_paths`, then remove its
+/// path from the allowlist. This avoids both persistent grants and access to
+/// unselected sibling files.
+#[tauri::command]
+fn read_selected_image(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let path = PathBuf::from(path);
+    let selected = app.state::<SelectedImagePaths>();
+    {
+        let mut allowed = selected
+            .0
+            .lock()
+            .map_err(|_| "Could not lock the selected-image allowlist".to_string())?;
+        if !allowed.remove(&path) {
+            return Err("Refusing to read an image that was not selected".to_string());
+        }
+    }
+    fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|error| format!("Could not read selected image: {error}"))
 }
 
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
@@ -821,16 +1092,57 @@ fn ensure_fetchable_url(url: &str) -> Result<(), String> {
 
 /// A redirect policy that re-applies [`url_is_fetchable`] to every hop, so a
 /// public URL that 3xx-redirects to an internal address is not followed.
+///
+/// A blocked hop fails the request via `attempt.error` rather than
+/// `attempt.stop`: stopping makes reqwest hand the 30x response back as `Ok`,
+/// which reaches the frontend as a bland "Request failed with status 302" that
+/// [`is_ssrf_guard_error`] cannot recognise — and an unrecognised failure is
+/// retried by the webview's unguarded `fetch`, which would follow the very
+/// redirect this policy refused. Failing with [`SSRF_BLOCKED_MESSAGE`] in the
+/// error's source chain keeps that fallback closed. The hop cap still uses
+/// `stop`: an over-long but otherwise allowed chain is not an SSRF rejection
+/// and must not be reported as one.
 fn guarded_redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
-        if attempt.previous().len() >= 10 {
+        if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
             return attempt.stop();
         }
         match url_is_fetchable(attempt.url()) {
             Ok(()) => attempt.follow(),
-            Err(_) => attempt.stop(),
+            Err(_) => attempt.error(SSRF_BLOCKED_MESSAGE),
         }
     })
+}
+
+/// True when a reqwest failure was caused by the SSRF guard rather than by the
+/// network.
+///
+/// Neither guard's rejection is visible in the top-level `Display`: the redirect
+/// policy's error is wrapped in reqwest's "error following redirect", and
+/// [`GuardedDnsResolver`]'s is wrapped by the connector. Both keep
+/// [`SSRF_BLOCKED_MESSAGE`] in the source chain, so walk it.
+fn is_ssrf_guard_error(error: &dyn std::error::Error) -> bool {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if error.to_string().contains(SSRF_BLOCKED_MESSAGE) {
+            return true;
+        }
+        current = error.source();
+    }
+    false
+}
+
+/// Renders a request failure for the frontend, preserving
+/// [`SSRF_BLOCKED_MESSAGE`] verbatim when the guard was what refused it.
+///
+/// `isBlockedUrlError` in `src/lib/vector-url-fetch.ts` matches on that wording
+/// to decide whether retrying in the webview is safe, so a guard rejection that
+/// reaches it as a generic transport error fails *open* into an unguarded fetch.
+fn request_error_message(error: &reqwest::Error) -> String {
+    if is_ssrf_guard_error(error) {
+        return SSRF_BLOCKED_MESSAGE.to_string();
+    }
+    format!("Request failed: {error}")
 }
 
 /// A DNS resolver that drops any address in a blocked range, so reqwest connects
@@ -1007,12 +1319,18 @@ fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
 }
 
 fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
+    build_guarded_http_client_with_redirects(guarded_redirect_policy())
+}
+
+fn build_guarded_http_client_with_redirects(
+    redirects: reqwest::redirect::Policy,
+) -> Result<reqwest::blocking::Client, String> {
     // The SSRF guard (GuardedDnsResolver + redirect re-validation) is applied
     // here, independent of the TLS backend chosen below, so it holds on both the
     // rustls and native-tls paths.
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .redirect(guarded_redirect_policy())
+        .redirect(redirects)
         .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
         .user_agent("GeoLibre Desktop");
 
@@ -1035,32 +1353,67 @@ fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
         .map_err(|error| format!("Could not create HTTP client: {error}"))
 }
 
+/// Fetches a URL's bytes, bypassing browser CORS.
+///
+/// `timeout_secs` overrides the tile-sized default for callers that download a
+/// whole dataset rather than a tile; it is clamped to
+/// `[REMOTE_TILE_TIMEOUT_SECS, MAX_FETCH_TIMEOUT_SECS]`, so the budget can only
+/// ever be raised and never removed.
+/// `max_bytes`, when supplied, limits the body while it is read rather than
+/// buffering an oversized response before rejecting it.
 #[tauri::command]
-async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
-    tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
-        .await
-        .map_err(|error| format!("Tile fetch task failed: {error}"))?
+async fn fetch_url_bytes(
+    url: String,
+    timeout_secs: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<Vec<u8>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_url_bytes_blocking(url, timeout_secs, max_bytes)
+    })
+    .await
+    .map_err(|error| format!("Tile fetch task failed: {error}"))?
 }
 
-fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
+/// Resolves the request budget for a fetch, defaulting to the tile timeout and
+/// clamping a caller-supplied value into `[REMOTE_TILE_TIMEOUT_SECS,
+/// MAX_FETCH_TIMEOUT_SECS]`. A caller can therefore only ever raise the budget,
+/// and never past the ceiling or down to zero (which reqwest reads as "no
+/// timeout" and would let a stalled request hang forever).
+fn resolve_fetch_timeout_secs(timeout_secs: Option<u64>) -> u64 {
+    timeout_secs
+        .unwrap_or(REMOTE_TILE_TIMEOUT_SECS)
+        .clamp(REMOTE_TILE_TIMEOUT_SECS, MAX_FETCH_TIMEOUT_SECS)
+}
+
+fn fetch_url_bytes_blocking(
+    url: String,
+    timeout_secs: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<Vec<u8>, String> {
     ensure_fetchable_url(&url)?;
 
     let client = guarded_http_client()?;
+    let timeout = resolve_fetch_timeout_secs(timeout_secs);
 
     let response = client
         .get(&url)
-        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(timeout))
         .send()
-        .map_err(|error| format!("Request failed: {error}"))?;
+        .map_err(|error| request_error_message(&error))?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("Request failed with status {status}"));
     }
 
-    response
-        .bytes()
-        .map(|bytes| bytes.to_vec())
-        .map_err(|error| format!("Could not read response body: {error}"))
+    if let Some(limit) = max_bytes {
+        let content_length = response.content_length();
+        http_body::read_limited_body(response, content_length, limit)
+    } else {
+        response
+            .bytes()
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| format!("Could not read response body: {error}"))
+    }
 }
 
 /// Install a packaged plugin from a local `.zip` archive into GeoLibre's
@@ -1552,7 +1905,7 @@ fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
         .header("accept", "application/json, text/plain;q=0.9, */*;q=0.8")
         .timeout(timeout)
         .send()
-        .map_err(|error| format!("Request failed: {error}"))?;
+        .map_err(|error| request_error_message(&error))?;
     if has_xyz_placeholders(response.url().as_str()) {
         return Ok(response.url().to_string());
     }
@@ -3678,6 +4031,17 @@ struct MbtilesMetadata {
 fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
     let connection = open_mbtiles(&path)?;
     let metadata = read_metadata_rows(&connection)?;
+    let metadata_min_zoom = metadata
+        .get("minzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let metadata_max_zoom = metadata
+        .get("maxzoom")
+        .and_then(|value| value.parse::<i64>().ok());
+    let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(
+        &connection,
+        metadata_min_zoom.is_none(),
+        metadata_max_zoom.is_none(),
+    )?;
     let fallback_name = Path::new(&path)
         .file_stem()
         .and_then(|name| name.to_str())
@@ -3702,12 +4066,8 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
         format,
         tile_type,
         source_layers: read_vector_source_layers(metadata.get("json")),
-        min_zoom: metadata
-            .get("minzoom")
-            .and_then(|value| value.parse::<i64>().ok()),
-        max_zoom: metadata
-            .get("maxzoom")
-            .and_then(|value| value.parse::<i64>().ok()),
+        min_zoom: metadata_min_zoom.or(tile_min_zoom),
+        max_zoom: metadata_max_zoom.or(tile_max_zoom),
         bounds: metadata.get("bounds").and_then(|value| parse_bounds(value)),
         center: metadata.get("center").and_then(|value| parse_center(value)),
         scheme: metadata
@@ -3715,6 +4075,26 @@ fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
             .map(|value| value.to_ascii_lowercase())
             .unwrap_or_else(|| "tms".to_string()),
     })
+}
+
+fn read_mbtiles_zoom_range(
+    connection: &Connection,
+    need_min: bool,
+    need_max: bool,
+) -> Result<(Option<i64>, Option<i64>), String> {
+    let read = |aggregate: &str| {
+        connection
+            .query_row(
+                &format!("SELECT {aggregate}(zoom_level) FROM tiles"),
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Could not read MBTiles zoom range: {error}"))
+    };
+    Ok((
+        if need_min { read("MIN")? } else { None },
+        if need_max { read("MAX")? } else { None },
+    ))
 }
 
 #[tauri::command]
@@ -3957,17 +4337,86 @@ fn linux_uses_nvidia_renderer(
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Debug, PartialEq, Eq)]
+enum LinuxDmabufWorkaround {
+    Disable,
+    ForceShm,
+}
+
+#[cfg(target_os = "linux")]
+fn linux_dmabuf_workaround(
+    webkit_version: (u32, u32),
+    uses_nvidia: bool,
+) -> Option<LinuxDmabufWorkaround> {
+    if webkit_version < (2, 48) || (uses_nvidia && webkit_version < (2, 52)) {
+        Some(LinuxDmabufWorkaround::Disable)
+    } else if uses_nvidia {
+        Some(LinuxDmabufWorkaround::ForceShm)
+    } else {
+        None
+    }
+}
+
+/// JavaScriptCore options that keep WebKitGTK's WebAssembly tier-up off its
+/// OSR-entry path (see `configure_linux_webkit`). Both are needed: the first
+/// covers OSR entry out of the WebAssembly interpreter, the second the loop
+/// tier-up checks the baseline (BBQ) JIT emits. Leaving either on still
+/// reaches the trampoline.
+#[cfg(target_os = "linux")]
+const WASM_OSR_ENTRY_JSC_OPTIONS: [&str; 2] = ["JSC_useWasmOSR", "JSC_useBBQTierUpChecks"];
+
+/// Whether this CPU implements AVX. The trampoline behind GeoLibre#2087 is
+/// x86-only, so every other architecture answers yes and skips the workaround.
+#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
+fn cpu_supports_avx() -> bool {
+    std::arch::is_x86_feature_detected!("avx")
+}
+
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "x86", target_arch = "x86_64"))
+))]
+fn cpu_supports_avx() -> bool {
+    true
+}
+
+/// Whether an explicit value for one of `WASM_OSR_ENTRY_JSC_OPTIONS` leaves it
+/// off. JavaScriptCore reads `false`, `no` (either in any case) and `0` as off
+/// and `true`, `yes` and `1` as on, and keeps the option's default, which for
+/// both of these is on, for anything it cannot parse. Answer the way it does
+/// rather than treating "set" as "off".
+#[cfg(target_os = "linux")]
+fn jsc_option_is_off(value: &std::ffi::OsStr) -> bool {
+    value.to_str().is_some_and(|value| {
+        value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("no") || value == "0"
+    })
+}
+
+/// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
+/// CPU supports AVX and whether either option is explicitly *on*. The two are
+/// one decision, not two: leaving half the pair applied costs WebAssembly
+/// performance without keeping the renderer alive. So an option somebody has
+/// already turned off is fine to build on (the other half still gets applied),
+/// while an option somebody has turned on is the escape hatch and takes the
+/// whole workaround out of GeoLibre's hands, as does pinning `JSC_useBBQJIT`
+/// instead.
+#[cfg(target_os = "linux")]
+fn linux_needs_wasm_osr_workaround(cpu_supports_avx: bool, opted_out: bool) -> bool {
+    !cpu_supports_avx && !opted_out
+}
+
+#[cfg(target_os = "linux")]
 fn configure_linux_webkit() {
     // WebKitGTK's DMABUF renderer could fail to allocate GBM buffers on older
     // graphics stacks, leaving the Tauri window blank, so it used to be
     // disabled here unconditionally. Disabling it also forces a slow readback
     // compositing path that visibly drops MapLibre pan/zoom FPS, and the
-    // allocation bugs are fixed on most current graphics stacks, so keep the
-    // workaround only for versions older than 2.48 and Nvidia renderers, where
-    // GBM allocation failures still occur on current WebKitGTK. An explicit
-    // user/distributor value always wins (per WebKit semantics, "0" keeps
-    // DMABUF on and any other value disables it). Only set the default when
-    // unset.
+    // allocation bugs are fixed on most current graphics stacks. Nvidia's GBM
+    // allocation still fails on current drivers, but WebKitGTK 2.52 added a
+    // modern shared-memory fallback that avoids both the blank window and the
+    // slow legacy renderer selected by WEBKIT_DISABLE_DMABUF_RENDERER. Keep the
+    // legacy escape hatch for older WebKitGTK. An explicit user/distributor
+    // value always wins.
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         let webkit_version = unsafe {
             (
@@ -3977,16 +4426,68 @@ fn configure_linux_webkit() {
         };
         let prime_offload = std::env::var_os("__NV_PRIME_RENDER_OFFLOAD");
         let glx_vendor = std::env::var_os("__GLX_VENDOR_LIBRARY_NAME");
-        if webkit_version < (2, 48)
-            || linux_uses_nvidia_renderer(
+        let uses_nvidia = webkit_version >= (2, 48)
+            && linux_uses_nvidia_renderer(
                 Path::new("/sys/class/drm"),
                 prime_offload.as_deref(),
                 glx_vendor.as_deref(),
-            )
-        {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            );
+        match linux_dmabuf_workaround(webkit_version, uses_nvidia) {
+            Some(LinuxDmabufWorkaround::Disable) => {
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+            Some(LinuxDmabufWorkaround::ForceShm) => {
+                if std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none() {
+                    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "0");
+                    std::env::set_var("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1");
+                }
+            }
+            None => {}
         }
     }
+    // WebAssembly tier-up kills the renderer on x86-64 CPUs without AVX
+    // (GeoLibre#2087). When a loop inside a WebAssembly function gets hot,
+    // JavaScriptCore performs OSR entry into a JIT tier, and that path runs
+    // `ctiMasmProbeTrampoline`, which spills xmm0-xmm15 with VEX-encoded
+    // `vmovaps` and no runtime AVX check. On a CPU without AVX the first of
+    // those instructions raises SIGILL, the WebKitWebProcess dies, and the
+    // window stays blank forever with nothing shown to the user. It is an
+    // upstream WebKit bug that no GeoLibre code can avoid emitting, and it is
+    // reached in normal use because the app runs WebAssembly (DuckDB-WASM,
+    // Whitebox) in a worker. All we can do is keep JavaScriptCore off the OSR
+    // entry path. WebAssembly still gets baseline-compiled when a function is
+    // called repeatedly, so the cost is bounded (a few times slower on repeated
+    // calls; a single long-running call with a hot loop stays interpreted)
+    // instead of the app being unusable. Verified against WebKitGTK 2.52.6 by
+    // breakpointing the trampoline in the web process: with both options off it
+    // is never entered, with either one on it still is.
+    let cpu_supports_avx = cpu_supports_avx();
+    let kept_on = WASM_OSR_ENTRY_JSC_OPTIONS
+        .into_iter()
+        .find(|option| std::env::var_os(option).is_some_and(|value| !jsc_option_is_off(&value)));
+    if linux_needs_wasm_osr_workaround(cpu_supports_avx, kept_on.is_some()) {
+        for option in WASM_OSR_ENTRY_JSC_OPTIONS {
+            if std::env::var_os(option).is_none() {
+                std::env::set_var(option, "false");
+            }
+        }
+        eprintln!(
+            "GeoLibre: this CPU has no AVX, so WebAssembly tier-up would crash the WebKit \
+             renderer (see GeoLibre issue 2087). {} are off to keep the app running; \
+             WebAssembly-heavy work will be slower.",
+            WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
+        );
+    } else if !cpu_supports_avx {
+        if let Some(option) = kept_on {
+            eprintln!(
+                "GeoLibre: this CPU has no AVX, but {option} is set to keep WebAssembly tier-up \
+                 on, so the workaround for GeoLibre issue 2087 was left alone. The renderer can \
+                 still die with SIGILL unless {} are both off.",
+                WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
+            );
+        }
+    }
+
     // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
     // metadata warnings that can appear around file and folder pickers.
     if std::env::var_os("GTK_USE_PORTAL").is_none() {
@@ -4002,10 +4503,17 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path, path_is_under, tcp_table_port,
+        is_image_picker_path, is_persisted_image_file,
+        is_safe_absolute_path, is_ssrf_guard_error, path_is_under, project_path_string,
+        project_paths_from_args, read_mbtiles_zoom_range, resolve_fetch_timeout_secs, tcp_table_port,
+        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
-    use super::{linux_uses_nvidia_renderer, nvidia_is_primary_gpu};
+    use super::{
+        cpu_supports_avx, jsc_option_is_off, linux_dmabuf_workaround,
+        linux_needs_wasm_osr_workaround, linux_uses_nvidia_renderer, nvidia_is_primary_gpu,
+        LinuxDmabufWorkaround, WASM_OSR_ENTRY_JSC_OPTIONS,
+    };
     // Everything these imports feed is compiled out of the `mas` build, so the
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
@@ -4017,7 +4525,7 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     use std::env;
     #[cfg(not(feature = "mas"))]
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     #[cfg(not(feature = "mas"))]
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -4034,6 +4542,30 @@ mod tests {
     // environment must not run concurrently with each other.
     #[cfg(not(feature = "mas"))]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn derives_mbtiles_zoom_range_from_tile_rows() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute("CREATE TABLE tiles (zoom_level INTEGER NOT NULL)", [])
+            .unwrap();
+        for zoom in [4, 9, 6] {
+            connection
+                .execute("INSERT INTO tiles (zoom_level) VALUES (?1)", [zoom])
+                .unwrap();
+        }
+
+        assert_eq!(
+            read_mbtiles_zoom_range(&connection, true, true).unwrap(),
+            (Some(4), Some(9))
+        );
+
+        let no_tiles_table = rusqlite::Connection::open_in_memory().unwrap();
+        assert_eq!(
+            read_mbtiles_zoom_range(&no_tiles_table, false, false).unwrap(),
+            (None, None)
+        );
+    }
 
     #[cfg(not(feature = "mas"))]
     #[test]
@@ -4078,6 +4610,49 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn resolves_only_existing_project_arguments() {
+        let root = ScratchDir::new("project-arguments");
+        let short = root.path().join("short.geolibre");
+        let legacy = root.path().join("legacy.geolibre.json");
+        let ordinary_json = root.path().join("ordinary.json");
+        std::fs::write(&short, "{}").unwrap();
+        std::fs::write(&legacy, "{}").unwrap();
+        std::fs::write(&ordinary_json, "{}").unwrap();
+
+        let paths = project_paths_from_args(
+            [
+                OsString::from("--verbose"),
+                OsString::from("short.geolibre"),
+                legacy.clone().into_os_string(),
+                ordinary_json.into_os_string(),
+                OsString::from("missing.geolibre"),
+            ],
+            root.path(),
+        );
+
+        assert_eq!(
+            paths,
+            [
+                project_path_string(&short.canonicalize().unwrap()),
+                project_path_string(&legacy.canonicalize().unwrap()),
+            ]
+        );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn rejects_project_named_symlinks_to_other_file_types() {
+        let root = ScratchDir::new("project-argument-symlink");
+        let target = root.path().join("private.json");
+        let link = root.path().join("looks-safe.geolibre");
+        std::fs::write(&target, "{}").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(project_paths_from_args([link.into_os_string()], root.path()).is_empty());
     }
 
     #[cfg(all(target_os = "linux", not(feature = "mas")))]
@@ -4139,6 +4714,95 @@ mod tests {
             Some(OsStr::new("0")),
             Some(OsStr::new("mesa")),
         ));
+    }
+
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn selects_modern_shm_fallback_for_current_nvidia_webkitgtk() {
+        assert_eq!(
+            linux_dmabuf_workaround((2, 47), false),
+            Some(LinuxDmabufWorkaround::Disable)
+        );
+        assert_eq!(
+            linux_dmabuf_workaround((2, 51), true),
+            Some(LinuxDmabufWorkaround::Disable)
+        );
+        assert_eq!(
+            linux_dmabuf_workaround((2, 52), true),
+            Some(LinuxDmabufWorkaround::ForceShm)
+        );
+        assert_eq!(linux_dmabuf_workaround((2, 52), false), None);
+    }
+
+    // Regression for issue #2087: on an x86-64 CPU without AVX, WebKitGTK's
+    // WebAssembly OSR entry runs an unconditionally AVX trampoline and takes
+    // the renderer down with SIGILL, so both options have to be pinned off.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn disables_wasm_osr_entry_only_without_avx() {
+        assert!(linux_needs_wasm_osr_workaround(false, false));
+        assert!(!linux_needs_wasm_osr_workaround(true, false));
+    }
+
+    // Turning either option back on is the escape hatch, and it takes the whole
+    // pair out of GeoLibre's hands: half the workaround costs WebAssembly
+    // performance without saving the renderer.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn keeps_an_explicit_wasm_osr_setting() {
+        assert!(!linux_needs_wasm_osr_workaround(false, true));
+        assert!(!linux_needs_wasm_osr_workaround(true, true));
+    }
+
+    // An option someone already turned off is not an opt-out, so the other half
+    // of the pair still gets applied. Which values count as off is
+    // JavaScriptCore's rule, verified against WebKitGTK 2.52.6: `false` and
+    // `no` in any case, and `0`, disable an option; `true`, `yes` and `1` turn
+    // it on; and a value it cannot parse leaves the default, which for both of
+    // these options is on.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn reads_wasm_osr_values_the_way_javascriptcore_does() {
+        for off in ["false", "FALSE", "False", "no", "NO", "No", "0"] {
+            assert!(jsc_option_is_off(OsStr::new(off)), "{off}");
+        }
+        for on in ["true", "TRUE", "1", "yes", "YES", "garbage", ""] {
+            assert!(!jsc_option_is_off(OsStr::new(on)), "{on}");
+        }
+    }
+
+    // Both options are needed: with either one left on, the web process still
+    // enters the trampoline (measured on WebKitGTK 2.52.6). They are read by
+    // JavaScriptCore straight out of the environment, so the names carry the
+    // `JSC_` prefix.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn pins_both_javascriptcore_wasm_osr_options() {
+        assert_eq!(
+            WASM_OSR_ENTRY_JSC_OPTIONS,
+            ["JSC_useWasmOSR", "JSC_useBBQTierUpChecks"]
+        );
+    }
+
+    // Every architecture other than x86 skips the workaround, and the x86
+    // answer has to come from the running CPU rather than from build flags.
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn reports_avx_support_for_this_cpu() {
+        let supported = cpu_supports_avx();
+        if !cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+            assert!(supported);
+            return;
+        }
+        // Cross-check against the kernel where it reports the flags. A
+        // hypervisor can mask them, and a restricted /proc need not carry a
+        // `flags` line at all, so a missing line means "nothing to compare",
+        // not a failure.
+        let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+        let mut flag_lines = cpuinfo.lines().filter(|line| line.starts_with("flags"));
+        if let Some(flags) = flag_lines.next() {
+            assert_eq!(supported, flags.split_whitespace().any(|flag| flag == "avx"));
+        }
     }
 
     // Regression for issue #1223: installed builds place the bundled sidecar at
@@ -4256,6 +4920,35 @@ mod tests {
         assert!(ensure_fetchable_url("https://1.1.1.1/").is_ok());
         assert!(ensure_fetchable_url("http://127.0.0.1:8081/tiles/0/0/0.png").is_ok());
         assert!(ensure_fetchable_url("http://[::1]:8081/data.pmtiles").is_ok());
+    }
+
+    #[test]
+    fn ssrf_guard_error_is_detected_through_the_source_chain() {
+        use std::error::Error;
+        use std::fmt;
+
+        #[derive(Debug)]
+        struct Wrapper(Box<dyn Error + Send + Sync>);
+        impl fmt::Display for Wrapper {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                // Deliberately hides the cause, the way reqwest's "error
+                // following redirect" / connector errors hide theirs.
+                write!(f, "error following redirect for url (https://example.com/)")
+            }
+        }
+        impl Error for Wrapper {
+            fn source(&self) -> Option<&(dyn Error + 'static)> {
+                Some(self.0.as_ref())
+            }
+        }
+
+        let blocked = Wrapper(SSRF_BLOCKED_MESSAGE.into());
+        assert!(!blocked.to_string().contains(SSRF_BLOCKED_MESSAGE));
+        assert!(is_ssrf_guard_error(&blocked));
+
+        // A genuine transport failure must stay fallback-eligible.
+        let transport = Wrapper("connection reset by peer".into());
+        assert!(!is_ssrf_guard_error(&transport));
     }
 
     #[test]
@@ -4659,6 +5352,55 @@ mod tests {
         assert_eq!(tcp_table_port(0x0000_3E22), 8766);
         assert_eq!(tcp_table_port(0xDEAD_3E22), 8766);
         assert_eq!(tcp_table_port(0x0000_223E), 0x3E22);
+    }
+
+    // Add Vector Layer downloads a whole dataset through the same command that
+    // fetches tiles, so it asks for a longer budget. The clamp is what keeps
+    // that override from becoming a way to disable the timeout entirely.
+    #[test]
+    fn clamps_the_fetch_timeout_into_the_allowed_range() {
+        // No override: the tile-sized default.
+        assert_eq!(resolve_fetch_timeout_secs(None), REMOTE_TILE_TIMEOUT_SECS);
+        // A dataset-sized budget is honored as asked.
+        assert_eq!(resolve_fetch_timeout_secs(Some(180)), 180);
+        // Zero would mean "no timeout" to reqwest, so it is raised to the floor
+        // rather than letting a stalled request hang forever.
+        assert_eq!(resolve_fetch_timeout_secs(Some(0)), REMOTE_TILE_TIMEOUT_SECS);
+        // Below the floor is raised; above the ceiling is capped.
+        assert_eq!(resolve_fetch_timeout_secs(Some(1)), REMOTE_TILE_TIMEOUT_SECS);
+        assert_eq!(
+            resolve_fetch_timeout_secs(Some(u64::MAX)),
+            MAX_FETCH_TIMEOUT_SECS
+        );
+    }
+
+    #[test]
+    fn recognizes_only_persisted_image_file_grants() {
+        assert!(is_persisted_image_file(
+            r"\\?\UNC\server\drone photos\IMG_0042.JPEG"
+        ));
+        // TIFF grants may belong to persistent GeoTIFF raster layers, so the
+        // startup migration must leave them intact even though the photo
+        // importer also accepts TIFF images.
+        assert!(!is_persisted_image_file(r"X:\survey\ortho.tif"));
+        // Directory patterns must survive even when their names contain an
+        // image-looking segment, as must unrelated project and vector grants.
+        assert!(!is_persisted_image_file(r"X:\survey\photos\**"));
+        assert!(!is_persisted_image_file(r"X:\survey\map.geolibre"));
+        assert!(!is_persisted_image_file(r"X:\survey\points.geojson"));
+    }
+
+    #[test]
+    fn native_image_picker_rejects_paths_outside_its_filter() {
+        assert!(is_image_picker_path(std::path::Path::new(
+            r"X:\survey\PHOTO.JPEG"
+        )));
+        assert!(is_image_picker_path(std::path::Path::new(
+            r"X:\survey\ortho.tiff"
+        )));
+        assert!(!is_image_picker_path(std::path::Path::new(
+            r"X:\survey\notes.txt"
+        )));
     }
 
     // The image-path guard is what keeps the reaper from killing a Jupyter the

@@ -1,18 +1,31 @@
-import { useAppStore } from "@geolibre/core";
+import { normalizeModelGraph, useAppStore } from "@geolibre/core";
 import {
   ALGORITHMS,
   VECTOR_TOOLS,
-  H3_TOOLS,
   STATISTICS_TOOLS,
+  fetchRemoteWhiteboxCatalogSnapshot,
+  listWasmToolManifests,
+  mergeWasmToolManifests,
+  runWhiteboxToolWasm,
+  topologicalOrder,
+  validateModelGraph,
   type ProcessingAlgorithm,
   type ProcessingContext,
+  type WhiteboxLayerInput,
+  type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
-import type { MapController } from "@geolibre/map";
+import type { RefObject } from "react";
+import type { MapEngine } from "@geolibre/map";
+import { isTiff } from "./binary-output";
 import { beginProcessingRun } from "../processing-history";
-import { captureMapImage } from "../print-layout-export";
+import { imageBlobToDataUrl } from "@geolibre/map";
 import { styleParamPatch } from "./style-params";
+import { parameterKind } from "../whitebox-param-kind";
+import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
+import { createAppAPI } from "../../hooks/usePlugins";
+import { buildModelToolCatalog } from "../model-tool-catalog";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -27,7 +40,63 @@ export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
 export interface ScriptingDeps {
   /** Lazily resolve the live map controller (it is created asynchronously). */
-  getController: () => MapController | null;
+  getController: () => MapEngine | null;
+}
+
+/**
+ * Add a Whitebox raster result to the map and return the created layer id.
+ *
+ * Built from `getController` rather than injected by a transport, so every
+ * scripting host (the widget bridge, the Notebook panel, the Jupyter relay, the
+ * in-app console, the assistant) can add raster outputs identically — the
+ * "one implementation, no drift between transports" invariant above.
+ *
+ * @param getController - Lazy accessor for the live map controller.
+ * @param bytes - The GeoTIFF the WASM runner produced.
+ * @param name - Display name for the new layer.
+ * @param fileName - File name the raster is registered under.
+ * @returns The id of the added layer.
+ */
+function addWhiteboxRasterOutput(
+  getController: () => MapEngine | null,
+  bytes: Uint8Array,
+  name: string,
+  fileName: string,
+): Promise<string> {
+  // A live view of the controller, since it is created asynchronously and the
+  // app API reads it lazily.
+  const controllerRef = {
+    get current() {
+      return getController();
+    },
+  } as RefObject<MapEngine | null>;
+  const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
+  return addRasterToMap(createAppAPI(controllerRef), file, { name });
+}
+
+function whiteboxToolName(tool: WhiteboxTool): string {
+  return tool.display_name || tool.id.replace(/_/g, " ");
+}
+
+async function whiteboxTools(): Promise<WhiteboxTool[]> {
+  // Settled, not all: the catalog snapshot is an HTTP fetch, so an offline or
+  // blocked deployment must not take down the locally bundled WASM manifests
+  // (the GeoLibre-authored tools) with it. Mirrors ProcessingDialog's local mode.
+  const [catalogResult, manifestResult] = await Promise.allSettled([
+    fetchRemoteWhiteboxCatalogSnapshot(),
+    listWasmToolManifests(),
+  ]);
+  if (catalogResult.status === "rejected") {
+    console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogResult.reason);
+  }
+  if (manifestResult.status === "rejected") {
+    console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", manifestResult.reason);
+  }
+  // Hide locked ("pro"-tier) tools: they cannot run in the browser.
+  const catalog =
+    catalogResult.status === "fulfilled" ? catalogResult.value.filter((tool) => !tool.locked) : [];
+  const manifests = manifestResult.status === "fulfilled" ? manifestResult.value : [];
+  return mergeWasmToolManifests(catalog, manifests);
 }
 
 /**
@@ -37,7 +106,7 @@ export interface ScriptingDeps {
  * "Copy as Python" eligibility can never drift from what actually runs.
  */
 export function allAlgorithms(): ProcessingAlgorithm[] {
-  return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS, ...STATISTICS_TOOLS];
+  return [...ALGORITHMS, ...VECTOR_TOOLS, ...STATISTICS_TOOLS];
 }
 
 /** Validate a required string `layerId` param, with a clear error if missing. */
@@ -58,13 +127,13 @@ function requireLayerId(params: Record<string, unknown>): string {
 export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers {
   const { getController } = deps;
 
-  return {
+  const handlers: ScriptingHandlers = {
     // -- view / camera ------------------------------------------------------
     getView: () => getController()?.readView() ?? null,
     getCenter: () => getController()?.readView().center ?? null,
     getBounds: () => getController()?.readView().bbox ?? null,
     flyTo: (params) => {
-      getController()?.flyTo(params as Parameters<MapController["flyTo"]>[0]);
+      getController()?.flyTo(params as Parameters<MapEngine["flyTo"]>[0]);
       return null;
     },
     fitBounds: (params) => {
@@ -237,10 +306,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           },
           duckdb: createDuckDbCapability(),
           viewportBounds: () => {
-            const map = getController()?.getMap();
-            if (!map) return null;
-            const b = map.getBounds();
-            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            // `readView().bbox`, not `map.getBounds()`: the extent is a camera
+            // fact every engine reports, and the MapLibre escape hatch is null
+            // on the globe — which would have made every bounds-aware algorithm
+            // silently see "no viewport" there (#2268 review).
+            const view = getController()?.readView();
+            return view?.bbox ?? null;
           },
         };
         await algo.run(ctx);
@@ -252,16 +323,205 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       else tracker.finish("success");
       return { logs, resultLayerIds };
     },
+    listWhiteboxTools: async () =>
+      (await whiteboxTools()).map((tool) => ({
+        id: tool.id,
+        name: whiteboxToolName(tool),
+        category: tool.category ?? tool.taxonomy_category ?? "General",
+        description: tool.summary ?? "",
+        parameters: tool.params ?? [],
+      })),
+    runWhiteboxTool: async (params) => {
+      const id = String(params.id ?? "");
+      const tool = (await whiteboxTools()).find((item) => item.id === id);
+      if (!tool) throw new Error(`Unknown Whitebox tool "${id}"`);
+      const supplied = (params.params as Record<string, unknown>) ?? {};
+      const parameters: Record<string, unknown> = { ...supplied };
+      const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
+      const layers = useAppStore.getState().layers;
+
+      for (const param of tool.params ?? []) {
+        const kind = parameterKind(param);
+        if (!kind.endsWith("_in")) continue;
+        const value = supplied[param.name];
+        const values = Array.isArray(value) ? value : [value];
+        const resolvedLayers = values.map((item) =>
+          typeof item === "string" ? layers.find((layer) => layer.id === item) : undefined,
+        );
+        if (resolvedLayers.every((layer) => !layer)) continue;
+        if (resolvedLayers.some((layer) => !layer)) {
+          throw new Error(`Not every layer supplied for "${param.name}" could be resolved`);
+        }
+        const resolved = resolvedLayers.filter((layer) => layer !== undefined);
+        const inputs: WhiteboxLayerInput[] = [];
+        for (const layer of resolved) {
+          // Same eligibility rule the Processing dialog filters its layer picker
+          // by, so a wrong-type layer reports that rather than failing later with
+          // a vaguer "not fetchable".
+          if (!canUseLayerForParameter(layer, param)) {
+            throw new Error(
+              `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`,
+            );
+          }
+          if (kind === "vector_in") {
+            if (!layer.geojson) {
+              throw new Error(`Layer "${layer.name}" has no in-memory GeoJSON for "${param.name}"`);
+            }
+            inputs.push({ name: layer.name, kind, geojson: layer.geojson });
+          } else {
+            const bytes = await fetchLayerBytes(layer);
+            if (!bytes) {
+              throw new Error(`Layer "${layer.name}" is not fetchable for "${param.name}"`);
+            }
+            inputs.push({ name: layer.name, kind, bytes });
+          }
+        }
+        delete parameters[param.name];
+        layerInputs[param.name] = inputs.length === 1 ? inputs[0] : inputs;
+      }
+
+      const tracker = beginProcessingRun({
+        kind: "whitebox",
+        toolId: tool.id,
+        toolName: whiteboxToolName(tool),
+        engine: "wasm",
+        parameters: supplied,
+      });
+      try {
+        const job = await runWhiteboxToolWasm({
+          tool_id: tool.id,
+          parameters,
+          tool,
+          layer_inputs: layerInputs,
+          include_pro: false,
+          tier: "open",
+        });
+        if (job.status !== "succeeded") {
+          throw new Error(job.error || job.messages.join("\n") || `Whitebox tool ${id} failed`);
+        }
+        const resultLayerIds: string[] = [];
+        // Byte outputs this API cannot surface as a layer. Reported back in
+        // `logs` rather than dropped, so a caller can tell the tool produced
+        // data it did not receive.
+        const unretrievable: string[] = [];
+        for (const [outputName, value] of Object.entries(job.outputs)) {
+          const displayName = `${whiteboxToolName(tool)} ${outputName.replace(/_/g, " ")}`;
+          if (
+            value &&
+            typeof value === "object" &&
+            (value as { type?: unknown }).type === "FeatureCollection"
+          ) {
+            const layerId = useAppStore
+              .getState()
+              .addGeoJsonLayer(displayName, value as FeatureCollection);
+            resultLayerIds.push(layerId);
+            tracker.addOutputLayer(displayName);
+          } else if (value instanceof Uint8Array) {
+            const outputParam = tool.params?.find((item) => item.name === outputName);
+            const outKind = outputParam ? parameterKind(outputParam) : "";
+            // Mirror ProcessingDialog's rule: any binary output is a raster
+            // unless it is explicitly file_out/vector_out (which the dialog
+            // downloads). Accepting only "raster_out" would drop the
+            // GeoLibre-authored subset extractors, whose produced COG comes back
+            // under a key with no typed param at all (SUBSET_OUTPUT_TOOL_IDS in
+            // wasm-client), so parameterKind falls through to "string".
+            if ((outKind === "file_out" || outKind === "vector_out") && !isTiff(value)) {
+              unretrievable.push(
+                `Output "${outputName}" (${outKind}, ${value.length} bytes) is a file, not a map layer; run this tool from Processing to download it.`,
+              );
+            } else {
+              const layerId = await addWhiteboxRasterOutput(
+                getController,
+                value,
+                displayName,
+                `${tool.id}_${outputName}.tif`,
+              );
+              resultLayerIds.push(layerId);
+              tracker.addOutputLayer(displayName);
+            }
+          }
+        }
+        tracker.finish("success");
+        return { logs: [...job.messages, ...unretrievable], resultLayerIds };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        tracker.finish("error", message);
+        throw error;
+      }
+    },
+    runModelBuilder: async (params) => {
+      const graph = normalizeModelGraph(params.graph);
+      if (!graph) throw new Error("runModelBuilder: graph is invalid");
+      const catalog = buildModelToolCatalog(VECTOR_TOOLS, await whiteboxTools());
+      const byKey = new Map(catalog.map((descriptor) => [descriptor.key, descriptor]));
+      const resolve = (provider: string | undefined, toolId: string | undefined) =>
+        provider && toolId ? byKey.get(`${provider}:${toolId}`) : undefined;
+      const issues = validateModelGraph(graph, resolve);
+      if (issues.length) throw new Error(issues.map((issue) => issue.message).join("\n"));
+      const ordered = topologicalOrder(graph);
+      if (!ordered) throw new Error("The model contains a loop.");
+
+      const incoming = new Map<string, typeof graph.edges>();
+      for (const edge of graph.edges) {
+        const list = incoming.get(edge.to) ?? [];
+        list.push(edge);
+        incoming.set(edge.to, list);
+      }
+      const produced = new Map<string, Map<string, string>>();
+      const outputLayerIds: string[] = [];
+      for (const node of ordered) {
+        if (node.kind === "input") {
+          const layerId = node.layerId ?? "";
+          if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
+            throw new Error(`No layer with id "${layerId}"`);
+          }
+          produced.set(node.id, new Map([["out", layerId]]));
+          continue;
+        }
+        if (node.kind === "output") {
+          const edge = incoming.get(node.id)?.[0];
+          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          if (!layerId) throw new Error(`No result reached output "${node.name ?? node.id}"`);
+          if (node.name?.trim()) useAppStore.getState().updateLayer(layerId, { name: node.name });
+          outputLayerIds.push(layerId);
+          continue;
+        }
+
+        const descriptor = resolve(node.provider, node.toolId);
+        if (!descriptor || !node.provider || !node.toolId) {
+          throw new Error(`Unknown Model Builder tool "${node.toolId ?? ""}"`);
+        }
+        const toolParams: Record<string, unknown> = { ...(node.parameters ?? {}) };
+        for (const edge of incoming.get(node.id) ?? []) {
+          const layerId = produced.get(edge.from)?.get(edge.fromPort);
+          if (!layerId) throw new Error(`No result reached "${descriptor.name}"`);
+          toolParams[edge.toPort] = layerId;
+        }
+        const handler =
+          node.provider === "whitebox" ? handlers.runWhiteboxTool : handlers.runAlgorithm;
+        const result = (await handler({ id: node.toolId, params: toolParams })) as {
+          resultLayerIds?: unknown;
+        };
+        const resultLayerIds = result?.resultLayerIds;
+        if (!Array.isArray(resultLayerIds) || resultLayerIds.length < descriptor.outputs.length) {
+          throw new Error(`"${descriptor.name}" did not produce its expected map outputs.`);
+        }
+        produced.set(
+          node.id,
+          new Map(
+            descriptor.outputs.map((port, index) => [port.id, String(resultLayerIds[index])]),
+          ),
+        );
+      }
+      return { outputLayerIds };
+    },
 
     // -- export -------------------------------------------------------------
-    toImage: () => {
-      const map = getController()?.getMap();
-      if (!map) throw new Error("The map is not ready yet");
-      // toDataURL is a synchronous PNG encode (100-400ms on a large/high-DPI
-      // viewport). In the in-app console (main thread) this briefly freezes the
-      // UI, so callers should avoid it in tight loops; the notebook path hides
-      // this behind the postMessage round-trip.
-      return captureMapImage(map).image.toDataURL("image/png");
+    toImage: async () => {
+      const engine = getController();
+      if (!engine) throw new Error("The map is not ready yet");
+      return imageBlobToDataUrl(await engine.captureImage());
     },
   };
+  return handlers;
 }

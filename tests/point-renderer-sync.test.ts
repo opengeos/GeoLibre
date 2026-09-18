@@ -35,6 +35,9 @@ function makeMap() {
       calls.push({ method: "removeLayer", args: [id] });
     },
     getFilter: (id: string) => layers.get(id)?.filter,
+    // A clustered source is pre-filtered against the live camera, so the
+    // clustering cases need a zoom to evaluate against.
+    getZoom: () => 4,
     setFilter: record("setFilter"),
     setPaintProperty: record("setPaintProperty"),
     setLayoutProperty: record("setLayoutProperty"),
@@ -98,6 +101,36 @@ describe("point renderer sync", () => {
     syncLayer(map as never, pointLayer({ pointRenderer: "heatmap" }));
     assert.equal((layers.get("layer-pts-heatmap") as { type: string }).type, "heatmap");
     assert.ok(!layers.has("layer-pts-circle"));
+  });
+
+  it("applies the selected heatmap ramp and numeric weight field", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      pointLayer({
+        pointRenderer: "heatmap",
+        heatmapColorRamp: "viridis",
+        heatmapWeightProperty: "nb_ruches",
+      }),
+    );
+
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], ["max", 0, ["to-number", ["get", "nb_ruches"], 0]]);
+    assert.deepEqual(paint["heatmap-color"], [
+      "interpolate",
+      ["linear"],
+      ["heatmap-density"],
+      0,
+      "rgba(0,0,0,0)",
+      0.25,
+      "#440154",
+      0.5,
+      "#31688e",
+      0.75,
+      "#35b779",
+      1,
+      "#fde725",
+    ]);
   });
 
   it("clusters: a clustered source plus cluster, count, and unclustered layers", () => {

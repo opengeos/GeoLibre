@@ -1,14 +1,19 @@
 import { useAppStore } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import type { TFunction } from "i18next";
+import * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
+import { bandMeasure } from "../lib/netcdf-band-axis";
 import {
   displayUnits,
   getNetcdfLayerState,
   gridPixelAt,
+  gridValueAt,
   NETCDF_IMAGE_SOURCE_KIND,
   readNetcdfProfile,
+  type GridPixel,
+  type NetcdfLayerState,
 } from "../lib/netcdf-image-symbology";
 import {
   addNetcdfProfileSample,
@@ -36,6 +41,75 @@ function formatReading(value: number, units: string | undefined): string {
 }
 
 /**
+ * The channel names an RGB composite's rows are labelled with, red first — the
+ * same three the Add dialog's band pickers carry, so a reading is named exactly
+ * as the field that chose it.
+ */
+const CHANNEL_LABEL_KEYS = [
+  "addData.netcdf.channel.red",
+  "addData.netcdf.channel.green",
+  "addData.netcdf.channel.blue",
+] as const;
+
+/**
+ * The value rows for one clicked cell.
+ *
+ * A single-band layer reports the variable it was built from. A composite
+ * reports all three channels instead: they are the same variable at three
+ * bands, so naming it three times would say nothing, where the channel and the
+ * band it was drawn from say everything. The three share a geometry, so the
+ * cell `gridPixelAt` found on the red channel addresses the other two directly.
+ *
+ * @param state - The layer's retained grids.
+ * @param pixel - The cell under the click.
+ * @param t - The translator, for the channel names and the no-data marker.
+ * @returns Label/value pairs, in display order.
+ */
+function valueRows(
+  state: NetcdfLayerState,
+  pixel: GridPixel,
+  t: TFunction,
+): Array<[string, string]> {
+  const reading = (value: number | null): string =>
+    value === null ? t("netcdfIdentify.noData") : formatReading(value, state.units);
+
+  const rgb = state.rgb;
+  if (!rgb) return [[state.variable, reading(pixel.value)]];
+
+  const axis = state.cube?.axis;
+  return rgb.bands.map((band, channel) => {
+    const name = t(CHANNEL_LABEL_KEYS[channel]);
+    return [
+      // The axis is gone once the file behind a second cube closed it, and with
+      // it any way to say which wavelength this was; the channel name alone
+      // still reads correctly.
+      axis ? `${name} (${bandMeasure(axis, band)})` : name,
+      reading(gridValueAt(rgb.channels[channel], pixel.row, pixel.column)),
+    ] as [string, string];
+  });
+}
+
+/**
+ * Build every label/value row shown for a clicked NetCDF grid cell.
+ *
+ * @param state Layer grids and metadata.
+ * @param pixel Cell under the click.
+ * @param t Translator for channel and coordinate labels.
+ * @returns Display rows in popup order.
+ */
+export function netcdfIdentifyRows(
+  state: NetcdfLayerState,
+  pixel: GridPixel,
+  t: TFunction,
+): Array<[string, string]> {
+  return [
+    ...valueRows(state, pixel, t),
+    [t("netcdfIdentify.coordinates"), `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
+    [t("netcdfIdentify.cell"), `${pixel.row}, ${pixel.column}`],
+  ];
+}
+
+/**
  * Bridges the store's `identifyLayerId` to a NetCDF image layer's retained grid.
  *
  * The counterpart of `useRasterIdentify` for the layers the NetCDF dialog bakes
@@ -59,7 +133,7 @@ function formatReading(value: number, units: string | undefined): string {
  *   the map finished loading.
  */
 export function useNetcdfIdentify(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
 ): void {
   const { t } = useTranslation();
@@ -106,16 +180,7 @@ export function useNetcdfIdentify(
 
       const container = document.createElement("div");
       container.className = "space-y-0.5 text-xs";
-      const rows: Array<[string, string]> = [
-        [
-          state.variable,
-          pixel.value === null
-            ? t("netcdfIdentify.noData")
-            : formatReading(pixel.value, state.units),
-        ],
-        [t("netcdfIdentify.coordinates"), `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
-        [t("netcdfIdentify.cell"), `${pixel.row}, ${pixel.column}`],
-      ];
+      const rows = netcdfIdentifyRows(state, pixel, t);
       for (const [label, value] of rows) {
         const line = document.createElement("div");
         const name = document.createElement("span");
@@ -152,7 +217,7 @@ export function useNetcdfIdentify(
       // axis in the source file (~200 ms for an EMIT scene), so it runs after
       // the popup is already on screen. A 2-D grid has no band axis, so the point
       // stays profile-less: still a marker and a list entry, just no line.
-      if (!state.profile) return;
+      if (!state.cube) return;
       const timeout = window.setTimeout(() => {
         profileTimeouts.delete(timeout);
         // A remote read is a worker round trip over range requests, so this can

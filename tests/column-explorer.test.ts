@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
+import {
+  coerceNumericStringRows,
+  type ChartRow,
+} from "../apps/geolibre-desktop/src/lib/attribute-charts";
 import type { NumericFieldStats } from "../apps/geolibre-desktop/src/lib/attribute-stats";
 import {
   COLUMN_EXPLORER_TOP_VALUES,
@@ -31,6 +34,18 @@ describe("summarizeColumn", () => {
     assert.equal(summary.total, 5);
   });
 
+  it("excludes numeric-looking text from a mixed numeric field", () => {
+    const data = rows({ pop: 10 }, { pop: "20" }, { pop: 30 });
+    const summary = summarizeColumn(data, "pop");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "numeric");
+    assert.equal(summary.histogram?.total, 2);
+    if (summary.stats.kind === "numeric") {
+      assert.equal(summary.stats.sum, 40);
+      assert.equal(summary.stats.nonNumeric, 1);
+    }
+  });
+
   it("summarizes a text field with top values and no histogram", () => {
     const data = rows({ kind: "a" }, { kind: "a" }, { kind: "b" }, { kind: "" });
     const summary = summarizeColumn(data, "kind");
@@ -42,6 +57,22 @@ describe("summarizeColumn", () => {
       assert.equal(summary.stats.unique, 2);
       assert.deepEqual(summary.stats.top[0], { value: "a", count: 2 });
     }
+  });
+
+  it("keeps numeric-looking strings as text without a histogram", () => {
+    const data = rows({ fips: "37009" }, { fips: "37005" }, { fips: "37171" });
+    const summary = summarizeColumn(data, "fips");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "text");
+    assert.equal(summary.histogram, null);
+  });
+
+  it("infers numeric strings for a string-only source", () => {
+    const data = rows({ population: "10" }, { population: "20" }, { population: "30" });
+    const summary = summarizeColumn(coerceNumericStringRows(data), "population");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "numeric");
+    assert.equal(summary.histogram?.total, 3);
   });
 
   it("lists up to COLUMN_EXPLORER_TOP_VALUES distinct text values", () => {

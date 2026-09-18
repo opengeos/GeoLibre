@@ -20,6 +20,8 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { REMEDIATION, scanForCredentials } from "./scan-credentials.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = resolve(repoRoot, "apps/geolibre-desktop/dist-embed");
 const staticDir = resolve(repoRoot, "python/src/geolibre/static/app");
@@ -82,6 +84,20 @@ if (/\b(?:src|href)="\/(?!\/)/.test(indexHtml)) {
   );
   process.exit(1);
 }
+
+// The wheel is redistributed, so it must carry no credential of ours. Verify the
+// output rather than trusting the config, which a hand-run build can satisfy and
+// still be wrong. See scripts/scan-credentials.mjs.
+const credentialFindings = scanForCredentials(distDir);
+if (credentialFindings.length > 0) {
+  console.error(
+    `[build-embed] Refusing to stage: ${credentialFindings.length} credential(s) in the embed build.\n` +
+      credentialFindings.map((f) => `  - ${f}`).join("\n") +
+      `\n\n${REMEDIATION}`,
+  );
+  process.exit(1);
+}
+console.log("[build-embed] Credential scan clean.");
 
 rmSync(staticDir, { recursive: true, force: true });
 mkdirSync(staticDir, { recursive: true });

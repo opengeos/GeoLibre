@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
+import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface SecondaryMapCanvasProps {
@@ -50,6 +51,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
 
   // Camera primitives, split out so the apply effects depend on values rather
   // than object identity (a new `mapView` object with equal values is a no-op).
@@ -125,20 +127,15 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       mc.setBasemapOpacity(live.basemapOpacity);
     });
 
-    let resizeFrame: number | null = null;
-    const resizeMap = () => {
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
-      });
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
+    // Shared with the primary map so a compare/swipe pane gets the same
+    // flash-free behaviour during a continuous window drag.
+    const disposeResizeScheduler = createMapResizeScheduler({
+      getMap: () => mc.getMap(),
+      container: containerRef.current,
+    });
 
     return () => {
-      resizeObserver.disconnect();
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      disposeResizeScheduler();
       mc.destroy();
       controller.current = null;
     };
@@ -165,6 +162,14 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.setBlankBackgroundColor(blankBackgroundColor);
+    if (blankBackgroundColor !== null || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => controller.current?.setBlankBackgroundColor(null));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [blankBackgroundColor]);
 
   // Map preferences (projection, zoom/pitch limits, bounds) are shared with the
   // primary map; re-apply them when they change so a pane doesn't keep the

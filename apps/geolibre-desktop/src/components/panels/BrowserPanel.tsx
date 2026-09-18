@@ -7,16 +7,16 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { isDesktopRuntime } from "../../lib/is-mobile";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   isLoadableFilePath,
-  isTauri,
   listDirectory,
   openLocalDataFileWithFallback,
   pickLocalDirectory,
@@ -47,7 +47,7 @@ const CONNECTION_ID_PREFIX = "connection:";
 const FOLDER_ID_PREFIX = "folder:";
 
 interface BrowserPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   /**
    * Open a recent project by path (shared with the toolbar's instance).
    * Resolves to an error message to show inline, or null on success.
@@ -156,11 +156,14 @@ export function BrowserPanel({
     (connectionString: string) => {
       if (connFetchedRef.current.has(connectionString)) return;
       connFetchedRef.current.add(connectionString);
-      // PostGIS browsing needs the desktop sidecar/Martin; off-Tauri, show the
-      // same localized "requires GeoLibre Desktop" message the Add Data dialog
-      // gives rather than letting startGeoLibreSidecar/fetch fail with a raw
-      // network error. Dropped from the fetched set so it can retry on desktop.
-      if (!isTauri()) {
+      // PostGIS browsing needs the desktop sidecar/Martin, so outside the
+      // desktop shell show the same localized "requires GeoLibre Desktop"
+      // message the Add Data dialog gives rather than letting
+      // startGeoLibreSidecar/fetch fail with a raw network error. The gate is
+      // isDesktopRuntime(), not isTauri(): the packaged mobile apps are Tauri
+      // too and have no sidecar to reach (GeoLibre#2091). Dropped from the
+      // fetched set so it can retry on desktop.
+      if (!isDesktopRuntime()) {
         connFetchedRef.current.delete(connectionString);
         setConnLoads((prev) => ({
           ...prev,
@@ -194,8 +197,8 @@ export function BrowserPanel({
         .then((tables) => {
           // geometry_columns returns one row per geometry column, so a table
           // with several geometry columns appears several times; keep the first
-          // (mirrors PostgresSource.handleConnectEditable's dedup) so the tree
-          // doesn't emit duplicate node ids.
+          // because the Browser tree represents tables, while the Add Data
+          // dialog provides the geometry-column picker after a table is chosen.
           const seen = new Set<string>();
           const deduped: { schema: string; table: string }[] = [];
           for (const tbl of tables) {
@@ -439,6 +442,15 @@ export function BrowserPanel({
         }
         return;
       }
+      if (entry.kind === "csw") {
+        openAddData("csw", {
+          url: typeof entry.fields.endpoint === "string" ? entry.fields.endpoint : undefined,
+          // The entry saves the search term alongside the endpoint, so restore
+          // it too rather than reopening on an empty keyword field.
+          keyword: typeof entry.fields.keyword === "string" ? entry.fields.keyword : undefined,
+        });
+        return;
+      }
       beginBusy(node.id);
       try {
         await applyServiceEntry(entry, { addLayer, mapControllerRef });
@@ -644,14 +656,9 @@ export function BrowserPanel({
   };
 
   // Toggle a node's presence in the Favorites section; the favorites change
-  // event refreshes the tree via useBrowserTree. The descriptor carries enough
-  // to rebuild + activate the favorited node without the live original.
-  //
-  // The label/payload are snapshotted at favorite time and not refreshed while
-  // the original still exists — intentional, matching the "rebuild without the
-  // live original" design. There's no rename for services/connections today, so
-  // this is currently unreachable; a future rename feature should re-sync (or
-  // accept) the stored label.
+  // event refreshes the tree via useBrowserTree. Snapshot only display metadata
+  // and stable identity; activating a service resolves its current definition
+  // from the library rather than persisting deployment configuration here.
   const toggleFavorite = (node: BrowserNode) => {
     if (favoriteIds.has(node.id)) {
       removeFavorite(node.id);
@@ -666,6 +673,7 @@ export function BrowserPanel({
       serviceId: node.serviceId,
       serviceKind: node.serviceKind,
       builtin: node.builtin,
+      deployment: node.deployment,
       path: node.path,
     });
   };

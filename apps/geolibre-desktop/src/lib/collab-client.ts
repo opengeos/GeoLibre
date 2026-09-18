@@ -79,21 +79,68 @@ export function sessionWsUrl(wsBase: string, sessionId: string): string {
   return `${wsBase}/sessions/${encodeURIComponent(sessionId)}/ws`;
 }
 
+export interface CollabCapabilities {
+  /**
+   * Whether the relay has an identity issuer configured. False means it cannot
+   * verify a sign-in, so the "require a signed-in account" option must stay
+   * hidden — turning it on would reject every guest.
+   */
+  identitySupported: boolean;
+}
+
+/**
+ * Probe the relay's `/health` endpoint for optional capabilities.
+ *
+ * Any failure — unreachable relay, timeout, or an older relay that doesn't
+ * report the field — resolves to everything disabled rather than rejecting, so
+ * a capability-gated control simply stays hidden instead of blocking the
+ * dialog.
+ *
+ * @param baseUrl - The `ws(s)://` relay base; read from the env when omitted.
+ * @param fetchImpl - Injectable fetch, for tests.
+ * @returns The relay's advertised capabilities, all false when unknown.
+ */
+export async function fetchCollabCapabilities(
+  baseUrl: string | null = resolveCollabBaseUrl(),
+  fetchImpl: typeof fetch = fetch,
+): Promise<CollabCapabilities> {
+  if (!baseUrl) return { identitySupported: false };
+  try {
+    const response = await fetchImpl(`${httpBaseFromWs(baseUrl)}/health`, {
+      signal: AbortSignal.timeout(CREATE_TIMEOUT_MS),
+    });
+    if (!response.ok) return { identitySupported: false };
+    const payload = (await response.json().catch(() => ({}))) as {
+      identitySupported?: unknown;
+    };
+    return { identitySupported: payload?.identitySupported === true };
+  } catch {
+    return { identitySupported: false };
+  }
+}
+
+export interface CreateSessionOptions {
+  mode?: CollaborationMode;
+  requireIdentity?: boolean;
+}
+
 export async function createSession(
-  mode: CollaborationMode,
+  options: CollaborationMode | CreateSessionOptions = "co-edit",
   baseUrl: string | null = resolveCollabBaseUrl(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<CreateSessionResult> {
   if (!baseUrl) {
     throw new Error("Collaboration is not configured. Set VITE_GEOLIBRE_COLLAB_URL.");
   }
+  const mode = typeof options === "string" ? options : (options.mode ?? "co-edit");
+  const requireIdentity = typeof options === "object" ? options.requireIdentity === true : false;
   const httpBase = httpBaseFromWs(baseUrl);
   let response: Response;
   try {
     response = await fetchImpl(`${httpBase}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, requireIdentity }),
       signal: AbortSignal.timeout(CREATE_TIMEOUT_MS),
     });
   } catch (error) {

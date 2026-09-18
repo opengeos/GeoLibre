@@ -30,6 +30,7 @@ many transitive dependencies they rely on).
 - [GeoParquet](https://geoparquet.org/) and the [Apache Arrow](https://arrow.apache.org/) / Parquet ecosystem.
 - [STAC](https://stacspec.org/) — the SpatioTemporal Asset Catalog specification and tooling.
 - [Zarr](https://zarr.dev/) and [CarbonPlan](https://carbonplan.org/) — cloud-native multidimensional array access.
+- [Icechunk](https://icechunk.io/) and [icechunk-js](https://github.com/EarthyScience/icechunk-js) — transactional storage for Zarr, read in the browser.
 - [H3](https://h3geo.org/) — hexagonal hierarchical spatial indexing.
 
 ### Python sidecar and notebooks
@@ -78,3 +79,6 @@ a discussion, or shared GeoLibre with their community.
 Want to see your name here? Contributions of every size are welcome — from
 filing a well-described bug report to writing a plugin. See the
 [Contributing guide](contributing.md) to get started.
+
+If you would rather support the project financially, see
+[Become a Sponsor](sponsor.md).

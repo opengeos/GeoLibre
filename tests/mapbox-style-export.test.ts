@@ -20,6 +20,8 @@ function layer(patch: Partial<ExportableLayer> & { style?: LayerStyle } = {}): E
     opacity: patch.opacity ?? 1,
     visible: patch.visible ?? true,
     style: patch.style ?? style(),
+    ...(patch.quickFilters ? { quickFilters: patch.quickFilters } : {}),
+    ...(patch.filterExpression ? { filterExpression: patch.filterExpression } : {}),
   };
 }
 
@@ -100,6 +102,48 @@ describe("buildMapboxStyle base document", () => {
     assert.equal(circle?.type, "circle");
     const paint = (circle as { paint: Record<string, unknown> }).paint;
     assert.equal(paint["circle-color"], "#ff0000");
+  });
+});
+
+describe("persistent expression filters", () => {
+  it("writes the layer filter into every exported render layer", () => {
+    const filterExpression = [">=", ["get", "value"], 10];
+    const { style: doc } = buildMapboxStyle(layer({ filterExpression }), mixedGeom());
+
+    assert.deepEqual(layerById(doc, "my-layer-fill")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+      filterExpression,
+    ]);
+    assert.deepEqual(layerById(doc, "my-layer-circle")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      filterExpression,
+    ]);
+  });
+});
+
+describe("MapLibre-only paint properties", () => {
+  it("never exports the *-layer-opacity keys that elect the blend composite", () => {
+    // `fillPaint`/`linePaint` always emit these (they have to: `ensureLayer`
+    // only writes the keys it is handed, so clearing a blend mode has to write
+    // the 1 back). They are MapLibre 6 additions that Mapbox GL rejects
+    // outright, and an exported style is a portable fragment meant to drop into
+    // either renderer, so `withoutLayerOpacity` strips them on the way out.
+    // Without this assertion a new call site that forgot to route through it
+    // would leak them into every exported style with nothing to catch it.
+    for (const blendMode of ["normal", "multiply"] as const) {
+      const { style: doc } = buildMapboxStyle(layer({ style: style({ blendMode }) }), polygons());
+      for (const exported of doc.layers) {
+        const paint = (exported as { paint?: Record<string, unknown> }).paint ?? {};
+        for (const key of Object.keys(paint)) {
+          assert.ok(
+            !key.endsWith("-layer-opacity"),
+            `${exported.id} exported the MapLibre-only "${key}" (blendMode ${blendMode})`,
+          );
+        }
+      }
+    }
   });
 });
 
@@ -261,6 +305,36 @@ describe("geometry-gated warnings", () => {
     assert.ok(pointsOnly.warnings.some((w) => w.toLowerCase().includes("duplicate-label")));
   });
 
+  it("exports the number-formatted text-field for a numeric label field", () => {
+    // The export shares labelFieldTextField with the live map so the two agree;
+    // this pins the wiring, which the shared builder's own unit tests cannot.
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "pop",
+      numberFormatEnabled: true,
+      numberDecimals: 2,
+      numberLocale: "en-US",
+    };
+    const { style: exported } = buildMapboxStyle(layer({ style: style({ labels }) }), points());
+    const symbol = exported.layers.find((l) => l.type === "symbol");
+    assert.ok(symbol, "expected a symbol layer");
+    const textField = JSON.stringify((symbol.layout as Record<string, unknown>)["text-field"]);
+    assert.ok(textField.includes("number-format"), textField);
+    assert.ok(textField.includes("en-US"), textField);
+    assert.ok(textField.includes("min-fraction-digits"), textField);
+  });
+
+  it("exports a plain text-field when number formatting is off", () => {
+    const labels = { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "pop" };
+    const { style: exported } = buildMapboxStyle(layer({ style: style({ labels }) }), points());
+    const symbol = exported.layers.find((l) => l.type === "symbol");
+    assert.deepEqual((symbol?.layout as Record<string, unknown>)["text-field"], [
+      "to-string",
+      ["coalesce", ["get", "pop"], ""],
+    ]);
+  });
+
   it("does not warn about dedupe when labeling by expression (no field)", () => {
     const labels = {
       ...DEFAULT_LAYER_STYLE.labels,
@@ -418,6 +492,80 @@ describe("graceful degradation warnings", () => {
       layout: Record<string, unknown>;
     };
     assert.equal(circle.layout.visibility, "none");
+  });
+});
+
+describe("quick filters (#2114)", () => {
+  it("folds the compiled quick filter into every render layer and the labels", () => {
+    // A quick filter hides features on the live map, so an exported style that
+    // drew them would disagree with what GeoLibre shows.
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({ labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name" } }),
+        quickFilters: [{ id: "qf-1", field: "class", kind: "categorical", values: ["city"] }],
+      }),
+      points(),
+    );
+    const expected = ["in", ["get", "class"], ["literal", ["city"]]];
+    const circle = layerById(doc, "my-layer-circle") as { filter: unknown };
+    assert.deepEqual(circle.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      expected,
+    ]);
+    const label = layerById(doc, "my-layer-label") as { filter: unknown };
+    assert.deepEqual(label.filter, expected);
+  });
+
+  it("combines a quick filter with the rule-based hide-unmatched filter", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "big",
+              filter: JSON.stringify([">", ["get", "value"], 10]),
+              color: "#abcdef",
+              isElse: false,
+            },
+            {
+              id: "r2",
+              label: "",
+              filter: "",
+              color: "#000000",
+              isElse: true,
+              enabled: false,
+            },
+          ],
+        }),
+        quickFilters: [{ id: "qf-1", field: "class", kind: "categorical", values: ["city"] }],
+      }),
+      points(),
+    );
+    const circle = layerById(doc, "my-layer-circle") as { filter: unknown };
+    assert.deepEqual(circle.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      ["any", [">", ["get", "value"], 10]],
+      ["in", ["get", "class"], ["literal", ["city"]]],
+    ]);
+  });
+
+  it("leaves the geometry filter alone when no quick filter constrains anything", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({ quickFilters: [{ id: "qf-1", field: "class", kind: "categorical", values: [] }] }),
+      points(),
+    );
+    const circle = layerById(doc, "my-layer-circle") as { filter: unknown };
+    assert.deepEqual(circle.filter, [
+      "match",
+      ["geometry-type"],
+      ["Point", "MultiPoint"],
+      true,
+      false,
+    ]);
   });
 });
 

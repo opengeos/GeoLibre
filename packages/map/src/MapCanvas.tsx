@@ -1,13 +1,32 @@
 import {
+  createHoverTooltipElement,
+  createIdentifyPopupElement,
+  createIdentifyPopupRows,
+} from "./feature-popup";
+import {
   applyGroupEffects,
+  applyMatchedSelection,
+  createPointerElevationResolver,
+  effectiveLayerRenderState,
+  formatPixelValue,
+  getActiveEllipsoid,
+  IDENTIFY_ALL_LAYERS_ID,
   isDuckDBQueryLayer,
+  isInlineImageValue,
+  isPopupClickEnabled,
+  isPopupHoverEnabled,
   NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
+  resolveConfiguredPopupTitle,
+  resolveLayerCapabilities,
+  stringifyPopupValue,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Feature, Polygon } from "geojson";
 import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,
@@ -21,13 +40,32 @@ import {
   mbtilesStyleLayerIds,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import {
+  FEATURE_SELECTION_EVENT,
+  featuresIntersectingPolygon,
+  keepsFeatureSelectionActive,
+  selectionModeFromModifiers,
+  suspendedCameraHandlers,
+  type FeatureSelectionRequest,
+  type FeatureSelectionShape,
+} from "./feature-selection";
+import { isGlobeControlToggleClick } from "./globe-control-toggle";
+import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
+import type { MapEngine } from "./map-engine";
+import { createMapResizeScheduler } from "./map-resize";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
 
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
+/**
+ * Dispatched when a feature-selection gesture arms. `featureSelectionActive` is
+ * a ref rather than store state, so the map overlays that must stand down for a
+ * gesture (the hover tooltip) have nothing to subscribe to — a gesture armed
+ * from a menu produces no pointer event, and a tip already open under a
+ * motionless cursor would sit there until the first drag.
+ */
+const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const WEB_MERCATOR_EARTH_RADIUS = 6378137;
@@ -36,12 +74,86 @@ const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
 const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
+/**
+ * Minimum screen distance, in pixels, between two vertices of a freehand
+ * selection ring. Small enough that the traced outline still reads as a smooth
+ * curve, large enough that a slow drag cannot grow the ring without bound.
+ */
+const FREEHAND_MIN_POINT_DISTANCE = 3;
+/**
+ * How close, in screen pixels, the two clicks a browser fires before `dblclick`
+ * have to land to count as the same vertex. Small: it only has to absorb the
+ * hand tremor within one double-click, never two deliberate vertices.
+ */
+const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
+/**
+ * Upper bound on the features a drawn selection will test on the main thread.
+ * Mirrors MAX_CLIENT_PAIRS in @geolibre/processing's vector tools, which caps
+ * the same kind of pairwise Turf loop so a very large layer cannot freeze the
+ * tab; Select by expression and Select by location handle the bigger jobs.
+ */
+const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 export interface MapCanvasProps {
-  controllerRef?: React.MutableRefObject<MapController | null>;
+  controllerRef?: React.MutableRefObject<MapEngine | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
+   */
+  canUseRemoteElevation?: () => boolean;
+  /** Localized labels for the grouped, all-layer Identify popup. */
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  /** Reads app-owned raster layers for the grouped, all-layer Identify popup. */
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
 }
+
+/** Text formatters used by the grouped, all-layer Identify popup. */
+export interface MapCanvasIdentifyAllLabels {
+  title: (count: number) => string;
+  resultCount: (count: number) => string;
+  featureFallback: (index: number) => string;
+  pixel: string;
+  expandAll: string;
+  collapseAll: string;
+  loadingTitle: string;
+  loading: string;
+  errorLabel: string;
+  error: string;
+}
+
+/** One raster result supplied by the application to all-layer Identify. */
+export interface MapCanvasRasterIdentifyResult {
+  properties: Record<string, unknown>;
+  title?: string;
+}
+
+/** Application bridge for raster sources owned outside `@geolibre/map`. */
+export type MapCanvasRasterIdentify = (
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  options: { signal: AbortSignal },
+) => Promise<MapCanvasRasterIdentifyResult | null>;
+
+const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
+  title: (count) => `Identified results (${count})`,
+  resultCount: (count) => `${count} ${count === 1 ? "result" : "results"}`,
+  featureFallback: (index) => `Feature ${index}`,
+  pixel: "Pixel",
+  expandAll: "Expand all",
+  collapseAll: "Collapse all",
+  loadingTitle: "Identify visible layers",
+  loading: "Loading...",
+  errorLabel: "Error",
+  error: "Could not identify this layer.",
+};
 
 export interface MapDiagnosticEvent {
   message: string;
@@ -92,146 +204,141 @@ interface GeoLibreTimeSliderBridge {
   ) => Promise<TimeSliderPixelIdentifyBridgeResult | null>;
 }
 
-function stringifyIdentifyValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+interface GlobalIdentifyHit {
+  layer: GeoLibreLayer;
+  properties: Record<string, unknown>;
+  feature?: maplibregl.MapGeoJSONFeature;
+  featureId: string | null;
+  title?: string;
 }
 
-function createIdentifyPopupElement(
-  layerName: string,
-  properties: Record<string, unknown>,
-  featureId?: string | number,
+/**
+ * Build the all-layer Identify result, grouped by owning GeoLibre layer.
+ *
+ * @param hits Rendered feature hits in topmost-first map order.
+ * @param zoom Current map zoom for expression-backed popup formatting.
+ * @param onActivate Selects the owning layer and feature in the application.
+ * @returns Popup DOM containing every grouped hit and its visible attributes.
+ */
+function createGlobalIdentifyPopupElement(
+  hits: GlobalIdentifyHit[],
+  zoom: number,
+  onActivate: (hit: GlobalIdentifyHit) => void,
+  labels: MapCanvasIdentifyAllLabels,
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
     "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
 
   const title = document.createElement("div");
-  title.className = "mb-2 font-semibold text-foreground";
-  title.textContent = layerName;
-  root.appendChild(title);
-
-  const rows = document.createElement("div");
-  rows.className = "geolibre-identify-popup-rows pe-2";
-  root.appendChild(rows);
-
-  const appendRow = (key: string, value: unknown) => {
-    const row = document.createElement("div");
-    row.className = "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
-
-    const keyCell = document.createElement("div");
-    keyCell.className = "break-words font-medium text-muted-foreground";
-    keyCell.textContent = key;
-
-    const valueCell = document.createElement("div");
-    valueCell.className = "break-words text-foreground";
-    // Render known KML description structures as sanitized markup. Requiring a
-    // supported tag keeps ordinary text such as "Elevation <500m>" intact.
-    if (
-      key === "description" &&
-      typeof value === "string" &&
-      /<(?:a|b|br|div|em|i|p|span|strong|table|tbody|td|th|thead|tr)\b/i.test(value)
-    ) {
-      appendSanitizedKmlDescription(valueCell, value);
-      // Render inline image data URLs (e.g. a geotagged-photo or field-collection
-      // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-      // Match base64 raster images only, excluding SVG (which can carry scripts)
-      // so an untrusted GeoJSON value can't smuggle one in.
-    } else if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
-      const image = document.createElement("img");
-      image.src = value;
-      image.alt = key;
-      image.loading = "lazy";
-      image.className = "max-h-40 max-w-full rounded";
-      valueCell.appendChild(image);
-    } else {
-      valueCell.textContent = stringifyIdentifyValue(value);
-    }
-
-    row.append(keyCell, valueCell);
-    rows.appendChild(row);
+  title.className = "font-semibold text-foreground";
+  title.textContent = labels.title(hits.length);
+  const header = document.createElement("div");
+  header.className = "mb-2 flex shrink-0 items-center justify-between gap-3 pe-10";
+  const actions = document.createElement("div");
+  actions.className = "flex shrink-0 items-center gap-1";
+  const detailsElements: HTMLDetailsElement[] = [];
+  const createToggleAllButton = (text: string, open: boolean) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      "rounded border px-1.5 py-0.5 font-normal text-muted-foreground hover:bg-muted hover:text-foreground";
+    button.textContent = text;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      for (const details of detailsElements) details.open = open;
+    });
+    return button;
   };
-
-  if (featureId != null) appendRow("id", featureId);
-
-  // Skip the full-resolution image: it is an internal companion to the
-  // thumbnail, so Identify shouldn't decode a multi-megapixel data URL just to
-  // show a second copy of the same photo in the same small box. Filter before
-  // the empty-state check so a feature whose only property is `photo_full` still
-  // reports "No attributes" rather than rendering an empty panel.
-  const entries = Object.entries(properties).filter(
-    ([key]) => key !== PHOTO_FULL_KEY && !key.startsWith("__geolibre_"),
+  actions.append(
+    createToggleAllButton(labels.expandAll, true),
+    createToggleAllButton(labels.collapseAll, false),
   );
-  if (entries.length === 0 && featureId == null) {
-    const empty = document.createElement("div");
-    empty.className = "text-muted-foreground";
-    empty.textContent = "No attributes";
-    rows.appendChild(empty);
-  } else {
-    for (const [key, value] of entries) appendRow(key, value);
+  header.append(title, actions);
+  root.appendChild(header);
+
+  // Only the results scroll. Scrolling `root` instead would run the scrollbar
+  // up the full popup height, and a sticky header painted over MapLibre's own
+  // close button — which lives outside this element and takes no stacking
+  // order from it.
+  const body = document.createElement("div");
+  body.className = "geolibre-identify-popup-groups";
+  root.appendChild(body);
+
+  const groups = new Map<string, GlobalIdentifyHit[]>();
+  for (const hit of hits) {
+    const group = groups.get(hit.layer.id);
+    if (group) group.push(hit);
+    else groups.set(hit.layer.id, [hit]);
+  }
+
+  for (const groupHits of groups.values()) {
+    const { layer } = groupHits[0];
+    const section = document.createElement("details");
+    section.className = "group border-t py-2 first:border-t-0 first:pt-0";
+    section.open = true;
+    detailsElements.push(section);
+
+    const layerButton = document.createElement("summary");
+    layerButton.className =
+      "mb-1 flex w-full cursor-pointer list-none items-center justify-between gap-3 rounded px-1 py-1 text-start font-semibold text-foreground hover:bg-muted [&::-webkit-details-marker]:hidden";
+    const layerName = document.createElement("span");
+    layerName.className = "min-w-0 break-words";
+    layerName.textContent = layer.name;
+    const count = document.createElement("span");
+    count.className = "shrink-0 font-normal text-muted-foreground";
+    count.textContent = labels.resultCount(groupHits.length);
+    layerButton.append(layerName, count);
+    layerButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onActivate(groupHits[0]);
+    });
+    section.appendChild(layerButton);
+
+    for (const [index, hit] of groupHits.entries()) {
+      const featureContainer = document.createElement("div");
+      featureContainer.className = "mb-2 rounded border bg-background/60 p-2 last:mb-0";
+      const configuredTitle = hit.feature
+        ? resolveConfiguredPopupTitle(hit.properties, layer.popup, {
+            feature: hit.feature,
+            zoom,
+            fieldVisibility: layer.fieldVisibility,
+          })
+        : null;
+      const featureButton = document.createElement("button");
+      featureButton.type = "button";
+      featureButton.className =
+        "mb-1 w-full break-words text-start font-medium text-foreground hover:underline";
+      featureButton.textContent = configuredTitle ?? hit.title ?? labels.featureFallback(index + 1);
+      featureButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onActivate(hit);
+      });
+      featureContainer.appendChild(featureButton);
+      featureContainer.appendChild(
+        createIdentifyPopupRows(
+          hit.properties,
+          hit.featureId ?? undefined,
+          {
+            popup: layer.popup,
+            fieldVisibility: layer.fieldVisibility,
+            feature: hit.feature,
+            zoom,
+          },
+          false,
+        ),
+      );
+      section.appendChild(featureContainer);
+    }
+    body.appendChild(section);
   }
 
   return root;
 }
 
-const KML_DESCRIPTION_TAGS = new Set([
-  "a",
-  "b",
-  "br",
-  "div",
-  "em",
-  "i",
-  "p",
-  "span",
-  "strong",
-  "table",
-  "tbody",
-  "td",
-  "th",
-  "thead",
-  "tr",
-]);
-
-/** Render useful KML description markup while dropping scripts and attributes. */
-function appendSanitizedKmlDescription(target: HTMLElement, html: string): void {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  const copy = (node: Node, parent: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      parent.appendChild(document.createTextNode(node.textContent ?? ""));
-      return;
-    }
-    if (!(node instanceof Element)) return;
-    const tag = node.localName.toLowerCase();
-    if (tag === "script" || tag === "style" || tag === "head" || tag === "meta") return;
-    if (!KML_DESCRIPTION_TAGS.has(tag)) {
-      for (const child of node.childNodes) copy(child, parent);
-      return;
-    }
-    const element = document.createElement(tag);
-    if (tag === "a") {
-      const href = node.getAttribute("href")?.trim();
-      if (href && /^(https?:|mailto:)/i.test(href)) {
-        element.setAttribute("href", href);
-        element.setAttribute("target", "_blank");
-        element.setAttribute("rel", "noopener noreferrer");
-      }
-    }
-    for (const child of node.childNodes) copy(child, element);
-    parent.appendChild(element);
-  };
-  const content = document.createElement("div");
-  content.className = "geolibre-kml-description";
-  for (const child of parsed.body.childNodes) copy(child, content);
-  target.appendChild(content);
-}
-
 function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {
   return createIdentifyPopupElement(layerName, { status: message });
 }
-
-/** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
-const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
 
 // Feature-property keys for geotagged/field-collection photos, from the shared
 // @geolibre/core schema: the popup shows the light thumbnail while the fullscreen
@@ -242,7 +349,7 @@ const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
 /** Return the value at `key` when it is an inline raster image data URL. */
 function imageDataUrlAt(properties: Record<string, unknown>, key: string): string | null {
   const value = properties[key];
-  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value) ? value : null;
+  return isInlineImageValue(value) ? value : null;
 }
 
 /**
@@ -254,7 +361,7 @@ function imageDataUrlAt(properties: Record<string, unknown>, key: string): strin
  */
 function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(properties)) {
-    if (key !== PHOTO_FULL_KEY && typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
+    if (key !== PHOTO_FULL_KEY && isInlineImageValue(value)) {
       return value;
     }
   }
@@ -638,8 +745,11 @@ function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
 function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
   return typeof window === "undefined"
     ? undefined
-    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
-        .__GEOLIBRE_TIME_SLIDER__;
+    : (
+        window as Window & {
+          __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge;
+        }
+      ).__GEOLIBRE_TIME_SLIDER__;
 }
 
 /**
@@ -649,19 +759,6 @@ function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
  */
 function isPixelIdentifyLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.pixelIdentify === true;
-}
-
-/**
- * Trim a float sample to something readable. A 32-bit raster value decoded to a
- * JS double prints all 17 digits of its binary representation
- * (`48.11851119995117`), which is noise past the sensor's precision — six
- * significant digits is more than any COG carries. Integers are left alone so a
- * classification code is never shown in exponential form.
- */
-function formatPixelValue(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  if (Number.isInteger(value)) return String(value);
-  return String(Number(value.toPrecision(6)));
 }
 
 /** Turn a pixel reading into the flat key/value rows the identify popup shows. */
@@ -1022,6 +1119,9 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
+  identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
+  identifyRasterLayerAt,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1037,22 +1137,75 @@ export const MapCanvas = memo(function MapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
   const mapPreferences = useAppStore((s) => s.preferences.map);
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
+  const layerGroupsRef = useRef(layerGroups);
+  layerGroupsRef.current = layerGroups;
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
+  const selectLayer = useAppStore((s) => s.selectLayer);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) {
+      // invalidate() before clearing: a lookup scheduled inside the 500ms
+      // debounce window would otherwise still fire the request, and only be
+      // suppressed afterwards by the isEnabled() re-check. Cancelling the timer
+      // means the request is never made at all.
+      pointerElevationRef.current?.invalidate();
+      setPointerElevation(null);
+      return;
+    }
+    // Symmetrically, switching it *on* while the cursor sits still would show
+    // nothing until the next mousemove. Resolve once for wherever the pointer
+    // already is, so the readout appears with the toggle.
+    const coords = useAppStore.getState().pointerCoords;
+    if (coords) pointerElevationRef.current?.update(coords);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
+  // The layer all-layer Identify last activated, so a click that hits nothing
+  // can retire that selection without touching one the user made themselves.
+  const globalIdentifyActivatedLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
+  const hoverTooltip = useRef<maplibregl.Popup | null>(null);
+  // Set for the duration of a map selection gesture. The other click handlers
+  // bound to the same map (Identify, geotagged-photo popups) read it and bail,
+  // so a rectangle drag or a polygon vertex click never also opens a popup.
+  const featureSelectionActive = useRef(false);
+  // Tears down the gesture in progress, if any. Held at component scope so the
+  // Identify effect can end a half-drawn selection when the user switches
+  // tools instead of finishing or pressing Esc.
+  const cancelFeatureSelection = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -1066,10 +1219,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+    pointerElevationRef.current = pointerElevation;
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -1090,13 +1270,16 @@ export const MapCanvas = memo(function MapCanvas({
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 
-    // Persist projection toggles (the GlobeControl) into project preferences so
-    // a project reopens with the projection it was saved in. getProjection()
-    // returns the configured type, so the internal globe→mercator switch at high
-    // zoom (which also fires this event) leaves the stored preference unchanged.
+    // Persist user clicks on MapLibre's GlobeControl into project preferences so
+    // a project reopens with the projection it was saved in. See
+    // `globe-control-toggle.ts` for why the click, and not MapLibre's
+    // `projectiontransition` event, is what this listens to.
     const updateProjection = () => {
       const projection = mc.readProjection();
       // Functional update so a concurrent preference change (zoom-limit edit,
@@ -1112,7 +1295,14 @@ export const MapCanvas = memo(function MapCanvas({
         };
       });
     };
-    map.on("projectiontransition", updateProjection);
+    const handleProjectionControlClick = (event: MouseEvent) => {
+      // The control's own handler runs on the button before the event reaches
+      // this container-level listener, and `setProjection` is synchronous, so
+      // `readProjection()` already reflects the toggle.
+      if (!isGlobeControlToggleClick(event.target)) return;
+      updateProjection();
+    };
+    map.getContainer().addEventListener("click", handleProjectionControlClick);
     map.on("load", () => {
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
@@ -1125,51 +1315,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
 
-    let resizeFrame: number | null = null;
-    let panelResizeActive = false;
-    let resizeAfterPanelResize = false;
-    const resizeMap = () => {
-      if (panelResizeActive) {
-        resizeAfterPanelResize = true;
-        return;
-      }
-
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
-      });
-    };
-    const onPanelResizeStart = () => {
-      panelResizeActive = true;
-      resizeAfterPanelResize = false;
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-    };
-    const onPanelResizeEnd = () => {
-      panelResizeActive = false;
-      if (resizeAfterPanelResize) {
-        resizeAfterPanelResize = false;
-      }
-      resizeMap();
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
-    window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-    window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-    resizeMap();
+    const disposeResizeScheduler = createMapResizeScheduler({
+      getMap: () => mc.getMap(),
+      container: containerRef.current,
+    });
 
     return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-      window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
+      disposeResizeScheduler();
+      pointerElevation.dispose();
+      map.getContainer().removeEventListener("click", handleProjectionControlClick);
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
@@ -1195,6 +1349,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {
@@ -1204,6 +1367,14 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.setBlankBackgroundColor(blankBackgroundColor);
+    if (blankBackgroundColor !== null || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => controller.current?.setBlankBackgroundColor(null));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [blankBackgroundColor]);
 
   useEffect(() => {
     controller.current?.applyMapPreferences(mapPreferences);
@@ -1218,6 +1389,313 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
+
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map) return;
+
+    // Only the drawn shapes scan the layer; `single` goes through
+    // queryRenderedFeatures, which is bounded by what is on screen. Checked
+    // both when the gesture starts — so the user is not left waiting on a scan
+    // that was never going to finish promptly — and again when it completes,
+    // since a connection-backed layer can refresh past the limit while a
+    // polygon or freehand gesture is still open.
+    const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
+      const featureCount = candidate.geojson?.features?.length ?? 0;
+      if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES) return false;
+      onMapDiagnosticEventRef.current?.({
+        message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
+        detail:
+          "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
+        source: candidate.name,
+      });
+      return true;
+    };
+
+    const begin = (request: FeatureSelectionRequest) => {
+      cancelFeatureSelection.current?.();
+      const state = useAppStore.getState();
+      const layer = state.layers.find((item) => item.id === request.layerId);
+      if (!layer?.geojson?.features) return;
+      // A gesture on a hidden layer would match features the user cannot see —
+      // and the `single` shape, which queries rendered features, would match
+      // none at all. Folded through the group chain, so a layer hidden only by
+      // its group counts as hidden. LayerPanel disables the menu items; this is
+      // the guard for a layer hidden between opening the menu and drawing.
+      if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
+      if (tooManyToScan(layer, request.shape)) return;
+
+      const canvas = map.getCanvas();
+      const container = map.getContainer();
+
+      // Every side effect below registers its own rollback as it happens, and
+      // the teardown is armed before the first of them. Arming it at the end
+      // instead would leave a throw part-way through to strand the overlay in
+      // the DOM with the camera handlers disabled and no way back.
+      const cleanups: Array<() => void> = [];
+      cancelFeatureSelection.current = () => {
+        cleanups.forEach((cleanup) => cleanup());
+        featureSelectionActive.current = false;
+        cancelFeatureSelection.current = null;
+      };
+
+      const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      overlay.setAttribute("aria-hidden", "true");
+      Object.assign(overlay.style, {
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: "5",
+      });
+      const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      shape.setAttribute("fill", "rgba(37, 99, 235, 0.16)");
+      shape.setAttribute("stroke", "#2563eb");
+      shape.setAttribute("stroke-width", "2");
+      shape.setAttribute("stroke-dasharray", "6 4");
+      overlay.append(shape);
+      container.append(overlay);
+      cleanups.push(() => overlay.remove());
+
+      // A drawn shape freezes the camera outright; click selection keeps it
+      // live but still gives up box zoom, which would otherwise swallow every
+      // Shift+click. See suspendedCameraHandlers() for why.
+      for (const name of suspendedCameraHandlers(request.shape)) {
+        const handler = map[name];
+        if (!handler.isEnabled()) continue;
+        handler.disable();
+        cleanups.push(() => handler.enable());
+      }
+      canvas.style.cursor = "crosshair";
+      cleanups.push(() => {
+        canvas.style.cursor = "";
+      });
+      featureSelectionActive.current = true;
+      window.dispatchEvent(new Event(FEATURE_SELECTION_BEGIN_EVENT));
+
+      let points: maplibregl.Point[] = [];
+      let dragging = false;
+      const render = () => {
+        if (points.length === 0) return shape.setAttribute("d", "");
+        if (request.shape === "rectangle" && points.length > 1) {
+          const [a, b] = points;
+          shape.setAttribute(
+            "d",
+            `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`,
+          );
+          return;
+        }
+        if (request.shape === "radius" && points.length > 1) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          shape.setAttribute(
+            "d",
+            `M ${center.x - radius} ${center.y} a ${radius} ${radius} 0 1 0 ${
+              radius * 2
+            } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
+          );
+          return;
+        }
+        const closed = request.shape !== "freehand" || !dragging;
+        shape.setAttribute(
+          "d",
+          `${points
+            .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
+            .join(" ")}${closed && points.length > 2 ? " Z" : ""}`,
+        );
+      };
+      const polygonFromPoints = (): Polygon | null => {
+        let ring = points;
+        // A click with no drag leaves the two points coincident, which would
+        // otherwise build a zero-area rectangle or a zero-radius circle. Say
+        // "no shape was drawn" outright rather than leaning on Turf to reject
+        // the degenerate ring.
+        const twoPointShape = request.shape === "rectangle" || request.shape === "radius";
+        if (twoPointShape && (points.length < 2 || points[0].equals(points[1]))) return null;
+        if (request.shape === "rectangle" && points.length >= 2) {
+          const [a, b] = points;
+          ring = [a, new maplibregl.Point(b.x, a.y), b, new maplibregl.Point(a.x, b.y)];
+        } else if (request.shape === "radius" && points.length >= 2) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          ring = Array.from({ length: 64 }, (_, index) => {
+            const angle = (index / 64) * Math.PI * 2;
+            return new maplibregl.Point(
+              center.x + Math.cos(angle) * radius,
+              center.y + Math.sin(angle) * radius,
+            );
+          });
+        }
+        if (ring.length < 3) return null;
+        const coordinates = ring.map((point) => {
+          const lngLat = map.unproject(point);
+          return [lngLat.lng, lngLat.lat] as [number, number];
+        });
+        coordinates.push(coordinates[0]);
+        return { type: "Polygon", coordinates: [coordinates] };
+      };
+
+      const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
+        // Re-read the layer rather than trusting the snapshot taken at gesture
+        // start: a polygon or freehand gesture stays open for as long as the
+        // user keeps drawing, long enough for a connection refresh to replace
+        // the features, for the layer to be hidden, or for it to be removed
+        // outright. Matching a deleted layer would also point selectedLayerId
+        // at something that no longer exists.
+        const store = useAppStore.getState();
+        const live = store.layers.find((item) => item.id === layer.id);
+        if (
+          !live?.geojson?.features ||
+          !effectiveLayerRenderState(live, store.layerGroups).visible ||
+          tooManyToScan(live, request.shape)
+        ) {
+          cancelFeatureSelection.current?.();
+          return;
+        }
+        let matched: string[] = [];
+        if (request.shape === "single" && points[0]) {
+          const point = points[0];
+          const queryIds = identifyStyleLayerIds(live).filter((id) => map.getLayer(id));
+          const rendered = map.queryRenderedFeatures(
+            [
+              [point.x - 4, point.y - 4],
+              [point.x + 4, point.y + 4],
+            ],
+            { layers: queryIds },
+          );
+          const id = rendered[0] ? findFeatureId(live, rendered[0]) : null;
+          if (id != null) matched = [id];
+        } else {
+          const polygon = polygonFromPoints();
+          // Nothing was drawn — a stray click rather than a drag. Leave the
+          // selection as it was instead of letting mode "new" replace it with
+          // the empty match. (Click-to-deselect stays the `single` shape's job,
+          // where an empty click is the deliberate gesture.)
+          if (!polygon) {
+            cancelFeatureSelection.current?.();
+            return;
+          }
+          matched = featuresIntersectingPolygon(live.geojson.features, polygon);
+        }
+        applyMatchedSelection(
+          layer.id,
+          matched,
+          selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
+        );
+        // Click selection is a continuous map tool: keep its handler and
+        // crosshair armed so the next click can add, remove, or intersect via
+        // modifiers. Drawn shapes remain one-shot because their completed
+        // geometry is the whole interaction. Escape and any newly-started map
+        // tool still run the shared teardown.
+        if (!keepsFeatureSelectionActive(request.shape)) cancelFeatureSelection.current?.();
+      };
+      const onMouseDown = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "polygon" || request.shape === "single") return;
+        dragging = true;
+        points = [event.point];
+        render();
+      };
+      // The map's own mouse events stop at the canvas, so a drag released over
+      // the layer panel or the browser chrome would never deliver a mouseup and
+      // would leave the gesture armed with pan/zoom still disabled. Window
+      // listeners extend tracking past the canvas edge, the same way
+      // print-extent.ts does for its rubber band. Both sources feed the two
+      // helpers below, which are idempotent so the duplicate events a release
+      // inside the canvas produces cost nothing.
+      const canvasPoint = (clientX: number, clientY: number) => {
+        const rect = canvas.getBoundingClientRect();
+        return new maplibregl.Point(clientX - rect.left, clientY - rect.top);
+      };
+      const moveTo = (point: maplibregl.Point) => {
+        if (!dragging) return;
+        if (request.shape === "freehand") {
+          // Sample rather than take every mousemove: a slow trace would
+          // otherwise accumulate thousands of near-coincident vertices, and
+          // both render() (which rebuilds the whole path string) and the
+          // closing intersection test scale with the ring.
+          const last = points.at(-1);
+          if (last && last.dist(point) < FREEHAND_MIN_POINT_DISTANCE) return;
+          points.push(point);
+        } else {
+          if (points[1]?.equals(point)) return;
+          points = [points[0], point];
+        }
+        render();
+      };
+      const endDrag = (point: maplibregl.Point, modifiers: MouseEvent) => {
+        if (!dragging) return;
+        dragging = false;
+        // `.equals()`, not `!==`: every mouse event carries a freshly built
+        // Point, so a reference check would never skip the duplicate.
+        if (request.shape === "freehand" && !points.at(-1)?.equals(point)) points.push(point);
+        else if (request.shape !== "freehand") points = [points[0], point];
+        finish(modifiers);
+      };
+      const onMouseMove = (event: maplibregl.MapMouseEvent) => moveTo(event.point);
+      const onWindowMouseMove = (event: MouseEvent) =>
+        moveTo(canvasPoint(event.clientX, event.clientY));
+      const onMouseUp = (event: maplibregl.MapMouseEvent) =>
+        endDrag(event.point, event.originalEvent);
+      const onWindowMouseUp = (event: MouseEvent) =>
+        endDrag(canvasPoint(event.clientX, event.clientY), event);
+      const onClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "single") {
+          points = [event.point];
+          finish(event.originalEvent);
+        } else if (request.shape === "polygon") {
+          points.push(event.point);
+          render();
+        }
+      };
+      const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape !== "polygon") return;
+        event.preventDefault();
+        // A double-click fires two clicks first; drop the duplicate tail vertex
+        // they leave behind (same fix as ElevationProfileControl's drawing).
+        const [last, previous] = [points.at(-1), points.at(-2)];
+        if (last && previous && last.dist(previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE) points.pop();
+        if (points.length > 2) finish(event.originalEvent);
+      };
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") cancelFeatureSelection.current?.();
+      };
+      // Only while a drag is in flight: that is the case where losing focus
+      // (Alt+Tab, a system dialog) means the mouseup never arrives. A polygon
+      // is drawn click by click with no armed state, so blurring away to check
+      // something must not throw away the vertices already placed.
+      const onBlur = () => {
+        if (dragging) cancelFeatureSelection.current?.();
+      };
+      map.on("mousedown", onMouseDown);
+      map.on("mousemove", onMouseMove);
+      map.on("mouseup", onMouseUp);
+      map.on("click", onClick);
+      map.on("dblclick", onDoubleClick);
+      window.addEventListener("mousemove", onWindowMouseMove);
+      window.addEventListener("mouseup", onWindowMouseUp);
+      window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("blur", onBlur);
+      cleanups.push(
+        () => map.off("mousedown", onMouseDown),
+        () => map.off("mousemove", onMouseMove),
+        () => map.off("mouseup", onMouseUp),
+        () => map.off("click", onClick),
+        () => map.off("dblclick", onDoubleClick),
+        () => window.removeEventListener("mousemove", onWindowMouseMove),
+        () => window.removeEventListener("mouseup", onWindowMouseUp),
+        () => window.removeEventListener("keydown", onKeyDown),
+        () => window.removeEventListener("blur", onBlur),
+      );
+    };
+    const onRequest = (event: Event) =>
+      begin((event as CustomEvent<FeatureSelectionRequest>).detail);
+    window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
+    return () => {
+      window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);
+      cancelFeatureSelection.current?.();
+    };
+  }, []);
 
   // Stable key over just the geotagged-photo layer ids, so the photo-click
   // effect re-binds only when such a layer is added/removed, not on every
@@ -1269,11 +1747,265 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const map = controller.current?.getMap();
-    const layer = layers.find((item) => item.id === identifyLayerId);
-    if (!map || !layer) {
+    const identifyAllLayers = identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+    const layer = identifyAllLayers
+      ? undefined
+      : layers.find((item) => item.id === identifyLayerId);
+    if (!map || (!layer && !identifyAllLayers)) {
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      if (map) map.getCanvas().style.cursor = "";
+      // Same guard as the cleanup below: picking a gesture turns Identify off,
+      // and begin() has already claimed the crosshair by the time this runs.
+      if (map && !featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      return;
+    }
+
+    // Switching to Identify ends a half-drawn selection. Without this the
+    // gesture stays live and its handlers keep swallowing map clicks, so the
+    // Identify button would light up while Identify itself did nothing.
+    cancelFeatureSelection.current?.();
+
+    if (identifyAllLayers) {
+      map.getCanvas().style.cursor = "crosshair";
+      let globalIdentifyAbortController: AbortController | null = null;
+      const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
+        if (featureSelectionActive.current) return;
+
+        globalIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        globalIdentifyAbortController = abortController;
+
+        const owners = new Map<string, GeoLibreLayer>();
+        // effectiveLayerRenderState rebuilds an id -> group map on every call
+        // when handed the array form, so fold every candidate against one map
+        // built once per click instead of one per layer.
+        const groupById = new Map(layerGroupsRef.current.map((group) => [group.id, group]));
+        const eligibleLayers = layers.filter(
+          (candidate) =>
+            effectiveLayerRenderState(candidate, groupById).visible &&
+            resolveLayerCapabilities(candidate).query &&
+            isPopupClickEnabled(candidate.popup),
+        );
+        for (const candidate of eligibleLayers) {
+          for (const styleLayerId of identifyStyleLayerIds(candidate)) {
+            if (map.getLayer(styleLayerId)) owners.set(styleLayerId, candidate);
+          }
+        }
+
+        const hits: GlobalIdentifyHit[] = [];
+        const acceptHit = createGlobalIdentifyHitDeduper();
+        const queryLayerIds = [...owners.keys()];
+        const rendered =
+          queryLayerIds.length === 0
+            ? []
+            : map.queryRenderedFeatures(event.point, { layers: queryLayerIds });
+        for (const feature of rendered) {
+          const owner = owners.get(feature.layer.id);
+          if (!owner) continue;
+          const hit: GlobalIdentifyHit = {
+            layer: owner,
+            properties: feature.properties ?? {},
+            feature,
+            featureId: findFeatureId(owner, feature),
+          };
+          if (!acceptHit(hit.layer.id, hit.featureId, feature)) continue;
+          hits.push(hit);
+        }
+
+        // DuckDB query layers draw through deck.gl, so they own no MapLibre
+        // style layer and never surface in queryRenderedFeatures. The plugin
+        // bridge picks them the same way the single-layer path does.
+        for (const candidate of eligibleLayers) {
+          if (!isDuckDBQueryLayer(candidate)) continue;
+          const result = duckDBBridge()?.identifyLayerAtPoint?.(candidate.id, {
+            x: event.point.x,
+            y: event.point.y,
+          });
+          if (!result) continue;
+          hits.push({
+            layer: candidate,
+            properties: result.properties,
+            featureId: result.featureId,
+          });
+        }
+
+        const activate = (hit: GlobalIdentifyHit) => {
+          selectLayer(hit.layer.id);
+          selectFeature(hit.featureId);
+          globalIdentifyActivatedLayerId.current = hit.layer.id;
+        };
+        const showPopup = (content: HTMLElement) => {
+          identifyPopup.current?.remove();
+          identifyPopup.current = new maplibregl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: "560px",
+          })
+            .setLngLat(event.lngLat)
+            .setDOMContent(content)
+            .addTo(map);
+        };
+        const finish = (allHits: GlobalIdentifyHit[]) => {
+          if (abortController.signal.aborted) return;
+          const order = new Map(layers.map((candidate, index) => [candidate.id, index]));
+          allHits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
+          if (allHits.length === 0) {
+            identifyPopup.current?.remove();
+            identifyPopup.current = null;
+            selectFeature(null);
+            // Retire the layer selection only when this mode is what set it.
+            // A layer the user picked in the Layers panel — to edit its style,
+            // say — is theirs to keep, and the single-layer Identify path
+            // never clears it either.
+            if (
+              globalIdentifyActivatedLayerId.current !== null &&
+              useAppStore.getState().selectedLayerId === globalIdentifyActivatedLayerId.current
+            ) {
+              selectLayer(null);
+            }
+            globalIdentifyActivatedLayerId.current = null;
+            return;
+          }
+          activate(allHits[0]);
+          showPopup(
+            createGlobalIdentifyPopupElement(allHits, map.getZoom(), activate, identifyAllLabels),
+          );
+        };
+
+        const asyncLayers = eligibleLayers.filter(
+          (candidate) =>
+            isWmsLayer(candidate) ||
+            isPixelIdentifyLayer(candidate) ||
+            candidate.type === "cog" ||
+            candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
+        );
+        if (asyncLayers.length === 0) {
+          finish(hits);
+          return;
+        }
+
+        selectFeature(null);
+        showPopup(
+          createIdentifyMessagePopupElement(
+            identifyAllLabels.loadingTitle,
+            identifyAllLabels.loading,
+          ),
+        );
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => abortController.abort();
+        loadingPopup?.once("close", onLoadingClose);
+
+        void Promise.all(
+          asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
+            try {
+              if (isWmsLayer(candidate)) {
+                const result = await fetchWmsIdentifyProperties(
+                  candidate,
+                  map,
+                  event,
+                  abortController.signal,
+                );
+                if (
+                  !result ||
+                  (result.featureId == null && Object.keys(result.properties).length === 0)
+                ) {
+                  return null;
+                }
+                return {
+                  layer: candidate,
+                  properties: result.properties,
+                  featureId: result.featureId == null ? null : String(result.featureId),
+                };
+              }
+
+              // Ordered before the pixel-identify branch on purpose: the
+              // NetCDF dialog marks these layers `pixelIdentify` too, and that
+              // branch reads through the Time Slider bridge, which knows
+              // nothing about a retained NetCDF grid.
+              if (candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
+                const result = await identifyRasterLayerAt?.(
+                  candidate,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: result.properties,
+                      featureId: null,
+                      title: result.title ?? identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              if (isPixelIdentifyLayer(candidate)) {
+                const result = await timeSliderBridge()?.identifyPixelAt?.(
+                  candidate.id,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: pixelIdentifyProperties(result),
+                      featureId: null,
+                      title: identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              const result = await identifyRasterLayerAt?.(
+                candidate,
+                [event.lngLat.lng, event.lngLat.lat],
+                { signal: abortController.signal },
+              );
+              return result
+                ? {
+                    layer: candidate,
+                    properties: result.properties,
+                    featureId: null,
+                    title: result.title ?? identifyAllLabels.pixel,
+                  }
+                : null;
+            } catch (error: unknown) {
+              if (abortController.signal.aborted || isAbortError(error)) return null;
+              return {
+                layer: candidate,
+                properties: {
+                  [identifyAllLabels.errorLabel]:
+                    error instanceof Error ? error.message : identifyAllLabels.error,
+                },
+                featureId: null,
+              };
+            }
+          }),
+        ).then((asyncHits) => {
+          if (abortController.signal.aborted) return;
+          loadingPopup?.off("close", onLoadingClose);
+          finish([...hits, ...asyncHits.filter((hit): hit is GlobalIdentifyHit => hit !== null)]);
+        });
+      };
+
+      map.on("click", handleIdentifyAllClick);
+      return () => {
+        globalIdentifyAbortController?.abort();
+        map.off("click", handleIdentifyAllClick);
+        identifyPopup.current?.remove();
+        identifyPopup.current = null;
+        globalIdentifyActivatedLayerId.current = null;
+        if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      };
+    }
+
+    if (!layer) return;
+
+    // An author can turn the click popup off for a layer they only want
+    // hovered (or only styled). Identify then does nothing for it rather than
+    // opening a popup the shared map was designed without.
+    if (!isPopupClickEnabled(layer.popup)) {
+      identifyPopup.current?.remove();
+      identifyPopup.current = null;
       return;
     }
 
@@ -1293,6 +2025,8 @@ export const MapCanvas = memo(function MapCanvas({
     let pixelIdentifyAbortController: AbortController | null = null;
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
+      // A selection gesture owns the map clicks while it runs.
+      if (featureSelectionActive.current) return;
       const clearIdentifyResult = () => {
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
@@ -1423,7 +2157,11 @@ export const MapCanvas = memo(function MapCanvas({
 
         selectFeature(result.featureId);
         showIdentifyPopup(
-          createIdentifyPopupElement(layer.name, result.properties, result.featureId),
+          createIdentifyPopupElement(layer.name, result.properties, result.featureId, {
+            popup: layer.popup,
+            fieldVisibility: layer.fieldVisibility,
+            zoom: map.getZoom(),
+          }),
         );
         return;
       }
@@ -1446,7 +2184,12 @@ export const MapCanvas = memo(function MapCanvas({
       selectFeature(featureId);
 
       showIdentifyPopup(
-        createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id),
+        createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id, {
+          popup: layer.popup,
+          fieldVisibility: layer.fieldVisibility,
+          feature,
+          zoom: map.getZoom(),
+        }),
       );
     };
 
@@ -1458,9 +2201,19 @@ export const MapCanvas = memo(function MapCanvas({
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      map.getCanvas().style.cursor = "";
+      // Starting a selection gesture turns Identify off, so this cleanup runs
+      // after the gesture has already claimed the crosshair — leave its cursor
+      // alone rather than resetting it out from under the drawing.
+      if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
-  }, [identifyLayerId, layers, selectFeature]);
+  }, [
+    identifyAllLabels,
+    identifyLayerId,
+    identifyRasterLayerAt,
+    layers,
+    selectFeature,
+    selectLayer,
+  ]);
 
   // Geotagged photos: clicking a photo point opens a resizable popup with the
   // photo, without needing the Identify tool. The popup is photo-specific, and
@@ -1478,8 +2231,9 @@ export const MapCanvas = memo(function MapCanvas({
 
     const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
       // The Identify tool already renders the photo in its own popup; skip ours
-      // so one click never opens two popups.
-      if (useAppStore.getState().identifyLayerId) return;
+      // so one click never opens two popups. Likewise while a selection gesture
+      // is drawing, where a click is a vertex rather than a pick.
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       const feature = event.features?.[0];
       if (!feature) return;
       // Anchor to the feature's own coordinate rather than the click point, so
@@ -1500,11 +2254,11 @@ export const MapCanvas = memo(function MapCanvas({
         .addTo(map);
     };
     const handleEnter = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "pointer";
     };
     const handleLeave = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "";
     };
 
@@ -1558,6 +2312,190 @@ export const MapCanvas = memo(function MapCanvas({
       removePhotoPopup();
     };
   }, [photoLayerKey]);
+
+  // Hover tooltips (#2113): a lightweight tip following the pointer over the
+  // layers whose author turned one on, showing the fields they flagged for
+  // hover. Keyed on the ids AND the popup blocks, so editing the tooltip's
+  // fields in the Style panel rebinds immediately.
+  const hoverTooltipKey = useMemo(
+    () =>
+      layers
+        // Group-aware, like the Identify handler and the selection query: a
+        // layer whose own switch is on can still be hidden by its group, and
+        // binding pointer handlers to it would be binding to something the
+        // user cannot see. `applyGroupEffects` also sets the synced MapLibre
+        // layer's visibility to `none`, so nothing fires today either way —
+        // this keeps the two from drifting if that ever stops being true.
+        .filter(
+          (layer) =>
+            effectiveLayerRenderState(layer, layerGroups).visible &&
+            isPopupHoverEnabled(layer.popup),
+        )
+        .map((layer) => `${layer.id}\u0000${JSON.stringify(layer.popup ?? {})}`)
+        .join("\u0001"),
+    [layers, layerGroups],
+  );
+
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map || !hoverTooltipKey) return;
+    const hoverLayerIds = hoverTooltipKey.split("\u0001").map((part) => part.split("\u0000")[0]);
+
+    // The pointer move that has not been drawn yet, and the frame that will
+    // draw it. `mousemove` fires far more often than the screen refreshes, and
+    // each tip rebuilds a small DOM tree, so moves are coalesced to one render
+    // per frame rather than one per event.
+    let pending: {
+      layerId: string;
+      feature: maplibregl.MapGeoJSONFeature;
+      lngLat: maplibregl.LngLat;
+    } | null = null;
+    let pendingFrame = 0;
+    // A `mouseleave` waiting for the same frame to decide. One logical layer
+    // renders as several MapLibre style layers (a polygon's fill and its own
+    // stroke, a point's circle and its marker), and this effect binds to each
+    // of them, so crossing from a feature's fill onto that feature's own
+    // stroke fires `mouseleave` on the first and `mousemove` on the second
+    // from a single pointer event. Removing on the spot would tear the popup
+    // down and rebuild it on every such crossing — and if the leave arrived
+    // after the move, it would cancel the redraw and blank the tip until the
+    // pointer moved again. Deferring the decision to the frame lets a move
+    // anywhere in the same layer outvote the leave.
+    let pendingLeave = false;
+
+    /** Drop the tooltip now, discarding anything waiting on a frame. */
+    const removeTooltip = () => {
+      pending = null;
+      pendingLeave = false;
+      if (pendingFrame) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = 0;
+      }
+      hoverTooltip.current?.remove();
+      hoverTooltip.current = null;
+    };
+
+    const drawPending = () => {
+      pendingFrame = 0;
+      const next = pending;
+      const leaving = pendingLeave;
+      pending = null;
+      pendingLeave = false;
+      // A move seen this frame means the pointer is still over one of this
+      // layer's style layers, whichever one it left.
+      if (!next) {
+        if (leaving) removeTooltip();
+        return;
+      }
+      // Read the layer from the store rather than from a captured array, so an
+      // edit to the tooltip's fields shows on the very next pointer move.
+      const layer = useAppStore.getState().layers.find((item) => item.id === next.layerId);
+      if (!layer) {
+        removeTooltip();
+        return;
+      }
+      const content = createHoverTooltipElement(layer.name, next.feature.properties ?? {}, {
+        popup: layer.popup,
+        fieldVisibility: layer.fieldVisibility,
+        feature: next.feature,
+        zoom: map.getZoom(),
+      });
+      if (!content) {
+        removeTooltip();
+        return;
+      }
+      if (!hoverTooltip.current) {
+        hoverTooltip.current = new maplibregl.Popup({
+          className: "geolibre-hover-tooltip",
+          closeButton: false,
+          closeOnClick: false,
+          // The tip must never sit under the cursor, or it would steal the
+          // pointer from the feature and flicker itself in and out.
+          offset: 12,
+          maxWidth: "280px",
+        }).addTo(map);
+      }
+      hoverTooltip.current.setLngLat(next.lngLat).setDOMContent(content);
+    };
+
+    const handleLeave = () => {
+      pendingLeave = true;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
+    };
+
+    /** Build the pointer handler for one hovered layer. */
+    const moveHandlerFor = (layerId: string) => (event: maplibregl.MapLayerMouseEvent) => {
+      // A selection gesture owns the pointer while it draws, and the Identify
+      // crosshair means the user is about to click for the full popup: neither
+      // wants a tip trailing the cursor.
+      if (featureSelectionActive.current || useAppStore.getState().identifyLayerId) {
+        removeTooltip();
+        return;
+      }
+      const feature = event.features?.[0];
+      if (!feature) {
+        removeTooltip();
+        return;
+      }
+      pending = { layerId, feature, lngLat: event.lngLat };
+      pendingLeave = false;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
+    };
+
+    // Style-layer id -> the handler bound to it, so unbinding detaches the very
+    // same function reference MapLibre was given.
+    let bound: {
+      id: string;
+      move: (event: maplibregl.MapLayerMouseEvent) => void;
+    }[] = [];
+    const unbind = () => {
+      for (const entry of bound) {
+        map.off("mousemove", entry.id, entry.move);
+        map.off("mouseleave", entry.id, handleLeave);
+      }
+      bound = [];
+    };
+    const bind = () => {
+      unbind();
+      const layersById = new Map(useAppStore.getState().layers.map((layer) => [layer.id, layer]));
+      for (const layerId of hoverLayerIds) {
+        const layer = layersById.get(layerId);
+        if (!layer) continue;
+        const move = moveHandlerFor(layerId);
+        for (const styleLayerId of identifyStyleLayerIds(layer)) {
+          if (!map.getLayer(styleLayerId)) continue;
+          map.on("mousemove", styleLayerId, move);
+          map.on("mouseleave", styleLayerId, handleLeave);
+          bound.push({ id: styleLayerId, move });
+        }
+      }
+    };
+
+    bind();
+    // syncLayers creates the style layers and then dispatches this event, so
+    // re-bind on it to catch layers that did not exist yet on the first run.
+    window.addEventListener("geolibre-layer-labels-change", bind);
+    // A selection gesture takes the pointer the same way Identify does, and can
+    // be armed from a menu with the cursor sitting still on a hovered feature.
+    window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
+    // Identify is armed from the toolbar, with no pointer event to hide a tip
+    // that is already open. `mouseleave` does not fire under a motionless
+    // cursor, so without this the tooltip would sit there while the Identify
+    // popup opened beside it. Same off->on guard as the photo-popup effect:
+    // this listener runs on every store change, so testing the current value
+    // alone would keep clearing a tip the user is still reading.
+    const unsubscribeIdentify = useAppStore.subscribe((state, prev) => {
+      if (state.identifyLayerId && !prev.identifyLayerId) removeTooltip();
+    });
+
+    return () => {
+      window.removeEventListener("geolibre-layer-labels-change", bind);
+      window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
+      unsubscribeIdentify();
+      unbind();
+      removeTooltip();
+    };
+  }, [hoverTooltipKey]);
 
   useEffect(() => {
     controller.current?.applyView(mapView);

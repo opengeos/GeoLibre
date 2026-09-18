@@ -82,8 +82,12 @@ describe("isDistanceParameterName", () => {
     // corridor_mapping_intelligence's corridor_tolerance is a fraction above
     // optimal cost in 0-1, so the `tolerance` segment must not claim it.
     assert.equal(isDistanceParameterName("corridor_tolerance"), false);
+    // contiguous_cartogram's densify_spacing is an edge length in cells of the
+    // tool's own diffusion grid, so the `spacing` segment must not claim it.
+    assert.equal(isDistanceParameterName("densify_spacing"), false);
     // The segment still works on the neighbouring real distances.
     assert.equal(isDistanceParameterName("snap_tolerance"), true);
+    assert.equal(isDistanceParameterName("sample_distance"), true);
   });
 
   it("matches whole name segments rather than substrings", () => {
@@ -219,6 +223,13 @@ describe("wgs84VectorLayerIds", () => {
         ],
         PREFIX,
       ),
+      ["a", "b"],
+    );
+  });
+
+  it("flattens a multi-dataset layer selection", () => {
+    assert.deepEqual(
+      wgs84VectorLayerIds([{ required: true, value: ["layer:a", "layer:b"] }], PREFIX),
       ["a", "b"],
     );
   });

@@ -6,11 +6,14 @@ number of GNSS satellites used in a location fix.
 
 The GeoLibre-specific delta is intentionally limited to:
 
-- `android/src/main/java/Geolocation.kt`: observe `GnssStatusCompat` and notify
+- `android/src/main/java/Geolocation.kt`: observe `GnssStatusCompat`, timestamp
+  the observation so stale metadata is not paired with a fused fix, and notify
   one-shot callers when a satellite count becomes available.
 - `android/src/main/java/GeolocationPlugin.kt`: include `satellites` in native
   coordinates, briefly race GNSS metadata against a timeout, and unregister
-  one-shot GNSS monitoring after completion when no continuous watch is active.
+  one-shot GNSS monitoring after completion when no continuous watch is active;
+  suppress speed at or below Android's reported speed uncertainty and omit unavailable
+  speed/bearing values instead of serializing Android's zero-value placeholders.
 - `src/models.rs`: preserve the optional value through Rust deserialization.
 
 When upgrading, compare the new upstream release against this directory,

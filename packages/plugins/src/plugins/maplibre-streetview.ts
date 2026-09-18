@@ -1,5 +1,9 @@
 import { getGoogleMapsApiKey } from "@geolibre/core";
-import { StreetViewControl, type StreetViewControlOptions } from "maplibre-gl-streetview";
+import {
+  StreetViewControl,
+  type CreateStreetViewMarker,
+  type StreetViewControlOptions,
+} from "maplibre-gl-streetview";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 const streetViewEnv = (
@@ -55,6 +59,7 @@ const STREET_VIEW_OPTIONS = {
 
 let streetViewControl: StreetViewControl | null = null;
 let activeApp: GeoLibreAppAPI | null = null;
+
 let removeRuntimeEnvListener: (() => void) | null = null;
 // The credentials the current control was built with, so a runtime-env change
 // that doesn't touch Street View's own vars (a common case now that the desktop
@@ -67,15 +72,70 @@ function credentialsSignature(): string {
   return JSON.stringify([defaultProvider, googleApiKey ?? "", mapillaryAccessToken ?? ""]);
 }
 
+/**
+ * How the control should place its location marker on this host.
+ *
+ * MapLibre's `Marker` reads `map._camera.transform` on every position update,
+ * which a mapbox-gl map does not have — it throws on the first map click there.
+ * Everything else the control touches (`getContainer`, `on`/`off`, a click
+ * event's `lngLat`) is on the surface both engines share, so the marker is the
+ * only piece that needs an engine of its own. On Mapbox the control's own
+ * marker element is positioned by mapbox-gl's `Marker` instead, through
+ * `maplibre-gl-streetview`'s `createMarker` option; `undefined` leaves the
+ * upstream default, which is MapLibre's.
+ *
+ * Two deliberate choices about *when* things are read. The engine is decided
+ * from the renderer alone, and the namespace is read only when a marker is
+ * actually built — inside the control's `onAdd`, by which point the map it is
+ * being added to necessarily exists.
+ *
+ * Both halves matter because the two signals disagree during a swap, in
+ * opposite directions. The store flips `primaryRenderer` synchronously;
+ * `getMapboxGl()` answers off the engine ref, which changes a beat later. So
+ * while a swap *to* Mapbox is in flight the namespace is still absent — reading
+ * it then would keep MapLibre's `Marker` for the control's whole lifetime and
+ * throw on the first map click, the exact bug this exists to prevent. And while
+ * a swap *away* from Mapbox is in flight the namespace is still present —
+ * accepting it then would commit a control being rebuilt for MapLibre to a
+ * Mapbox marker, which by `onAdd` has no namespace left to build. The renderer
+ * is right in both directions, so it is the only signal consulted; the
+ * namespace is a fallback purely for a host that does not report a renderer.
+ *
+ * @param app - The plugin host API, read for the renderer and the namespace.
+ * @returns A marker factory on a Mapbox host, else `undefined`.
+ */
+export function streetViewMarkerFactory(
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null,
+): CreateStreetViewMarker | undefined {
+  const renderer = app?.getMapRenderer?.();
+  const mapbox = renderer === undefined ? !!app?.getMapboxGl?.() : renderer === "mapbox";
+  if (!mapbox) return undefined;
+  return (options) => {
+    const mapboxgl = app?.getMapboxGl?.();
+    if (!mapboxgl) {
+      // Unreachable in practice (see above); loud rather than silently placing
+      // a MapLibre marker that would throw later with a confusing message.
+      throw new Error("Street View needs the mapbox-gl namespace to place its marker.");
+    }
+    return new mapboxgl.Marker(options);
+  };
+}
+
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-streetview",
   name: "Street View",
-  version: "0.4.0",
+  version: "0.5.0",
+  // Both 2D engines: the control stays on the Style Spec surface they share,
+  // and the one MapLibre class it built itself — the location `Marker` — now
+  // comes from `createMarker` (see streetViewMarkerFactory). A renderer swap
+  // tears every active plugin down and re-activates it, so the rebuilt control
+  // picks up the new engine's factory.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     activeApp = app;
     addRuntimeEnvListener();
     if (!streetViewControl) {
-      streetViewControl = new StreetViewControl(getStreetViewOptions());
+      streetViewControl = new StreetViewControl(getStreetViewOptions(app));
     }
 
     const added = app.addMapControl(streetViewControl, streetViewPosition);
@@ -104,11 +164,12 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   },
 };
 
-function getStreetViewOptions(): StreetViewControlOptions {
+function getStreetViewOptions(app: GeoLibreAppAPI | null): StreetViewControlOptions {
   return {
     ...STREET_VIEW_OPTIONS,
     ...getStreetViewCredentials(),
     position: streetViewPosition,
+    createMarker: streetViewMarkerFactory(app),
   };
 }
 
@@ -123,7 +184,7 @@ function addRuntimeEnvListener(): void {
     const signature = credentialsSignature();
     if (streetViewControl && signature === appliedCredentialsSignature) return;
     if (streetViewControl) activeApp.removeMapControl(streetViewControl);
-    streetViewControl = new StreetViewControl(getStreetViewOptions());
+    streetViewControl = new StreetViewControl(getStreetViewOptions(activeApp));
     const added = activeApp.addMapControl(streetViewControl, streetViewPosition);
     if (!added) {
       // Keep the listener registered so a later credential change can retry.

@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import {
   BasemapControl,
+  DEFAULT_BASEMAPS,
   type BasemapChangeEvent,
   type BasemapDefinition,
   type BasemapControlEventPayload,
@@ -13,6 +14,7 @@ import {
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { installBasemapThumbnails } from "./basemap-thumbnails";
 
 const basemapEnv = (
   import.meta as ImportMeta & {
@@ -82,6 +84,7 @@ function getStyleProviderCredentials(): {
   protomapsApiKey?: string;
   stadiaApiKey?: string;
   mapboxAccessToken?: string;
+  tiandituApiKey?: string;
 } {
   const env = getRuntimeEnvironment();
   const protomapsApiKey = getProtomapsApiKey(env);
@@ -90,10 +93,16 @@ function getStyleProviderCredentials(): {
   // the others: the panel's API keys view has a Mapbox field, so pushing an
   // empty string would clobber a token typed there.
   const mapboxAccessToken = getMapboxAccessToken(env);
+  // Tianditu (added in maplibre-gl-basemap-control 0.14.0) is the only basemap
+  // provider in the catalog reachable from mainland China that also aligns with
+  // WGS84 data, so its key gets the same env route as every other provider
+  // rather than being panel-only.
+  const tiandituApiKey = env.VITE_TIANDITU_API_KEY?.trim() || undefined;
   return {
     ...(protomapsApiKey ? { protomapsApiKey } : {}),
     ...(stadiaApiKey ? { stadiaApiKey } : {}),
     ...(mapboxAccessToken ? { mapboxAccessToken } : {}),
+    ...(tiandituApiKey ? { tiandituApiKey } : {}),
   };
 }
 
@@ -128,6 +137,7 @@ export function setBasemapControlLabels(next: Partial<BasemapControlLabels>): vo
 }
 
 let basemapControl: BasemapControl | null = null;
+let thumbnails: ReturnType<typeof installBasemapThumbnails> | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
 const registeredRasterLayers = new Map<string, string>();
@@ -155,6 +165,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: BASEMAP_CONTROL_PLUGIN_ID,
   name: "Basemaps",
   version: "0.3.0",
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) {
       basemapControl = new BasemapControl(getBasemapControlOptions(app));
@@ -183,6 +194,8 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     // style basemap or a removal can unregister them (the module state does not
     // survive a new session).
     relinkRestoredRasterBasemaps();
+    thumbnails?.dispose();
+    thumbnails = installBasemapThumbnails(basemapControl);
     // Seed the fresh control instance with every basemap already on the map —
     // the active style basemap plus any stacked rasters we just relinked — so
     // the reopened panel highlights them as active and a re-click on a stacked
@@ -212,6 +225,8 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     // reactivation relinks them from the store via relinkRestoredRasterBasemaps
     // (the same path a reopened project takes). See #1113 follow-up.
     registeredRasterLayers.clear();
+    thumbnails?.dispose();
+    thumbnails = null;
     app.removeMapControl(basemapControl);
     basemapControl = null;
     // Drop any pending style-failure fallback so a later reactivation cannot
@@ -234,6 +249,22 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
 
 function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
   return {
+    ...(app.getMapboxMap?.()
+      ? {
+          basemaps: [
+            {
+              id: "mapbox-standard",
+              name: "Mapbox Standard",
+              provider: "mapbox",
+              type: "style",
+              source: {
+                type: "style",
+                url: "https://api.mapbox.com/styles/v1/mapbox/standard?access_token={api-key}",
+              },
+            },
+          ],
+        }
+      : {}),
     collapsed: false,
     position: basemapControlPosition,
     title: "Basemaps",
@@ -286,10 +317,12 @@ function addRuntimeEnvListener(): void {
       basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
     }
     // Same rule for the style-provider keys: push only what the user actually set.
-    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken } = getStyleProviderCredentials();
+    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken, tiandituApiKey } =
+      getStyleProviderCredentials();
     if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
     if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
     if (mapboxAccessToken) basemapControl.setMapboxAccessToken(mapboxAccessToken);
+    if (tiandituApiKey) basemapControl.setTiandituApiKey(tiandituApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
@@ -320,6 +353,7 @@ function handleBasemapChange(app: GeoLibreAppAPI, event: BasemapControlEventPayl
   // before touching the layer manager, so an unrecognized future source type
   // does not evict the raster overlays without replacing the style.
   if (source.type !== "style" && source.type !== "vector-style") return;
+  thumbnails?.pause();
   // Provider style basemaps (Amazon Location, MapTiler, Mapbox, ...) carry a
   // templated source.url with `{api-key}`/`{aws-region}` placeholders that the
   // control substitutes from the user's credentials. Apply the resolved URL the
@@ -388,6 +422,9 @@ function registerRasterBasemap(
     return;
   }
 
+  // Keep the provider-resolved source so Mapbox can restore the adopted layer
+  // after a style reload without requesting literal credential placeholders.
+  const nativeSource = app.getMapboxMap?.()?.getStyle()?.sources[managedRaster.sourceId];
   app.registerExternalNativeLayer({
     id: layerId,
     name: basemap.name,
@@ -399,7 +436,7 @@ function registerRasterBasemap(
       scheme: basemap.source.scheme,
       sourceId: managedRaster.sourceId,
       tileSize: basemap.source.tileSize ?? 256,
-      tiles: basemap.source.tiles,
+      tiles: nativeSource?.type === "raster" ? nativeSource.tiles : basemap.source.tiles,
       type: "raster",
     },
     nativeLayerIds: [managedRaster.layerId],
@@ -484,6 +521,17 @@ function normalizeBeforeId(value: string | undefined | null): string | undefined
 }
 
 function getBasemapIdForStyleUrl(url: string): string | undefined {
+  // Match both native Mapbox URLs from older projects and resolved catalog URLs.
+  const normalize = (value: string) =>
+    value.split("?")[0].replace("mapbox://styles/", "https://api.mapbox.com/styles/v1/");
+  if (normalize(url) === "https://api.mapbox.com/styles/v1/mapbox/standard")
+    return "mapbox-standard";
+  const match = DEFAULT_BASEMAPS.find(
+    ({ source }) =>
+      (source.type === "style" || source.type === "vector-style") &&
+      normalize(source.url) === normalize(url),
+  );
+  if (match) return match.id;
   if (url === "https://tiles.openfreemap.org/styles/positron") {
     return "openfreemap-positron";
   }

@@ -1,4 +1,5 @@
 import type { FeatureCollection } from "geojson";
+import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [
   {
@@ -299,6 +300,22 @@ export interface LabelStyle {
   /** Letter-case transform applied to the label text (MapLibre `text-transform`). */
   transform: LabelTransform;
   /**
+   * Render a numeric {@link field} with the locale's thousands and decimal
+   * separators (issue #2336), so `1234567.5` labels as `1,234,567.5` instead
+   * of running together. Non-numeric values are unaffected, and it is not
+   * applied to {@link expression}, which formats its own output (MapLibre's
+   * `number-format`, offered in the Expression Builder).
+   */
+  numberFormatEnabled: boolean;
+  /** Decimal places kept while {@link numberFormatEnabled} is on (0-10). */
+  numberDecimals: number;
+  /**
+   * BCP 47 tag picking the separators for {@link numberFormatEnabled}, from
+   * {@link LABEL_NUMBER_LOCALES}. Empty (the default) follows the app's own
+   * language, the way popup number fields do.
+   */
+  numberLocale: string;
+  /**
    * How to handle features that share a label.
    *
    * - `"off"`: every feature is labeled (the historical behavior).
@@ -364,6 +381,47 @@ export type LabelTransform = "none" | "uppercase" | "lowercase";
 
 /** Duplicate-label handling offered for {@link LabelStyle.dedupe}. */
 export type LabelDedupe = "off" | "unique" | "concatenate";
+
+/**
+ * Cartographic blend modes offered for {@link LayerStyle.blendMode}.
+ *
+ * The list is bounded by what WebGL *fixed-function* blending can express --
+ * one `blendFunc` factor pair plus one `blendEquation` -- because that is the
+ * only blend state MapLibre's renderer exposes, and it applies to colour and
+ * alpha together. Two consequences shaped this list:
+ *
+ * - Modes needing the destination colour inside a fragment shader (`overlay`,
+ *   `color-dodge`, `soft-light`, `difference`, and the non-separable HSL modes)
+ *   are absent. MapLibre draws straight into the map framebuffer, which a
+ *   shader cannot sample, so computing them would need an extra copy pass.
+ * - `darken` and `subtract` are absent even though `MIN` and
+ *   `FUNC_REVERSE_SUBTRACT` look like they would serve. Both also apply to the
+ *   alpha channel, where they drive the map canvas transparent: `MIN` takes the
+ *   whole canvas to `min(0, dst) = 0` everywhere the layer does not cover, and
+ *   `FUNC_REVERSE_SUBTRACT` leaves `dstA - srcA` inside it. Correcting either
+ *   needs `blendEquationSeparate` / `blendFuncSeparate`, which MapLibre's state
+ *   tracker does not offer.
+ *
+ * Every mode here leaves the canvas opaque and leaves the map untouched
+ * wherever the layer contributes nothing. See `docs/user-guide/layers.md`.
+ */
+export const BLEND_MODES = ["normal", "multiply", "screen", "lighten", "add"] as const;
+
+/**
+ * How a layer's pixels combine with the map beneath it. `"normal"` is ordinary
+ * alpha compositing (the default, and what every layer did before blend modes
+ * existed). See {@link BLEND_MODES}.
+ */
+export type BlendMode = (typeof BLEND_MODES)[number];
+
+/**
+ * The mode a layer renders with unless it says otherwise. Declared separately
+ * from {@link DEFAULT_LAYER_STYLE} so consumers get a non-optional
+ * {@link BlendMode} to fall back to: `blendMode` is optional on
+ * {@link LayerStyle}, so `DEFAULT_LAYER_STYLE.blendMode` is typed
+ * `BlendMode | undefined` however it is initialized.
+ */
+export const DEFAULT_BLEND_MODE: BlendMode = "normal";
 
 export interface LayerStyle {
   minZoom: number;
@@ -494,6 +552,10 @@ export interface LayerStyle {
   pointRenderer: PointRenderer;
   heatmapRadius: number;
   heatmapIntensity: number;
+  /** Built-in color ramp used by the heatmap density renderer. */
+  heatmapColorRamp: string;
+  /** Numeric feature property used as heatmap weight; blank gives every point equal weight. */
+  heatmapWeightProperty: string;
   clusterRadius: number;
   clusterMaxZoom: number;
   /**
@@ -527,6 +589,14 @@ export interface LayerStyle {
   geometryGenerator: GeometryGeneratorType;
   /** Buffer distance in meters for the `"buffer"` generator. */
   geometryGeneratorBufferDistance: number;
+  /**
+   * Attribute driving the `"buffer"` generator's distance, so each feature is
+   * buffered by its own value in meters (QGIS data-defined override on a
+   * geometry-generator symbol). An empty string buffers every feature by the
+   * flat {@link geometryGeneratorBufferDistance}, which also stands in for
+   * features whose value is missing or non-numeric.
+   */
+  geometryGeneratorBufferProperty: string;
   /** Fill color (6-digit hex) for generated polygons and centroid points. */
   geometryGeneratorFillColor: string;
   /** Outline color (6-digit hex) for generated geometry. */
@@ -537,11 +607,38 @@ export interface LayerStyle {
   geometryGeneratorOpacity: number;
   /** Circle radius in pixels for generated centroid points. */
   geometryGeneratorCircleRadius: number;
+  /**
+   * Attribute driving the radius of generated centroid points, scaling them
+   * between {@link geometryGeneratorSizeMinRadius} and
+   * {@link geometryGeneratorSizeMaxRadius} across
+   * {@link geometryGeneratorSizeMinValue} ..
+   * {@link geometryGeneratorSizeMaxValue} (proportional symbols on the derived
+   * centroids). An empty string draws every centroid at the flat
+   * {@link geometryGeneratorCircleRadius}.
+   *
+   * Deliberately separate from {@link proportionalSizeProperty}: that one also
+   * drives line width, so reusing it here would resize a polygon layer's
+   * outlines as a side effect of sizing its centroids.
+   */
+  geometryGeneratorSizeProperty: string;
+  geometryGeneratorSizeMinValue: number;
+  geometryGeneratorSizeMaxValue: number;
+  geometryGeneratorSizeMinRadius: number;
+  geometryGeneratorSizeMaxRadius: number;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
   rasterContrast: number;
   rasterHueRotate: number;
+  /**
+   * How this layer composites onto whatever is drawn beneath it. `"normal"`
+   * (the default) is ordinary alpha compositing; `"multiply"` is the classic
+   * cartographic case of laying colour over a hillshade so the relief still
+   * reads through. Applies to the layer's own rendered geometry and raster
+   * tiles, not to its labels, which stay legible on top. See
+   * {@link BLEND_MODES} for the available modes and why the list is what it is.
+   */
+  blendMode?: BlendMode;
 }
 
 export const DEFAULT_LAYER_STYLE: LayerStyle = {
@@ -575,6 +672,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     rotation: 0,
     maxWidth: 10,
     transform: "none",
+    numberFormatEnabled: false,
+    numberDecimals: 0,
+    numberLocale: "",
     dedupe: "off",
     sizeExpression: "",
     colorExpression: "",
@@ -630,6 +730,8 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   pointRenderer: "single",
   heatmapRadius: 30,
   heatmapIntensity: 1,
+  heatmapColorRamp: "turbo",
+  heatmapWeightProperty: "",
   clusterRadius: 50,
   clusterMaxZoom: 14,
   invertedFillEnabled: false,
@@ -639,16 +741,23 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   lineDecorationSpacing: 80,
   geometryGenerator: "none",
   geometryGeneratorBufferDistance: 1000,
+  geometryGeneratorBufferProperty: "",
   geometryGeneratorFillColor: "#f59e0b",
   geometryGeneratorStrokeColor: "#b45309",
   geometryGeneratorStrokeWidth: 2,
   geometryGeneratorOpacity: 0.4,
   geometryGeneratorCircleRadius: 5,
+  geometryGeneratorSizeProperty: "",
+  geometryGeneratorSizeMinValue: 0,
+  geometryGeneratorSizeMaxValue: 100,
+  geometryGeneratorSizeMinRadius: 4,
+  geometryGeneratorSizeMaxRadius: 24,
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,
   rasterContrast: 0,
   rasterHueRotate: 0,
+  blendMode: DEFAULT_BLEND_MODE,
 };
 
 /**
@@ -796,6 +905,85 @@ export interface AttributeFormConfig {
 }
 
 /**
+ * How a popup renders one field's value (issue #2113). `"auto"` reproduces the
+ * untyped rendering the Identify popup has always done — sanitized KML
+ * `description` markup, an inline `data:image/*;base64` value as a thumbnail,
+ * anything else stringified. The remaining kinds are explicit author choices
+ * so a popup never has to guess from the value.
+ */
+export type PopupFieldKind = "auto" | "text" | "number" | "date" | "link" | "image";
+
+/** How a `"date"` field's value is written out. */
+export type PopupDateFormat = "date" | "datetime" | "time" | "iso" | "year";
+
+/** Value formatting for one popup field. Every part is optional. */
+export interface PopupFieldFormat {
+  /** Fixed number of decimals for a `"number"` field. */
+  decimals?: number;
+  /** Group thousands with the locale's separator (`"number"` fields). */
+  thousands?: boolean;
+  /** Date rendering for a `"date"` field; defaults to `"date"`. */
+  dateFormat?: PopupDateFormat;
+  /** Text placed before the formatted value. */
+  prefix?: string;
+  /** Text placed after the formatted value, e.g. a unit suffix. */
+  suffix?: string;
+  /** Link text for a `"link"` field; the value itself is used when unset. */
+  linkLabel?: string;
+}
+
+/** One field's entry in a layer's popup configuration. */
+export interface PopupFieldConfig {
+  /** Feature property key. */
+  field: string;
+  /** Display label shown instead of the raw field name. */
+  label?: string;
+  /** How the value renders; defaults to `"auto"`. */
+  kind?: PopupFieldKind;
+  format?: PopupFieldFormat;
+  /** Include this field in the hover tooltip's short subset. */
+  hover?: boolean;
+}
+
+/**
+ * Per-layer configuration for what a viewer sees when they interact with a
+ * feature (issue #2113): which fields the Identify popup shows, in what order,
+ * under what labels and formatting, plus an optional hover tooltip.
+ *
+ * A layer with no `popup` block behaves exactly as it did before this existed:
+ * the layer name as the heading, then every property as a key/value row.
+ * {@link GeoLibreLayer.fieldVisibility} stays authoritative — a `"hidden"` or
+ * `"excluded"` field is dropped even when a popup config names it.
+ */
+export interface LayerPopupConfig {
+  /** `false` suppresses the Identify popup for this layer. Defaults to `true`. */
+  click?: boolean;
+  /** `true` shows a hover tooltip built from the `hover` fields. Defaults to `false`. */
+  hover?: boolean;
+  /** Field whose value titles the popup instead of the layer name. */
+  titleField?: string;
+  /**
+   * MapLibre expression source producing the popup title. Wins over
+   * {@link titleField}; when it fails or produces nothing the title falls
+   * through to `titleField`, and only then to the layer name.
+   */
+  titleExpression?: string;
+  /**
+   * MapLibre expression source producing the whole popup body as text, for
+   * authors who want a sentence rather than a table. When it evaluates, it
+   * replaces the field rows.
+   */
+  bodyExpression?: string;
+  /** `false` drops the synthetic `id` row. Defaults to `true`. */
+  showFeatureId?: boolean;
+  /**
+   * The fields to show and their order. An empty or absent list keeps today's
+   * behavior: every visible property, in the feature's own key order.
+   */
+  fields?: PopupFieldConfig[];
+}
+
+/**
  * A virtual field attached to a vector layer (QGIS Field Calculator → "Create
  * virtual field", issue #1321): a column defined by a MapLibre expression that
  * recomputes live instead of being written once as static values. The engine
@@ -838,6 +1026,65 @@ export interface LayerVirtualField {
   errorCount?: number;
 }
 
+/**
+ * Quick filters (issue #2114): the data-driven filter controls a layer offers
+ * in its Quick Filters section. What persists is the *control state* — field,
+ * kind, chosen values — not the compiled output; `quick-filters.ts` compiles it
+ * to a MapLibre filter at sync time so a saved filter can always be reopened
+ * and edited.
+ */
+
+/** Which control a quick filter renders, and how it compiles. */
+export type QuickFilterKind = "categorical" | "range" | "date" | "text";
+
+/** The comparison a `text` quick filter applies (always case-insensitive). */
+export type QuickFilterTextOperator = "contains" | "startsWith" | "equals";
+
+/**
+ * How a date field stores its values, deciding whether a `date` quick filter
+ * compares ISO text or epoch numbers. `iso` covers both `YYYY-MM-DD` and full
+ * `YYYY-MM-DDTHH:MM:SSZ` timestamps: only the leading `YYYY-MM-DD` slice is
+ * compared, so a trailing time, a milliseconds fraction, or a `Z` cannot break
+ * a boundary. Mirrors (deliberately, in a smaller form) the value kinds the
+ * Time Slider's `detectValueKind` reports.
+ */
+export type QuickFilterDateKind = "iso" | "epochMs" | "epochS";
+
+/** A single filter control persisted on a layer. */
+export interface LayerQuickFilter {
+  /** Stable id, used as the React key and for edits/removal. */
+  id: string;
+  /** The feature property this control narrows. */
+  field: string;
+  kind: QuickFilterKind;
+  /**
+   * `false` keeps the control configured but inert, so a filter can be muted
+   * without losing the values chosen for it. Defaults to enabled.
+   */
+  enabled?: boolean;
+  /**
+   * `categorical`: the chosen values. An empty (or omitted) selection means
+   * "every value" and compiles to nothing — unchecking the last box clears the
+   * filter rather than emptying the map.
+   */
+  values?: (string | number | boolean)[];
+  /** `range`: inclusive bounds. `null`/omitted leaves that side open. */
+  min?: number | null;
+  max?: number | null;
+  /**
+   * `date`: inclusive `YYYY-MM-DD` bounds. The end day is included in full, so
+   * a timestamp field filtered to a single day keeps that whole day.
+   */
+  start?: string | null;
+  end?: string | null;
+  /** `date`: how the field stores its values. Defaults to `iso`. */
+  dateKind?: QuickFilterDateKind;
+  /** `text`: the comparison. Defaults to `contains`. */
+  operator?: QuickFilterTextOperator;
+  /** `text`: the needle. Blank means no constraint. */
+  text?: string;
+}
+
 /** Persisted refresh policy and most recent synchronization result for a layer. */
 export interface LayerConnection {
   /** Owning layer id. Repeated here so records remain self-describing when exported. */
@@ -853,11 +1100,98 @@ export interface LayerConnection {
 }
 
 /**
+ * Configuration for automatic feature editor tracking (Issue #1677).
+ * Maintains `created_by`, `created_at`, `edited_by`, `edited_at` fields
+ * automatically when features are created or updated.
+ */
+export interface EditorTrackingConfig {
+  /** `true` enables automatic creation/edit timestamp and author stamping. */
+  enabled: boolean;
+  /** Field name for creation author (default `"created_by"`). */
+  createdByField?: string;
+  /** Field name for creation timestamp (default `"created_at"`). */
+  createdAtField?: string;
+  /** Field name for last-edit author (default `"edited_by"`). */
+  editedByField?: string;
+  /** Field name for last-edit timestamp (default `"edited_at"`). */
+  editedAtField?: string;
+}
+
+/**
  * Visibility of a layer's attribute field.
  * - "hidden": Not shown in the attribute table, identify popup, tooltips, or field pickers, but remains in the data.
  * - "excluded": Removed entirely from the data when the project is shared or exported.
  */
 export type FieldVisibility = "hidden" | "excluded";
+
+/**
+ * Explicit capability flags defining what actions a user/session may perform on a layer.
+ * Any omitted capability falls back to the inferred default behavior for that layer's source.
+ */
+export interface LayerCapabilities {
+  /** Can the layer's features or attributes be queried / identified. */
+  query?: boolean;
+  /** Can new features be created/added to the layer. */
+  create?: boolean;
+  /** Can existing features/attributes be modified. */
+  update?: boolean;
+  /** Can features be deleted from the layer. */
+  delete?: boolean;
+  /** Can the layer data/symbology be exported/downloaded. */
+  export?: boolean;
+}
+
+/**
+ * Application privilege identifiers defining discrete capabilities in GeoLibre.
+ */
+export type AppPrivilege =
+  | "layers:edit"
+  | "layers:add-remote"
+  | "layers:add-local"
+  | "processing:run"
+  | "processing:sidecar"
+  | "project:save"
+  | "project:share"
+  | "project:share-public"
+  | "plugins:install"
+  | "assistant:use"
+  | "connections:manage"
+  | "export:data"
+  | "export:image"
+  | "settings:manage";
+
+/**
+ * Standard named roles bundling application privileges.
+ */
+export type AppRole = "viewer" | "editor" | "publisher" | "administrator" | "custom";
+
+/**
+ * Ephemeral application capabilities state defining the active role, effective privileges,
+ * and optional restriction reason for the current session/deployment.
+ */
+export interface AppCapabilities {
+  /**
+   * The assigned application role. `custom` once an ad-hoc `grantAppPrivilege` /
+   * `revokeAppPrivilege` has moved the set away from the bundle a named role
+   * defines, so the role never claims a shape the privileges do not have.
+   */
+  role: AppRole;
+  /** List of granted privileges for the active role or custom configuration. */
+  privileges: AppPrivilege[];
+  /**
+   * Optional human-readable reason covering the whole set (e.g. "Action disabled
+   * by deployment policy"), used for any privilege without its own.
+   */
+  reason?: string;
+  /**
+   * Per-privilege reasons, and why they exist: two privileges can be withheld by
+   * different causes — a role bundle plus a licence limit, say — and a single
+   * `reason` would make the second revocation relabel the first, so every gate
+   * would explain itself with whichever cause happened to be recorded last.
+   * Takes precedence over `reason` for the privileges it names.
+   */
+  privilegeReasons?: Partial<Record<AppPrivilege, string>>;
+}
 
 export interface GeoLibreLayer {
   id: string;
@@ -871,6 +1205,15 @@ export interface GeoLibreLayer {
   beforeId?: string;
   geojson?: FeatureCollection;
   /**
+   * Explicit capability set for the layer (query, create, update, delete, export).
+   * Unset capabilities default to the inferred behavior for the layer's source kind.
+   */
+  capabilities?: LayerCapabilities;
+  /**
+   * Automatic editor tracking configuration for feature creation/updates.
+   */
+  editorTracking?: EditorTrackingConfig;
+  /**
    * Field-level visibility overrides. Fields marked as "excluded" are physically
    * removed from the data during export and sharing.
    */
@@ -882,6 +1225,11 @@ export interface GeoLibreLayer {
    * with the project like {@link joins}.
    */
   attributeForm?: AttributeFormConfig;
+  /**
+   * Popup and hover-tooltip design for this layer, authored in the Style
+   * panel's Popup section. Absent means the default full-property dump.
+   */
+  popup?: LayerPopupConfig;
   /**
    * Persistent attribute joins applied to this layer's features, in order.
    * The joined columns are materialized into `geojson` feature properties (so
@@ -909,6 +1257,23 @@ export interface GeoLibreLayer {
   timeFilter?: unknown[];
   /** Transient MapLibre expression applied by the iframe embed API. */
   embedFilter?: unknown[];
+  /**
+   * Project-persisted boolean MapLibre expression that narrows the features
+   * rendered for this layer. Unlike a selection, this leaves the source data
+   * intact and keeps non-matching features hidden until the filter is cleared.
+   * It is composed with transient filters, quick filters, and rule visibility
+   * by the map renderers.
+   */
+  filterExpression?: unknown[];
+  /**
+   * Data-driven filter controls authored in the layer's Quick Filters section
+   * (issue #2114). Unlike {@link timeFilter} and {@link embedFilter} this is
+   * persisted control *state*, not a compiled expression: `@geolibre/map`
+   * compiles it at sync time (see `compileQuickFilters`) and combines the
+   * result with the transient filters and the rule-based visibility filter, so
+   * a host page's filter and a user's filter narrow the layer together.
+   */
+  quickFilters?: LayerQuickFilter[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the
@@ -1054,6 +1419,29 @@ export interface MapGridLayout {
 }
 
 /**
+ * Which engine draws a map pane.
+ *
+ * `"maplibre"` is the 2D MapLibre GL map that owns the app's plugin, styling,
+ * and deck.gl integrations. `"cesium"` is the 3D globe (see `CesiumCanvas`),
+ * which renders the same shared store state — camera, basemap, layers, group
+ * effects — through CesiumJS. `"mapbox"` is Mapbox GL JS and `"arcgis"` the
+ * ArcGIS Maps SDK for JavaScript, loaded from Esri's CDN at runtime (see
+ * `ArcgisCanvas`); both draw the same store state through their own engines.
+ *
+ * Used both for secondary panes ({@link SecondaryMapView.viewKind}) and for the
+ * primary workspace ({@link GeoLibreProject.primaryRenderer}), so the two never
+ * drift apart.
+ */
+export type MapRendererKind = "maplibre" | "cesium" | "mapbox" | "arcgis";
+
+/**
+ * The engine that draws the primary map area when a project says nothing. The
+ * 2D map: it is the renderer every tool, plugin, and panel is wired to, so an
+ * existing project (and a new one) opens exactly as it always did.
+ */
+export const DEFAULT_PRIMARY_RENDERER: MapRendererKind = "maplibre";
+
+/**
  * A non-primary map pane: shares the primary map's basemap and layers, with its
  * own camera and per-layer visibility overrides.
  */
@@ -1068,7 +1456,7 @@ export interface SecondaryMapView {
    * map) when absent, so existing projects and panes are unchanged. `"cesium"`
    * renders a 3D globe (see {@link CesiumCanvas}) over the same shared layers.
    */
-  viewKind?: "maplibre" | "cesium";
+  viewKind?: MapRendererKind;
   /**
    * Per-layer visibility overrides keyed by layer id. A layer absent from this
    * map inherits the primary map's visibility (`layer.visible`); an entry forces
@@ -1099,6 +1487,21 @@ export type CollaborationRole = "host" | "guest";
 /** Whether guests may edit (`co-edit`) or only watch (`view-only`). */
 export type CollaborationMode = "view-only" | "co-edit";
 
+export interface ParticipantIdentity {
+  provider: string;
+  userId: string;
+  username: string;
+}
+
+export interface CollabInvite {
+  token: string;
+  role: CollaborationMode;
+  createdAt: number;
+  maxUses?: number;
+  useCount: number;
+  revoked: boolean;
+}
+
 export interface CollaborationParticipant {
   clientId: string;
   displayName: string;
@@ -1110,6 +1513,8 @@ export interface CollaborationParticipant {
    * `null` for the host (the host can always edit).
    */
   editOverride: boolean | null;
+  /** Optional account identity when signed-in identity binding is enabled. */
+  identity?: ParticipantIdentity | null;
 }
 
 /** A remote participant's live cursor + viewport, used to render presence. */
@@ -1153,6 +1558,19 @@ export interface CollaborationState {
   followHost: boolean;
   /** Recent session chat, oldest first, capped to a bounded window (#754). */
   chat: CollaborationChatMessage[];
+  /** Session flag requiring participants to be signed in. */
+  requireIdentity: boolean;
+  /**
+   * Whether the connected relay has an identity issuer configured. False (the
+   * default) means it cannot verify a sign-in, so the host UI hides the
+   * "require a signed-in account" toggle instead of offering a gate that would
+   * lock every guest out.
+   */
+  identitySupported: boolean;
+  /** Layer IDs marked locked by the host. */
+  lockedLayerIds: string[];
+  /** Active session invites minted by host. */
+  invites: CollabInvite[];
   /** Last human-readable error, surfaced in the Collaborate dialog. */
   error: string | null;
 }
@@ -1185,6 +1603,37 @@ export interface MapPreferences {
    * `"imperial"` for feet/miles or `"nautical"` for nautical miles.
    */
   scaleUnit: MapScaleUnit;
+  /**
+   * Whether the status bar resolves and shows the ground elevation under the
+   * pointer (issue #1813). **Defaults to `false`**: with 3D terrain off the
+   * lookup falls back to the public Open-Meteo service, so hovering would send
+   * coordinates off the device for a readout the user never asked for. Toggled
+   * from Controls -> Elevation.
+   */
+  showPointerElevation: boolean;
+  /** Whether the built-in 3D terrain control and terrain surface are enabled. */
+  terrainEnabled: boolean;
+  /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
+  mapboxStyleUrl?: string;
+  /**
+   * ArcGIS-only basemap: an Esri basemap style id (`arcgis/streets`,
+   * `arcgis/imagery`, `osm/standard`, ...). New projects use Streets. Absent
+   * follows the shared basemap, translated to tiles the SDK can draw; the id
+   * is also set aside when no ArcGIS API key is configured, since Esri's
+   * basemap styles service requires one.
+   */
+  arcgisBasemap?: string;
+  /** Cesium imagery override; absent follows the shared project basemap. */
+  cesiumBasemap?: import("./cesium-imagery").CesiumBasemapId;
+  /**
+   * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
+   * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and
+   * decimal minutes, or `"utm"` zone easting/northing. Stored as a string
+   * rather than a union so `@geolibre/core` does not have to depend on the
+   * formatter, which lives with the app's DMS helpers and the Gridlines
+   * plugin's UTM projection; the app normalises unknown values to `"dd"`.
+   */
+  coordinateFormat: string;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -1249,6 +1698,13 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     projection: "globe",
     ellipsoidId: "earth",
     scaleUnit: "metric",
+    // Off by default: turning it on can send pointer coordinates to a public
+    // elevation service, which should be an explicit choice.
+    showPointerElevation: false,
+    terrainEnabled: false,
+    coordinateFormat: "dd",
+    mapboxStyleUrl: "mapbox://styles/mapbox/standard",
+    arcgisBasemap: "arcgis/streets",
   },
   environmentVariables: [],
   geocoding: {
@@ -1479,14 +1935,94 @@ export interface ProcessingModelStep {
 }
 
 /**
- * A reusable, sequential processing pipeline ("model" in QGIS Graphical Modeler
- * / ArcGIS ModelBuilder terms). Steps run in order; each step's result feeds the
- * next. Saved in the project file so it can be reloaded and re-run.
+ * What flows along a model edge. Vector nodes exchange FeatureCollections;
+ * raster nodes exchange GeoTIFF bytes. A port declaring `"any"` accepts either
+ * and is resolved to a concrete kind at run time by whatever is wired into it.
+ */
+export type ModelPortKind = "vector" | "raster" | "any";
+
+/** One connection point on a {@link ModelGraphNode}. */
+export interface ModelGraphPort {
+  /**
+   * Port id, unique within its node and direction. For a tool node's inputs
+   * this is the underlying tool parameter id, so wiring an edge and setting the
+   * parameter by hand are the same operation.
+   */
+  id: string;
+  label: string;
+  kind: ModelPortKind;
+  /** Inputs only: the run fails when nothing is wired in and no value is set. */
+  required?: boolean;
+}
+
+/**
+ * What a node does. `input` sources an existing project layer, `tool` runs a
+ * processing algorithm, and `output` names a result to add back to the map.
+ */
+export type ModelGraphNodeKind = "input" | "tool" | "output";
+
+/** One node on the Model Builder canvas. */
+export interface ModelGraphNode {
+  /** Stable id, unique within the graph; referenced by {@link ModelGraphEdge}. */
+  id: string;
+  kind: ModelGraphNodeKind;
+  /** Canvas position in graph coordinates (unscaled by zoom). */
+  x: number;
+  y: number;
+  /** `input` nodes: the project layer id this node sources. */
+  layerId?: string;
+  /**
+   * `tool` nodes: the tool's id within {@link provider}'s registry. Kept
+   * separate from the provider so the same short id can exist in both.
+   */
+  toolId?: string;
+  /** `tool` nodes: which registry resolves {@link toolId}. */
+  provider?: ModelToolProvider;
+  /** `tool` nodes: parameter values for everything not supplied by an edge. */
+  parameters?: Record<string, unknown>;
+  /** `output` nodes: the layer name given to the result added to the map. */
+  name?: string;
+}
+
+/**
+ * A directed connection from one node's output port to another node's input
+ * port. Ports are named, so a tool with several inputs (Clip's target and
+ * overlay, say) wires each one unambiguously.
+ */
+export interface ModelGraphEdge {
+  id: string;
+  from: string;
+  fromPort: string;
+  to: string;
+  toPort: string;
+}
+
+/** The node-and-edge graph authored on the Model Builder canvas. */
+export interface ProcessingModelGraph {
+  nodes: ModelGraphNode[];
+  edges: ModelGraphEdge[];
+}
+
+/** Which registry a {@link ModelGraphNode.toolId} is resolved against. */
+export type ModelToolProvider = "vector" | "whitebox";
+
+/**
+ * A reusable processing pipeline ("model" in QGIS Graphical Modeler / ArcGIS
+ * ModelBuilder terms), saved in the project file so it can be reloaded and
+ * re-run.
+ *
+ * Two shapes coexist. {@link steps} is the original strictly linear chain, and
+ * remains the only thing older builds understand. {@link graph} is the
+ * Model Builder's directed graph, which supports multi-input tools, branches
+ * and merges. When both are present `graph` wins; a model saved by the canvas
+ * also writes a `steps` projection whenever its graph happens to be a single
+ * chain, so older builds can still run it.
  */
 export interface ProcessingModel {
   id: string;
   name: string;
   steps: ProcessingModelStep[];
+  graph?: ProcessingModelGraph;
 }
 
 /**
@@ -1712,6 +2248,8 @@ export interface LayerLibraryEntry {
   virtualFields?: LayerVirtualField[];
   /** Per-field edit-widget/constraint configuration to reapply. */
   attributeForm?: AttributeFormConfig;
+  /** Popup/tooltip design to reapply. */
+  popup?: LayerPopupConfig;
   /**
    * Embedded features, present only for a layer whose source cannot be
    * re-read (in-memory features) or whose local file may be unavailable.
@@ -1743,6 +2281,8 @@ export interface GeoLibreProject {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  /** Custom colour for the Blank background. Null uses the current theme default. */
+  blankBackgroundColor?: string | null;
   layers: GeoLibreLayer[];
   /**
    * Layer selected in the Layers panel when the project was saved. Omitted by
@@ -1756,6 +2296,12 @@ export interface GeoLibreProject {
   plugins?: ProjectPluginState;
   /** User customizations for the Print Layout legend. */
   legend?: LegendConfig;
+  /**
+   * Print Layout composer settings (title, page size, orientation, blocks,
+   * atlas). Omitted while the composer is untouched, so projects that never
+   * opened it are unaffected (GeoLibre discussion #1992).
+   */
+  printLayout?: PrintLayoutConfig;
   storymap?: StoryMap;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models?: ProcessingModel[];
@@ -1778,6 +2324,17 @@ export interface GeoLibreProject {
   secondaryMapViews?: SecondaryMapView[];
   /** User-entered label for the primary pane; omitted when empty. */
   primaryMapLabel?: string;
+  /**
+   * Which engine draws the primary map area (issue #2217). Omitted for the
+   * default 2D map, so every project written before this existed — and every
+   * project that never leaves MapLibre — is byte-identical to before. A project
+   * saved as `"cesium"` reopens directly on the 3D globe.
+   *
+   * This is independent of {@link mapLayout}: a 1x1 workspace can be either
+   * renderer, and a multi-pane grid can still mix the two through each pane's
+   * {@link SecondaryMapView.viewKind}.
+   */
+  primaryRenderer?: MapRendererKind;
   /**
    * Project-scoped Style Manager entries (issue #1294), so a project can carry
    * its reusable styles to teammates. Omitted when empty; the app-level
@@ -1819,4 +2376,105 @@ export interface RecentProjectEntry {
   path: string;
   name: string;
   openedAt: string;
+}
+
+/**
+ * Size at or above which a local vector file is read through DuckDB instead of
+ * the in-memory JavaScript readers, and the feature count above which the user
+ * is asked before every feature is materialized as GeoJSON.
+ *
+ * These live in core so the desktop loaders (`duckdb-vector-guard.ts`) and the
+ * Add Vector Layer panel (`@geolibre/plugins`, which configures the
+ * `maplibre-gl-vector` control's `autoThreshold`) switch strategy at the *same*
+ * numbers. Before they were unified the two entry points disagreed — the panel
+ * tiled at 25 MB / 50k while drag-and-drop stayed in memory to 100 MB — so the
+ * same file behaved differently depending on how it was added, and no single
+ * number could be documented.
+ */
+export const DUCKDB_VECTOR_ROUTE_BYTES = 100 * 1024 * 1024; // 100 MB
+export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 100_000;
+
+/** A collection whose coordinates cannot be WGS84 longitude/latitude. */
+export interface NonGeographicCoordinates {
+  /** How many coordinates were inspected. */
+  sampled: number;
+  /** The largest |x| seen — a longitude may not exceed 180. */
+  maxAbsX: number;
+  /** The largest |y| seen — a latitude may not exceed 90. */
+  maxAbsY: number;
+}
+
+const MAX_WGS84_LON = 180;
+const MAX_WGS84_LAT = 90;
+
+/**
+ * Detect a collection that declares (or is assumed to be) WGS84 but carries
+ * projected coordinates — the failure mode where a layer loads cleanly, appears
+ * in the Layers panel, and renders nowhere because its "longitude" is a easting
+ * in metres or feet.
+ *
+ * GeoLibre honours whatever CRS a file declares, so a file that declares
+ * `CRS84`/`GCS_WGS_1984` while holding State Plane or Albers coordinates is
+ * passed through untouched and lands off the map with no error. Callers use
+ * this to warn instead of failing silently; it does not guess the true CRS,
+ * which only the user knows.
+ *
+ * Sampling stops at `sampleLimit` coordinates: out-of-range values are a
+ * property of the whole file, so a prefix is enough and a 3-million-coordinate
+ * collection is not walked twice.
+ *
+ * @returns Details when a coordinate is out of geographic range, else null.
+ */
+export function detectNonGeographicCoordinates(
+  geojson: GeoJSON.FeatureCollection | undefined,
+  sampleLimit = 1000,
+): NonGeographicCoordinates | null {
+  if (!geojson?.features?.length) return null;
+  let sampled = 0;
+  let maxAbsX = 0;
+  let maxAbsY = 0;
+  let offending = false;
+
+  const visit = (coords: unknown): void => {
+    if (sampled >= sampleLimit || !Array.isArray(coords)) return;
+    if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+      const x = Math.abs(coords[0]);
+      const y = Math.abs(coords[1]);
+      sampled += 1;
+      // Gated on finiteness for the same reason as `offending` below: an
+      // Infinity would otherwise be reported as the offending magnitude in the
+      // warning, hiding the real out-of-range value.
+      if (Number.isFinite(x) && x > maxAbsX) maxAbsX = x;
+      if (Number.isFinite(y) && y > maxAbsY) maxAbsY = y;
+      // NaN/Infinity are a different defect (a broken file, not a CRS mismatch),
+      // so only finite out-of-range values count.
+      if (Number.isFinite(x) && Number.isFinite(y) && (x > MAX_WGS84_LON || y > MAX_WGS84_LAT)) {
+        offending = true;
+      }
+      return;
+    }
+    for (const part of coords) {
+      if (sampled >= sampleLimit) return;
+      visit(part);
+    }
+  };
+
+  for (const feature of geojson.features) {
+    if (sampled >= sampleLimit) break;
+    const geometry = feature?.geometry as {
+      coordinates?: unknown;
+      geometries?: { coordinates?: unknown }[];
+    } | null;
+    // A GeometryCollection holds its coordinates one level down, under
+    // `geometries[]`, so it has no `coordinates` of its own to visit.
+    if (geometry?.coordinates !== undefined) visit(geometry.coordinates);
+    else if (Array.isArray(geometry?.geometries)) {
+      for (const member of geometry.geometries) {
+        if (sampled >= sampleLimit) break;
+        if (member?.coordinates !== undefined) visit(member.coordinates);
+      }
+    }
+  }
+
+  return offending ? { sampled, maxAbsX, maxAbsY } : null;
 }

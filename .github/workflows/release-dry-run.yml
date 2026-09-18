@@ -1,0 +1,158 @@
+# A trial run of everything a release fires, without publishing any of it.
+#
+# The release workflows only run on `release: published`, so until v2.9.0 a
+# build break could sit on `main` unnoticed and surface for the first time on
+# the release itself, with the tag already cut. That is exactly what happened:
+# a desktop-only `window.unminimize()` call landed on 2026-08-29 and took both
+# the Android and iOS builds down on release day, so v2.9.0 published with no
+# mobile artifacts and needed them backfilled by hand.
+#
+# Run this before tagging. It dispatches every release workflow that can build
+# without publishing, waits for them all, and fails if any of them fails.
+#
+#   gh workflow run release-dry-run.yml -R opengeos/GeoLibre --ref main
+#
+# Each workflow it triggers withholds its own publishing on a non-release
+# event, so nothing here can write a release asset, push to npm or PyPI, or
+# touch Homebrew, AUR, COPR or winget:
+#
+#   Release Desktop App  - builds all four desktop targets, MSIX, portable zip,
+#                          and the Chrome extension; attaches none of them, and
+#                          its homebrew/aur/copr/winget jobs are skipped
+#   Android              - builds and signs the APKs and AAB, attaches nothing
+#   iOS                  - builds and signs the .ipa, attaches nothing
+#   Mac App Store        - builds the .pkg, attaches nothing
+#   Store MSIX           - dispatch-only already
+#   Publish Python       - builds the wheel; the publish job is release-only
+#   Publish core and map - builds and prepares the manifests, publishes nothing
+#   Publish embed SDK    - same
+#
+# Deliberately not included: Publish Container Image already runs on every push
+# to `main`, so it is continuously covered and dispatching it here would push a
+# real image to the registry.
+name: Release dry run
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to build (defaults to the branch this is run from)
+        required: false
+        default: ""
+
+concurrency:
+  group: release-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    name: Build everything, publish nothing
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      # Dispatch the release workflows and read back their conclusions.
+      actions: write
+    steps:
+      - name: Trigger every release workflow in build-only mode
+        id: trigger
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          workflows="release.yml android.yml ios.yml mas-store.yml msix-store.yml publish-python.yml publish-packages.yml publish-embed.yml"
+
+          # Record the newest existing run id per workflow first. `gh workflow
+          # run` returns nothing identifying, and a run takes a moment to
+          # appear, so each new run is found by watching for an id above this
+          # watermark rather than by taking "the most recent run", which would
+          # happily pick up an unrelated one.
+          : > watermarks.txt
+          for wf in $workflows; do
+            before="$(gh run list -R "$REPO" --workflow "$wf" --limit 1 \
+              --json databaseId --jq '.[0].databaseId // 0')"
+            echo "$wf $before" >> watermarks.txt
+          done
+
+          for wf in $workflows; do
+            gh workflow run "$wf" -R "$REPO" --ref "$REF"
+            echo "dispatched $wf"
+          done
+
+          # Give the runs time to register before resolving their ids.
+          sleep 20
+
+          : > runs.txt
+          while read -r wf before; do
+            id=""
+            for _ in $(seq 1 12); do
+              # The oldest run above the watermark is the one just dispatched;
+              # taking the newest would prefer a concurrent dispatch instead.
+              id="$(gh run list -R "$REPO" --workflow "$wf" --event workflow_dispatch \
+                --limit 20 --json databaseId \
+                --jq "[.[] | select(.databaseId > $before)] | min_by(.databaseId) | .databaseId // empty")"
+              [ -n "$id" ] && break
+              sleep 10
+            done
+            if [ -z "$id" ]; then
+              echo "::error::$wf never produced a new run after dispatch"
+              exit 1
+            fi
+            echo "$wf $id" >> runs.txt
+            echo "  $wf -> $id"
+          done < watermarks.txt
+
+      - name: Wait for them all and report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Desktop and mobile builds are slow; poll for up to ~2 hours.
+          deadline=$(( $(date +%s) + 7200 ))
+          while :; do
+            pending=0
+            while read -r wf id; do
+              status="$(gh run view -R "$REPO" "$id" --json status --jq '.status')"
+              [ "$status" = "completed" ] || pending=$((pending + 1))
+            done < runs.txt
+            [ "$pending" -eq 0 ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out with $pending workflow(s) still running."
+              break
+            fi
+            sleep 60
+          done
+
+          {
+            echo "## Release dry run"
+            echo
+            echo "| Workflow | Result | Run |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          failed=0
+          while read -r wf id; do
+            meta="$(gh run view -R "$REPO" "$id" --json status,conclusion,workflowName)"
+            status="$(jq -r '.status' <<<"$meta")"
+            conclusion="$(jq -r '.conclusion // "n/a"' <<<"$meta")"
+            name="$(jq -r '.workflowName' <<<"$meta")"
+            if [ "$status" != "completed" ]; then
+              icon=":hourglass:"; failed=$((failed + 1))
+            elif [ "$conclusion" = "success" ]; then
+              icon=":white_check_mark:"
+            else
+              icon=":x:"; failed=$((failed + 1))
+            fi
+            echo "| $name | $icon $conclusion | [$id](https://github.com/$REPO/actions/runs/$id) |" >> "$GITHUB_STEP_SUMMARY"
+          done < runs.txt
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed release workflow(s) did not succeed. Fix these before tagging."
+            exit 1
+          fi
+          echo "All release workflows built cleanly. Safe to tag."

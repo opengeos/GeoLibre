@@ -1,0 +1,19 @@
+diff --git a/node_modules/maplibre-gl-raster/dist/RasterControl-5Xo2rM_m.js b/node_modules/maplibre-gl-raster/dist/RasterControl-5Xo2rM_m.js
+index 97a0d22a..5a8bd424 100644
+--- a/node_modules/maplibre-gl-raster/dist/RasterControl-5Xo2rM_m.js
++++ b/node_modules/maplibre-gl-raster/dist/RasterControl-5Xo2rM_m.js
+@@ -23304,10 +23304,10 @@ var RasterControl = class {
+ 	_getControlPosition() {
+ 		const parent = this._container?.parentElement;
+ 		if (!parent) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-top-left")) return "top-left";
+-		if (parent.classList.contains("maplibregl-ctrl-top-right")) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-left")) return "bottom-left";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-right")) return "bottom-right";
++		if ((parent.classList.contains("maplibregl-ctrl-top-left") || parent.classList.contains("mapboxgl-ctrl-top-left"))) return "top-left";
++		if ((parent.classList.contains("maplibregl-ctrl-top-right") || parent.classList.contains("mapboxgl-ctrl-top-right"))) return "top-right";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-left") || parent.classList.contains("mapboxgl-ctrl-bottom-left"))) return "bottom-left";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-right") || parent.classList.contains("mapboxgl-ctrl-bottom-right"))) return "bottom-right";
+ 		return "top-right";
+ 	}
+ 	/**

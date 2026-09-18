@@ -10,6 +10,7 @@ import {
   isUnsupportedSurfaceWkbError,
   normalizePropertyValue,
   stripAutoFidColumn,
+  SYNTHESIZED_GEOMETRY_COLUMN,
   wkbRowsToFeatureCollection,
 } from "../apps/geolibre-desktop/src/lib/duckdb-geometry";
 import { encodeWkb } from "../apps/geolibre-desktop/src/lib/geometry-wkb";
@@ -125,6 +126,141 @@ describe("detectGeometryColumn", () => {
   });
 });
 
+describe("detectGeometryColumn with a declared primary_column", () => {
+  it("prefers the column a GeoParquet geo block names", () => {
+    // Two blob columns both bear well-known names; only the document knows
+    // which one actually holds the geometry.
+    const description = [
+      describeRow("geometry", "BLOB"),
+      describeRow("geom", "BLOB"),
+      describeRow("id", "BIGINT"),
+    ];
+    assert.deepEqual(detectGeometryColumn(description, { primaryColumn: "geom" }), {
+      column: "geom",
+      isWkb: true,
+    });
+  });
+
+  it("beats a native GEOMETRY column elsewhere in the file", () => {
+    const description = [describeRow("wgs84_geom", "GEOMETRY"), describeRow("geom_2100", "BLOB")];
+    assert.deepEqual(detectGeometryColumn(description, { primaryColumn: "geom_2100" }), {
+      column: "geom_2100",
+      isWkb: true,
+    });
+  });
+
+  it("reads a declared column DuckDB decoded natively", () => {
+    assert.deepEqual(
+      detectGeometryColumn([describeRow("geom", "GEOMETRY('epsg:26986')")], {
+        primaryColumn: "geom",
+      }),
+      { column: "geom", isWkb: false },
+    );
+  });
+
+  it("still value-probes a declared string column", () => {
+    assert.deepEqual(
+      detectGeometryColumn([describeRow("geom", "VARCHAR")], {
+        primaryColumn: "geom",
+      }),
+      {
+        column: "geom",
+        isWkb: true,
+        isBase64Wkb: true,
+        requiresBase64WkbValidation: true,
+        base64WkbCandidates: ["geom"],
+      },
+    );
+  });
+
+  it("falls through when the declared column is absent or unreadable", () => {
+    const description = [describeRow("geometry", "BLOB"), describeRow("counter", "BIGINT")];
+    // A document naming a column the file does not have must not fail the load.
+    assert.deepEqual(detectGeometryColumn(description, { primaryColumn: "missing" }), {
+      column: "geometry",
+      isWkb: true,
+    });
+    // Nor must one naming a column no geometry reader accepts.
+    assert.deepEqual(detectGeometryColumn(description, { primaryColumn: "counter" }), {
+      column: "geometry",
+      isWkb: true,
+    });
+  });
+});
+
+describe("detectGeometryColumn with coordinate columns", () => {
+  const lonLat = [
+    describeRow("lon", "DOUBLE"),
+    describeRow("lat", "DOUBLE"),
+    describeRow("name", "VARCHAR"),
+  ];
+
+  it("is off unless the caller opts in", () => {
+    assert.equal(detectGeometryColumn(lonLat), null);
+  });
+
+  it("synthesizes points from a lon/lat pair", () => {
+    assert.deepEqual(detectGeometryColumn(lonLat, { allowCoordinateColumns: true }), {
+      column: SYNTHESIZED_GEOMETRY_COLUMN,
+      isWkb: false,
+      coordinateColumns: { x: "lon", y: "lat" },
+    });
+  });
+
+  it("accepts every recognised spelling, case-insensitively", () => {
+    for (const [x, y] of [
+      ["longitude", "latitude"],
+      ["LONG", "LAT"],
+      ["lng", "Lat"],
+      ["x", "y"],
+    ]) {
+      assert.deepEqual(
+        detectGeometryColumn([describeRow(x, "DOUBLE"), describeRow(y, "FLOAT")], {
+          allowCoordinateColumns: true,
+        })?.coordinateColumns,
+        { x, y },
+        `${x}/${y}`,
+      );
+    }
+  });
+
+  it("is the last resort, after every geometry column", () => {
+    assert.deepEqual(
+      detectGeometryColumn([...lonLat, describeRow("geom", "BLOB")], {
+        allowCoordinateColumns: true,
+      }),
+      { column: "geom", isWkb: true },
+    );
+  });
+
+  it("refuses to synthesize beside an unrecognised binary column", () => {
+    // A WKB blob under a name this module does not know is still geometry, so a
+    // numeric `x`/`y` pair beside it is an attribute pair, not a point source:
+    // synthesizing here would draw a layer of bogus points over the real data.
+    assert.equal(
+      detectGeometryColumn(
+        [
+          describeRow("shape_bytes", "BLOB"),
+          describeRow("x", "DOUBLE"),
+          describeRow("y", "DOUBLE"),
+        ],
+        { allowCoordinateColumns: true },
+      ),
+      null,
+    );
+  });
+
+  it("requires both halves, as different float columns", () => {
+    const detect = (rows: ReturnType<typeof describeRow>[]) =>
+      detectGeometryColumn(rows, { allowCoordinateColumns: true });
+    // A latitude with no longitude is not a point.
+    assert.equal(detect([describeRow("lat", "DOUBLE")]), null);
+    // An integer or string "lat" is an identifier or a formatted value.
+    assert.equal(detect([describeRow("lon", "BIGINT"), describeRow("lat", "BIGINT")]), null);
+    assert.equal(detect([describeRow("lon", "VARCHAR"), describeRow("lat", "VARCHAR")]), null);
+  });
+});
+
 describe("geometryExpr", () => {
   it("references a native geometry column directly", () => {
     assert.equal(geometryExpr({ column: "geom", isWkb: false }), '"geom"');
@@ -134,6 +270,17 @@ describe("geometryExpr", () => {
     assert.equal(
       geometryExpr({ column: "geometry_wkb", isWkb: true }),
       'ST_GeomFromWKB("geometry_wkb")',
+    );
+  });
+
+  it("builds a point from a coordinate column pair", () => {
+    assert.equal(
+      geometryExpr({
+        column: SYNTHESIZED_GEOMETRY_COLUMN,
+        isWkb: false,
+        coordinateColumns: { x: "lon", y: "lat" },
+      }),
+      'ST_Point("lon", "lat")',
     );
   });
 

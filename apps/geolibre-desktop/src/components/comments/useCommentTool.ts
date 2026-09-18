@@ -2,14 +2,20 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import { useAppStore, type CommentAnchor, type ProjectComment } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { v4 as uuidv4 } from "uuid";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
-import type maplibreGl from "maplibre-gl";
+import type * as maplibreGl from "maplibre-gl";
 
 interface UseCommentToolOptions {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   collaboration?: CollaborationApi;
+  /**
+   * Bumped whenever a canvas publishes an engine, and on an engine hand-off.
+   * The ref has stable identity, so this is what re-runs the click-listener
+   * effect when the map underneath changes (#2268 review).
+   */
+  mapReadyGeneration: number;
 }
 
 export interface PendingCommentState {
@@ -17,7 +23,11 @@ export interface PendingCommentState {
   point: { x: number; y: number };
 }
 
-export function useCommentTool({ mapControllerRef, collaboration }: UseCommentToolOptions) {
+export function useCommentTool({
+  mapControllerRef,
+  collaboration,
+  mapReadyGeneration,
+}: UseCommentToolOptions) {
   const { t } = useTranslation();
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
@@ -25,10 +35,26 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   const addComment = useAppStore((s) => s.addComment);
   const collab = useAppStore((s) => s.collaboration);
 
+  /**
+   * Whether the current engine can host the tool at all. Placing a comment needs
+   * a map click and feature picking, both MapLibre-only today, so an engine
+   * without a native map must not let the tool arm (#2268 review).
+   */
+  const canPlaceComments = useCallback(
+    // `=== true`, not `!== false`: a null ref (no engine published yet) must not
+    // arm the tool either. The effect below only attaches its click listener
+    // when `isActive` flips, and mutating the ref does not re-run it — so a tool
+    // armed before the map was ready would stay armed and dead until the user
+    // toggled it off and on again (#2268 review).
+    () => mapControllerRef.current?.capabilities.nativeMapInstance === true,
+    [mapControllerRef],
+  );
+
   const activateTool = useCallback(() => {
+    if (!canPlaceComments()) return;
     setIsActive(true);
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const deactivateTool = useCallback(() => {
     setIsActive(false);
@@ -36,9 +62,9 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   const toggleTool = useCallback(() => {
-    setIsActive((prev) => !prev);
+    setIsActive((prev) => (prev ? false : canPlaceComments()));
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const submitComment = useCallback(
     (body: string, authorName?: string) => {
@@ -98,8 +124,25 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   useEffect(() => {
+    // Placing a comment needs a map click plus feature picking, so it is
+    // MapLibre-only for now. The guard used to be implicit — the ref was null on
+    // the globe — but it now holds a `CesiumEngine` whose `getMap()` is null, so
+    // without saying so the tool could read as armed while no click ever lands
+    // (#2268 review). `activateTool`/`toggleTool` refuse to arm without it.
     const map = mapControllerRef.current?.getMap();
-    if (!map || !isActive) return;
+    if (!isActive) return;
+    if (!map) {
+      // Armed with no map to click: disarm rather than leave the tool looking
+      // active. Unconditional, including when the ref is momentarily null — the
+      // hand-off bumps the generation before the incoming engine publishes, and
+      // waiting for a non-null ref left the tool stuck armed if that engine
+      // never arrived (a Cesium or WebGL failure means no second bump) (#2268
+      // review). There is no initial-mount case to protect: `canPlaceComments`
+      // requires `nativeMapInstance === true`, so `isActive` cannot be true
+      // before an engine has published.
+      setIsActive(false);
+      return;
+    }
 
     map.getCanvas().style.cursor = "crosshair";
 
@@ -158,7 +201,11 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
       map.getCanvas().style.cursor = "";
       map.off("click", handleMapClick);
     };
-  }, [isActive, mapControllerRef]);
+    // `mapReadyGeneration` is what makes this re-run on an engine hand-off: the
+    // ref has stable identity, so without it a tool armed on the 2D map would
+    // stay armed across a switch and never attach to the replacement map
+    // (#2268 review).
+  }, [isActive, mapControllerRef, mapReadyGeneration]);
 
   return {
     isActive,

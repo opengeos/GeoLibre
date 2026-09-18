@@ -7,6 +7,7 @@ import {
   getNetcdfProfileSamples,
   isNetcdfProfilePoppedOut,
   MAX_PROFILE_SAMPLES,
+  removeNetcdfProfileSample,
   setNetcdfProfilePoppedOut,
   setNetcdfProfileSampleProfile,
   subscribeNetcdfProfile,
@@ -160,6 +161,53 @@ describe("netcdf profile store", () => {
     addNetcdfProfileSample(sample("a", 2));
     assert.equal(calls, 2);
     setNetcdfProfilePoppedOut(false);
+  });
+
+  it("gives the number back when the newest sample is dropped", () => {
+    // The COG path adds a marker on click and removes it if the read comes back
+    // with nothing to chart. Without the rollback the next click is labelled
+    // "3" beside a "1", and the series color, keyed off the number, skips too.
+    addNetcdfProfileSample(sample("a", 1));
+    const pending = addNetcdfProfileSample(sample("a", 2));
+    removeNetcdfProfileSample(pending);
+    addNetcdfProfileSample(sample("a", 3));
+    assert.deepEqual(
+      getNetcdfProfileSamples().map((item) => item.order),
+      [1, 2],
+    );
+  });
+
+  it("keeps the numbers of the samples it did not drop", () => {
+    // Only the newest gives its number back: `order` is assigned once, so a
+    // read that resolves after a later click leaves a gap rather than
+    // renumbering points the user is already looking at.
+    const first = addNetcdfProfileSample(sample("a", 1));
+    addNetcdfProfileSample(sample("a", 2));
+    removeNetcdfProfileSample(first);
+    assert.deepEqual(
+      getNetcdfProfileSamples().map((item) => item.order),
+      [2],
+    );
+  });
+
+  it("restarts numbering when the last sample is dropped", () => {
+    const only = addNetcdfProfileSample(sample("a", 1));
+    setNetcdfProfilePoppedOut(true);
+    removeNetcdfProfileSample(only);
+    addNetcdfProfileSample(sample("a", 2));
+    assert.equal(getNetcdfProfileSamples()[0].order, 1);
+    // Emptying the list docks the chart, as a full clear does — an empty window
+    // stranded over the map is the thing being avoided.
+    assert.equal(isNetcdfProfilePoppedOut(), false);
+  });
+
+  it("does not notify when removing an id that is not in the list", () => {
+    addNetcdfProfileSample(sample("a", 1));
+    let calls = 0;
+    const unsubscribe = subscribeNetcdfProfile(() => calls++);
+    removeNetcdfProfileSample(9999);
+    assert.equal(calls, 0);
+    unsubscribe();
   });
 
   it("does not notify when clearing an already-empty list", () => {

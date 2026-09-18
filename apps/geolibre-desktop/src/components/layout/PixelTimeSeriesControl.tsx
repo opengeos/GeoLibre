@@ -13,8 +13,8 @@ import { Button, Input, Select } from "@geolibre/ui";
 import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import * as maplibregl from "maplibre-gl";
+import type { MapEngine } from "@geolibre/map";
 import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";
 import { usePluginRegistry } from "../../hooks/usePlugins";
@@ -51,7 +51,7 @@ const SERIES_COLORS = [
 const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /**

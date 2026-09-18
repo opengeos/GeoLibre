@@ -12,7 +12,7 @@ import {
   validateAuthor,
   validateComment,
   validateReply,
-} from "../workers/collab/src/comment-validate";
+} from "../packages/collab-core/src/index.ts";
 
 // -- constants ----------------------------------------------------------------
 
@@ -446,6 +446,6 @@ describe("validateComment", () => {
       __proto__: { evil: true },
     });
     assert.ok(result);
-    assert.equal((result as Record<string, unknown>).extraField, undefined);
+    assert.equal((result as unknown as Record<string, unknown>).extraField, undefined);
   });
 });

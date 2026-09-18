@@ -2,13 +2,19 @@ import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
   coerceAttributeFormValue,
+  currentEditorIdentity,
+  editorTrackingFieldNames,
+  ensureEditorTrackingFields,
   isDuckDBQueryLayer,
+  stampFeaturePropertiesEditorTracking,
   useAppStore,
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
+  resolveLayerCapabilities,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
+  type EditorTrackingStampOptions,
 } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
@@ -17,7 +23,7 @@ import {
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
 import {
   Button,
@@ -106,7 +112,9 @@ import {
   type CalcOutputType,
 } from "../../lib/attribute-expression";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
+import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
+import { registerPendingAttributeDrafts } from "../../lib/attribute-draft-commit";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
   AREA_UNITS,
@@ -123,6 +131,7 @@ import {
   formatAttributeValue,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -237,6 +246,7 @@ function applyDraftsToFeatures(
   features: Feature[],
   drafts: AttributeDrafts,
   formFields?: Map<string, AttributeFormFieldConfig>,
+  tracking?: EditorTrackingStampOptions,
 ): Feature[] {
   // Derived from the whole collection, so an edit to an empty cell adopts the
   // column's type rather than the cell's (absent) one.
@@ -246,7 +256,7 @@ function applyDraftsToFeatures(
     const rowDrafts = drafts[featureId];
     if (!rowDrafts) return feature;
 
-    const properties = { ...(feature.properties ?? {}) };
+    let properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
     for (const [column, draft] of Object.entries(rowDrafts)) {
       const previousValue = feature.properties?.[column];
       // Skip drafts that are invalid JSON for an object-typed cell so we never
@@ -259,6 +269,13 @@ function applyDraftsToFeatures(
       properties[column] = config
         ? coerceAttributeFormValue(config, draft)
         : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
+    }
+
+    // Only the rows that carried a draft reach here, so this stamps exactly the
+    // features the user edited. Passed only on save — the export preview runs
+    // the same transform and must not record an edit that never happened.
+    if (tracking) {
+      properties = stampFeaturePropertiesEditorTracking(properties, "update", tracking);
     }
 
     return { ...feature, properties };
@@ -354,7 +371,7 @@ function applyDraftsToDuckDBRows(
 }
 
 interface AttributeTableProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
@@ -459,16 +476,41 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     () => new Set([...joinDerivedColumns, ...virtualFieldColumns]),
     [joinDerivedColumns, virtualFieldColumns],
   );
-  const features = layer?.geojson?.features ?? [];
+  // Editor tracking columns are maintained by the app on every create/update,
+  // so a hand-typed value would be overwritten by the next edit and a rename
+  // would detach the column from the configuration that names it. They are
+  // shown, but not edited here — the Editor Tracking section owns them.
+  const trackingColumns = useMemo(
+    () => new Set(editorTrackingFieldNames(layer?.editorTracking) ?? []),
+    [layer?.editorTracking],
+  );
+  // Every column the user may not type into or restructure from this table.
+  const readOnlyColumns = useMemo(
+    () => new Set([...derivedColumns, ...trackingColumns]),
+    [derivedColumns, trackingColumns],
+  );
+  const features = useMemo(() => layer?.geojson?.features ?? [], [layer?.geojson]);
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
-  const attributeRows: AttributeTableRow[] = isDuckDBLayer
-    ? duckDBRowsToAttributeRows(duckdbRows)
-    : features.map((feature, index) => ({
+  // Memoized so the analysis adapters below (and everything else keyed on these
+  // rows) only rebuild when the layer's features actually change, not on every
+  // render caused by scrolling, filtering or selection. The DuckDB branch stays
+  // unmemoized because `getDuckDBLayerRows` reads a mutable store and returns a
+  // fresh array each call; delimited-text layers — the ones that pay for the
+  // numeric-string adapter below — are geojson-backed and take this path.
+  const geojsonRows: AttributeTableRow[] = useMemo(
+    () =>
+      features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
         properties: (feature.properties ?? {}) as Record<string, unknown>,
-      }));
-  const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
+      })),
+    [features],
+  );
+  const attributeRows: AttributeTableRow[] = isDuckDBLayer
+    ? duckDBRowsToAttributeRows(duckdbRows)
+    : geojsonRows;
+  const layerCaps = resolveLayerCapabilities(layer);
+  const hasAttributeSource = Boolean((layer?.geojson || isDuckDBLayer) && layerCaps.query);
   // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
   // control owns, and their `layer.geojson` is dropped when a project is saved.
   // Edits made here would neither redraw on the map nor survive a save, so the
@@ -612,14 +654,35 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // O(1) lookups for the multi-selection while rendering thousands of rows.
   const selectedIdSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds]);
 
-  const filterLower = attributeFilter.toLowerCase();
-  const filtered = attributeRows.filter(({ properties, featureId }) => {
-    // "Show Selected Features" restricts the table to the current selection.
-    if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
-    if (!filterLower) return true;
-    const props = JSON.stringify(properties).toLowerCase();
-    return featureId.includes(filterLower) || props.includes(filterLower);
-  });
+  const filtered = useMemo(() => {
+    const filterLower = attributeFilter.toLowerCase();
+    return attributeRows.filter(({ properties, featureId }) => {
+      // "Show Selected Features" restricts the table to the current selection.
+      if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
+      if (!filterLower) return true;
+      const props = JSON.stringify(properties).toLowerCase();
+      return featureId.includes(filterLower) || props.includes(filterLower);
+    });
+  }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
+  // String-oriented sources can encode measurements as text. Adapt only the
+  // rows sent to analysis dialogs, leaving the table and source data intact.
+  const adaptAnalysisRows = chartOpen || statsOpen || explorerOpen;
+  const analysisRows = useMemo(
+    () => (adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows),
+    [adaptAnalysisRows, attributeRows],
+  );
+  // Both subsets are picked out of the already-adapted full-layer rows so a field
+  // keeps the same numeric/text inference whichever statistics scope is showing.
+  const analysisFilteredRows = useMemo(() => {
+    if (!adaptAnalysisRows) return filtered;
+    if (filtered.length === attributeRows.length) return analysisRows;
+    const filteredIds = new Set(filtered.map(({ featureId }) => featureId));
+    return pickAnalysisRows(analysisRows, attributeRows, filteredIds);
+  }, [adaptAnalysisRows, analysisRows, attributeRows, filtered]);
+  const analysisSelectedRows = useMemo(() => {
+    if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
+    return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
+  }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
@@ -714,7 +777,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
     }
   }
-  const discoveredColumns = Array.from(propKeys);
+  // Tracking columns are listed even before any feature carries one, so a layer
+  // that just turned tracking on shows what it is about to maintain (and the
+  // Field Calculator's "new field" name check sees them as taken).
+  const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
@@ -724,7 +790,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Column management mutates layer.geojson/style/metadata, so it is offered
   // only for in-store, editable GeoJSON layers — not DuckDB query results or
   // Add Vector Layer layers (whose geojson is not persisted).
-  const canManageColumns = Boolean(layer?.geojson) && !isDuckDBLayer && !isReadOnlyVectorLayer;
+  const canManageColumns =
+    Boolean(layer?.geojson) && !isDuckDBLayer && !isReadOnlyVectorLayer && layerCaps.update;
 
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
@@ -892,27 +959,55 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
   };
 
-  const saveDrafts = () => {
-    if (!layer || !hasEdits || hasInvalidDrafts || hasFormErrors) return;
+  /** Apply the drafts to the layer; returns whether they were committed. */
+  const saveDrafts = (): boolean => {
+    // Re-read the capability here rather than trusting the disabled state:
+    // edit mode (and the dialogs below) can be open across a project reload or
+    // a collaborator's change that revokes the capability, and the commit would
+    // otherwise still run.
+    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
       setIsEditing(false);
       setDrafts({});
-      return;
+      return true;
     }
 
-    if (!layer.geojson) return;
+    if (!layer.geojson) return false;
 
     const geojson = {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
+      features: applyDraftsToFeatures(
+        layer.geojson.features,
+        drafts,
+        formFields,
+        editorTrackingFieldNames(layer.editorTracking)
+          ? {
+              config: layer.editorTracking,
+              userIdentity: currentEditorIdentity(),
+              // One timestamp for the save, so rows edited together agree.
+              timestamp: new Date().toISOString(),
+            }
+          : undefined,
+      ),
     };
 
     updateLayer(layer.id, { geojson });
     setIsEditing(false);
     setDrafts({});
+    return true;
   };
+
+  // Offer unsaved drafts to the Layers panel's write-back action, which reads
+  // the layer from the store: without this, Save edits to source/ArcGIS/PostGIS
+  // silently writes the pre-edit values the table no longer shows (#2438, #2439).
+  // Re-registered every render so the committer always sees the latest drafts.
+  const pendingDraftsLayerId = isEditing && hasEdits ? (layer?.id ?? null) : null;
+  useEffect(() => {
+    if (!pendingDraftsLayerId) return;
+    return registerPendingAttributeDrafts(pendingDraftsLayerId, saveDrafts);
+  });
 
   const geojsonWithDrafts = () => {
     if (!layer?.geojson) return null;
@@ -923,7 +1018,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     };
   };
 
-  const exportLayer = async (format: VectorExportFormat) => {
+  const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
 
     try {
@@ -936,7 +1031,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
+      const polylinePrecision =
+        precision ??
+        (typeof layer.metadata?.polylinePrecision === "number"
+          ? layer.metadata.polylinePrecision
+          : 5);
+      const savedPath = await exportVectorLayer(
+        exportGeojson,
+        format,
+        baseName,
+        layer.name,
+        polylinePrecision,
+      );
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -966,7 +1072,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const commitColumnRename = () => {
-    if (suppressColumnBlurRef.current || !editingColumn || !layer) {
+    if (suppressColumnBlurRef.current || !editingColumn || !layer || !canManageColumns) {
       suppressColumnBlurRef.current = false;
       return;
     }
@@ -1025,7 +1131,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const confirmDeleteColumn = () => {
-    if (!layer || !columnPendingDelete) return;
+    if (!layer || !canManageColumns || !layerCaps.delete || !columnPendingDelete) return;
     const patch = deleteColumn(layer, columnPendingDelete);
     if (patch) updateLayer(layer.id, patch);
     // Drop a sort that pointed at the deleted column, which would otherwise
@@ -1067,7 +1173,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const confirmAddColumn = () => {
-    if (!layer || !canSubmitNewColumn) return;
+    if (!layer || !canManageColumns || !canSubmitNewColumn) return;
     const patch = addColumn(
       layer,
       discoveredColumns,
@@ -1082,7 +1188,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // The Field Calculator must not target a derived column (joined or virtual)
   // either: the calculated value would be overwritten by the re-derivation in
   // the same store update.
-  const calculatorTargetColumns = discoveredColumns.filter((col) => !derivedColumns.has(col));
+  const calculatorTargetColumns = discoveredColumns.filter((col) => !readOnlyColumns.has(col));
 
   const openCalculator = () => {
     const hasColumns = calculatorTargetColumns.length > 0;
@@ -1242,7 +1348,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     calcPreview.kind !== "syntax";
 
   const confirmCalculate = () => {
-    if (!layer || !calcCanSubmit) return;
+    if (!layer || !canManageColumns || !calcCanSubmit) return;
     const targetName = calcMode === "create" ? calcNewNameTrimmed : calcTargetField;
     const scope =
       calcSelectedOnly && selectedFeatureIds.length > 0 ? new Set(selectedFeatureIds) : undefined;
@@ -1376,7 +1482,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={derivedColumns.has(col)}
+              disabled={readOnlyColumns.has(col)}
               onSelect={() => beginColumnRename(col)}
             >
               <Pencil className="me-2 h-3.5 w-3.5" />
@@ -1409,7 +1515,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              disabled={derivedColumns.has(col)}
+              disabled={readOnlyColumns.has(col) || !layerCaps.delete}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1439,7 +1545,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     <section
       ref={tableSectionRef}
       aria-label={t("attributeTable.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      data-collapsed={collapsed || undefined}
+      className="geolibre-attribute-table-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: collapsed ? undefined : tableHeight }}
     >
       {!collapsed ? (
@@ -1447,7 +1554,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           role="separator"
           aria-orientation="horizontal"
           aria-label={t("attributeTable.resize")}
-          className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+          className="geolibre-attribute-table-resize-handle absolute -top-1 start-0 end-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
           onMouseDown={startTableResize}
         />
       ) : null}
@@ -1479,17 +1586,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           size="sm"
           className="ms-auto h-7 px-2"
           title={
-            isGeometryEditing
-              ? t("attributeTable.editTitleFinishGeometry")
-              : isReadOnlyVectorLayer
-                ? t("attributeTable.editTitleReadOnly")
-                : isEditing
-                  ? hasEdits
-                    ? t("attributeTable.editTitleUseSaveCancel")
-                    : t("attributeTable.exitEditMode")
-                  : isDuckDBLayer
-                    ? t("attributeTable.editTitleDuckdb")
-                    : t("attributeTable.editValues")
+            !layerCaps.update
+              ? t("attributeTable.editTitleCapabilityDisabled")
+              : isGeometryEditing
+                ? t("attributeTable.editTitleFinishGeometry")
+                : isReadOnlyVectorLayer
+                  ? t("attributeTable.editTitleReadOnly")
+                  : isEditing
+                    ? hasEdits
+                      ? t("attributeTable.editTitleUseSaveCancel")
+                      : t("attributeTable.exitEditMode")
+                    : isDuckDBLayer
+                      ? t("attributeTable.editTitleDuckdb")
+                      : t("attributeTable.editValues")
           }
           aria-label={
             isEditing && !hasEdits
@@ -1498,6 +1607,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           }
           disabled={
             !hasAttributeSource ||
+            !layerCaps.update ||
             isReadOnlyVectorLayer ||
             isGeometryEditing ||
             (isEditing && hasEdits)
@@ -1521,7 +1631,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
-          disabled={!isEditing || !hasEdits || hasInvalidDrafts || hasFormErrors}
+          disabled={
+            !isEditing || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors
+          }
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
@@ -1670,12 +1782,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               size="sm"
               className="h-7 px-2"
               title={
-                layer?.geojson
-                  ? t("attributeTable.exportSelectedLayer")
-                  : t("attributeTable.exportTitleDisabled")
+                !layerCaps.export
+                  ? t("attributeTable.exportTitleCapabilityDisabled")
+                  : layer?.geojson
+                    ? t("attributeTable.exportSelectedLayer")
+                    : t("attributeTable.exportTitleDisabled")
               }
               aria-label={t("attributeTable.exportSelectedLayer")}
-              disabled={!layer?.geojson}
+              disabled={!layer?.geojson || !layerCaps.export}
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{t("attributeTable.buttons.export")}</span>
@@ -1696,9 +1810,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
-              CSV (attributes only)
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>CSV</DropdownMenuItem>
+            {layer && layerSupportsPolylineExport(layer) && (
+              <>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
+                  {t("layers.exportPolyline", { precision: 5 })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
+                  {t("layers.exportPolyline", { precision: 6 })}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {isEditing ? (
@@ -1861,7 +1983,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
-                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const isEditableCell = isEditing && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
@@ -1884,7 +2006,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                 ? t("attributeTable.virtualColumnTitle")
                                 : joinDerivedColumns.has(col)
                                   ? t("attributeTable.joinedColumnTitle")
-                                  : undefined
+                                  : trackingColumns.has(col)
+                                    ? t("attributeTable.trackingColumnTitle")
+                                    : undefined
                             }
                           >
                             {isEditableCell ? (
@@ -2019,7 +2143,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <Button variant="outline" onClick={() => setColumnPendingDelete(null)}>
               {t("common.cancel")}
             </Button>
-            <Button variant="destructive" onClick={confirmDeleteColumn}>
+            <Button
+              variant="destructive"
+              disabled={!canManageColumns || !layerCaps.delete}
+              onClick={confirmDeleteColumn}
+            >
               {t("attributeTable.deleteField")}
             </Button>
           </div>
@@ -2110,7 +2238,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <Button variant="outline" onClick={() => setAddingColumn(false)}>
               {t("common.cancel")}
             </Button>
-            <Button disabled={!canSubmitNewColumn} onClick={confirmAddColumn}>
+            <Button disabled={!canManageColumns || !canSubmitNewColumn} onClick={confirmAddColumn}>
               {t("attributeTable.addField")}
             </Button>
           </div>
@@ -2311,7 +2439,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <Button variant="outline" onClick={() => setCalcOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button disabled={!calcCanSubmit} onClick={confirmCalculate}>
+            <Button disabled={!canManageColumns || !calcCanSubmit} onClick={confirmCalculate}>
               {t("attributeTable.buttons.calculate")}
             </Button>
           </div>
@@ -2320,23 +2448,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <AttributeChartDialog
         open={chartOpen}
         onOpenChange={setChartOpen}
-        rows={attributeRows}
+        rows={analysisRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <AttributeStatsDialog
         open={statsOpen}
         onOpenChange={setStatsOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
+        selectedRows={analysisSelectedRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <ColumnExplorerDialog
         open={explorerOpen}
         onOpenChange={setExplorerOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />

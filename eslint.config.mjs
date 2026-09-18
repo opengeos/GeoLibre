@@ -23,6 +23,7 @@ export default [
       "python/**",
       "site/**",
       "**/static/**",
+      "**/public/plugins/**",
       "**/*.min.js",
       "**/*.d.ts",
     ],

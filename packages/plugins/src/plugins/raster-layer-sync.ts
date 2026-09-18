@@ -1,5 +1,12 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
+import {
+  applyGroupEffects,
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -82,6 +89,42 @@ let syncingLayersToStore = false;
 // control emits raster* events synchronously from those calls, and syncing
 // mid-mutation would observe a partially updated layer list.
 let storeSyncSuspended = 0;
+// The last visibility/opacity this module knows each raster to hold in the
+// control, by layer id -- whether it got there by being pushed (a group fold,
+// which never lives on the child layer and so reaches a deck.gl raster only
+// through the control) or by a control-side edit this module accepted. The
+// control reports its state back on every later event, and comparing against
+// this is what lets syncRasterLayersToStoreWithOptions tell that echo from a
+// real edit. It must track *accepted* values too, not just pushed ones: with
+// only the pushed value recorded, a user toggling a control's checkbox away
+// and back would land on the pushed value again and have that second edit
+// misread as an echo and dropped.
+const controlRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+const transientControlVisibility = new Set<string>();
+
+/** Mark visibility changes made only for a swipe comparison, not by the user. */
+export function setTransientRasterVisibility(id: string, transient: boolean): void {
+  if (transient) transientControlVisibility.add(id);
+  else transientControlVisibility.delete(id);
+}
+
+/**
+ * Record what the control now holds for a raster, so the next control->store
+ * mirror can recognize it as an echo rather than a user edit. Called wherever
+ * this module forces a group-folded value on the control -- its own store
+ * subscriber and the project-restore replay in maplibre-raster -- and again
+ * whenever the mirror accepts a control-side edit.
+ *
+ * @param id - The raster/store layer id.
+ * @param patch - The fields the control now holds.
+ */
+export function rememberControlRasterRenderState(
+  id: string,
+  patch: { visible?: boolean; opacity?: number },
+): void {
+  const existing = controlRenderState.get(id);
+  controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
+}
 
 /**
  * Detects a layer panel entry owned by the maplibre-gl-raster control.
@@ -229,6 +272,7 @@ export const GEOLIBRE_OWNED_METADATA_KEYS = [
   "rasterSymbology",
   "rasterAttributeTable",
   "localBytesUrl",
+  STAC_ASSET_ACCESS_METADATA_KEY,
 ] as const;
 
 export function syncRasterLayersToStoreWithOptions(
@@ -240,6 +284,17 @@ export function syncRasterLayersToStoreWithOptions(
   const infos = control.getRasters();
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = rasterPanelCollapsedFromControl(control);
+
+  // A raster the control no longer holds can never echo again, and its id
+  // could otherwise mis-suppress a future raster added under the same id.
+  for (const id of controlRenderState.keys()) {
+    if (!infoIds.has(id)) controlRenderState.delete(id);
+  }
+  // Same for a swipe's transient hide: a stale id would make a later raster
+  // added under it ignore genuine control-side visibility changes.
+  for (const id of transientControlVisibility) {
+    if (!infoIds.has(id)) transientControlVisibility.delete(id);
+  }
 
   syncingLayersToStore = true;
   try {
@@ -265,28 +320,63 @@ export function syncRasterLayersToStoreWithOptions(
       // wipe them.
       const preserved: Record<string, unknown> = {};
       for (const key of GEOLIBRE_OWNED_METADATA_KEYS) {
+        if (key === STAC_ASSET_ACCESS_METADATA_KEY) {
+          const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+          const access = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+          if (access) preserved[key] = access;
+          continue;
+        }
         if (existing.metadata[key] !== undefined) {
           preserved[key] = existing.metadata[key];
         }
       }
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
+      const stacAssetAccess = preserved[STAC_ASSET_ACCESS_METADATA_KEY] as
+        | ReturnType<typeof stacAssetAccessFromLayer>
+        | undefined;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
+
+      // A control still reporting the value this module last knows it to hold
+      // is echoing that value, not recording a user edit. Mirroring the echo
+      // would burn a hidden group's `false` into the layer's own `visible`,
+      // leaving it hidden after the group is shown again. Anything else is a
+      // genuine control-side change: take it, and remember it so the control's
+      // next report is compared against the value it actually holds now.
+      const known = controlRenderState.get(layer.id);
+      const visibleIsEcho = known?.visible !== undefined && layer.visible === known.visible;
+      const opacityIsEcho =
+        known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
+      const visible =
+        transientControlVisibility.has(layer.id) || visibleIsEcho
+          ? existing.visible
+          : layer.visible;
+      const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
+      if (!visibleIsEcho || !opacityIsEcho) {
+        rememberControlRasterRenderState(layer.id, {
+          ...(visibleIsEcho ? {} : { visible: layer.visible }),
+          ...(opacityIsEcho ? {} : { opacity: layer.opacity }),
+        });
+      }
 
       if (
-        existing.visible !== layer.visible ||
-        existing.opacity !== layer.opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
+        existing.visible !== visible ||
+        existing.opacity !== opacity ||
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
         !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
           // Replace metadata wholesale so stale keys (error, bounds) cannot
           // survive a raster being swapped out under the same id.
           metadata,
-          opacity: layer.opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
-          visible: layer.visible,
+          opacity,
+          source,
+          sourcePath,
+          visible,
         });
       }
     }
@@ -314,7 +404,7 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
       !activeControl ||
       syncingLayersToStore ||
       isRasterStoreSyncSuspended() ||
-      state.layers === previous.layers
+      (state.layers === previous.layers && state.layerGroups === previous.layerGroups)
     ) {
       return;
     }
@@ -323,22 +413,33 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
     // when the previous snapshot held no control-managed rasters at all.
     if (!previous.layers.some(isRasterControlStoreLayer)) return;
 
-    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    // Diff the *group-folded* visibility and opacity, not the layers' own
+    // fields: hiding or fading a parent group never touches a child layer, so
+    // watching `layer.visible` alone leaves a grouped raster on the map
+    // (GeoLibre#1717). A deck.gl-rendered raster has no MapLibre style layer
+    // for layer-sync to toggle, so this control push is its only channel.
+    const currentById = new Map(
+      applyGroupEffects(state.layers, state.layerGroups).map((layer) => [layer.id, layer]),
+    );
+    const previousLayers = applyGroupEffects(previous.layers, previous.layerGroups);
     runWithRasterStoreSyncSuspended(() => {
-      for (const layer of previous.layers) {
+      for (const layer of previousLayers) {
         if (!isRasterControlStoreLayer(layer)) continue;
 
         const current = currentById.get(layer.id);
         if (!current) {
           activeControl.removeRaster(layer.id);
+          controlRenderState.delete(layer.id);
           continue;
         }
 
         if (current.visible !== layer.visible) {
           activeControl.setVisible(layer.id, current.visible);
+          rememberControlRasterRenderState(layer.id, { visible: current.visible });
         }
         if (current.opacity !== layer.opacity) {
           activeControl.setRasterState(layer.id, { opacity: current.opacity });
+          rememberControlRasterRenderState(layer.id, { opacity: current.opacity });
         }
         const patch = rasterStatePatch(layer, current);
         if (patch) activeControl.setRasterState(layer.id, patch);
@@ -435,6 +536,9 @@ export function unwireRasterStoreSync(): void {
   storeUnsubscribe?.();
   storeUnsubscribe = null;
   syncedControl = null;
+  // The successor control has been told nothing, so no echo of this one's
+  // pushes can arrive; a stale record would only mis-suppress its first sync.
+  controlRenderState.clear();
 }
 
 /**
@@ -614,6 +718,14 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Opacity round-trips through the control as a float that a group fold has
+// multiplied, so compare the echo with a tolerance rather than by identity —
+// a last-bit difference would read as a user edit and overwrite the layer's
+// own opacity with the folded one.
+function numbersEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-9;
 }
 
 function serializableRasterState(state: RasterLayerState): Record<string, unknown> {

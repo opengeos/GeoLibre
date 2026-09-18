@@ -24,6 +24,11 @@ import {
   parseDelimitedTextRows,
 } from "../../../../lib/delimited-text";
 import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
+import {
+  type ExcelWorksheet,
+  isExcelFile,
+  readExcelWorksheets,
+} from "../../../../lib/excel-workbook";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
   COMMON_CRS_PRESETS,
@@ -97,7 +102,9 @@ export function DelimitedTextSource() {
   const [selectedDelimitedText, setSelectedDelimitedText] = useState<{
     path: string;
     text: string;
+    worksheets?: ExcelWorksheet[];
   } | null>(null);
+  const [selectedWorksheet, setSelectedWorksheet] = useState("");
   // Whether points are built from coordinate columns (default, unchanged
   // behaviour) or by geocoding an address composed from one or more columns.
   const [delimitedTextImportMode, setDelimitedTextImportMode] =
@@ -135,6 +142,7 @@ export function DelimitedTextSource() {
   const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
+    setSelectedWorksheet("");
     resetDelimitedTextColumns();
     resetDelimitedTextCrs();
   };
@@ -159,9 +167,12 @@ export function DelimitedTextSource() {
       if (!selectedDelimitedText) {
         throw new Error(t("addData.delimitedText.errorChooseFile"));
       }
+      const worksheet = selectedDelimitedText.worksheets?.find(
+        (item) => item.name === selectedWorksheet,
+      );
       return {
         sourcePath: selectedDelimitedText.path,
-        text: selectedDelimitedText.text,
+        text: worksheet?.toCsv() ?? selectedDelimitedText.text,
       };
     }
 
@@ -184,18 +195,31 @@ export function DelimitedTextSource() {
       const result = await openLocalDataFileWithFallback({
         filters: [
           {
-            name: "Delimited text",
-            extensions: ["csv", "tsv", "txt", "dat"],
+            name: "Delimited text or Excel",
+            extensions: ["csv", "tsv", "txt", "dat", "xls", "xlsx"],
           },
         ],
-        accept: ".csv,.tsv,.txt,.dat",
+        accept: ".csv,.tsv,.txt,.dat,.xls,.xlsx",
+        binaryExtensions: ["xls", "xlsx"],
         readText: true,
       });
       if (!result) return;
-      if (!result.text) throw new Error(t("addData.delimitedText.errorFileMissing"));
+      const worksheets =
+        isExcelFile(result.path) && result.data
+          ? await readExcelWorksheets(result.data)
+          : undefined;
+      if (worksheets && worksheets.length === 0) {
+        throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
+      }
+      if (!worksheets && !result.text) {
+        throw new Error(t("addData.delimitedText.errorFileMissing"));
+      }
+      if (worksheets) setDelimitedTextDelimiter("comma");
+      setSelectedWorksheet(worksheets?.[0]?.name ?? "");
       setSelectedDelimitedText({
         path: result.path,
-        text: result.text,
+        text: result.text ?? "",
+        worksheets,
       });
       resetDelimitedTextColumns();
       resetDelimitedTextCrs();
@@ -548,16 +572,41 @@ export function DelimitedTextSource() {
         </div>
 
         {delimitedTextMode === "file" ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={handleChooseDelimitedText}>
-              <FileUp className="me-2 h-3.5 w-3.5" />
-              {t("addData.common.chooseFile")}
-            </Button>
-            <span className="min-w-0 truncate text-xs text-muted-foreground">
-              {selectedDelimitedText
-                ? fileNameFromPath(selectedDelimitedText.path)
-                : t("addData.common.noFileSelected")}
-            </span>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={handleChooseDelimitedText}>
+                <FileUp className="me-2 h-3.5 w-3.5" />
+                {t("addData.common.chooseFile")}
+              </Button>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {selectedDelimitedText
+                  ? fileNameFromPath(selectedDelimitedText.path)
+                  : t("addData.common.noFileSelected")}
+              </span>
+            </div>
+            {selectedDelimitedText?.worksheets ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="delimited-text-worksheet">
+                  {t("addData.delimitedText.worksheet")}
+                </Label>
+                <Select
+                  id="delimited-text-worksheet"
+                  value={selectedWorksheet}
+                  onChange={(event) => {
+                    setSelectedWorksheet(event.target.value);
+                    setDelimitedTextDelimiter("comma");
+                    resetDelimitedTextColumns();
+                    resetDelimitedTextCrs();
+                  }}
+                >
+                  {selectedDelimitedText.worksheets.map((worksheet) => (
+                    <option key={worksheet.name} value={worksheet.name}>
+                      {worksheet.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -623,6 +672,7 @@ export function DelimitedTextSource() {
                 setDelimitedTextDelimiter(event.target.value as DelimitedTextDelimiter);
                 resetDelimitedTextColumns();
               }}
+              disabled={Boolean(selectedDelimitedText?.worksheets)}
             >
               <option value="comma">{t("addData.delimitedText.delimiterComma")}</option>
               <option value="tab">{t("addData.delimitedText.delimiterTab")}</option>
@@ -776,6 +826,7 @@ export function DelimitedTextSource() {
           onSelect={(url) => {
             setDelimitedTextMode("url");
             setSelectedDelimitedText(null);
+            setSelectedWorksheet("");
             resetDelimitedTextColumns();
             // The sample is a comma-delimited CSV, so reset the delimiter too;
             // otherwise a previously chosen delimiter would misparse it.

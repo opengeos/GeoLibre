@@ -41,13 +41,20 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Features: features.md
+  - Comparison: comparison.md
   - Demos: demos.md
   - Downloads: downloads.md
-  - Launch GeoLibre Web: /demo/
+  - Sponsor: sponsor.md
+  # Keep this deployment-relative: production serves at /, while PR previews
+  # are nested under /pages-preview/GeoLibre/pr-<number>/.
+  - Launch GeoLibre Web: https://web.geolibre.app
   - User Guide:
       - Interface Overview: user-guide/interface.md
+      - Rendering Engines: user-guide/rendering-engines.md
       - Projects: user-guide/projects.md
       - Adding Data: user-guide/adding-data.md
+      - Supported Data Formats: data-formats.md
+      - Chrome Extension: user-guide/chrome-extension.md
       - Managing Layers: user-guide/layers.md
       - Styling Layers: user-guide/styling.md
       - Attribute Table: user-guide/attribute-table.md
@@ -59,20 +66,32 @@ nav:
       - AI Assistant: user-guide/ai-assistant.md
       - Data Integrations: user-guide/data-integrations.md
       - Plugins & Marketplace: user-guide/plugins.md
+      - Web Services: user-guide/web-services.md
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
       - Troubleshooting: user-guide/troubleshooting.md
   - Tutorials:
       - Overview: tutorials/index.md
+      - Video Tutorials: tutorials/videos.md
       - Your First Map: tutorials/first-map.md
       - Cloud-Native Data: tutorials/cloud-native-data.md
       - Vector Analysis: tutorials/vector-analysis.md
       - Terrain Analysis: tutorials/terrain-analysis.md
       - Spatial SQL: tutorials/spatial-sql.md
       - Sharing & Embedding: tutorials/sharing-embedding.md
+      - Format Reference: tutorials/supported-formats-en.md
+      - Format Reference (中文): tutorials/supported-formats-zh.md
+      - Source Code Deep Dive: tutorials/source-code-deep-dive-en.md
+      - Source Code Deep Dive (中文): tutorials/source-code-deep-dive-zh.md
   - Reference:
       - Architecture: architecture.md
+      - MapLibre Renderer: maplibre-renderer.md
+      - Mapbox Renderer: mapbox-renderer.md
+      - Cesium Renderer: cesium-renderer.md
+      - ArcGIS Renderer: arcgis-renderer.md
+      - Self-Hosting: self-hosting.md
+      - Server API: server-api.md
       - Android: android.md
       - iOS: ios.md
       - Mac App Store: mac-app-store.md
@@ -80,11 +99,16 @@ nav:
       - Plugin API: plugin-api.md
       - Collaboration: collaboration.md
       - UI Profiles: ui-profiles.md
+      - Deployment Capabilities: deployment-capabilities.md
       - Internationalization: i18n.md
       - Python Package: python.md
+      - R Package: r.md
+      - MCP Server: mcp.md
+      - Agent Skill: agent-skill.md
       - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
+      - Maintenance Notes: maintenance.md
       - How to Cite: citation.md
       - Acknowledgements: acknowledgements.md
       - Privacy Policy: privacy.md
@@ -113,7 +137,25 @@ extra_css:
   - stylesheets/extra.css
 
 extra:
+  # Google Analytics for geolibre.app, configured entirely from the environment
+  # so the tracker only loads where a measurement ID is set: the production
+  # Pages deploy. A local `zensical build`, a fork, and a PR preview leave these
+  # unset and ship no tracker, which is also why the ID is not hard-coded here.
+  #
+  # `provider` is a second variable because the theme keys the whole integration
+  # off it: with a provider and a blank property it would still load gtag.js,
+  # pointed at nothing. .github/workflows/pages.yml derives it from
+  # GEOLIBRE_GA_MEASUREMENT_ID, so an operator only ever sets that one value.
+  analytics:
+    provider: !ENV [GEOLIBRE_ANALYTICS_PROVIDER, ""]
+    property: !ENV [GEOLIBRE_GA_MEASUREMENT_ID, ""]
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/opengeos/GeoLibre
       name: GeoLibre on GitHub
+    - icon: fontawesome/solid/heart
+      link: https://github.com/sponsors/giswqs
+      name: Sponsor GeoLibre on GitHub
+    - icon: fontawesome/solid/mug-hot
+      link: https://buymeacoffee.com/giswqs
+      name: Buy the maintainer a coffee

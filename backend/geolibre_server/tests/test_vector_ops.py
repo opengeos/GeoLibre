@@ -68,6 +68,27 @@ POINT_IN_SQUARE = {
         }
     ],
 }
+ANTIMERIDIAN_LAYER = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"name": "fiji_tonga"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [175.0, -18.0],
+                        [-175.0, -18.0],
+                        [-175.0, -16.0],
+                        [175.0, -16.0],
+                        [175.0, -18.0],
+                    ]
+                ],
+            },
+        }
+    ],
+}
 
 
 def _attr_point(name: str, pop, x: float) -> dict:
@@ -120,12 +141,336 @@ def test_buffer_returns_feature_collection_and_messages() -> None:
 
 
 @requires_geopandas
+def test_buffer_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("buffer", ANTIMERIDIAN_LAYER, parameters={"distance": 1})
+
+
+def _polygon_area(geojson: dict) -> float:
+    """Planar area of a one-feature polygon FeatureCollection, in square degrees.
+
+    Degrees are fine here: the assertions only compare the buffer sides against
+    the same unbuffered square, so the units cancel out.
+    """
+    gpd = pytest.importorskip("geopandas")
+    return float(gpd.GeoDataFrame.from_features(geojson["features"]).geometry.area.sum())
+
+
+@requires_geopandas
+def test_buffer_inside_shrinks_the_polygon() -> None:
+    # GeoLibre#2235: the buffer only ever grew a feature; `side` picks the
+    # direction, and `inside` must erode the polygon rather than grow it.
+    outward, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10})
+    inward, messages = run_vector_tool(
+        "buffer", SQUARE, parameters={"distance": 10, "side": "inside"}
+    )
+    assert len(inward["features"]) == 1
+    assert _polygon_area(inward) < _polygon_area(SQUARE) < _polygon_area(outward)
+    assert "(inside)" in messages[0]
+
+
+@requires_geopandas
+def test_buffer_both_keeps_a_band_with_a_hole() -> None:
+    both, _ = run_vector_tool("buffer", SQUARE, parameters={"distance": 10, "side": "both"})
+    assert len(both["features"]) == 1
+    rings = both["features"][0]["geometry"]["coordinates"]
+    # An outer ring plus the hole left where the inward buffer was cut out.
+    assert len(rings) == 2
+    # The band is thinner than either solid it was cut from.
+    assert _polygon_area(both) < _polygon_area(SQUARE)
+    assert both["features"][0]["properties"]["name"] == "a"
+
+
+@requires_geopandas
+def test_buffer_inside_drops_features_it_empties() -> None:
+    # A point has no interior, so the inward buffer empties it. The result must
+    # be an empty layer, not a feature carrying a ring-less polygon.
+    geojson, messages = run_vector_tool(
+        "buffer", POINT_IN_SQUARE, parameters={"distance": 1, "side": "inside"}
+    )
+    assert geojson["features"] == []
+    assert any("Dropped 1 feature(s)" in message for message in messages)
+
+
+@requires_geopandas
+def test_buffer_rejects_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": "sideways"})
+
+
+@requires_geopandas
+def test_buffer_rejects_empty_side() -> None:
+    # An explicitly blank side is rejected rather than silently growing, the way
+    # a blank `units` reaches the unit lookup and is rejected there. Only an
+    # absent `side` defaults to "outside". The client engine matches.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": 1, "side": ""})
+
+
+@requires_geopandas
+def test_buffer_defaults_to_outside_when_side_is_absent() -> None:
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": 1})
+    assert "(outside)" in messages[0]
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_side_before_negative_distance() -> None:
+    # The client engine validates in this same order (units, side, distance
+    # finiteness, distance sign), so a call with several bad parameters at once
+    # gets the same *first* error from both engines.
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": -5, "side": "bogus"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_unit_before_unknown_side() -> None:
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool(
+            "buffer", SQUARE, parameters={"distance": 1, "units": "furlongs", "side": "bogus"}
+        )
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_unit_before_unparseable_distance() -> None:
+    # The distance is parsed only after `units`/`side`, so an unparseable one
+    # cannot pre-empt either check. Before that ordering, `float("abc")` raised
+    # first and neither check was reached.
+    with pytest.raises(ValueError, match="Unknown unit"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "units": "furlongs"})
+
+
+@requires_geopandas
+def test_buffer_reports_unknown_side_before_unparseable_distance() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": "abc", "side": "bogus"})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", [True, False, [5], [], {}])
+def test_buffer_rejects_a_non_numeric_distance_type(distance: object) -> None:
+    # `or 0` reads every falsy value as 0 and `float` raises on a non-empty
+    # list, where JavaScript coerces the same values to 0/1/5. Rejecting the
+    # type is the only reading both engines share; the client matches.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("field", ["units", "side", "distance"])
+def test_buffer_reads_an_explicit_null_as_the_default(field: str) -> None:
+    # An absent parameter and an explicit JSON null take the same default, for
+    # every field. Before this, `units: None` reached the lookup as the unit
+    # "None" and `distance: None` was rejected, while the client defaulted both.
+    parameters: dict[str, object] = {"distance": 1, field: None}
+    _, messages = run_vector_tool("buffer", SQUARE, parameters=parameters)
+    assert messages[0] == "Buffered 1 feature(s) by 1.0 kilometers (outside)"
+
+
+@requires_geopandas
+def test_buffer_reads_an_empty_string_distance_as_zero() -> None:
+    # The one non-number both engines agree on: `"" or 0` is 0 here, and
+    # `Number("")` is 0 on the client.
+    _, messages = run_vector_tool("buffer", SQUARE, parameters={"distance": ""})
+    assert "by 0.0 kilometers" in messages[0]
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", ["abc", "0x10", "   "])
+def test_buffer_rejects_unparseable_distance_with_the_tools_own_message(distance: str) -> None:
+    # Not `float`'s raw "could not convert string to float: 'abc'" — the client
+    # engine logs "buffer distance must be a finite number" for the same inputs.
+    with pytest.raises(ValueError, match="Buffer distance must be a finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+@requires_geopandas
+@pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf")])
+def test_buffer_rejects_non_finite_distance(distance: float) -> None:
+    # `json.loads` accepts NaN/Infinity, so a raw payload can carry one, and NaN
+    # compares False against the >= 0 bound rather than tripping it.
+    with pytest.raises(ValueError, match="finite number"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": distance})
+
+
+# --- buffer dissolve ---------------------------------------------------------
+#
+# The client engine's half of the same contract lives in
+# tests/vector-buffer-dissolve.test.ts, and the two are kept in step by hand:
+# overlapping buffers merge into one attribute-less polygon, disjoint ones into
+# a single multipolygon, and a non-boolean flag is rejected on both sides. A
+# change to either file needs its counterpart.
+
+TWO_SQUARES = {
+    "type": "FeatureCollection",
+    "features": [*SQUARE["features"], *OVERLAP["features"]],
+}
+FAR_APART_SQUARES = {
+    "type": "FeatureCollection",
+    "features": [*SQUARE["features"], *DISJOINT["features"]],
+}
+
+
+@requires_geopandas
+def test_buffer_dissolve_merges_overlapping_buffers() -> None:
+    geojson, messages = run_vector_tool(
+        "buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True}
+    )
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["geometry"]["type"] == "Polygon"
+    # The merged ring belongs to no single input feature, so it carries no
+    # attributes — the client engine's union drops them the same way.
+    assert geojson["features"][0]["properties"] == {}
+    assert messages == [
+        "Buffered 2 feature(s) by 1.0 kilometers (outside)",
+        "Dissolved 2 buffer(s) into 1 feature",
+    ]
+
+
+@requires_geopandas
+def test_buffer_dissolve_keeps_disjoint_buffers_as_one_multipolygon() -> None:
+    geojson, _ = run_vector_tool(
+        "buffer", FAR_APART_SQUARES, parameters={"distance": 1, "dissolve": True}
+    )
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["geometry"]["type"] == "MultiPolygon"
+    assert len(geojson["features"][0]["geometry"]["coordinates"]) == 2
+
+
+@requires_geopandas
+def test_buffer_without_dissolve_keeps_one_buffer_per_feature() -> None:
+    geojson, messages = run_vector_tool(
+        "buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": False}
+    )
+    assert len(geojson["features"]) == 2
+    assert geojson["features"][0]["properties"]["name"] == "a"
+    assert not any("Dissolved" in message for message in messages)
+
+
+@requires_geopandas
+def test_buffer_dissolve_is_silent_when_nothing_survived() -> None:
+    # Nothing to merge, so the run produces the same empty layer it would
+    # without the flag rather than an "Unable to dissolve" error.
+    geojson, messages = run_vector_tool(
+        "buffer",
+        POINT_IN_SQUARE,
+        parameters={"distance": 1, "side": "inside", "dissolve": True},
+    )
+    assert geojson["features"] == []
+    assert not any("Dissolved" in message for message in messages)
+
+
+@requires_geopandas
+@pytest.mark.parametrize(
+    ("raw", "dissolved"),
+    [
+        (True, True),
+        (False, False),
+        (None, False),
+        ("true", True),
+        ("false", False),
+        ("  On  ", True),
+        ("1", True),
+        ("0", False),
+        ("", False),
+        (1, True),
+        (0, False),
+    ],
+)
+def test_buffer_dissolve_reads_the_same_words_as_the_client(raw: object, dissolved: bool) -> None:
+    # A checkbox that round-tripped through a query string, a CSV batch row, or
+    # a replayed history entry arrives as a string; `booleanParam` on the client
+    # reads this same set.
+    geojson, _ = run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": raw})
+    assert len(geojson["features"]) == (1 if dissolved else 2)
+
+
+@requires_geopandas
+@pytest.mark.parametrize("raw", ["maybe", "flase", [True], {}, float("nan")])
+def test_buffer_rejects_a_non_boolean_dissolve(raw: object) -> None:
+    # Each language's own truthiness reads these differently (`bool([])` is
+    # False where `Boolean([])` is true), so rejecting is the only shared read.
+    with pytest.raises(ValueError, match="Buffer dissolve must be true or false"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": raw})
+
+
+@requires_geopandas
+def test_buffer_dissolve_reports_a_geos_failure_as_bad_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A GEOS TopologyException must surface as a ValueError (HTTP 400), not as
+    # an unhandled 500 — the client engine answers the same failure by logging
+    # "unable to dissolve" and producing no result layer.
+    import geopandas as gpd
+
+    def boom(self: object, *args: object, **kwargs: object) -> NoReturn:
+        raise RuntimeError("TopologyException: found non-noded intersection")
+
+    monkeypatch.setattr(gpd.GeoSeries, "union_all", boom)
+    with pytest.raises(ValueError, match="Unable to dissolve the buffered features"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True})
+
+
+@requires_geopandas
+def test_buffer_dissolve_rejects_a_union_that_came_back_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An empty geometry serializes to a ring-less polygon no renderer can draw,
+    # the same shape the per-feature `is_empty` filter above exists to drop.
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    monkeypatch.setattr(gpd.GeoSeries, "union_all", lambda self, *a, **k: Polygon())
+    with pytest.raises(ValueError, match="Unable to dissolve the buffered features"):
+        run_vector_tool("buffer", TWO_SQUARES, parameters={"distance": 1, "dissolve": True})
+
+
+@requires_geopandas
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("dissolve", "Buffer dissolve must be true or false"),
+        ("distance", "Buffer distance must be a finite number"),
+    ],
+)
+def test_buffer_rejects_an_integer_too_large_for_a_float(field: str, message: str) -> None:
+    # `json.loads` keeps an arbitrarily large integer exact, so a raw payload can
+    # carry one; `math.isfinite`/`float` raise OverflowError converting it. The
+    # same literal reaches the client as `Infinity`, which it rejects, so both
+    # engines must answer with the tool's own message rather than a 500.
+    parameters: dict[str, object] = {"distance": 1, field: 10**309}
+    with pytest.raises(ValueError, match=message):
+        run_vector_tool("buffer", SQUARE, parameters=parameters)
+
+
+@requires_geopandas
+def test_buffer_reports_a_bad_dissolve_before_a_bad_distance() -> None:
+    # units, then side, then dissolve, then the distance — the client engine
+    # validates in this same order.
+    with pytest.raises(ValueError, match="Buffer dissolve must be true or false"):
+        run_vector_tool("buffer", SQUARE, parameters={"distance": -5, "dissolve": "maybe"})
+
+
+@requires_geopandas
+def test_buffer_reports_an_unknown_side_before_a_bad_dissolve() -> None:
+    with pytest.raises(ValueError, match="Unknown buffer side"):
+        run_vector_tool(
+            "buffer", SQUARE, parameters={"distance": 1, "side": "bogus", "dissolve": "maybe"}
+        )
+
+
+@requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;
     # this guards that path that the Pyodide engine also relies on.
     geojson, _ = run_vector_tool("centroids", SQUARE)
     assert geojson["type"] == "FeatureCollection"
     assert geojson["features"][0]["geometry"]["type"] == "Point"
+
+
+@requires_geopandas
+def test_centroids_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("centroids", ANTIMERIDIAN_LAYER)
 
 
 @requires_geopandas

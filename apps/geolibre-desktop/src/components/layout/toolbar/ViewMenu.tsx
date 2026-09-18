@@ -17,6 +17,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   ArrowLeft,
   ArrowRight,
+  Box,
   Compass,
   Crosshair,
   Earth,
@@ -34,7 +35,7 @@ import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
-import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
 
 /** Selectable map-grid presets offered in the Split View submenu. */
@@ -111,6 +112,8 @@ export function ViewMenu({
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const setPrimaryRenderer = useAppStore((s) => s.setPrimaryRenderer);
   // Camera snapshot taken when the menu opens. The dropdown blocks map
   // interaction while open, so a single read on open stays accurate for the
   // life of the menu and lets items grey out at their limit (#708, #710).
@@ -121,7 +124,13 @@ export function ViewMenu({
   const atMaxZoom = camera != null && camera.zoom >= camera.maxZoom - 1e-3;
   const bearingIsNorth = camera != null && Math.abs(camera.bearing) < 1e-2;
   const pitchIsFlat = camera != null && Math.abs(camera.pitch) < 1e-2;
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // TopToolbar keeps this menu mounted while the globe is primary even when a
+  // profile hid the whole "view" menu, so that the escape hatch back to 2D
+  // survives (#2217 review). Honour the admin's intent in that case by showing
+  // nothing but the Rendering engine submenu, rather than the full menu the
+  // profile asked to hide.
+  const menuHiddenByProfile = !isMenuVisible(uiProfile, "view");
+  const show = (id: string) => !menuHiddenByProfile && isMenuItemVisible(uiProfile, id);
   const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation = show("view.previousView") || show("view.nextView");
   const showResetPitch = show("view.resetPitch");
@@ -137,6 +146,16 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
+  // Always offered while the globe owns the primary map, whatever the UI
+  // profile says: this submenu is the only way back to the 2D map, and hiding
+  // it there would strand a user on a renderer whose tools are all disabled.
+  const showRenderingEngine = show("view.renderingEngine") || primaryRenderer !== "maplibre";
+  // Zoom, viewport history, orientation, Set View, and the Google Maps/Earth
+  // hand-offs read or animate the camera — which every engine has. They were
+  // greyed out on the globe only because there was no engine behind the ref to
+  // answer them (#2217); `CesiumEngine` answers all of them now, so the gate is
+  // gone (#2260). Items that need a capability the engine lacks say so through
+  // `capabilities` instead of naming the renderer.
   const showGoogleMaps = show("view.googleMaps");
   const showGoogleEarth = show("view.googleEarth");
   const showExternal = showGoogleMaps || showGoogleEarth;
@@ -145,7 +164,15 @@ export function ViewMenu({
   // A custom profile could hide every item; render nothing rather than a menu
   // whose dropdown is an empty shell. (TopToolbar's isMenuVisible guard normally
   // hides the menu first, but don't rely on that invariant here.)
-  if (!showZoom && !showNavigation && !showReset && !showSetView && !showSplitView && !showExternal)
+  if (
+    !showZoom &&
+    !showNavigation &&
+    !showReset &&
+    !showSetView &&
+    !showSplitView &&
+    !showRenderingEngine &&
+    !showExternal
+  )
     return null;
 
   return (
@@ -203,7 +230,11 @@ export function ViewMenu({
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.resetOrientation")}</span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-48">
+            {/* The wider floor goes through `style`, not a `min-w-*` class:
+                DropdownMenuSubContent sets minWidth inline so it can yield to the
+                available-width cap on a narrow screen, and an inline declaration
+                beats any class. Passing it here folds 12rem into that same cap. */}
+            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
               {showResetPitch && (
                 <DropdownMenuItem disabled={pitchIsFlat} onSelect={onResetPitch}>
                   <Mountain className="me-2 h-3.5 w-3.5 shrink-0" />
@@ -244,7 +275,11 @@ export function ViewMenu({
               <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.splitView")}</span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-48">
+            {/* No `minWidth` override: these labels ("2 × 2", "Single map") are
+                short, and a 12rem floor left most of the submenu empty. The
+                shared 8rem floor plus the content's own width is enough, and it
+                still yields to the available-width cap on a narrow screen. */}
+            <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 value={gridKey}
                 onValueChange={(value: string) => {
@@ -289,6 +324,49 @@ export function ViewMenu({
           </DropdownMenuSub>
         )}
         {(showZoom || showNavigation || showReset || showSetView || showSplitView) &&
+          showRenderingEngine && <DropdownMenuSeparator />}
+        {showRenderingEngine && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Box className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t("toolbar.item.renderingEngine")}</span>
+            </DropdownMenuSubTrigger>
+            {/* No `minWidth` override — see the Split View submenu above. Two
+                one-word engine names sized to a 12rem floor read as a mostly
+                empty box. */}
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={primaryRenderer}
+                onValueChange={(value: string) =>
+                  setPrimaryRenderer(
+                    value === "cesium" || value === "mapbox" || value === "arcgis"
+                      ? value
+                      : "maplibre",
+                  )
+                }
+              >
+                <DropdownMenuRadioItem value="maplibre">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererMapLibre")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="mapbox">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererMapbox")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="arcgis">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererArcgis")}</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="cesium">
+                  <span className="whitespace-nowrap">{t("toolbar.item.rendererCesium")}</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView ||
+          showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
           <DropdownMenuItem onSelect={onViewInGoogleMaps}>

@@ -6,6 +6,7 @@
 // `GeoLibreProject`. Keep the two `type` discriminants and field names in sync.
 
 import type {
+  CollabInvite,
   CollaborationChatMessage,
   CollaborationMode,
   CollaborationParticipant,
@@ -16,7 +17,7 @@ import type {
   ProjectComment,
 } from "@geolibre/core";
 
-export type { CollaborationMode, CollaborationRole };
+export type { CollaborationMode, CollaborationRole, CollabInvite };
 
 export interface CollabCursor {
   lng: number;
@@ -40,6 +41,21 @@ export function participantCanEdit(
   return participant.editOverride ?? mode === "co-edit";
 }
 
+/**
+ * Effective layer edit permission. Host can edit any layer; guests with general
+ * edit permission cannot edit layers that are explicitly locked.
+ */
+export function participantCanEditLayer(
+  participant: CollaborationParticipant,
+  mode: CollaborationMode,
+  layerId: string,
+  lockedLayerIds: string[] = [],
+): boolean {
+  if (!participantCanEdit(participant, mode)) return false;
+  if (participant.role === "host") return true;
+  return !lockedLayerIds.includes(layerId);
+}
+
 // Client -> server -----------------------------------------------------------
 
 export interface JoinMessage {
@@ -49,6 +65,14 @@ export interface JoinMessage {
   color: string;
   /** Presented by the session creator to claim the host role. */
   hostToken?: string;
+  /** Optional invite token carrying a baked-in role. */
+  inviteToken?: string;
+  /**
+   * Optional HMAC-signed identity credential minted by the relay's issuer. See
+   * `verifyIdentityToken` in `@geolibre/collab-core`; a relay with no signing
+   * secret configured ignores this field entirely.
+   */
+  identityToken?: string;
 }
 
 export interface ClientSnapshotMessage {
@@ -93,6 +117,39 @@ export interface CommentMutationMessage {
   action: CommentMutationAction;
 }
 
+export interface MintInviteMessage {
+  type: "mint-invite";
+  role: CollaborationMode;
+  maxUses?: number;
+}
+
+export interface RevokeInviteMessage {
+  type: "revoke-invite";
+  token: string;
+}
+
+export interface SetSessionConfigMessage {
+  type: "set-session-config";
+  requireIdentity?: boolean;
+}
+
+export interface KickParticipantMessage {
+  type: "kick-participant";
+  clientId: string;
+  reason?: string;
+}
+
+export interface BlockParticipantMessage {
+  type: "block-participant";
+  clientId: string;
+  reason?: string;
+}
+
+export interface SetLayerLocksMessage {
+  type: "set-layer-locks";
+  lockedLayerIds: string[];
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
@@ -100,7 +157,13 @@ export type ClientMessage =
   | SetModeMessage
   | SetParticipantModeMessage
   | ChatSendMessage
-  | CommentMutationMessage;
+  | CommentMutationMessage
+  | MintInviteMessage
+  | RevokeInviteMessage
+  | SetSessionConfigMessage
+  | KickParticipantMessage
+  | BlockParticipantMessage
+  | SetLayerLocksMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -117,6 +180,15 @@ export interface WelcomeMessage {
   /** Recent chat history so a late joiner sees the conversation so far (#754). */
   chat: CollaborationChatMessage[];
   rev: number;
+  requireIdentity?: boolean;
+  /**
+   * Whether this relay has an identity issuer configured. False means every
+   * joiner is anonymous and `requireIdentity` cannot be turned on, so the host
+   * UI hides the toggle rather than offering a gate nobody could pass.
+   */
+  identitySupported?: boolean;
+  lockedLayerIds?: string[];
+  invites?: CollabInvite[];
 }
 
 export interface PresenceEntry {
@@ -154,9 +226,41 @@ export interface ChatBroadcastMessage {
   message: CollaborationChatMessage;
 }
 
+export interface InviteCreatedMessage {
+  type: "invite-created";
+  invite: CollabInvite;
+}
+
+export interface InviteRevokedMessage {
+  type: "invite-revoked";
+  token: string;
+}
+
+export interface SessionConfigMessage {
+  type: "session-config";
+  requireIdentity: boolean;
+}
+
+export interface LayerLocksMessage {
+  type: "layer-locks";
+  lockedLayerIds: string[];
+}
+
+export interface KickedMessage {
+  type: "kicked";
+  reason?: string;
+}
+
 export interface ErrorMessage {
   type: "error";
-  code: "forbidden" | "too-large" | "bad-message" | "not-found";
+  code:
+    | "forbidden"
+    | "too-large"
+    | "bad-message"
+    | "not-found"
+    | "identity-required"
+    | "identity-unavailable"
+    | "layer-locked";
   message: string;
 }
 
@@ -168,4 +272,9 @@ export type ServerMessage =
   | ModeMessage
   | ChatBroadcastMessage
   | CommentMutationMessage
+  | InviteCreatedMessage
+  | InviteRevokedMessage
+  | SessionConfigMessage
+  | LayerLocksMessage
+  | KickedMessage
   | ErrorMessage;

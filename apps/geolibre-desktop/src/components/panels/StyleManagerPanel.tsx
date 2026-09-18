@@ -13,6 +13,7 @@
 // layer and apply an entry to it — while browsing the library.
 
 import {
+  localFileName,
   BUILT_IN_STYLE_PRESETS,
   createStyleLibraryEntryId,
   DEFAULT_LAYER_STYLE,
@@ -27,8 +28,30 @@ import {
   type StyleLibraryEntryKind,
 } from "@geolibre/core";
 import { applyQmlImport, applySldImport, parseQml, parseSld } from "@geolibre/map";
-import { Button, cn, Input, Label, ScrollArea, Select } from "@geolibre/ui";
-import { Check, Download, GripVertical, Palette, Save, Trash2, Upload, X } from "lucide-react";
+import {
+  Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+  ScrollArea,
+  Select,
+} from "@geolibre/ui";
+import {
+  Check,
+  Download,
+  GripVertical,
+  MoreHorizontal,
+  Palette,
+  Pencil,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -39,7 +62,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
-import { isQmlStyleXml } from "../../lib/style-format";
+import { isQmlStyleXml } from "@geolibre/map/style-import";
 import { openLocalDataFileWithFallback, saveTextFileWithFallback } from "../../lib/tauri-io";
 import {
   createCategorizedStops,
@@ -129,6 +152,117 @@ function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
         strokeWidth="1"
       />
     </svg>
+  );
+}
+
+/** Each row owns its draft so filtering or closing the panel cancels editing. */
+function EntryName({
+  entry,
+  kindLabel,
+  scope,
+  readOnly,
+  onDelete,
+}: {
+  entry: StyleLibraryEntry;
+  kindLabel: string;
+  scope: "app" | "project";
+  readOnly: boolean;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<string | null>(null);
+  const editingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const beginRename = () => {
+    editingRef.current = true;
+    setDraft(entry.name);
+  };
+  const finishRename = (commit: boolean) => {
+    // Enter/Escape can unmount the input and deliver a second blur event.
+    if (!editingRef.current) return;
+    editingRef.current = false;
+    const name = draft?.trim();
+    if (commit && name && !readOnly) {
+      const state = useAppStore.getState();
+      const entries = scope === "project" ? state.projectStyleLibrary : state.styleLibrary;
+      const current = entries.find((item) => item.id === entry.id);
+      // Read fresh data: never restore a deleted entry or overwrite a style
+      // imported while the editor was open. Only the library name changes.
+      if (current && current.name !== name) {
+        state.saveStyleLibraryEntry({ ...current, name }, scope);
+      }
+    }
+    setDraft(null);
+  };
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        {draft !== null ? (
+          <Input
+            ref={inputRef}
+            autoFocus
+            className="h-7 min-w-0 px-1 text-sm font-medium"
+            value={draft}
+            aria-label={t("layers.renameNamed", { name: entry.name })}
+            onChange={(event) => setDraft(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onBlur={() => finishRename(true)}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter" || event.key === "Escape") {
+                event.preventDefault();
+                finishRename(event.key === "Enter");
+              }
+            }}
+          />
+        ) : (
+          <p
+            className="truncate text-sm font-medium"
+            title={readOnly ? entry.name : t("layers.doubleClickToRename")}
+            onDoubleClick={readOnly ? undefined : beginRename}
+          >
+            {entry.name}
+          </p>
+        )}
+        <p className="truncate text-xs text-muted-foreground">
+          {kindLabel}
+          {entry.tags.length > 0 ? ` · ${entry.tags.join(", ")}` : ""}
+        </p>
+      </div>
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              aria-label={t("styleManager.presetActions")}
+              title={t("styleManager.presetActions")}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (editingRef.current) {
+                event.preventDefault();
+                inputRef.current?.focus();
+              }
+            }}
+          >
+            <DropdownMenuItem onSelect={beginRename}>
+              <Pencil className="me-2 h-3.5 w-3.5" />
+              {t("layers.rename")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onDelete}>
+              <Trash2 className="me-2 h-3.5 w-3.5" />
+              {t("styleManager.delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
   );
 }
 
@@ -354,15 +488,14 @@ export function StyleManagerPanel() {
             extensions: ["json", "qml", "sld", "xml"],
           },
         ],
+        // Android cannot reliably map the SLD/QML extensions to MIME types.
+        // Accept any document there and validate its contents after selection.
+        androidFilters: [],
         accept: ".json,.qml,.sld,.xml,application/json,application/xml,text/xml",
         readText: true,
       });
       if (!picked || picked.text === undefined) return;
-      const fileName =
-        picked.path
-          .split(/[\\/]/)
-          .pop()
-          ?.replace(/\.[^.]+$/, "") ?? "";
+      const fileName = localFileName(picked.path).replace(/\.[^.]+$/, "");
       const trimmed = picked.text.trimStart();
       if (trimmed.startsWith("<")) {
         // A QGIS QML or OGC SLD file: convert it to a full-style entry via the
@@ -687,13 +820,27 @@ export function StyleManagerPanel() {
                           className="flex items-center gap-3 rounded-md border border-border px-2 py-1.5"
                         >
                           <EntryPreview entry={entry} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{entry.name}</p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {kindLabels[entry.kind]}
-                              {entry.tags.length > 0 ? ` · ${entry.tags.join(", ")}` : ""}
-                            </p>
-                          </div>
+                          <EntryName
+                            entry={entry}
+                            kindLabel={kindLabels[entry.kind]}
+                            scope={section.key === "project" ? "project" : "app"}
+                            readOnly={section.readOnly}
+                            onDelete={() => {
+                              // Scope-bound so deleting a project entry can
+                              // never erase an app-library entry that
+                              // happens to share the id (or vice versa).
+                              deleteStyleLibraryEntry(
+                                entry.id,
+                                section.key === "project" ? "project" : "app",
+                              );
+                              setStatus({
+                                type: "success",
+                                text: t("styleManager.deleted", {
+                                  name: entry.name,
+                                }),
+                              });
+                            }}
+                          />
                           <Button
                             size="sm"
                             variant="secondary"
@@ -702,32 +849,6 @@ export function StyleManagerPanel() {
                           >
                             {t("styleManager.apply")}
                           </Button>
-                          {!section.readOnly && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 shrink-0"
-                              aria-label={t("styleManager.delete")}
-                              title={t("styleManager.delete")}
-                              onClick={() => {
-                                // Scope-bound so deleting a project entry can
-                                // never erase an app-library entry that
-                                // happens to share the id (or vice versa).
-                                deleteStyleLibraryEntry(
-                                  entry.id,
-                                  section.key === "project" ? "project" : "app",
-                                );
-                                setStatus({
-                                  type: "success",
-                                  text: t("styleManager.deleted", {
-                                    name: entry.name,
-                                  }),
-                                });
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
                         </li>
                       ))}
                     </ul>

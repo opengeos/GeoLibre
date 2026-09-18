@@ -1,9 +1,17 @@
 name: Build Mac App Store package
 
-# Manually builds the sandboxed Mac App Store variant and uploads the signed
-# .pkg as a workflow artifact for submission via Transporter or
-# `xcrun altool --upload-app`. Like msix-store.yml, this never touches a GitHub
-# release; it exists so a Store-ready package can be produced on demand.
+# Builds the sandboxed Mac App Store variant and produces the signed .pkg for
+# submission via Transporter or `xcrun altool --upload-app`. It runs on each
+# published release (matching release.yml / android.yml / ios.yml) and on demand
+# via the "Run workflow" button, and publishes the .pkg both as a workflow
+# artifact and — on release runs — as a release asset.
+#
+# That release asset is the *submission* package, not a download: a MAS-signed
+# .pkg is installable only through the App Store, so a user who grabs it from
+# the releases page cannot run it. It is attached so the exact bytes submitted
+# for a given tag stay recoverable after the CI artifact expires. macOS users
+# install GeoLibre from the App Store, the Homebrew cask, or the Developer
+# ID-signed .dmg that release.yml attaches.
 #
 # The MAS variant differs from the Developer ID builds in release.yml:
 #   - `mas` cargo feature: the Python sidecar, Jupyter, martin, and external
@@ -30,24 +38,40 @@ name: Build Mac App Store package
 #   APPLE_TEAM_ID                    already configured for release.yml
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
 
+# Least privilege at the workflow level; the build job below elevates to
+# contents: write only where it needs to attach the release asset.
 permissions:
   contents: read
 
-jobs:
-  build:
-    name: Build MAS pkg
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          # npm ci runs third-party lifecycle scripts; keep the checkout token
-          # out of the local git config they could read.
-          persist-credentials: false
+# A release run must never be cancelled: it is the only producer of that tag's
+# release assets, and losing it mid-upload leaves the release incomplete with no
+# obvious sign of why. So the group separates release runs from manual ones (a
+# workflow_dispatch on the same tag would otherwise share the group and cancel
+# the release build), and cancel-in-progress is disabled for release runs
+# outright. Manual runs still supersede each other, which is what you want while
+# iterating.
+concurrency:
+  group: mas-store-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
+jobs:
+  # Split out of `build` so a release run with no MAS secrets skips the whole
+  # macOS job rather than gating a dozen steps individually — and, more to the
+  # point, so it does not redden an otherwise good release. A workflow_dispatch
+  # run is an explicit request for a .pkg, so there the same missing secrets are
+  # a hard error instead.
+  secrets-gate:
+    name: Check signing secrets
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
       - name: Verify signing secrets are configured
+        id: check
         env:
           APPLE_MAS_CERTIFICATE: ${{ secrets.APPLE_MAS_CERTIFICATE }}
           APPLE_MAS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_MAS_CERTIFICATE_PASSWORD }}
@@ -55,6 +79,7 @@ jobs:
           APPLE_MAS_SIGNING_IDENTITY: ${{ secrets.APPLE_MAS_SIGNING_IDENTITY }}
           APPLE_MAS_INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           missing=()
           for name in APPLE_MAS_CERTIFICATE APPLE_MAS_CERTIFICATE_PASSWORD \
@@ -62,10 +87,40 @@ jobs:
             APPLE_MAS_INSTALLER_IDENTITY APPLE_TEAM_ID; do
             [[ -n "${!name}" ]] || missing+=("$name")
           done
-          if (( ${#missing[@]} )); then
+          if (( ${#missing[@]} == 0 )); then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "present=false" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             echo "::error::Missing secrets for the Mac App Store build: ${missing[*]}. See docs/mac-app-store.md."
             exit 1
           fi
+          # The whole set is unavailable to forks, and a repo that has not set
+          # them up yet should not get a red release. Warn and skip.
+          echo "::warning::Skipping the Mac App Store package for this release — missing secrets: ${missing[*]}. See docs/mac-app-store.md."
+
+  build:
+    name: Build MAS pkg
+    runs-on: macos-latest
+    needs: secrets-gate
+    # success() is explicit because a custom job `if:` REPLACES the default
+    # success() check on `needs:` rather than ANDing with it. Without it, this
+    # job's gating would rest on the invariant that secrets-gate writes
+    # present=false before any path that fails the step — true today, but not
+    # something Actions enforces against a future edit.
+    if: success() && needs.secrets-gate.outputs.present == 'true'
+    # Elevated here (not workflow-level) so only this job can write release
+    # assets; workflow_dispatch runs never attach but the grant is harmless.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # npm ci runs third-party lifecycle scripts; keep the checkout token
+          # out of the local git config they could read.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -172,6 +227,19 @@ jobs:
           name: geolibre-mas-pkg
           path: ${{ steps.build_pkg.outputs.pkg_path }}
           if-no-files-found: error
+
+      - name: Attach MAS package to GitHub Release
+        # Release runs only; a workflow_dispatch build has no release to attach
+        # to and stops at the artifact above. The `_mas` suffix in the filename
+        # is load-bearing — see the header comment: this .pkg installs only via
+        # the App Store, so it must not be mistaken for the Developer ID .dmg
+        # that release.yml publishes alongside it.
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          PKG_PATH: ${{ steps.build_pkg.outputs.pkg_path }}
+        run: gh release upload "$TAG" "$PKG_PATH" --clobber
 
       - name: Remove the temporary keychain
         if: always()

@@ -1,10 +1,11 @@
+// Deep import, not the package barrel: this module is a side-effect import from
+// the app entry, and the barrel would drag the MapLibre/Mapbox/Cesium canvases
+// into the boot chunk that each of them works to stay out of.
+import { BASEMAP_LABEL_KEY, type GeoLibreLayerLabelWindow } from "@geolibre/map/layer-labels";
+
 const SWIPE_STYLE_ID = "maplibre-gl-swipe-style-fixes";
 const SWIPE_SELECT_PROXY_CLASS = "swipe-select-proxy";
 const SWIPE_SELECT_MENU_CLASS = "swipe-select-menu";
-
-interface GeoLibreLayerLabelWindow extends Window {
-  __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
-}
 
 const SWIPE_SELECT_FIXES = `
 .swipe-control-panel .swipe-control-select {
@@ -255,7 +256,7 @@ const SWIPE_BASEMAP_LABEL = "Background";
 
 const getSwipeLayerLabel = (layerId: string): string => {
   const labels = (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__;
-  if (layerId === "__basemap__") return labels?.[layerId] ?? SWIPE_BASEMAP_LABEL;
+  if (layerId === BASEMAP_LABEL_KEY) return labels?.[layerId] ?? SWIPE_BASEMAP_LABEL;
   return labels?.[layerId] ?? layerId;
 };
 
@@ -274,7 +275,7 @@ const syncSwipeLayerLabels = () => {
       if (!label) return;
 
       const displayName = getSwipeLayerLabel(layerId);
-      const title = layerId === "__basemap__" ? displayName : `${displayName} (${layerId})`;
+      const title = layerId === BASEMAP_LABEL_KEY ? displayName : `${displayName} (${layerId})`;
       if (label.textContent !== displayName) {
         label.textContent = displayName;
       }

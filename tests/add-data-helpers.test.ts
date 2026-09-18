@@ -24,11 +24,13 @@ import {
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
   geoJsonToPointRows,
+  isServiceFormUrl,
   layerNameFromPath,
   normalizeCrs,
   parseOptionalNumber,
   parseRequiredNumber,
   parseVideoCorner,
+  readLimitedBody,
   resolveDelimitedTextDelimiter,
   savedPostgresConnectionLabel,
   serviceRequestErrorMessage,
@@ -482,6 +484,39 @@ describe("attributionForTileUrl", () => {
   });
 });
 
+describe("isServiceFormUrl", () => {
+  it("accepts absolute HTTP(S) service URLs", () => {
+    assert.equal(isServiceFormUrl("https://geoserver.example.org/geoserver/wms"), true);
+    assert.equal(isServiceFormUrl("http://127.0.0.1:8080/wfs"), true);
+    assert.equal(isServiceFormUrl("  https://x.test/wms  "), true);
+  });
+
+  it("accepts same-origin references for reverse-proxied deployments", () => {
+    assert.equal(isServiceFormUrl("/geoserver/wms"), true);
+    assert.equal(isServiceFormUrl("geoserver/wfs"), true);
+  });
+
+  it("refuses non-HTTP schemes, protocol-relative URLs, and blank values", () => {
+    assert.equal(isServiceFormUrl(""), false);
+    assert.equal(isServiceFormUrl("   "), false);
+    assert.equal(isServiceFormUrl("javascript:alert(1)"), false);
+    assert.equal(isServiceFormUrl("data:text/plain,x"), false);
+    assert.equal(isServiceFormUrl("ftp://x.test/wms"), false);
+    assert.equal(isServiceFormUrl("/geoserver/wms has space"), false);
+    // Protocol-relative URLs share only the scheme, not the origin; the app
+    // must never treat a foreign host as same-origin (and the dev CORS proxy
+    // would skip them too).
+    assert.equal(isServiceFormUrl("//example.com/geoserver/wms"), false);
+    assert.equal(isServiceFormUrl("//attacker.example/wms"), false);
+    // A scheme without a host is not a usable endpoint: reject here rather
+    // than throwing from new URL() in the request builders.
+    assert.equal(isServiceFormUrl("https://"), false);
+    assert.equal(isServiceFormUrl("http://"), false);
+    assert.equal(isServiceFormUrl("https://host"), true);
+    assert.equal(isServiceFormUrl("https://x.test/wms"), true);
+  });
+});
+
 describe("serviceRequestErrorMessage", () => {
   it("maps a network/TLS/CORS failure to the localized network message", () => {
     assert.equal(
@@ -641,5 +676,39 @@ describe("createBaseLayer", () => {
         .simpleStyleEnabled,
       false,
     );
+  });
+});
+
+describe("readLimitedBody", () => {
+  const streamed = (chunks: string[], headers: Record<string, string> = {}) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+          controller.close();
+        },
+      }),
+      { headers },
+    );
+
+  it("returns a body that fits within the ceiling", async () => {
+    const bytes = await readLimitedBody(streamed(["abcd", "efgh"]), 8);
+    assert.equal(new TextDecoder().decode(bytes), "abcdefgh");
+  });
+
+  it("refuses an advertised length over the ceiling before reading a byte", async () => {
+    await assert.rejects(
+      readLimitedBody(
+        new Response("{}", { headers: { "Content-Length": String(64 * 1024 * 1024) } }),
+        8,
+      ),
+      // Callers match on "download limit" to map either branch — the native
+      // `read_limited_body` or this one — onto their own error.
+      /download limit/,
+    );
+  });
+
+  it("stops a chunked body that streams past the ceiling", async () => {
+    await assert.rejects(readLimitedBody(streamed(["abcd", "efgh", "ijkl"]), 8), /download limit/);
   });
 });

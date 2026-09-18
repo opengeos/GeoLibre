@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Feature, FeatureCollection } from "geojson";
 import {
   atlasEntryName,
+  atlasViewportFrame,
   buildAtlasPages,
   buildLineAtlasPages,
   hasLineGeometry,
@@ -180,6 +181,55 @@ describe("expandBounds", () => {
     assert.ok(e > w);
     assert.ok(s >= -85 && n <= 85);
     assert.ok(n - s >= 0.005 - 1e-12);
+  });
+});
+
+describe("atlasViewportFrame", () => {
+  it("adds vertical padding when the print frame is wider than the live map", () => {
+    const frame = atlasViewportFrame(1200, 900, 2);
+    assert.deepEqual(frame.padding, {
+      top: 150,
+      bottom: 150,
+      left: 0,
+      right: 0,
+    });
+    assert.deepEqual(frame.crop, {
+      top: 150,
+      bottom: 750,
+      left: 0,
+      right: 1200,
+    });
+  });
+
+  it("adds horizontal padding when the print frame is narrower than the live map", () => {
+    const frame = atlasViewportFrame(1200, 600, 1);
+    assert.deepEqual(frame.padding, {
+      top: 0,
+      bottom: 0,
+      left: 300,
+      right: 300,
+    });
+    assert.deepEqual(frame.crop, {
+      top: 0,
+      bottom: 600,
+      left: 300,
+      right: 900,
+    });
+  });
+
+  it("keeps the full viewport for matching or invalid aspect ratios", () => {
+    assert.deepEqual(atlasViewportFrame(1200, 600, 2).padding, {
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+    });
+    assert.deepEqual(atlasViewportFrame(1200, 600, 0).crop, {
+      top: 0,
+      bottom: 600,
+      left: 0,
+      right: 1200,
+    });
   });
 });
 

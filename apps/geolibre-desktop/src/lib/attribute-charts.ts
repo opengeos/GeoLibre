@@ -41,6 +41,111 @@ export function toFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * Test whether a stored field value contributes to numeric type inference.
+ * Only explicit numeric values qualify. Callers handling string-only data
+ * sources adapt their analysis rows with {@link coerceNumericStringRows} first.
+ */
+export function isNumericFieldValue(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** True when a string encodes an integer with meaningful leading zeroes. */
+function hasLeadingZeroes(value: string): boolean {
+  return /^[+-]?0\d+$/.test(value.trim());
+}
+
+/** True for common delimited-text headers that conventionally hold identifiers. */
+function isIdentifierFieldName(key: string): boolean {
+  const normalized = key.replace(/([a-z\d])([A-Z])/g, "$1_$2").toLowerCase();
+  if (/(^|[\s_-])(id|fid|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized)) {
+    return true;
+  }
+  const compact = normalized.replace(/[\s_-]/g, "");
+  return (
+    /^(geo|object|feature|row)id\d*$/.test(compact) ||
+    /^(state|county|place)fp\d*$/.test(compact) ||
+    /^(tract|block)ce\d*$/.test(compact)
+  );
+}
+
+/**
+ * Convert numeric-looking strings in analysis rows without changing the source
+ * data. String-oriented sources use this adapter because measurements may be
+ * stored as text even though summaries should treat them as numeric. Since the
+ * values carry no declared field types, common identifier headers and integer
+ * strings with leading zeroes remain text.
+ *
+ * The decision is per column, not per value: a column is converted only when its
+ * numeric-looking values would carry it past the same threshold the summaries
+ * apply (at least two of them, and at least half of the populated rows). A
+ * mostly-free-text column holding a stray `"3.0"` therefore keeps that cell
+ * verbatim, so its distinct-value counts and top-value labels stay faithful to
+ * what the file says.
+ */
+export function coerceNumericStringRows(rows: ChartRow[]): ChartRow[] {
+  const textKeys = new Set<string>();
+  const populatedCounts = new Map<string, number>();
+  const numericCounts = new Map<string, number>();
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row.properties)) {
+      if (value == null || value === "") continue;
+      populatedCounts.set(key, (populatedCounts.get(key) ?? 0) + 1);
+      if (typeof value === "string" && (isIdentifierFieldName(key) || hasLeadingZeroes(value))) {
+        textKeys.add(key);
+        continue;
+      }
+      // Values already stored as numbers count toward the threshold too, since
+      // they are what the summaries will see after this pass.
+      const countsAsNumeric =
+        isNumericFieldValue(value) || (typeof value === "string" && toFiniteNumber(value) !== null);
+      if (countsAsNumeric) numericCounts.set(key, (numericCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const numericKeys = new Set<string>();
+  for (const [key, numeric] of numericCounts) {
+    if (textKeys.has(key)) continue;
+    if (numeric >= 2 && numeric >= (populatedCounts.get(key) ?? 0) / 2) numericKeys.add(key);
+  }
+  if (numericKeys.size === 0) return rows;
+
+  return rows.map((row) => {
+    let properties: Record<string, unknown> | null = null;
+    for (const [key, value] of Object.entries(row.properties)) {
+      if (!numericKeys.has(key) || typeof value !== "string") continue;
+      const numeric = toFiniteNumber(value);
+      if (numeric === null) continue;
+      properties ??= { ...row.properties };
+      properties[key] = numeric;
+    }
+    return properties ? { ...row, properties } : row;
+  });
+}
+
+/**
+ * Narrow whole-layer analysis rows to the features named by `featureIds`.
+ *
+ * The analysis rows come from {@link coerceNumericStringRows} over the entire
+ * layer, so they line up index for index with the source rows they were built
+ * from. Picking out of that array — rather than re-coercing the subset — is what
+ * keeps a field's numeric/text inference identical no matter which statistics
+ * scope (all / filtered / selected) is showing: the threshold is always measured
+ * against the full layer.
+ *
+ * @param analysisRows The coerced rows for the whole layer.
+ * @param sourceRows The rows those were built from, same length and order.
+ * @param featureIds The features to keep.
+ * @returns The coerced rows for those features, in layer order.
+ */
+export function pickAnalysisRows(
+  analysisRows: ChartRow[],
+  sourceRows: { featureId: string }[],
+  featureIds: ReadonlySet<string>,
+): ChartRow[] {
+  return analysisRows.filter((_, index) => featureIds.has(sourceRows[index].featureId));
+}
+
+/**
  * The distinct non-empty values of a category field, sorted for display. Used
  * by the selector widget to build its list of value chips.
  *
@@ -109,7 +214,7 @@ export function numericColumns(rows: ChartRow[], columns: string[]): string[] {
       const raw = row.properties[key];
       if (raw == null || raw === "") continue;
       nonNull += 1;
-      if (toFiniteNumber(raw) !== null) numeric += 1;
+      if (isNumericFieldValue(raw)) numeric += 1;
     }
     return numeric >= 2 && numeric >= nonNull / 2;
   });
@@ -119,8 +224,8 @@ export function numericColumns(rows: ChartRow[], columns: string[]): string[] {
 export function numericValues(rows: ChartRow[], key: string): number[] {
   const values: number[] = [];
   for (const row of rows) {
-    const next = toFiniteNumber(row.properties[key]);
-    if (next !== null) values.push(next);
+    const value = row.properties[key];
+    if (isNumericFieldValue(value)) values.push(value);
   }
   return values;
 }
@@ -233,9 +338,9 @@ export function computeScatter(
   let yMin = 0;
   let yMax = 0;
   for (const row of rows) {
-    const x = toFiniteNumber(row.properties[xKey]);
-    const y = toFiniteNumber(row.properties[yKey]);
-    if (x === null || y === null) continue;
+    const x = row.properties[xKey];
+    const y = row.properties[yKey];
+    if (!isNumericFieldValue(x) || !isNumericFieldValue(y)) continue;
     if (all.length === 0) {
       xMin = xMax = x;
       yMin = yMax = y;
@@ -313,6 +418,18 @@ export function categoricalColumns(
   });
 }
 
+/**
+ * Every field that can label a chart category, with detected low-cardinality
+ * fields first so the automatic selection remains useful. Unique labels such
+ * as names and IDs must stay available for explicitly configured charts.
+ */
+export function categoryColumnOptions(rows: ChartRow[], columns: string[]): string[] {
+  const preferred = categoricalColumns(rows, columns);
+  if (preferred.length === 0) return columns;
+  const preferredSet = new Set(preferred);
+  return [...preferred, ...columns.filter((column) => !preferredSet.has(column))];
+}
+
 export type BarAggregation = "count" | "sum" | "mean";
 
 export interface BarDatum {
@@ -356,8 +473,8 @@ export function computeBar(
     const group = groups.get(label) ?? { count: 0, sum: 0, numericCount: 0 };
     group.count += 1;
     if (aggregation !== "count" && valueKey) {
-      const value = toFiniteNumber(row.properties[valueKey]);
-      if (value !== null) {
+      const value = row.properties[valueKey];
+      if (isNumericFieldValue(value)) {
         group.sum += value;
         group.numericCount += 1;
       }
@@ -428,8 +545,8 @@ export function computePie(
     const group = groups.get(label) ?? { count: 0, sum: 0 };
     group.count += 1;
     if (aggregation !== "count" && valueKey) {
-      const value = toFiniteNumber(row.properties[valueKey]);
-      if (value !== null) group.sum += value;
+      const value = row.properties[valueKey];
+      if (isNumericFieldValue(value)) group.sum += value;
     }
     groups.set(label, group);
   }
@@ -497,8 +614,8 @@ export function computeLine(rows: ChartRow[], key: string): LineResult | null {
   let max = -Infinity;
   let index = 0;
   for (const row of rows) {
-    const value = toFiniteNumber(row.properties[key]);
-    if (value !== null) {
+    const value = row.properties[key];
+    if (isNumericFieldValue(value)) {
       points.push({ index, value });
       if (value < min) min = value;
       if (value > max) max = value;

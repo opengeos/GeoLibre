@@ -1,21 +1,56 @@
 {
   "name": "@geolibre/core",
-  "version": "2.4.1",
-  "private": true,
+  "version": "3.0.0",
+  "description": "GeoLibre domain types, project schema, and Zustand store",
+  "keywords": [
+    "geolibre",
+    "geospatial",
+    "gis",
+    "maplibre",
+    "zustand"
+  ],
+  "homepage": "https://geolibre.app",
+  "bugs": "https://github.com/opengeos/GeoLibre/issues",
+  "license": "MIT",
+  "author": "Qiusheng Wu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengeos/GeoLibre",
+    "directory": "packages/core"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "main": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts"
+  },
   "dependencies": {
     "@maplibre/maplibre-gl-style-spec": "^26.2.1",
-    "uuid": "^14.0.1",
+    "uuid": "^14.0.2",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
+    "tsdown": "^0.23.0",
     "typescript": "^7.0.2"
   }
 }

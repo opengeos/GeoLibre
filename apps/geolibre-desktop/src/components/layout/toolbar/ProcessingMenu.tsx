@@ -1,4 +1,4 @@
-import { type NetworkToolKind, useAppStore } from "@geolibre/core";
+import { type NetworkToolKind, useAppCapability, useAppStore } from "@geolibre/core";
 import { isEarthEngineAvailable } from "@geolibre/plugins";
 import {
   Button,
@@ -15,13 +15,31 @@ import {
 import { Wrench } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
+import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
+import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { whiteboxMenuSubcategorySlug } from "../../../lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
+import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
+
+// aria-describedby targets for the "your role does not allow this" explanations.
+// One per privilege rather than one per item: several denied entries share a
+// reason, and an element may be described by an id it does not own.
+const ASSISTANT_DENIED_ID = "processing-menu-assistant-denied";
+const PROCESSING_DENIED_ID = "processing-menu-processing-denied";
+const SIDECAR_DENIED_ID = "processing-menu-sidecar-denied";
+const ADD_REMOTE_DENIED_ID = "processing-menu-add-remote-denied";
+
+/** Convert a Whitebox subcategory label to its full i18n key. */
+function subcatKey(label: string): string {
+  return `processing.whitebox.menuSubcategory.${whiteboxMenuSubcategorySlug(label)}`;
+}
 
 // Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
 // App Store builds (Mac App Store and iOS) compile out so the app claims no
@@ -54,23 +72,57 @@ export function ProcessingMenu({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
+  const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
+  // Object detection and segment-everything read pixels off the MapLibre canvas
+  // and drive the map directly, so they need a live native map instance — not
+  // merely "not Cesium".
+  const capabilities = useMapCapabilities();
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setProcessingHistoryOpen = useAppStore((s) => s.setProcessingHistoryOpen);
+  const processingCap = useAppCapability("processing:run");
+  const sidecarCap = useAppCapability("processing:sidecar");
+  const assistantCap = useAppCapability("assistant:use");
+  // Planetary Computer and Earth Engine sit under Processing but browse a remote
+  // catalog and add imagery from it, so they are data entry rather than tool
+  // runs. `deployment-gates.ts` classifies their commands the same way; the two
+  // disagreeing is what leaves an action greyed out in the menu but live in the
+  // command palette.
+  const addRemoteCap = useAppCapability("layers:add-remote");
+  // Every entry that actually runs a tool is gated, not just the toolbox items
+  // that open a dialog: the Whitebox category submenus reach `openWhiteboxTool`
+  // without passing the top-level item, so a gate on that item alone gates
+  // nothing. Disabling a DropdownMenuSubTrigger stops Radix opening the submenu,
+  // which is what puts its leaves out of reach.
+  const processingDenied = !processingCap.granted;
+  // Sidecar tools are processing tools first: withholding `processing:run` takes
+  // them too, whatever `processing:sidecar` says.
+  const sidecarDenied = processingDenied || !sidecarCap.granted;
+  const sidecarDeniedCap = processingDenied ? processingCap : sidecarCap;
+  const assistantDeniedBy = capabilityNoticeId(ASSISTANT_DENIED_ID, assistantCap);
+  const processingDeniedBy = capabilityNoticeId(PROCESSING_DENIED_ID, processingCap);
+  const sidecarDeniedBy = capabilityNoticeId(SIDECAR_DENIED_ID, sidecarDeniedCap);
+  const addRemoteDeniedBy = capabilityNoticeId(ADD_REMOTE_DENIED_ID, addRemoteCap);
+  // A disabled submenu trigger keeps its pointer events on purpose, so it can
+  // explain itself with a native tooltip instead of a rendered line. Same text
+  // the rendered notes use, generic fallback included.
+  const processingDeniedTitle = useCapabilityReason(processingCap);
+  const sidecarDeniedTitle = useCapabilityReason(sidecarDeniedCap);
 
-  // Format Conversion, Raster tools, and AI Segmentation require the Python
-  // sidecar, which cannot run on Android/iOS — hide them on mobile so they don't
-  // present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python (Pyodide),
-  // geocode, statistics, and the assistant run client-side and stay. The user
-  // agent is stable for the session, so evaluate once.
+  // Format Conversion, sidecar-backed Raster leaves, and AI Segmentation require
+  // the Python sidecar, which cannot run on Android/iOS — hide those entries on
+  // mobile so they don't present and then fail. The Global DEM raster downloader,
+  // Vector (Turf), SQL (PGlite/DuckDB), Python (Pyodide), geocode, statistics, and
+  // the assistant run client-side and stay. The user agent is stable for the
+  // session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   // The Mac App Store build hides sidecar-only items with no client fallback
@@ -92,22 +144,23 @@ export function ProcessingMenu({
 
   // Section visibility, so dividers never render with nothing on one side when a
   // UI profile (or mobile) hides whole sections. `showGeolibreTools` are the
-  // client tool submenus; `showGeolibreActions` are geocode/model-builder/
-  // segmentation below the in-submenu divider.
+  // client tool submenus; `showGeolibreActions` are geocode/batch/segmentation
+  // below the in-submenu divider.
   const showGeolibreTools =
     (!mobile && show("processing.conversion")) ||
     show("processing.vector") ||
     show("processing.network") ||
     show("processing.statistics") ||
-    (!mobile && show("processing.raster"));
+    show("processing.raster");
   const showGeolibreActions =
     show("processing.geocode") ||
-    show("processing.modelBuilder") ||
+    show("processing.batchTools") ||
     (!mobile && show("processing.segmentation")) ||
     show("processing.objectDetection") ||
     show("processing.segmentEverything");
   const showGeolibre = showGeolibreTools || showGeolibreActions;
   const showWorkspacesOrServices =
+    show("processing.modelBuilder") ||
     show("processing.history") ||
     show("processing.sqlWorkspace") ||
     show("processing.pythonConsole") ||
@@ -134,15 +187,31 @@ export function ProcessingMenu({
         <DropdownMenuSeparator />
         {show("processing.assistant") && (
           <>
-            <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
+            <DropdownMenuItem
+              onSelect={() => setAssistantOpen(true)}
+              disabled={!assistantCap.granted}
+              aria-describedby={assistantDeniedBy}
+            >
               {t("toolbar.command.assistant")}
             </DropdownMenuItem>
+            <CapabilityNotice id={ASSISTANT_DENIED_ID} capability={assistantCap} />
             <DropdownMenuSeparator />
           </>
         )}
+        {/* Heads the toolbox block below: the nine category submenus render as
+            bare siblings of the GeoLibre Toolbox submenu, so "Conversion"
+            (Whitebox) and "GeoLibre Toolbox → Conversion" (app dialog)
+            otherwise look like peers (GeoLibre#1904). Names the toolbox rather
+            than repeating the bare product name, and says what clicking it
+            does; pairs with the GeoLibre Toolbox trigger below. Reuses the
+            dialog's own heading string, already translated in every locale. */}
         {showWhitebox && (
-          <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
-            {t("toolbar.item.whitebox")}
+          <DropdownMenuItem
+            onSelect={() => setProcessingOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
+            {t("processing.whitebox.toolbox")}
           </DropdownMenuItem>
         )}
         {/* Whitebox tools grouped by category/subcategory. Each leaf opens the
@@ -152,24 +221,34 @@ export function ProcessingMenu({
         {showWhitebox &&
           WHITEBOX_MENU_CATALOG.map((cat) => (
             <DropdownMenuSub key={cat.key}>
-              <DropdownMenuSubTrigger>{t(cat.labelKey)}</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger disabled={processingDenied} title={processingDeniedTitle}>
+                {t(cat.labelKey)}
+              </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 {cat.subcategories.length === 1
                   ? cat.subcategories[0].tools.map((tool) => (
                       <DropdownMenuItem key={tool.id} onSelect={() => openWhiteboxTool(tool.id)}>
-                        {tool.name}
+                        {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys, {
+                          defaultValue: tool.name,
+                        })}
                       </DropdownMenuItem>
                     ))
                   : cat.subcategories.map((sub) => (
                       <DropdownMenuSub key={sub.label}>
-                        <DropdownMenuSubTrigger>{sub.label}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>
+                          {t(subcatKey(sub.label) as ParseKeys, {
+                            defaultValue: sub.label,
+                          })}
+                        </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           {sub.tools.map((tool) => (
                             <DropdownMenuItem
                               key={tool.id}
                               onSelect={() => openWhiteboxTool(tool.id)}
                             >
-                              {tool.name}
+                              {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys, {
+                                defaultValue: tool.name,
+                              })}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuSubContent>
@@ -178,19 +257,28 @@ export function ProcessingMenu({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           ))}
+        {/* Divide the toolbox block from GeoLibre's own tools, so the two
+            sections read as separate owners rather than one flat list. */}
+        {showWhitebox && showGeolibre && <DropdownMenuSeparator />}
         {/* GeoLibre's own tools (Turf vector, rasterio raster, format
             conversion, routing, spatial statistics) plus geocoding, batch &
-            models, and AI segmentation. Grouped under a single "GeoLibre"
-            submenu so their category names don't collide with the Whitebox
-            category submenus above. Each child keeps its own visibility gate;
-            the parent shows when any child does. */}
+            models, and AI segmentation. Grouped under a single "GeoLibre
+            Toolbox" submenu so their category names don't collide with the
+            Whitebox category submenus above, and so the label names a toolbox
+            the way its "Whitebox Toolbox" sibling does instead of standing as
+            the bare product name (GeoLibre#1904). Each child keeps its own
+            visibility gate; the parent shows when any child does. */}
         {showGeolibre && (
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{t("toolbar.item.geolibre")}</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger disabled={processingDenied} title={processingDeniedTitle}>
+              {t("toolbar.item.geolibre")}
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {!mobile && show("processing.conversion") && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>{t("toolbar.item.conversion")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger disabled={sidecarDenied} title={sidecarDeniedTitle}>
+                    {t("toolbar.item.conversion")}
+                  </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-vector")}>
                       {t("toolbar.conversion.vectorToVector")}
@@ -247,6 +335,12 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
                       {t("toolbar.vectorTool.simplify")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("decode-polyline")}>
+                      {t("toolbar.vectorTool.decodePolyline")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("encode-polyline")}>
+                      {t("toolbar.vectorTool.encodePolyline")}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
                       {t("toolbar.vectorTool.reproject")}
                     </DropdownMenuItem>
@@ -258,6 +352,12 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
                       {t("toolbar.vectorTool.smooth")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("extract-vertices")}>
+                      {t("toolbar.vectorTool.extractVertices")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("points-along-geometry")}>
+                      {t("toolbar.vectorTool.pointsAlongGeometry")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
                       {t("toolbar.vectorTool.grid")}
@@ -322,6 +422,13 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupDataManagement")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("merge-layers")}>
+                      {t("toolbar.vectorTool.mergeLayers")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupDataQuality")}
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("check-validity")}>
@@ -379,88 +486,183 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setStatisticsToolOpen("emerging-hot-spot")}>
                       {t("toolbar.statisticsTool.emergingHotSpot")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("composite-score")}>
+                      {t("toolbar.statisticsTool.compositeScore")}
+                    </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
-              {!mobile && show("processing.raster") && (
+              {show("processing.raster") && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>{t("toolbar.item.raster")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger disabled={processingDenied} title={processingDeniedTitle}>
+                    {t("toolbar.item.raster")}
+                  </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupTerrain")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
-                      {t("toolbar.rasterTool.hillshade")}
+                    <DropdownMenuItem
+                      onSelect={() => openWhiteboxTool(DOWNLOAD_GLOBAL_DEM_TOOL_ID)}
+                    >
+                      {t("toolbar.rasterTool.downloadGlobalDem")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
-                      {t("toolbar.rasterTool.slope")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
-                      {t("toolbar.rasterTool.aspect")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupReproject")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
-                      {t("toolbar.rasterTool.reproject")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
-                      {t("toolbar.rasterTool.resample")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupClip")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-extent")}>
-                      {t("toolbar.rasterTool.clipExtent")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
-                      {t("toolbar.rasterTool.clipMask")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupRasterToVector")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("polygonize")}>
-                      {t("toolbar.rasterTool.polygonize")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
-                      {t("toolbar.rasterTool.contour")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupVectorToRaster")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("interpolate")}>
-                      {t("toolbar.rasterTool.interpolate")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupAnalysis")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("zonal")}>
-                      {t("toolbar.rasterTool.zonal")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("raster-calc")}>
-                      {t("toolbar.rasterTool.rasterCalc")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("spectral-index")}>
-                      {t("toolbar.rasterTool.spectralIndex")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reclassify")}>
-                      {t("toolbar.rasterTool.reclassify")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("mosaic")}>
-                      {t("toolbar.rasterTool.mosaic")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
-                      {t("toolbar.rasterTool.focal")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={onOpenGeoreferencer}>
-                      {t("toolbar.item.georeferencing")}
-                    </DropdownMenuItem>
+                    {!mobile && <DropdownMenuSeparator />}
+                    {!mobile && (
+                      <>
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupTerrain")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("hillshade")}
+                        >
+                          {t("toolbar.rasterTool.hillshade")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("slope")}
+                        >
+                          {t("toolbar.rasterTool.slope")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("aspect")}
+                        >
+                          {t("toolbar.rasterTool.aspect")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupReproject")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("reproject")}
+                        >
+                          {t("toolbar.rasterTool.reproject")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("resample")}
+                        >
+                          {t("toolbar.rasterTool.resample")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupClip")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("clip-extent")}
+                        >
+                          {t("toolbar.rasterTool.clipExtent")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("clip-mask")}
+                        >
+                          {t("toolbar.rasterTool.clipMask")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupRasterToVector")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("polygonize")}
+                        >
+                          {t("toolbar.rasterTool.polygonize")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("contour")}
+                        >
+                          {t("toolbar.rasterTool.contour")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupVectorToRaster")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("interpolate")}
+                        >
+                          {t("toolbar.rasterTool.interpolate")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupAnalysis")}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("zonal")}
+                        >
+                          {t("toolbar.rasterTool.zonal")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("raster-calc")}
+                        >
+                          {t("toolbar.rasterTool.rasterCalc")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("spectral-index")}
+                        >
+                          {t("toolbar.rasterTool.spectralIndex")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("reclassify")}
+                        >
+                          {t("toolbar.rasterTool.reclassify")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("mosaic")}
+                        >
+                          {t("toolbar.rasterTool.mosaic")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={sidecarDenied}
+                          title={sidecarDenied ? sidecarDeniedTitle : undefined}
+                          aria-describedby={sidecarDeniedBy}
+                          onSelect={() => setRasterToolOpen("focal")}
+                        >
+                          {t("toolbar.rasterTool.focal")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={onOpenGeoreferencer}>
+                          {t("toolbar.item.georeferencing")}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
@@ -486,48 +688,94 @@ export function ProcessingMenu({
                   {t("toolbar.item.geocode")}
                 </DropdownMenuItem>
               )}
-              {show("processing.modelBuilder") && (
-                <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
-                  {t("toolbar.item.modelBuilder")}
+              {show("processing.batchTools") && (
+                <DropdownMenuItem onSelect={() => setBatchToolsOpen(true)}>
+                  {t("toolbar.item.batchTools")}
                 </DropdownMenuItem>
               )}
               {!mobile && show("processing.segmentation") && (
-                <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
-                  {t("toolbar.command.segmentation")}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onSelect={() => setSegmentationOpen(true)}
+                    disabled={sidecarDenied}
+                    aria-describedby={sidecarDeniedBy}
+                  >
+                    {t("toolbar.command.segmentation")}
+                  </DropdownMenuItem>
+                </>
               )}
               {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.objectDetection") && (
-                <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
+                <DropdownMenuItem
+                  disabled={!capabilities.nativeMapInstance}
+                  onSelect={() => setObjectDetectionOpen(true)}
+                >
                   {t("toolbar.command.objectDetection")}
                 </DropdownMenuItem>
               )}
               {/* SlimSAM "segment everything" also runs client-side (onnxruntime-web),
             so it stays available on mobile/web clients (no `!mobile` gate). */}
               {show("processing.segmentEverything") && (
-                <DropdownMenuItem onSelect={() => setSegmentEverythingOpen(true)}>
+                <DropdownMenuItem
+                  disabled={!capabilities.nativeMapInstance}
+                  onSelect={() => setSegmentEverythingOpen(true)}
+                >
                   {t("toolbar.command.segmentEverything")}
                 </DropdownMenuItem>
               )}
+              {!mobile && <CapabilityNotice id={SIDECAR_DENIED_ID} capability={sidecarDeniedCap} />}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
         {/* Divide the tool-category submenus (Whitebox, GeoLibre) from the
             workspaces and consoles below. Only when both sides are present. */}
         {(showWhitebox || showGeolibre) && showWorkspacesOrServices && <DropdownMenuSeparator />}
+        {/* The workspaces run tools too — Model Builder composes them, and the
+            SQL/Python/notebook consoles execute arbitrary analysis over the
+            loaded data — so they carry the same `processing:run` gate as the
+            toolboxes. The dashboard and the processing history log below do
+            not — they visualize and record rather than run anything — and the
+            Planetary Computer / Earth Engine catalogs take `layers:add-remote`
+            instead, because they bring imagery in. */}
+        {/* Model Builder sits at the top level rather than inside the GeoLibre
+            Toolbox submenu: it is a canvas that composes tools from every
+            toolbox (Whitebox raster and GeoLibre vector alike), so filing it
+            under one of them would misdescribe its reach. It heads the
+            workspaces block with its SQL/Python/notebook/dashboard siblings. */}
+        {show("processing.modelBuilder") && (
+          <DropdownMenuItem
+            onSelect={() => setModelBuilderOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
+            {t("toolbar.item.modelBuilder")}
+          </DropdownMenuItem>
+        )}
         {show("processing.sqlWorkspace") && (
-          <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
+          <DropdownMenuItem
+            onSelect={() => setSqlWorkspaceOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
             {t("toolbar.command.sqlWorkspace")}
           </DropdownMenuItem>
         )}
         {show("processing.pythonConsole") && (
-          <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
+          <DropdownMenuItem
+            onSelect={() => setPythonConsoleOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
             {t("toolbar.command.pythonConsole")}
           </DropdownMenuItem>
         )}
         {show("processing.notebook") && (
-          <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
+          <DropdownMenuItem
+            onSelect={() => setNotebookOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
             {t("toolbar.command.notebook")}
           </DropdownMenuItem>
         )}
@@ -542,16 +790,31 @@ export function ProcessingMenu({
           </DropdownMenuItem>
         )}
         {show("processing.planetaryComputer") && (
-          <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
+          <DropdownMenuItem
+            onSelect={onOpenPlanetaryComputer}
+            disabled={!addRemoteCap.granted}
+            aria-describedby={addRemoteDeniedBy}
+          >
             {t("toolbar.command.planetaryComputer")}
           </DropdownMenuItem>
         )}
         {showEarthEngine && (
-          <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
+          <DropdownMenuItem
+            onSelect={earthEnginePanel.toggle}
+            disabled={!addRemoteCap.granted}
+            aria-describedby={addRemoteDeniedBy}
+          >
             {t("toolbar.command.earthEngine")}
             {earthEnginePanel.visible ? " ✓" : ""}
           </DropdownMenuItem>
         )}
+        {(show("processing.planetaryComputer") || showEarthEngine) && (
+          <CapabilityNotice id={ADD_REMOTE_DENIED_ID} capability={addRemoteCap} />
+        )}
+        {/* One reason line for the whole menu, at its foot: the entries
+            `processing:run` disables are spread across the toolbox block and
+            the workspaces block, and each points here with aria-describedby. */}
+        <CapabilityNotice id={PROCESSING_DENIED_ID} capability={processingCap} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

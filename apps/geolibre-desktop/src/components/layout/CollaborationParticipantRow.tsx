@@ -1,5 +1,5 @@
 import type { CollaborationMode, CollaborationParticipant } from "@geolibre/core";
-import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil, UserX, Ban } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { participantCanEdit } from "../../lib/collab-protocol";
 
@@ -14,6 +14,8 @@ interface CollaborationParticipantRowProps {
    *  own row never shows a control. */
   canManage: boolean;
   onSetParticipantMode: (clientId: string, canEdit: boolean) => void;
+  onKickParticipant?: (clientId: string) => void;
+  onBlockParticipant?: (clientId: string) => void;
   /** Render the smaller variant used in the on-canvas badge roster. */
   compact?: boolean;
 }
@@ -30,6 +32,8 @@ export function CollaborationParticipantRow({
   isSelf,
   canManage,
   onSetParticipantMode,
+  onKickParticipant,
+  onBlockParticipant,
   compact = false,
 }: CollaborationParticipantRowProps) {
   const { t } = useTranslation();
@@ -51,6 +55,11 @@ export function CollaborationParticipantRow({
         style={{ backgroundColor: p.color }}
       />
       <span className="truncate">{p.displayName}</span>
+      {p.identity && (
+        <span className="rounded bg-primary/10 px-1 text-[10px] text-primary">
+          {p.identity.provider === "geolibre" ? "✓" : p.identity.provider}
+        </span>
+      )}
       {isSelf && <span className="text-xs text-muted-foreground">({t("collaborate.you")})</span>}
       {isHostRow && (
         <span
@@ -61,19 +70,45 @@ export function CollaborationParticipantRow({
       )}
       {!isHostRow &&
         (showToggle ? (
-          <button
-            type="button"
-            onClick={() => onSetParticipantMode(p.clientId, !editable)}
-            // A binary "can edit" vs "view-only" setting reads as a switch to
-            // assistive tech, rather than a momentary press (aria-pressed).
-            role="switch"
-            aria-checked={editable}
-            title={editable ? t("collaborate.setViewOnly") : t("collaborate.allowEdit")}
-            className={`ms-auto flex shrink-0 items-center gap-1 rounded border py-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground ${compact ? "px-1 text-[10px]" : "px-1.5 text-xs"}`}
-          >
-            {permIcon}
-            {permLabel}
-          </button>
+          <div className="ms-auto flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onSetParticipantMode(p.clientId, !editable)}
+              role="switch"
+              aria-checked={editable}
+              title={editable ? t("collaborate.setViewOnly") : t("collaborate.allowEdit")}
+              className={`flex items-center gap-1 rounded border py-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground ${compact ? "px-1 text-[10px]" : "px-1.5 text-xs"}`}
+            >
+              {permIcon}
+              {permLabel}
+            </button>
+            {canManage && !compact && (
+              <>
+                {onKickParticipant && (
+                  <button
+                    type="button"
+                    onClick={() => onKickParticipant(p.clientId)}
+                    title={(t as (key: string) => string)("collaborate.kick")}
+                    aria-label={(t as (key: string) => string)("collaborate.kick")}
+                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <UserX className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                )}
+                {onBlockParticipant && (
+                  <button
+                    type="button"
+                    onClick={() => onBlockParticipant(p.clientId)}
+                    title={(t as (key: string) => string)("collaborate.block")}
+                    aria-label={(t as (key: string) => string)("collaborate.block")}
+                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Ban className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         ) : (
           // Non-host viewers still see each guest's current permission.
           <span

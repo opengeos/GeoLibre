@@ -13,6 +13,7 @@
  */
 
 import type { LngLat } from "./elevation-profile/elevation/geometry";
+import { bearingBetween } from "./route-animation-geometry";
 
 export type { LngLat };
 
@@ -345,4 +346,90 @@ function gradient(
   if (after !== null) return (after - here) / spacingMeters;
   if (before !== null) return (here - before) / spacingMeters;
   return null;
+}
+
+/**
+ * Initial (forward) great-circle azimuth from `a` to `b`, in degrees clockwise
+ * from true north, normalised to [0, 360).
+ *
+ * This is the *initial* bearing: on a sphere a great-circle path's heading
+ * changes as you travel it, so a long line's arrival bearing differs from its
+ * departure bearing. {@link finalAzimuthDegrees} gives the other end.
+ *
+ * Radius-independent, so it needs no ellipsoid — the bearing between two
+ * coordinates is the same on any sphere.
+ */
+export function forwardAzimuthDegrees(a: LngLat, b: LngLat): number {
+  // Delegates to the Route Animation plugin's implementation rather than
+  // re-deriving the same atan2 formula: two copies of a bearing that must agree
+  // is exactly the kind of drift this file's neighbours already avoid.
+  return bearingBetween(a, b);
+}
+
+/**
+ * Final great-circle azimuth arriving at `b` from `a`, in degrees clockwise
+ * from true north. Derived by reversing the leg and flipping 180°.
+ */
+export function finalAzimuthDegrees(a: LngLat, b: LngLat): number {
+  return (forwardAzimuthDegrees(b, a) + 180) % 360;
+}
+
+/**
+ * Whether two points are (near enough) antipodal.
+ *
+ * Antipodal endpoints lie on infinitely many great circles, so there is no
+ * defined initial bearing between them — `atan2` still returns a number, but it
+ * is an artefact of floating-point noise rather than a heading. Callers should
+ * report no bearing instead.
+ *
+ * The tolerance is generous (0.01 degrees, roughly a kilometre) because a
+ * bearing that close to antipodal is already meaningless.
+ */
+export function isAntipodal(a: LngLat, b: LngLat, toleranceDegrees = 0.01): boolean {
+  if (Math.abs(a[1] + b[1]) > toleranceDegrees) return false;
+  // Longitudes must differ by 180 degrees. Normalised into [0, 360) first so
+  // the comparison works across the antimeridian (e.g. -150 and 30).
+  const separation = (((b[0] - a[0]) % 360) + 360) % 360;
+  return Math.abs(separation - 180) <= toleranceDegrees;
+}
+
+/**
+ * Whether two points are close enough that the bearing between them is noise.
+ *
+ * An exact coordinate comparison misses points that differ only by
+ * floating-point dust, which still produce a mathematically valid but
+ * essentially arbitrary heading.
+ */
+export function isDegenerateSegment(a: LngLat, b: LngLat, toleranceDegrees = 1e-9): boolean {
+  if (Math.abs(a[1] - b[1]) > toleranceDegrees) return false;
+  // Wrapped onto the circle, so [180, 5] and [-180, 5] -- the same meridian
+  // written two ways -- separate by 0 rather than 360.
+  const lonGap = Math.abs(((b[0] - a[0] + 540) % 360) - 180);
+  return lonGap <= toleranceDegrees;
+}
+
+/** The 16-point compass rose, indexed by `round(azimuth / 22.5) % 16`. */
+const COMPASS_POINTS = [
+  "N",
+  "NNE",
+  "NE",
+  "ENE",
+  "E",
+  "ESE",
+  "SE",
+  "SSE",
+  "S",
+  "SSW",
+  "SW",
+  "WSW",
+  "W",
+  "WNW",
+  "NW",
+  "NNW",
+] as const;
+
+/** Nearest 16-point compass label for an azimuth in degrees (e.g. 310 -> "NW"). */
+export function compassPoint(azimuthDegrees: number): string {
+  const normalised = ((azimuthDegrees % 360) + 360) % 360;
+  return COMPASS_POINTS[Math.round(normalised / 22.5) % 16];
 }

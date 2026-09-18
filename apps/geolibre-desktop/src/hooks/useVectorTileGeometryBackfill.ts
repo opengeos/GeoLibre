@@ -13,10 +13,29 @@
  * so a layer whose tiles load after a pan/zoom is picked up too.
  */
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { sourceId } from "@geolibre/map";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import { sourceId, mapboxSourceId } from "@geolibre/map/style-layer-ids";
+import type { Feature } from "geojson";
+import type { MapEngine } from "@geolibre/map";
 import { useEffect } from "react";
 import type { createAppAPI } from "./usePlugins";
+
+/** Read-only tile query shared by MapLibre and Mapbox. */
+interface TileFeatureMap {
+  querySourceFeatures(sourceId: string, options?: { sourceLayer?: string }): Feature[];
+  on(event: "idle", listener: () => void): unknown;
+  off(event: "idle", listener: () => void): unknown;
+}
+
+/** Select the native tile-query map without treating Mapbox as MapLibre. */
+export function vectorTileMap(engine: MapEngine | null | undefined): TileFeatureMap | null {
+  const map = engine?.getMap();
+  if (map) return map;
+  return engine?.kind === "mapbox" &&
+    "getMapboxMap" in engine &&
+    typeof engine.getMapboxMap === "function"
+    ? engine.getMapboxMap()
+    : null;
+}
 
 /** Layer types drawn from vector tiles (no local features to inspect). */
 const VECTOR_TILE_TYPES = new Set<GeoLibreLayer["type"]>(["vector-tiles", "pmtiles", "mbtiles"]);
@@ -36,15 +55,30 @@ function liveSourceId(layer: GeoLibreLayer): string {
     : sourceId(layer.id);
 }
 
+/**
+ * Whether a layer draws from vector tiles, and so carries no local features:
+ * anything read from it has to come from the tiles currently loaded.
+ *
+ * @param layer - The layer to test.
+ * @returns `true` for vector-tile, PMTiles, and MBTiles layers.
+ */
+export function isVectorTileLayer(layer: GeoLibreLayer): boolean {
+  return VECTOR_TILE_TYPES.has(layer.type);
+}
+
 /** A bounded sample of features currently loaded for a vector-tile layer. */
 export function loadedVectorTileFeatures(
-  map: MapLibreMap,
+  map: Pick<TileFeatureMap, "querySourceFeatures">,
   layer: GeoLibreLayer,
-): ReturnType<MapLibreMap["querySourceFeatures"]> {
+  renderer: string = "maplibre",
+): Feature[] {
   const sourceLayer = sourceLayerOf(layer);
   try {
     return map
-      .querySourceFeatures(liveSourceId(layer), sourceLayer ? { sourceLayer } : undefined)
+      .querySourceFeatures(
+        renderer === "mapbox" ? mapboxSourceId(layer.id) : liveSourceId(layer),
+        sourceLayer ? { sourceLayer } : undefined,
+      )
       .slice(0, 400);
   } catch {
     return []; // source not added yet
@@ -52,9 +86,7 @@ export function loadedVectorTileFeatures(
 }
 
 /** The dominant geometry kind among sampled tile features, or null. */
-function dominantGeometry(
-  features: ReturnType<MapLibreMap["querySourceFeatures"]>,
-): "point" | "line" | "polygon" | null {
+function dominantGeometry(features: Feature[]): "point" | "line" | "polygon" | null {
   if (!features || features.length === 0) return null;
   let polygon = 0;
   let line = 0;
@@ -73,7 +105,7 @@ function dominantGeometry(
 }
 
 /** Sorted attribute names present in sampled tile features. */
-function attributeFields(features: ReturnType<MapLibreMap["querySourceFeatures"]>): string[] {
+function attributeFields(features: Feature[]): string[] {
   const fields = new Set<string>();
   for (const feature of features) {
     for (const field of Object.keys(feature.properties ?? {})) fields.add(field);
@@ -98,7 +130,7 @@ export function useVectorTileGeometryBackfill(
   const layers = useAppStore((state) => state.layers);
 
   useEffect(() => {
-    const map = app.getMap?.();
+    const map = app.getMap?.() ?? app.getMapboxMap?.();
     if (!map) return;
 
     const needsBackfill = () =>
@@ -116,7 +148,7 @@ export function useVectorTileGeometryBackfill(
 
     const backfill = (): void => {
       for (const layer of needsBackfill()) {
-        const features = loadedVectorTileFeatures(map, layer);
+        const features = loadedVectorTileFeatures(map, layer, app.getMapRenderer?.());
         if (features.length === 0) continue;
         const geometryType = dominantGeometry(features);
         const fields = attributeFields(features);

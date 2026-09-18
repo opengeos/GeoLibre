@@ -12,8 +12,8 @@ import { getRuntimeEnvironment } from "./runtime-env";
  * unit-tested without a browser or network.
  *
  * Providers: geocoding is dispatched through a small {@link GeocodingProvider}
- * registry so alternatives to Nominatim (ArcGIS World Geocoder, Mapbox, Pelias,
- * Google) can be selected per project. Each provider builds its own request
+ * registry so alternatives to Nominatim (ArcGIS World Geocoder, CartoCiudad, Mapbox,
+ * Pelias, Google) can be selected per project. Each provider builds its own request
  * URLs and normalizes its response into a {@link GeocodeMatch} (forward) or a
  * {@link ReverseGeocodeDisplay} (reverse), so the dialog and plugin stay
  * provider-agnostic. Nominatim is the default.
@@ -39,6 +39,18 @@ export const NOMINATIM_PUBLIC_HOST = "nominatim.openstreetmap.org";
 /** Minimum spacing between requests to the public Nominatim endpoint. */
 export const NOMINATIM_MIN_INTERVAL_MS = 1100;
 
+/** Host of the free, unkeyed public CartoCiudad geocoder (IGN/CNIG). */
+export const CARTOCIUDAD_PUBLIC_HOST = "cartociudad.es";
+
+/**
+ * Courtesy spacing (~5 req/sec) between requests to the public CartoCiudad
+ * endpoint. Unlike {@link NOMINATIM_MIN_INTERVAL_MS} this is not a published
+ * policy — IGN documents no rate limit — it is our own conservative default so
+ * a large batch does not burst at a free public government service. See
+ * {@link geocoderMinIntervalMs}.
+ */
+export const CARTOCIUDAD_MIN_INTERVAL_MS = 200;
+
 /** Max rows a single batch run will geocode against the public endpoint. */
 export const PUBLIC_GEOCODE_ROW_CAP = 1000;
 
@@ -53,7 +65,13 @@ export const GEOCODE_PROVIDER_KEY = "geocode_provider";
 export const GEOCODE_STATUS_KEY = "geocode_status";
 
 /** Identifier of a selectable geocoding backend. */
-export type GeocodingProviderId = "nominatim" | "pelias" | "arcgis" | "mapbox" | "google";
+export type GeocodingProviderId =
+  | "nominatim"
+  | "pelias"
+  | "arcgis"
+  | "mapbox"
+  | "google"
+  | "cartociudad";
 
 /** The provider used when none is configured. */
 export const DEFAULT_GEOCODING_PROVIDER_ID: GeocodingProviderId = "nominatim";
@@ -661,6 +679,165 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
     .filter((m): m is GeocodeMatch => m !== null);
 }
 
+// --- CartoCiudad (IGN/CNIG — Spanish national geocoder) -------------------
+
+/**
+ * A single CartoCiudad forward/reverse geocoding result. The API returns one
+ * object (not an array) for both forward (`find`) and reverse (`reverseGeocode`)
+ * lookups, even for an ambiguous query. `lat`/`lng` are top-level numbers.
+ *
+ * There is no in-body success flag or confidence signal to check. A query the
+ * geocoder cannot match comes back as HTTP 204 with an empty body rather than
+ * an object carrying a failure code, so {@link readGeocodeJson} turns it into
+ * "no results" before a parser ever sees it. The `state`/`stateMsg` fields are
+ * vestigial: IGN's own service docs record them as suppressed in the current
+ * Elasticsearch-backed geocoder, which "cannot configure candidate output by
+ * degree of match", so `state` is permanently 0 and `stateMsg` empty
+ * (github.com/IDEESpain/Cartociudad). Neither is modeled here, and matches
+ * carry `score: null` because the API exposes no ranking to map onto it.
+ */
+interface CartoCiudadResult {
+  lat: number;
+  lng: number;
+  address?: string;
+  type?: string;
+  tip_via?: string;
+  portalNumber?: number | string;
+  postalCode?: string;
+  poblacion?: string;
+  muni?: string;
+  province?: string;
+  comunidadAutonoma?: string;
+  refCatastral?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Read a CartoCiudad `lat`/`lng` field as a finite number, or null when the
+ * field is absent, blank, or not numeric (`"NaN"` and `"invalid"` included).
+ * Guarding the raw value matters because `Number(null)` is 0, which would turn
+ * a coordinate-less response into a match in the Gulf of Guinea.
+ */
+function cartociudadCoordinate(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Validated WGS84 position for a result, or null when it carries none. */
+function cartociudadCoords(r: CartoCiudadResult): { lat: number; lon: number } | null {
+  const lat = cartociudadCoordinate(r.lat);
+  const lon = cartociudadCoordinate(r.lng);
+  if (lat === null || lon === null) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+/** Default endpoints for the public CartoCiudad REST API (no auth required). */
+const CARTOCIUDAD_FORWARD_ENDPOINT = "https://www.cartociudad.es/geocoder/api/geocoder/find";
+const CARTOCIUDAD_REVERSE_ENDPOINT =
+  "https://www.cartociudad.es/geocoder/api/geocoder/reverseGeocode";
+
+/**
+ * Build a human-readable display name from CartoCiudad address fields.
+ * Format: "Tip Via Address Num, CP Poblacion (Province)"
+ */
+function cartociudadDisplayName(r: CartoCiudadResult): string {
+  const parts: string[] = [];
+  const streetParts = [r.tip_via, r.address]
+    .filter((s) => s && String(s).trim())
+    .map((s) => String(s).trim());
+  if (streetParts.length) {
+    let street = streetParts.join(" ");
+    const portalNumber =
+      r.portalNumber === undefined || r.portalNumber === null ? "" : String(r.portalNumber).trim();
+    if (portalNumber) street += ` ${portalNumber}`;
+    parts.push(street);
+  }
+  // `poblacion` is null on some results that still carry `muni` — a road
+  // kilometre point such as "A-6 km 120" answers with muni "Espinosa de los
+  // Caballeros" and no poblacion — so fall back to the municipality rather than
+  // drop it from the display name. When both are present, `poblacion` wins as
+  // the more specific locality.
+  const localityName = [r.poblacion, r.muni].find((s) => s && String(s).trim());
+  const locality = [r.postalCode, localityName]
+    .filter((s) => s && String(s).trim())
+    .map((s) => String(s).trim())
+    .join(" ");
+  if (locality) parts.push(locality);
+  const province = r.province ? String(r.province).trim() : "";
+  if (province) parts.push(`(${province})`);
+  return parts.join(", ") || r.address || r.poblacion || r.muni || "";
+}
+
+const cartociudadProvider: GeocodingProvider = {
+  id: "cartociudad",
+  label: "CartoCiudad (IGN España)",
+  forward: true,
+  reverse: true,
+  requiresApiKey: false,
+  acceptsApiKey: false,
+  defaultForwardEndpoint: CARTOCIUDAD_FORWARD_ENDPOINT,
+  defaultReverseEndpoint: CARTOCIUDAD_REVERSE_ENDPOINT,
+  buildForwardUrl: (config, query) => {
+    const url = new URL(config.forwardEndpoint);
+    url.searchParams.set("q", query);
+    // `find` answers with one best result and has no result-count parameter, so
+    // the batch loop's `limit` is intentionally not forwarded.
+    return url.toString();
+  },
+  parseForward: (data) => {
+    // `find` returns a single object, never an array — verified against the live
+    // endpoint with an ambiguous query ("calle mayor"), which still answers with
+    // one object rather than a candidate list.
+    if (!data || typeof data !== "object" || Array.isArray(data)) return [];
+    const r = data as CartoCiudadResult;
+    const coords = cartociudadCoords(r);
+    if (!coords) return [];
+    const displayName = cartociudadDisplayName(r).trim();
+    if (!displayName) return [];
+    return [
+      {
+        lat: coords.lat,
+        lon: coords.lon,
+        displayName,
+        score: null,
+      },
+    ];
+  },
+  buildReverseUrl: (config, lon, lat) => {
+    const url = new URL(config.reverseEndpoint);
+    url.searchParams.set("lat", String(lat));
+    url.searchParams.set("lon", String(lon));
+    return url.toString();
+  },
+  parseReverse: (data) => {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+    const r = data as CartoCiudadResult;
+    if (!cartociudadCoords(r)) return null;
+    const displayName = cartociudadDisplayName(r).trim();
+    if (!displayName) return null;
+    // Build a structured address-parts record from the rich CartoCiudad fields.
+    const parts: Record<string, string> = {};
+    for (const [key, value] of Object.entries({
+      type: r.type,
+      tip_via: r.tip_via,
+      address: r.address,
+      portalNumber: r.portalNumber,
+      postalCode: r.postalCode,
+      poblacion: r.poblacion,
+      muni: r.muni,
+      province: r.province,
+      comunidadAutonoma: r.comunidadAutonoma,
+      refCatastral: r.refCatastral,
+    })) {
+      if (value !== undefined && value !== null && value !== "") parts[key] = String(value);
+    }
+    return { displayName, parts };
+  },
+};
+
 /** All selectable geocoding providers, Nominatim first (the default). */
 export const GEOCODING_PROVIDERS: readonly GeocodingProvider[] = [
   nominatimProvider,
@@ -668,6 +845,7 @@ export const GEOCODING_PROVIDERS: readonly GeocodingProvider[] = [
   arcgisProvider,
   mapboxProvider,
   googleProvider,
+  cartociudadProvider,
 ];
 
 const PROVIDERS_BY_ID = new Map<GeocodingProviderId, GeocodingProvider>(
@@ -734,33 +912,64 @@ export function resolveGeocoderConfig(input: GeocodingPreferenceInput): Geocoder
   };
 }
 
-/**
- * Whether requests to `endpoint` must be throttled/capped. True for the public
- * Nominatim host (its usage policy applies) and, defensively, for any endpoint
- * that does not parse as a URL. Every other host (a self-hosted Nominatim or a
- * keyed provider) returns false.
- */
-export function shouldThrottle(endpoint: string): boolean {
+/** Hostname of `endpoint`, or null when it does not parse as a URL. */
+function geocoderHostname(endpoint: string): string | null {
   try {
-    return new URL(endpoint).hostname === NOMINATIM_PUBLIC_HOST;
+    return new URL(endpoint).hostname;
   } catch {
-    return true;
+    return null;
   }
 }
 
-/** The row cap to apply for `endpoint`: a finite cap for the public host, else Infinity. */
+/** Whether `hostname` is the public CartoCiudad service or a subdomain of it. */
+function isCartociudadHost(hostname: string | null): boolean {
+  if (hostname === null) return false;
+  return hostname === CARTOCIUDAD_PUBLIC_HOST || hostname.endsWith(`.${CARTOCIUDAD_PUBLIC_HOST}`);
+}
+
+/**
+ * Whether requests to `endpoint` must be throttled AND row-capped. True for the
+ * public Nominatim host (its usage policy applies) and, defensively, for any
+ * endpoint that does not parse as a URL. Every other host (a self-hosted
+ * Nominatim or a keyed provider) returns false.
+ *
+ * Note this is the *Nominatim policy* gate, not "is this host paced at all" —
+ * see {@link geocoderMinIntervalMs}, which paces CartoCiudad more gently
+ * without capping its row count.
+ */
+export function shouldThrottle(endpoint: string): boolean {
+  const hostname = geocoderHostname(endpoint);
+  return hostname === null || hostname === NOMINATIM_PUBLIC_HOST;
+}
+
+/**
+ * The row cap to apply for `endpoint`: a finite cap for the public Nominatim
+ * host, else Infinity. CartoCiudad is uncapped — IGN publishes no row limit and
+ * its own bulk address geocoder processes up to 60,000 records per run, so a
+ * cap here would be an invented constraint. It is still paced; see
+ * {@link geocoderMinIntervalMs}.
+ */
 export function rowCap(endpoint: string): number {
   return shouldThrottle(endpoint) ? PUBLIC_GEOCODE_ROW_CAP : Number.POSITIVE_INFINITY;
 }
 
 /**
- * Minimum spacing (ms) between requests for `endpoint`. Gated on the hostname
- * (like {@link rowCap}), not the selected provider, so pointing any provider at
- * the public Nominatim host still honors its 1 req/sec policy; keyed providers
- * and self-hosted endpoints are not paced by us.
+ * Minimum spacing (ms) between requests for `endpoint`. Gated on the hostname,
+ * not the selected provider, so pointing any provider at the public Nominatim
+ * host still honors its 1 req/sec policy.
+ *
+ * CartoCiudad gets a gentler pace of its own. IGN documents no rate limit for
+ * the single-lookup `find`/`reverseGeocode` endpoints either way, so the honest
+ * position is that unbounded bursting is unverified rather than sanctioned:
+ * a large CSV run against a free public government service with zero spacing
+ * risks getting the caller's IP throttled and degrading the service for
+ * everyone. Nominatim's 1 req/sec is that provider's published policy and is
+ * not borrowed here. Keyed providers and self-hosted endpoints are paced by
+ * their own quotas, not by us.
  */
 export function geocoderMinIntervalMs(endpoint: string): number {
-  return shouldThrottle(endpoint) ? NOMINATIM_MIN_INTERVAL_MS : 0;
+  if (shouldThrottle(endpoint)) return NOMINATIM_MIN_INTERVAL_MS;
+  return isCartociudadHost(geocoderHostname(endpoint)) ? CARTOCIUDAD_MIN_INTERVAL_MS : 0;
 }
 
 /** Hosted Pelias service that rejects keyless requests. */
@@ -853,6 +1062,41 @@ function geocodeFetch(): typeof globalThis.fetch {
 }
 
 /**
+ * Read a geocoder response body as JSON, treating an empty one as "no results".
+ *
+ * CartoCiudad answers an unmatched query with HTTP 204 and an empty body rather
+ * than a JSON null (verified against the live `find` and `reverseGeocode`
+ * endpoints). `response.ok` is true for 204, so parsing unconditionally would
+ * throw a JSON syntax error and surface a nonsense address as "Search failed"
+ * instead of "no match". Returning undefined lets each provider's parser report
+ * no results the way it already does for a null body.
+ */
+async function readGeocodeJson(response: Response): Promise<unknown> {
+  if (response.status === 204) return undefined;
+  const text = await response.text();
+  if (!text.trim()) return undefined;
+  return JSON.parse(text) as unknown;
+}
+
+/**
+ * Normalize a longitude into [-180, 180], or null when it is not finite.
+ *
+ * MapLibre reports `lngLat.lng` unwrapped once the map is zoomed out far enough
+ * to show repeated world copies, so a click on a non-primary copy arrives as
+ * e.g. 210 rather than -150. Rejecting those outright would silently drop a
+ * legitimate reverse-geocode click for every provider, so wrap instead.
+ *
+ * An in-range longitude returns untouched: the modulo round-trip is not exact
+ * in floating point (-3.7 comes back as -3.7000000000000455), and the common
+ * case should not be perturbed to handle the rare one.
+ */
+function wrapLongitude(lon: number): number | null {
+  if (!Number.isFinite(lon)) return null;
+  if (lon >= -180 && lon <= 180) return lon;
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
  * Forward-geocode a single query through the configured provider, returning
  * normalized matches.
  */
@@ -873,7 +1117,7 @@ export async function geocodeForward(
   if (!response.ok) {
     throw new Error(`Geocoder returned HTTP ${response.status}`);
   }
-  const data: unknown = await response.json();
+  const data: unknown = await readGeocodeJson(response);
   return provider.parseForward(data);
 }
 
@@ -886,9 +1130,13 @@ export async function geocodeReverse(
   lat: number,
   options: { signal?: AbortSignal; config?: GeocoderConfig; zoom?: number } = {},
 ): Promise<ReverseGeocodeDisplay | null> {
+  const wrappedLon = wrapLongitude(lon);
+  if (wrappedLon === null || !Number.isFinite(lat) || lat < -90 || lat > 90) {
+    return null;
+  }
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
-  const url = provider.buildReverseUrl(config, lon, lat, {
+  const url = provider.buildReverseUrl(config, wrappedLon, lat, {
     email: config.email,
     zoom: options.zoom,
   });
@@ -899,6 +1147,6 @@ export async function geocodeReverse(
   if (!response.ok) {
     throw new Error(`Geocoder returned HTTP ${response.status}`);
   }
-  const data: unknown = await response.json();
+  const data: unknown = await readGeocodeJson(response);
   return provider.parseReverse(data);
 }

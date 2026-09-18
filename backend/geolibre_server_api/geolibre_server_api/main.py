@@ -9,7 +9,7 @@ import re
 import secrets
 import shutil
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote
@@ -112,6 +112,26 @@ class Version(Base):
     project: Mapped[Project] = relationship(back_populates="versions")
 
 
+class ProjectActivity(Base):
+    __tablename__ = "project_activities"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(50))
+    details_json: Mapped[str] = mapped_column(Text, default="{}")
+    # Anonymous open/fetch events collapse into one row per project, action and
+    # UTC day: `bucket_key` ("<project>:<action>:<YYYY-MM-DD>") is unique so two
+    # concurrent requests cannot create duplicate buckets, and `count` is
+    # incremented database-side so they cannot lose each other's increment.
+    bucket_key: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[str] = mapped_column(String(32), index=True)
+
+
 # project_json reads project.owner.username and len(project.versions), both lazy.
 # Without these a single listing page (up to 100 rows) fires ~201 queries instead
 # of three.
@@ -149,6 +169,101 @@ class ForkRequest(BaseModel):
 
 def now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+# Activity rows older than this are pruned the next time the project logs an
+# event, so the log never grows without bound (GeoLibre#1678 asks for a stated
+# retention period plus owner-initiated deletion, the latter being
+# DELETE /api/projects/{id}/activity).
+ACTIVITY_RETENTION_DAYS = int(os.getenv("GEOLIBRE_ACTIVITY_RETENTION_DAYS", "90"))
+# Actions an anonymous visitor can trigger. These are never stored per hit:
+# they are aggregated into one row per project, action and UTC day carrying a
+# count, so the owner learns "opened 40 times on 2026-08-21" and nothing about
+# who did it.
+AGGREGATED_ANONYMOUS_ACTIONS = frozenset({"open", "fetch"})
+
+
+def log_project_activity(
+    session: Session,
+    project_id: str,
+    actor_id: str | None,
+    action: str,
+    details: dict | None = None,
+) -> None:
+    """Record a project event, aggregating anonymous opens/fetches per day.
+
+    Args:
+        session: The open database session; the caller commits.
+        project_id: The project the event belongs to.
+        actor_id: The authenticated account, or ``None`` for an anonymous visitor.
+        action: A short action name such as ``"fork"`` or ``"visibility_change"``.
+        details: Optional JSON-serializable context stored with the row.
+    """
+    timestamp = now()
+    cutoff = (
+        (datetime.now(UTC) - timedelta(days=ACTIVITY_RETENTION_DAYS))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    session.execute(
+        delete(ProjectActivity).where(
+            ProjectActivity.project_id == project_id, ProjectActivity.created_at < cutoff
+        )
+    )
+    bucket_key = None
+    if actor_id is None and action in AGGREGATED_ANONYMOUS_ACTIONS:
+        day = timestamp[:10]
+        bucket_key = f"{project_id}:{action}:{day}"
+        details = {"date": day}
+        # Atomic increment: no read-modify-write, so two concurrent hits cannot
+        # overwrite each other's count.
+        updated = session.execute(
+            update(ProjectActivity)
+            .where(ProjectActivity.bucket_key == bucket_key)
+            .values(count=ProjectActivity.count + 1)
+        ).rowcount
+        if updated:
+            return
+    row = ProjectActivity(
+        id=str(uuid.uuid4()),
+        project_id=project_id,
+        actor_id=actor_id,
+        action=action,
+        details_json=json.dumps(details or {}),
+        bucket_key=bucket_key,
+        count=1,
+        created_at=timestamp,
+    )
+    if bucket_key is None:
+        session.add(row)
+        return
+    # Two requests can both miss the UPDATE and race to create the day's bucket;
+    # the unique key makes the loser's INSERT fail, and it falls back to the
+    # increment.
+    try:
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
+    except IntegrityError:
+        session.execute(
+            update(ProjectActivity)
+            .where(ProjectActivity.bucket_key == bucket_key)
+            .values(count=ProjectActivity.count + 1)
+        )
+
+
+def activity_json(act: ProjectActivity) -> dict:
+    """Serialize an activity row with the API's camelCase field names."""
+    details = json.loads(act.details_json)
+    if act.bucket_key is not None:
+        details["count"] = act.count
+    return {
+        "id": act.id,
+        "action": act.action,
+        "actorId": act.actor_id,
+        "details": details,
+        "createdAt": act.created_at,
+    }
 
 
 def password_hash(password: str, salt: bytes | None = None) -> str:
@@ -638,6 +753,32 @@ def create_app(
     ):
         return {"project": project_json(visible(session.get(Project, project_id), account))}
 
+    @app.get("/api/projects/{project_id}/activity")
+    def get_project_activity(
+        project_id: str,
+        account: Account = Depends(required_account),
+        session: Session = Depends(db),
+    ):
+        project = owned(session.get(Project, project_id), account)
+        activities = session.scalars(
+            select(ProjectActivity)
+            .where(ProjectActivity.project_id == project.id)
+            .order_by(ProjectActivity.created_at.desc())
+            .limit(100)
+        ).all()
+        return {"activity": [activity_json(act) for act in activities]}
+
+    @app.delete("/api/projects/{project_id}/activity", status_code=204)
+    def delete_project_activity(
+        project_id: str,
+        account: Account = Depends(required_account),
+        session: Session = Depends(db),
+    ):
+        project = owned(session.get(Project, project_id), account)
+        session.execute(delete(ProjectActivity).where(ProjectActivity.project_id == project.id))
+        session.commit()
+        return Response(status_code=204)
+
     @app.patch("/api/projects/{project_id}")
     def patch_project(
         project_id: str,
@@ -646,6 +787,7 @@ def create_app(
         session: Session = Depends(db),
     ):
         project = owned(session.get(Project, project_id), account)
+        old_visibility = project.visibility
         updates = body.model_dump(exclude_unset=True)
         if "title" in updates:
             if not updates["title"] or not updates["title"].strip():
@@ -667,6 +809,14 @@ def create_app(
                 raise HTTPException(422, "tags must contain at most 20 non-empty 40-character tags")
             project.tags_json = json.dumps(tags)
         project.updated_at = now()
+        if old_visibility != project.visibility:
+            log_project_activity(
+                session,
+                project.id,
+                account.id,
+                "visibility_change",
+                {"before": old_visibility, "after": project.visibility},
+            )
         session.commit()
         return {"project": project_json(project)}
 
@@ -707,6 +857,7 @@ def create_app(
             raise HTTPException(409, "could not allocate a version number; retry")
         object_storage.put(key, body.content.encode(), "application/json")
         project.updated_at = now()
+        log_project_activity(session, project.id, account.id, "version_save", {"version": number})
         session.commit()
         session.refresh(project)
         return {"project": project_json(project), "version": number}
@@ -750,6 +901,7 @@ def create_app(
         session.execute(
             update(Project).where(Project.id == source.id).values(fork_count=Project.fork_count + 1)
         )
+        log_project_activity(session, source.id, account.id, "fork", {"forked_project_id": fork.id})
         session.commit()
         session.refresh(fork)
         return {"project": project_json(fork)}
@@ -779,6 +931,10 @@ def create_app(
         version = session.get(Version, (project_id, number))
         if version is None:
             raise HTTPException(404, "project version not found")
+        log_project_activity(
+            session, project.id, account.id if account else None, "fetch", {"version": number}
+        )
+        session.commit()
         return raw_response(project, version, True)
 
     @app.put("/api/projects/{project_id}/thumbnail", status_code=204)
@@ -854,6 +1010,13 @@ def create_app(
         session.execute(
             update(Project).where(Project.id == project.id).values(views=Project.views + 1)
         )
+        log_project_activity(
+            session,
+            project.id,
+            account.id if account else None,
+            "fetch",
+            {"version": project.versions[-1].number},
+        )
         session.commit()
         return body
 
@@ -868,6 +1031,8 @@ def create_app(
             select(Project).join(Account).where(Account.username == username, Project.slug == slug)
         )
         project = visible(project, account)
+        log_project_activity(session, project.id, account.id if account else None, "open")
+        session.commit()
         raw = f"{base_url}/{quote(username)}/{quote(slug)}.geolibre.json"
         return RedirectResponse(viewer_url + "?project=" + quote(raw, safe=""), status_code=302)
 

@@ -1,5 +1,6 @@
 import type { MapViewState } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
+import type { MapLibreEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -53,7 +54,7 @@ export interface ViewportHistory {
  *     The current navigability flags and the back/forward actions.
  */
 export function useViewportHistory(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
   projectGeneration: number,
 ): ViewportHistory {
@@ -69,19 +70,55 @@ export function useViewportHistory(
   const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
 
+  /**
+   * Whether history is usable right now.
+   *
+   * The stack is only fed by MapLibre's `moveend` (see the effect below), so on
+   * an engine without a native map it holds views from a renderer that is no
+   * longer drawing. Every entry point checks this — not just the effect — because
+   * the keyboard shortcuts reach `goBack`/`goForward` directly: `useGlobalShortcuts`
+   * runs a command on a key match without consulting the View menu's disabled
+   * state, so gating the menu alone left `[` and `]` able to ease the globe's
+   * camera through stale 2D history (#2268 review).
+   */
+  const canNavigateHistory = useCallback(
+    () => Boolean(mapControllerRef.current?.getMap()),
+    [mapControllerRef],
+  );
+
   const syncNav = useCallback(() => {
-    const canGoBack = indexRef.current > 0;
-    const canGoForward = indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
+    // Report "nowhere to go" whenever history cannot be used, so a `restore()`
+    // that raced a hand-off cannot leave the menu items looking enabled.
+    const usable = canNavigateHistory();
+    const canGoBack = usable && indexRef.current > 0;
+    const canGoForward =
+      usable && indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
     setNav((prev) =>
       prev.canGoBack === canGoBack && prev.canGoForward === canGoForward
         ? prev
         : { canGoBack, canGoForward },
     );
-  }, []);
+  }, [canNavigateHistory]);
 
   useEffect(() => {
+    // MapLibre-only for now, and deliberately so. Recording is already
+    // engine-neutral (`record` reads through `controller.readView()`), but the
+    // *trigger* is MapLibre's `moveend` — and the story/flight tokens it filters
+    // on ride along as that event's `eventData`. Giving the globe a history
+    // needs an engine-neutral camera-change subscription on `MapEngine`, which
+    // is a follow-up rather than something to fake here (#2268 review). Until
+    // then Previous/Next View stay disabled on the globe.
     const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
+    if (!map) {
+      // Re-report on the hand-off: `syncNav` answers "nowhere to go" without a
+      // usable map, so panning on the 2D map and then switching to the globe no
+      // longer leaves the last 2D answer standing. The stack itself is kept —
+      // switching back re-runs this effect and `syncNav` restores the real
+      // answer, so a round trip through the globe does not cost the user their
+      // history.
+      syncNav();
+      return;
+    }
     const controller = mapControllerRef.current;
 
     // Loading a different project clears the stack so navigation can't cross
@@ -117,7 +154,12 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number; flightCameraToken?: number }) => {
+    // Both tokens ride along as `eventData` on the camera calls that set them,
+    // so they are extra fields on a real `moveend` event rather than a
+    // standalone shape — v6's listener types reject the latter.
+    const onMoveEnd = (
+      event: MapLibreEvent & { storyCameraToken?: number; flightCameraToken?: number },
+    ) => {
       // Story presenter / chapter-preview camera moves carry a storyCameraToken
       // in their event data. Those are scripted playback, not user navigation,
       // so don't record them (checked before the restore counter so a story
@@ -159,14 +201,18 @@ export function useViewportHistory(
       const controller = mapControllerRef.current;
       // Bail before touching the flag if there's no map to drive — otherwise it
       // would stay `true` (no `moveend` to clear it) and swallow the next pan.
-      if (!controller) return;
+      // `canNavigateHistory`, not just `!controller`: the ref now holds a live
+      // engine on the globe, so the old null check no longer covers the "no
+      // MapLibre map" case and a shortcut could animate the globe from stale 2D
+      // history (#2268 review).
+      if (!controller || !canNavigateHistory()) return;
       indexRef.current = nextIndex;
       restoringCountRef.current++;
       // Animate (easeTo) rather than jump, matching the browser-style framing.
       controller.easeToView(view);
       syncNav();
     },
-    [mapControllerRef, syncNav],
+    [canNavigateHistory, mapControllerRef, syncNav],
   );
 
   const goBack = useCallback(() => {

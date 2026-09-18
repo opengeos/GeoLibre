@@ -1,11 +1,14 @@
 import { useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
   getStatisticsTool,
   type AlgorithmParameter,
+  type FieldWeight,
   type GeometryFamily,
+  numericFieldValue,
   type ProcessingContext,
+  type ResultLayerOptions,
 } from "@geolibre/processing";
 import {
   Button,
@@ -21,11 +24,17 @@ import type { FeatureCollection } from "geojson";
 import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**
@@ -37,12 +46,35 @@ interface StatisticsToolsDialogProps {
  * @returns True when the value is missing or, for numbers, NaN.
  */
 function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
+  // A composite score needs at least two fields to combine, so a single row is
+  // as unset as no rows at all. Weights that are all zero carry no information
+  // either, and the editor already says so, so they leave the parameter unset
+  // rather than letting a run produce an index nothing weighted.
+  if (param.type === "field-weights") {
+    const rows = Array.isArray(value) ? (value as FieldWeight[]) : [];
+    const named = rows.filter((row) => row?.field);
+    return named.length < 2 || !named.some((row) => Number(row.weight) > 0);
+  }
   return (
     value === undefined ||
     value === "" ||
     value === null ||
     (param.type === "number" && typeof value === "number" && Number.isNaN(value))
   );
+}
+
+/**
+ * Whether a GeoJSON property value is a number a scoring tool can use.
+ *
+ * Delegates to the processing package's own rule so the fields this picker
+ * offers are exactly the ones a tool will score, rather than two copies of the
+ * same check drifting apart.
+ *
+ * @param value - Raw property value.
+ * @returns True when the value reads as a finite number.
+ */
+function isNumericValue(value: unknown): boolean {
+  return numericFieldValue(value) !== null;
 }
 
 /**
@@ -62,6 +94,7 @@ export function StatisticsToolsDialog({
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const rerun = useAppStore((s) => s.ui.processingRerun);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
@@ -145,18 +178,29 @@ export function StatisticsToolsDialog({
   );
 
   // Attribute-field names per layer, sampled from the first features (GeoJSON is
-  // schemaless). Memoized on the layer set and the dialog being open.
+  // schemaless). Numeric fields are tracked separately: a field-weights
+  // parameter can only score numbers, so offering the text columns there just
+  // invites a run that fails. Memoized on the layer set and the dialog being open.
   const fieldsByLayer = useMemo(() => {
     const FIELD_SCAN_SAMPLE = 1000;
-    const map = new Map<string, string[]>();
+    const map = new Map<string, { all: string[]; numeric: string[] }>();
     if (!open) return map;
     for (const layer of layers) {
       if (layer.type !== "geojson" || !layer.geojson) continue;
       const keys = new Set<string>();
+      const numeric = new Set<string>();
       for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
-        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+        for (const [key, value] of Object.entries(feature.properties ?? {})) {
+          keys.add(key);
+          // A field counts as numeric as soon as one sampled feature carries a
+          // finite number for it, so a scattering of nulls does not hide it.
+          // Booleans, blank strings, and single-element arrays all survive
+          // `Number()`, so the check is on the value's own type, not on what it
+          // coerces to.
+          if (isNumericValue(value)) numeric.add(key);
+        }
       }
-      map.set(layer.id, [...keys]);
+      map.set(layer.id, { all: [...keys], numeric: [...numeric] });
     }
     return map;
   }, [layers, open]);
@@ -164,13 +208,15 @@ export function StatisticsToolsDialog({
   const fieldOptions = useCallback(
     (param: AlgorithmParameter): string[] => {
       const sourceId = params[param.fieldSource ?? "layer"] as string | undefined;
-      return (sourceId && fieldsByLayer.get(sourceId)) || [];
+      const fields = sourceId ? fieldsByLayer.get(sourceId) : undefined;
+      if (!fields) return [];
+      return param.type === "field-weights" ? fields.numeric : fields.all;
     },
     [fieldsByLayer, params],
   );
 
   const addResultLayer = useCallback(
-    (name: string, fc: FeatureCollection) => {
+    (name: string, fc: FeatureCollection, options?: ResultLayerOptions) => {
       if (!fc.features.length) {
         appendLog(`No features produced for "${name}"`);
         return;
@@ -178,9 +224,28 @@ export function StatisticsToolsDialog({
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      // A score column says nothing under the default single color, so a tool
+      // that produces one hands the field to the graduated renderer and the
+      // layer lands on the map already styled by it.
+      if (layer && options?.graduatedField) {
+        try {
+          setLayerStyle(
+            layerId,
+            buildSymbologyStyle(layer, {
+              mode: "graduated",
+              property: options.graduatedField,
+              colorRamp: options.colorRamp ?? "viridis",
+              classCount: options.classCount ?? 5,
+              scheme: "quantile",
+            }),
+          );
+        } catch (error) {
+          appendLog(`Could not style "${name}": ${(error as Error).message}`);
+        }
+      }
       if (layer) mapControllerRef.current?.fitLayer(layer);
     },
-    [addGeoJsonLayer, appendLog, mapControllerRef],
+    [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle],
   );
 
   // When a layer parameter changes, clear any field parameter that draws its
@@ -190,7 +255,10 @@ export function StatisticsToolsDialog({
       setParams((prev) => {
         const next = { ...prev, [id]: value };
         for (const param of tool.parameters) {
-          if (param.type === "field" && (param.fieldSource ?? "layer") === id) {
+          if (
+            (param.type === "field" || param.type === "field-weights") &&
+            (param.fieldSource ?? "layer") === id
+          ) {
             next[param.id] = undefined;
           }
         }
@@ -312,7 +380,7 @@ export function StatisticsToolsDialog({
                     entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                   )}
                 >
-                  {entry.name}
+                  {translateToolName(t, "statistics", entry)}
                 </button>
               ))}
             </div>
@@ -320,16 +388,22 @@ export function StatisticsToolsDialog({
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "statistics", tool)}
+            </p>
 
             <div className="flex flex-col gap-3">
               {tool.parameters.filter(isParamVisible).map((param) => (
                 <ParameterField
                   key={param.id}
-                  param={param}
+                  param={translateParameter(t, "statistics", tool.id, param)}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
+                  fieldOptions={
+                    param.type === "field" || param.type === "field-weights"
+                      ? fieldOptions(param)
+                      : undefined
+                  }
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}

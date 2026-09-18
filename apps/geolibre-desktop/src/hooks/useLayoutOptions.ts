@@ -14,6 +14,8 @@ export interface LayoutOptions {
    * shared rail — so a map-only embed shows nothing but the map.
    */
   panelsHidden: boolean;
+  /** Start the Layers and Style panels on their rails without hiding them. */
+  panelsCollapsed: boolean;
   showProjectInfo: boolean;
   statusBarVisible: boolean;
   stylePanelVisible: boolean;
@@ -25,6 +27,7 @@ export interface LayoutOptions {
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
+const HIDDEN_TOOLBAR_VALUES = new Set(["hidden", "hide", "none", "off"]);
 const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
 const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
 
@@ -41,6 +44,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
       attributePanelVisible: true,
       compact: false,
       panelsHidden: false,
+      panelsCollapsed: false,
       statusBarVisible: true,
       toolbarVisible: true,
       viewer: false,
@@ -67,6 +71,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     mapOnly ||
     HIDDEN_PANEL_VALUES.has(panels) ||
     normalizedParam(params.get("hidePanels")) === "true";
+  const panelsCollapsed = !panelsHidden && panels === "collapsed";
   const toolbarLabels =
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
@@ -82,11 +87,12 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     compact,
     layerPanelVisible,
     panelsHidden,
+    panelsCollapsed,
     showProjectInfo,
     statusBarVisible: !mapOnly,
     stylePanelVisible,
     toolbarLabels,
-    toolbarVisible: !mapOnly,
+    toolbarVisible: !mapOnly && !HIDDEN_TOOLBAR_VALUES.has(toolbar),
     viewer,
   };
 }

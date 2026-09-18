@@ -5,7 +5,9 @@ import {
   type FemaWmsEventHandler,
 } from "maplibre-gl-fema-wms";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getStyleMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -19,7 +21,7 @@ const SOURCE_KIND = "fema-wms";
 // Matches the control's native source/layer id scheme (`fema-wms-<name>`).
 const NATIVE_ID_PREFIX = "fema-wms-";
 
-let femaWmsPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "fema-wms-panel";
 
 const FEMA_WMS_OPTIONS = {
   collapsed: false,
@@ -30,6 +32,7 @@ const FEMA_WMS_OPTIONS = {
 
 let femaWmsControl: FemaWmsControl | null = null;
 let controlEventHandler: FemaWmsEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 function layerNameFromStoreLayer(layer: GeoLibreLayer): string | undefined {
   const fromMetadata = stringMetadata(layer.metadata.femaLayerName);
@@ -113,43 +116,57 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-fema-wms",
   name: "FEMA NFHL",
   version: "0.1.2",
+  // Docks its panel and adds raster tile layers through the Style Spec API
+  // both 2D engines share; the engine adopts the layers under the control's
+  // own native ids on Mapbox as MapLibre's layer-sync does.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getStyleMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
     }
 
-    const added = app.addMapControl(femaWmsControl, femaWmsPosition);
-    if (!added) {
+    const activeControl = femaWmsControl;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "FEMA NFHL",
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        femaWmsStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          femaWmsStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       femaWmsControl = null;
       return false;
     }
-    femaWmsStoreSync.attach(femaWmsControl);
-    setTimeout(() => femaWmsControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!femaWmsControl) return;
     femaWmsStoreSync.detach();
-    app.removeMapControl(femaWmsControl);
+    unmountMapControlFromPanel(femaWmsControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     femaWmsControl = null;
-  },
-  getMapControlPosition: () => femaWmsPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    femaWmsPosition = position;
-    if (!femaWmsControl) return;
-    app.removeMapControl(femaWmsControl);
-    const added = app.addMapControl(femaWmsControl, femaWmsPosition);
-    if (!added) {
-      femaWmsStoreSync.detach();
-      femaWmsControl = null;
-      return false;
-    }
-    setTimeout(() => femaWmsControl?.expand(), 0);
   },
 };
 
 function getFemaWmsControlOptions(): Partial<FemaWmsControlOptions> {
   return {
     ...FEMA_WMS_OPTIONS,
-    position: femaWmsPosition,
+    position: "top-left",
   };
 }

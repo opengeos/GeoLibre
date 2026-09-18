@@ -33,14 +33,14 @@ A Cloud-Optimized GeoTIFF is a regular GeoTIFF organized so clients can read jus
 
 ## Convert local data to cloud-native
 
-Use **Processing → Conversion** to write cloud-native files. See [Processing Tools](../user-guide/processing.md#conversion).
+Use **Processing → GeoLibre Toolbox → Conversion** to write cloud-native files. See [Processing Tools](../user-guide/processing.md#conversion).
 
 - **Vector to GeoParquet** and **CSV to GeoParquet** run in the browser with DuckDB-WASM.
 - **Vector to FlatGeobuf**, **Vector to PMTiles**, and **Raster to COG** run on the Python sidecar (desktop app).
 
 For example, to publish a local GeoJSON as GeoParquet:
 
-1. Open **Processing → Conversion → Vector to GeoParquet**.
+1. Open **Processing → GeoLibre Toolbox → Conversion → Vector to GeoParquet**.
 2. Choose the input file and an output path.
 3. Run the conversion, then add the resulting GeoParquet back to the map to verify it.
 

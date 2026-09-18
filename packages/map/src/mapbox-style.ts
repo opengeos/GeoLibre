@@ -29,7 +29,7 @@
  * free of credential plumbing and makes a saved project self-contained.
  */
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /** Host serving both the style descriptors and the `mapbox://` redirect targets. */
 const MAPBOX_API_HOST = "api.mapbox.com";

@@ -200,7 +200,7 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
   i3sDeckGL ??= await app.getDeckGL();
   i3sLoader ??= await loadI3sLoader();
 
-  const map = app.getMap?.() ?? null;
+  const map = app.getMap?.() ?? app.getMapboxMap?.() ?? null;
   if (i3sOverlay && i3sBoundMap === map) {
     renderArcgisI3sTilesLayers();
     return;
@@ -291,7 +291,7 @@ function renderArcgisI3sTilesLayers(): void {
     i3sOverlayMounted = true;
     i3sMountRetries = 0;
     i3sMountGaveUp = false;
-    i3sBoundMap = i3sApp.getMap?.() ?? null;
+    i3sBoundMap = i3sApp.getMap?.() ?? i3sApp.getMapboxMap?.() ?? null;
     lastI3sLayerSignature = null;
   }
 
@@ -491,7 +491,9 @@ function flyToI3sTileset(layerId: string, tileset: unknown): void {
     zoom?: number;
   } | null;
   const center = info?.cartographicCenter;
-  const map = i3sApp.getMap?.() as { flyTo?: (opts: Record<string, unknown>) => void } | undefined;
+  const map = (i3sApp.getMap?.() ?? i3sApp.getMapboxMap?.()) as
+    | { flyTo?: (opts: Record<string, unknown>) => void }
+    | undefined;
   // Only consume the fly-to request once we can actually fly, so a transient
   // missing map/flyTo doesn't permanently drop it.
   if (!center || !map?.flyTo) return;

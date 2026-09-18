@@ -3,14 +3,15 @@
  * into a compact, at-a-glance summary (type, populated vs null, unique count,
  * numeric range, and a small distribution) the way MotherDuck's column explorer
  * does. This composes the existing field-statistics and chart helpers rather
- * than recomputing anything, so the explorer agrees with the Statistics and
- * Charts panels on what counts as a number. Kept free of any rendering or React
- * so it can be unit-tested in isolation.
+ * than recomputing anything. Like Statistics, it respects the primitive value
+ * types stored by the layer, so numeric-looking text remains text. String-only
+ * sources can explicitly retain numeric inference. Kept free of rendering and
+ * React so it can be unit-tested in isolation.
  */
 
 import {
   computeHistogram,
-  toFiniteNumber,
+  isNumericFieldValue,
   type ChartRow,
   type HistogramResult,
 } from "./attribute-charts";
@@ -37,44 +38,46 @@ export interface ColumnSummary {
 }
 
 /**
- * Summarize one field across `rows`: its statistics (numeric or text, chosen by
- * the same heuristic the Statistics/Charts panels use) plus a numeric
- * distribution when the field reads as numeric. Returns null only when the field
- * yields no statistics at all, so callers can skip it.
+ * Summarize one field across `rows`: its statistics (numeric or text, chosen
+ * from the stored primitive values) plus a numeric distribution when the field
+ * reads as numeric. Returns null only when the field yields no statistics at
+ * all, so callers can skip it.
  *
  * A single pass both classifies the field and, when it reads as numeric,
  * collects its finite values for `computeNumericStats` and `computeHistogram` —
  * so a numeric column is no longer scanned once to classify (via
  * `numericColumns`) and again to extract, which doubled the row-property lookups
- * before the dialog first rendered. The classification mirrors `numericColumns`
- * exactly (populated means not null and not the empty string; numeric means at
- * least two finite values that make up at least half of those populated rows),
- * so the explorer still agrees with the Charts panel on what counts as a number.
+ * before the dialog first rendered. Populated means not null and not the empty
+ * string. Numeric means at least two finite number-typed values that make up at
+ * least half of those populated rows. Numeric-looking strings contribute only
+ * when the caller adapts a string-only source before summarizing it.
  */
 export function summarizeColumn(rows: ChartRow[], key: string): ColumnSummary | null {
   const values: number[] = [];
   let nulls = 0;
   let nonNumeric = 0;
-  // Populated rows by `numericColumns`' rule (no whitespace trim), which is the
-  // denominator of its numeric ratio — kept separate from the trimming `nulls`
-  // count the statistics use so classification stays identical to that helper.
+  let numeric = 0;
+  // Populated rows exclude null and empty strings. Keep this separate from the
+  // trimming `nulls` count used by statistics so whitespace remains populated
+  // for field-type classification.
   let populated = 0;
   for (const row of rows) {
     const raw = row.properties[key];
     if (isBlank(raw)) {
       nulls += 1;
-      // A whitespace-only string is blank for the statistics but still a
-      // populated, non-numeric row for classification, matching numericColumns.
+      // A whitespace-only string is blank for statistics but still a populated,
+      // non-numeric row for classification.
       if (raw != null && raw !== "") populated += 1;
       continue;
     }
     populated += 1;
-    const next = toFiniteNumber(raw);
-    if (next === null) nonNumeric += 1;
-    else values.push(next);
+    if (isNumericFieldValue(raw)) {
+      numeric += 1;
+      values.push(raw);
+    } else nonNumeric += 1;
   }
 
-  const isNumeric = values.length >= 2 && values.length >= populated / 2;
+  const isNumeric = numeric >= 2 && numeric >= populated / 2;
   if (!isNumeric) {
     const stats = computeTextStats(rows, key, COLUMN_EXPLORER_TOP_VALUES);
     return { key, stats, histogram: null, total: rows.length };

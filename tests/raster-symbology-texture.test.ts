@@ -29,6 +29,7 @@ type PipelineModule = { module?: { name?: string }; props?: Record<string, unkno
  * (`reversed: false`, a named-colormap texture/index).
  */
 function fakeControl() {
+  let engine = "maplibre-gl-raster";
   const manager: Record<string, unknown> = {
     _device: {},
     _deps: {},
@@ -45,7 +46,17 @@ function fakeControl() {
         ],
       }),
   };
-  return { _layerManager: manager } as { _layerManager: Record<string, unknown> };
+  return {
+    _layerManager: manager,
+    getEngine: () => engine,
+    setEngine: (next: string) => {
+      engine = next;
+    },
+  } as {
+    _layerManager: Record<string, unknown>;
+    getEngine: () => string;
+    setEngine: (next: string) => void;
+  };
 }
 
 /** Renders a single-band tile through the patched manager and returns the
@@ -63,7 +74,11 @@ function renderColormapProps(
 
 function rasterLayer(
   id: string,
-  opts: { rasterSymbology?: Record<string, unknown>; reversed?: boolean } = {},
+  opts: {
+    rasterSymbology?: Record<string, unknown>;
+    reversed?: boolean;
+    mode?: "single" | "rgb";
+  } = {},
 ): GeoLibreLayer {
   return {
     id,
@@ -80,7 +95,7 @@ function rasterLayer(
       // Reverse lives on rasterState now (the control renders it for built-in
       // colormaps; the injected texture reads it for classified / custom).
       rasterState: {
-        mode: "single",
+        mode: opts.mode ?? "single",
         colormap: "viridis",
         reversed: opts.reversed ?? false,
       },
@@ -153,5 +168,86 @@ describe("raster symbology render injection", () => {
     assert.ok(props?.colormapTexture, "expected an injected colormap texture");
     assert.equal(created.length >= 1, true);
     assert.equal(created[0]?.opts.width, 256);
+  });
+
+  it("rebuilds the classified texture when class opacity changes", () => {
+    const layer = rasterLayer("r1", {
+      rasterSymbology: {
+        classified: true,
+        ramp: "viridis",
+        customColors: ["#ff0000", "#0000ff"],
+        method: "equal-interval",
+        classCount: 2,
+        breaks: [0, 1, 2],
+      },
+    });
+    useAppStore.getState().addLayer(layer);
+    const control = fakeControl();
+    let created = 0;
+    let destroyed = 0;
+    control._layerManager._device = {
+      createTexture: () => {
+        created += 1;
+        return { destroy: () => (destroyed += 1) };
+      },
+    };
+    activateRasterClassification(control);
+    renderColormapProps(control, "r1");
+    assert.equal(created, 1);
+
+    useAppStore.getState().updateLayer("r1", {
+      metadata: {
+        ...layer.metadata,
+        rasterSymbology: {
+          ...(layer.metadata.rasterSymbology as Record<string, unknown>),
+          classOpacities: [0, 1],
+        },
+      },
+    });
+    renderColormapProps(control, "r1");
+
+    assert.equal(created, 2);
+    assert.equal(destroyed, 1);
+  });
+
+  it("switches from the WASM renderer when discrete classes need the GPU pipeline", () => {
+    useAppStore.getState().addLayer(
+      rasterLayer("r1", {
+        rasterSymbology: {
+          classified: true,
+          ramp: "autumn",
+          method: "manual",
+          classCount: 2,
+          breaks: [144.86, 200, 322.84],
+        },
+      }),
+    );
+    const control = fakeControl();
+    control.setEngine("cog-tiler-wasm");
+
+    activateRasterClassification(control);
+
+    assert.equal(control.getEngine(), "maplibre-gl-raster");
+  });
+
+  it("does not switch renderers for stale classification metadata in RGB mode", () => {
+    useAppStore.getState().addLayer(
+      rasterLayer("r1", {
+        mode: "rgb",
+        rasterSymbology: {
+          classified: true,
+          ramp: "autumn",
+          method: "manual",
+          classCount: 2,
+          breaks: [0, 200, 300],
+        },
+      }),
+    );
+    const control = fakeControl();
+    control.setEngine("cog-tiler-wasm");
+
+    activateRasterClassification(control);
+
+    assert.equal(control.getEngine(), "cog-tiler-wasm");
   });
 });

@@ -49,6 +49,7 @@ import {
   type TimelapseFrame,
   type TimelapseProvider,
 } from "./timelapse-providers";
+import { getStyleMap } from "./style-map";
 
 export const TIMELAPSE_PLUGIN_ID = "geolibre-timelapse";
 
@@ -1388,7 +1389,7 @@ function activateWithFrames(
   if (frames.length === 0) return false;
   appRef = app;
   const control = new TimelapseControl({
-    map: app.getMap?.() ?? null,
+    map: getStyleMap(app),
     provider,
     frames,
     initial: savedState,
@@ -1397,7 +1398,7 @@ function activateWithFrames(
   control.ensureStack();
   unsubscribeStore = subscribeStoreLayer(control);
   unsubscribeBasemap = app.onBasemapChange(() => {
-    const map = app.getMap?.();
+    const map = getStyleMap(app);
     if (!map || !timelapseControl) return;
     // A basemap change reloads the style, wiping this plugin's sources and
     // layers; rebuild once the new style is in (the ordering-only sync path
@@ -1416,6 +1417,11 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
   id: TIMELAPSE_PLUGIN_ID,
   name: "Timelapse",
   version: "0.2.0",
+  // The frame stack is plain raster tile sources and layers, and recording
+  // reads the map canvas (which the Mapbox pane keeps drawable), so the plugin
+  // runs on either 2D engine; the store mirror is plugin-owned on Mapbox
+  // (`isMapboxPluginLayer`), as its `providerId` source is not compilable.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     const session = ++activationSession;
     const provider = getTimelapseProvider(savedState?.providerId);
@@ -1436,10 +1442,18 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
     appRef = null;
     if (!timelapseControl) return;
     savedState = timelapseControl.getState();
-    timelapseControl.dispose();
-    timelapseControl.removeStack();
-    removeTimelapseStoreLayers();
-    timelapseControl = null;
+    // A renderer swap deactivates this plugin after the old map was removed;
+    // a removed mapbox-gl map throws from getLayer (its style is gone). The
+    // store and module state must still reset, or a stale control survives.
+    try {
+      timelapseControl.dispose();
+      timelapseControl.removeStack();
+    } catch {
+      // Already torn down with the map.
+    } finally {
+      removeTimelapseStoreLayers();
+      timelapseControl = null;
+    }
   },
   // The floating card is freely draggable; the position submenu in the
   // Plugins menu just picks which corner it opens at.

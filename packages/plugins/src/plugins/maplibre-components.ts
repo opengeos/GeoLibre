@@ -1,11 +1,25 @@
+import { readNativeZarrDimensions, registerZarrStore } from "@geolibre/map/zarr-source";
+import { adaptMapboxPMTilesControl } from "./mapbox-pmtiles-control";
 import {
   clearExternalNativePaintBridge,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  getActiveMeanRadiusMeters,
+  getEllipsoid,
   interpolateRampColors,
+  meanRadiusMeters,
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
+import {
+  createPMTilesArchiveLayers,
+  createArcgisPMTilesArchiveLayers,
+  readRemotePMTilesInfo,
+  pmtilesIdsForSourceLayers,
+  type PMTilesStoreLayerOptions,
+} from "@geolibre/map/pmtiles-layer";
+import { addPMTilesArchive } from "./pmtiles-archive-store";
+import { stringMetadata } from "./web-service-sync";
 import type {
   QueryGeometry,
   QueryOptions,
@@ -17,7 +31,7 @@ import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
 import { fromArrayBuffer } from "geotiff";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import proj4 from "proj4";
 import type {
   AddVectorControl,
@@ -73,9 +87,16 @@ import type {
 import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-gl-splat";
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
-import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  ensureMercatorProjection,
+  acquireMercatorProjectionLock,
+  releaseMercatorProjectionLock,
+} from "./map-projection-utils";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import { attachTerrainMeasure, measurePanelElement, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
+import { savedRasterState } from "./raster-layer-sync";
+import type { SwipeRasterSnapshot } from "./swipe-raster-mirror";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
@@ -86,7 +107,12 @@ import {
   registerTemporalLayer,
   unregisterTemporalLayer,
 } from "./temporal-layers";
-import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
+import {
+  pickTimeDimension,
+  readCoordinateTimeAttributes,
+  resolveZarrTimeAxis,
+  type ZarrTimeAttributes,
+} from "./zarr-time-axis";
 import {
   ZarrDirectoryStore,
   createDirectoryZarrMetadataReader,
@@ -175,7 +201,9 @@ const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
 const BUILDING_COUNT_H3_PMTILES_SAMPLE_URL =
   "https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles";
 const PMTILES_SAMPLE_URL =
-  "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-06-17.0/buildings.pmtiles";
+  "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-07-22.0/buildings.pmtiles";
+const TILEZEN_PMTILES_SAMPLE_URL =
+  "https://r2-public.protomaps.com/protomaps-sample-datasets/tilezen.pmtiles";
 const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
 /**
@@ -281,6 +309,7 @@ const PMTILES_OPTIONS = {
   sampleData: [
     { label: "Overture buildings", url: PMTILES_SAMPLE_URL },
     { label: "H3 building counts", url: BUILDING_COUNT_H3_PMTILES_SAMPLE_URL },
+    { label: "Tilezen", url: TILEZEN_PMTILES_SAMPLE_URL },
   ],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
@@ -728,10 +757,20 @@ let searchControl: SearchControl | null = null;
 let spinGlobeControl: SpinGlobeControl | null = null;
 let measureControl: MeasureControl | null = null;
 let measureTerrainDetach: (() => void) | null = null;
+/** Drops the store subscription that follows the project's celestial body. */
+let measureRadiusUnsubscribe: (() => void) | null = null;
+/** The body the mounted Measure control's radius currently reflects. */
+let measureEllipsoidId: string | null = null;
 let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
 let stacSearchControl: StacSearchControl | null = null;
+// The host API the STAC Search control was opened with, kept so its deck.gl COG
+// layers can reach the shared interleaved overlay from the patched hooks below.
+let stacSearchApp: GeoLibreAppAPI | null = null;
+// Store-derived `beforeId` per STAC Search deck layer id, pushed in by
+// `applyStacSearchLayerOrder`. See `renderStacSearchDeckLayers`.
+const stacSearchBeforeIds = new Map<string, string | undefined>();
 let zarrControl: ZarrLayerControl | null = null;
 let colorbarControl: ColorbarGuiControl | null = null;
 let legendControl: LegendGuiControl | null = null;
@@ -766,6 +805,9 @@ let geoTiffRasterStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let stacSearchStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
+const arcgisZarrTemporalUnsubscribes = new Map<string, () => void>();
+const restoredArcgisZarrLayerIds = new Set<string>();
+let restoredArcgisZarrStoreUnsubscribe: (() => void) | null = null;
 let lidarStoreUnsubscribe: (() => void) | null = null;
 let splattingStoreUnsubscribe: (() => void) | null = null;
 
@@ -1687,6 +1729,16 @@ function finiteNumber(value: unknown, fallback: number): number {
 }
 
 export function openFlatGeobufAddVectorLayerPanel(app: GeoLibreAppAPI): void {
+  if (app.getMapRenderer?.() === "mapbox") {
+    // The vector importer materializes FlatGeobuf into the shared layer store.
+    // The standalone control owns MapLibre layers outside that bridge.
+    void import("./maplibre-vector")
+      .then(({ openVectorLayerPanel }) => openVectorLayerPanel(app))
+      .catch((error) => {
+        console.error("[GeoLibre] Failed to open the vector layer panel", error);
+      });
+    return;
+  }
   void openStandaloneFlatGeobufControl(app);
 }
 
@@ -1698,6 +1750,11 @@ export async function addCogRasterLayer(
     return addGeoTiffRasterLayer(app, options);
   }
 
+  // The Components plugin itself is MapLibre-only (no `engines`); this read is
+  // reached from the STAC plugin's audit closure. The COG control is
+  // maplibre-gl-raster, whose tile protocol only registers with MapLibre, and
+  // on Mapbox the STAC plugin draws COGs through the engine instead.
+  // engine-audit-allow: getMap-mapbox
   ensureMercatorProjection(app.getMap?.());
   const control = await ensureCogRasterControl(app);
   if (!control) {
@@ -1714,6 +1771,30 @@ export async function addCogRasterLayer(
 
 export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePMTilesControl(app);
+}
+
+/**
+ * PMTiles archives being added by URL rather than through the panel, counted per URL because two
+ * adds of one URL can overlap.
+ *
+ * The control keeps one tick selection for the whole panel and `addLayer(url)` does not reset it,
+ * so these adds — Add Data, Source Cooperative, Hugging Face, none of which shows a tick UI — would
+ * otherwise inherit whatever was last ticked for a different archive and strand the rest of this
+ * one outside the store. Marked here, they take the whole archive.
+ */
+const programmaticPMTilesAdds = new Map<string, number>();
+
+/** Mark a programmatic add in flight, returning a disposer for its `finally`. */
+function beginProgrammaticPMTilesAdd(url: string): () => void {
+  programmaticPMTilesAdds.set(url, (programmaticPMTilesAdds.get(url) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = (programmaticPMTilesAdds.get(url) ?? 1) - 1;
+    if (remaining > 0) programmaticPMTilesAdds.set(url, remaining);
+    else programmaticPMTilesAdds.delete(url);
+  };
 }
 
 /**
@@ -1737,10 +1818,49 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
  * @returns True when the archive was added.
  * @throws If the archive could not be loaded (unreachable, not PMTiles, 403).
  */
-export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): Promise<boolean> {
+export async function addPMTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { fit?: boolean } = {},
+): Promise<boolean> {
+  let address: URL;
+  try {
+    address = new URL(url);
+    if (!["https:", "http:"].includes(address.protocol)) throw new Error("Unsupported protocol");
+  } catch {
+    throw new Error(
+      app.translate?.("addData.pmtiles.errorUrl", "Enter a valid HTTP(S) PMTiles URL") ??
+        "Enter a valid HTTP(S) PMTiles URL",
+    );
+  }
+  const normalizedUrl = address.href;
+  if (app.getMapRenderer?.() === "arcgis") {
+    const info = await readRemotePMTilesInfo(normalizedUrl);
+    if (info.encoding === "mlt")
+      throw new Error(
+        app.translate?.("addData.pmtiles.errorMlt", "ArcGIS requires MVT vector tiles, not MLT") ??
+          "ArcGIS requires MVT vector tiles, not MLT",
+      );
+    const encodedName = address.pathname.split("/").pop() || "PMTiles";
+    let name = encodedName;
+    try {
+      name = decodeURIComponent(encodedName);
+    } catch {
+      // A valid URL can still contain a malformed percent escape in its path.
+    }
+    const layers = createArcgisPMTilesArchiveLayers({
+      id: crypto.randomUUID(),
+      name,
+      url: normalizedUrl,
+      ...info,
+    });
+    addPMTilesArchive(layers, name);
+    if (options.fit !== false && info.bounds) app.fitBounds?.(info.bounds);
+    return true;
+  }
   const { PMTilesLayerControl: PMTilesLayerControlClass } = await getComponentsConstructors();
 
-  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
+  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass, app);
 
   if (!pmtilesControlMounted) {
     const added = app.addMapControl(pmtilesControl, pmtilesControlPosition);
@@ -1754,7 +1874,56 @@ export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): 
     pmtilesControl.hide();
   }
 
-  await pmtilesControl.addLayer(url);
+  const map = options.fit === false ? (app.getMap?.() ?? app.getMapboxMap?.()) : undefined;
+  const cameraEvents = map as
+    | {
+        on(
+          event: "movestart" | "moveend",
+          handler: (event: { originalEvent?: unknown }) => void,
+        ): unknown;
+        off(
+          event: "movestart" | "moveend",
+          handler: (event: { originalEvent?: unknown }) => void,
+        ): unknown;
+      }
+    | undefined;
+  const readCamera = () =>
+    map
+      ? {
+          center: map.getCenter(),
+          zoom: map.getZoom(),
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+        }
+      : null;
+  let camera = readCamera();
+  let userMoving = false;
+  const onMoveStart = (event: { originalEvent?: unknown }) => {
+    if (event.originalEvent) userMoving = true;
+  };
+  const onMoveEnd = () => {
+    if (userMoving) {
+      camera = readCamera();
+      userMoving = false;
+    }
+  };
+  cameraEvents?.on("movestart", onMoveStart);
+  cameraEvents?.on("moveend", onMoveEnd);
+  const control = pmtilesControl;
+  const endAdd = beginProgrammaticPMTilesAdd(normalizedUrl);
+  try {
+    await control.addLayer(normalizedUrl);
+  } finally {
+    endAdd();
+    // Preserve a host user's camera interaction that happened while the archive
+    // header was loading, rather than restoring the older pre-load position.
+    if (userMoving) camera = readCamera();
+    cameraEvents?.off("movestart", onMoveStart);
+    cameraEvents?.off("moveend", onMoveEnd);
+  }
+  // The upstream PMTiles control always frames a newly added archive. Restore
+  // the host's camera when a programmatic caller explicitly opts out.
+  if (camera) map?.jumpTo(camera);
   // A failed load does NOT reject: the control catches it, records it on
   // `state.error`, and emits "error" (same convention as CogLayerControl, which
   // addLayerWithCogRasterControl has to check the same way). Without this a
@@ -1762,7 +1931,7 @@ export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): 
   // hidden its own on-panel error would never be seen either — the caller has
   // to surface it. `_addLayer` clears `error` on entry, so this reads the
   // outcome of the call above.
-  const { error } = pmtilesControl.getState();
+  const { error } = control.getState();
   if (error) throw new Error(error);
   return true;
 }
@@ -2193,6 +2362,21 @@ export async function addCloudNetcdfLayer(
   app: GeoLibreAppAPI,
   options: CloudNetcdfLayerOptions,
 ): Promise<void> {
+  if (app.getMapRenderer?.() === "arcgis") {
+    const refs =
+      options.refs ?? (await loadKerchunkReference(options.url, { headers: options.headers }));
+    await addNativeArcgisZarrLayer(
+      {
+        ...options,
+        store: new KerchunkReferenceStore(refs, {
+          headers: options.headers,
+          sourceUrl: options.url,
+        }),
+      },
+      refs,
+    );
+    return;
+  }
   const { ZarrLayerControl: ZarrLayerControlClass } = await getComponentsConstructors();
 
   zarrControl ??= createZarrControl(ZarrLayerControlClass);
@@ -2211,12 +2395,15 @@ export async function addCloudNetcdfLayer(
   }
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
-  // (matching the COG raster flow) so the layer paints.
-  ensureMercatorProjection(app.getMap?.());
+  // (matching the COG raster flow) so the layer paints, on either 2D engine.
+  ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
   const refs =
     options.refs ?? (await loadKerchunkReference(options.url, { headers: options.headers }));
-  const store = new KerchunkReferenceStore(refs, { headers: options.headers });
+  const store = new KerchunkReferenceStore(refs, {
+    headers: options.headers,
+    sourceUrl: options.url,
+  });
 
   // The control is a module-level singleton and may have been torn down (set to
   // null on plugin deactivation) during the await above.
@@ -2294,7 +2481,7 @@ function applyZarrLayerBounds(layerId: string, bounds: [number, number, number, 
 
 /** Options for {@link addZarrRasterLayer}. */
 export interface ZarrRasterLayerOptions {
-  /** URL of the Zarr store (Zarr v2/v3, Icechunk over HTTP). */
+  /** URL of a plain Zarr store (v2/v3). Anything else is read through `store`. */
   url: string;
   /** Layer name shown in the Layers panel. Defaults to `<store> - <variable>`. */
   name?: string;
@@ -2393,7 +2580,72 @@ export async function addZarrRasterLayer(
     throw new Error("A Zarr variable is required (pass options.variable).");
   }
 
+  if (app.getMapRenderer?.() === "arcgis")
+    return addNativeArcgisZarrLayer({ ...options, url, variable });
   return queueZarrAdd(() => addZarrLayerExclusively(app, options, url, variable));
+}
+
+async function addNativeArcgisZarrLayer(
+  options: ZarrRasterLayerOptions,
+  refs?: KerchunkRefs,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const layer = createZarrStoreLayer(id, {
+    id,
+    url: options.url,
+    variable: options.variable,
+    name: options.name,
+    selector: options.selector,
+    clim: options.clim ?? [0, 1],
+    colormap: resolveZarrColormap(options.colormap) ?? interpolateRampColors("viridis", 256),
+    opacity: options.opacity ?? 1,
+    crs: options.crs,
+    proj4: options.proj4,
+    bounds: options.bounds,
+  });
+  layer.source = {
+    ...layer.source,
+    // Local NetCDF refs inline the entire decoded raster. Keep those in the
+    // session store so saving a project cannot embed megabytes of base64 data.
+    ...(refs && !options.url.startsWith("local:") ? { kerchunkRefs: refs } : {}),
+    headers: options.headers,
+    spatialDimensions: options.spatialDimensions,
+  };
+  if (options.store) {
+    const dispose = registerZarrStore(id, options.store);
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (state.layers === previous.layers) return;
+      if (!state.layers.some((layer) => layer.id === id)) {
+        dispose();
+        unsubscribe();
+      }
+    });
+  }
+  useAppStore.getState().addLayer(layer, options.beforeLayerId);
+  trackRestoredArcgisZarrLayer(id);
+  void registerZarrTemporalAdapter(id, options.url, {
+    refs,
+    headers: options.headers,
+    ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
+  }).then((registered) => {
+    if (!registered) restoredArcgisZarrLayerIds.delete(id);
+  });
+  return id;
+}
+
+function trackRestoredArcgisZarrLayer(layerId: string): void {
+  restoredArcgisZarrLayerIds.add(layerId);
+  if (restoredArcgisZarrStoreUnsubscribe) return;
+  restoredArcgisZarrStoreUnsubscribe = useAppStore.subscribe((state, previous) => {
+    if (state.layers === previous.layers) return;
+    const currentIds = new Set(state.layers.map((layer) => layer.id));
+    for (const id of restoredArcgisZarrLayerIds) {
+      if (!currentIds.has(id)) restoredArcgisZarrLayerIds.delete(id);
+    }
+    if (restoredArcgisZarrLayerIds.size) return;
+    restoredArcgisZarrStoreUnsubscribe?.();
+    restoredArcgisZarrStoreUnsubscribe = null;
+  });
 }
 
 // One add at a time: see the queue comment on queueZarrAdd.
@@ -2537,9 +2789,12 @@ export async function setZarrLayerSelector(
   const instance = zarrControl?.getLayersMap().get(layerId) as
     | { setSelector?: (selector: Record<string, number | string>) => Promise<void> | void }
     | undefined;
-  if (!instance || typeof instance.setSelector !== "function") return false;
+  const native =
+    useAppStore.getState().primaryRenderer === "arcgis" &&
+    useAppStore.getState().layers.some((layer) => layer.id === layerId && layer.type === "zarr");
+  if (!native && (!instance || typeof instance.setSelector !== "function")) return false;
 
-  await instance.setSelector(selector);
+  await instance?.setSelector?.(selector);
 
   const store = useAppStore.getState();
   const layer = store.layers.find((item) => item.id === layerId);
@@ -2665,6 +2920,10 @@ const ZARR_DIMENSION_ATTEMPTS = 24;
 async function readZarrDimensionValues(
   layerId: string,
 ): Promise<Record<string, (number | string)[]> | null> {
+  if (useAppStore.getState().primaryRenderer === "arcgis") {
+    const layer = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+    return layer ? readNativeZarrDimensions(layer) : null;
+  }
   for (let attempt = 0; attempt < ZARR_DIMENSION_ATTEMPTS; attempt += 1) {
     const instance = zarrControl?.getLayersMap().get(layerId) as
       | { dimensionValues?: Record<string, (number | string)[]> }
@@ -2691,22 +2950,7 @@ function localZarrTimeAttributesReader(url: string): ZarrTimeAttributesReader | 
   const reader = zarrLocalStoreReaders.get(url);
   if (!reader) return null;
   const read = createDirectoryZarrMetadataReader(reader);
-  return async (dimension: string) => {
-    for (const prefix of ["", "0/"]) {
-      for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
-        const document = await read(key);
-        const attributes = key.endsWith("zarr.json")
-          ? (document as { attributes?: unknown } | undefined)?.attributes
-          : document;
-        if (!attributes || typeof attributes !== "object") continue;
-        const record = attributes as Record<string, unknown>;
-        const units = typeof record.units === "string" ? record.units : undefined;
-        const calendar = typeof record.calendar === "string" ? record.calendar : undefined;
-        if (units !== undefined || calendar !== undefined) return { units, calendar };
-      }
-    }
-    return null;
-  };
+  return (dimension: string) => readCoordinateTimeAttributes(read, dimension);
 }
 
 /** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */
@@ -2744,15 +2988,15 @@ function registerZarrTemporalAdapter(
   layerId: string,
   url: string | undefined,
   context: ZarrTemporalContext = {},
-): void {
+): Promise<boolean> {
   const { headers, refs } = context;
   // A folder the panel opened is not something the caller could have passed
   // context for, so fall back to the reader filed under this layer's own url.
   const readAttributes =
     context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
-  void (async () => {
+  return (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
-    if (!dimensionValues) return;
+    if (!dimensionValues) return true;
     const dimension = pickTimeDimension(dimensionValues) ?? "time";
     // Either source of attributes replaces the HTTP metadata walk, which for
     // these layers would only produce a run of failed requests.
@@ -2765,19 +3009,58 @@ function registerZarrTemporalAdapter(
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
-    if (!axis) return;
+    if (!axis) return true;
     // The layer may have been removed while the axis was being resolved.
-    if (!zarrControl?.getLayersMap().has(layerId)) return;
+    if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;
+    if (
+      useAppStore.getState().primaryRenderer !== "arcgis" &&
+      !zarrControl?.getLayersMap().has(layerId)
+    )
+      return true;
     registerTemporalLayer(layerId, {
       dimension: axis.dimension,
       getTimeValues: () => axis.values,
       setTime: async (date) => {
         const index = nearestTimeIndex(axis.values, date.getTime());
         if (index < 0) return;
-        await setZarrLayerSelector(layerId, { [axis.dimension]: index });
+        const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+        await setZarrLayerSelector(layerId, {
+          ...((current?.source.selector as Record<string, number | string>) ?? {}),
+          [axis.dimension]: index,
+        });
       },
     });
-  })();
+    if (useAppStore.getState().primaryRenderer === "arcgis") {
+      // Native layers have no Zarr control to own their temporal cleanup.
+      arcgisZarrTemporalUnsubscribes.get(layerId)?.();
+      const unsubscribe = useAppStore.subscribe((state, previous) => {
+        if (state.layers === previous.layers) return;
+        if (state.layers.some((layer) => layer.id === layerId)) return;
+        unregisterTemporalLayer(layerId);
+        unsubscribe();
+        arcgisZarrTemporalUnsubscribes.delete(layerId);
+      });
+      arcgisZarrTemporalUnsubscribes.set(layerId, unsubscribe);
+    }
+    return true;
+  })().catch((error) => {
+    console.warn("[zarr] Could not register the time axis", error);
+    return false;
+  });
+}
+
+export function restoreArcgisZarrLayers(): void {
+  for (const layer of useAppStore.getState().layers) {
+    if (layer.type !== "zarr") continue;
+    if (restoredArcgisZarrLayerIds.has(layer.id)) continue;
+    trackRestoredArcgisZarrLayer(layer.id);
+    void registerZarrTemporalAdapter(layer.id, String(layer.source.url), {
+      headers: layer.source.headers as Record<string, string> | undefined,
+      refs: layer.source.kerchunkRefs as KerchunkRefs | undefined,
+    }).then((registered) => {
+      if (!registered) restoredArcgisZarrLayerIds.delete(layer.id);
+    });
+  }
 }
 
 // The control takes an explicit list of hex colors; the public option also
@@ -2853,7 +3136,7 @@ async function ensureCogRasterControl(app: GeoLibreAppAPI): Promise<CogLayerCont
 async function openStandalonePMTilesControl(app: GeoLibreAppAPI): Promise<boolean> {
   const { PMTilesLayerControl: PMTilesLayerControlClass } = await getComponentsConstructors();
 
-  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
+  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass, app);
 
   if (!pmtilesControlMounted) {
     const added = app.addMapControl(pmtilesControl, pmtilesControlPosition);
@@ -2934,6 +3217,10 @@ async function openStandaloneMeasureControl(app: GeoLibreAppAPI): Promise<boolea
     measureControlMounted = true;
     // Terrain-aware 3D readouts (surface distance/area) appended to the
     // control's panel; requires the panel from onAdd, so attach after mounting.
+    // The Components plugin itself is MapLibre-only (no `engines`); the read
+    // is reached from the STAC plugin's audit closure, and the readouts depend
+    // on MapLibre's terrain either way.
+    // engine-audit-allow: getMap-mapbox
     measureTerrainDetach = attachTerrainMeasure(
       measureControl,
       () => (app.getMap?.() ?? null) as TerrainMapLike | null,
@@ -3124,6 +3411,7 @@ async function openStandaloneViewStateControl(app: GeoLibreAppAPI): Promise<bool
 async function openStandaloneStacSearchControl(app: GeoLibreAppAPI): Promise<boolean> {
   const { StacSearchControl: StacSearchControlClass } = await getComponentsConstructors();
 
+  stacSearchApp = app;
   stacSearchControl ??= createStacSearchControl(StacSearchControlClass);
 
   if (!stacSearchControlMounted) {
@@ -3240,11 +3528,16 @@ async function openStandaloneLidarControl(
   // clouds, so it passes `reveal: false` to keep the panel out of the user's
   // way; a freshly created control is hidden so it does not pop open on load.
   const reveal = options.reveal ?? true;
+  if (
+    app.getMapRenderer?.() === "arcgis" &&
+    !(await import("./arcgis-deck/control-adapter")).installArcgisDeckControls(app)
+  )
+    return false;
   const { LidarControl: LidarControlClass, LidarLayerAdapter: LidarLayerAdapterClass } =
     await getComponentsConstructors();
 
   const created = !lidarControl;
-  lidarControl ??= createLidarControl(LidarControlClass, LidarLayerAdapterClass);
+  lidarControl ??= createLidarControl(LidarControlClass, LidarLayerAdapterClass, app);
 
   if (!lidarControlMounted) {
     const added = app.addMapControl(lidarControl, lidarControlPosition);
@@ -3255,6 +3548,7 @@ async function openStandaloneLidarControl(
     lidarControlMounted = true;
   }
 
+  ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
   startLidarThemeSync();
 
   setTimeout(() => {
@@ -3262,6 +3556,7 @@ async function openStandaloneLidarControl(
       showLidarControl(lidarControl);
       lidarControl?.expand();
     } else if (created) {
+      lidarControl?.collapse();
       hideLidarControl(lidarControl);
     }
   }, 0);
@@ -3316,7 +3611,7 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
     // The deck.gl point-cloud overlay only renders under the Mercator
     // projection (the streaming loader's viewport math breaks under the default
     // globe), matching the USGS LiDAR plugin and the other deck.gl controls.
-    ensureMercatorProjection(app.getMap?.());
+    ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
     for (const layer of pending) {
       const url = lidarLayerUrl(layer);
@@ -3495,6 +3790,11 @@ export interface SwipeCogRasterSnapshot {
   nodata?: number;
 }
 
+// The snapshot getSwipeMaplibreRasters produces is exactly what SwipeRasterMirror
+// consumes, so the mirror owns the shape and this is an alias rather than a
+// second copy to keep in sync by hand.
+export type SwipeMaplibreRasterSnapshot = SwipeRasterSnapshot;
+
 // Notified when the set/state of CogLayerControl rasters changes, so the swipe
 // provider can refresh its list and re-mirror. Backed by a single store
 // subscription while at least one listener is registered.
@@ -3520,7 +3820,7 @@ function notifySwipeCogChange(): void {
 function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
   const parts: unknown[][] = [];
   for (const layer of layers) {
-    if (!isCogRasterControlLayer(layer)) continue;
+    if (!isCogRasterControlLayer(layer) && !isMaplibreRasterControlLayer(layer)) continue;
     const source = layer.source as {
       url?: unknown;
       bands?: unknown;
@@ -3542,6 +3842,11 @@ function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
       source.rescaleMin,
       source.rescaleMax,
       source.nodata,
+      // maplibre-gl-raster layers keep their visualization (mode/bands/
+      // colormap/rescale/nodata/...) in metadata.rasterState, not on `source`;
+      // without it a restyle of a mirrored raster would not notify. Always
+      // undefined for cog-url layers, so this is a no-op there.
+      layer.metadata.rasterState,
     ]);
   }
   return JSON.stringify(parts);
@@ -3622,6 +3927,30 @@ export function getSwipeCogRasters(): SwipeCogRasterSnapshot[] {
     });
   }
   return snapshots;
+}
+
+/** Snapshot the newer maplibre-gl-raster layers, including project restores. */
+export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
+  return useAppStore
+    .getState()
+    .layers.filter(isMaplibreRasterControlLayer)
+    .flatMap((layer) => {
+      const url = (layer.source as { url?: unknown }).url;
+      if (typeof url !== "string") return [];
+      return [
+        {
+          id: layer.id,
+          name: layer.name,
+          url,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          // Sanitized the same way the normal restore path does, so a
+          // hand-edited project file cannot push malformed fields straight
+          // into the mirror control's addRaster.
+          state: savedRasterState(layer),
+        },
+      ];
+    });
 }
 
 /**
@@ -3752,6 +4081,7 @@ export function clearMirrorCogLayers(control: CogLayerControl): void {
 function createLidarControl(
   LidarControlClass: LidarControlConstructor,
   LidarLayerAdapterClass: LidarLayerAdapterConstructor,
+  app: GeoLibreAppAPI,
 ): LidarControl {
   // Force the LiDAR panel to follow the in-app light/dark theme rather than the
   // system prefers-color-scheme (which can differ), matching how the panel is
@@ -3760,11 +4090,51 @@ function createLidarControl(
     ...LIDAR_OPTIONS,
     theme: resolveDocumentTheme(),
   });
+  if (app.getMapRenderer?.() === "arcgis") {
+    // The SDK owns terrain; do not install the plugin's MapLibre DEM source.
+    control.setTerrain = (enabled: boolean) => {
+      app.setTerrainEnabled?.(enabled);
+    };
+    control.getTerrain = () => app.isTerrainEnabled?.() ?? false;
+  }
   lidarLayerAdapter = new LidarLayerAdapterClass(control);
+  const onUnload = createLidarUnloadHandler();
+  const onLoad = createLidarLoadHandler();
+  const handleLoad: LidarControlEventHandler = (event) => {
+    acquireMercatorProjectionLock("lidar", app);
+    onLoad(event);
+  };
+  const onRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    // Mapbox destroys controls when switching engines. Drop singleton handles
+    // so project restoration streams onto the new map, not the removed one.
+    lidarStoreUnsubscribe?.();
+    lidarStoreUnsubscribe = null;
+    stopLidarThemeSync();
+    pendingLidarRestores.clear();
+    lidarRestoreInFlight = false;
+    // Stopping a renderer emits unload for every streamed cloud. Preserve
+    // project records during teardown so the next engine can restore them.
+    control.off("unload", onUnload);
+    // A restore still streaming into this control must not land as a fresh
+    // layer once its queue entry is gone: the saved record stays in the store
+    // and the next engine's restoreLidarLayers re-streams it under its own id.
+    control.off("load", handleLoad);
+    onRemove();
+    releaseMercatorProjectionLock("lidar", app);
+    if (lidarControl === control) {
+      lidarControl = null;
+      lidarControlMounted = false;
+      lidarLayerAdapter = null;
+    }
+  };
   control.on("collapse", () => hideLidarControl(control));
-  control.on("load", createLidarLoadHandler());
-  control.on("unload", createLidarUnloadHandler());
+  control.on("load", handleLoad);
+  control.on("unload", onUnload);
   lidarStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (state.layers === previous.layers) return;
+    if (state.layers.some(isLidarControlLayer)) acquireMercatorProjectionLock("lidar", app);
+    else releaseMercatorProjectionLock("lidar", app);
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
     for (const layer of previous.layers) {
@@ -3897,30 +4267,41 @@ function registerZarrPaintBridge(layerId: string): void {
 
 function createPMTilesControl(
   PMTilesLayerControlClass: PMTilesLayerControlConstructor,
+  app: GeoLibreAppAPI,
 ): PMTilesLayerControl {
   const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
+  if (app.getMapRenderer?.() === "mapbox") adaptMapboxPMTilesControl(control, app);
+  const removeHandler = createPMTilesLayerRemoveHandler();
+  const onRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    pmtilesStoreUnsubscribe?.();
+    pmtilesStoreUnsubscribe = null;
+    // The map is going away, not the project. Ignore the control's unload echo.
+    control.off("layerremove", removeHandler);
+    for (const layer of control.getState().layers) controlOwnedArchives.delete(layer.id);
+    onRemove();
+    if (pmtilesControl === control) {
+      pmtilesControl = null;
+      pmtilesControlMounted = false;
+    }
+  };
   control.on("collapse", () => control.hide());
   control.on("layeradd", createPMTilesLayerAddHandler());
-  control.on("layerremove", (event) => {
-    const store = useAppStore.getState();
-    const activeLayerIds = new Set(event.state.layers.map((layer) => layer.id));
-    for (const layer of store.layers) {
-      if (!isPMTilesControlLayer(layer)) continue;
-      const shouldRemove = event.layerId
-        ? layer.id === event.layerId
-        : !activeLayerIds.has(layer.id);
-      if (shouldRemove) {
-        store.removeLayer(layer.id);
-      }
-    }
-  });
+  control.on("layerremove", removeHandler);
   pmtilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
-    const removedLayers = previous.layers.filter(
-      (layer) =>
-        isPMTilesControlLayer(layer) && !state.layers.some((current) => current.id === layer.id),
-    );
-    for (const layer of removedLayers) {
-      pmtilesControl?.removeLayer(layer.id);
+    // Every store write lands here, and the map writes pointer coordinates on each mousemove.
+    // Only a layers action replaces the array, so identity settles it before any scanning.
+    if (state.layers === previous.layers) return;
+    for (const archiveId of pmtilesArchivesFullyRemoved(
+      previous.layers,
+      state.layers,
+      controlOwnedArchives,
+    )) {
+      // Released here, not in the remove handler: a Layers-panel delete takes the archive's last
+      // layer, so the control's echoed `layerremove` has nothing left to attribute it to and the
+      // claim would outlive the archive, onto whatever reuses `pmtiles-source-N`.
+      controlOwnedArchives.delete(archiveId);
+      pmtilesControl?.removeLayer(archiveId);
     }
   });
   return control;
@@ -3937,7 +4318,28 @@ function createSearchControl(SearchControlClass: SearchControlConstructor): Sear
 }
 
 function createMeasureControl(MeasureControlClass: MeasureControlConstructor): MeasureControl {
-  const control = new MeasureControlClass(MEASURE_OPTIONS);
+  // The control derives distances and areas from lon/lat angles scaled by a
+  // radius that defaults to Earth's, so on a Moon/Mars project every readout
+  // would be wrong by that body's radius ratio (GeoLibre#1128). Seed it with the
+  // project's body and follow the planet switcher for the rest of the session.
+  const control = new MeasureControlClass({
+    ...MEASURE_OPTIONS,
+    radius: getActiveMeanRadiusMeters(),
+  });
+  // Seed from the store rather than at module load: the body may already have
+  // changed before the user first opens the panel, and a stale baseline would
+  // swallow the switch *back* to that body as a no-op.
+  measureEllipsoidId = useAppStore.getState().preferences.map.ellipsoidId;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = useAppStore.subscribe((state) => {
+    const id = state.preferences.map.ellipsoidId;
+    if (id === measureEllipsoidId) return;
+    measureEllipsoidId = id;
+    // Resolve the radius from the id in hand rather than the active-ellipsoid
+    // singleton, so this does not depend on the store's own mirroring
+    // subscription having run before ours.
+    control.setRadius(meanRadiusMeters(getEllipsoid(id)));
+  });
   return control;
 }
 
@@ -4270,9 +4672,15 @@ function teardownGeoTiffRasterOverlay(app: GeoLibreAppAPI): void {
   geoTiffRasterOverlayMounted = false;
 }
 
-function teardownPMTilesControl(app: GeoLibreAppAPI): void {
+/** @internal Exported only so the control's teardown can be unit-tested. */
+export function teardownPMTilesControl(app: GeoLibreAppAPI): void {
   pmtilesStoreUnsubscribe?.();
   pmtilesStoreUnsubscribe = null;
+  // Claims belong to the control instance: a reopened panel holds nothing. Dropped *before* the
+  // control is removed, because `onRemove` clears every layer it drew and emits a `layerremove`
+  // naming no archive while its handlers are still attached — claims held that late read it as the
+  // user deleting them all. Released first it means only that the map lost them, redrawn next sync.
+  controlOwnedArchives.clear();
   if (pmtilesControl && pmtilesControlMounted) {
     app.removeMapControl(pmtilesControl);
   }
@@ -4320,6 +4728,10 @@ function teardownStacSearchControl(app: GeoLibreAppAPI): void {
   }
   stacSearchControl = null;
   stacSearchControlMounted = false;
+  stacSearchApp = null;
+  // Its deck layers live in the shared overlay, which outlives this control.
+  stacSearchBeforeIds.clear();
+  setSharedDeckLayers("stac-search", []);
 }
 
 function hideSearchControl(): void {
@@ -4338,6 +4750,8 @@ function setSearchPlacesPanelVisible(visible: boolean): void {
 function teardownMeasureControl(app: GeoLibreAppAPI): void {
   measureTerrainDetach?.();
   measureTerrainDetach = null;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = null;
   if (measureControl && measureControlMounted) {
     app.removeMapControl(measureControl);
   }
@@ -4689,25 +5103,89 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
   };
 }
 
-function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
+/**
+ * The archives this session's control added, and so may remove.
+ *
+ * Ownership is not `metadata.controlArchiveId`: that mark rides into the saved project and outlives
+ * the control that set it. Read as ownership, the control's clear-all — which reports an empty list
+ * rather than a layer id — would take archives it never added.
+ */
+const controlOwnedArchives = new Set<string>();
+
+/** @internal Exported only so a test starts with no control, no claims and no add in flight. */
+export function __resetPMTilesControlForTests(): void {
+  controlOwnedArchives.clear();
+  programmaticPMTilesAdds.clear();
+  pmtilesStoreUnsubscribe?.();
+  pmtilesStoreUnsubscribe = null;
+  pmtilesControl = null;
+  pmtilesControlMounted = false;
+}
+
+/** @internal Exported only so the URL-add path's effect on the tick filter can be unit-tested. */
+export function __beginProgrammaticPMTilesAddForTests(url: string): () => void {
+  return beginProgrammaticPMTilesAdd(url);
+}
+
+/** @internal Exported only so a test can drive the panel state a real control would hold. */
+export function __getPMTilesControlForTests(): unknown {
+  return pmtilesControl;
+}
+
+/** @internal Exported only so teardown can be unit-tested with a control mounted. */
+export function __mountPMTilesControlForTests(control: unknown): void {
+  pmtilesControl = control as typeof pmtilesControl;
+  pmtilesControlMounted = true;
+}
+
+/** @internal Exported only so the archive's removal can be unit-tested. */
+export function createPMTilesLayerRemoveHandler(): PMTilesLayerEventHandler {
+  return (event) => {
+    const store = useAppStore.getState();
+    const removed = new Set(pmtilesLayerIdsToRemove(store.layers, event, controlOwnedArchives));
+    const dropped = store.layers.filter((layer) => removed.has(layer.id));
+    const groupIds = new Set(dropped.map((layer) => layer.groupId));
+    // Only what this event actually took: releasing every archive missing from the snapshot would
+    // hand back ownership of ones it never mentioned, and the control could then no longer clear
+    // them.
+    const releasing = new Set(
+      dropped
+        .map((layer) => layer.metadata.controlArchiveId)
+        .filter((id): id is string => typeof id === "string"),
+    );
+    for (const id of removed) {
+      store.removeLayer(id);
+    }
+    // The folder was this plugin's doing, so it goes with its last layer — unless the user put
+    // something else in it.
+    const after = useAppStore.getState();
+    for (const groupId of groupIds) {
+      if (!groupId) continue;
+      if (after.layers.some((layer) => layer.groupId === groupId)) continue;
+      after.removeLayerGroup(groupId);
+    }
+    // The control no longer has it, so neither does the claim.
+    const stillListed = new Set(event.state.layers.map((layer) => layer.id));
+    for (const archiveId of releasing) {
+      if (!stillListed.has(archiveId)) controlOwnedArchives.delete(archiveId);
+    }
+  };
+}
+
+/** @internal Exported only so the archive's grouping can be unit-tested. */
+export function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
   return (event) => {
     if (!event.layerId) return;
     const layerInfo = event.state.layers.find((layer) => layer.id === event.layerId);
     if (!layerInfo) return;
 
-    const store = useAppStore.getState();
-    const layer = createPMTilesStoreLayer(event.layerId, layerInfo);
-    if (store.layers.some((item) => item.id === layer.id)) {
-      store.updateLayer(layer.id, {
-        metadata: layer.metadata,
-        opacity: layer.opacity,
-        source: layer.source,
-        style: layer.style,
-        visible: layer.visible,
-      });
-      return;
-    }
-    store.addLayer(layer);
+    addPMTilesArchive(
+      // The panel's tick selection, read from the state the control hands every handler rather than
+      // inferred from the ids it drew, which spell the name raw where this package encodes it.
+      pmtilesStoreLayers(event.layerId, layerInfo, event.state.selectedSourceLayers),
+      pmtilesArchiveName(event.layerId, layerInfo),
+    );
+    controlOwnedArchives.add(event.layerId);
   };
 }
 
@@ -5303,42 +5781,68 @@ function createGeoTiffRasterStoreLayer(state: GeoTiffRasterLayerState): GeoLibre
   };
 }
 
-function createPMTilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer {
-  const firstSourceLayer = layerInfo.sourceLayers[0];
-  const fillColor =
-    (firstSourceLayer && layerInfo.sourceLayerColors?.[firstSourceLayer]) ??
-    DEFAULT_LAYER_STYLE.fillColor;
+/** @internal The layers a control-reported archive becomes. */
+export function pmtilesStoreLayers(
+  id: string,
+  layerInfo: PMTilesLayerInfo,
+  // Required, not defaulted: a caller that stopped passing it would silently go back to taking the
+  // whole archive whatever the panel has ticked, which is the behaviour this argument exists to fix.
+  selectedSourceLayers: readonly string[],
+): GeoLibreLayer[] {
+  return createPMTilesArchiveLayers(pmtilesLayerOptions(id, layerInfo, selectedSourceLayers)).map(
+    (layer) => ({
+      ...layer,
+      // What the control knows this archive by. A STAC asset builds the same shape without one.
+      metadata: { ...layer.metadata, controlArchiveId: id },
+    }),
+  );
+}
 
+/** What an archive is called: the control's own name, or one read off its URL. */
+function pmtilesArchiveName(id: string, layerInfo: PMTilesLayerInfo): string {
+  return layerInfo.name || layerNameFromUrl(layerInfo.url, id);
+}
+
+function pmtilesLayerOptions(
+  id: string,
+  layerInfo: PMTilesLayerInfo,
+  selectedSourceLayers: readonly string[],
+): PMTilesStoreLayerOptions {
+  // What the control drew: the panel's ticked source layers, or the whole archive when none are
+  // ticked. A stale tick can name source layers this archive does not even have.
+  const controlDrew =
+    selectedSourceLayers.length > 0 ? selectedSourceLayers : layerInfo.sourceLayers;
+  // A selection naming anything this archive lacks belongs to a different one, and so does the
+  // checkbox list beside it — the user could not tick the rest back. None of it is trusted.
+  const stale = controlDrew.some((sourceLayer) => !layerInfo.sourceLayers.includes(sourceLayer));
+  // Matched on the URL string exactly as the caller passed it, because the mark is claimed before
+  // the add and there is no archive id yet to key on. The control stores that string verbatim, and
+  // `tests/pmtiles-control-contract.test.ts` adds through a URL carrying a query string so a bump
+  // that starts rewriting it fails there rather than silently reinstating a stale tick selection.
+  const sourceLayers =
+    stale || programmaticPMTilesAdds.has(layerInfo.url)
+      ? layerInfo.sourceLayers
+      : layerInfo.sourceLayers.filter((sourceLayer) => controlDrew.includes(sourceLayer));
+  // The control made these layers, so its ids stand rather than derived ones, which would draw a
+  // second trio over them. Only ids naming what the store holds are kept — the rest would be styled
+  // and removed in place of real layers. With no `vector_layers` there is nothing to derive at all,
+  // so the control's stand whatever they name or the layer renders as a placeholder.
+  const named = pmtilesIdsForSourceLayers(layerInfo.layerIds, id, sourceLayers);
+  // Ids left out name control-drawn layers no store layer owns; closing the panel or deleting the
+  // archive clears them, the control removing them by its own full `layerIds`.
   return {
     id,
-    name: layerInfo.name || layerNameFromUrl(layerInfo.url, id),
-    type: "pmtiles",
-    source: {
-      sourceId: layerInfo.id,
-      sourceLayers: layerInfo.sourceLayers,
-      tileType: layerInfo.tileType,
-      type: layerInfo.tileType === "raster" ? "raster" : "vector",
-      url: layerInfo.url,
-    },
-    visible: true,
+    name: pmtilesArchiveName(id, layerInfo),
+    url: layerInfo.url,
+    // The control also reports "unknown", which it and the map both draw as vector tiles.
+    tileType: layerInfo.tileType === "raster" ? "raster" : "vector",
+    sourceLayers,
     opacity: layerInfo.opacity,
-    style: {
-      ...DEFAULT_LAYER_STYLE,
-      fillOpacity: layerInfo.tileType === "raster" ? 0.6 : 1,
-      fillColor,
-      strokeColor: fillColor,
-    },
-    metadata: {
-      externalNativeLayer: true,
-      nativeLayerIds: layerInfo.layerIds,
-      pickable: layerInfo.pickable,
-      sourceId: layerInfo.id,
-      sourceKind: "pmtiles-url",
-      sourceLayerColors: layerInfo.sourceLayerColors,
-      sourceLayers: layerInfo.sourceLayers,
-      tileType: layerInfo.tileType,
-    },
-    sourcePath: layerInfo.url,
+    style: { fillOpacity: layerInfo.tileType === "raster" ? 0.6 : 1 },
+    pickable: layerInfo.pickable,
+    nativeLayerIds:
+      sourceLayers.length === 0 ? layerInfo.layerIds : named.length > 0 ? named : undefined,
+    ...(layerInfo.sourceLayerColors ? { sourceLayerColors: layerInfo.sourceLayerColors } : {}),
   };
 }
 
@@ -5432,6 +5936,11 @@ function createStacSearchStoreLayer(
     metadata: {
       collectionId,
       customLayerType: "raster",
+      // The COG variant renders as a deck.gl layer with no MapLibre style layer
+      // to move, so layer-sync must hand its computed `beforeId` to the control
+      // instead of calling `moveLayer` (#1718). The raster-tile variant is a
+      // real style layer and reorders normally.
+      ...(rasterLayerInfo ? {} : { externalDeckLayer: true }),
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds,
@@ -5532,6 +6041,14 @@ function isCogRasterControlLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+function isMaplibreRasterControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "cog" &&
+    layer.metadata.sourceKind === "maplibre-gl-raster" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
 function isGeoTiffRasterLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "cog" &&
@@ -5540,11 +6057,72 @@ function isGeoTiffRasterLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * The archive a store layer belongs to. A split-out layer is named after its source layer, so its
+ * own id is one the control has never heard of; matching on it goes wrong in both directions.
+ */
+function pmtilesArchiveId(layer: GeoLibreLayer): string | undefined {
+  return stringMetadata(layer.metadata.controlArchiveId);
+}
+
+/**
+ * @internal The store layers to drop for a `layerremove`. Matched by archive, not by layer id, so
+ * removing one takes every layer split out of it and a listed archive keeps all of its own.
+ */
+export function pmtilesLayerIdsToRemove(
+  layers: readonly GeoLibreLayer[],
+  event: { layerId?: string; state: { layers: readonly { id: string }[] } },
+  owned: ReadonlySet<string>,
+): string[] {
+  const activeArchiveIds = new Set(event.state.layers.map((layer) => layer.id));
+  return layers
+    .filter((layer) => {
+      const archiveId = pmtilesArchiveId(layer);
+      if (!archiveId || !owned.has(archiveId) || !isPMTilesControlLayer(layer)) return false;
+      return event.layerId ? archiveId === event.layerId : !activeArchiveIds.has(archiveId);
+    })
+    .map((layer) => layer.id);
+}
+
+/**
+ * @internal The archives whose last layer has just left the store. Deleting one source layer leaves
+ * the rest drawing, so an archive goes only once none of its layers remain.
+ */
+export function pmtilesArchivesFullyRemoved(
+  previous: readonly GeoLibreLayer[],
+  next: readonly GeoLibreLayer[],
+  owned: ReadonlySet<string>,
+): string[] {
+  const remaining = new Set<string | undefined>();
+  const nextIds = new Set<string>();
+  for (const layer of next) {
+    nextIds.add(layer.id);
+    if (isPMTilesControlLayer(layer)) remaining.add(pmtilesArchiveId(layer));
+  }
+  const gone = new Set<string>();
+  for (const layer of previous) {
+    if (!isPMTilesControlLayer(layer)) continue;
+    if (nextIds.has(layer.id)) continue;
+    const archiveId = pmtilesArchiveId(layer);
+    // Ownership, not the mark — see `controlOwnedArchives`.
+    if (archiveId && owned.has(archiveId) && !remaining.has(archiveId)) gone.add(archiveId);
+  }
+  return [...gone];
+}
+
+/**
+ * Whether this layer came from the control: a STAC asset and a basemap extract share its shape.
+ *
+ * A project saved before archives carried `controlArchiveId` fails this, which costs it nothing:
+ * every caller gates on `controlOwnedArchives` as well, and that is session state — a reloaded
+ * layer is not the control's to remove whether or not it carries the mark.
+ */
 function isPMTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "pmtiles" &&
     layer.metadata.sourceKind === "pmtiles-url" &&
-    layer.metadata.externalNativeLayer === true
+    layer.metadata.externalNativeLayer === true &&
+    pmtilesArchiveId(layer) !== undefined
   );
 }
 
@@ -5597,6 +6175,10 @@ function patchStacSearchRemoveLayer(control: StacSearchControl): void {
   mutableControl._removeLayer = (id?: string) => {
     const layerIds = id ? [id] : Array.from(mutableControl._cogLayers?.keys() ?? []);
     removeLayer(id);
+    // Upstream repaints its own overlay, which GeoLibre bypasses, so drop the
+    // removed layers from the shared interleaved overlay here (#1718).
+    for (const layerId of layerIds) stacSearchBeforeIds.delete(layerId);
+    renderStacSearchDeckLayers();
     const store = useAppStore.getState();
     for (const layerId of layerIds) {
       const layer = store.layers.find((item) => item.id === layerId);
@@ -5628,7 +6210,10 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
 
   mutableControl._addCogLayer = async (url: string, item: StacSearchItem, assetKey: string) => {
     ensureMercatorProjection(mutableControl._map);
-    await mutableControl._ensureOverlay?.();
+    // Deliberately NOT `_ensureOverlay()`: that builds the control's own
+    // non-interleaved overlay, which can never be ordered against the style.
+    // The shared interleaved overlay renders these layers instead (#1718).
+    if (stacSearchApp) await ensureSharedDeckOverlay(stacSearchApp);
     const selectedAsset = getStacSearchSelectedAsset(mutableControl, item, {
       key: assetKey,
       url,
@@ -5655,9 +6240,7 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
       ...renderProps,
     });
     mutableControl._cogLayers?.set(id, layer as unknown as Layer);
-    mutableControl._deckOverlay?.setProps({
-      layers: Array.from(mutableControl._cogLayers?.values() ?? []) as Layer[],
-    });
+    renderStacSearchDeckLayers();
     if (mutableControl._state) {
       mutableControl._state.hasLayer = true;
       mutableControl._state.layerCount = mutableControl._cogLayers?.size ?? 0;
@@ -6008,15 +6591,57 @@ function setStacSearchControlLayerState(id: string, visible: boolean, opacity: n
     id,
     layer.clone({ opacity: appliedOpacity }) as StacSearchRenderableLayer,
   );
-  mutableControl?._deckOverlay?.setProps({
-    layers: getStacSearchDeckLayers(mutableControl),
-  });
+  renderStacSearchDeckLayers();
 }
 
 function getStacSearchDeckLayers(control: MutableStacSearchControl): Layer[] {
   return Array.from(control._cogLayers?.values() ?? []).filter(
     (layer): layer is Layer => !getStacSearchRasterLayerInfo(layer),
   );
+}
+
+/**
+ * Pushes the STAC Search control's deck.gl COG layers into GeoLibre's shared
+ * interleaved overlay, each carrying the `beforeId` derived from the store's
+ * layer order.
+ *
+ * Upstream renders them through the control's own non-interleaved
+ * `MapboxOverlay`, which owns a separate canvas stacked above the entire
+ * MapLibre style — so STAC imagery covered every vector layer no matter where
+ * the user placed it in the Layers panel (opengeos/GeoLibre#1718). Interleaved
+ * layers are drawn inside the style instead, at the depth their `beforeId`
+ * selects, which is what makes panel order mean anything for them.
+ */
+function renderStacSearchDeckLayers(): void {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  if (!control) return;
+  const layers = getStacSearchDeckLayers(control).map((layer) => {
+    const beforeId = stacSearchBeforeIds.get(layer.id);
+    if ((layer.props as { beforeId?: string }).beforeId === beforeId) return layer;
+    return layer.clone({ beforeId } as unknown as Partial<Layer["props"]>);
+  });
+  setSharedDeckLayers("stac-search", layers);
+}
+
+/**
+ * Applies a store-derived draw order to a STAC Search deck.gl COG layer.
+ *
+ * Registered by the app shell as part of the external deck-layer order handler:
+ * such a layer is not a real MapLibre style layer, so `moveLayer` cannot reorder
+ * it and layer-sync forwards the computed `beforeId` here instead.
+ *
+ * @param layerId - The store layer id, which doubles as the deck layer id.
+ * @param beforeId - The style layer to draw beneath, or undefined for the top.
+ * @returns True when the id belongs to the STAC Search control.
+ */
+export function applyStacSearchLayerOrder(layerId: string, beforeId: string | undefined): boolean {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  const layer = control?._cogLayers?.get(layerId);
+  if (!layer || getStacSearchRasterLayerInfo(layer)) return false;
+  if (stacSearchBeforeIds.get(layerId) === beforeId) return true;
+  stacSearchBeforeIds.set(layerId, beforeId);
+  renderStacSearchDeckLayers();
+  return true;
 }
 
 function getStacSearchRasterLayerInfo(
@@ -6172,6 +6797,9 @@ function hideLidarControl(control: LidarControl | null): void {
 function showLidarControl(control: LidarControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "";
+  // Restored clouds can update state while the toggle is hidden. Recompute
+  // panel placement after showing it, even if expand() would be a no-op.
+  control?.setState({});
 }
 
 function hideSplattingControl(control: GaussianSplatControl | null): void {

@@ -10,6 +10,7 @@
 // memory (drawn features, processing output) or only in a local file have no
 // re-fetchable source, so those embed their features behind a size cap.
 
+import { cesiumIonAssetId } from "./cesium-ion";
 import type { FeatureCollection } from "geojson";
 import {
   DEFAULT_LAYER_STYLE,
@@ -18,6 +19,7 @@ import {
   type GeoLibreLayer,
   type LayerJoin,
   type LayerLibraryEntry,
+  type LayerPopupConfig,
   type LayerStyle,
   type LayerType,
   type LayerVirtualField,
@@ -56,8 +58,9 @@ export const MAX_LAYER_LIBRARY_ENTRIES = 500;
  * Metadata keys dropped when capturing an entry. `resolvedUrl` is the dev-server
  * proxy rewrite of an XYZ template — a per-session artifact that must not be
  * baked into a saved source (the same reason `prepareLayerForSave` strips it).
+ * `geometryEdited` tracks changes to the live layer, not a library source.
  */
-const TRANSIENT_METADATA_KEYS = ["resolvedUrl"] as const;
+const TRANSIENT_METADATA_KEYS = ["resolvedUrl", "geometryEdited"] as const;
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
@@ -80,6 +83,9 @@ export function hasRestorableLayerSource(
   if (nonEmptyString(source.url)) return true;
   if (nonEmptyString(source.data)) return true;
   if (Array.isArray(source.tiles) && source.tiles.some(nonEmptyString)) return true;
+  // A Cesium Ion asset is re-fetched from its id alone (under the cesium-ion
+  // source kind, the same contract the globe loads it by).
+  if (cesiumIonAssetId(layer) !== null) return true;
   return nonEmptyString((layer.metadata ?? {}).originalUrl);
 }
 
@@ -199,6 +205,12 @@ function sourceForCapture(layer: GeoLibreLayer): Record<string, unknown> {
       ? source.url
       : null;
   if (!originalUrl) return source;
+  // A TileJSON layer keeps its own tile templates — see `prepareLayerForSave`.
+  // The library re-adds a captured source verbatim, with no re-resolution step,
+  // so collapsing `tiles` onto the document URL here would never load a tile.
+  if (typeof (layer.metadata ?? {}).tilejsonUrl === "string") {
+    return { ...source, url: originalUrl };
+  }
   return { ...source, tiles: [originalUrl], url: originalUrl };
 }
 
@@ -321,6 +333,7 @@ export function captureLayerLibraryEntry(
     ...(layer.joins?.length ? { joins: structuredClone(layer.joins) } : {}),
     ...(layer.virtualFields?.length ? { virtualFields: structuredClone(layer.virtualFields) } : {}),
     ...(layer.attributeForm ? { attributeForm: structuredClone(layer.attributeForm) } : {}),
+    ...(layer.popup ? { popup: structuredClone(layer.popup) } : {}),
   };
   const withFeatures = embed && !controlPainted ? { ...base, geojson: embed } : base;
 
@@ -361,6 +374,7 @@ export interface LayerLibraryConfigPatch {
   joins?: LayerJoin[];
   virtualFields?: LayerVirtualField[];
   attributeForm?: AttributeFormConfig;
+  popup?: LayerPopupConfig;
 }
 
 /** How an entry should be re-added to the current project. */
@@ -411,6 +425,7 @@ export function planLayerLibraryAdd(
       ...(entry.joins ? { joins: structuredClone(entry.joins) } : {}),
       ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
       ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
+      ...(entry.popup ? { popup: structuredClone(entry.popup) } : {}),
     },
   };
 }
@@ -430,6 +445,7 @@ export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryC
     ...(entry.joins ? { joins: structuredClone(entry.joins) } : {}),
     ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
     ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
+    ...(entry.popup ? { popup: structuredClone(entry.popup) } : {}),
   };
 }
 
@@ -525,6 +541,30 @@ function validAttributeForm(value: unknown): AttributeFormConfig | undefined {
   );
   if (fields.length === 0) return undefined;
   return structuredClone({ ...config, fields }) as unknown as AttributeFormConfig;
+}
+
+/**
+ * A structurally plausible popup design, or undefined. `fields` is optional (a
+ * config may carry only a title or the hover flag), so unlike the attribute
+ * form an empty field list does not disqualify the block — but a config with
+ * nothing set at all is dropped rather than stored as an empty object.
+ */
+function validPopup(value: unknown): LayerPopupConfig | undefined {
+  const config = plainObject(value);
+  if (!config) return undefined;
+  const fields = Array.isArray(config.fields)
+    ? config.fields.filter(
+        (field) =>
+          plainObject(field) !== undefined && nonEmptyString((field as { field?: unknown }).field),
+      )
+    : undefined;
+  const rest = { ...config };
+  delete rest.fields;
+  if (!fields?.length && Object.keys(rest).length === 0) return undefined;
+  return structuredClone({
+    ...rest,
+    ...(fields?.length ? { fields } : {}),
+  }) as unknown as LayerPopupConfig;
 }
 
 /** An array of plain JSON objects, or undefined when nothing usable is present. */
@@ -630,10 +670,12 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
         const joins = validJoins(candidate.joins);
         const virtualFields = validVirtualFields(candidate.virtualFields);
         const attributeForm = validAttributeForm(candidate.attributeForm);
+        const popup = validPopup(candidate.popup);
         return {
           ...(joins ? { joins } : {}),
           ...(virtualFields ? { virtualFields } : {}),
           ...(attributeForm ? { attributeForm } : {}),
+          ...(popup ? { popup } : {}),
         };
       })(),
       ...(geojson ? { geojson: structuredClone(geojson) } : {}),

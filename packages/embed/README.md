@@ -66,6 +66,7 @@ the target of every outbound message and the filter on inbound ones.
 | `setFilter(layerId, expression)`       | `void`                  |
 | `getViewport()`                        | `Viewport`              |
 | `addLayer(spec)`                       | the new layer's `id`    |
+| `addData(url, options?)`               | the new layer `id`s     |
 | `exportImage()`                        | a PNG `data:` URL       |
 | `on(event, listener)`                  | an unsubscribe function |
 | `disconnect()`                         | not a promise           |

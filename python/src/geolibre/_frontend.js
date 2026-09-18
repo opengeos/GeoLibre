@@ -39,6 +39,98 @@ function proxyBase(port) {
   return new URL(`${jupyterBaseUrl()}proxy/${port}/`, window.location.href).href;
 }
 
+function colabKernel() {
+  return (
+    typeof window !== "undefined" &&
+    window.google &&
+    window.google.colab &&
+    window.google.colab.kernel
+  );
+}
+
+// Local raster URLs are authored in the kernel as loopback URLs. In Colab the
+// iframe itself is loaded through proxyPort(), so the browser cannot fetch that
+// raw 127.0.0.1 address. Point only GeoLibre's tokenized local-file routes on
+// this widget's own port at the same proxy base. Copy on write keeps the synced
+// Python project unchanged until the app reports its restored state.
+function proxiedLocalFileUrl(raw, base, port) {
+  if (typeof raw !== "string") return raw;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname);
+  // Colab assigns a distinct proxy subdomain to each output/widget view. A
+  // project synced back by an older view can therefore carry a valid token on
+  // that view's now-foreign origin. Recognize the same-port proxy hostname and
+  // rebase it onto the current view's proxy URL below.
+  // The proxy origin carries no explicit port; requiring an empty one keeps a
+  // look-alike host on some other network port out of the rewrite path.
+  const colabProxy =
+    parsed.protocol === "https:" &&
+    parsed.port === "" &&
+    parsed.hostname.endsWith(`-${port}-colab.googleusercontent.com`);
+  if (
+    ((!loopback || parsed.port !== String(port)) && !colabProxy) ||
+    !["/_geolibre_local/", "/_geolibre_tiles/"].some((prefix) => parsed.pathname.startsWith(prefix))
+  ) {
+    return raw;
+  }
+  const relative = `${parsed.pathname.replace(/^\/+/, "")}${parsed.search}${parsed.hash}`;
+  const rewritten = new URL(relative, base);
+  // URL serialisation escapes XYZ placeholders, but MapLibre requires the
+  // literal braces in its template in order to substitute tile coordinates.
+  return rewritten.href.replace(/%7B([zxy])%7D/gi, "{$1}");
+}
+
+// Whether the browser can reach the kernel's tokenized local-file routes by
+// rebasing them onto `base`. True in Colab, where the iframe itself is loaded
+// through the per-port proxy, and wherever the app is already served by
+// jupyter-server-proxy on that same kernel port. Under the Jupyter Server
+// extension the app comes from a different route than the kernel's port, so
+// the loopback URL cannot be rewritten and is left alone.
+export function canProxyLocalFiles(base, port) {
+  if (!port) return false;
+  return Boolean(colabKernel()) || base === proxyBase(port);
+}
+
+export function rewriteProxiedLocalFileUrls(project, base, port) {
+  if (!project || typeof project !== "object" || !Array.isArray(project.layers) || !port) {
+    return project;
+  }
+  let changed = false;
+  const layers = project.layers.map((layer) => {
+    if (!layer || typeof layer !== "object") return layer;
+    const rawUrl = layer.source?.url;
+    const url = proxiedLocalFileUrl(rawUrl, base, port);
+    const rawTiles = layer.source?.tiles;
+    const tiles = Array.isArray(rawTiles)
+      ? rawTiles.map((tile) => proxiedLocalFileUrl(tile, base, port))
+      : rawTiles;
+    const sourcePath = proxiedLocalFileUrl(layer.sourcePath, base, port);
+    const tilesChanged =
+      Array.isArray(rawTiles) && tiles.some((tile, index) => tile !== rawTiles[index]);
+    if (url === rawUrl && !tilesChanged && sourcePath === layer.sourcePath) return layer;
+    changed = true;
+    return {
+      ...layer,
+      ...(url !== rawUrl || tilesChanged
+        ? {
+            source: {
+              ...layer.source,
+              ...(url !== rawUrl ? { url } : {}),
+              ...(tilesChanged ? { tiles } : {}),
+            },
+          }
+        : {}),
+      ...(sourcePath !== layer.sourcePath ? { sourcePath } : {}),
+    };
+  });
+  return changed ? { ...project, layers } : project;
+}
+
 // Ordered same-origin candidates to try under "remote" mode. Both serve the
 // identical bundle from the notebook's own origin; the front-end uses whichever
 // is live, so a host needs only ONE of them (the extension, or
@@ -67,11 +159,7 @@ function remoteCandidates(model) {
 // null in remote mode when no candidate is reachable.
 async function resolveBase(model) {
   const port = model.get("_app_port");
-  const colab =
-    typeof window !== "undefined" &&
-    window.google &&
-    window.google.colab &&
-    window.google.colab.kernel;
+  const colab = colabKernel();
   if (port && colab && typeof colab.proxyPort === "function") {
     try {
       const url = await colab.proxyPort(port, { cache: true });
@@ -186,10 +274,14 @@ async function render({ model, el }) {
 
   const pushProject = () => {
     if (!ready) return;
+    const port = model.get("_app_port");
+    const project = canProxyLocalFiles(base, port)
+      ? rewriteProxiedLocalFileUrls(model.get("project"), base, port)
+      : model.get("project");
     post({
       type: "geolibre:load-project",
       seq: model.get("_seq"),
-      project: model.get("project"),
+      project,
       trustedWidget: true,
     });
   };

@@ -1,4 +1,5 @@
 import { WHITEBOX_MENU_CATALOG } from "./whitebox-menu-catalog";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem";
 
 /**
  * Query parameter that deep-links to a single Whitebox/Processing tool, e.g.
@@ -44,11 +45,15 @@ const RESERVED_PARAMS: ReadonlySet<string> = new Set([
  * dialog's own async guard handles by ignoring an id absent from the *loaded*
  * tool list.
  */
-const KNOWN_TOOL_IDS: ReadonlySet<string> = new Set(
-  WHITEBOX_MENU_CATALOG.flatMap((category) =>
+const KNOWN_TOOL_IDS: ReadonlySet<string> = new Set([
+  ...WHITEBOX_MENU_CATALOG.flatMap((category) =>
     category.subcategories.flatMap((subcategory) => subcategory.tools.map((tool) => tool.id)),
   ),
-);
+  // App-native Processing tool. It intentionally is not in the generated
+  // Whitebox/WASM menu catalog because its only menu entry lives under the
+  // native GeoLibre Toolbox > Raster branch.
+  DOWNLOAD_GLOBAL_DEM_TOOL_ID,
+]);
 
 /**
  * Whether `toolId` matches a tool id in the Processing menu catalog.

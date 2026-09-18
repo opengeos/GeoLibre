@@ -32,12 +32,19 @@ export type GeoAgentOverlayRecord = {
 /**
  * The slice of the GeoAgent tools surface the store -> GeoAgent sync needs.
  * Structural (rather than maplibre-gl types) so tests can pass fakes.
+ *
+ * Declared with method syntax, not function-typed properties: MapLibre v6 made
+ * `set/getPaintProperty` generic over `keyof AllPaintProperties`, and under
+ * `strictFunctionTypes` a function-typed property is checked contravariantly,
+ * so a real `Map` stops satisfying a `(id: string, property: string, ...)`
+ * slice. Methods are checked bivariantly, which accepts both a real map and a
+ * test fake.
  */
 export type GeoAgentSyncableTools = {
   map?: {
-    getLayer: (id: string) => { type: string } | undefined;
-    setLayoutProperty: (id: string, property: string, value: unknown) => unknown;
-    setPaintProperty: (id: string, property: string, value: unknown) => unknown;
+    getLayer(id: string): { type: string } | undefined;
+    setLayoutProperty(id: string, property: string, value: unknown): unknown;
+    setPaintProperty(id: string, property: string, value: unknown): unknown;
   };
   removeOverlay?: (name: string) => boolean;
 };

@@ -1,21 +1,17 @@
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  createXyzTileUrlTemplate,
-  registerXyzTileProtocol,
-  resolveXyzTileUrlTemplate,
-} from "../../../../lib/xyz-url";
+import { registerXyzTileProtocol, resolveXyzTileUrlTemplate } from "../../../../lib/xyz-url";
 import { buildXyzLayer } from "../apply-service";
 import { DEFAULT_XYZ_URL } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
-export function XyzSource() {
+export function XyzSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.xyz.defaultName"));
-  const [xyzUrl, setXyzUrl] = useState("");
+  const [xyzUrl, setXyzUrl] = useState(initialUrl);
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
 
@@ -35,9 +31,7 @@ export function XyzSource() {
     const name = source.layerName.trim() || t("addData.xyz.defaultName");
     if (!xyzUrl.trim()) throw new Error(t("addData.xyz.errorUrl"));
     if (xyzShortUrl) registerXyzTileProtocol();
-    const tileUrl = xyzShortUrl
-      ? await resolveXyzTileUrlTemplate(xyzUrl)
-      : createXyzTileUrlTemplate(xyzUrl);
+    const tileUrl = await resolveXyzTileUrlTemplate(xyzUrl);
     source.addAndClose(
       buildXyzLayer({
         name,
@@ -70,7 +64,9 @@ export function XyzSource() {
         />
         <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
           <div className="space-y-1.5">
-            <Label htmlFor="xyz-url">{t("addData.common.tileUrlTemplate")}</Label>
+            <Label htmlFor="xyz-url">
+              {t("addData.xyz.urlLabel", "XYZ template or TileJSON URL")}
+            </Label>
             <Input
               id="xyz-url"
               placeholder={

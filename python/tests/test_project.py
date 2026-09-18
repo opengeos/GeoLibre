@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+import geolibre
 from geolibre import project
 
 POINT_FC = {
@@ -31,6 +32,18 @@ def test_build_empty_project_defaults():
     assert proj["layers"] == []
     # Preferences must be a fresh copy, not the shared default.
     assert proj["preferences"] is not project.DEFAULT_PROJECT_PREFERENCES
+
+
+def test_top_level_package_exports_headless_authoring_api(tmp_path):
+    proj = project.build_empty_project()
+    assert geolibre.basemap_catalog()
+    assert geolibre.builtin_legend_names()
+    assert geolibre.color_ramp_names()
+
+    path = tmp_path / "map.geolibre.json"
+    geolibre.save_project(path, proj)
+    loaded = geolibre.load_project(path)
+    assert geolibre.describe_project(loaded)["layerCount"] == 0
 
 
 def test_build_empty_project_overrides():
@@ -102,6 +115,93 @@ def test_wms_layer_shape_and_url():
     assert "LAYERS=layer%3Aa%2Clayer%3Ab" in tile
     assert "SRS=EPSG%3A3857" in tile
     assert "WIDTH=256" in tile
+
+
+def test_wms_layer_bounds_are_optional():
+    # A service layer carries no geometry, so without bounds the app has
+    # nothing to zoom to; omitting them must leave the source as it was.
+    layer = project.wms_layer("x", "https://e/wms", "a", bounds=[8.14, 38.85, 9.83, 41.31])
+    assert layer["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+    assert "bounds" not in project.wms_layer("x", "https://e/wms", "a")["source"]
+
+
+def test_wmts_layer_bounds_are_optional():
+    layer = project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=[-10, 35, 5, 45])
+    assert layer["source"]["bounds"] == [-10, 35, 5, 45]
+    assert "bounds" not in project.wmts_layer("x", "https://e/{z}/{y}/{x}.png")["source"]
+
+
+@pytest.mark.parametrize("bad", [[], [1, 2], [1, 2, 3, 4, 5]])
+def test_ogc_layer_bounds_must_have_four_values(bad):
+    # A short list would reach the app as an extent it cannot use, and an empty
+    # one would be dropped without a word, so both are refused here.
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wms_layer("x", "https://e/wms", "a", bounds=bad)
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        project.wmts_layer("x", "https://e/{z}/{y}/{x}.png", bounds=bad)
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_reject_non_numbers(builder, args):
+    # Four values of the wrong kind must fail like the wrong count does, not
+    # with a bare "could not convert string to float" from the comprehension.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, "x"])
+    # float() takes "nan" and "inf" without a word, and either would reach the
+    # app as an extent it cannot fit to. Map.fit_bounds refuses them too.
+    for bad in ([float("nan"), 38, 9, 41], [8, 38, float("inf"), 41]):
+        with pytest.raises(ValueError, match="finite numbers"):
+            builder(*args, bounds=bad)
+    # An int too large for a float raises OverflowError, not ValueError.
+    with pytest.raises(ValueError, match="four numbers"):
+        builder(*args, bounds=[8, 38, 9, 10**1000])
+    # An iterable without len() must not escape as a bare TypeError: the MCP
+    # tool wrapper only restates ValueError, so anything else reaches the agent
+    # stripped of its message.
+    assert builder(*args, bounds=iter([8, 38, 9, 41]))["source"]["bounds"] == [8.0, 38.0, 9.0, 41.0]
+    with pytest.raises(ValueError, match="exactly 4 elements"):
+        builder(*args, bounds=iter([8, 38, 9]))
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_check_latitudes_but_not_longitudes(builder, args):
+    # A south > north box is the axis-order mixup the docstrings warn about,
+    # and latitudes have no wraparound to excuse it.
+    with pytest.raises(ValueError, match="latitudes inverted"):
+        builder(*args, bounds=[8, 41, 9, 38])
+    with pytest.raises(ValueError, match=r"within \+/-90"):
+        builder(*args, bounds=[8, -95, 9, 41])
+    # Longitudes are another matter: RFC 7946 section 5.2 writes a box crossing
+    # the antimeridian as west > east, and authoring.fit_bounds frames one.
+    fiji = builder(*args, bounds=[170, -20, -170, -10])
+    assert fiji["source"]["bounds"] == [170.0, -20.0, -170.0, -10.0]
+
+
+@pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (project.wms_layer, ("x", "https://e/wms", "a")),
+        (project.wmts_layer, ("x", "https://e/{z}/{y}/{x}.png")),
+    ],
+)
+def test_ogc_layer_bounds_are_coerced_to_floats(builder, args):
+    # Ints compare equal to floats, so assert the stored types: what reaches
+    # the project file has to be JSON numbers the app reads as coordinates.
+    stored = builder(*args, bounds=[8, 38, 9, 41])["source"]["bounds"]
+    assert stored == [8.0, 38.0, 9.0, 41.0]
+    assert all(isinstance(v, float) for v in stored)
 
 
 def test_wms_layer_version_1_3_0_uses_crs():
@@ -336,3 +436,293 @@ def test_load_featurecollection_geo_interface():
 def test_load_featurecollection_invalid():
     with pytest.raises(ValueError):
         project.load_featurecollection(42)
+
+
+# -- popups, tooltips, and marker symbology ------------------------------------
+
+
+def test_popup_field_builds_format_block():
+    config = project.popup_field(
+        "pop", label="Population", kind="number", decimals=1, thousands=True, suffix=" people"
+    )
+    assert config == {
+        "field": "pop",
+        "label": "Population",
+        "kind": "number",
+        "format": {"decimals": 1, "thousands": True, "suffix": " people"},
+    }
+
+
+def test_popup_field_omits_the_default_kind_and_empty_format():
+    assert project.popup_field("name") == {"field": "name"}
+
+
+def test_popup_field_rejects_an_unknown_kind():
+    with pytest.raises(ValueError, match="kind must be one of"):
+        project.popup_field("name", kind="markdown")
+
+
+def test_popup_field_rejects_an_unknown_date_format():
+    with pytest.raises(ValueError, match="date_format must be one of"):
+        project.popup_field("when", kind="date", date_format="rfc2822")
+
+
+def test_popup_field_rejects_decimals_out_of_intl_range():
+    # Intl.NumberFormat throws past 20, taking the whole popup render with it.
+    with pytest.raises(ValueError, match="decimals must be between 0 and 20"):
+        project.popup_field("pop", kind="number", decimals=25)
+
+
+def test_popup_field_rejects_a_blank_name():
+    with pytest.raises(ValueError, match="non-empty string"):
+        project.popup_field("   ")
+
+
+def test_normalize_popup_returns_none_when_nothing_is_configured():
+    assert project.normalize_popup() is None
+
+
+def test_normalize_popup_accepts_a_single_field_name():
+    assert project.normalize_popup("name") == {"fields": [{"field": "name"}]}
+
+
+def test_normalize_popup_false_suppresses_the_click_popup():
+    assert project.normalize_popup(False) == {"click": False}
+
+
+def test_normalize_popup_accepts_names_and_mappings_together():
+    config = project.normalize_popup(["name", {"field": "photo", "kind": "image"}])
+    assert config["fields"] == [{"field": "name"}, {"field": "photo", "kind": "image"}]
+
+
+def test_normalize_popup_accepts_camel_and_snake_config_keys():
+    snake = project.normalize_popup({"title_field": "name", "show_feature_id": False})
+    camel = project.normalize_popup({"titleField": "name", "showFeatureId": False})
+    assert snake == camel == {"titleField": "name", "showFeatureId": False}
+
+
+def test_normalize_popup_rejects_an_unknown_config_key():
+    with pytest.raises(ValueError, match="unknown popup key 'titel'"):
+        project.normalize_popup({"titel": "name"})
+
+
+def test_normalize_popup_rejects_an_unknown_field_key():
+    with pytest.raises(ValueError, match="unknown popup field key 'kinde'"):
+        project.normalize_popup([{"field": "name", "kinde": "text"}])
+
+
+def test_normalize_popup_accepts_a_nested_format_block():
+    config = project.normalize_popup(
+        [{"field": "pop", "kind": "number", "format": {"decimals": 0, "thousands": True}}]
+    )
+    assert config["fields"][0]["format"] == {"decimals": 0, "thousands": True}
+
+
+def test_tooltip_flags_the_named_field_and_turns_hover_on():
+    config = project.normalize_popup(["name", "pop"], tooltip="name")
+    assert config["hover"] is True
+    assert config["fields"] == [{"field": "name", "hover": True}, {"field": "pop"}]
+
+
+def test_tooltip_adds_a_field_the_popup_did_not_list():
+    # The hover subset is drawn from `fields`, so a tooltip-only property still
+    # has to appear there or the tip would come up empty.
+    config = project.normalize_popup(["name"], tooltip=["elev"])
+    assert config["fields"][-1] == {"field": "elev", "hover": True}
+
+
+def test_tooltip_true_flags_every_configured_field():
+    config = project.normalize_popup(["name", "pop"], tooltip=True)
+    assert [entry["hover"] for entry in config["fields"]] == [True, True]
+
+
+def test_tooltip_true_without_anything_to_show_is_rejected():
+    # createHoverTooltipElement returns null for this, so the tooltip would
+    # silently never appear.
+    with pytest.raises(ValueError, match="nothing would render in it"):
+        project.normalize_popup(tooltip=True)
+
+
+def test_hover_true_without_anything_to_show_is_rejected_too():
+    # The same dead tooltip, reached through the lower-level `hover` argument
+    # rather than the tooltip shorthand.
+    with pytest.raises(ValueError, match="nothing would render in it"):
+        project.normalize_popup({"hover": True})
+
+
+def test_hover_true_is_fine_once_a_field_carries_it():
+    config = project.normalize_popup({"hover": True, "fields": ["name"]}, tooltip="name")
+    assert config["hover"] is True
+
+
+def test_empty_tooltip_sequence_turns_the_tooltip_off():
+    # `tooltip=[]` selects no fields, which is what `tooltip=False` means; the
+    # MCP tool maps its empty list the same way.
+    config = project.normalize_popup(["a"], tooltip=[])
+    assert config["hover"] is False
+    assert config["fields"] == [{"field": "a"}]
+
+
+def test_tooltip_true_is_allowed_when_a_title_carries_the_tip():
+    config = project.normalize_popup({"title": "name"}, tooltip=True)
+    assert config == {"titleField": "name", "hover": True}
+
+
+def test_tooltip_false_turns_hover_off():
+    assert project.normalize_popup("name", tooltip=False)["hover"] is False
+
+
+def test_popup_can_be_spelled_inside_the_config_mapping():
+    assert project.normalize_popup({"fields": ["name"], "tooltip": "name"}) == {
+        "fields": [{"field": "name", "hover": True}],
+        "hover": True,
+    }
+
+
+def test_layer_builders_put_the_popup_beside_the_style_not_in_it():
+    layer = project.geojson_layer("Sites", POINT_FC, popup=["name"], tooltip="name")
+    assert layer["popup"] == {"fields": [{"field": "name", "hover": True}], "hover": True}
+    assert "popup" not in layer["style"]
+    assert "tooltip" not in layer["style"]
+
+
+def test_layer_builders_omit_the_popup_key_when_none_is_asked_for():
+    assert "popup" not in project.geojson_layer("Sites", POINT_FC)
+
+
+def test_normalize_hex_color_expands_shorthand_and_rejects_names():
+    assert project.normalize_hex_color("f00") == "#ff0000"
+    assert project.normalize_hex_color("#F00") == "#ff0000"
+    assert project.normalize_hex_color("red") is None
+
+
+def test_marker_style_keeps_circle_rendering_by_default():
+    style = project.marker_style(color="#e11d48", radius=8, opacity=0.5)
+    assert style["circleRadius"] == 8
+    assert "markerEnabled" not in style
+
+
+def test_marker_style_switches_to_a_sprite_for_a_shape():
+    style = project.marker_style(shape="pin", color="#e11d48", size=32)
+    assert style["markerEnabled"] is True
+    assert style["markerShape"] == "pin"
+    assert style["markerColor"] == "#e11d48"
+    assert style["markerSize"] == 32
+
+
+def test_marker_style_size_alone_enables_the_sprite():
+    assert project.marker_style(size=24)["markerEnabled"] is True
+
+
+def test_marker_style_icon_implies_a_custom_shape():
+    style = project.marker_style(icon="<svg/>")
+    assert style["markerShape"] == "custom"
+    assert style["markerSvg"] == "<svg/>"
+
+
+def test_marker_style_custom_shape_needs_an_icon():
+    with pytest.raises(ValueError, match='shape="custom" needs icon='):
+        project.marker_style(shape="custom")
+
+
+def test_marker_style_rejects_an_icon_alongside_another_shape():
+    # markerSvg is only read for markerShape "custom", so honoring the icon
+    # would quietly throw away the shape the caller asked for.
+    with pytest.raises(ValueError, match='icon= implies shape="custom"'):
+        project.marker_style(shape="pin", icon="<svg/>")
+
+
+def test_marker_style_allows_icon_with_an_explicit_custom_shape():
+    assert project.marker_style(shape="custom", icon="<svg/>")["markerShape"] == "custom"
+
+
+def test_marker_style_rejects_a_named_color_for_a_sprite():
+    # The sprite baker runs markerColor through normalizeHexColor and falls
+    # back to blue, so a CSS name would draw the wrong marker in silence.
+    with pytest.raises(ValueError, match="marker sprites need a hex color"):
+        project.marker_style(shape="pin", color="red")
+
+
+def test_marker_style_allows_a_named_color_for_a_circle():
+    style = project.marker_style(color="red")
+    assert style["fillColor"] == "red"
+    assert "markerColor" not in style
+
+
+def test_marker_style_rejects_an_unknown_shape():
+    with pytest.raises(ValueError, match="shape must be one of"):
+        project.marker_style(shape="hexagon")
+
+
+def test_marker_style_rejects_out_of_range_numbers():
+    with pytest.raises(ValueError, match="opacity must be between 0 and 1"):
+        project.marker_style(opacity=1.5)
+    with pytest.raises(ValueError, match="radius must be a finite number"):
+        project.marker_style(radius=0)
+    with pytest.raises(ValueError, match="size must be a finite number"):
+        project.marker_style(size=float("nan"))
+
+
+def test_marker_style_rejects_circle_only_settings_on_a_sprite():
+    # layer-sync removes the circle layer when a sprite is active, and the
+    # sprite draws its own white halo, so these would never render.
+    with pytest.raises(ValueError, match="only applies to circle markers"):
+        project.marker_style(shape="pin", radius=8)
+    with pytest.raises(ValueError, match="opacity, stroke_width"):
+        project.marker_style(size=20, opacity=0.5, stroke_width=2)
+
+
+def test_marker_style_still_takes_color_on_a_sprite():
+    style = project.marker_style(shape="star", color="#22c55e", size=20)
+    assert style["markerColor"] == "#22c55e"
+
+
+def test_marker_style_is_empty_when_nothing_is_passed():
+    assert project.marker_style() == {}
+
+
+def test_normalize_popup_rejects_a_value_that_is_not_a_field_spec():
+    with pytest.raises(ValueError, match="popup fields must be a property name"):
+        project.normalize_popup(42)
+
+
+def test_tooltip_rejects_a_value_that_is_not_a_name_or_sequence():
+    with pytest.raises(ValueError, match="tooltip must be True/False"):
+        project.normalize_popup(["a"], tooltip=42)
+
+
+def test_tooltip_only_image_fields_is_rejected():
+    # resolvePopupRows drops image rows from the hover subset, so flagging only
+    # an image leaves the same empty tip as flagging nothing.
+    with pytest.raises(ValueError, match="only image fields are flagged"):
+        project.normalize_popup([{"field": "photo", "kind": "image"}], tooltip="photo")
+
+
+def test_tooltip_accepts_an_image_alongside_a_text_field():
+    config = project.normalize_popup(
+        [{"field": "photo", "kind": "image"}, "name"], tooltip=["photo", "name"]
+    )
+    assert config["hover"] is True
+
+
+def test_a_tooltip_field_also_narrows_the_click_popup():
+    # Documented consequence of the app's schema: the tooltip and the click
+    # popup share `fields`, and a non-empty list is what the click popup shows.
+    assert project.normalize_popup(None, "name")["fields"] == [{"field": "name", "hover": True}]
+
+
+def test_popup_field_format_block_rejects_a_field_level_flag():
+    # `hover` is a field-level flag, not a format concern; accepting it inside
+    # `format` would be a hole in the reject-what-you-do-not-recognize rule.
+    with pytest.raises(ValueError, match="unknown popup field format key 'hover'"):
+        project.normalize_popup([{"field": "x", "format": {"hover": True}}])
+
+
+def test_popup_field_rejects_a_fractional_decimals():
+    # Truncating to 2 would format to a precision nobody asked for.
+    with pytest.raises(ValueError, match="decimals must be a whole number"):
+        project.popup_field("pop", kind="number", decimals=2.9)
+
+
+def test_popup_field_accepts_an_integral_float_for_decimals():
+    assert project.popup_field("pop", kind="number", decimals=2.0)["format"]["decimals"] == 2

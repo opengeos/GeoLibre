@@ -1,5 +1,5 @@
 import { getRoutingConfig, useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
   getNetworkTool,
@@ -22,10 +22,15 @@ import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
 
 interface NetworkToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**
@@ -296,7 +301,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
                     entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                   )}
                 >
-                  {entry.name}
+                  {translateToolName(t, "network", entry)}
                 </button>
               ))}
             </div>
@@ -304,13 +309,15 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "network", tool)}
+            </p>
 
             <div className="flex flex-col gap-3">
               {tool.parameters.map((param) => (
                 <ParameterField
                   key={param.id}
-                  param={param}
+                  param={translateParameter(t, "network", tool.id, param)}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
                   fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}

@@ -23,6 +23,22 @@ Endpoints are `POST /sessions`, `GET /sessions/:id/ws`, and `GET /health`.
 Persist the directory containing `COLLAB_DB_PATH`, and terminate TLS at the
 ingress so browsers can connect with `wss://`.
 
+## Checking a deployment
+
+`scripts/smoke.mjs` exercises the three endpoints against a running relay —
+health, session creation, and a WebSocket join round-trip — and needs nothing
+beyond Node:
+
+```bash
+node workers/collab-node/scripts/smoke.mjs http://127.0.0.1:8787
+```
+
+CI runs it against the freshly built image. The Dockerfile already imports the
+staged bundle during `docker build`, so a missing `ws` or a broken
+`@geolibre/collab-core` target fails there; this script covers the rest, which
+only a running container shows: that the process starts and stays up, and that
+it actually serves HTTP and completes a WebSocket upgrade.
+
 ## Volume ownership
 
 The container runs as the unprivileged `node` user, and the image creates

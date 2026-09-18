@@ -2,11 +2,14 @@ import {
   projectFromStore,
   redactCredentials,
   useAppStore,
+  type GeoLibreLayer,
   type GeoLibreProject,
 } from "@geolibre/core";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";
+import { embedEditedGeometry } from "./edited-geometry-save";
+import { prepareCollaborationLayers } from "./collaboration-layers";
 
 /**
  * Build a `GeoLibreProject` snapshot from the live store and map controller.
@@ -19,10 +22,14 @@ import { getPluginManager } from "../hooks/usePlugins";
  *
  * @param mapControllerRef - Ref to the live map controller; its `readView()`
  *   supplies the current camera.
+ * @param overrides - Replacements for store fields the caller has already
+ *   transformed. Routing every caller through this one field list keeps a new
+ *   project field from reaching one snapshot path but not another.
  * @returns The serializable project snapshot.
  */
 export function buildProjectSnapshot(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
+  overrides: { layers?: GeoLibreLayer[] } = {},
 ): GeoLibreProject {
   const state = useAppStore.getState();
   return projectFromStore({
@@ -31,7 +38,10 @@ export function buildProjectSnapshot(
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
-    layers: state.layers,
+    blankBackgroundColor: state.blankBackgroundColor,
+    // History and external snapshots must preserve the current edited data.
+    // File saves use their own explicit embedding choice before serialization.
+    layers: (overrides.layers ?? state.layers).map(embedEditedGeometry),
     selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,
     preferences: state.preferences,
@@ -40,6 +50,7 @@ export function buildProjectSnapshot(
       manifestUrls: state.projectPlugins?.manifestUrls ?? [],
     },
     legend: state.legend,
+    printLayout: state.printLayout,
     storymap: state.storymap,
     models: state.models,
     processingHistory: state.processingHistory,
@@ -48,6 +59,7 @@ export function buildProjectSnapshot(
     mapLayout: state.mapLayout,
     secondaryMapViews: state.secondaryMapViews,
     primaryMapLabel: state.primaryMapLabel,
+    primaryRenderer: state.primaryRenderer,
     styleLibrary: state.projectStyleLibrary,
     comments: state.comments,
     metadata: state.metadata,
@@ -60,7 +72,37 @@ export function buildProjectSnapshot(
  * reverting to the credential-bearing local snapshot.
  */
 export function buildProjectEgressSnapshot(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): GeoLibreProject {
   return redactCredentials(buildProjectSnapshot(mapControllerRef));
+}
+
+/** Build a self-contained public snapshot for a remote collaborator. */
+export async function buildCollaborationSnapshot(
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<GeoLibreProject> {
+  // Keep the plugins barrel out of this module's eager dependency graph: some
+  // optional controls load browser-only SDKs at module evaluation time.
+  const { materializeEmbeddableVectorLayers } = await import("@geolibre/plugins");
+  // Materialize against one layer revision and build the snapshot from that
+  // same revision. Mixing two would strip `localFileReloadable` from a layer
+  // added during the await while leaving it without embedded features (a layer
+  // that looks portable and arrives empty), and would let `layerGroups` or
+  // `selectedLayerId` name a layer the broadcast does not carry.
+  let source = useAppStore.getState().layers;
+  let materialized = await materializeEmbeddableVectorLayers(source);
+  // An edit that lands mid-read invalidates the result, so read again rather
+  // than combine revisions. Bounded: a participant editing continuously still
+  // gets a broadcast, at worst one revision behind on group membership.
+  for (let attempt = 0; attempt < 3 && useAppStore.getState().layers !== source; attempt += 1) {
+    source = useAppStore.getState().layers;
+    materialized = await materializeEmbeddableVectorLayers(source);
+  }
+  const layers = prepareCollaborationLayers(source, materialized);
+  // Pass the prepared layers only when portability actually rewrote one, so an
+  // unaffected project still snapshots straight from the live store. Nothing
+  // below awaits, so the override and every field `buildProjectSnapshot` reads
+  // from the store come from the same instant.
+  const changed = layers.some((layer, index) => layer !== source[index]);
+  return redactCredentials(buildProjectSnapshot(mapControllerRef, changed ? { layers } : {}));
 }

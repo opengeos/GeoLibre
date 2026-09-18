@@ -10,6 +10,7 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
+import { getStyleMap } from "./style-map";
 
 // mapillary-js is a heavy WebGL module, so it is loaded lazily the first time
 // the viewer mounts (see mountViewer) rather than statically at import time.
@@ -753,8 +754,11 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
   id: MAPILLARY_PLUGIN_ID,
   name: "Mapillary",
   version: "0.1.0",
+  // Coverage is a vector-tile source with style layers and the viewer is a
+  // floating panel: nothing MapLibre-specific.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    const activeMap = app.getMap?.();
+    const activeMap = getStyleMap(app);
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;
@@ -798,7 +802,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     hintEl = null;
     settingsButtonEl = null;
     pendingImageId = null;
-    const activeMap = map ?? app.getMap?.() ?? null;
+    const activeMap = map ?? getStyleMap(app);
     if (activeMap) {
       detachInteractions(activeMap);
       removeCoverage(activeMap);

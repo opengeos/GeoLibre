@@ -1,10 +1,15 @@
 import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
-import { resolveUrlRedirect } from "./native-http";
+import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
+import { isHttpWmsUrl, nativeWmsTileUrl, WMS_TILE_PROTOCOL } from "./native-wms-url";
+import { sanitizeAttributionHtml } from "./sanitize-html";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
+
+/** The source options {@link parseXyzTileJson} derives from a TileJSON document. */
+const TILEJSON_SOURCE_KEYS = ["bounds", "minzoom", "maxzoom", "scheme", "attribution"] as const;
 
 let protocolRegistered = false;
 
@@ -13,6 +18,16 @@ export interface ResolvedXyzTileUrl {
   redirected: boolean;
   renderUrl: string;
   url: string;
+  tilejson?: XyzTileJsonSource;
+}
+
+export interface XyzTileJsonSource {
+  tiles: string[];
+  bounds?: [number, number, number, number];
+  minzoom?: number;
+  maxzoom?: number;
+  scheme?: "xyz" | "tms";
+  attribution?: string;
 }
 
 export function normalizeTileUrlTemplate(url: string): string {
@@ -47,6 +62,7 @@ export async function resolveXyzTileUrlTemplate(
   url: string,
   signal?: AbortSignal,
 ): Promise<ResolvedXyzTileUrl> {
+  signal?.throwIfAborted();
   const originalUrl = normalizeTileUrlTemplate(url.trim());
   if (hasXyzTilePlaceholders(originalUrl)) {
     return {
@@ -57,38 +73,28 @@ export async function resolveXyzTileUrlTemplate(
     };
   }
 
-  const resolvedUrl = normalizeTileUrlTemplate(await resolveShortXyzUrl(originalUrl, signal));
-  if (!hasXyzTilePlaceholders(resolvedUrl)) {
-    throw new Error("Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.");
-  }
-
-  return {
-    originalUrl,
-    redirected: resolvedUrl !== originalUrl,
-    renderUrl: renderableXyzTileUrl(resolvedUrl),
-    url: resolvedUrl,
-  };
+  return resolveShortXyzUrl(originalUrl, signal);
 }
 
 export function registerXyzTileProtocol(): void {
   if (protocolRegistered || !isTauri()) return;
 
-  addProtocol(XYZ_TILE_PROTOCOL, async (request) => {
-    const url = parseXyzTileRequest(request);
-    // This handler runs once per tile, so — unlike the one-shot native calls
-    // routed through native-http — it deliberately calls `invoke` directly and
-    // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
-    // edge returns 404s in bulk, and recording each would re-render the panel
-    // per tile and evict more relevant entries from the 500-record ring buffer.
-    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-      url,
-    });
-    const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return {
-      data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
-    };
-  });
+  addProtocol(XYZ_TILE_PROTOCOL, async (request) => fetchNativeTile(parseXyzTileRequest(request)));
+  addProtocol(WMS_TILE_PROTOCOL, async (request) => fetchNativeTile(parseWmsTileRequest(request)));
   protocolRegistered = true;
+}
+
+async function fetchNativeTile(url: string): Promise<{ data: ArrayBuffer }> {
+  // This handler runs once per tile, so — unlike the one-shot native calls
+  // routed through native-http — it deliberately calls `invoke` directly and
+  // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
+  // edge returns 404s in bulk, and recording each would re-render the panel
+  // per tile and evict more relevant entries from the 500-record ring buffer.
+  const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
+    url,
+  });
+  const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return { data: array.slice().buffer };
 }
 
 export async function resolveProjectXyzLayers(
@@ -112,6 +118,7 @@ async function resolveProjectXyzLayer(
   layer: GeoLibreLayer,
   signal?: AbortSignal,
 ): Promise<GeoLibreLayer> {
+  if (layer.type === "wms") return routeWmsLayerThroughNativeProtocol(layer);
   if (layer.type !== "xyz") return layer;
 
   const url = getSavedXyzUrl(layer);
@@ -126,19 +133,45 @@ async function resolveProjectXyzLayer(
     hasShortUrlMetadata || !hasXyzTilePlaceholders(normalizedUrl)
       ? await resolveXyzTileUrlTemplate(url, signal)
       : createXyzTileUrlTemplate(url);
+  // A saved TileJSON layer re-reads its document on every open, so the spreads
+  // below must not keep fields the refreshed document dropped — a stale
+  // `bounds` or zoom limit would go on clipping the layer invisibly. Drop the
+  // TileJSON-derived options first and let the new document reinstate them.
+  const source = { ...layer.source };
+  const metadata = { ...layer.metadata };
+  if (tileUrl.tilejson || typeof metadata.tilejsonUrl === "string") {
+    for (const key of TILEJSON_SOURCE_KEYS) delete source[key];
+    delete metadata.tilejsonUrl;
+  }
   return {
     ...layer,
     source: {
-      ...layer.source,
-      tiles: [tileUrl.renderUrl],
+      ...source,
+      ...(tileUrl.tilejson ?? {}),
+      tiles: tileUrl.tilejson?.tiles ?? [tileUrl.renderUrl],
       url: tileUrl.originalUrl,
     },
     metadata: {
-      ...layer.metadata,
+      ...metadata,
       originalUrl:
         tileUrl.redirected || layer.metadata.originalUrl ? tileUrl.originalUrl : undefined,
       resolvedUrl: tileUrl.redirected ? tileUrl.url : undefined,
       sourceKind: layer.metadata.sourceKind ?? "xyz-url",
+      ...(tileUrl.tilejson ? { tilejsonUrl: tileUrl.originalUrl } : {}),
+    },
+  };
+}
+
+/** Route a WMS layer through Tauri's CORS-exempt HTTP client on desktop. */
+export function routeWmsLayerThroughNativeProtocol(layer: GeoLibreLayer): GeoLibreLayer {
+  if (!isTauri() || layer.type !== "wms" || !Array.isArray(layer.source.tiles)) return layer;
+  return {
+    ...layer,
+    source: {
+      ...layer.source,
+      tiles: layer.source.tiles.map((tile) =>
+        typeof tile === "string" ? nativeWmsTileUrl(tile) : tile,
+      ),
     },
   };
 }
@@ -187,43 +220,158 @@ function parseXyzTileRequest(request: RequestParameters): string {
     .replace(/\{y\}/g, parts[2]);
 }
 
+function parseWmsTileRequest(request: RequestParameters): string {
+  const url = new URL(request.url).searchParams.get("url");
+  if (!url || !isHttpWmsUrl(url)) {
+    throw new Error("Invalid WMS tile URL.");
+  }
+  return url;
+}
+
 function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-async function resolveShortXyzUrl(url: string, signal?: AbortSignal): Promise<string> {
-  if (!isHttpUrl(url)) return url;
-
-  if (isTauri()) {
-    try {
-      return await resolveShortXyzUrlWithFetch(url, signal);
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      console.warn("Falling back to desktop URL resolver", error);
-    }
-
-    return resolveUrlRedirect(url, { context: "XYZ URL resolve" });
+async function resolveShortXyzUrl(url: string, signal?: AbortSignal): Promise<ResolvedXyzTileUrl> {
+  if (!isHttpUrl(url)) return createXyzTileUrlTemplate(url);
+  signal?.throwIfAborted();
+  try {
+    return await resolveShortXyzUrlWithFetch(url, signal);
+  } catch (error) {
+    // Only transport/CORS failures need the native client. Invalid documents
+    // and HTTP errors must keep their useful error message.
+    if (!isTauri() || isAbortError(error) || !(error instanceof TypeError)) throw error;
   }
-
-  return resolveShortXyzUrlWithFetch(url, signal);
+  // The native short-URL resolver extracts tiles[0] from JSON, discarding the
+  // extent. Read the document first so desktop CORS fallback keeps TileJSON.
+  const bytes = await fetchUrlBytes(url, { context: "XYZ TileJSON" });
+  signal?.throwIfAborted();
+  const text = new TextDecoder().decode(new Uint8Array(bytes)).trim();
+  if (text.startsWith("{") || text.startsWith("[") || text.startsWith('"') || isHttpUrl(text)) {
+    // `fetch_url_bytes` follows redirects internally but returns only bytes, so
+    // the document URL is unknowable here and `url` stands in for it. A TileJSON
+    // reached through this fallback therefore reports `redirected: false` and
+    // leaves `metadata.resolvedUrl` unset even if the request did redirect —
+    // cosmetic, since the tile templates come from the document itself.
+    return resolvedXyzBody(text, url, url);
+  }
+  // An image response can still be a short URL redirecting to a template.
+  const resolvedUrl = normalizeTileUrlTemplate(
+    await resolveUrlRedirect(url, { context: "XYZ URL resolve" }),
+  );
+  signal?.throwIfAborted();
+  return resolvedXyzUrl(url, resolvedUrl);
 }
 
-async function resolveShortXyzUrlWithFetch(url: string, signal?: AbortSignal): Promise<string> {
+async function resolveShortXyzUrlWithFetch(
+  url: string,
+  signal?: AbortSignal,
+): Promise<ResolvedXyzTileUrl> {
   const response = await fetch(url, {
     headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
     redirect: "follow",
     signal,
   });
+  if (!response.ok) throw new Error(`Could not load XYZ / TileJSON URL (HTTP ${response.status}).`);
   const resolvedUrl = urlFromResolverResponse(response);
-  if (resolvedUrl) return resolvedUrl;
+  if (resolvedUrl) return resolvedXyzUrl(url, resolvedUrl);
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.startsWith("image/")) {
-    const bodyUrl = await urlFromResolverBody(response);
-    if (bodyUrl) return bodyUrl;
+    return resolvedXyzBody(await response.text(), url, response.url || url);
   }
+  throw new Error("Enter an XYZ tile URL template or a raster TileJSON URL.");
+}
 
-  return response.url || url;
+function resolvedXyzUrl(originalUrl: string, url: string): ResolvedXyzTileUrl {
+  const resolved = createXyzTileUrlTemplate(url);
+  return { ...resolved, originalUrl, redirected: url !== originalUrl };
+}
+
+function resolvedXyzBody(
+  text: string,
+  originalUrl: string,
+  documentUrl: string,
+): ResolvedXyzTileUrl {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    value = text.trim();
+  }
+  if (value && typeof value === "object" && "tilejson" in value) {
+    const tilejson = parseXyzTileJson(value);
+    return {
+      ...resolvedXyzUrl(originalUrl, tilejson.tiles[0]),
+      url: documentUrl,
+      redirected: documentUrl !== originalUrl,
+      tilejson,
+    };
+  }
+  const url = urlFromJsonValue(value);
+  if (url) return resolvedXyzUrl(originalUrl, normalizeTileUrlTemplate(url));
+  throw new Error("Enter an XYZ tile URL template or a raster TileJSON URL.");
+}
+
+/** Validate raster TileJSON and keep the source options used by MapLibre. */
+export function parseXyzTileJson(value: unknown): XyzTileJsonSource {
+  if (!value || typeof value !== "object") throw new Error("Invalid TileJSON document.");
+  const record = value as Record<string, unknown>;
+  if (typeof record.tilejson !== "string" || !/^\d+\.\d+\.\d+$/.test(record.tilejson)) {
+    throw new Error("Invalid TileJSON version.");
+  }
+  // Esri `VectorTileServer` documents spell this `vectorLayers`; `vectorLayerIds`
+  // in ogc-vector-tiles.ts accepts both spellings, so reject both here rather
+  // than let a camelCase document through as a raster source and serve protobuf
+  // where an image is expected.
+  const vectorLayers = record.vector_layers ?? record.vectorLayers;
+  if (Array.isArray(vectorLayers) && vectorLayers.length > 0) {
+    throw new Error("This TileJSON describes vector tiles. Use a vector tile source instead.");
+  }
+  if (!Array.isArray(record.tiles) || record.tiles.length === 0) {
+    throw new Error("TileJSON must contain at least one raster tile URL.");
+  }
+  const tiles = record.tiles.map((tile: unknown) => {
+    if (typeof tile !== "string") throw new Error("Invalid TileJSON tile URL.");
+    const url = normalizeTileUrlTemplate(tile.trim());
+    if (!isHttpUrl(url) || !hasXyzTilePlaceholders(url)) {
+      throw new Error("TileJSON tile URLs must use HTTP(S) and contain {z}, {x}, and {y}.");
+    }
+    // Check syntax as well as the protocol prefix.
+    try {
+      new URL(url);
+    } catch {
+      throw new Error("Invalid TileJSON tile URL.");
+    }
+    return url;
+  });
+  const source: XyzTileJsonSource = { tiles };
+  const bounds = record.bounds;
+  if (
+    Array.isArray(bounds) &&
+    bounds.length === 4 &&
+    bounds.every((value) => typeof value === "number" && Number.isFinite(value)) &&
+    bounds[0] >= -180 &&
+    bounds[2] <= 180 &&
+    bounds[0] <= bounds[2] &&
+    bounds[1] >= -90 &&
+    bounds[3] <= 90 &&
+    bounds[1] <= bounds[3]
+  )
+    source.bounds = bounds as [number, number, number, number];
+  const validZoom = (zoom: unknown): zoom is number =>
+    typeof zoom === "number" && Number.isInteger(zoom) && zoom >= 0 && zoom <= 30;
+  if (validZoom(record.minzoom)) source.minzoom = record.minzoom;
+  if (validZoom(record.maxzoom)) source.maxzoom = record.maxzoom;
+  if ((source.minzoom ?? 0) > (source.maxzoom ?? 30)) {
+    delete source.minzoom;
+    delete source.maxzoom;
+  }
+  if (record.scheme === "xyz" || record.scheme === "tms") source.scheme = record.scheme;
+  if (typeof record.attribution === "string") {
+    source.attribution = sanitizeAttributionHtml(record.attribution);
+  }
+  return source;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -233,25 +381,6 @@ function isAbortError(error: unknown): boolean {
 function urlFromResolverResponse(response: Response): string | null {
   const resolvedUrl = normalizeTileUrlTemplate(response.url);
   return resolvedUrl && hasXyzTilePlaceholders(resolvedUrl) ? resolvedUrl : null;
-}
-
-async function urlFromResolverBody(response: Response): Promise<string | null> {
-  const text = (await response.text()).trim();
-  if (!text) return null;
-
-  const jsonUrl = urlFromResolverJson(text);
-  if (jsonUrl) return jsonUrl;
-
-  return isHttpUrl(text) ? text : null;
-}
-
-function urlFromResolverJson(text: string): string | null {
-  try {
-    const value = JSON.parse(text) as unknown;
-    return urlFromJsonValue(value);
-  } catch {
-    return null;
-  }
 }
 
 function urlFromJsonValue(value: unknown): string | null {

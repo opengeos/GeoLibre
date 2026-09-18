@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   ArrowDown,
@@ -17,7 +17,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFileNamePrompt } from "../../hooks/useFileNamePrompt";
 import {
@@ -50,7 +50,7 @@ import {
 interface RecordTourDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -130,6 +130,10 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const abortRef = useRef<AbortController | null>(null);
+  const renderer = useAppStore((state) => state.primaryRenderer);
+  useEffect(() => {
+    abortRef.current?.abort();
+  }, [renderer]);
   // Guards against a second handleSave landing before the "saving" state has
   // re-rendered (fast double-click / keyboard repeat on Enter), which would
   // otherwise fire two save dialogs or two downloads.
@@ -457,7 +461,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     });
 
   const handleRecord = async () => {
-    const map = mapControllerRef.current?.getMap();
+    const map = mapControllerRef.current;
     if (!map || keyframes.length < 2) return;
     setError(null);
     setSavedName(null);

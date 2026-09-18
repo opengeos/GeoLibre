@@ -47,6 +47,7 @@ import {
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import { isRasterTooLargeForWasm, messageFromThrown } from "../../lib/wasm-error";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import i18n from "../../i18n";
 
@@ -867,8 +868,9 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -922,8 +924,9 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -964,6 +967,10 @@ export function ConversionDialog() {
         i18n.t("toolbar.conversion.convertingWithWasm", { name: mainFile.name }),
       ]),
     );
+    // Kept outside the try so a failure can still report the shape. The reason
+    // the browser engine refuses a raster is almost always how big it is, and
+    // the size is the one thing the message needs to be actionable.
+    let shape = "";
     try {
       const { convertGeoTiffToCog, readGeoTiffInfo } = await import("@geolibre/processing");
       const bytes = new Uint8Array(await mainFile.arrayBuffer());
@@ -973,6 +980,11 @@ export function ConversionDialog() {
       if (!info.ok) {
         throw new Error(i18n.t("toolbar.conversion.notAGeoTiff"));
       }
+      shape = i18n.t("toolbar.conversion.rasterShape", {
+        width: info.width,
+        height: info.height,
+        bands: info.bands,
+      });
       const data = await convertGeoTiffToCog(bytes, {
         compression: compression as CogWasmCompression,
       });
@@ -989,11 +1001,7 @@ export function ConversionDialog() {
       });
       setJob(
         browserConversionJob(toolId, "succeeded", [
-          i18n.t("toolbar.conversion.rasterShape", {
-            width: info.width,
-            height: info.height,
-            bands: info.bands,
-          }),
+          shape,
           i18n.t("toolbar.conversion.wroteCog", { compression }),
           savedName
             ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
@@ -1001,9 +1009,16 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
-      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
+      // The engine explains the size limit in its own terms (it names internal
+      // APIs); say what to do about it instead.
+      const lines = [shape, detail].filter(Boolean);
+      if (isRasterTooLargeForWasm(detail)) {
+        lines.push(i18n.t("toolbar.conversion.rasterTooLargeForBrowser"));
+      }
+      setJob(browserConversionJob(toolId, "failed", lines, detail));
     }
   };
 
@@ -1079,8 +1094,9 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -1155,8 +1171,9 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -1274,8 +1291,9 @@ export function ConversionDialog() {
         ]),
       );
     } catch (err) {
-      const detail =
-        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      // The wasm engines reject with a bare string, so read the message off any
+      // thrown shape; `instanceof Error` alone would drop it (GeoLibre#1743).
+      const detail = messageFromThrown(err, i18n.t("toolbar.conversion.convertFailed"));
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };

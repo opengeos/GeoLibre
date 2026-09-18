@@ -69,7 +69,7 @@ export function useGlobalShortcuts({
       for (const command of commandsRef.current) {
         if (command.shortcut && matchesShortcut(event, command.shortcut, isMac)) {
           event.preventDefault();
-          command.run();
+          if (!command.disabledReason) command.run();
           return;
         }
       }

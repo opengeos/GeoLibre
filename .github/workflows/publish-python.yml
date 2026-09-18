@@ -42,8 +42,12 @@ jobs:
 
       # Tests cover the pure-Python builders and do not need the bundled web
       # app, so install only the runtime/test deps and run against the sources.
+      # `mcp` and `dash` are optional extras, but tests/test_mcp_server.py skips
+      # itself without the former and test_dash_component.py only covers the
+      # missing-Dash fallback without the latter, so install both here or the
+      # MCP server and the Dash component ship untested.
       - name: Install test dependencies
-        run: python -m pip install anywidget traitlets pytest
+        run: python -m pip install anywidget traitlets pytest "mcp>=2.0" "dash>=2.16"
 
       - name: Run tests
         run: python -m pytest python/tests

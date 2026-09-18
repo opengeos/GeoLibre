@@ -1,6 +1,12 @@
 import type { FeatureCollection } from "geojson";
+import type { LayerCapabilities } from "@geolibre/core";
 
-const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
+/**
+ * Loopback origin of the desktop/dev sidecar. Exported so the desktop shell can
+ * scope its native HTTP transport to the same host and port instead of
+ * redeclaring the literal.
+ */
+export const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
 
 /** Build-time override, e.g. `VITE_SIDECAR_URL=http://127.0.0.1:9000`. */
 function explicitSidecarUrl(): string | undefined {
@@ -52,6 +58,19 @@ const DEFAULT_SIDECAR_URL = resolveSidecarBaseUrl();
  */
 let sidecarAuthToken: string | null = null;
 
+// Desktop installs Tauri's native HTTP client here. Keeping the override in
+// this package makes every sidecar endpoint use the same transport, while web,
+// Docker, and Vite development continue to use the browser fetch.
+let sidecarFetchImpl: typeof globalThis.fetch | null = null;
+
+/**
+ * Override the transport used for requests to the local processing sidecar.
+ * Passing null restores the browser fetch.
+ */
+export function setSidecarFetch(fetchImpl: typeof globalThis.fetch | null): void {
+  sidecarFetchImpl = fetchImpl;
+}
+
 /**
  * Record (or clear) the sidecar auth token. Call after `startGeoLibreSidecar()`
  * returns. Passing an empty/nullish value clears it.
@@ -73,10 +92,11 @@ export function setSidecarAuthToken(token: string | null | undefined): void {
  * @returns The fetch response promise.
  */
 function sidecarFetch(input: string, init?: RequestInit): Promise<Response> {
-  if (!sidecarAuthToken) return fetch(input, init);
+  const fetchImpl = sidecarFetchImpl ?? globalThis.fetch;
+  if (!sidecarAuthToken) return fetchImpl(input, init);
   const headers = new Headers(init?.headers);
   headers.set("X-GeoLibre-Token", sidecarAuthToken);
-  return fetch(input, { ...init, headers });
+  return fetchImpl(input, { ...init, headers });
 }
 
 const WHITEBOX_CATALOG_SNAPSHOT_URL =
@@ -121,6 +141,24 @@ export interface WhiteboxToolParameter {
   options?: string[];
   kind?: WhiteboxParameterKind;
   schema?: unknown;
+}
+
+/** Whether a dataset input accepts several datasets rather than one. */
+export function isMultipleWhiteboxDatasetParameter(param: WhiteboxToolParameter): boolean {
+  const kind = String(param.kind ?? "").toLowerCase();
+  const schema =
+    param.schema && typeof param.schema === "object"
+      ? (param.schema as Record<string, unknown>)
+      : {};
+  const role = String(param.io_role ?? schema.kind ?? "").toLowerCase();
+  if (!(kind.endsWith("_in") || role === "input")) return false;
+  if (String(schema.cardinality ?? "").toLowerCase() === "multiple") return true;
+  const description = param.description ?? "";
+  return (
+    /\b(array|list|stack) of (?:[\w-]+\s+)*(?:paths?|rasters?|vectors?|layers?|files?)\b/i.test(
+      description,
+    ) || /\b(?:paths?|rasters?|vectors?|layers?|files?) (?:as|in) an array\b/i.test(description)
+  );
 }
 
 export interface WhiteboxTool {
@@ -206,7 +244,7 @@ export interface RunWhiteboxToolRequest {
   tool_id: string;
   parameters: Record<string, unknown>;
   tool?: WhiteboxTool;
-  layer_inputs?: Record<string, WhiteboxLayerInput>;
+  layer_inputs?: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]>;
   include_pro?: boolean;
   tier?: string;
   /** WASM runner only: format for `vector_out` outputs (default `"geojson"`). */
@@ -796,6 +834,8 @@ export interface ReadPostgisTableRequest {
   connection: string;
   schema_name?: string;
   table: string;
+  /** Geometry column to load when the table registers more than one. */
+  geometry_column?: string;
   excluded_fields?: string[];
 }
 
@@ -814,6 +854,8 @@ export interface WritePostgisTableRequest {
   connection: string;
   schema_name?: string;
   table: string;
+  /** Geometry column backing this editable layer. */
+  geometry_column?: string;
   /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
   geojson: FeatureCollection;
   /**
@@ -822,6 +864,8 @@ export interface WritePostgisTableRequest {
    * survive the save; when omitted the sidecar diffs the whole table.
    */
   baseline_keys?: Array<string | number>;
+  /** Optional layer capability overrides enforcing create/update/delete restrictions. */
+  capabilities?: LayerCapabilities;
 }
 
 export interface WritePostgisTableResult {

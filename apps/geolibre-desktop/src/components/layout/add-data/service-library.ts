@@ -12,6 +12,7 @@
  * never persisted, so they stay fresh across releases and can't be deleted.
  */
 
+import { readDeploymentEnv } from "../../../lib/deployment-env";
 import {
   DEFAULT_ARCGIS_FEATURE_URL,
   DEFAULT_WFS_ENDPOINT,
@@ -27,7 +28,7 @@ import {
 } from "./constants";
 
 /** The web-service source kinds that participate in the saved library. */
-export type ServiceLibraryKind = "wms" | "wfs" | "wmts" | "xyz" | "arcgis";
+export type ServiceLibraryKind = "wms" | "wfs" | "wmts" | "xyz" | "arcgis" | "csw";
 
 export type ServiceFieldValue = string | number | boolean;
 
@@ -46,15 +47,80 @@ export interface ServiceLibraryEntry {
   fields: ServiceFields;
   /** True for built-in presets: always listed, read-only, never persisted. */
   builtin?: boolean;
+  /** True for deployment-managed connections: read-only and never persisted. */
+  deployment?: boolean;
 }
 
-const SERVICE_KINDS: readonly ServiceLibraryKind[] = ["wms", "wfs", "wmts", "xyz", "arcgis"];
-
-/** Label used for entries that have no category set. */
-export const UNCATEGORIZED_LABEL = "Uncategorized";
+const SERVICE_KINDS: readonly ServiceLibraryKind[] = ["wms", "wfs", "wmts", "xyz", "arcgis", "csw"];
 
 /** The wrapped JSON shape produced by {@link serializeUserServices}. */
 const EXPORT_FORMAT = "geolibre-service-library";
+const DEPLOYMENT_ID_PREFIX = "deployment:";
+
+/** Managed definitions can be copied, but never edited or saved as user entries. */
+export function isManagedService(entry: ServiceLibraryEntry): boolean {
+  return Boolean(entry.builtin || entry.deployment);
+}
+
+let cachedDeploymentConfig: unknown;
+let cachedDeploymentServices: ServiceLibraryEntry[] = [];
+
+/**
+ * Read the startup-injected catalog, never project preferences or build-time env.
+ * Cache by the raw value so both UI surfaces share stable entries and malformed
+ * configuration is reported once, not on each render.
+ */
+export function readDeploymentServices(): ServiceLibraryEntry[] {
+  const raw = readDeploymentEnv()?.VITE_GEOLIBRE_SERVICES;
+  if (raw === cachedDeploymentConfig) return cachedDeploymentServices;
+  cachedDeploymentConfig = raw;
+  cachedDeploymentServices = [];
+  if (raw === undefined || raw === "") return cachedDeploymentServices;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("services" in parsed) ||
+      !Array.isArray(parsed.services)
+    ) {
+      throw new Error("Expected an object containing a services array.");
+    }
+    const seen = new Set<string>();
+    let skipped = 0;
+    for (const value of parsed.services) {
+      // A configured id is required: random ids would break Browser favorites
+      // whenever the page reloads.
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        typeof value.id !== "string" ||
+        !value.id.trim() ||
+        (value.category !== undefined && typeof value.category !== "string")
+      ) {
+        skipped++;
+        continue;
+      }
+      const entry = normalizeEntry(value);
+      if (!entry || seen.has(entry.id)) {
+        skipped++;
+        continue;
+      }
+      seen.add(entry.id);
+      cachedDeploymentServices.push({
+        ...entry,
+        id: `${DEPLOYMENT_ID_PREFIX}${entry.id}`,
+        deployment: true,
+      });
+    }
+    if (skipped)
+      console.warn(`Deployment service library: skipped ${skipped} invalid or duplicate entries.`);
+  } catch {
+    console.warn("Deployment service library: invalid VITE_GEOLIBRE_SERVICES configuration.");
+  }
+  return cachedDeploymentServices;
+}
 
 function createServiceId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -83,10 +149,14 @@ function isServiceKind(value: unknown): value is ServiceLibraryKind {
 }
 
 function normalizeFields(value: unknown): ServiceFields {
-  if (!value || typeof value !== "object") return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const result: ServiceFields = {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") {
+    if (
+      typeof raw === "string" ||
+      typeof raw === "boolean" ||
+      (typeof raw === "number" && Number.isFinite(raw))
+    ) {
       result[key] = raw;
     }
   }
@@ -95,7 +165,7 @@ function normalizeFields(value: unknown): ServiceFields {
 
 /**
  * Validates and sanitises one parsed object into a `ServiceLibraryEntry`,
- * returning `null` when it is unusable. The `builtin` flag is intentionally
+ * returning `null` when it is unusable. Ownership flags are intentionally
  * dropped — user/imported entries are never treated as read-only presets.
  */
 function normalizeEntry(value: unknown): ServiceLibraryEntry | null {
@@ -127,7 +197,9 @@ export function normalizeServiceEntries(value: unknown): ServiceLibraryEntry[] {
   for (const item of value) {
     const entry = normalizeEntry(item);
     if (!entry) continue;
-    if (seenIds.has(entry.id)) entry.id = createServiceId();
+    if (seenIds.has(entry.id) || entry.id.startsWith(DEPLOYMENT_ID_PREFIX)) {
+      entry.id = createServiceId();
+    }
     seenIds.add(entry.id);
     entries.push(entry);
     if (entries.length >= MAX_SAVED_SERVICES) break;
@@ -153,7 +225,9 @@ export function writeUserServices(entries: ServiceLibraryEntry[]): void {
   try {
     window.localStorage.setItem(
       SERVICE_LIBRARY_STORAGE_KEY,
-      JSON.stringify(entries.slice(0, MAX_SAVED_SERVICES)),
+      JSON.stringify(
+        entries.filter((entry) => !isManagedService(entry)).slice(0, MAX_SAVED_SERVICES),
+      ),
     );
   } catch {
     // Best-effort persistence: a quota/private-mode failure must not break the
@@ -205,7 +279,9 @@ export function serializeUserServices(entries: ServiceLibraryEntry[]): string {
     {
       type: EXPORT_FORMAT,
       version: 1,
-      services: entries.map(({ builtin: _builtin, ...rest }) => rest),
+      services: entries
+        .filter((entry) => !isManagedService(entry))
+        .map(({ builtin: _builtin, deployment: _deployment, ...rest }) => rest),
     },
     null,
     2,
@@ -243,25 +319,37 @@ export function mergeImportedServices(
     ...existing.map((entry) => entry.id),
   ]);
   for (const entry of imported) {
-    const id = seen.has(entry.id) ? createServiceId() : entry.id;
+    const id =
+      seen.has(entry.id) || entry.id.startsWith(DEPLOYMENT_ID_PREFIX)
+        ? createServiceId()
+        : entry.id;
     seen.add(id);
     merged.push({ ...entry, id });
   }
   return merged.slice(0, MAX_SAVED_SERVICES);
 }
 
+/** True when the deployment hides the built-in starter presets (GEOLIBRE_BUILTIN_SERVICES=off). */
+function builtinsHidden(): boolean {
+  const value = readDeploymentEnv()?.VITE_GEOLIBRE_BUILTIN_SERVICES;
+  return value !== undefined && value.trim().toLowerCase() === "off";
+}
+
+/** Shared catalog for the Browser and source picker, in ownership order. */
+export function listAllServices(userEntries: ServiceLibraryEntry[]): ServiceLibraryEntry[] {
+  const builtins = builtinsHidden() ? [] : BUILTIN_SERVICES;
+  return [...builtins, ...readDeploymentServices(), ...userEntries];
+}
+
 /**
- * Lists every entry for a kind — built-in presets first, then the user's saved
- * services — for the source picker.
+ * Lists every entry for a kind — built-in presets, deployment connections,
+ * then the user's saved services — for the source picker.
  */
 export function listServices(
   kind: ServiceLibraryKind,
   userEntries: ServiceLibraryEntry[],
 ): ServiceLibraryEntry[] {
-  return [
-    ...BUILTIN_SERVICES.filter((entry) => entry.kind === kind),
-    ...userEntries.filter((entry) => entry.kind === kind),
-  ];
+  return listAllServices(userEntries).filter((entry) => entry.kind === kind);
 }
 
 /** The distinct, sorted categories present in a list of entries. */

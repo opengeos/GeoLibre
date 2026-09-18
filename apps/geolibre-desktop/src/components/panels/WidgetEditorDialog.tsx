@@ -14,7 +14,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  categoricalColumns,
+  categoryColumnOptions,
   DEFAULT_HISTOGRAM_BINS,
   MAX_HISTOGRAM_BINS,
   MIN_HISTOGRAM_BINS,
@@ -105,7 +105,7 @@ export function WidgetEditorDialog({
 
   const data = useLayerChartData(layerId);
   const numericCols = useMemo(() => numericColumns(data.rows, data.columns), [data]);
-  const categoryCols = useMemo(() => categoricalColumns(data.rows, data.columns), [data]);
+  const categoryCols = useMemo(() => categoryColumnOptions(data.rows, data.columns), [data]);
   const hasNumeric = numericCols.length > 0;
   const hasCategory = categoryCols.length > 0;
   const hasChartable = hasNumeric || hasCategory;

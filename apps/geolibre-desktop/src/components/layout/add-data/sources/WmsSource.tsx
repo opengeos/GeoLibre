@@ -11,11 +11,15 @@ import {
 } from "../constants";
 import {
   fetchWmsCapabilities,
+  isServiceFormUrl,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
+import { routeWmsLayerThroughNativeProtocol } from "../../../../lib/xyz-url";
+import { isHttpWmsUrl } from "../../../../lib/native-wms-url";
+import { isTauri } from "../../../../lib/tauri-io";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -38,28 +42,40 @@ interface WmsFormCache {
 }
 let wmsFormCache: WmsFormCache | null = null;
 
-export function WmsSource() {
+export function WmsSource({
+  initialUrl = "",
+  initialLayers = "",
+}: {
+  initialUrl?: string;
+  initialLayers?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState(wmsFormCache?.endpoint ?? "");
-  const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
-  const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
+  const [wmsEndpoint, setWmsEndpoint] = useState(initialUrl || wmsFormCache?.endpoint || "");
+  // A deep link brings its own service, so everything the cache holds *about a
+  // service* belongs to a different one: its layers, styles, retrieved layer
+  // list and negotiated version. Pairing a fresh endpoint with any of those
+  // would describe a service this form is no longer pointed at. Generic
+  // preferences (image format, transparency, tile size) still carry over.
+  const serviceCache = initialUrl ? null : wmsFormCache;
+  const [wmsLayers, setWmsLayers] = useState(initialLayers || (serviceCache?.layers ?? ""));
+  const [wmsStyles, setWmsStyles] = useState(serviceCache?.styles ?? "");
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
   const [wmsTransparent, setWmsTransparent] = useState(wmsFormCache?.transparent ?? true);
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
-  const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
+  const [wmsVersion, setWmsVersion] = useState(serviceCache?.version ?? "1.1.1");
   // True while the version has an explicit source — the selector, a pasted
   // URL's VERSION parameter, or a saved service entry. Capabilities
   // auto-detection only fills the version in when no explicit source exists.
   // Mirrored in a ref so the async retrieve handler reads the value current at
   // response time, not the one captured when the button was clicked.
-  const [versionTouched, setVersionTouched] = useState(wmsFormCache?.versionTouched ?? false);
+  const [versionTouched, setVersionTouched] = useState(serviceCache?.versionTouched ?? false);
   const versionTouchedRef = useRef(versionTouched);
   const markVersionTouched = (touched: boolean) => {
     versionTouchedRef.current = touched;
     setVersionTouched(touched);
   };
-  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(wmsFormCache?.options ?? []);
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(serviceCache?.options ?? []);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();
@@ -113,7 +129,10 @@ export function WmsSource() {
 
   const handleRetrieveLayers = async () => {
     const endpoint = wmsEndpoint.trim();
-    if (!endpoint) {
+    // Relative endpoints are a web-origin deployment feature: in the desktop
+    // app they would resolve against the app origin, and the native HTTP path
+    // needs an absolute URL, so require http(s) there with the translated error.
+    if (!isServiceFormUrl(endpoint) || (isTauri() && !isHttpWmsUrl(endpoint))) {
       setRetrieveError(t("addData.wms.errorUrl"));
       return;
     }
@@ -194,7 +213,9 @@ export function WmsSource() {
 
   const handleSubmit = source.runSubmit(() => {
     const name = source.layerName.trim() || t("addData.wms.defaultName");
-    if (!wmsEndpoint.trim()) throw new Error(t("addData.wms.errorUrl"));
+    if (!isServiceFormUrl(wmsEndpoint.trim()) || (isTauri() && !isHttpWmsUrl(wmsEndpoint.trim()))) {
+      throw new Error(t("addData.wms.errorUrl"));
+    }
     if (!wmsLayers.trim()) {
       throw new Error(t("addData.wms.errorLayers"));
     }
@@ -202,16 +223,18 @@ export function WmsSource() {
     // GetCapabilities URL), normalizes the version, and credits known keyless
     // services (e.g. GEBCO) in the map's attribution control.
     source.addAndClose(
-      buildWmsLayer({
-        name,
-        endpoint: wmsEndpoint,
-        layers: wmsLayers,
-        styles: wmsStyles,
-        format: wmsFormat,
-        transparent: wmsTransparent,
-        tileSize: wmsTileSize,
-        version: wmsVersion,
-      }),
+      routeWmsLayerThroughNativeProtocol(
+        buildWmsLayer({
+          name,
+          endpoint: wmsEndpoint,
+          layers: wmsLayers,
+          styles: wmsStyles,
+          format: wmsFormat,
+          transparent: wmsTransparent,
+          tileSize: wmsTileSize,
+          version: wmsVersion,
+        }),
+      ),
     );
   });
 

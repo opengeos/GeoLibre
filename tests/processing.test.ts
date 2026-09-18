@@ -52,6 +52,113 @@ describe("processing registry", () => {
     assert.deepEqual(messages, ["Feature count: 2"]);
   });
 
+  it("dissolves disconnected polygons into one feature per attribute value", () => {
+    const square = (x: number, group: string | number, name = `square-${x}`) => ({
+      type: "Feature" as const,
+      properties: { group, name },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [x, 0],
+            [x + 1, 0],
+            [x + 1, 1],
+            [x, 1],
+            [x, 0],
+          ],
+        ],
+      },
+    });
+    const polygons: GeoLibreLayer = {
+      ...layer,
+      id: "polygons",
+      geojson: {
+        type: "FeatureCollection",
+        features: [square(0, 5), square(3, 5), square(6, "B")],
+      },
+    };
+    const messages: string[] = [];
+    let result: FeatureCollection | null = null;
+
+    getVectorTool("dissolve")!.run({
+      layers: [polygons],
+      parameters: { layer: "polygons", field: "group" },
+      log: (message) => messages.push(message),
+      addResultLayer: (_name, geojson) => {
+        result = geojson;
+      },
+    });
+
+    assert.equal(result!.features.length, 2);
+    const numericGroup = result!.features.find((feature) => feature.properties?.group === 5);
+    assert.equal(numericGroup?.properties?.group, 5);
+    assert.equal(numericGroup?.geometry.type, "MultiPolygon");
+    // Merged groups keep the first source feature's other attributes, matching
+    // the sidecar's GeoPandas dissolve.
+    assert.equal(numericGroup?.properties?.name, "square-0");
+    const connectedGroup = result!.features.find((feature) => feature.properties?.group === "B");
+    assert.equal(connectedGroup?.properties?.name, "square-6");
+    assert.deepEqual(messages, ["Dissolved 3 polygon(s) into 2 feature(s)"]);
+  });
+
+  it("dissolves all disconnected polygons into one feature without a field", () => {
+    const polygons: GeoLibreLayer = {
+      ...layer,
+      id: "polygons",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "first" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { name: "second" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [3, 0],
+                  [4, 0],
+                  [4, 1],
+                  [3, 1],
+                  [3, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let result: FeatureCollection | null = null;
+
+    getVectorTool("dissolve")!.run({
+      layers: [polygons],
+      parameters: { layer: "polygons" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        result = geojson;
+      },
+    });
+
+    assert.equal(result!.features.length, 1);
+    assert.equal(result!.features[0].geometry.type, "MultiPolygon");
+    assert.equal(result!.features[0].properties?.name, "first");
+  });
+
   it("spatially joins zone attributes onto points", () => {
     const zone: GeoLibreLayer = {
       ...layer,
@@ -1279,6 +1386,31 @@ describe("processing registry", () => {
 
     calculateBoundsAlgorithm.run({
       layers: [layer],
+      parameters: { layer: "layer-a" },
+      log: (message) => messages.push(message),
+      fitBounds: (bounds) => {
+        fittedBounds = bounds;
+      },
+    });
+
+    assert.deepEqual(messages, ["Bounds: [-78.000000, 35.000000, -77.000000, 36.000000]"]);
+    assert.deepEqual(fittedBounds, [-78, 35, -77, 36]);
+  });
+
+  it("fits the horizontal extent of a layer whose bbox carries elevation", () => {
+    // A collection's own `bbox` member is returned verbatim, and RFC 7946 §5
+    // lets it hold six values. Read as four, the altitude would stand in for a
+    // longitude and the east edge for a latitude.
+    const messages: string[] = [];
+    let fittedBounds: [number, number, number, number] | null = null;
+
+    calculateBoundsAlgorithm.run({
+      layers: [
+        {
+          ...layer,
+          geojson: { ...(layer.geojson as FeatureCollection), bbox: [-78, 35, 0, -77, 36, 1200] },
+        },
+      ],
       parameters: { layer: "layer-a" },
       log: (message) => messages.push(message),
       fitBounds: (bounds) => {

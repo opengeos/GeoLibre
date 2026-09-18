@@ -1,3 +1,14 @@
+export {
+  registerAssistantTool,
+  registerAssistantToolSpec,
+  registerAssistantGuidance,
+  listAssistantTools,
+  listAssistantGuidance,
+  getAssistantToolsVersion,
+  unregisterAssistantToolsByOwner,
+  MAX_ASSISTANT_GUIDANCE_LENGTH,
+  type AssistantGuidanceEntry,
+} from "./assistant-tool-registry";
 export * from "./types";
 export { PluginManager } from "./plugin-manager";
 export {
@@ -46,7 +57,17 @@ export {
 // reuse the title-resolve-or-fallback + per-id warning-dedup behavior instead
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
+// Same rationale as PanelTitleResolver: the toolbar-menu label resolver is the
+// one place that decides how a `string | (() => string)` label becomes display
+// text, so hosts rendering plugin menus share its fallback/dedup behavior.
+export {
+  isToolbarLabel,
+  resetToolbarLabelWarnings,
+  resolveToolbarLabel,
+  type GeoLibreToolbarLabel,
+} from "./toolbar-menu-label";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
+export { getStyleMap } from "./plugins/style-map";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {
@@ -58,8 +79,26 @@ export {
 } from "./plugins/maplibre-basemap-control";
 export {
   addArcGISLayer,
+  isArcGISWritableLayer,
+  saveArcGISLayerEdits,
+  arcGISLayerHasPendingEdits,
+  setArcGISFetch,
+  fetchArcGISImageServiceRasterFunctions,
+  fetchArcGISMapServiceSublayers,
+  ARCGIS_FEATURE_SOURCE_KIND,
+  ARCGIS_IMAGE_SERVICE_URL_ERROR,
+  ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
+  ARCGIS_LAYER_TYPES,
+  ARCGIS_MAP_SERVICE_SOURCE_KIND,
+  ARCGIS_MAP_SERVICE_URL_ERROR,
+  parseArcGISLayerType,
+  refreshArcGISFeatureLayer,
+  reloadArcGISViewportLayer,
+  restoreArcGISViewportLayers,
   type ArcGISLayerOptions,
+  type ArcGISImageServiceRasterFunction,
   type ArcGISLayerType,
+  type ArcGISMapServiceSublayer,
   type ArcGISSourceType,
 } from "./plugins/arcgis-layer";
 export {
@@ -87,6 +126,7 @@ export {
   isViewStatePanelVisible,
   COMPONENTS_PLUGIN_ID,
   maplibreComponentsPlugin,
+  applyStacSearchLayerOrder,
   openBookmarkPanel,
   openFlatGeobufAddVectorLayerPanel,
   openColorbarPanel,
@@ -98,6 +138,7 @@ export {
   restoreLidarLayers,
   openMeasurePanel,
   openMinimapPanel,
+  addPMTilesLayerFromUrl,
   openPMTilesLayerPanel,
   openPrintPanel,
   openSearchPlacesPanel,
@@ -109,6 +150,7 @@ export {
   addCloudNetcdfLayer,
   type CloudNetcdfLayerOptions,
   addZarrRasterLayer,
+  restoreArcgisZarrLayers,
   queryZarrLayer,
   setZarrLayerSelector,
   setZarrLocalStoreProvider,
@@ -154,6 +196,7 @@ export {
   composeRgbImage,
   gridBounds,
   gridPixelAt,
+  gridValueAt,
   percentileClim,
   type ColormapComposition,
   type RgbComposition,
@@ -169,6 +212,7 @@ export {
   type LocalNetcdfLayerRefs,
   type LocalNetcdfRgbImage,
   type LocalNetcdfRgbOptions,
+  type LocalNetcdfWindow,
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {
@@ -213,11 +257,15 @@ export {
 export { isRecoverableNonTiledRasterError } from "./plugins/non-tiled-raster-error";
 export {
   addRasterToMap,
+  setRasterRenderEngine,
   prepareRasterControl,
   applyRasterLayerOrder,
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
+  getRasterLoadState,
+  readRasterPixel,
+  readRasterWindow,
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
@@ -227,6 +275,7 @@ export {
   type NonTiledRasterRequest,
   type PickedLocalRaster,
 } from "./plugins/maplibre-raster";
+export { getSharedDeckLoadState } from "./plugins/shared-deck-overlay";
 export {
   RASTER_MAX_CLASSES,
   RASTER_MAX_STORED_CLASSES,
@@ -237,7 +286,9 @@ export {
   type RasterSymbology,
   clampRasterClassCount,
   computeRasterBreaks,
+  customColorsForRasterClassEdit,
   defaultRasterSymbology,
+  normalizeRasterClassOpacities,
   savedRasterSymbology,
 } from "./plugins/raster-symbology";
 export { RASTER_SOURCE_KIND, getRasterBandStats } from "./plugins/raster-symbology-texture";
@@ -249,13 +300,15 @@ export {
   type PaletteLegendEntry,
 } from "./plugins/raster-palette";
 export { colormapColors, normalizeRampColor, warmColormapColors } from "./plugins/colormap-colors";
-export { setTerrainMeasureLabels } from "./plugins/terrain-measure";
+export { setTerrainMeasureBodyNames, setTerrainMeasureLabels } from "./plugins/terrain-measure";
 export {
+  addVectorLayerFromUrl,
   closeVectorLayerPanel,
   getVectorLayerPropertyValues,
   materializeEmbeddableVectorLayers,
   openVectorLayerPanel,
   reloadVectorControlLayer,
+  replayVectorControlLayerById,
   restoreVectorLayers,
   setKmlFileImportHandler,
   isKmlFileSelection,
@@ -364,12 +417,33 @@ export {
   setAnnotationLabels,
   type AnnotationLabels,
 } from "./plugins/maplibre-annotations";
+export {
+  maplibreDimensionsPlugin,
+  DIMENSIONS_PLUGIN_ID,
+  DIMENSIONS_SOURCE_KIND,
+  DIMENSION_UNITS,
+  setDimensionLabels,
+  metersToUnit,
+  formatDistance,
+  formatAngle,
+  flattenFeatureVertices,
+  resolveTiePosition,
+  parseAssociativeDimension,
+  spliceRebuiltDimensionGroups,
+  type DimensionLabels,
+  type DimensionUnit,
+  type DimensionTie,
+  type ParsedAssociativeDimension,
+} from "./plugins/maplibre-dimensions";
 export { maplibreEnviroAtlasPlugin } from "./plugins/maplibre-enviroatlas";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
   GEO_EDITOR_PLUGIN_ID,
+  DEFAULT_GEO_EDITOR_LABELS,
+  setGeoEditorLabels,
+  type GeoEditorLabels,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,
@@ -395,6 +469,22 @@ export {
 } from "./plugins/geo-editor-view-import";
 export { maplibreGeoAgentPlugin, GEOAGENT_PLUGIN_ID } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
+export {
+  buildBasinUrl,
+  buildFlowtraceBody,
+  buildHydrolocationUrl,
+  buildNavigationSourceUrl,
+  buildNavigationUrl,
+  maplibreUsgsNldiPlugin,
+  parseFlowtraceResponse,
+  setUsgsNldiLabels,
+  DEFAULT_USGS_NLDI_LABELS,
+  NLDI_API,
+  USGS_NLDI_PLUGIN_ID,
+  type NldiDirection,
+  type NldiTraceResult,
+  type UsgsNldiLabels,
+} from "./plugins/maplibre-usgs-nldi";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export {
   DEFAULT_EARTHDATA_GIS_LABELS,
@@ -421,6 +511,22 @@ export {
   setOpenAerialMapLabels,
   type OpenAerialMapLabels,
 } from "./plugins/maplibre-openaerialmap";
+export {
+  maplibreOsmDownloaderPlugin,
+  OSM_DOWNLOADER_PLUGIN_ID,
+} from "./plugins/maplibre-osm-downloader";
+export {
+  buildOsmDownloadQuery,
+  downloadOsmGeoJson,
+  escapeOverpassString,
+  overpassJsonToGeoJson,
+  OVERPASS_DEFAULT_ENDPOINT,
+  type OsmDownloadFilter,
+  type OsmDownloadPreset,
+  type OverpassElement,
+  type OverpassFetch,
+  type OverpassResponse,
+} from "./plugins/osm-downloader-api";
 export {
   ARCGIS_HUB_PLUGIN_ID,
   DEFAULT_ARCGIS_HUB_LABELS,
@@ -453,25 +559,39 @@ export {
   type OpenAerialMapSearchOptions,
 } from "./plugins/openaerialmap-api";
 export {
+  maplibrePlanetOpenDataPlugin,
+  maplibrePortolanPlugin,
   maplibreStacCatalogsPlugin,
+  PLANET_DISASTER_DATA_CATALOG_URL,
+  PLANET_OPEN_DATA_PLUGIN_ID,
+  PORTOLAN_PLUGIN_ID,
   setStacLabels,
   STAC_PLUGIN_ID,
   type StacLabels,
 } from "./plugins/maplibre-stac";
 export {
+  assetDisplayFormat,
+  assetFormat,
   connectStac,
   isVisualizableAsset,
   itemBbox,
+  loadPortolanIndex,
   loadStacIndex,
+  openCatalogNode,
+  PORTOLAN_REGISTRY_URL,
   searchStacApi,
   searchStaticStac,
   STAC_INDEX_CATALOGS_URL,
   type StacAsset,
+  type StacCatalogNode,
   type StacCollection,
   type StacConnection,
+  type StacOpenedNode,
   type StacIndexCatalog,
   type StacItem,
   type StacNextPage,
+  type StacAssetFormat,
+  type StacAssetDisplayFormat,
   type StacSearchOptions,
   type StacSearchResult,
 } from "./plugins/stac-api";
@@ -512,6 +632,7 @@ export {
   type GeoLensLabels,
   type GeoLensSampleServer,
 } from "./plugins/maplibre-geolens";
+export { maplibreVantorPlugin, VANTOR_PLUGIN_ID } from "./plugins/maplibre-vantor";
 export {
   buildListObjectsUrl,
   buildObjectUrl,
@@ -539,6 +660,12 @@ export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export {
+  maplibreSamGeoPlugin,
+  SAMGEO_PLUGIN_ID,
+  setSamGeoLabels,
+  type SamGeoLabels,
+} from "./plugins/maplibre-samgeo";
+export {
   maplibreMapillaryPlugin,
   MAPILLARY_PLUGIN_ID,
   setMapillaryLabels,
@@ -548,7 +675,11 @@ export {
   maplibreElevationProfilePlugin,
   ELEVATION_PROFILE_PLUGIN_ID,
 } from "./plugins/elevation-profile";
-export { maplibreSwipePlugin, SWIPE_PLUGIN_ID } from "./plugins/maplibre-swipe";
+export {
+  maplibreSwipePlugin,
+  SWIPE_PLUGIN_ID,
+  getSwipeRasterLoadState,
+} from "./plugins/maplibre-swipe";
 export {
   maplibreGraticulePlugin,
   GRATICULE_PLUGIN_ID,
@@ -563,6 +694,9 @@ export {
   type GraticuleLabels,
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
+  lngLatToUtm,
+  utmZoneDesignation,
+  type UtmCoordinate,
 } from "./plugins/maplibre-graticule";
 export {
   maplibreH3Plugin,

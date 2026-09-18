@@ -53,13 +53,19 @@ export { STORE_LAYER_SOURCE_KIND as TIME_SLIDER_SOURCE_KIND };
  * range out of the box rather than against an unrelated span (which would
  * request tiles for years the data does not cover).
  */
-function buildDefaultOptions(): TimeSliderOptions {
+export function buildDefaultOptions(): TimeSliderOptions {
   return {
     startDate: "1984-01-01",
     endDate: "2013-01-01",
     granularity: "year",
     granularities: ["year", "month", "day"],
     speed: 800,
+    // Reaching the end should leave the map on the final frame. Apart from
+    // being the less surprising default, this prevents a slow vector-tile
+    // filter from finishing an old end-of-range render after the marker has
+    // already wrapped to the beginning. A user can still enable looping, and
+    // an explicitly saved `loop` value continues to round-trip unchanged.
+    loop: false,
     collapsible: true,
     collapsed: false,
     // Match the in-app light/dark toggle rather than the system
@@ -124,6 +130,9 @@ function stopThemeSync(): void {
 
 let timeSliderPosition: GeoLibreMapControlPosition = "bottom-left";
 let timeSliderControl: TimeSliderControl | null = null;
+// The host the control was activated on, so the source reconciliation can ask
+// which renderer draws the map (see enforceEngineSupport).
+let activeHost: GeoLibreAppAPI | null = null;
 // Last known config, kept so deactivating/reactivating (or restoring a saved
 // project) rebuilds the timeline and its layers exactly.
 let savedConfig: TimeSliderConfig | null = null;
@@ -150,6 +159,13 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",
   version: "1.0.3",
+  // The dock only uses the style API both 2D engines share (raster tile and
+  // GeoJSON sources, filters, paint), so it mounts on the Mapbox renderer too;
+  // its store mirrors are plugin-owned there (`isMapboxPluginLayer`). COG and
+  // mosaic sources render through maplibre-gl-raster, whose tile protocol only
+  // registers with MapLibre, so those source types stay blank on Mapbox while
+  // XYZ, WMS and GeoJSON sources animate as usual.
+  engines: ["maplibre", "mapbox"],
   // The dock's `collapsed` flag round-trips through getProjectState /
   // configToOptions, so the restored config decides whether it opens. Without
   // this the host's restore-time collapse sweep hid the dock entirely (its
@@ -157,6 +173,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   restoresPanelCollapseState: true,
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
+    activeHost = app;
     const control = savedConfig
       ? controlFromConfig(savedConfig)
       : new TimeSliderControl(buildDefaultOptions());
@@ -175,6 +192,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     setTimeout(() => syncStoreLayers(control), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    activeHost = null;
     if (!timeSliderControl) return;
     savedConfig = timeSliderControl.getConfig();
     detachStoreSync?.();
@@ -370,7 +388,10 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   // Normalize an open end to `undefined` (never `null`) so the open-end sentinel
   // the library expects (`endDate?: string`) is honored even if a hand-edited
   // project carried `"endDate": null`, rather than leaking null past the cast.
-  return { ...candidate, endDate: candidate.endDate ?? undefined } as TimeSliderConfig;
+  return {
+    ...candidate,
+    endDate: candidate.endDate ?? undefined,
+  } as TimeSliderConfig;
 }
 
 // Only sourceadd/sourceremove change the store's layer set. statechange also
@@ -437,7 +458,10 @@ function attachDisplaySync(control: TimeSliderControl): () => void {
       // was mirrored from, so restoring a project does not re-push what the
       // control just rendered.
       if (!previous) continue;
-      control.setSourceProperty(layer.id, { opacity, visible } as Partial<SourceSpec>);
+      control.setSourceProperty(layer.id, {
+        opacity,
+        visible,
+      } as Partial<SourceSpec>);
     }
     for (const id of [...lastDisplay.keys()]) {
       if (!ids.has(id)) lastDisplay.delete(id);
@@ -477,6 +501,17 @@ let applyingBoundFilters = false;
 // re-write the store. Cleared when a layer is unbound or the dock detaches.
 const appliedFilterKeys = new Map<string, string>();
 
+// Changing a MapLibre filter invalidates the loaded vector-tile buckets and
+// sends them back through the workers. At fast playback speeds a large bound
+// layer can take longer to rebuild than one timeline step; sending every
+// intermediate year then creates a worker backlog, so the map continues
+// painting old cumulative frames after the marker has moved elsewhere. Keep a
+// short leading/trailing throttle and retain only the newest requested date.
+// The ordinary 800 ms default cadence remains completely unaffected.
+const BOUND_FILTER_APPLY_INTERVAL_MS = 250;
+let boundFilterApplyTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingBoundFilterControl: TimeSliderControl | null = null;
+
 // Guards the store writes made by overlay-frame visibility toggling (mirrors
 // `applyingBoundFilters`) so they do not re-trigger the store subscription.
 let applyingOverlayVisibility = false;
@@ -497,14 +532,17 @@ interface SelectorLayer {
   adapter: TemporalLayerAdapter;
 }
 
-/** A KML `<TimeSpan>`/`<TimeStamp>` overlay frame's epoch-ms window. */
+/**
+ * The epoch-ms window of a KML `<TimeSpan>`/`<TimeStamp>` frame: a ground
+ * overlay or a time-tagged placemark layer, keyed by `metadata.timeSpan`.
+ */
 interface TimeOverlayFrame {
   id: string;
   begin: number;
   end: number | null;
 }
 
-/** Collect the image-overlay frames tagged with a `<TimeSpan>`/`<TimeStamp>`. */
+/** Collect the KML ground-overlay and placemark frames tagged with a time window. */
 function getTimeOverlayFrames(): TimeOverlayFrame[] {
   const frames: TimeOverlayFrame[] = [];
   for (const layer of useAppStore.getState().layers) {
@@ -523,7 +561,7 @@ function getTimeOverlayFrames(): TimeOverlayFrame[] {
 }
 
 /**
- * Show only the overlay frame whose `[begin, end)` window contains the control's
+ * Show only the KML frames whose `[begin, end)` window contains the control's
  * current date; hide the rest. Writes are guarded and diffed so scrubbing does
  * not churn the store. A frame with an open end (the last in a sequence) stays
  * visible for any date at or after its start.
@@ -609,6 +647,50 @@ function applyBoundFilters(control: TimeSliderControl, bound: BoundLayer[]): voi
   } finally {
     applyingBoundFilters = false;
   }
+}
+
+/**
+ * Apply bound vector filters at a rate MapLibre's tile workers can sustain.
+ * The first change after an idle period is immediate; changes during the
+ * cooldown collapse into one trailing apply that reads the control's latest
+ * date when it runs.
+ */
+function scheduleBoundFilters(control: TimeSliderControl): void {
+  const bound = getBoundLayers();
+  if (bound.length === 0) {
+    pendingBoundFilterControl = null;
+    return;
+  }
+  pendingBoundFilterControl = control;
+  if (boundFilterApplyTimer !== null) return;
+
+  pendingBoundFilterControl = null;
+  applyBoundFilters(control, bound);
+  boundFilterApplyTimer = setTimeout(flushPendingBoundFilters, BOUND_FILTER_APPLY_INTERVAL_MS);
+}
+
+function flushPendingBoundFilters(): void {
+  boundFilterApplyTimer = null;
+  const control = pendingBoundFilterControl;
+  pendingBoundFilterControl = null;
+  if (control) scheduleBoundFilters(control);
+}
+
+function clearBoundFilterSchedule(): void {
+  if (boundFilterApplyTimer !== null) clearTimeout(boundFilterApplyTimer);
+  boundFilterApplyTimer = null;
+  pendingBoundFilterControl = null;
+}
+
+/** Test seam for the latest-date throttle used by bound vector layers. */
+export function __scheduleBoundFiltersForTests(control: TimeSliderControl): void {
+  scheduleBoundFilters(control);
+}
+
+/** Reset the module-level throttle between tests. */
+export function __resetBoundFilterScheduleForTests(): void {
+  clearBoundFilterSchedule();
+  appliedFilterKeys.clear();
 }
 
 // Last time index *requested* per selector-bound layer, so a tick that lands on
@@ -780,11 +862,18 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       }
       lastBoundRangeKey = rangeKey;
       control.setRange(new Date(min), new Date(max), undefined, granularity);
+      const baseGranularities = preBindingRange?.granularities ??
+        control.getConfig().granularities ?? [...TIME_GRANULARITIES];
+      // The control snaps back to its first listed unit when the requested one
+      // is not offered, so hourly KML frames on the default year/month/day
+      // track would step a whole day and never advance (#2411). Offer the
+      // stepping unit the data needs alongside the existing ones.
       control.setGranularities(
         orderedDisplayUnits
           ? orderedDisplayUnits
-          : (preBindingRange?.granularities ??
-              control.getConfig().granularities ?? [...TIME_GRANULARITIES]),
+          : baseGranularities.includes(granularity)
+            ? baseGranularities
+            : [granularity, ...baseGranularities],
       );
     }
   } else {
@@ -809,7 +898,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     if (!selectorIds.has(id)) appliedTimeIndices.delete(id);
   }
   scheduleSelectorTimes(control);
-  applyBoundFilters(control, bound);
+  scheduleBoundFilters(control);
   applyTimeOverlayVisibility(control, frames);
 }
 
@@ -827,6 +916,7 @@ export function __reconcileBoundLayersForTests(control: TimeSliderControl): void
  * @returns A teardown function.
  */
 function attachBindingSync(control: TimeSliderControl): () => void {
+  clearBoundFilterSchedule();
   lastBoundRangeKey = null;
   preBindingRange = null;
   appliedTimeIndices.clear();
@@ -837,7 +927,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
   // and overlay frames must update.
   const onStateChange = () => {
     scheduleSelectorTimes(control);
-    applyBoundFilters(control, getBoundLayers());
+    scheduleBoundFilters(control);
     applyTimeOverlayVisibility(control, getTimeOverlayFrames());
   };
   control.on("statechange", onStateChange);
@@ -874,6 +964,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
       clearTimeout(selectorApplyTimer);
       selectorApplyTimer = null;
     }
+    clearBoundFilterSchedule();
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
     // A cube stays on the slice it was last stepped to: unlike a filter, that is
@@ -931,8 +1022,8 @@ export function getLayerTimeBinding(layer: {
  * - the dock's own sources (COG stacks, mosaics, tile templates added through
  *   its "Add data" form), which are mirrored into the store under
  *   {@link STORE_LAYER_SOURCE_KIND};
- * - KML `<TimeSpan>` / `<TimeStamp>` image overlays, which the slider animates
- *   by visibility rather than by filter.
+ * - KML `<TimeSpan>` / `<TimeStamp>` ground overlays and placemark layers, which
+ *   the slider animates by visibility rather than by filter.
  *
  * The last two matter because the dock is the only way to reach them: turning
  * the plugin off while either exists would take the user's own timeline data
@@ -957,8 +1048,78 @@ export function isTimeSliderIdle(): boolean {
  * source id for every adapter type, so `nativeLayerIds` lets the Layers panel
  * and the on-map layer control drive the underlying layer.
  */
+/** The fields of a COG source the dock's form authors, minus the engine choice. */
+const COG_SOURCE_FIELDS = [
+  "id",
+  "name",
+  "opacity",
+  "visible",
+  "beforeId",
+  "bounds",
+  "url",
+  "endpoint",
+  "colormap",
+  "rescale",
+  "bidx",
+  "nodata",
+  "tileSize",
+] as const;
+
+/**
+ * Keeps every dock source on a renderer that can draw it.
+ *
+ * The library renders a COG on the `gpu`/`wasm` engines, and any mosaic
+ * manifest, through `maplibre-gl-raster`: a deck.gl tile layer that reads
+ * MapLibre's viewport, or the WASM tiler's own `mlrcog://` protocol, neither of
+ * which a mapbox-gl map can host (the protocol source fails to fetch and sits
+ * in the engine's error banner; the tile layer throws on every frame). On the
+ * Mapbox renderer a COG is therefore re-added on the `titiler` engine, which
+ * serves ordinary XYZ tiles and works there like any raster source — the same
+ * data, animated over the same dates — and a real mosaic manifest, which has
+ * no such fallback, is dropped with a console warning rather than left as a
+ * layer that renders nothing. MapLibre is untouched; each source keeps the
+ * engine the user chose.
+ *
+ * Removing and re-adding fires the control's `sourceremove`/`sourceadd`, so
+ * this runs before the store sync iterates and the nested sync sees only
+ * supported sources. Exported for unit tests, which cannot mount the real
+ * control (its `onAdd` builds DOM); it runs against the active host's renderer.
+ *
+ * @param control - The active control whose sources to reconcile.
+ */
+export function enforceEngineSupport(
+  control: Pick<TimeSliderControl, "getSources" | "removeSource" | "addSource">,
+): void {
+  if (activeHost?.getMapRenderer?.() !== "mapbox") return;
+  // Snapshot: the loop removes and re-adds sources on the control it iterates.
+  for (const spec of [...control.getSources()]) {
+    if (spec.type !== "mosaic" || !spec.id) continue;
+    // Tested on the raw template rather than the date-resolved URL
+    // ensureSourceBounds reads: this runs synchronously from the control's
+    // sourceadd/sourceremove handlers, and the check only keys off the file
+    // extension, which a date placeholder ({date}, %Y, ...) never sits in.
+    const url = typeof spec.url === "string" ? spec.url : "";
+    if (usesMosaicManifest(spec, url)) {
+      console.warn(
+        `[time-slider] Dropped source "${spec.id}": mosaic manifests render through maplibre-gl-raster, which the Mapbox renderer cannot host.`,
+      );
+      control.removeSource(spec.id);
+      continue;
+    }
+    // An engine-rewritten COG: keep the authored fields and hand it to TiTiler.
+    const cog: Record<string, unknown> = { type: "cog", engine: "titiler" };
+    for (const key of COG_SOURCE_FIELDS) {
+      const value = (spec as unknown as Record<string, unknown>)[key];
+      if (value !== undefined) cog[key] = value;
+    }
+    control.removeSource(spec.id);
+    control.addSource(cog as unknown as SourceSpec);
+  }
+}
+
 function syncStoreLayers(control: TimeSliderControl | null): void {
   if (!control) return;
+  enforceEngineSupport(control);
   const activeIds = new Set<string>();
   for (const spec of control.getSources()) {
     if (!spec.id) continue;
@@ -1101,6 +1262,12 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
 export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
+  const authoredUrl = ["url", "tiles", "baseUrl", "data"]
+    .map((key) => {
+      const value = key in spec ? spec[key as keyof SourceSpec] : undefined;
+      return typeof value === "string" ? value.trim() : "";
+    })
+    .find(Boolean);
   // COG and mosaic sources carry real source values, so Identify reads their
   // bands at the timeline's current date (see time-slider-pixel-identify) the
   // same way it reads a COG added through Add Raster Layer. XYZ/WMS sources are
@@ -1143,6 +1310,12 @@ export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
       sourceId,
       sourceIds: [sourceId],
       sourceKind: STORE_LAYER_SOURCE_KIND,
+      // The renderer is owned by the control, so `source` intentionally holds
+      // only its native id. Keep the authored reference on the mirror as well:
+      // share readiness otherwise mistakes this hosted temporal layer for a
+      // local/query layer with no recipient-openable source. `originalUrl` is
+      // already a recognized, credential-scrubbed reference field.
+      ...(authoredUrl ? { originalUrl: authoredUrl } : {}),
     },
   };
 }

@@ -12,12 +12,13 @@
  */
 import {
   normalizeHexColor,
+  storyVisibleLayers,
   useAppStore,
   type LegendConfig,
   type LegendCustomEntry,
   type LegendPanelPosition,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
 import { cn } from "@geolibre/ui";
 import {
@@ -174,11 +175,20 @@ export function MapLegendPanel({
   mapControllerRef,
   mapReadyGeneration,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
 }) {
   const { t, i18n } = useTranslation();
-  const layers = useAppStore((state) => state.layers);
+  const storeLayers = useAppStore((state) => state.layers);
+  const storyPresenting = useAppStore((state) => state.ui.storymapPresenting);
+  const storyOpacity = useAppStore((state) => state.ui.storymapLayerOpacity);
+  // During a story presentation the legend follows the chapters: a layer the
+  // current chapter has faded fully out drops from the legend as well, so
+  // the reader sees only the symbology on screen (discussion #2326).
+  const layers = useMemo(
+    () => storyVisibleLayers(storeLayers, storyPresenting, storyOpacity),
+    [storeLayers, storyPresenting, storyOpacity],
+  );
   const legend = useAppStore((state) => state.legend);
   const setLegend = useAppStore((state) => state.setLegend);
   const [editing, setEditing] = useState(false);
@@ -258,6 +268,12 @@ export function MapLegendPanel({
       buildAutoLegend(layers, legend, {
         locale: i18n.language,
         resolveColormapColors: colormapColors,
+        geometryGeneratorLabels: {
+          centroid: t("style.generator.typeCentroid"),
+          "bounding-box": t("style.generator.typeBoundingBox"),
+          "convex-hull": t("style.generator.typeConvexHull"),
+          buffer: t("style.generator.typeBuffer"),
+        },
       }),
     // colormapGeneration re-derives once an async colormap sample lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,7 +486,7 @@ export function MapLegendPanel({
     // a flex column keeps header/footer fixed while the entry list scrolls.
     <div
       ref={panelRef}
-      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md"
+      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 map-glass text-foreground shadow-lg"
       style={{
         maxHeight: maxHeight ?? undefined,
         ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),
@@ -931,7 +947,12 @@ function LegendClassRow({
       )}
       <div className="flex items-center gap-1.5">
         {row.marker ? (
-          <MarkerSwatch marker={row.marker} opacity={entry.opacity} />
+          <MarkerSwatch
+            marker={row.marker}
+            size={row.size}
+            maxSize={maxRowSize > 0 ? maxRowSize : undefined}
+            opacity={entry.opacity}
+          />
         ) : (
           <GeometrySwatch
             shape={row.shape}

@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
 import { ChevronDown, ClipboardPaste, Info } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -31,7 +31,7 @@ import {
 interface SetViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**

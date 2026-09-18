@@ -56,6 +56,22 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={consent.elevationNoticeOpen} onOpenChange={consent.setElevationNoticeOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.pointerElevationNoticeTitle")}</DialogTitle>
+            <DialogDescription>{t("toolbar.item.pointerElevationNoticeDesc")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => consent.setElevationNoticeOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={consent.confirmEnablePointerElevation}>
+              {t("toolbar.item.continue")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <RoutingConsentDialog
         open={consent.routingNoticeOpen}
         onCancel={consent.dismissRoutingNotice}

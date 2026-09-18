@@ -43,6 +43,15 @@ const isWin = process.platform === "win32";
 // inherits, so this is visible here.
 const IS_MAS_BUILD = process.env.GEOLIBRE_MAS_BUILD === "1";
 
+// Builds whose output *serves* the site and therefore cannot degrade gracefully
+// when it is missing. The Docker image sets this: nginx answers an unknown path
+// with index.html (`try_files $uri /index.html`), exactly as Tauri does, so a
+// missing site makes the Notebook panel render a second copy of GeoLibre inside
+// its iframe rather than fail visibly (GeoLibre#1851). Warning and exiting 0
+// there ships that silently, which is how the official image shipped without the
+// site for as long as it did.
+const IS_REQUIRED = IS_MAS_BUILD || process.env.GEOLIBRE_JUPYTERLITE_REQUIRED === "1";
+
 // Every other desktop (Tauri) build launches a real JupyterLab server, so the
 // static site is dead weight in the installer. Tauri sets TAURI_ENV_* on its
 // beforeBuildCommand; skip the build there. The plain web build and the embed
@@ -85,11 +94,17 @@ if (probe.status !== 0) {
   // Notebook panel pointing at a missing asset, and Tauri's asset resolver
   // serves index.html for anything it cannot find, so the panel would render a
   // second copy of GeoLibre inside its iframe. Fail the build instead.
-  if (IS_MAS_BUILD) {
+  if (IS_REQUIRED) {
+    const why = IS_MAS_BUILD
+      ? "the Mac App Store build embeds the JupyterLite site (it cannot spawn a " +
+        "Jupyter server)"
+      : "this build serves the JupyterLite site and GEOLIBRE_JUPYTERLITE_REQUIRED=1";
     console.error(
-      "[build-jupyterlite] `jupyter lite` is not available, but the Mac App " +
-        "Store build embeds the JupyterLite site (it cannot spawn a Jupyter " +
-        "server). Install the build deps:\n" +
+      "[build-jupyterlite] `jupyter lite` is not available, but " +
+        why +
+        ". Shipping without the site leaves the Notebook panel pointing at a " +
+        "missing asset, which is answered with index.html and renders a second " +
+        "copy of GeoLibre inside the iframe. Install the build deps:\n" +
         install,
     );
     process.exit(1);

@@ -22,7 +22,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
 _lock = threading.Lock()
 _server: ThreadingHTTPServer | None = None
@@ -34,8 +34,13 @@ _port: int | None = None
 # only files the user explicitly registered are reachable. Trailing slash so the
 # token starts immediately after it.
 _LOCAL_FILE_PREFIX = "/_geolibre_local/"
+_RASTER_TILE_PREFIX = "/_geolibre_tiles/"
 # token -> absolute filesystem path for files registered via register_local_file.
 _local_files: dict[str, Path] = {}
+# token -> (path, bands, colormap, rescale) for Colab-safe XYZ rendering.
+_raster_tiles: dict[
+    str, tuple[Path, tuple[int, ...] | None, str | None, tuple[tuple[float, float], ...] | None]
+] = {}
 # Chunk size for streaming a (possibly ranged) local file response.
 _STREAM_CHUNK = 64 * 1024
 
@@ -83,6 +88,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             size = os.fstat(handle.fileno()).st_size
             start, end, status = 0, size - 1, 200
             range_header = self.headers.get("Range")
+            # Set only once a range actually parses, so an unparsable unit
+            # (e.g. "items=0-1") does not attach a Content-Range to the
+            # full-file 200 it falls back to.
+            range_matched = False
             if range_header and range_header.startswith("bytes="):
                 parsed = self._parse_single_range(range_header, size)
                 if parsed is None:
@@ -91,6 +100,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                     self.end_headers()
                     return
                 start, end = parsed
+                range_matched = True
                 status = 206
             length = end - start + 1
             self.send_response(status)
@@ -101,7 +111,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             # working if the app is served from a different origin (the file
             # server is loopback-only and serves only registered tokens).
             self.send_header("Access-Control-Allow-Origin", "*")
-            if status == 206:
+            if range_matched:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.end_headers()
             if head_only:
@@ -116,6 +126,66 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                 remaining -= len(chunk)
         finally:
             handle.close()
+
+    def _match_raster_tile(
+        self,
+    ) -> (
+        tuple[
+            Path,
+            tuple[int, ...] | None,
+            str | None,
+            tuple[tuple[float, float], ...] | None,
+            int,
+            int,
+            int,
+        ]
+        | None
+    ):
+        """Resolve a tokenized ``z/x/y.png`` request to its raster settings."""
+        path = unquote(urlsplit(self.path).path)
+        if not path.startswith(_RASTER_TILE_PREFIX):
+            return None
+        parts = path[len(_RASTER_TILE_PREFIX) :].split("/")
+        if len(parts) != 4 or not parts[3].endswith(".png"):
+            return None
+        token, z_raw, x_raw, y_raw = parts
+        try:
+            z, x, y = int(z_raw), int(x_raw), int(y_raw[:-4])
+        except ValueError:
+            return None
+        with _lock:
+            registered = _raster_tiles.get(token)
+        if registered is None:
+            return None
+        return (*registered, z, x, y)
+
+    def _serve_raster_tile(self, matched: tuple, *, head_only: bool) -> None:
+        """Render one PNG tile from a registered kernel-side raster."""
+        file_path, bands, colormap, rescale, z, x, y = matched
+        try:
+            from rio_tiler.colormap import cmap
+            from rio_tiler.io import Reader
+
+            with Reader(file_path) as source:
+                image = source.tile(x, y, z, indexes=bands)
+            if rescale:
+                image.rescale(rescale)
+            color_map = cmap.get(colormap) if colormap and len(image.data) == 1 else None
+            payload = image.render(img_format="PNG", colormap=color_map)
+        except ImportError:
+            self.send_error(500, "rio-tiler is required for Colab raster tiles")
+            return
+        except Exception as exc:  # pragma: no cover - rio-tiler error text varies
+            self.send_error(500, f"Could not render raster tile: {exc}")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(payload)
 
     @staticmethod
     def _parse_single_range(range_header: str, size: int) -> tuple[int, int] | None:
@@ -149,6 +219,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         return start, min(end, size - 1)
 
     def do_GET(self) -> None:  # noqa: N802 - http.server naming
+        tile = self._match_raster_tile()
+        if tile is not None:
+            self._serve_raster_tile(tile, head_only=False)
+            return
         matched = self._match_local_file()
         if matched is not None:
             self._serve_local_file(matched, head_only=False)
@@ -156,6 +230,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self) -> None:  # noqa: N802 - http.server naming
+        tile = self._match_raster_tile()
+        if tile is not None:
+            self._serve_raster_tile(tile, head_only=True)
+            return
         matched = self._match_local_file()
         if matched is not None:
             self._serve_local_file(matched, head_only=True)
@@ -292,6 +370,61 @@ def register_local_file(path: str | os.PathLike[str]) -> str:
             _local_files[token] = file_path
         base = _base_url
     return f"{base}{_LOCAL_FILE_PREFIX.lstrip('/')}{token}/{quote(file_path.name)}"
+
+
+def register_raster_tiles(
+    path: str | os.PathLike[str],
+    *,
+    bands: list[int] | None = None,
+    colormap: str | None = None,
+    rescale: list[list[float]] | None = None,
+) -> str:
+    """Register a raster and return a tokenized XYZ URL on the app server."""
+    file_path = Path(path).expanduser().resolve()
+    if not file_path.is_file():
+        raise ValueError(f"Local file not found: {path}")
+    normalized_bands = tuple(bands) if bands else None
+    normalized_rescale = tuple(tuple(pair) for pair in rescale) if rescale else None
+    settings = (file_path, normalized_bands, colormap, normalized_rescale)
+    with _lock:
+        if _base_url is None:
+            raise RuntimeError("The GeoLibre static server is not running; create a Map first.")
+        token = next(
+            (tok for tok, registered in _raster_tiles.items() if registered == settings), None
+        )
+        if token is None:
+            token = secrets.token_urlsafe(16)
+            _raster_tiles[token] = settings
+        base = _base_url
+    return f"{base}{_RASTER_TILE_PREFIX.lstrip('/')}{token}/{{z}}/{{x}}/{{y}}.png"
+
+
+def unregister_local_file(path: str | os.PathLike[str]) -> None:
+    """Drop the registration for ``path``, if it has one.
+
+    The counterpart of :func:`register_local_file`, so a caller that owns the
+    file's lifetime (``Map`` deleting a GeoTIFF it materialized from an xarray
+    object) can also drop the token instead of leaving a dead entry behind. Each
+    materialization writes to a fresh temporary path, so without this the
+    registry — which ``register_local_file`` scans linearly to dedup — would grow
+    for the life of the kernel.
+
+    Args:
+        path: A path previously passed to :func:`register_local_file`. It is
+            resolved the same way, so the caller can pass what it handed in.
+            A path that is not registered is ignored.
+    """
+    try:
+        file_path = Path(path).expanduser().resolve()
+    except OSError:  # pragma: no cover - best-effort during interpreter exit
+        return
+    with _lock:
+        for token, registered in list(_local_files.items()):
+            if registered == file_path:
+                del _local_files[token]
+        for token, registered in list(_raster_tiles.items()):
+            if registered[0] == file_path:
+                del _raster_tiles[token]
 
 
 def app_port() -> int | None:

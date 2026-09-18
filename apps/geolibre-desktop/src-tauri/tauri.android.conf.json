@@ -3,6 +3,17 @@
   "productName": "GeoLibre",
   "identifier": "org.geolibre.app",
   "bundle": {
-    "resources": []
+    "resources": [],
+    "fileAssociations": []
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["geo"],
+          "appLink": false
+        }
+      ]
+    }
   }
 }

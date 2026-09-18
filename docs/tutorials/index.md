@@ -25,3 +25,12 @@ Work through them in order for a guided tour, or jump to the one that matches yo
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [Access Free High-Resolution Disaster Satellite Imagery in Your Browser](https://youtu.be/QQ9i5CTNh84)
+- [Regularize Building Footprints in the Browser with GeoLibre](https://youtu.be/xjfPYxgEEEc)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)
+- [Create Reusable GIS Workflows with GeoLibre Model Builder and AI Assistant](https://youtu.be/dzjNKM6slgs)
+- [Mapping the 2026 Nepal Floods with Free High-Resolution Satellite Imagery](https://youtu.be/UDO1BCwOAAc)
+- [Building Cloud-Native GIS Workflows with GeoLibre](https://youtu.be/RgNoKsvZ5Hk)
+- [Image Georeferencing Using GeoLibre in the Browser](https://youtu.be/lbioujkDSG0)
+
+All of them, with chapters and summaries, are on [Video Tutorials](videos.md).

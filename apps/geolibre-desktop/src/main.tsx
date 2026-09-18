@@ -1,6 +1,20 @@
 import "./lib/symbol-dispose-polyfill";
+import "./lib/crypto-random-uuid-polyfill";
+// Must precede any Map construction (see the module docs).
+import "./lib/maplibre-worker";
 import React from "react";
 import ReactDOM from "react-dom/client";
+/* App typeface — see the --font-sans/--font-mono note in index.css.
+   These must be imported from JS, not via `@import` in index.css: Tailwind v4
+   resolves CSS @imports itself and inlines them before Vite sees them, so the
+   relative `url(./files/*.woff2)` in fontsource's CSS is never rewritten into
+   an asset reference and no font file is emitted into dist/. The result builds
+   clean and 404s at runtime, silently falling back to system fonts. Importing
+   from JS routes the CSS through Vite's asset pipeline instead. */
+import "@fontsource-variable/ibm-plex-sans/wght.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/700.css";
+import "@geolibre/plugins/maplibre-vantor/style.css";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "@maplibre/maplibre-gl-directions/dist/style.css";
 import "maplibre-gl-3d-tiles/style.css";
@@ -36,23 +50,67 @@ import "./lib/swipe-style";
 import { registerSW } from "virtual:pwa-register";
 import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
+import type { ReactNode } from "react";
+// Puts a deep link's query back after a sign-in redirect dropped it. This import
+// MUST stay above `./i18n` below: it does its work while loading, and `./i18n`
+// resolves the UI language from the query string while *it* loads, so a later
+// position would restore the parameters after they had already been read. Same
+// for the theme, resolved further down this file. A no-op when no sign-in
+// redirect is in flight, so every other build just pays for an empty module.
+import "./lib/auth-return-url-boot";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first
 // paint is already in the right language. English is bundled; other locales are
 // lazily imported, so `i18nReady` resolves once the initial locale's catalog has
 // loaded and init has run — the render below awaits it.
-import i18n, { i18nReady } from "./i18n";
+import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
+import { startAnalytics } from "./lib/analytics";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
+import { isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
+import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
+import { getInitialThemeMode } from "./hooks/useThemeMode";
+import { applyTemporaryDesktopSettings } from "./hooks/useDesktopSettings";
+import {
+  desktopSettingsUrl,
+  fetchDesktopSettings,
+  sharedSettingsLanguage,
+} from "./lib/desktop-settings-url";
+import { parseDeploymentCapabilities, useAppStore } from "@geolibre/core";
+import { readDeploymentEnvValue } from "./lib/deployment-env";
+import { initializeNativeProjectOpen } from "./lib/native-project-open";
+
+import { initializeNativeCoordinateOpen } from "./lib/native-coordinate-open";
 
 installDiagnosticsCapture();
-// In the desktop build, route geocoding (place search / reverse geocode)
-// through Tauri's native HTTP client so it bypasses WebView CORS: public
-// Nominatim's CDN intermittently omits the CORS header on cached responses,
-// which the WebView rejects as "Search failed. Try again." Lazy + desktop-only
-// so the web/embedded bundles never import the Tauri HTTP plugin.
+
+const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
+const nativeProjectOpenReady = initializeNativeProjectOpen();
+let nativeArcGISFetchReady: Promise<void> = Promise.resolve();
+let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
+// Install desktop-only transports before requests can be issued. ArcGIS uses
+// a dedicated guarded Rust command; the other adapters use scoped HTTP hosts.
 if (isTauri()) {
+  nativeArcGISFetchReady = import("./lib/arcgis-fetch")
+    .then(({ installNativeArcGISFetch }) => installNativeArcGISFetch())
+    .catch((error: unknown) => {
+      console.error("[GeoLibre] Failed to install native ArcGIS fetch", error);
+    });
+  // WebView2 can apply browser CORS and Local Network Access restrictions to
+  // the loopback processing server. Route those requests through Tauri's
+  // scoped native client so Windows uses the same reliable path as the shell
+  // that launched the server. Windows-only: the macOS and Linux webviews reach
+  // the sidecar directly, and the native client serializes request bodies over
+  // IPC, which would tax large uploads (ML segmentation) on platforms that were
+  // never broken.
+  if (isWindows()) {
+    nativeSidecarFetchReady = import("./lib/sidecar-fetch")
+      .then(({ installNativeSidecarFetch }) => installNativeSidecarFetch())
+      .catch((error: unknown) => {
+        console.error("[GeoLibre] Failed to install native sidecar fetch", error);
+      });
+  }
   void import("./lib/geocoding-fetch")
     .then(({ installNativeGeocodingFetch }) => installNativeGeocodingFetch())
     .catch((error: unknown) => {
@@ -85,6 +143,68 @@ if (isTauri()) {
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.
 installStaleChunkReload();
+
+// What this deployment is allowed to do (issue #1673). Read once, before the
+// app renders, so no surface ever paints with the full grant and then retracts
+// it. Comes from the deployment/build env only — never from a URL parameter or
+// a project file — because a capability a visitor can hand themselves is not a
+// restriction. An absent value keeps the default full grant, so existing
+// deployments are unchanged.
+const configuredCapabilities = readDeploymentEnvValue("VITE_GEOLIBRE_CAPABILITIES");
+if (configuredCapabilities) {
+  useAppStore
+    .getState()
+    .setDeploymentCapabilities(parseDeploymentCapabilities(configuredCapabilities));
+}
+
+// "Web app" here means the *build*, never anything the visitor controls: the
+// desktop shell and the Jupyter embed wheel are compiled without the gate, but a
+// hosted deployment gates every request. In particular this must NOT consult
+// `isEmbedded()` — that returns true for a plain `?embed=1` query parameter, so
+// any visitor could disable a configured sign-in wall by typing a URL.
+const isHostedWebApp = !isTauri() && !__GEOLIBRE_EMBED_BUILD__;
+// Google Analytics, if this deployment was built with a measurement ID (only
+// the geolibre.app and web.geolibre.app Pages deploys are, see analytics.ts).
+// A no-op in every other build, so nothing is loaded and nothing is sent.
+startAnalytics(isHostedWebApp);
+// Clerk or Auth0, whichever this deployment configured (neither, normally).
+const authGate = resolveAuthGate(isHostedWebApp);
+if (authGate) {
+  // Apply the initial theme now rather than leaving it to <App />. A gate paints
+  // a full-screen signed-out page *before* App mounts, and App is where
+  // useThemeMode adds the `dark` class — so without this a dark-mode visitor
+  // gets a white sign-in screen that flips to dark only after signing in. This
+  // sets exactly what useThemeMode's layout effect will set a moment later
+  // (same helper, same `?theme=` handling), so it is a no-op once App mounts.
+  const initialTheme = getInitialThemeMode();
+  document.documentElement.classList.toggle("dark", initialTheme === "dark");
+  document.documentElement.style.colorScheme = initialTheme;
+}
+
+/**
+ * Load the configured gate's chunk and return a wrapper for the app tree.
+ *
+ * Each provider lives in its own dynamically imported module, so a deployment
+ * downloads only the SDK it actually uses — and an ungated build downloads
+ * neither. Returns null when no gate is configured.
+ */
+function loadAuthGate(
+  config: AuthGateConfig | undefined,
+): Promise<((children: ReactNode) => ReactNode) | null> {
+  if (!config) return Promise.resolve(null);
+  if (config.provider === "clerk") {
+    return import("./components/auth/ClerkGate").then(({ ClerkGate }) => (children: ReactNode) => (
+      <ClerkGate publishableKey={config.publishableKey} waitlist={config.waitlist}>
+        {children}
+      </ClerkGate>
+    ));
+  }
+  return import("./components/auth/Auth0Gate").then(({ Auth0Gate }) => (children: ReactNode) => (
+    <Auth0Gate domain={config.domain} clientId={config.clientId}>
+      {children}
+    </Auth0Gate>
+  ));
+}
 // Register the offline/PWA service worker (web build only). `registerSW` is a
 // no-op stub in the Tauri desktop and embedded Jupyter builds, where the plugin
 // is disabled (see vite.config.ts pwaPlugin).
@@ -122,24 +242,69 @@ registerSW({
   },
 });
 
+const sharedSettingsUrl = desktopSettingsUrl(window.location.search);
+const sharedSettingsReady = sharedSettingsUrl
+  ? fetchDesktopSettings(sharedSettingsUrl)
+      .then((settings) => {
+        applyTemporaryDesktopSettings(settings);
+        return settings;
+      })
+      .catch((error: unknown) => {
+        // A shared settings file is optional configuration. Keep the app usable
+        // with the visitor's local settings, but make a bad URL visible in the
+        // diagnostics capture and developer console.
+        console.error("[GeoLibre] Failed to load shared desktop settings", error);
+        return null;
+      })
+  : Promise.resolve(null);
+
+const startupLanguageReady = Promise.all([i18nReady, sharedSettingsReady]).then(
+  async ([, settings]) => {
+    if (!settings) return;
+    const language = sharedSettingsLanguage(
+      window.location.search,
+      settings.language,
+      AVAILABLE_LANGUAGES,
+    );
+    if (!language) return;
+    try {
+      await setActiveLanguage(language);
+    } catch (error) {
+      // Shared language is optional presentation configuration. If its lazy
+      // catalog cannot load, retain the language i18next already initialized.
+      console.error("[GeoLibre] Failed to apply shared settings language", error);
+    }
+  },
+);
+
 // Fetch both chunks in parallel rather than waterfalling the boundary import
 // after App resolves — a free win, and it matters over the network in the web
 // build where these are separate fetches.
 void Promise.all([
   import("./App"),
   import("./components/common/error-boundaries"),
+  loadAuthGate(authGate),
+  // Sidecar-dependent panels can issue a request as soon as App mounts. On
+  // Windows, wait until those requests have the native transport installed.
+  nativeSidecarFetchReady,
+  // Restored ArcGIS layers can query immediately when App mounts.
+  nativeArcGISFetchReady,
+  // Capture a file-association or command-line project path before App decides
+  // whether to restore a configured startup project or the default workspace.
+  nativeProjectOpenReady,
+  nativeCoordinateOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
-  i18nReady,
+  startupLanguageReady,
 ])
-  .then(([{ default: App }, { AppErrorBoundary }]) => {
+  .then(([{ default: App }, { AppErrorBoundary }, withAuthGate]) => {
+    const app = <App />;
+    const authenticatedApp = withAuthGate ? withAuthGate(app) : app;
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
         <I18nextProvider i18n={i18n}>
           <AppErrorBoundary>
-            <TooltipProvider delayDuration={200}>
-              <App />
-            </TooltipProvider>
+            <TooltipProvider delayDuration={200}>{authenticatedApp}</TooltipProvider>
           </AppErrorBoundary>
         </I18nextProvider>
       </React.StrictMode>,
