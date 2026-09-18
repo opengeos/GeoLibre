@@ -104,7 +104,12 @@ describe("htmlToPlainText", () => {
   it("stays linear on unterminated breaks and tags (#2466)", () => {
     // Both inputs took several seconds at 100 KB with the old regexes. A wide
     // bound still catches a quadratic regression without flaking under load.
-    const inputs = [`<br${" ".repeat(100_000)}`, "<".repeat(100_000), '<"'.repeat(50_000)];
+    const inputs = [
+      `<br${" ".repeat(100_000)}`,
+      "<".repeat(100_000),
+      '<"'.repeat(50_000),
+      "<script ".repeat(50_000),
+    ];
     for (const input of inputs) {
       const started = performance.now();
       htmlToPlainText(input);

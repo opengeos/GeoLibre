@@ -149,12 +149,59 @@ function decodeEntities(text: string): string {
   });
 }
 
+/** Remove complete script/style blocks without retrying from every opening `<`. */
+function stripRawTextBlocks(text: string): string {
+  const lower = text.toLowerCase();
+  const lastClose: Record<"script" | "style", number> = {
+    script: lower.lastIndexOf("</script>"),
+    style: lower.lastIndexOf("</style>"),
+  };
+  const output: string[] = [];
+  let plainStart = 0;
+  let searchFrom = 0;
+
+  for (;;) {
+    const open = lower.indexOf("<", searchFrom);
+    if (open === -1) break;
+    const name = lower.startsWith("<script", open)
+      ? "script"
+      : lower.startsWith("<style", open)
+        ? "style"
+        : null;
+    if (name === null || lastClose[name] <= open) {
+      searchFrom = open + 1;
+      continue;
+    }
+
+    const openEnd = lower.indexOf(">", open + name.length + 1);
+    if (openEnd === -1) break;
+    const closeToken = `</${name}>`;
+    const close = lower.indexOf(closeToken, openEnd + 1);
+    if (close === -1) {
+      // The last closing token was swallowed by this malformed opening tag, so
+      // no later block of the same type can be complete.
+      lastClose[name] = -1;
+      searchFrom = open + 1;
+      continue;
+    }
+
+    output.push(text.slice(plainStart, open));
+    plainStart = close + closeToken.length;
+    searchFrom = plainStart;
+  }
+
+  output.push(text.slice(plainStart));
+  return output.join("");
+}
+
 /**
  * Strip complete HTML-like tags in one pass while respecting quoted `>`.
  *
  * A regex that retries at every `<` becomes quadratic when no `>` follows.
  * When another unquoted `<` appears before a closing `>`, keep the malformed
  * prefix as text and treat the newer `<` as the start of a possible tag.
+ * A raw `<` inside an attribute is likewise treated as malformed; valid HTML
+ * escapes that character as `&lt;`, which is decoded after tags are stripped.
  */
 function stripTags(text: string): string {
   const output: string[] = [];
@@ -215,10 +262,7 @@ function stripTags(text: string): string {
 export function htmlToPlainText(html: string): string {
   return decodeEntities(
     stripTags(
-      html
-        // Drop <script>/<style> blocks with their contents first; the generic tag
-        // strip below only removes delimiters and would leave their text behind.
-        .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+      stripRawTextBlocks(html)
         .replace(/<\s*br\s*(?:\/\s*)?>/gi, "\n")
         .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n"),
     ),
