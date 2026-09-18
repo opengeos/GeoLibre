@@ -57,8 +57,8 @@ export interface MapEngine {
 
   // ------------------------------------------------------------------- camera
 
-  /** Place the camera at `view` immediately, without animation. */
-  applyView(view: MapViewState): void;
+  /** Place the camera at `view` without animation, resolving after asynchronous engines settle. */
+  applyView(view: MapViewState): void | Promise<void>;
   /** Animate the camera to `view` with a short ease. */
   easeToView(view: MapViewState): void;
   /** The camera's current position, in the store's engine-neutral shape. */

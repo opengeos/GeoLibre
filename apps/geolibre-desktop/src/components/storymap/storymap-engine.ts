@@ -8,20 +8,6 @@ export interface StoryMapMarker {
   remove(): void;
 }
 
-function viewMatchesLocation(engine: MapEngine, location: StoryChapterLocation): boolean {
-  const current = engine.readView();
-  const bearingDelta = Math.abs(
-    ((((current.bearing - location.bearing + 180) % 360) + 360) % 360) - 180,
-  );
-  return (
-    Math.abs(current.center[0] - location.center[0]) < 1e-8 &&
-    Math.abs(current.center[1] - location.center[1]) < 1e-8 &&
-    Math.abs(current.zoom - location.zoom) < 1e-8 &&
-    bearingDelta < 1e-8 &&
-    Math.abs(current.pitch - location.pitch) < 1e-8
-  );
-}
-
 /** Pin the standard story marker to any engine's renderer-neutral surface. */
 export function createStoryMapMarker(engine: MapEngine, color: string): StoryMapMarker | null {
   const surface = engine.getRenderSurface();
@@ -113,14 +99,18 @@ export function applyStoryViewAndWait(
       if (isAborted()) finish();
       else maybeFinish();
     }, 100);
-    cameraIdle = viewMatchesLocation(engine, location);
     viewApplied = true;
-    engine.applyView(location);
-    requestAnimationFrame(() => {
-      renderedFrame = true;
-      // Immediate camera setters can complete between observable frames.
-      if (!engine.isCameraMoving() && viewMatchesLocation(engine, location)) cameraIdle = true;
-      maybeFinish();
-    });
+    try {
+      void Promise.resolve(engine.applyView(location)).then(() => {
+        if (settled) return;
+        cameraIdle = !engine.isCameraMoving();
+        requestAnimationFrame(() => {
+          renderedFrame = true;
+          maybeFinish();
+        });
+      }, finish);
+    } catch {
+      finish();
+    }
   });
 }

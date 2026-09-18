@@ -646,7 +646,7 @@ export class ArcgisEngine implements MapEngine {
       ...(bounds ? { bbox: bounds } : {}),
     };
   }
-  applyView(view: MapViewState): void {
+  async applyView(view: MapViewState): Promise<void> {
     const old = this.readView();
     const target = this.constrainView(view);
     const scene = this.view?.type === "3d";
@@ -659,16 +659,18 @@ export class ArcgisEngine implements MapEngine {
       (!scene || Math.abs(old.pitch - this.clampPitch(target.pitch)) < 1e-8)
     )
       return;
-    void this.view
-      ?.goTo(
+    try {
+      await this.view?.goTo(
         {
           center: target.center,
           zoom: target.zoom,
           ...this.orientation(target.bearing, target.pitch),
         },
         { animate: false },
-      )
-      .catch(reportGoToFailure);
+      );
+    } catch (error) {
+      reportGoToFailure(error);
+    }
   }
   /**
    * Place the camera at `view` and resolve once it is there. A new view
