@@ -51,6 +51,7 @@ import {
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
   maplibreGeoLensPlugin,
+  setGeoLensDefaultServerUrl,
   maplibreVantorPlugin,
   maplibrePlanetOpenDataPlugin,
   maplibrePortolanPlugin,
@@ -101,6 +102,7 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
 } from "@geolibre/plugins";
+import { readDeploymentEnvValue } from "../lib/deployment-env";
 import { CesiumEngine, getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
 import type {
   GeoLibreCogLayerOptions,
@@ -196,6 +198,7 @@ interface TauriRuntimeWindow extends Window {
 }
 
 const manager = new PluginManager();
+setGeoLensDefaultServerUrl(readDeploymentEnvValue("VITE_GEOLENS_DEFAULT_URL"));
 manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreGeoEditorPlugin,

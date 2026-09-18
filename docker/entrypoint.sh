@@ -448,6 +448,14 @@ if collab_url:
         "GEOLIBRE_COLLAB_URL", collab_url, ("wss",), ("ws",), ("localhost", "127.0.0.1", "::1")
     )
 
+# Default GeoLens catalog. Unset lets the plugin try the browser origin, which
+# is the zero-config path when GeoLibre and GeoLens share a reverse proxy.
+geolens_url = os.environ.get("GEOLIBRE_GEOLENS_URL", "").strip()
+if geolens_url:
+    deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
+        "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
+    )
+
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))
@@ -477,6 +485,10 @@ fi
 
 if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then
   echo "Collaboration relay: $(trim "$GEOLIBRE_COLLAB_URL")"
+fi
+
+if [ -n "$(trim "${GEOLIBRE_GEOLENS_URL:-}")" ]; then
+  echo "GeoLens server: $(trim "$GEOLIBRE_GEOLENS_URL")"
 fi
 
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then

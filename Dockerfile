@@ -62,6 +62,9 @@ ARG VITE_GEOLIBRE_SHARE_URL=
 # Self-hosted collaboration relay (wss://…). Unset leaves collaboration dark.
 # Also settable at RUN time (-e GEOLIBRE_COLLAB_URL=…).
 ARG VITE_GEOLIBRE_COLLAB_URL=
+# GeoLens catalog default. Also settable at RUN time
+# (-e GEOLIBRE_GEOLENS_URL=...).
+ARG VITE_GEOLENS_DEFAULT_URL=
 # Set to 1 to strip every external CDN reference (unpkg.com, cdn.jsdelivr.net,
 # …) from the build output, for deployments that may not load third-party
 # hosts. Features that depend on CDN-hosted assets are disabled or degraded —
@@ -83,6 +86,7 @@ ENV VITE_WELCOME_DISABLED=${VITE_WELCOME_DISABLED}
 ENV VITE_GEOLIBRE_EMBED_ORIGINS=${VITE_GEOLIBRE_EMBED_ORIGINS}
 ENV VITE_GEOLIBRE_SHARE_URL=${VITE_GEOLIBRE_SHARE_URL}
 ENV VITE_GEOLIBRE_COLLAB_URL=${VITE_GEOLIBRE_COLLAB_URL}
+ENV VITE_GEOLENS_DEFAULT_URL=${VITE_GEOLENS_DEFAULT_URL}
 ENV GEOLIBRE_NO_EXTERNAL_CDN=${GEOLIBRE_NO_EXTERNAL_CDN}
 ENV VITE_GEOLIBRE_CAPABILITIES=${VITE_GEOLIBRE_CAPABILITIES}
 

@@ -481,6 +481,7 @@ default. Point them at your own server instead, or turn the feature off:
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_SHARE_URL=https://maps.example.org \
   -e GEOLIBRE_COLLAB_URL=wss://collab.example.org \
+  -e GEOLIBRE_GEOLENS_URL=https://catalog.example.org \
   ghcr.io/opengeos/geolibre:latest
 ```
 
@@ -488,19 +489,21 @@ docker run --rm -p 8080:80 \
 | --- | --- |
 | `GEOLIBRE_SHARE_URL` | Base URL of the project sharing server. Unset uses `share.geolibre.app`. Set it to `off` to remove Share and the Project Gallery from the UI entirely. |
 | `GEOLIBRE_COLLAB_URL` | Base URL of the [collaboration](collaboration.md) relay. Unset leaves live collaboration disabled. |
+| `GEOLIBRE_GEOLENS_URL` | Default GeoLens server. The plugin connects automatically and remembers the last successful server; unset uses the app's browser origin for co-located deployments. |
 
-Both are read at container startup, so a prebuilt image can be repointed by
-restarting it with different values — no rebuild. (The equivalent build
-arguments, `VITE_GEOLIBRE_SHARE_URL` and `VITE_GEOLIBRE_COLLAB_URL`, exist for
-baking a default into your own image.)
+All three are read at container startup, so a prebuilt image can be repointed by
+restarting it with different values, with no rebuild. (The equivalent build
+arguments, `VITE_GEOLIBRE_SHARE_URL`, `VITE_GEOLIBRE_COLLAB_URL`, and
+`VITE_GEOLENS_DEFAULT_URL`, exist for baking defaults into your own image.)
 
 When `GEOLIBRE_COLLAB_URL` is set, the entrypoint also adds that relay's origin to
 the container's `Content-Security-Policy` `connect-src`, so the browser is allowed
 to open the WebSocket. (The directive has a bare `https:`, which covers any share
 server, but no bare `wss:`.) No manual edit of `docker/nginx.conf` is needed.
 
-Both must use TLS — `https://` for the share server, `wss://` for the relay —
-because the app sends your API token to the share server with every request.
+All remote services must use TLS: `https://` for the share and GeoLens servers,
+and `wss://` for the relay,
+because the app may send credentials to the configured service.
 Plaintext is accepted only on `localhost` / `127.0.0.1` for local development, so
 put a self-hosted server behind a reverse proxy that terminates TLS. A value that
 does not satisfy this **fails the container boot** with an error naming the
