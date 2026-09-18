@@ -334,13 +334,16 @@ function writeSavedGeoLensServerUrl(value: string): void {
 }
 
 const CURRENT_ORIGIN_DEFAULT = "same-origin";
+const DISABLED_DEFAULT = "off";
 let configuredDefaultServerUrl = "";
 
 /** Set the deployment's preferred GeoLens server before the panel mounts. */
 export function setGeoLensDefaultServerUrl(value: string | undefined): void {
   const trimmed = value?.trim() ?? "";
   configuredDefaultServerUrl =
-    trimmed === CURRENT_ORIGIN_DEFAULT ? CURRENT_ORIGIN_DEFAULT : normalizeBaseUrl(trimmed);
+    trimmed === CURRENT_ORIGIN_DEFAULT || trimmed.toLowerCase() === DISABLED_DEFAULT
+      ? trimmed.toLowerCase()
+      : normalizeBaseUrl(trimmed);
 }
 
 /** Saved preference wins, then deployment config (including `same-origin`). */
@@ -349,6 +352,7 @@ export function resolveGeoLensInitialServerUrl(
   configuredUrl: string,
   currentOrigin: string,
 ): string {
+  if (configuredUrl.toLowerCase() === DISABLED_DEFAULT) return "";
   if (savedUrl) return normalizeBaseUrl(savedUrl);
   if (configuredUrl === CURRENT_ORIGIN_DEFAULT) return normalizeBaseUrl(currentOrigin);
   return normalizeBaseUrl(configuredUrl);

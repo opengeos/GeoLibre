@@ -276,6 +276,12 @@ describe("GeoLens server preference", () => {
       "https://maps.example",
     );
     assert.equal(resolveGeoLensInitialServerUrl("", "", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", "off", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", "OFF", "https://maps.example/"), "");
+    assert.equal(
+      resolveGeoLensInitialServerUrl("https://saved.example", "off", "https://maps.example/"),
+      "",
+    );
   });
 
   it("reads and normalizes the last successful server from local storage", () => {

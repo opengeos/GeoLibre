@@ -452,9 +452,12 @@ if collab_url:
 # is the zero-config path when GeoLibre and GeoLens share a reverse proxy.
 geolens_url = os.environ.get("GEOLIBRE_GEOLENS_URL", "").strip()
 if geolens_url:
-    deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
-        "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
-    )
+    if geolens_url.lower() == "off":
+        deployment["VITE_GEOLENS_DEFAULT_URL"] = "off"
+    else:
+        deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
+            "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
+        )
 else:
     deployment["VITE_GEOLENS_DEFAULT_URL"] = "same-origin"
 

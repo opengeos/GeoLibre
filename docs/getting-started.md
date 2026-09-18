@@ -489,7 +489,7 @@ docker run --rm -p 8080:80 \
 | --- | --- |
 | `GEOLIBRE_SHARE_URL` | Base URL of the project sharing server. Unset uses `share.geolibre.app`. Set it to `off` to remove Share and the Project Gallery from the UI entirely. |
 | `GEOLIBRE_COLLAB_URL` | Base URL of the [collaboration](collaboration.md) relay. Unset leaves live collaboration disabled. |
-| `GEOLIBRE_GEOLENS_URL` | Default GeoLens server. The plugin connects automatically and remembers the last successful server; unset uses the app's browser origin for co-located deployments. |
+| `GEOLIBRE_GEOLENS_URL` | Default GeoLens server. The plugin connects automatically and remembers the last successful server; unset uses the app's browser origin for co-located deployments. Set `off` to leave the panel idle until the user chooses a server. |
 
 All three are read at container startup, so a prebuilt image can be repointed by
 restarting it with different values, with no rebuild. (The equivalent build
@@ -502,9 +502,9 @@ the container's `Content-Security-Policy` `connect-src`, so the browser is allow
 to open the WebSocket. (The directive has a bare `https:`, which covers any share
 server, but no bare `wss:`.) No manual edit of `docker/nginx.conf` is needed.
 
-All remote services must use TLS: `https://` for the share and GeoLens servers,
-and `wss://` for the relay,
-because the app may send credentials to the configured service.
+All remote services must use TLS because the app may send credentials to the
+configured service. Use `https://` for the share and GeoLens servers and
+`wss://` for the relay.
 Plaintext is accepted only on `localhost` / `127.0.0.1` for local development, so
 put a self-hosted server behind a reverse proxy that terminates TLS. A value that
 does not satisfy this **fails the container boot** with an error naming the
