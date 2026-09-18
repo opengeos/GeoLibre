@@ -37,6 +37,7 @@ import {
   wireVectorStoreSync,
 } from "./vector-layer-sync";
 import { bridgeVectorControlToStore, exceedsCesiumVectorLimit } from "./vector-cesium-bridge";
+import { groupVectorContainerImports } from "./vector-container-group";
 import { readableStacLayerHref } from "./stac-signing";
 import type { FeatureCollection } from "geojson";
 
@@ -786,6 +787,25 @@ export async function addVectorLayersFromUrl(
   return addVectorLayersThroughControl(control, url, options);
 }
 
+/** Import a local container with the control's layer picker and rendering path. */
+export async function addVectorFileToMap(
+  app: GeoLibreAppAPI,
+  file: File,
+  options: VectorLayerOptions = {},
+): Promise<number> {
+  const control = await ensureVectorControl(app);
+  if (!control) throw new Error("The vector control is unavailable.");
+  const id = crypto.randomUUID();
+  try {
+    await control.addData(file, { ...options, id });
+  } catch (error) {
+    if (isVectorLayerSelectionCancelled(error)) return 0;
+    throw error;
+  }
+  return control.getLayers().filter((layer) => layer.id === id || layer.id.startsWith(`${id}-`))
+    .length;
+}
+
 /** The subset of VectorControl used to add a remote dataset (eases testing). */
 export type VectorUrlSink = Pick<VectorControl, "addData" | "getLayers">;
 
@@ -912,6 +932,9 @@ function createVectorControl(
   const panelStateSyncHandler: VectorControlEventHandler = () => syncVectorLayersToStore(control);
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
+  groupVectorContainerImports(control, (name, ids) => {
+    useAppStore.getState().addLayerGroup(name, ids);
+  });
   wireVectorStoreSync(control);
   patchVectorControlOnRemove(control, panelStateSyncHandler);
 
