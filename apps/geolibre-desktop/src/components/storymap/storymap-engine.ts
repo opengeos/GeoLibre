@@ -3,6 +3,9 @@ import type { StoryChapterLocation } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 
 const RENDER_STABILITY_MS = 500;
+// Mirrors the unexported vertical offset `maplibregl.Marker` gives its default
+// pin (see docs/maintenance.md). It keeps the shadow ellipse on the coordinate.
+const DEFAULT_MARKER_OFFSET_Y = -14;
 
 export interface StoryMapMarker {
   setLngLat(lngLat: [number, number]): void;
@@ -24,9 +27,8 @@ export function createStoryMapMarker(engine: MapEngine, color: string): StoryMap
     try {
       const point = surface.project(coordinate);
       element.style.display = "";
-      // Match MapLibre's default pin: center anchor with its built-in -14 px
-      // vertical offset keeps the shadow ellipse's center on the coordinate.
-      element.style.transform = `translate(-50%, -50%) translate(${point.x}px, ${point.y - 14}px)`;
+      // Match MapLibre's default pin: center anchor plus its built-in offset.
+      element.style.transform = `translate(-50%, -50%) translate(${point.x}px, ${point.y + DEFAULT_MARKER_OFFSET_Y}px)`;
     } catch {
       // Cesium cannot project a coordinate on the far side of the globe. Keep
       // the marker hidden until the camera brings it back into view.
