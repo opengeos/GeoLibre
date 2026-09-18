@@ -12,6 +12,30 @@ async function waitForMap(page: Page): Promise<void> {
   });
 }
 
+/** Wait until React publishes the live renderer and its map is fully loaded. */
+async function waitForRenderer(page: Page, kind: "mapbox" | "maplibre"): Promise<void> {
+  await page.waitForFunction((wanted) => {
+    const header = document.querySelector("header") as unknown as Record<string, unknown>;
+    if (!header) return false;
+    let fiber = header[Object.keys(header).find((key) => key.startsWith("__reactFiber"))!] as any;
+    while (fiber) {
+      for (const side of [fiber, fiber.alternate]) {
+        let hook = side?.memoizedState;
+        while (hook) {
+          const engine = hook.memoizedState?.current;
+          if (engine?.kind === wanted) {
+            const map = wanted === "mapbox" ? engine.getMapboxMap?.() : engine.getMap?.();
+            if (map?.loaded()) return true;
+          }
+          hook = hook.next;
+        }
+      }
+      fiber = fiber.return;
+    }
+    return false;
+  }, kind);
+}
+
 /** Opens Project → Story Map and returns the dialog locator. */
 async function openStoryMapPanel(page: Page) {
   await page.getByRole("button", { name: "Project" }).click();
@@ -157,16 +181,14 @@ test("presents and composes a story on Mapbox", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Rendering engine" }).hover();
   await page.getByRole("menuitemradio", { name: "Mapbox" }).click();
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible({ timeout: 30_000 });
-  // The canvas mounts before Mapbox's load event publishes the engine ref that
-  // Story Map drives. Wait for the authenticated style and tiles to settle.
-  await page.waitForTimeout(3_000);
+  await waitForRenderer(page, "mapbox");
 
   let dialog = await openStoryMapPanel(page);
   await dialog.getByRole("button", { name: "Load sample story" }).click();
   await dialog.getByRole("button", { name: "Present" }).click();
   await expect(page.locator(".glsm-dark").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Exit" })).toBeVisible();
-  await expect(page.locator(".mapboxgl-marker, .maplibregl-marker")).toHaveCount(2);
+  await expect(page.locator(".maplibregl-marker")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Exit" }).click();
   dialog = page.getByRole("dialog");

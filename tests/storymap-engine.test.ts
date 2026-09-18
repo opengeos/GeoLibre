@@ -88,9 +88,12 @@ describe("applyStoryViewAndWait", () => {
 
   it("stops waiting when the export is aborted", async () => {
     const started = performance.now();
+    let applied = false;
     await applyStoryViewAndWait(
       engineWith(
-        () => {},
+        () => {
+          applied = true;
+        },
         () => ["tiles"],
       ),
       location,
@@ -98,5 +101,6 @@ describe("applyStoryViewAndWait", () => {
       500,
     );
     assert.ok(performance.now() - started < 400);
+    assert.equal(applied, false);
   });
 });

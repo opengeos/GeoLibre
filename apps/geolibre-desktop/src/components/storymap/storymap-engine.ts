@@ -62,6 +62,10 @@ export function applyStoryViewAndWait(
   timeoutMs = 5000,
 ): Promise<void> {
   return new Promise((resolve) => {
+    if (isAborted()) {
+      resolve();
+      return;
+    }
     let settled = false;
     let renderedFrame = false;
     let cameraMoved = false;
