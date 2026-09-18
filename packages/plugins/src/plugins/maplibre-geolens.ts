@@ -1659,7 +1659,7 @@ function buildPanel(
     typeof window !== "undefined" &&
     /^https?:$/.test(window.location?.protocol ?? "") &&
     !isTauriRuntime()
-      ? window.location.origin
+      ? normalizeBaseUrl(window.location.origin)
       : "";
   if (browserOrigin && !GEOLENS_SAMPLE_SERVERS.some((server) => server.baseUrl === browserOrigin)) {
     const option = el("option", "", labels.currentOrigin(browserOrigin));

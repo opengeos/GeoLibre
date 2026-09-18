@@ -54,8 +54,16 @@ describe("normalizeBaseUrl", () => {
   it("trims, defaults to https, and strips trailing slashes", () => {
     assert.equal(normalizeBaseUrl("  demo.getgeolens.com/  "), "https://demo.getgeolens.com");
     assert.equal(normalizeBaseUrl("http://localhost:8080///"), "http://localhost:8080");
+    assert.equal(normalizeBaseUrl("http://127.0.0.1:8080/"), "http://127.0.0.1:8080");
+    assert.equal(normalizeBaseUrl("http://[::1]:8080/"), "http://[::1]:8080");
     assert.equal(normalizeBaseUrl("https://x.example"), "https://x.example");
     assert.equal(normalizeBaseUrl(""), "");
+  });
+
+  it("rejects plaintext remote and non-HTTP URLs", () => {
+    assert.equal(normalizeBaseUrl("http://demo.getgeolens.com"), "");
+    assert.equal(normalizeBaseUrl("ftp://demo.getgeolens.com"), "");
+    assert.equal(normalizeBaseUrl("not a URL"), "");
   });
 });
 

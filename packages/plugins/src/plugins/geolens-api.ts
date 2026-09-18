@@ -175,15 +175,39 @@ export function createGeoLensHostFetch(
 
 /** Only http(s) URLs may ever reach the map or a token mint. */
 const HTTP_URL_RE = /^https?:\/\//i;
+const EXPLICIT_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  );
+}
 
 /**
  * Normalize a user-entered server URL: trim, default the scheme to https, and
- * drop a trailing slash so path joins never double up. Returns "" for blank.
+ * drop a trailing slash so path joins never double up. Remote servers must use
+ * HTTPS; HTTP is accepted only for loopback development. Returns "" for blank
+ * or unsafe/invalid URLs.
  */
 export function normalizeBaseUrl(raw: string): string {
   const trimmed = (raw ?? "").trim();
   if (!trimmed) return "";
-  const withScheme = HTTP_URL_RE.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withScheme = EXPLICIT_SCHEME_RE.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withScheme);
+    if (
+      parsed.protocol !== "https:" &&
+      !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname))
+    ) {
+      return "";
+    }
+  } catch {
+    return "";
+  }
   return withScheme.replace(/\/+$/, "");
 }
 
