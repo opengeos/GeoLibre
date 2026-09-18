@@ -258,7 +258,7 @@ describe("GEOLENS_SAMPLE_SERVERS", () => {
 });
 
 describe("GeoLens server preference", () => {
-  it("prefers a saved server, then deployment config, then current origin", () => {
+  it("prefers a saved server, then deployment config", () => {
     assert.equal(
       resolveGeoLensInitialServerUrl(
         "https://saved.example/",
@@ -272,9 +272,10 @@ describe("GeoLens server preference", () => {
       "https://configured.example",
     );
     assert.equal(
-      resolveGeoLensInitialServerUrl("", "", "https://maps.example/"),
+      resolveGeoLensInitialServerUrl("", "same-origin", "https://maps.example/"),
       "https://maps.example",
     );
+    assert.equal(resolveGeoLensInitialServerUrl("", "", "https://maps.example/"), "");
   });
 
   it("reads and normalizes the last successful server from local storage", () => {

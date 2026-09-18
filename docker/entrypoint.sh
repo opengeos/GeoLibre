@@ -353,7 +353,7 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     # ws://localhost:8080"; ... with hostname "localhost", which would match the
     # loopback allowlist while netloc still carried the rest.
     #
-    # Credentials: both values are echoed to stdout further down, so a credentialed
+    # Service URLs are echoed to stdout further down, so a credentialed
     # URL would also land in the container logs.
     if parsed.username or parsed.password:
         raise SystemExit(f"ERROR: {name} must not embed credentials.")
@@ -455,6 +455,8 @@ if geolens_url:
     deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
         "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
     )
+else:
+    deployment["VITE_GEOLENS_DEFAULT_URL"] = "same-origin"
 
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")

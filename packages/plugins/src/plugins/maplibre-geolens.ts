@@ -30,6 +30,7 @@ import {
 import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import { createLayerId } from "../layer-ids";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { isTauriRuntime } from "./earth-engine-auth";
 import { getStyleMap } from "./style-map";
 import {
   applyFeatureEdits,
@@ -332,20 +333,25 @@ function writeSavedGeoLensServerUrl(value: string): void {
   }
 }
 
+const CURRENT_ORIGIN_DEFAULT = "same-origin";
 let configuredDefaultServerUrl = "";
 
 /** Set the deployment's preferred GeoLens server before the panel mounts. */
 export function setGeoLensDefaultServerUrl(value: string | undefined): void {
-  configuredDefaultServerUrl = normalizeBaseUrl(value ?? "");
+  const trimmed = value?.trim() ?? "";
+  configuredDefaultServerUrl =
+    trimmed === CURRENT_ORIGIN_DEFAULT ? CURRENT_ORIGIN_DEFAULT : normalizeBaseUrl(trimmed);
 }
 
-/** Saved preference wins, then deployment config, then the browser's origin. */
+/** Saved preference wins, then deployment config (including `same-origin`). */
 export function resolveGeoLensInitialServerUrl(
   savedUrl: string,
   configuredUrl: string,
   currentOrigin: string,
 ): string {
-  return normalizeBaseUrl(savedUrl || configuredUrl || currentOrigin);
+  if (savedUrl) return normalizeBaseUrl(savedUrl);
+  if (configuredUrl === CURRENT_ORIGIN_DEFAULT) return normalizeBaseUrl(currentOrigin);
+  return normalizeBaseUrl(configuredUrl);
 }
 
 /** Panels currently mounted, so a language change can repaint them in place. */
@@ -1644,7 +1650,9 @@ function buildPanel(
   }
 
   const browserOrigin =
-    typeof window !== "undefined" && /^https?:$/.test(window.location?.protocol ?? "")
+    typeof window !== "undefined" &&
+    /^https?:$/.test(window.location?.protocol ?? "") &&
+    !isTauriRuntime()
       ? window.location.origin
       : "";
   if (browserOrigin && !GEOLENS_SAMPLE_SERVERS.some((server) => server.baseUrl === browserOrigin)) {
@@ -2217,8 +2225,9 @@ function buildPanel(
   });
 
   // A remembered or deployment-provided server should be ready as soon as the
-  // panel opens. The same-origin fallback gives co-located reverse-proxy
-  // deployments the same zero-click behavior without requiring configuration.
+  // panel opens. The Docker runtime explicitly supplies `same-origin`, giving
+  // co-located reverse-proxy deployments zero-click behavior while plain static
+  // builds stay idle until the user chooses a server.
   if (baseUrlInput.value) void connect();
 
   return () => {
