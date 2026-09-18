@@ -1328,10 +1328,8 @@ export function DesktopShell({
     // has already deactivated it and this only detaches the engine.
     reattachRouteAnimation(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
-      if (engine.kind === "arcgis") {
-        restoreRasterLayers(appAPI);
-        restoreArcgisZarrLayers();
-      }
+      if (engine.kind === "mapbox" || engine.kind === "arcgis") restoreRasterLayers(appAPI);
+      if (engine.kind === "arcgis") restoreArcgisZarrLayers();
       void restoreLocalFileLayers();
       return;
     }
