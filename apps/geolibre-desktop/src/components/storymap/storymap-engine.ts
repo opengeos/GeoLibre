@@ -36,7 +36,9 @@ export function createStoryMapMarker(engine: MapEngine, color: string): StoryMap
     try {
       const point = surface.project(coordinate);
       element.style.display = "";
-      element.style.transform = `translate(-50%, -100%) translate(${point.x}px, ${point.y}px)`;
+      // Match MapLibre's default pin: center anchor with its built-in -14 px
+      // vertical offset keeps the shadow ellipse's center on the coordinate.
+      element.style.transform = `translate(-50%, -50%) translate(${point.x}px, ${point.y - 14}px)`;
     } catch {
       // Cesium cannot project a coordinate on the far side of the globe. Keep
       // the marker hidden until the camera brings it back into view.
