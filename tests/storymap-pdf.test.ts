@@ -80,6 +80,7 @@ describe("htmlToPlainText", () => {
 
   it("strips tags with a '>' inside a quoted attribute value", () => {
     assert.equal(htmlToPlainText('<span title="a > b">text</span>'), "text");
+    assert.equal(htmlToPlainText('<span title="a < b">text</span>'), "text");
   });
 
   it("keeps malformed nested '<' text while stripping later complete tags", () => {
@@ -88,10 +89,17 @@ describe("htmlToPlainText", () => {
     assert.equal(htmlToPlainText("1 < 2"), "1 < 2");
   });
 
+  it("recovers after an unterminated attribute quote", () => {
+    assert.equal(
+      htmlToPlainText('<a href="https://example.com>Read more</a> <p>Second paragraph</p>'),
+      "Read more Second paragraph",
+    );
+  });
+
   it("stays linear on unterminated breaks and tags (#2466)", () => {
     // Both inputs took several seconds at 100 KB with the old regexes. A wide
     // bound still catches a quadratic regression without flaking under load.
-    const inputs = [`<br${" ".repeat(100_000)}`, "<".repeat(100_000)];
+    const inputs = [`<br${" ".repeat(100_000)}`, "<".repeat(100_000), '<"'.repeat(50_000)];
     for (const input of inputs) {
       const started = performance.now();
       htmlToPlainText(input);
