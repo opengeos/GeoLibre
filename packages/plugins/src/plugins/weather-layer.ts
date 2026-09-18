@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { Map as MapLibreMap, RasterTileSource } from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
+import { getStyleMap } from "./style-map";
 
 /**
  * Shared engine for the Weather overlays (Clouds, Precipitation).
@@ -126,7 +127,9 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
   /** Swap the live source to the current frame for an instant visual update. */
   const applyFrameToMap = (): void => {
     if (layerId === null || frames.length === 0) return;
-    const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+    // mapbox-gl's raster source has the same `setTiles`, so the instant frame
+    // swap works on either 2D engine; the globe relies on the store write alone.
+    const map = getStyleMap(appRef) as MapLibreMap | null;
     const source = map?.getSource(rasterSourceId(layerId)) as RasterTileSource | undefined;
     source?.setTiles([frames[index].tileUrl]);
   };
@@ -268,7 +271,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
 
       // Watch for this source's tile failures so a rate-limited animation can
       // stop itself instead of spiralling (see handleMapError).
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      const map = getStyleMap(appRef) as MapLibreMap | null;
       if (map) {
         mapErrorHandler = handleMapError;
         map.on("error", mapErrorHandler);
@@ -289,7 +292,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
         frameTimer = null;
       }
       playing = false;
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      const map = getStyleMap(appRef) as MapLibreMap | null;
       if (map && mapErrorHandler) map.off("error", mapErrorHandler);
       mapErrorHandler = null;
       errorTimestamps = [];

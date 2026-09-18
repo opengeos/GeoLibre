@@ -4,7 +4,9 @@
 
 export type AddDataKind =
   | "xyz"
+  | "wcs"
   | "wms"
+  | "csw"
   | "wfs"
   | "wmts"
   | "ogc-features"
@@ -15,11 +17,19 @@ export type AddDataKind =
   | "cad"
   | "gdb"
   | "photos"
+  | "raster"
+  | "zarr"
+  | "pmtiles"
   | "mbtiles"
+  | "polyline"
   | "arcgis"
   | "postgres"
+  | "iceberg"
   | "deckgl-viz"
-  | "video";
+  | "video"
+  | "cesium-ion"
+  | "czml"
+  | "kml";
 
 /** A data source loadable either from a remote URL or a local file. */
 export type FeedMode = "url" | "file";

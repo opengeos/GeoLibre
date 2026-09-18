@@ -1,13 +1,26 @@
 import {
   applyGroupEffects,
+  availableCesiumBasemap,
+  basemapToCesiumImagery,
+  sameCesiumImagery,
   useAppStore,
+  type CesiumBasemapImagery,
   type GeoLibreLayer,
   type MapViewState,
 } from "@geolibre/core";
-import type { Viewer } from "cesium";
+import type { CesiumWidget, ImageryLayer } from "@cesium/engine";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { applyMapViewToCamera, isSameView, readMapViewFromCamera } from "./cesium-camera";
-import { CesiumLayerSync } from "./cesium-layer-sync";
+import { applyBasemapAppearance, applyBasemapImagery, getStadiaApiKey } from "./cesium-basemap";
+import { isSameView } from "./cesium-camera";
+import { installCesiumInteractions } from "./cesium-interactions";
+import { CesiumEngine } from "./cesium-engine";
+import type { BuiltInMapControl, MapEngine } from "./map-engine";
+import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
+import type {
+  CesiumWidgetControlHandle,
+  CesiumWidgetControls,
+  CesiumWidgetControlLabels,
+} from "./cesium-widget-controls";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
 // build, token, and split-pane mount; M2 synced the camera with the shared store
@@ -28,16 +41,77 @@ const APP_BASE_URL =
 const CESIUM_BASE_URL = `${APP_BASE_URL}cesium`;
 /** id for the one-time <link> to Cesium's widget stylesheet (served from base). */
 const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
+/**
+ * The Cesium stylesheets this pane actually needs, in cascade order.
+ *
+ * Not the full `Widgets/widgets.css` (32 KB), which also carries the chrome for
+ * the geocoder, timeline, animation dial and info box — none
+ * of which this pane creates. All of them are staged by copy-cesium-assets, so
+ * narrowing the links costs nothing and keeps unused rules out of the document.
+ *
+ * - `CesiumWidget.css` — canvas sizing, the credit container, the render-error
+ *   panel. Always needed.
+ * - `shared.css` — the `.cesium-button` / `.cesium-toolbar-button` base both
+ *   toolbar widgets are built from. The home button has no stylesheet of its
+ *   own; this is all it needs.
+ * - `SceneModePicker.css` — the expanding drop-down that widget adds on top.
+ * - `FullscreenButton.css` — the fullscreen button's own sizing.
+ *
+ * The widget sheets are only meaningful on the primary globe, the one pane that
+ * hosts controls, but are linked unconditionally: the links are document-level
+ * and a pane can become the primary map without a reload.
+ */
+const CESIUM_CSS_PATHS = [
+  "/Widgets/CesiumWidget/CesiumWidget.css",
+  "/Widgets/shared.css",
+  "/Widgets/SceneModePicker/SceneModePicker.css",
+  "/Widgets/FullscreenButton/FullscreenButton.css",
+  "/Widgets/BaseLayerPicker/BaseLayerPicker.css",
+] as const;
 
 export interface CesiumCanvasProps {
-  /** Id of the `secondaryMapViews` entry this pane renders (label/telemetry). */
-  viewId: string;
   /**
-   * Cesium Ion access token. When present the globe uses Ion world imagery +
-   * terrain; when empty it falls back to keyless OpenStreetMap imagery on the
-   * plain ellipsoid. The app injects this from the CESIUM_TOKEN env var.
+   * Id of the `secondaryMapViews` entry this pane renders (label/telemetry).
+   *
+   * Omit it to render the **primary** map area (issue #2217). A primary globe
+   * has no `secondaryMapViews` record behind it, so it reads and writes the
+   * shared `mapView` directly, is never subject to the `syncView` toggle, and
+   * shows every layer without per-pane visibility overrides.
+   */
+  viewId?: string;
+  /**
+   * Cesium Ion access token. It buys two things: world terrain (so tilted views
+   * show relief) and Ion World Imagery as the fallback base layer for a basemap
+   * with no raster form. Everything else — the globe itself, the store basemap,
+   * and every data layer — works without one. The app injects this from the
+   * CESIUM_TOKEN env var.
    */
   ionToken?: string;
+  /**
+   * Ref the globe publishes its {@link CesiumEngine} into, so the app can drive
+   * it the way it drives `MapController` through `MapCanvas`'s `controllerRef`
+   * (issue #2260). Set once the engine exists and nulled on unmount.
+   *
+   * Only meaningful for the primary globe: a grid pane's engine is not the one
+   * menus and panels act on, and publishing it would let the last pane to mount
+   * win the shared ref.
+   */
+  engineRef?: React.RefObject<MapEngine | null>;
+  /** Called once the engine is live and the ref is set. */
+  onEngineReady?: () => void;
+  /**
+   * Translated tooltips for the Cesium toolbar controls (home, scene mode).
+   *
+   * The controls are Cesium widgets rendered outside React, so their labels are
+   * pushed in the way `MapController`'s compass and terrain labels are, rather
+   * than read from a hook here — `@geolibre/map` has no i18n of its own. Omit
+   * them and the widgets keep their English defaults.
+   *
+   * Only the primary globe hosts controls, so this is ignored on a grid pane.
+   */
+  controlLabels?: CesiumWidgetControlLabels;
+  /** Translated accessible label for the Identify popup close button. */
+  popupCloseLabel?: string;
 }
 
 /**
@@ -49,36 +123,55 @@ export interface CesiumCanvasProps {
 function prepareCesiumEnvironment(): void {
   const globalWindow = window as typeof window & { CESIUM_BASE_URL?: string };
   globalWindow.CESIUM_BASE_URL ??= CESIUM_BASE_URL;
-  if (!document.getElementById(CESIUM_CSS_LINK_ID)) {
+  CESIUM_CSS_PATHS.forEach((path, index) => {
+    const id = `${CESIUM_CSS_LINK_ID}-${index}`;
+    if (document.getElementById(id)) return;
     const link = document.createElement("link");
-    link.id = CESIUM_CSS_LINK_ID;
+    link.id = id;
     link.rel = "stylesheet";
-    link.href = `${CESIUM_BASE_URL}/Widgets/widgets.css`;
+    link.href = `${CESIUM_BASE_URL}${path}`;
     document.head.appendChild(link);
-  }
+  });
 }
 
 /**
- * A 3D-globe map pane rendered with CesiumJS, mounted alongside the MapLibre
- * panes in the multi-map grid. Mirrors {@link SecondaryMapCanvas}'s conventions:
- * the viewer is created exactly once in a dependency-free effect, torn down on
- * unmount, and its camera is kept in step with the shared store camera.
+ * A 3D globe rendered with CesiumJS. Mirrors {@link SecondaryMapCanvas}'s
+ * conventions: the viewer is created exactly once in a dependency-free effect,
+ * torn down on unmount, and its camera is kept in step with the shared store
+ * camera.
+ *
+ * It serves two roles, told apart by whether `viewId` is given:
+ *
+ * - **A pane** in the multi-map grid, beside the MapLibre panes, backed by a
+ *   `secondaryMapViews` record with its own camera and layer-visibility
+ *   overrides.
+ * - **The primary map area** (issue #2217), when the project's
+ *   `primaryRenderer` is `"cesium"`. There is no pane record then: the globe
+ *   reads and writes the shared `mapView`, ignores the `syncView` toggle (which
+ *   exists to make panes follow the primary camera), and draws every layer with
+ *   no per-pane overrides.
  */
-export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: CesiumCanvasProps) {
+export const CesiumCanvas = memo(function CesiumCanvas({
+  viewId,
+  ionToken,
+  engineRef,
+  onEngineReady,
+  controlLabels,
+  popupCloseLabel,
+}: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<Viewer | null>(null);
-  const cesiumRef = useRef<typeof import("cesium") | null>(null);
-  const layerSyncRef = useRef<CesiumLayerSync | null>(null);
-  // The last view we pushed into the camera. Applying a view fires Cesium's
-  // moveEnd with a (rounding-drifted) echo of that same view; comparing against
-  // this lets the moveEnd handler tell a real user move from that echo.
-  const lastAppliedRef = useRef<MapViewState | null>(null);
-  // Set by real pointer/wheel/touch input on the globe canvas and consumed by
-  // the moveEnd handler. Cesium's camera.moveEnd carries no user-driven flag
-  // (unlike MapLibre's moveend.originalEvent), so this stands in for it: an
-  // autonomous camera settle (terrain streaming in, a container resize) leaves
-  // it false and must not mark the project dirty.
-  const userMovedRef = useRef(false);
+  const viewerRef = useRef<CesiumWidget | null>(null);
+  const cesiumRef = useRef<typeof import("@cesium/engine") | null>(null);
+  const engineInstanceRef = useRef<CesiumEngine | null>(null);
+  const interactionCleanup = useRef<(() => void) | null>(null);
+  const controlHostRef = useRef<CesiumControlHost | null>(null);
+  // The Cesium toolbar widgets mounted on the primary globe, kept so the label
+  // effect can retranslate them and the unmount can remove them.
+  const widgetControlsRef = useRef<CesiumWidgetControls | null>(null);
+  // The imagery layers currently drawing the project basemap, at the bottom of
+  // the stack. Tracked so a basemap change replaces exactly these and leaves
+  // the data layers above them alone.
+  const baseImageryLayersRef = useRef<ImageryLayer[]>([]);
   // Flips true once the viewer exists so the store-driven apply effects re-run
   // and drive the freshly created camera.
   const [ready, setReady] = useState(false);
@@ -90,19 +183,39 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   viewIdRef.current = viewId;
   const ionTokenRef = useRef(ionToken);
   ionTokenRef.current = ionToken;
+  const engineRefProp = useRef(engineRef);
+  engineRefProp.current = engineRef;
+  const onEngineReadyRef = useRef(onEngineReady);
+  onEngineReadyRef.current = onEngineReady;
+  const popupCloseLabelRef = useRef(popupCloseLabel);
+  popupCloseLabelRef.current = popupCloseLabel;
+  const controlLabelsRef = useRef(controlLabels);
+  controlLabelsRef.current = controlLabels;
+
+  // No pane id means this globe *is* the primary map area, not a pane beside it.
+  const isPrimary = viewId === undefined;
+  const isPrimaryRef = useRef(isPrimary);
+  isPrimaryRef.current = isPrimary;
 
   // Camera sync inputs, mirrored from SecondaryMapCanvas: the shared global
   // camera when sync is on, otherwise this pane's own saved camera.
-  const syncView = useAppStore((s) => s.mapLayout.syncView);
+  const paneSyncView = useAppStore((s) => s.mapLayout.syncView);
   const globalView = useAppStore((s) => s.mapView);
-  const entryView = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.view);
+  const entryView = useAppStore((s) =>
+    viewId === undefined ? undefined : s.secondaryMapViews.find((p) => p.id === viewId)?.view,
+  );
+  // The primary globe *is* the shared camera, so it always follows `mapView`;
+  // `syncView` only governs whether the secondary panes track it.
+  const syncView = isPrimary || paneSyncView;
 
   // Layer sync inputs, mirrored from SecondaryMapCanvas: the shared layers with
   // this pane's per-layer visibility overrides, then group effects folded in.
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
-  const layerVisibility = useAppStore(
-    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
+  const layerVisibility = useAppStore((s) =>
+    viewId === undefined
+      ? undefined
+      : s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
   );
   const paneLayers = useMemo<GeoLibreLayer[]>(() => {
     const withOverrides = !layerVisibility
@@ -120,13 +233,89 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   const paneLayersRef = useRef(paneLayers);
   paneLayersRef.current = paneLayers;
 
-  // Push a store view into the camera and remember it as the expected echo.
-  function applyView(view: MapViewState): void {
+  // The project basemap, translated into imagery the globe can draw. Every pane
+  // shares the primary map's basemap, so this is read straight from the store
+  // the way `layers` is.
+  const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  const cesiumBasemap = useAppStore((s) => s.preferences.map.cesiumBasemap);
+  const terrainEnabled = useAppStore((s) => s.preferences.map.terrainEnabled);
+  const basemapImagery = useMemo(
+    () =>
+      basemapToCesiumImagery(
+        basemapStyleUrl,
+        availableCesiumBasemap(cesiumBasemap, Boolean(ionToken?.trim())),
+      ),
+    [basemapStyleUrl, cesiumBasemap, ionToken],
+  );
+  // Read from the mount effect's initial draw without making that
+  // dependency-free effect re-run, mirroring paneLayersRef above.
+  const basemapImageryRef = useRef(basemapImagery);
+  basemapImageryRef.current = basemapImagery;
+  // The descriptor currently drawn. `ready` flips right after the mount effect's
+  // own draw, so the [ready, basemapImagery] effect below would otherwise redraw
+  // the same basemap immediately — rebuilding the providers, restarting the
+  // first tile requests, and flashing a hybrid basemap as its overlay is torn
+  // down and re-added.
+  const appliedImageryRef = useRef<CesiumBasemapImagery | null>(null);
+
+  // The basemap's visibility and opacity (the layer panel's Background row).
+  // Read through refs as well so the dependency-free mount effect can apply the
+  // current values without re-running.
+  const basemapVisible = useAppStore((s) => s.basemapVisible);
+  const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const basemapVisibleRef = useRef(basemapVisible);
+  basemapVisibleRef.current = basemapVisible;
+  const basemapOpacityRef = useRef(basemapOpacity);
+  basemapOpacityRef.current = basemapOpacity;
+
+  /** Push the store's basemap visibility/opacity onto the drawn layers. */
+  function applyBasemapLook(): void {
+    applyBasemapAppearance(
+      baseImageryLayersRef.current,
+      basemapVisibleRef.current,
+      basemapOpacityRef.current,
+    );
+  }
+
+  // Replace the globe's base imagery with the current basemap.
+  function applyBasemap(): void {
     const Cesium = cesiumRef.current;
     const viewer = viewerRef.current;
     if (!Cesium || !viewer || viewer.isDestroyed()) return;
-    lastAppliedRef.current = view;
-    applyMapViewToCamera(Cesium, viewer, view);
+    const imagery = basemapImageryRef.current;
+    // By value, not by reference: two basemaps can resolve to the same imagery
+    // (OpenFreeMap liberty and bright share the streets analogue) through
+    // separate descriptor objects, and rebuilding an identical provider costs a
+    // flash and a round of re-requested tiles for no visible change.
+    if (appliedImageryRef.current && sameCesiumImagery(appliedImageryRef.current, imagery)) return;
+    appliedImageryRef.current = imagery;
+    baseImageryLayersRef.current = applyBasemapImagery(
+      Cesium,
+      viewer,
+      baseImageryLayersRef.current,
+      imagery,
+      ionTokenRef.current?.trim() || undefined,
+    );
+    // Fresh layers start shown and fully opaque, so carry the store's
+    // visibility/opacity straight onto them.
+    applyBasemapLook();
+  }
+
+  // Push a store view into the camera. The engine remembers it as the expected
+  // echo and re-applies it if terrain settles at a different height.
+  function applyView(view: MapViewState): void {
+    engineInstanceRef.current?.applyView(view);
+  }
+
+  /**
+   * Whether `view` is the one the globe itself last published, arriving back
+   * here through the store. Re-applying it would `lookAt` the camera again —
+   * repositioning it to the last settled view and undoing whatever the user has
+   * scrolled since.
+   */
+  function isEchoOfOurOwnCamera(view: MapViewState): boolean {
+    const applied = engineInstanceRef.current?.getLastAppliedView();
+    return Boolean(applied && isSameView(view, applied));
   }
 
   // Create the viewer exactly once. The deps are intentionally empty; everything
@@ -135,13 +324,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
     if (!containerRef.current || viewerRef.current) return;
     const container = containerRef.current;
     let cancelled = false;
-    let cleanupInput: (() => void) | undefined;
 
     prepareCesiumEnvironment();
 
     void (async () => {
       try {
-        const Cesium = await import("cesium");
+        const Cesium = await import("@cesium/engine");
         // The effect may have been cleaned up (StrictMode double-mount, fast
         // unmount) while the chunk loaded; bail before creating a viewer whose
         // container is gone.
@@ -150,37 +338,25 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         const token = ionTokenRef.current?.trim();
         if (token) Cesium.Ion.defaultAccessToken = token;
 
-        const viewer = new Cesium.Viewer(container, {
-          // A focused globe: no base-layer picker, geocoder, timeline, or
-          // animation widget — this pane is a viewport, not a full Cesium app.
-          baseLayerPicker: false,
-          geocoder: false,
-          homeButton: false,
-          sceneModePicker: false,
-          navigationHelpButton: false,
-          timeline: false,
-          animation: false,
-          fullscreenButton: false,
-          // No default click popup / selection outline: clicking a GeoJSON
-          // feature must not pop Cesium's unstyled InfoBox (it isn't wired to
-          // GeoLibre's identify UI and would overflow a small grid pane).
-          infoBox: false,
-          selectionIndicator: false,
-          // Without an Ion token, fall back to keyless OpenStreetMap imagery so
-          // the globe still renders (Ion's default imagery requires a token).
-          // MapGrid only mounts this pane once a token is set, but CesiumCanvas
-          // is a public @geolibre/map export with an optional `ionToken`, so the
-          // no-token path stays supported for that direct use.
-          baseLayer: token
-            ? undefined
-            : Cesium.ImageryLayer.fromProviderAsync(
-                Promise.resolve(
-                  new Cesium.OpenStreetMapImageryProvider({
-                    url: "https://tile.openstreetmap.org/",
-                  }),
-                ),
-                {},
-              ),
+        // CesiumWidget, not Viewer: this pane is a viewport, not a full Cesium
+        // app. `Viewer` is a wrapper that builds the base-layer picker,
+        // geocoder, home button, scene-mode picker, help button, timeline,
+        // animation dial, fullscreen button, info box and selection indicator —
+        // all of which this pane then had to switch off one by one — on top of
+        // the widget. Constructing the widget directly skips building them, and
+        // it already exposes everything the pane uses: `scene`, `camera`,
+        // `canvas`, `imageryLayers`, `dataSources`, `terrainProvider` and
+        // `screenSpaceEventHandler`.
+        const viewer = new Cesium.CesiumWidget(container, {
+          // No base imagery from Cesium: the project basemap supplies it, drawn
+          // by applyBasemap() below and re-drawn whenever the basemap changes.
+          // Letting Cesium add its own default here would both ignore the user's
+          // choice and fail without an Ion token (Ion's default imagery needs
+          // one), which is what used to keep the globe off the keyless path.
+          baseLayer: false,
+          contextOptions: { webgl: { preserveDrawingBuffer: true } },
+          // Match the project map in flat modes, including its vertical extent.
+          mapProjection: new Cesium.WebMercatorProjection(),
         });
         if (cancelled) {
           viewer.destroy();
@@ -188,49 +364,37 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         }
         cesiumRef.current = Cesium;
         viewerRef.current = viewer;
-        layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
 
-        // Drop Cesium's default double-click "track entity" gesture: it flies to
-        // and camera-locks a picked feature, which fights the store-driven camera
-        // sync and isn't wired to GeoLibre. Removing it also means every camera
-        // move now comes through the pointer/wheel/touch input the moveEnd
-        // handler watches, so a real move is never mistaken for an autonomous one.
-        viewer.screenSpaceEventHandler.removeInputAction(
-          Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
-        );
+        // Match the pale globe and dark space used by the MapLibre view while
+        // retaining Cesium's native stars and atmospheric glow.
+        viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#cae2f8");
+        viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0c1b33");
 
-        // Flag genuine camera-moving input on the globe so the moveEnd handler
-        // can tell a real move from an autonomous settle. Only motion events
-        // count: Cesium's moveEnd fires solely on actual camera movement, so a
-        // plain click/tap (pointerdown/touchstart) that doesn't move the camera
-        // must NOT arm the flag — otherwise a later autonomous settle (terrain,
-        // resize) would consume that stale flag and dirty the project. A hover
-        // isn't a move either, so pointermove only counts while a button is down.
-        const markUserMove = () => {
-          userMovedRef.current = true;
-        };
-        const markUserDrag = (event: PointerEvent) => {
-          if (event.buttons !== 0) userMovedRef.current = true;
-        };
-        const canvas = viewer.canvas;
-        const opts: AddEventListenerOptions = { passive: true };
-        canvas.addEventListener("pointermove", markUserDrag, opts);
-        canvas.addEventListener("wheel", markUserMove, opts);
-        canvas.addEventListener("touchmove", markUserMove, opts);
-        cleanupInput = () => {
-          canvas.removeEventListener("pointermove", markUserDrag, opts);
-          canvas.removeEventListener("wheel", markUserMove, opts);
-          canvas.removeEventListener("touchmove", markUserMove, opts);
-        };
+        // Note for anyone reintroducing `Viewer`: it installs a double-click
+        // "track entity" gesture that flies to and camera-locks a picked
+        // feature, which fights the store-driven camera sync and isn't wired to
+        // GeoLibre — the pane used to remove that input action explicitly.
+        // CesiumWidget never installs it, so every camera move now reaches the
+        // engine's moveEnd handler through the pointer/wheel/touch input it
+        // flags, and a real move can't be mistaken for an autonomous one.
 
-        // With a token, add Cesium World Terrain so tilted views show relief.
-        if (token) {
-          try {
-            viewer.terrainProvider = await Cesium.createWorldTerrainAsync();
-          } catch {
-            // Terrain is best-effort; the globe still renders without it.
-          }
-        }
+        // The engine owns everything from here: the camera state machine (echo
+        // suppression, user-driven tracking, the terrain correction), input
+        // tracking, publishing moves back to the store, and layer sync. It is
+        // constructed before the terrain await below so its listeners are armed
+        // for the whole mount, exactly as the hand-rolled versions were.
+        const engine = new CesiumEngine(Cesium, viewer, {
+          viewId: viewIdRef.current,
+          worldTerrainAvailable: Boolean(token),
+        });
+        engineInstanceRef.current = engine;
+
+        // Restore terrain, using keyless Terrarium when Ion is unavailable.
+        // Awaited before the camera is seeded: ground height is what turns
+        // MapLibre's zoom into a camera distance, so seeding first would place
+        // the first frame against the ellipsoid.
+        if (useAppStore.getState().preferences.map.terrainEnabled)
+          await engine.enableWorldTerrain();
         // The unmount cleanup may have run during the terrain await (destroying
         // the viewer); re-check before touching it, mirroring the guard after the
         // dynamic import above and CesiumLayerSync's post-await checks. Otherwise
@@ -238,42 +402,86 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
         // moveEnd listener that cleanupInput never removes.
         if (cancelled || viewer.isDestroyed()) return;
 
+        if (viewId === undefined) {
+          const host = new CesiumControlHost(viewer, container, Cesium);
+          controlHostRef.current = host;
+          setPrimaryCesiumControlHost(host);
+          // Cesium's native toolbar widgets. Imported
+          // here rather than at module scope so `@cesium/widgets` stays in the
+          // lazily fetched `cesium` chunk instead of joining the 2D boot path.
+          const { createCesiumWidgetControls } = await import("./cesium-widget-controls");
+          if (!cancelled && !viewer.isDestroyed()) {
+            // Fullscreen expands the globe's own container, matching what
+            // MapLibre's fullscreen control does with the 2D map's — the app
+            // chrome around it goes away, the map fills the screen, and the
+            // control host inside it comes along so the buttons stay reachable.
+            const controls = createCesiumWidgetControls(
+              viewer,
+              container,
+              controlLabelsRef.current,
+              Boolean(token),
+            );
+            widgetControlsRef.current = controls;
+            // Home, the scene-mode picker and fullscreen mount through the
+            // engine under a built-in control id, so the Controls menu governs
+            // them and a remount restores the visibility and corner each was
+            // last given (a hidden control is not mounted at all). Home sits
+            // under "compass": the 2D map's compass is itself a
+            // reset-pitch-and-bearing button, and unlike "navigation" it is
+            // visible by default, so the Controls menu checkbox matches the
+            // button the globe mounts here. The base-layer picker has no 2D
+            // counterpart and mounts directly. Iterating `all` keeps the
+            // stacking order either way; top-right by default, above
+            // MapLibre's navigation control on the 2D map, so the toolbar
+            // reads the same whichever renderer is drawing.
+            const builtInIds = new Map<CesiumWidgetControlHandle, BuiltInMapControl>([
+              [controls.home, "compass"],
+              [controls.sceneMode, "globe"],
+              [controls.fullscreen, "fullscreen"],
+            ]);
+            for (const control of controls.all) {
+              const id = builtInIds.get(control);
+              if (id) engine.registerBuiltInControl(id, control);
+              else host.addControl(control, "top-right");
+            }
+          }
+        }
+
+        // Widget imports can finish after unmount has already destroyed this viewer.
+        if (cancelled || viewer.isDestroyed()) return;
+
         // Seed the camera from the shared store camera before the first frame.
+        // The primary globe always seeds from `mapView`, which is what carries
+        // the camera across a renderer switch: MapLibre wrote the view the user
+        // was looking at, and the globe picks up exactly that.
         const state = useAppStore.getState();
-        const pane = state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
-        applyView(state.mapLayout.syncView ? state.mapView : (pane?.view ?? state.mapView));
+        const pane = isPrimaryRef.current
+          ? undefined
+          : state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
+        applyView(
+          isPrimaryRef.current || state.mapLayout.syncView
+            ? state.mapView
+            : (pane?.view ?? state.mapView),
+        );
 
-        // Render the store layers on the globe before the first frame.
-        layerSyncRef.current?.sync(paneLayersRef.current);
+        // Draw the project basemap, then the store layers above it, before the
+        // first frame. Basemap first so it lands at the bottom of an empty
+        // imagery stack rather than having to be lowered past the data layers.
+        applyBasemap();
+        engine.syncLayers(paneLayersRef.current);
+        if (isPrimaryRef.current)
+          interactionCleanup.current = installCesiumInteractions(
+            Cesium,
+            viewer,
+            engine,
+            () => popupCloseLabelRef.current ?? "Close",
+          );
 
-        // Mirror a user's globe navigation back into the shared camera. Echoes
-        // of our own applyView are filtered by the isSameView guard.
-        viewer.camera.moveEnd.addEventListener(() => {
-          if (!cesiumRef.current || viewer.isDestroyed()) return;
-          const view = readMapViewFromCamera(cesiumRef.current, viewer);
-          if (lastAppliedRef.current && isSameView(view, lastAppliedRef.current)) {
-            return;
-          }
-          lastAppliedRef.current = view;
-          // Only the moves that follow real user input dirty the project; an
-          // autonomous settle still syncs the camera (markDirty=false) so the
-          // panes stay in step without flipping isDirty on a freshly opened
-          // project. Mirrors SecondaryMapCanvas's `userDriven` semantics.
-          const userDriven = userMovedRef.current;
-          userMovedRef.current = false;
-          const live = useAppStore.getState();
-          // Write only when the view actually differs from the stored camera:
-          // `setMapView` has no same-camera guard in the store, and
-          // `setSecondaryMapView`'s guard uses exact equality (which Cesium's
-          // lossy readback never hits), so both are gated here with isSameView.
-          if (live.mapLayout.syncView && !isSameView(view, live.mapView)) {
-            live.setMapView(view, userDriven);
-          }
-          const paneView = live.secondaryMapViews.find((p) => p.id === viewIdRef.current)?.view;
-          if (!paneView || !isSameView(view, paneView)) {
-            live.setSecondaryMapView(viewIdRef.current, view, userDriven);
-          }
-        });
+        // Publish the engine only for the primary globe — see `engineRef`.
+        if (isPrimaryRef.current && engineRefProp.current) {
+          engineRefProp.current.current = engine;
+          onEngineReadyRef.current?.();
+        }
 
         if (!cancelled) setReady(true);
       } catch (err) {
@@ -284,9 +492,33 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
 
     return () => {
       cancelled = true;
-      cleanupInput?.();
-      layerSyncRef.current?.destroy();
-      layerSyncRef.current = null;
+      // Drops the engine's listeners and its layer sync; the viewer itself is
+      // destroyed below.
+      interactionCleanup.current?.();
+      interactionCleanup.current = null;
+      engineInstanceRef.current?.destroy();
+      // Clear the published ref before the engine is torn down, so nothing can
+      // reach a destroyed engine through it. Only ours is cleared: a pane never
+      // published one.
+      if (isPrimaryRef.current && engineRefProp.current?.current === engineInstanceRef.current) {
+        engineRefProp.current.current = null;
+      }
+      engineInstanceRef.current = null;
+      // The viewer's destroy() below tears the imagery down with it; just drop
+      // the handles so a remount starts from an empty stack and redraws.
+      baseImageryLayersRef.current = [];
+      appliedImageryRef.current = null;
+      if (viewId === undefined) {
+        // The host's own destroy() removes every control it holds, these
+        // included; dropping the handles here is what stops the label effect
+        // from writing to a destroyed widget's view model afterwards.
+        widgetControlsRef.current = null;
+        if (controlHostRef.current) {
+          controlHostRef.current.destroy();
+          controlHostRef.current = null;
+        }
+        setPrimaryCesiumControlHost(null);
+      }
       const viewer = viewerRef.current;
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
       viewerRef.current = null;
@@ -295,12 +527,65 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-draw the base imagery when the project basemap changes. `ready` re-runs
+  // this once the viewer exists; applyBasemap's own guard makes that first run a
+  // no-op, since the mount effect already drew this descriptor.
+  useEffect(() => {
+    if (!ready) return;
+    applyBasemap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, basemapImagery]);
+
+  // Stadia can authenticate through a registered domain or a runtime API key.
+  // Rebuild only its active provider when that key changes in Settings.
+  useEffect(() => {
+    if (!ready) return;
+    let key = getStadiaApiKey();
+    const refresh = () => {
+      const next = getStadiaApiKey();
+      if (next === key) return;
+      key = next;
+      const imagery = basemapImageryRef.current;
+      if (imagery.kind !== "xyz" || imagery.apiKeyProvider !== "stadia") return;
+      appliedImageryRef.current = null;
+      applyBasemap();
+    };
+    window.addEventListener("geolibre:runtime-env-change", refresh);
+    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  // Terrain selection uses the same saved preference as Controls → Terrain,
+  // including globe panes that do not host a toolbar.
+  useEffect(() => {
+    const engine = engineInstanceRef.current;
+    if (!ready || !engine) return;
+    const enabled = terrainEnabled;
+    if (engine.isTerrainEnabled() !== enabled) engine.setTerrainEnabled(enabled);
+  }, [ready, terrainEnabled, ionToken]);
+
+  // Hiding or fading the background is a live appearance change, so it re-styles
+  // the existing layers rather than rebuilding them.
+  useEffect(() => {
+    if (!ready) return;
+    applyBasemapLook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, basemapVisible, basemapOpacity]);
+
+  // Retranslate the Cesium toolbar tooltips when the UI language changes. The
+  // widgets expose them as observables, so this updates the live DOM without
+  // rebuilding the controls or touching the camera.
+  useEffect(() => {
+    if (!ready || !controlLabels) return;
+    for (const control of widgetControlsRef.current?.all ?? []) control.setLabels(controlLabels);
+  }, [ready, controlLabels]);
+
   // Reconcile the store layers (with this pane's overrides) onto the globe
   // whenever they change. `ready` re-runs this once the viewer exists; the
   // mount effect's initial sync already covers the value captured at ready time.
   useEffect(() => {
     if (!ready) return;
-    layerSyncRef.current?.sync(paneLayers);
+    engineInstanceRef.current?.syncLayers(paneLayers);
   }, [ready, paneLayers]);
 
   // Synced: follow the shared global camera. Depend on primitives so an
@@ -308,6 +593,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // viewer exists (the initial seed above already covers the mount value).
   useEffect(() => {
     if (!ready || !syncView) return;
+    // The view this canvas just published arrives straight back here through the
+    // store. Re-applying it would `lookAt` the camera again — repositioning it
+    // to the last settled view and undoing whatever the user has scrolled since.
+    // Only a camera that genuinely differs is worth applying.
+    if (isEchoOfOurOwnCamera(globalView)) return;
     applyView(globalView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -323,6 +613,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   // Not synced: follow this pane's own saved camera.
   useEffect(() => {
     if (!ready || syncView || !entryView) return;
+    // Same echo guard as the synced effect above.
+    if (isEchoOfOurOwnCamera(entryView)) return;
     applyView(entryView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -336,7 +628,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: Ces
   ]);
 
   return (
-    <div className="relative h-full w-full" data-testid="cesium-canvas" data-view-id={viewId}>
+    <div
+      className="relative h-full w-full"
+      data-testid="cesium-canvas"
+      data-view-id={viewId}
+      data-primary={isPrimary ? "true" : undefined}
+    >
       <div ref={containerRef} className="h-full w-full" />
       {error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-destructive">

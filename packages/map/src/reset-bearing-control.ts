@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * Bearing/pitch below this magnitude is treated as "north-up and flat", so a

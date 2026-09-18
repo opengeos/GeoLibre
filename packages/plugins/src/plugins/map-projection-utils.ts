@@ -1,17 +1,23 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapboxMap } from "mapbox-gl";
+type ProjectionMap = MapLibreMap | MapboxMap;
 
-const pendingMercatorIdleGuards = new WeakSet<MapLibreMap>();
+const pendingMercatorIdleGuards = new WeakSet<ProjectionMap>();
 
-export function ensureMercatorProjection(map: MapLibreMap | null | undefined): void {
+export function ensureMercatorProjection(map: ProjectionMap | null | undefined): void {
   if (!map) return;
   setMercatorProjection(map);
   scheduleMercatorIdleGuard(map);
 }
 
-function setMercatorProjection(map: MapLibreMap): void {
+function setMercatorProjection(map: ProjectionMap): void {
   try {
-    if (map.getProjection()?.type === "mercator") return;
-    map.setProjection({ type: "mercator" });
+    const projection = map.getProjection();
+    if (projection && "name" in projection) {
+      if (projection.name !== "mercator") (map as MapboxMap).setProjection({ name: "mercator" });
+    } else {
+      if (projection?.type !== "mercator") (map as MapLibreMap).setProjection({ type: "mercator" });
+    }
   } catch {
     // MapLibre can reject projection changes while the style is still settling.
   }
@@ -21,10 +27,10 @@ function setMercatorProjection(map: MapLibreMap): void {
 // style is settling, getProjection() can report a value the settled style
 // will overwrite (and setMercatorProjection swallows rejections in that
 // window), so the cheap re-check on idle covers both cases.
-function scheduleMercatorIdleGuard(map: MapLibreMap): void {
+function scheduleMercatorIdleGuard(map: ProjectionMap): void {
   if (pendingMercatorIdleGuards.has(map)) return;
   pendingMercatorIdleGuards.add(map);
-  map.once("idle", () => {
+  (map as { once: (event: "idle", listener: () => void) => unknown }).once("idle", () => {
     pendingMercatorIdleGuards.delete(map);
     setMercatorProjection(map);
   });
@@ -32,9 +38,11 @@ function scheduleMercatorIdleGuard(map: MapLibreMap): void {
 
 /** Minimal app surface the shared mercator lock needs. */
 interface MercatorProjectionApp {
+  getMapRenderer?: () => string;
   getMapProjection?: () => "globe" | "mercator";
   setMapProjection?: (projection: "globe" | "mercator") => void;
   getMap?: () => MapLibreMap | null;
+  getMapboxMap?: () => MapboxMap | null;
 }
 
 // `setMapProjection`/`getMapProjection` drive a single global map setting, but
@@ -64,8 +72,10 @@ let capturedProjectionToRestore: "globe" | "mercator" | null = null;
 export function acquireMercatorProjectionLock(
   key: string,
   app: MercatorProjectionApp,
-  mapOverride?: MapLibreMap | null,
+  mapOverride?: ProjectionMap | null,
 ): void {
+  // ArcGIS local scenes already use Web Mercator without changing view mode.
+  if (app.getMapRenderer?.() === "arcgis") return;
   if (mercatorProjectionHolders.size === 0 && capturedProjectionToRestore === null) {
     // Only remember "globe" as worth restoring. Never capture "mercator": it may
     // be a value WE forced and persisted into the project file, so a reopened
@@ -76,7 +86,7 @@ export function acquireMercatorProjectionLock(
   }
   mercatorProjectionHolders.add(key);
   app.setMapProjection?.("mercator");
-  ensureMercatorProjection(mapOverride ?? app.getMap?.());
+  ensureMercatorProjection(mapOverride ?? app.getMap?.() ?? app.getMapboxMap?.());
 }
 
 /**
@@ -90,6 +100,6 @@ export function releaseMercatorProjectionLock(key: string, app: MercatorProjecti
   if (!mercatorProjectionHolders.delete(key)) return;
   if (mercatorProjectionHolders.size > 0) return;
   if (capturedProjectionToRestore === null) return;
-  app.setMapProjection?.(capturedProjectionToRestore);
+  if (app.getMapRenderer?.() !== "arcgis") app.setMapProjection?.(capturedProjectionToRestore);
   capturedProjectionToRestore = null;
 }

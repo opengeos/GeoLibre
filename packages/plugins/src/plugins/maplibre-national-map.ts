@@ -5,7 +5,9 @@ import {
   type NationalMapControlOptions,
 } from "maplibre-gl-national-map";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getStyleMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -17,7 +19,7 @@ import {
 
 const SOURCE_KIND = "national-map";
 
-let nationalMapPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "national-map-panel";
 
 const NATIONAL_MAP_OPTIONS = {
   collapsed: false,
@@ -28,6 +30,7 @@ const NATIONAL_MAP_OPTIONS = {
 
 let nationalMapControl: NationalMapControl | null = null;
 let controlEventHandler: NationalMapControlEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 function serviceId(entry: WebServiceLayerEntry): string | undefined {
   return stringMetadata(entry.metadata?.nationalMapServiceId);
@@ -127,43 +130,54 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-national-map",
   name: "USGS National Map",
   version: "0.1.1",
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getStyleMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nationalMapControl) {
       nationalMapControl = new NationalMapControl(getNationalMapControlOptions());
     }
 
-    const added = app.addMapControl(nationalMapControl, nationalMapPosition);
-    if (!added) {
+    const activeControl = nationalMapControl;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "USGS National Map",
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        nationalMapStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          nationalMapStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       nationalMapControl = null;
       return false;
     }
-    nationalMapStoreSync.attach(nationalMapControl);
-    setTimeout(() => nationalMapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!nationalMapControl) return;
     nationalMapStoreSync.detach();
-    app.removeMapControl(nationalMapControl);
+    unmountMapControlFromPanel(nationalMapControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     nationalMapControl = null;
-  },
-  getMapControlPosition: () => nationalMapPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    nationalMapPosition = position;
-    if (!nationalMapControl) return;
-    app.removeMapControl(nationalMapControl);
-    const added = app.addMapControl(nationalMapControl, nationalMapPosition);
-    if (!added) {
-      nationalMapStoreSync.detach();
-      nationalMapControl = null;
-      return false;
-    }
-    setTimeout(() => nationalMapControl?.expand(), 0);
   },
 };
 
 function getNationalMapControlOptions(): NationalMapControlOptions {
   return {
     ...NATIONAL_MAP_OPTIONS,
-    position: nationalMapPosition,
+    position: "top-left",
   };
 }

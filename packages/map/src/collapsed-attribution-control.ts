@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 /** Set by MapLibre once the control is in compact (collapsible) mode. */
 const COMPACT_CLASS = "maplibregl-compact";

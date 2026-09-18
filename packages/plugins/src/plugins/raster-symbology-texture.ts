@@ -43,6 +43,8 @@ type RasterLayerManager = {
 type ControlWithManager = {
   _layerManager?: RasterLayerManager;
   getRaster?: (id: string) => RasterInfoLike | undefined;
+  getEngine?: () => string;
+  setEngine?: (engine: "maplibre-gl-raster") => void;
 };
 type RasterInfoLike = {
   source?: { kind: "url"; url: string } | { kind: "file"; fileName: string; objectUrl: string };
@@ -53,7 +55,7 @@ type ClassificationEntry = {
   /** Whether the ramp is reversed (from `rasterState.reversed`); baked into
    * the injected texture. */
   reversed: boolean;
-  /** Cache key for the built texture (breaks + ramp + customColors + reversed). */
+  /** Cache key for the built texture (breaks + ramp + colors + opacity + reverse). */
   key: string;
   texture?: GpuTexture;
 };
@@ -84,6 +86,15 @@ function readRasterReversed(layer: GeoLibreLayer): boolean {
   );
 }
 
+/** Reads the persisted raster render mode, defaulting like the control. */
+function readRasterMode(layer: GeoLibreLayer): string {
+  const raw = layer.metadata.rasterState;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "rgb";
+  return typeof (raw as Record<string, unknown>).mode === "string"
+    ? String((raw as Record<string, unknown>).mode)
+    : "rgb";
+}
+
 // Per-layer classification state and built GPU textures. Module-global to
 // match the single mounted raster control (see maplibre-raster.ts).
 const entries = new Map<string, ClassificationEntry>();
@@ -100,6 +111,7 @@ function symbologyKey(symbology: RasterSymbology, reversed: boolean): string {
     symbology.breaks,
     symbology.ramp,
     symbology.customColors ?? null,
+    symbology.classOpacities ?? null,
     reversed,
   ]);
 }
@@ -186,7 +198,7 @@ function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry):
   if (entry.texture && entry.key === key) return entry.texture;
   entry.texture?.destroy?.();
   try {
-    const { classified, breaks, ramp, customColors } = entry.symbology;
+    const { classified, breaks, ramp, customColors, classOpacities } = entry.symbology;
     const reversed = entry.reversed;
     // Classified ramps step through the class breaks; a custom continuous ramp
     // is a smooth gradient of the user's colors. (A built-in continuous ramp
@@ -204,6 +216,7 @@ function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry):
           ramp,
           reversed,
           custom ?? colormapColors(ramp) ?? undefined,
+          classOpacities,
         )
       : buildContinuousColormapRgba(custom ?? ["#000000", "#ffffff"], reversed);
     // The DOM ImageData ctor types its buffer as ArrayBuffer (not the wider
@@ -232,7 +245,8 @@ function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry):
  * @param control - The mounted raster control (for `_rebuild`).
  */
 function reconcile(control: unknown): void {
-  const manager = (control as ControlWithManager)._layerManager;
+  const rasterControl = control as ControlWithManager;
+  const manager = rasterControl._layerManager;
   if (!manager) return;
 
   const layers = useAppStore.getState().layers;
@@ -255,6 +269,19 @@ function reconcile(control: unknown): void {
         changed = true;
       }
       continue;
+    }
+
+    // Discrete and custom colormaps are injected into the deck.gl GPU
+    // pipeline. The alternate WASM and TiTiler engines bypass that pipeline,
+    // so leaving either selected makes the UI report classification while the
+    // map still draws a continuous ramp. Move to the renderer that can honor
+    // the requested symbology; the control's engine picker updates with it.
+    if (
+      readRasterMode(layer) === "single" &&
+      rasterControl.getEngine?.() !== "maplibre-gl-raster" &&
+      typeof rasterControl.setEngine === "function"
+    ) {
+      rasterControl.setEngine("maplibre-gl-raster");
     }
 
     // Reverse lives on rasterState (the control renders it for built-in ramps;

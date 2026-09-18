@@ -1,6 +1,6 @@
 [package]
 name = "geolibre-desktop"
-version = "2.4.1"
+version = "3.0.0"
 description = "GeoLibre Desktop — lightweight cloud-native desktop GIS"
 authors = ["GeoLibre Contributors"]
 edition = "2021"
@@ -67,8 +67,14 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Pinned to 1.x on purpose: this must match the bincode version
+# `tauri-plugin-persisted-scope` uses to write its scope file, which
+# `PersistedScopeState` in src/lib.rs reads and rewrites. Dependabot is told to
+# skip major bumps in .github/dependabot.yml; see docs/maintenance.md.
+bincode = "1"
 # OS CSPRNG for the per-launch Jupyter token (already an indirect dep).
 getrandom = "0.4"
+tauri-plugin-deep-link = "2"
 
 # native-tls backs only the desktop mTLS PKCS#12 path (issue #1220). It pulls in
 # openssl-sys, which has no vendored/cross build for the Android NDK, so the
@@ -76,6 +82,11 @@ getrandom = "0.4"
 # likewise cfg'd out in src/lib.rs).
 [target.'cfg(not(target_os = "android"))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+
+# File-manager launches on Windows and Linux start a second process. Forward
+# its project path to the existing window instead of opening a second workspace.
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"
 
 # Runtime WebKitGTK version check (already an indirect dep via tauri/wry).
 [target."cfg(target_os = \"linux\")".dependencies]

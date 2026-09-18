@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "deep-link:allow-get-current",
     "dialog:default",
     "fs:default",
     "fs:allow-read-dir",
@@ -25,18 +26,28 @@
       "allow": [{ "path": "$TEMP/geolibre-gdb-*.geojson" }]
     },
     {
+      "comment": "Restorable copies of the startup project (GeoLibre#1948). On Android a project picked from device storage is a content:// URI whose read grant dies with the process, so the startup restore has nothing to reopen; GeoLibre keeps its own copy here instead. Only a scope entry is needed, no new command permission: `mkdir` is already granted by `fs:default` (its `create-app-specific-dirs` set), and `read_text_file`/`write_text_file` by the entries above. It must be `fs:scope` rather than a path on those entries because an fs permission's scope applies only to the commands that permission grants, so `fs:default`'s app-directory scope reaches `read_text_file` but not `mkdir` or `write_text_file` (the app's other writes are to paths a dialog just added to the runtime scope) — without this the copies fail with \"forbidden path\". Two entries because the directory itself is the mkdir target and its files are the read/write targets. See lib/startup-project-snapshot.ts.",
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPLOCALDATA/startup-projects" },
+        { "path": "$APPLOCALDATA/startup-projects/*" }
+      ]
+    },
+    {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
     {
-      "comment": "Hosts routed through the native HTTP client to bypass the WebView's CORS. Geocoding (place search / reverse geocode): public Nominatim's CDN intermittently omits the CORS header on cached responses (rejected as 'Search failed'), and the native client can send the User-Agent Nominatim's policy requires — keep the geocoder hosts in sync with the GEOCODING_PROVIDERS registry / lib/geocoding-fetch.ts. share.geolibre.app (project Share + gallery) and datasets.geolibre.app (the built-in GeoLens service) have origin-restricted CORS policies that may not include the Tauri WebView origin — see lib/share-fetch.ts and lib/geolens-fetch.ts. Any custom/self-hosted service falls back to the browser fetch.",
+      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The loopback scope is only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, and GeoLens use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. Any custom/self-hosted service falls back to browser fetch.",
       "identifier": "http:default",
       "allow": [
+        { "url": "http://127.0.0.1:8765/*" },
         { "url": "https://nominatim.openstreetmap.org/*" },
         { "url": "https://api.geocode.earth/*" },
         { "url": "https://geocode.arcgis.com/*" },
         { "url": "https://api.mapbox.com/*" },
         { "url": "https://maps.googleapis.com/*" },
+        { "url": "https://www.cartociudad.es/*" },
         { "url": "https://share.geolibre.app/*" },
         { "url": "https://datasets.geolibre.app/*" }
       ]

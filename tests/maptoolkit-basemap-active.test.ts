@@ -59,4 +59,66 @@ describe("isMaptoolkitBasemapActive", () => {
       false,
     );
   });
+
+  it("does not match a Maptoolkit style hidden behind an opaque raster basemap from another provider", () => {
+    // Raster basemaps never replace the style — they only stack on top (see
+    // registerRasterBasemap) — so picking plain OpenStreetMap tiles over a
+    // Maptoolkit style leaves basemapStyleUrl on maptoolkit.org even though
+    // its tiles are now fully covered.
+    assert.equal(
+      isMaptoolkitBasemapActive("https://styles.maptoolkit.org/summer.json", [
+        basemapLayer({
+          metadata: { sourceKind: "maplibre-basemap-control", basemapProvider: "openstreetmap" },
+        }),
+      ]),
+      false,
+    );
+  });
+
+  it("still matches a Maptoolkit style under a translucent raster overlay from another provider", () => {
+    assert.equal(
+      isMaptoolkitBasemapActive("https://styles.maptoolkit.org/summer.json", [
+        basemapLayer({
+          opacity: 0.5,
+          metadata: { sourceKind: "maplibre-basemap-control", basemapProvider: "openstreetmap" },
+        }),
+      ]),
+      true,
+    );
+  });
+
+  it("still matches a Maptoolkit style under an opaque raster basemap that is itself Maptoolkit", () => {
+    assert.equal(
+      isMaptoolkitBasemapActive("https://styles.maptoolkit.org/summer.json", [
+        basemapLayer({
+          metadata: { sourceKind: "maplibre-basemap-control", basemapProvider: "maptoolkit" },
+        }),
+      ]),
+      true,
+    );
+  });
+
+  it("ignores a hidden opaque raster basemap when deciding whether the style is obscured", () => {
+    assert.equal(
+      isMaptoolkitBasemapActive("https://styles.maptoolkit.org/summer.json", [
+        basemapLayer({
+          visible: false,
+          metadata: { sourceKind: "maplibre-basemap-control", basemapProvider: "openstreetmap" },
+        }),
+      ]),
+      true,
+    );
+  });
+
+  it("does not treat an unrelated opaque raster data layer as obscuring the style", () => {
+    // Only layers the basemap control itself manages (sourceKind
+    // "maplibre-basemap-control") count — a plain XYZ layer added through Add
+    // Data is a data overlay, not a basemap replacement.
+    assert.equal(
+      isMaptoolkitBasemapActive("https://styles.maptoolkit.org/summer.json", [
+        basemapLayer({ metadata: {} }),
+      ]),
+      true,
+    );
+  });
 });

@@ -258,6 +258,20 @@ describe("mergeWasmToolManifests", () => {
     );
   });
 
+  it("hides a locked WASM-only pro-tier tool", () => {
+    const merged = mergeWasmToolManifests(
+      [],
+      [
+        { id: "pro_tool", locked: true, params: [] },
+        { id: "free_tool", locked: false, params: [] },
+      ],
+    );
+    assert.deepEqual(
+      merged.map((tool) => tool.id),
+      ["free_tool"],
+    );
+  });
+
   it("keeps catalog params when the WASM manifest declares none", () => {
     // geolibre-wasm ships 138 manifests with an empty `params` array — every
     // Hydrology → Flow Routing tool among them (d8_pointer, fill_depressions,
@@ -440,5 +454,33 @@ describe("fileOutputTargetExtension", () => {
   it("falls back to an opaque .dat for a non-table, non-text output", () => {
     const opaque = { name: "output", data_kind: "file", io_role: "output" };
     assert.equal(fileOutputTargetExtension(opaque, undefined), "dat");
+  });
+
+  it("honors a recommended extension in the description over the table default", () => {
+    // excel_to_table's output param, as the WASM manifest reports it: data_kind
+    // "table" would otherwise default to .csv, but the writer is the generic
+    // vector format dispatch (no CSV driver) and the description already names
+    // the extension that does work.
+    const excelToTable = {
+      name: "file_out",
+      description:
+        "Optional output table path (driver from its extension; GeoParquet .parquet recommended). If omitted, stored in memory.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(excelToTable, undefined), "parquet");
+    assert.equal(fileOutputTargetExtension(excelToTable, ""), "parquet");
+    // An explicit user-chosen path still wins.
+    assert.equal(fileOutputTargetExtension(excelToTable, "report.gpkg"), "gpkg");
+  });
+
+  it("ignores a decimal in the prose rather than reading it as an extension", () => {
+    const decimalProse = {
+      name: "file_out",
+      description: "Optional CSV output path; a tolerance of 0.5 recommended for noisy inputs.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(decimalProse, undefined), "csv");
   });
 });

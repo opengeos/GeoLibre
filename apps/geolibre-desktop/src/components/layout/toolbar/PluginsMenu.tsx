@@ -12,7 +12,9 @@ import {
   ROUTE_ANIMATION_PLUGIN_ID,
   SUN_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
+  isPluginEngineSupported,
 } from "@geolibre/plugins";
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
   DropdownMenu,
@@ -30,6 +32,7 @@ import {
 import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { usePluginRegistry } from "../../../hooks/usePlugins";
+import { pluginDisplayName } from "../../../lib/plugin-display-name";
 import { type AppApi, PLUGIN_POSITION_ITEMS, type ToolbarChrome } from "./constants";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
@@ -65,16 +68,30 @@ export function PluginsMenu({
   hiddenPluginIds,
 }: PluginsMenuProps) {
   const { t } = useTranslation();
+  const primaryRenderer = useAppStore((state) => state.primaryRenderer);
 
   const renderPluginMenuItem = (p: RegisteredPlugin) => {
+    const isSupported = isPluginEngineSupported(p, primaryRenderer);
+    // A plugin that was activated under another renderer stays active after a
+    // renderer switch, so its toggle must keep working even when the new
+    // renderer does not support it — otherwise the only way to turn it off is
+    // to switch the renderer back.
+    const canToggle = isSupported || isActive(p.id);
     const pluginPosition = getMapControlPosition(p.id);
-    // Translate the plugin's display name when a locale string exists for its id,
-    // falling back to the registered (English) name — brand/proper-noun plugins
-    // (Mapillary, NASA Earthdata, …) simply have no key and stay as-is.
-    const pluginName = t(`toolbar.plugin.${p.id}`, { defaultValue: p.name });
+    const pluginName = pluginDisplayName(t, p);
     if (!pluginPosition) {
       return (
-        <DropdownMenuItem key={p.id} onClick={() => toggle(p.id, appApi)}>
+        <DropdownMenuItem
+          key={p.id}
+          disabled={!canToggle}
+          // A greyed-out item still says why on hover, matching the command
+          // palette's disabledReason for the same condition.
+          title={!canToggle ? t("renderer.pluginUnsupported") : undefined}
+          onClick={() => {
+            if (!canToggle) return;
+            toggle(p.id, appApi);
+          }}
+        >
           {pluginName}
           {isActive(p.id) ? " ✓" : ""}
         </DropdownMenuItem>
@@ -83,26 +100,37 @@ export function PluginsMenu({
 
     return (
       <DropdownMenuSub key={p.id}>
-        <DropdownMenuSubTrigger>
+        <DropdownMenuSubTrigger
+          disabled={!canToggle}
+          title={!canToggle ? t("renderer.pluginUnsupported") : undefined}
+        >
           {pluginName}
           {isActive(p.id) ? " ✓" : ""}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
+          <DropdownMenuItem
+            disabled={!canToggle}
+            onClick={() => {
+              if (!canToggle) return;
+              toggle(p.id, appApi);
+            }}
+          >
             {isActive(p.id) ? t("toolbar.item.deactivate") : t("toolbar.item.activate")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("toolbar.item.position")}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={pluginPosition}
-            onValueChange={(position: string) =>
-              setMapControlPosition(p.id, appApi, position as GeoLibreMapControlPosition)
-            }
+            onValueChange={(position: string) => {
+              if (!isSupported) return;
+              setMapControlPosition(p.id, appApi, position as GeoLibreMapControlPosition);
+            }}
           >
             {PLUGIN_POSITION_ITEMS.map((position) => (
               <DropdownMenuRadioItem
                 key={position.value}
                 value={position.value}
+                disabled={!isSupported}
                 onSelect={(event: Event) => event.preventDefault()}
               >
                 {t(position.labelKey)}
@@ -127,6 +155,15 @@ export function PluginsMenu({
   // The DGGS grid plugins (H3, S2, A5) render as one grouped submenu, placed
   // where the first of them appears in registration order.
   let dggsRendered = false;
+
+  // Grouped submenus open when at least one member is usable on the active
+  // renderer, or is still active from a previous one and needs turning off.
+  const dggsSupported = dggsPlugins.some(
+    (p) => isPluginEngineSupported(p, primaryRenderer) || isActive(p.id),
+  );
+  const webServicesSupported = webServicePlugins.some(
+    (p) => isPluginEngineSupported(p, primaryRenderer) || isActive(p.id),
+  );
 
   return (
     <DropdownMenu>
@@ -180,7 +217,7 @@ export function PluginsMenu({
             dggsRendered = true;
             return (
               <DropdownMenuSub key="dggs">
-                <DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger disabled={!dggsSupported}>
                   {t("toolbar.item.dggs")}
                   {dggsPlugins.some((plugin) => isActive(plugin.id)) ? " ✓" : ""}
                 </DropdownMenuSubTrigger>
@@ -201,7 +238,7 @@ export function PluginsMenu({
           webServicesRendered = true;
           return (
             <DropdownMenuSub key="web-services">
-              <DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger disabled={!webServicesSupported}>
                 {t("toolbar.item.webServices")}
                 {webServicePlugins.some((plugin) => isActive(plugin.id)) ? " ✓" : ""}
               </DropdownMenuSubTrigger>

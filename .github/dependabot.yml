@@ -63,6 +63,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # `bincode` must stay on the 1.x line: `PersistedScopeState` in
+      # `src/lib.rs` reads and rewrites the file `tauri-plugin-persisted-scope`
+      # serializes with bincode 1, so a major bump silently breaks the on-disk
+      # format. bincode 3.0.0 is also a deliberately unbuildable release whose
+      # whole source is `compile_error!("https://xkcd.com/2347/")` (see #2194).
+      - dependency-name: bincode
+        update-types:
+          - version-update:semver-major
     groups:
       cargo-security:
         applies-to: security-updates

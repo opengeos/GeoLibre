@@ -13,6 +13,8 @@ import tin from "@turf/tin";
 import sector from "@turf/sector";
 import circle from "@turf/circle";
 import distance from "@turf/distance";
+import bearing from "@turf/bearing";
+import destination from "@turf/destination";
 import bbox from "@turf/bbox";
 import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
@@ -28,9 +30,20 @@ import type {
   Point,
   Polygon,
   Position,
+  MultiLineString,
   MultiPolygon,
 } from "geojson";
-import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
+import {
+  bodyLengthToEarth,
+  decodePolyline,
+  decodePolylineDetailed,
+  earthLengthToBody,
+  encodePolyline,
+  getActiveBodyRadiusRatio,
+  horizontalBbox,
+  layerJoinKey,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
@@ -94,6 +107,42 @@ function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
   return result;
 }
 
+/** Reassemble Turf dissolve parts into one Polygon/MultiPolygon per group. */
+function collectDissolveParts(
+  dissolved: FeatureCollection<Polygon>,
+  field?: string,
+  originalProperties?: ReadonlyMap<string, GeoJsonProperties>,
+): FeatureCollection<Polygon | MultiPolygon> {
+  const groups = new Map<string, Feature<Polygon>[]>();
+  for (const feature of dissolved.features) {
+    const key = field ? String(feature.properties?.[field]) : "";
+    const group = groups.get(key);
+    if (group) group.push(feature);
+    else groups.set(key, [feature]);
+  }
+
+  const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(([key, parts]) => {
+    // Mirror GeoPandas' `dissolve` (aggfunc="first"): every merged feature keeps
+    // the first source feature's whole attribute set, so the dissolve field keeps
+    // its original type and the other attributes survive the merge — whether or
+    // not the group happened to stay connected.
+    const source = originalProperties?.get(key) ?? parts[0].properties;
+    const properties: GeoJsonProperties = source ? { ...source } : {};
+    if (parts.length === 1) {
+      return { ...parts[0], properties };
+    }
+    return {
+      type: "Feature" as const,
+      properties,
+      geometry: {
+        type: "MultiPolygon" as const,
+        coordinates: parts.map((part) => part.geometry.coordinates),
+      },
+    };
+  });
+  return featureCollection(features);
+}
+
 /** Merge all polygons of a collection into a single (multi)polygon feature. */
 function mergePolygons(fc: FeatureCollection): Feature<Polygon | MultiPolygon> | null {
   const polys = polygonFeatures(fc);
@@ -152,6 +201,157 @@ function computeStat(nums: number[], statistic: string): number | null {
   return null;
 }
 
+/** Which side of a feature's boundary {@link bufferTool} keeps. */
+type BufferSide = "outside" | "inside" | "both";
+
+const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
+
+/** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
+type BufferUnits = "kilometers" | "meters" | "miles";
+
+const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
+
+/**
+ * Values both engines read as a boolean parameter, matched case-insensitively
+ * after trimming. Plain truthiness cannot be shared: `Boolean([])` is `true`
+ * while Python's `bool([])` is `False`, and a checkbox that reached the tool as
+ * the *string* `"false"` (a query string, a CSV batch row, a replayed history
+ * entry) is truthy in both languages, which is the opposite of what the caller
+ * meant. Spelling the accepted words out keeps the two engines on one reading
+ * and turns a typo into an error instead of a silent dissolve.
+ */
+const TRUE_STRINGS = new Set(["true", "1", "yes", "on"]);
+
+const FALSE_STRINGS = new Set(["", "false", "0", "no", "off"]);
+
+/**
+ * Read a checkbox parameter the way `vector_ops._boolean_param` does.
+ *
+ * An absent or null value is the unchecked default; a JSON boolean passes
+ * through; a finite number is its zero/non-zero truthiness; a string must be
+ * one of {@link TRUE_STRINGS}/{@link FALSE_STRINGS}. Anything else (an array,
+ * an object, NaN) returns `null` so the caller can reject it rather than pick a
+ * coercion the other engine does not share.
+ *
+ * @param raw - The raw parameter value as it arrived from the caller.
+ * @returns The boolean, or `null` when the value is not a boolean at all.
+ */
+export function booleanParam(raw: unknown): boolean | null {
+  if (raw == null) return false;
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw !== 0 : null;
+  if (typeof raw === "string") {
+    const text = raw.trim().toLowerCase();
+    if (TRUE_STRINGS.has(text)) return true;
+    if (FALSE_STRINGS.has(text)) return false;
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Python's decimal-float grammar, which `Number()` does not share.
+ *
+ * `Number()` reads JavaScript's `0x`/`0b`/`0o` bases (`Number("0x10")` is 16)
+ * and whitespace-only input (`Number("  ")` is 0), where Python's `float()`
+ * raises on all of them — so a string distance that the sidecar rejects would
+ * otherwise buffer happily on the client. This is deliberately the narrower of
+ * the two grammars: it also rejects Python's digit separators (`float("1_000")`
+ * is 1000, `Number("1_000")` is `NaN`), which both engines then refuse.
+ */
+const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
+
+/**
+ * A buffered feature, or `null` when the operation left nothing behind.
+ *
+ * An inward buffer erodes a polygon and can consume it entirely; on a point or
+ * line, which has no interior, it always does. jsts answers with an empty
+ * geometry rather than nothing at all, so an emptied feature reaches us as a
+ * polygon with zero rings — a shape no renderer can draw and every downstream
+ * tool has to special-case. Drop those here instead.
+ */
+function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
+  const geometry = result?.geometry as Polygon | MultiPolygon | undefined;
+  if (!geometry || !hasPositions(geometry.coordinates)) return null;
+  return result as Feature;
+}
+
+/**
+ * Whether a GeoJSON coordinate array holds at least one real position.
+ *
+ * Zero rings is the shape jsts usually returns for an emptied geometry, but not
+ * the only one: a `Polygon` can come back with a single *empty* ring
+ * (`[[]]`), and a `MultiPolygon` with several individually degenerate parts —
+ * both of which have a non-zero `coordinates.length` while still being
+ * undrawable. Recursing to the first number catches every arity.
+ *
+ * Exported for tests: turf rejects a degenerate geometry on the way *in*
+ * ("coordinates must contain numbers"), so this guard's job is to catch one
+ * coming back *out* and cannot be reached through the tool's own parameters.
+ */
+export function hasPositions(coordinates: unknown): boolean {
+  if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+  if (typeof coordinates[0] === "number") return true;
+  return coordinates.some(hasPositions);
+}
+
+/**
+ * Buffer one feature on the requested side of its boundary.
+ *
+ * `outside` grows the feature (the historical behavior), `inside` shrinks it by
+ * buffering with a negative radius, and `both` keeps only the band within
+ * `radius` of the boundary — the grown shape with the eroded one cut back out.
+ *
+ * For `both` on a feature with no interior left to erode (a point, a line, or a
+ * polygon thinner than twice the radius) the grown shape *is* the band, so it is
+ * returned whole rather than treated as a failure.
+ */
+function bufferOneFeature(
+  feature: Feature,
+  radius: number,
+  side: BufferSide,
+  units: BufferUnits,
+): Feature | null {
+  const options = { units };
+  if (side === "inside") return nonEmptyBuffer(buffer(feature, -radius, options));
+  const outer = nonEmptyBuffer(buffer(feature, radius, options));
+  if (side === "outside" || !outer) return outer;
+  const inner = nonEmptyBuffer(buffer(feature, -radius, options));
+  if (!inner) return outer;
+  const band = difference(
+    featureCollection([
+      outer as Feature<Polygon | MultiPolygon>,
+      inner as Feature<Polygon | MultiPolygon>,
+    ]),
+  );
+  const kept = nonEmptyBuffer(band as Feature | null);
+  // turf carries the first input's properties through, but that input is our own
+  // intermediate buffer — restore the source feature's attributes explicitly.
+  return kept ? { ...kept, properties: feature.properties ?? {} } : null;
+}
+
+/**
+ * Merge every buffered feature into one, dissolving the overlaps between them.
+ *
+ * The merged ring belongs to no single input feature, so the result carries no
+ * attributes — the same shape the GeoPandas engine's `union_all` produces. Only
+ * `null` when the union collapses to nothing; a throw from polyclip is left to
+ * the caller, which reports it the way the Python engine's raise does.
+ *
+ * @param features - The buffered polygons, at least one.
+ * @returns The single merged feature, or `null` when nothing is left.
+ */
+function dissolveBuffers(features: Feature[]): Feature | null {
+  const polys = features as Feature<Polygon | MultiPolygon>[];
+  // turf's union throws on a single geometry ("Must have at least 2
+  // geometries"), and one buffer is already its own dissolve.
+  const merged = polys.length === 1 ? polys[0] : union(featureCollection(polys));
+  const kept = nonEmptyBuffer(merged as Feature | null);
+  // The single `properties: {}` — the lone-buffer branch carries the source
+  // feature's attributes in, so clearing them has to happen here either way.
+  return kept ? { ...kept, properties: {} } : null;
+}
+
 export const bufferTool: ProcessingAlgorithm = {
   id: "buffer",
   name: "Buffer",
@@ -180,18 +380,163 @@ export const bufferTool: ProcessingAlgorithm = {
         { value: "miles", label: "Miles" },
       ],
     },
+    {
+      id: "side",
+      label: "Buffer side",
+      type: "select",
+      default: "outside",
+      description:
+        "Outside grows each feature, Inside shrinks it, and Both keeps the zone within the distance on either side of its boundary. Inside needs polygon input — a point or line has no interior to buffer into.",
+      options: [
+        { value: "outside", label: "Outside (grow)" },
+        { value: "inside", label: "Inside (shrink)" },
+        { value: "both", label: "Both sides" },
+      ],
+    },
+    {
+      id: "dissolve",
+      label: "Dissolve result",
+      type: "boolean",
+      default: false,
+      description:
+        "Merge the buffers into one feature and dissolve the overlaps between them. The merged shape belongs to no input feature, so attributes are dropped; to dissolve by an attribute, run the Dissolve tool on the result.",
+    },
   ],
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
+    // Validate in the Python engine's order (`_buffer`: units, then side, then
+    // distance finiteness, then distance sign) so a call with several bad
+    // parameters at once gets the same first error from both engines, not just
+    // the same accept/reject verdict.
+    const rawUnits = ctx.parameters.units;
+    const units = (rawUnits == null ? "kilometers" : String(rawUnits)) as BufferUnits;
+    if (!BUFFER_UNITS.has(units)) {
+      // turf throws on a unit it does not know, and the per-feature `try`/`catch`
+      // below would swallow that into the `Skipped` count — reporting a
+      // successful run that buffered nothing where the Python engine raises
+      // "Unknown unit". Reject up front so the two engines agree.
+      ctx.log(`Error: unknown unit '${units}'; expected ${[...BUFFER_UNITS].join(", ")}`);
+      return;
+    }
+    // Only a missing `side` defaults; an explicitly empty one falls through to
+    // the check below, matching the Python engine (and the way an empty `units`
+    // reaches its own lookup there). Direction is a deliberate choice, so a
+    // caller that sends a blank one gets an error rather than a silent grow.
+    const rawSide = ctx.parameters.side;
+    const side = (rawSide == null ? "outside" : String(rawSide)) as BufferSide;
+    if (!BUFFER_SIDES.has(side)) {
+      // Reject rather than fall back, so the client and Python engines answer a
+      // bad `side` the same way (see tests/fixtures/vector/SPEC.md).
+      ctx.log(`Error: unknown buffer side '${side}'; expected ${[...BUFFER_SIDES].join(", ")}`);
+      return;
+    }
+    // Checked before the distance, so a call with a bad dissolve flag and a bad
+    // distance reports the same first error from both engines.
+    const dissolveResult = booleanParam(ctx.parameters.dissolve);
+    if (dissolveResult === null) {
+      ctx.log("Error: buffer dissolve must be true or false");
+      return;
+    }
+    const rawDistance = ctx.parameters.distance;
+    // `numberParam` folds a non-finite or unparseable value into its fallback,
+    // which would hand a programmatic caller a silent 1-unit buffer where the
+    // Python engine raises. Check the raw parameter so both engines reject it.
+    // A string is held to Python's grammar rather than `Number()`'s (see
+    // DECIMAL_NUMBER), so `"0x10"` and `"  "` are rejected here the way
+    // `float()` rejects them there. An *empty* string is the one case both
+    // engines already agree on — `"" or 0` is 0 in Python — so it falls
+    // through to `numberParam`.
+    // A distance must be a number or a numeric string. Anything else is caller
+    // error, and the two languages coerce it differently enough that letting it
+    // through diverges: `Number(false)` is 0 and `Number([5])` is 5 (both of
+    // which `numberParam` then discards for the fallback 1), while Python's
+    // `raw or 0` reads `false`/`[]`/`{}` as 0 and raises on `[5]`. Rejecting the
+    // type outright is the only reading both engines share.
+    const distanceType = typeof rawDistance;
+    const badDistanceType = distanceType !== "number" && distanceType !== "string";
+    const badDistanceString =
+      typeof rawDistance === "string" && rawDistance !== "" && !DECIMAL_NUMBER.test(rawDistance);
+    if (
+      rawDistance != null &&
+      (badDistanceType || badDistanceString || !Number.isFinite(Number(rawDistance)))
+    ) {
+      ctx.log("Error: buffer distance must be a finite number");
+      return;
+    }
     const distance = numberParam(ctx, "distance", 1);
-    const units = (ctx.parameters.units as string) || "kilometers";
-    const buffered = buffer(fc, distance, {
-      units: units as "kilometers" | "meters" | "miles",
-    });
-    const features = ((buffered?.features ?? []) as Feature[]).filter((f) => Boolean(f?.geometry));
-    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units}`);
-    ctx.addResultLayer?.("Buffer", featureCollection(features));
+    if (distance < 0) {
+      // The dialog's `min: 0` binds the form, not a programmatic caller (Model
+      // Builder, the assistant, a replayed history entry). Reject rather than
+      // erode: direction belongs to `side`, and the Python engine already
+      // answers a negative distance this way.
+      ctx.log("Error: buffer distance must be >= 0; use the buffer side to buffer inward");
+      return;
+    }
+    // turf bakes in Earth's radius, so the requested distance would lay out as
+    // Earth ground on a Moon/Mars project. Convert to the Earth-equivalent that
+    // spans the same distance on this body (GeoLibre#1128) — a no-op on Earth.
+    const radius = bodyLengthToEarth(distance);
+    const features: Feature[] = [];
+    let dropped = 0;
+    let failed = 0;
+    for (const feature of fc.features) {
+      // A null-geometry feature counts as dropped, not skipped in silence: the
+      // Python engine loads it into the GeoDataFrame and its `isna()` filter
+      // reports it, so counting it here keeps the two engines' totals equal.
+      if (!feature?.geometry) {
+        dropped += 1;
+        continue;
+      }
+      let buffered: Feature | null = null;
+      try {
+        buffered = bufferOneFeature(feature, radius, side, units);
+      } catch {
+        // jsts can throw on a degenerate or self-intersecting geometry — the
+        // erosion step in `inside`/`both` is a new way to produce one. Report
+        // it separately from an empty result (the geometry was not buffered
+        // away, it could not be buffered at all) rather than let it abort the
+        // whole batch and discard every feature already buffered.
+        failed += 1;
+        continue;
+      }
+      if (buffered) features.push(buffered);
+      else dropped += 1;
+    }
+    // Dissolve before logging anything: the Python engine returns its messages
+    // only on success, so a failed dissolve must not leave a "Buffered N" line
+    // behind on the client either.
+    let output = featureCollection(features);
+    const didDissolve = dissolveResult && features.length > 0;
+    if (didDissolve) {
+      let merged: Feature | null = null;
+      try {
+        merged = dissolveBuffers(features);
+      } catch {
+        // polyclip can throw on a self-intersecting union, the way the
+        // GeoPandas engine's `union_all` can — fail the run rather than hand
+        // back the undissolved buffers the caller did not ask for.
+        merged = null;
+      }
+      if (!merged) {
+        ctx.log("Error: unable to dissolve the buffered features");
+        return;
+      }
+      output = featureCollection([merged]);
+    }
+    ctx.log(`Buffered ${features.length} feature(s) by ${distance} ${units} (${side})`);
+    if (dropped > 0) {
+      // Deliberately not "the inward buffer": an outward buffer also drops a
+      // feature whose geometry is missing or degenerate enough to come back empty.
+      ctx.log(`Dropped ${dropped} feature(s) the buffer left empty`);
+    }
+    if (failed > 0) {
+      ctx.log(`Skipped ${failed} feature(s) the buffer could not process`);
+    }
+    if (didDissolve) {
+      ctx.log(`Dissolved ${features.length} buffer(s) into 1 feature`);
+    }
+    ctx.addResultLayer?.("Buffer", output);
   },
 };
 
@@ -266,9 +611,17 @@ export const dissolveTool: ProcessingAlgorithm = {
       return;
     }
     const field = (ctx.parameters.field as string)?.trim();
-    const dissolved = dissolve(featureCollection(polys), {
+    // Remember the first source feature of each group so the merged output can
+    // carry its attributes through, the way the sidecar's GeoPandas dissolve does.
+    const originalProperties = new Map<string, GeoJsonProperties>();
+    for (const polygon of polys) {
+      const key = field ? String(polygon.properties?.[field]) : "";
+      if (!originalProperties.has(key)) originalProperties.set(key, polygon.properties);
+    }
+    const dissolvedParts = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
     });
+    const dissolved = collectDissolveParts(dissolvedParts, field || undefined, originalProperties);
     ctx.log(`Dissolved ${polys.length} polygon(s) into ${dissolved.features.length} feature(s)`);
     ctx.addResultLayer?.("Dissolve", dissolved);
   },
@@ -1634,6 +1987,301 @@ export const smoothTool: ProcessingAlgorithm = {
   },
 };
 
+/**
+ * Split any geometry into its linear "parts": each ring of a polygon, each
+ * line of a (multi)linestring, or the single coordinate of a point. Used by
+ * Extract vertices and Points along geometry to walk coordinates uniformly.
+ */
+function geometryParts(geometry: Geometry): Position[][] {
+  switch (geometry.type) {
+    case "Point":
+      return [[geometry.coordinates]];
+    case "MultiPoint":
+      return geometry.coordinates.map((pos) => [pos]);
+    case "LineString":
+      return [geometry.coordinates];
+    case "MultiLineString":
+      return geometry.coordinates;
+    case "Polygon":
+      return geometry.coordinates;
+    case "MultiPolygon":
+      return geometry.coordinates.flat();
+    case "GeometryCollection":
+      return geometry.geometries.flatMap(geometryParts);
+    default:
+      return [];
+  }
+}
+
+/** Line/polygon coordinate rings of a geometry, unwrapping GeometryCollections. */
+function linearParts(geometry: Geometry): Position[][] {
+  if (geometry.type === "GeometryCollection") return geometry.geometries.flatMap(linearParts);
+  return isFamily(geometry, "line") || isFamily(geometry, "polygon") ? geometryParts(geometry) : [];
+}
+
+export const extractVerticesTool: ProcessingAlgorithm = {
+  id: "extract-vertices",
+  name: "Extract vertices",
+  description:
+    "Convert every vertex of the input features into a point, keeping the original attributes plus vertex_index and part_index columns (same-named source attributes are overwritten)",
+  group: "Geometry",
+  parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const points: Feature<Point>[] = [];
+    let skipped = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      if (!geometry) {
+        skipped += 1;
+        continue;
+      }
+      const parts = geometryParts(geometry);
+      if (!parts.length) {
+        skipped += 1;
+        continue;
+      }
+      for (const [partIndex, part] of parts.entries()) {
+        for (const [vertexIndex, position] of part.entries()) {
+          points.push({
+            type: "Feature",
+            properties: {
+              ...(feature.properties ?? {}),
+              vertex_index: vertexIndex,
+              part_index: partIndex,
+            },
+            geometry: { type: "Point", coordinates: [...position] as Position },
+          });
+        }
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no vertices found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable geometry`);
+    ctx.log(`Extracted ${points.length} vertex point(s)`);
+    ctx.addResultLayer?.("Vertices", featureCollection(points));
+  },
+};
+
+/** Units accepted by Points along geometry; @turf/distance speaks all three. */
+type AlongUnits = "kilometers" | "meters" | "miles";
+
+/**
+ * Hard ceiling on generated points so a tiny interval on a long geometry
+ * cannot freeze the tab (the same guard {@link GRID_HARD_CAP} gives the grid).
+ */
+const POINTS_ALONG_HARD_CAP = 1_000_000;
+
+/**
+ * Forward-only cursor that yields a point every {@link interval} (in Turf's
+ * Earth-scaled units; see {@link bodyLengthToEarth}) along an open coordinate
+ * ring, together with the interval multiple it sits on. Segment lengths are haversine and the position inside a
+ * segment is found geodesically (bearing + destination), so the measured
+ * `distance` attribute and the emitted coordinate agree even on long
+ * high-latitude segments where linear lon/lat interpolation drifts. Each
+ * segment is visited once, so a walk is O(points + vertices) rather than
+ * re-scanning the ring from its first vertex for every point.
+ */
+function* walkAlong(
+  positions: Position[],
+  interval: number,
+  units: AlongUnits,
+  segmentLengths: number[],
+): Generator<{ position: Position; step: number }> {
+  let travelled = 0;
+  let atDistance = 0;
+  let step = 0;
+  for (let i = 1; i < positions.length; i += 1) {
+    const start = positions[i - 1];
+    const end = positions[i];
+    const segment = segmentLengths[i - 1];
+    if (segment <= 0) continue;
+    let heading: number | null = null;
+    // A step landing within float noise of a vertex snaps to the vertex itself
+    // (exact coordinates), so the caller's endpoint dedup never sees a point a
+    // few ulps short of the end vertex. The noise in `atDistance - travelled`
+    // scales with the *accumulated* distance, not with this segment, so the
+    // tolerance follows the running totals: a segment-proportional epsilon is
+    // far below the noise for a short segment late in a long ring, and far
+    // above it (centimetres) for a single segment thousands of km long. The
+    // 1e-12 factor is ~4500 ulp at any magnitude, enough slack to absorb the
+    // per-vertex error of summing a dense ring.
+    const epsilon = (travelled + segment) * 1e-12;
+    while (atDistance <= travelled + segment + epsilon) {
+      const offset = atDistance - travelled;
+      let position: Position;
+      // Exact vertices keep their full position; interior points are placed
+      // geodesically in 2-D by Turf, so any Z is interpolated back in here to
+      // keep a 3-D input from coming out with elevation only at its vertices.
+      if (offset <= epsilon) position = [...start] as Position;
+      else if (offset >= segment - epsilon) position = [...end] as Position;
+      else {
+        heading ??= bearing(start, end);
+        position = destination(start, offset, heading, { units }).geometry.coordinates;
+        if (typeof start[2] === "number" && typeof end[2] === "number") {
+          position = [
+            position[0],
+            position[1],
+            start[2] + (end[2] - start[2]) * (offset / segment),
+          ];
+        }
+      }
+      yield { position, step };
+      step += 1;
+      atDistance = step * interval;
+    }
+    travelled += segment;
+  }
+}
+
+/** Haversine lengths of an open coordinate ring's segments. */
+function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
+  const lengths: number[] = [];
+  for (let i = 1; i < positions.length; i += 1) {
+    lengths.push(distance(positions[i - 1], positions[i], { units }));
+  }
+  return lengths;
+}
+
+export const pointsAlongGeometryTool: ProcessingAlgorithm = {
+  id: "points-along-geometry",
+  name: "Points along geometry",
+  description:
+    "Generate points at a fixed distance interval along lines and polygon boundaries; the first and last vertices are always included. Each point gets a distance column (a same-named source attribute is overwritten)",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line", "polygon"],
+    },
+    {
+      id: "interval",
+      label: "Interval",
+      type: "number",
+      required: true,
+      default: 1,
+      min: 0.000001,
+      step: 0.1,
+      description: "Distance between generated points",
+    },
+    {
+      id: "units",
+      label: "Units",
+      type: "select",
+      default: "kilometers",
+      options: [
+        { value: "kilometers", label: "Kilometers" },
+        { value: "meters", label: "Meters" },
+        { value: "miles", label: "Miles" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const interval = numberParam(ctx, "interval", 1);
+    if (!(interval > 0)) {
+      ctx.log("Error: interval must be greater than 0");
+      return;
+    }
+    const units = (ctx.parameters.units as string) || "kilometers";
+    if (!LINEAR_UNITS.has(units)) {
+      ctx.log(`Error: unknown units '${units}'`);
+      return;
+    }
+    const alongUnits = units as AlongUnits;
+    // Turf is Earth-locked: pre-scale the user's ground interval into Turf's
+    // frame for the walk, and post-scale every length Turf measures back into
+    // the active body's frame before it reaches the distance column.
+    const turfInterval = bodyLengthToEarth(interval);
+    const parts: {
+      feature: Feature;
+      part: Position[];
+      length: number;
+      segmentLengths: number[];
+    }[] = [];
+    let skipped = 0;
+    let estimated = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      const linear = geometry ? linearParts(geometry) : [];
+      let usable = 0;
+      for (const part of linear) {
+        if (part.length < 2) continue;
+        // Interval multiples plus the closing end vertex.
+        const segmentLengths = ringSegmentLengths(part, alongUnits);
+        const length = segmentLengths.reduce((total, segment) => total + segment, 0);
+        estimated += Math.floor(length / turfInterval) + 2;
+        parts.push({ feature, part, length, segmentLengths });
+        usable += 1;
+      }
+      // A feature with no line or polygon geometry at all and one whose every
+      // part is a lone coordinate both contribute nothing, so both are counted
+      // here: the summary would otherwise under-report the second kind.
+      if (!usable) skipped += 1;
+    }
+    // Bail before allocating anything, the way gridTool does for its cells.
+    if (estimated > POINTS_ALONG_HARD_CAP) {
+      ctx.log(
+        `Error: this interval would generate about ${estimated.toLocaleString()} points (cap ${POINTS_ALONG_HARD_CAP.toLocaleString()}); use a larger interval.`,
+      );
+      return;
+    }
+    // One rounding rule for the whole distance column, so `3 * 0.1` and the
+    // measured endpoint length both read cleanly.
+    const roundDistance = (value: number) => Number(value.toFixed(6));
+    const points: Feature<Point>[] = [];
+    for (const { feature, part, length, segmentLengths } of parts) {
+      // Walk every interval multiple, then always close with the part's
+      // final vertex so endpoints survive rounding of the total length.
+      let lastPushed: Feature<Point> | undefined;
+      for (const { position, step } of walkAlong(part, turfInterval, alongUnits, segmentLengths)) {
+        lastPushed = {
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}), distance: roundDistance(step * interval) },
+          geometry: { type: "Point", coordinates: position },
+        };
+        points.push(lastPushed);
+      }
+      const last = part[part.length - 1];
+      const endDistance = roundDistance(earthLengthToBody(length));
+      const previous = lastPushed?.geometry.coordinates;
+      // When the length is an (near) exact multiple of the interval, the last
+      // stepped point already sits on the end vertex; keep one point but snap
+      // it to the exact end vertex so endpoints are never off by float noise.
+      // `lastPushed` is scoped to this part, so a degenerate part (all
+      // segments zero-length) can never snap a point from another part.
+      const duplicatesEnd =
+        previous &&
+        Math.abs(previous[0] - last[0]) < 1e-9 &&
+        Math.abs(previous[1] - last[1]) < 1e-9;
+      if (duplicatesEnd && lastPushed) {
+        lastPushed.geometry.coordinates = [...last] as Position;
+        lastPushed.properties!.distance = endDistance;
+      } else if (!duplicatesEnd) {
+        points.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}), distance: endDistance },
+          geometry: { type: "Point", coordinates: [...last] as Position },
+        });
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no line or polygon features found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable line or polygon geometry`);
+    ctx.log(`Generated ${points.length} point(s) every ${interval} ${units}`);
+    ctx.addResultLayer?.("Points along geometry", featureCollection(points));
+  },
+};
+
 /** Hard ceiling on grid cells so a tiny cell size cannot freeze the tab. */
 const GRID_HARD_CAP = 1_000_000;
 
@@ -1762,7 +2410,12 @@ export const gridTool: ProcessingAlgorithm = {
         ctx.log('Error: parameter "layer" has no GeoJSON features');
         return;
       }
-      bounds = bbox(layer.geojson) as [number, number, number, number];
+      const layerBounds = horizontalBbox(bbox(layer.geojson));
+      if (!layerBounds) {
+        ctx.log('Error: parameter "layer" has no usable extent');
+        return;
+      }
+      bounds = layerBounds;
       // Guard the layer path like the viewport/bbox paths: a zero-area extent
       // (e.g. a single-point layer, west === east) or an antimeridian-spanning
       // one (west > east) would otherwise make cols/rows zero or negative,
@@ -1909,13 +2562,14 @@ export const voronoiTool: ProcessingAlgorithm = {
     // Both diagrams are undefined for collinear/coincident points (a zero-area
     // bounding box). Turf's tin/voronoi would throw or return nothing; bail with
     // a clear message instead. Mirrors the backend guard.
-    const [minX, minY, maxX, maxY] = bbox(pointsFc) as [number, number, number, number];
-    if (minX === maxX || minY === maxY) {
+    const pointsBox = horizontalBbox(bbox(pointsFc));
+    if (!pointsBox || pointsBox[0] === pointsBox[2] || pointsBox[1] === pointsBox[3]) {
       ctx.log(
         "Error: the points are collinear or coincident; Voronoi / Delaunay needs points that span an area",
       );
       return;
     }
+    const [minX, minY, maxX, maxY] = pointsBox;
     if (kind === "delaunay") {
       const result = tin(pointsFc);
       // The bbox guard above catches axis-aligned collinearity; diagonally
@@ -2163,9 +2817,13 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       // after normalization), so draw an omnidirectional site as a circle.
       if (angle > 360) angle = 360;
       const full = angle === 360; // only reachable once the clamp above fired
+      // turf's circle/sector are Earth-radius based, so scale the site radius
+      // into its Earth equivalent to cover the intended ground on this body
+      // (GeoLibre#1128). A no-op on Earth.
+      const turfRadius = bodyLengthToEarth(radius);
       const wedge = full
-        ? circle(point.geometry.coordinates, radius, { units: units as LinearUnit })
-        : sector(point.geometry.coordinates, radius, azimuth - angle / 2, azimuth + angle / 2, {
+        ? circle(point.geometry.coordinates, turfRadius, { units: units as LinearUnit })
+        : sector(point.geometry.coordinates, turfRadius, azimuth - angle / 2, azimuth + angle / 2, {
             units: units as LinearUnit,
           });
       if (!wedge?.geometry) {
@@ -2258,11 +2916,15 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
     const segments: Feature<LineString>[] = [];
+    // turf measures on Earth; rescale to this body's ground distance
+    // (GeoLibre#1128) so the derived speeds are correct off Earth too. Read the
+    // ratio once rather than per segment.
+    const bodyRatio = getActiveBodyRadiusRatio();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        const meters = distance(a.coord, b.coord, { units: "meters" });
+        const meters = distance(a.coord, b.coord, { units: "meters" }) * bodyRatio;
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2402,6 +3064,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const stops: Feature<Point>[] = [];
+    // Convert the threshold into turf's Earth-based units once, rather than
+    // converting every measured distance inside the O(n²) scan below
+    // (GeoLibre#1128). Equivalent comparison, no per-iteration ellipsoid lookup.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -2418,7 +3084,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
           j < pts.length &&
           distance(pts[i].coord, pts[j].coord, {
             units: distanceUnits as LinearUnit,
-          }) <= maxDistance
+          }) <= maxTurfDistance
         ) {
           j += 1;
         }
@@ -2633,15 +3299,21 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // Sort by time so the inner loop can stop once the time gap is exceeded.
     timed.sort((a, b) => a.time - b.time);
     const pairs: Feature<LineString>[] = [];
+    // As in stop detection: convert the threshold into turf's Earth-based units
+    // once so the O(n²) candidate scan does no per-iteration conversion
+    // (GeoLibre#1128). Only the pairs that survive the test are converted back
+    // to this body's ground distance for the reported `distance` property.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        const dist = distance(timed[i].coord, timed[j].coord, {
+        const turfDistance = distance(timed[i].coord, timed[j].coord, {
           units: distanceUnits as LinearUnit,
         });
-        if (dist > maxDistance) continue;
+        if (turfDistance > maxTurfDistance) continue;
+        const dist = earthLengthToBody(turfDistance);
         pairs.push({
           type: "Feature",
           properties: {
@@ -2668,6 +3340,349 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
   },
 };
 
+export const mergeLayersTool: ProcessingAlgorithm = {
+  id: "merge-layers",
+  name: "Merge layers",
+  description:
+    "Combine several vector layers into one, uniting their attribute schemas (missing attributes become null)",
+  group: "Data management",
+  parameters: [
+    {
+      id: "layers",
+      label: "Input layers",
+      type: "layers",
+      required: true,
+      description: "Select two or more layers; they are concatenated in the order shown",
+    },
+    {
+      id: "addSourceField",
+      label: "Add source layer field",
+      type: "boolean",
+      default: true,
+      description: "Record each output feature's originating layer name",
+    },
+    {
+      id: "sourceFieldName",
+      label: "Source field name",
+      type: "string",
+      default: "source",
+      description: "Name of the field that stores the originating layer name",
+    },
+  ],
+  run: (ctx) => {
+    // De-duplicate: the multi-select cannot repeat an option, but a replayed
+    // History entry could, and merging a layer into itself twice is never meant.
+    const ids = Array.isArray(ctx.parameters.layers)
+      ? [...new Set(ctx.parameters.layers as string[])]
+      : [];
+    if (ids.length < 2) {
+      ctx.log('Error: parameter "layers" requires at least two selected layers');
+      return;
+    }
+    const addSource = ctx.parameters.addSourceField !== false;
+    const rawFieldName = (ctx.parameters.sourceFieldName as string)?.trim();
+    const sourceField = rawFieldName || "source";
+
+    // Resolve first so a layer deleted since it was selected (or a stale
+    // History re-run) is reported as missing rather than as merely empty.
+    const resolved = ids.map((id) => ctx.layers.find((l) => l.id === id));
+    const missing = resolved.filter((l) => !l).length;
+    if (missing) ctx.log(`Skipped ${missing} selected layer(s) that no longer exist`);
+    // Require a feature that will actually be emitted: a layer whose features
+    // all have null geometry contributes nothing to the output below, so it is
+    // a skip, not a merged layer.
+    const selected = resolved.filter((l): l is GeoLibreLayer =>
+      Boolean(l?.geojson?.features?.some((feature) => feature.geometry)),
+    );
+    const unusable = ids.length - missing - selected.length;
+    if (unusable) ctx.log(`Skipped ${unusable} selected layer(s) with no usable geometry`);
+    if (!selected.length) {
+      ctx.log("Error: none of the selected layers has usable geometry");
+      return;
+    }
+    // The source field is written last and would otherwise overwrite an input
+    // attribute of the same name, so refuse rather than silently drop data.
+    if (
+      addSource &&
+      selected.some((layer) =>
+        layer.geojson!.features.some(
+          (feature) =>
+            feature.geometry &&
+            Object.prototype.hasOwnProperty.call(feature.properties ?? {}, sourceField),
+        ),
+      )
+    ) {
+      ctx.log(
+        `Error: source field '${sourceField}' already exists in an input layer; choose a different source field name`,
+      );
+      return;
+    }
+
+    // Union of property keys in first-seen order, so the merged attribute
+    // schema is stable regardless of feature iteration.
+    const schema: string[] = [];
+    const seen = new Set<string>();
+    if (addSource) {
+      schema.push(sourceField);
+      seen.add(sourceField);
+    }
+    for (const layer of selected) {
+      for (const feature of layer.geojson!.features) {
+        // Skip features the output builder drops, so a property carried only
+        // by a null-geometry feature does not become an always-null column.
+        if (!feature.geometry) continue;
+        for (const key of Object.keys(feature.properties ?? {})) {
+          if (!seen.has(key)) {
+            seen.add(key);
+            schema.push(key);
+          }
+        }
+      }
+    }
+
+    // Build fresh features (no `id`): two input layers routinely number their
+    // features from the same base, so carrying ids across a merge would emit
+    // duplicates, which would corrupt MapLibre feature state. Same reasoning as
+    // the one-to-many spatial join above.
+    const out = featureCollection(
+      selected.flatMap((layer) =>
+        layer
+          .geojson!.features.filter((feature) => feature.geometry)
+          .map((feature) => ({
+            type: "Feature" as const,
+            properties: Object.fromEntries(
+              schema.map((key) => {
+                if (key === sourceField && addSource) return [key, layer.name];
+                const props = feature.properties ?? {};
+                // Own-property lookup: a bare `props[key]` resolves "__proto__"
+                // to Object.prototype for a feature that lacks it, and `?? null`
+                // does not catch that because it is not nullish. JSON.parse does
+                // create an own "__proto__" key, so this is reachable from a file.
+                return [
+                  key,
+                  Object.prototype.hasOwnProperty.call(props, key) ? (props[key] ?? null) : null,
+                ];
+              }),
+            ),
+            geometry: feature.geometry!,
+          })),
+      ),
+    );
+
+    ctx.log(
+      `Merged ${selected.length} layer(s): ${out.features.length} feature(s), ${schema.length} attribute(s)`,
+    );
+    ctx.addResultLayer?.("Merged layers", out);
+  },
+};
+
+export const decodePolylineTool: ProcessingAlgorithm = {
+  id: "decode-polyline",
+  name: "Decode polyline",
+  description:
+    "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+    },
+    {
+      id: "field",
+      label: "Polyline field",
+      type: "field",
+      description: "Attribute field containing the encoded polyline string",
+      required: true,
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const field = (ctx.parameters.field as string)?.trim();
+    if (!field) {
+      ctx.log("Error: please specify a polyline field");
+      return;
+    }
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+
+    const outFeatures: Feature<LineString | MultiLineString>[] = [];
+    let skipped = 0;
+
+    for (const feature of fc.features) {
+      const rawVal = feature.properties?.[field];
+      if (typeof rawVal !== "string" || !rawVal.trim()) {
+        skipped++;
+        continue;
+      }
+      const val = rawVal.trim();
+      const parts = val
+        .split(";")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      let valid = true;
+      const multiCoords: [number, number][][] = [];
+
+      for (const part of parts) {
+        for (let i = 0; i < part.length; i++) {
+          const code = part.charCodeAt(i);
+          if (code < 63 || code > 126) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        const decodeResult = decodePolylineDetailed(part, precision);
+        if (!decodeResult.complete) {
+          valid = false;
+          break;
+        }
+
+        const coords = decodeResult.coordinates;
+        if (coords.length < 2) {
+          valid = false;
+          break;
+        }
+
+        for (const [lon, lat] of coords) {
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        multiCoords.push(coords);
+      }
+
+      if (!valid || multiCoords.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      if (multiCoords.length === 1) {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "LineString",
+            coordinates: multiCoords[0],
+          },
+        });
+      } else {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: multiCoords,
+          },
+        });
+      }
+    }
+
+    if (skipped > 0) {
+      ctx.log(`Skipped ${skipped} feature(s) with missing or invalid polyline string`);
+    }
+    ctx.log(`Decoded ${outFeatures.length} line feature(s) from "${field}"`);
+    ctx.addResultLayer?.("Decoded polylines", featureCollection(outFeatures));
+  },
+};
+
+export const encodePolylineTool: ProcessingAlgorithm = {
+  id: "encode-polyline",
+  name: "Encode line to polyline",
+  description:
+    "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line"],
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+    {
+      id: "targetField",
+      label: "Output field name",
+      type: "string",
+      description: "Name of the attribute column to store encoded polylines (default: polyline)",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+    const targetField = ((ctx.parameters.targetField as string) || "").trim() || "polyline";
+
+    const outFeatures: Feature[] = [];
+    let encodedCount = 0;
+
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      let polylineStr = "";
+      if (geometry?.type === "LineString") {
+        polylineStr = encodePolyline(geometry.coordinates as [number, number][], precision);
+      } else if (geometry?.type === "MultiLineString") {
+        polylineStr = geometry.coordinates
+          .map((lineCoords) => encodePolyline(lineCoords as [number, number][], precision))
+          .filter(Boolean)
+          .join(";");
+      }
+      if (polylineStr) encodedCount++;
+      outFeatures.push({
+        ...feature,
+        properties: {
+          ...(feature.properties ?? {}),
+          [targetField]: polylineStr,
+        },
+      });
+    }
+
+    ctx.log(
+      `Encoded ${encodedCount} line feature(s) into field "${targetField}" (precision ${precision})`,
+    );
+    ctx.addResultLayer?.("Encoded polylines", featureCollection(outFeatures));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -2688,9 +3703,13 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   explodeTool,
   aggregateTool,
   smoothTool,
+  extractVerticesTool,
+  pointsAlongGeometryTool,
   gridTool,
   voronoiTool,
   cellSectorsTool,
+  decodePolylineTool,
+  encodePolylineTool,
   createDggsGridTool,
   dggsBinPointsTool,
   dggsCompactTool,
@@ -2699,6 +3718,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   trajectorySpeedTool,
   detectStopsTool,
   spaceTimeProximityTool,
+  mergeLayersTool,
   // Data-quality tools (validity + topology rules) last, matching the menu.
   ...TOPOLOGY_TOOLS,
 ];

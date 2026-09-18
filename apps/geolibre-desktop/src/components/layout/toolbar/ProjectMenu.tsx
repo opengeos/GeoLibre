@@ -1,4 +1,4 @@
-import { projectPathLabel, useAppStore } from "@geolibre/core";
+import { projectPathLabel, useAppCapability, useAppStore } from "@geolibre/core";
 import {
   Button,
   DropdownMenu,
@@ -35,13 +35,23 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { projectMenuItemCapability } from "../../../lib/deployment-gates";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import type { ShareHostStatus } from "../../../lib/share-geolibre";
+import { CapabilityNotice, capabilityNoticeId } from "./CapabilityNotice";
 import { formatRecentProjectTime, type ToolbarChrome } from "./constants";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 
 // aria-describedby targets for the "sharing server unavailable" explanation.
 const SHARE_UNAVAILABLE_ID = "project-menu-share-unavailable";
 const GALLERY_UNAVAILABLE_ID = "project-menu-gallery-unavailable";
+// …and for the "your role does not allow this" explanations. One per privilege,
+// not per item: the four save entries share a reason, and aria-describedby may
+// name an id the element does not own.
+const SAVE_DENIED_ID = "project-menu-save-denied";
+const SHARE_DENIED_ID = "project-menu-share-denied";
+const EXPORT_DATA_DENIED_ID = "project-menu-export-data-denied";
+const EXPORT_IMAGE_DENIED_ID = "project-menu-export-image-denied";
 
 interface ProjectMenuProps {
   chrome: ToolbarChrome;
@@ -97,12 +107,42 @@ export function ProjectMenu({
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
+  // The offline-region export walks the basemap's style document to collect the
+  // tiles it needs, so it depends on the Style Spec rather than on the renderer.
+  const capabilities = useMapCapabilities();
   const recentProjects = useAppStore((s) => s.recentProjects);
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
+  const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  const saveCapability = useAppCapability("project:save");
+  const shareCapability = useAppCapability("project:share");
+  // Collaboration puts the project on a server outside this machine, the same
+  // thing Share does, so it takes `project:share` too — and
+  // `deployment-gates.ts` classifies `project.collaborate` that way for the
+  // command palette, which has to agree with this.
+  // Everything that gets something back out of the app, split the way the
+  // privilege vocabulary splits it: Export HTML writes the project and its data
+  // into a standalone file and the offline basemap downloads tiles, so both are
+  // `export:data`; the print layout designer exists to produce a rendering, so
+  // it is `export:image`. Share has its own `project:share` above.
+  const exportDataCapability = useAppCapability("export:data");
+  const exportImageCapability = useAppCapability("export:image");
+  // A disabled DropdownMenuItem is `pointer-events-none`, so the reason has to
+  // be a rendered line the item points at, exactly like shareBrokenNote below.
+  const saveDeniedBy = capabilityNoticeId(SAVE_DENIED_ID, saveCapability);
+  const shareDeniedBy = capabilityNoticeId(SHARE_DENIED_ID, shareCapability);
+  const exportDataDeniedBy = capabilityNoticeId(EXPORT_DATA_DENIED_ID, exportDataCapability);
+  const exportImageDeniedBy = capabilityNoticeId(EXPORT_IMAGE_DENIED_ID, exportImageCapability);
+  // Two independent gates, and the deployment's comes first: the interface
+  // profile is a decluttering preference the user can undo, while a capability
+  // the deployment withheld is not on offer at all (issue #1673).
+  const show = (id: string) => {
+    const required = projectMenuItemCapability(id);
+    if (required && !deploymentCapabilities.has(required)) return false;
+    return isMenuItemVisible(uiProfile, id);
+  };
   // A deployment that turned sharing off should not advertise it; one that named
   // a host we rejected should say so rather than leave the user wondering.
   const shareHidden = shareHostStatus === "disabled";
@@ -128,6 +168,20 @@ export function ProjectMenu({
     (!shareHidden && show("project.share")) ||
     show("project.exportHtml") ||
     (collaborationEnabled && show("project.collaborate"));
+  // Narrower than showSaveGroup, which also covers share/export/collaborate: the
+  // `project:save` note must not render when only those siblings are on screen.
+  const showSaveActions =
+    show("project.save") ||
+    show("project.saveAs") ||
+    (show("project.duplicate") && Boolean(onDuplicate)) ||
+    (show("project.saveAsTemplate") && Boolean(onSaveAsTemplate));
+  // The two `export:data` entries sit in different groups, so their shared note
+  // renders at the menu's foot and needs to know whether either is on screen.
+  const showExportDataActions = show("project.exportHtml") || show("project.offlineRegion");
+  // Same for the two `project:share` entries, which straddle Export HTML.
+  const showShareActions =
+    (!shareHidden && show("project.share")) ||
+    (collaborationEnabled && show("project.collaborate"));
   const showPrintGroup = show("project.printLayout") || show("project.offlineRegion");
 
   return (
@@ -143,7 +197,8 @@ export function ProjectMenu({
           {chrome.renderLabel(t("toolbar.menu.project"))}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      {/* No width class — see AddDataMenu: shrink-to-fit over a fixed w-64. */}
+      <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.menu.project")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("project.new") && (
@@ -270,35 +325,58 @@ export function ProjectMenu({
         )}
         {showSaveGroup && <DropdownMenuSeparator />}
         {show("project.save") && (
-          <DropdownMenuItem onSelect={onSave}>
+          <DropdownMenuItem
+            onSelect={onSave}
+            disabled={!saveCapability.granted}
+            aria-describedby={saveDeniedBy}
+          >
             <Save className="me-2 h-3.5 w-3.5" />
             {t("common.save")}
           </DropdownMenuItem>
         )}
         {show("project.saveAs") && (
-          <DropdownMenuItem onSelect={onSaveAs}>
+          <DropdownMenuItem
+            onSelect={onSaveAs}
+            disabled={!saveCapability.granted}
+            aria-describedby={saveDeniedBy}
+          >
             <FilePen className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.saveAsEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.duplicate") && onDuplicate && (
-          <DropdownMenuItem onSelect={onDuplicate}>
+          <DropdownMenuItem
+            onSelect={onDuplicate}
+            disabled={!saveCapability.granted}
+            aria-describedby={saveDeniedBy}
+          >
             <Copy className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.duplicate")}
           </DropdownMenuItem>
         )}
         {show("project.saveAsTemplate") && onSaveAsTemplate && (
-          <DropdownMenuItem onSelect={onSaveAsTemplate}>
+          <DropdownMenuItem
+            onSelect={onSaveAsTemplate}
+            disabled={!saveCapability.granted}
+            aria-describedby={saveDeniedBy}
+          >
             <Bookmark className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.saveAsTemplateEllipsis")}
           </DropdownMenuItem>
         )}
+        {/* One line for the whole save group, after its last entry: all four
+            items are denied together and each points here. */}
+        {showSaveActions && <CapabilityNotice id={SAVE_DENIED_ID} capability={saveCapability} />}
         {show("project.share") && !shareHidden && (
           <>
             <DropdownMenuItem
               onSelect={onShare}
-              disabled={shareBroken}
-              aria-describedby={shareBroken ? SHARE_UNAVAILABLE_ID : undefined}
+              disabled={shareBroken || !shareCapability.granted}
+              aria-describedby={
+                [shareBroken ? SHARE_UNAVAILABLE_ID : undefined, shareDeniedBy]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
             >
               <Share2 className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.shareEllipsis")}
@@ -307,26 +385,45 @@ export function ProjectMenu({
           </>
         )}
         {show("project.exportHtml") && (
-          <DropdownMenuItem onSelect={onExportHtml}>
+          <DropdownMenuItem
+            onSelect={onExportHtml}
+            disabled={!exportDataCapability.granted}
+            aria-describedby={exportDataDeniedBy}
+          >
             <FileCode2 className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.exportHtmlEllipsis")}
           </DropdownMenuItem>
         )}
         {collaborationEnabled && show("project.collaborate") && (
-          <DropdownMenuItem onSelect={onCollaborate}>
+          <DropdownMenuItem
+            onSelect={onCollaborate}
+            disabled={!shareCapability.granted}
+            aria-describedby={shareDeniedBy}
+          >
             <Users className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.collaborateEllipsis")}
           </DropdownMenuItem>
         )}
+        {/* After Collaborate rather than inside Share's fragment: both point at
+            this note, and Collaborate can be on screen with Share hidden. */}
+        {showShareActions && <CapabilityNotice id={SHARE_DENIED_ID} capability={shareCapability} />}
         {showPrintGroup && <DropdownMenuSeparator />}
         {show("project.printLayout") && (
-          <DropdownMenuItem onSelect={onPrintLayout}>
+          <DropdownMenuItem
+            onSelect={onPrintLayout}
+            disabled={!exportImageCapability.granted}
+            aria-describedby={exportImageDeniedBy}
+          >
             <Printer className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.printLayoutEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.offlineRegion") && (
-          <DropdownMenuItem onSelect={onOpenOfflineBasemap}>
+          <DropdownMenuItem
+            onSelect={onOpenOfflineBasemap}
+            disabled={!capabilities.styleSpec || !exportDataCapability.granted}
+            aria-describedby={exportDataDeniedBy}
+          >
             <HardDriveDownload className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineBasemapEllipsis")}
           </DropdownMenuItem>
@@ -339,6 +436,15 @@ export function ProjectMenu({
               {t("toolbar.item.storymapEllipsis")}
             </DropdownMenuItem>
           </>
+        )}
+        {/* One line per export privilege, at the menu's foot: Export HTML and the
+            offline basemap sit either side of a separator, so a note next to one
+            of them would be orphaned when only the other is on screen. */}
+        {showExportDataActions && (
+          <CapabilityNotice id={EXPORT_DATA_DENIED_ID} capability={exportDataCapability} />
+        )}
+        {show("project.printLayout") && (
+          <CapabilityNotice id={EXPORT_IMAGE_DENIED_ID} capability={exportImageCapability} />
         )}
       </DropdownMenuContent>
     </DropdownMenu>

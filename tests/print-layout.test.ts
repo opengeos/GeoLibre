@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   computeScaleRatio,
   drawLayout,
+  mapBodyAspectRatio,
   pageMm,
   pagePx,
   resolvePageSize,
@@ -18,14 +19,24 @@ import {
  */
 function recordingCanvas(): {
   canvas: HTMLCanvasElement;
-  fills: { text: string; textAlign: string; textBaseline: string }[];
+  fills: { text: string; x: number; y: number; textAlign: string; textBaseline: string }[];
   fillRects: { w: number; h: number; fillStyle: string }[];
+  imageBoxes: { w: number; h: number }[];
   arcs: number;
   polylines: number[];
 } {
-  const fills: { text: string; textAlign: string; textBaseline: string }[] = [];
+  const fills: {
+    text: string;
+    x: number;
+    y: number;
+    textAlign: string;
+    textBaseline: string;
+  }[] = [];
   // Filled rectangles (swatches, chart bars), with the fill colour in effect.
   const fillRects: { w: number; h: number; fillStyle: string }[] = [];
+  // Drawn images (custom SVG marker icons), with the box each was drawn into,
+  // so a proportional marker ramp's graduated sizes can be asserted.
+  const imageBoxes: { w: number; h: number }[] = [];
   // Stroked polylines: one entry per beginPath..stroke sequence that used
   // lineTo, holding the segment count (the line chart's path).
   const polylines: number[] = [];
@@ -38,9 +49,11 @@ function recordingCanvas(): {
     get(target, prop) {
       if (prop === "measureText") return () => ({ width: 10 });
       if (prop === "fillText") {
-        return (text: string) =>
+        return (text: string, x: number, y: number) =>
           fills.push({
             text,
+            x,
+            y,
             textAlign: String(target.textAlign),
             textBaseline: String(target.textBaseline),
           });
@@ -55,8 +68,9 @@ function recordingCanvas(): {
         };
       }
       if (prop === "drawImage") {
-        return () => {
+        return (_img: unknown, _x: number, _y: number, w: number, h: number) => {
           counters.drawImages += 1;
+          imageBoxes.push({ w, h });
         };
       }
       if (prop === "beginPath") {
@@ -93,6 +107,7 @@ function recordingCanvas(): {
     canvas,
     fills,
     fillRects,
+    imageBoxes,
     get arcs() {
       return counters.arcs;
     },
@@ -150,7 +165,11 @@ describe("drawLayout legend rendering", () => {
       canvas,
       baseOptions({
         legend: [
-          { id: "pop", name: "Population", swatches: [{ color: "#00aa00", label: "High" }] },
+          {
+            id: "pop",
+            name: "Population",
+            swatches: [{ color: "#00aa00", label: "High" }],
+          },
         ],
       }),
     );
@@ -272,7 +291,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "pts",
             name: "Sites",
-            swatches: [{ color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } }],
+            swatches: [
+              {
+                color: "#00aa55",
+                marker: { shape: "triangle", color: "#00aa55" },
+              },
+            ],
           },
         ],
       }),
@@ -299,7 +323,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "bees",
             name: "Bees",
-            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+            swatches: [
+              {
+                color: "#3b82f6",
+                marker: { shape: "custom", color: "#3b82f6", svg },
+              },
+            ],
           },
         ],
         markerIcons: new Map([[svg, image]]),
@@ -312,6 +341,182 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("scales a proportional size ramp's marker icons instead of drawing one fixed box", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "ruchers",
+            name: "Ruchers",
+            swatches: [
+              { color: "#3b82f6", label: "1", size: 4, marker },
+              { color: "#3b82f6", label: "43.5", size: 14, marker },
+              { color: "#3b82f6", label: "86", size: 24, marker },
+            ],
+          },
+        ],
+        markerIcons: new Map([[svg, image]]),
+      }),
+    );
+    assert.equal(rec.drawImages, 3);
+    const widths = rec.imageBoxes.map((box) => box.w);
+    // Strictly growing, at the map's size ratios, so the ramp reads as one
+    // symbol growing rather than three identical icons (GH discussion #1711).
+    // The smallest row sits on the shared visible-symbol floor (like the circle
+    // branch), so the ratio is asserted between the two unclamped rows.
+    assert.ok(widths[0] < widths[1] && widths[1] < widths[2], `not growing: ${widths.join()}`);
+    assert.ok(
+      Math.abs(widths[1] / widths[2] - 14 / 24) < 0.02,
+      `middle/max ratio off: ${widths.join()}`,
+    );
+    assert.ok(
+      rec.imageBoxes.every((box) => box.w === box.h),
+      "expected square marker boxes",
+    );
+  });
+
+  it("matches proportional legend markers to the fitted map image scale", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const legend: LegendEntry[] = [
+      {
+        id: "ruchers",
+        name: "Ruchers",
+        swatches: [{ color: "#3b82f6", label: "86", size: 16, marker }],
+      },
+    ];
+    const render = (mapImageWidth: number) => {
+      const rec = recordingCanvas();
+      drawLayout(
+        rec.canvas,
+        baseOptions({
+          legend,
+          markerIcons: new Map([[svg, image]]),
+          mapImage: {} as CanvasImageSource,
+          mapImageWidth,
+          mapImageHeight: mapImageWidth,
+          mapPixelRatio: 2,
+        }),
+      );
+      return rec.imageBoxes.at(-1)!.w;
+    };
+
+    // A 400 px square page with normal margins has a 360 px map body. At DPR 2,
+    // a 16 CSS-px radius is a 32 device-px radius before the map fit is applied.
+    // (Kept under the swatch cap below so this asserts the fit scaling alone.)
+    assert.equal(render(400), 57.6);
+    assert.equal(render(800), 28.8);
+  });
+
+  it("keeps ordinary rows compact beside a derived proportional ramp", () => {
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "regions",
+            name: "Regions",
+            swatches: [
+              { color: "#111111", label: "Low" },
+              { color: "#222222", label: "High" },
+              { color: "#f59e0b", label: "Centroids: 2", size: 4 },
+              { color: "#f59e0b", label: "Centroids: 25", size: 14 },
+              { color: "#f59e0b", label: "Centroids: 48", size: 24 },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const classSwatches = rec.fillRects.filter(
+      (rect) => rect.fillStyle === "#111111" || rect.fillStyle === "#222222",
+    );
+    assert.deepEqual(
+      classSwatches.map((rect) => [rect.w, rect.h]),
+      [
+        [8, 8],
+        [8, 8],
+      ],
+    );
+    const low = rec.fills.find((fill) => fill.text === "Low");
+    const high = rec.fills.find((fill) => fill.text === "High");
+    assert.ok(low && high);
+    assert.ok(high.y - low.y < 20, `ordinary rows were inflated: ${high.y - low.y}`);
+    assert.ok(rec.arcs >= 3, "expected the proportional centroid circles to be drawn");
+  });
+
+  it("caps an outsized proportional symbol instead of blanking the legend box", () => {
+    // A live-map radius far larger than the page: sized 1:1 it would make one
+    // row taller than the whole map body, and the truncation rule would drop
+    // the entire box — including the unrelated entry below it.
+    const legend: LegendEntry[] = [
+      {
+        id: "hives",
+        name: "Hives",
+        swatches: [
+          { color: "#3b82f6", label: "1", size: 4 },
+          { color: "#3b82f6", label: "9000", size: 900 },
+        ],
+      },
+    ];
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+        mapPixelRatio: 2,
+      }),
+    );
+    const texts = rec.fills.map((f) => f.text);
+    assert.ok(texts.includes("Hives"), `legend was blanked: ${texts.join()}`);
+    assert.ok(texts.includes("1") && texts.includes("9000"), `rows elided: ${texts.join()}`);
+  });
+
+  it("scopes the outsized-symbol shrink to the entry that overflowed", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    // Two proportional layers sharing one legend: only the first overflows the
+    // swatch column, so the second must still draw 1:1 with the map.
+    const legend: LegendEntry[] = [
+      {
+        id: "hives",
+        name: "Hives",
+        swatches: [{ color: "#3b82f6", label: "9000", size: 900, marker }],
+      },
+      {
+        id: "wells",
+        name: "Wells",
+        swatches: [{ color: "#3b82f6", label: "3", size: 8, marker }],
+      },
+    ];
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend,
+        markerIcons: new Map([[svg, image]]),
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+        mapPixelRatio: 2,
+      }),
+    );
+    // mapSymbolScale is 2 (DPR) × 0.9 (map fit), so the modest 8 px radius is a
+    // 14.4 px radius, i.e. a 28.8 px box — untouched by the outlier's shrink.
+    assert.equal(rec.imageBoxes.at(-1)!.w, 28.8);
+  });
+
   it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
     const svg = "<svg/>";
     const rec = recordingCanvas();
@@ -322,7 +527,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "bees",
             name: "Bees",
-            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+            swatches: [
+              {
+                color: "#3b82f6",
+                marker: { shape: "custom", color: "#3b82f6", svg },
+              },
+            ],
           },
         ],
         // No markerIcons: the icon is unavailable.
@@ -332,6 +542,37 @@ describe("drawLayout legend rendering", () => {
     assert.ok(
       rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
       "expected a fallback color square when the icon is missing",
+    );
+  });
+
+  it("falls back to sized circles, not framed squares, for an unloaded ramp icon", () => {
+    const svg = "<svg/>";
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "ruchers",
+            name: "Ruchers",
+            swatches: [
+              { color: "#3b82f6", label: "1", size: 4, marker },
+              { color: "#3b82f6", label: "43.5", size: 14, marker },
+              { color: "#3b82f6", label: "86", size: 24, marker },
+            ],
+          },
+        ],
+        // No markerIcons: a remote icon still fetching, or one that failed.
+      }),
+    );
+    assert.equal(rec.drawImages, 0);
+    // Three filled circles, so the ramp still reads as one growing symbol
+    // during the load window rather than a column of identical framed boxes.
+    assert.ok(rec.arcs >= 3, `expected fallback circles, got ${rec.arcs} arcs`);
+    assert.ok(
+      !rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
+      "expected no square fallback swatch for a proportional row",
     );
   });
 
@@ -345,7 +586,10 @@ describe("drawLayout legend rendering", () => {
             id: "md",
             name: "Marker+Diagram",
             swatches: [
-              { color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } },
+              {
+                color: "#00aa55",
+                marker: { shape: "triangle", color: "#00aa55" },
+              },
               { color: "#111111", label: "votes" },
             ],
           },
@@ -377,14 +621,23 @@ describe("drawLayout legend rendering", () => {
 
 describe("resolvePageSize", () => {
   it("swaps width/height for landscape preset paper", () => {
-    const portrait = resolvePageSize({ paperSize: "a4", orientation: "portrait" });
+    const portrait = resolvePageSize({
+      paperSize: "a4",
+      orientation: "portrait",
+    });
     assert.deepEqual(portrait, { width: 210, height: 297, unit: "mm" });
-    const landscape = resolvePageSize({ paperSize: "a4", orientation: "landscape" });
+    const landscape = resolvePageSize({
+      paperSize: "a4",
+      orientation: "landscape",
+    });
     assert.deepEqual(landscape, { width: 297, height: 210, unit: "mm" });
   });
 
   it("resolves a pixel screen preset to its oriented pixel dimensions", () => {
-    const landscape = resolvePageSize({ paperSize: "fullhd", orientation: "landscape" });
+    const landscape = resolvePageSize({
+      paperSize: "fullhd",
+      orientation: "landscape",
+    });
     assert.deepEqual(landscape, { width: 1920, height: 1080, unit: "px" });
   });
 
@@ -404,6 +657,26 @@ describe("resolvePageSize", () => {
       customSize: { width: 0, height: 0, unit: "px" },
     });
     assert.deepEqual(size, { width: 1280, height: 720, unit: "px" });
+  });
+});
+
+describe("mapBodyAspectRatio", () => {
+  it("accounts for an outside title when fitting the atlas camera", () => {
+    const inside = mapBodyAspectRatio(
+      baseOptions({
+        titlePlacement: "inside",
+        showAttribution: false,
+        showDate: false,
+      }),
+    );
+    const outside = mapBodyAspectRatio(
+      baseOptions({
+        titlePlacement: "outside",
+        showAttribution: false,
+        showDate: false,
+      }),
+    );
+    assert.ok(outside > inside);
   });
 });
 
@@ -576,7 +849,12 @@ describe("drawLayout cartographic furniture", () => {
         projectNumber: "PRJ-42",
         crs: "EPSG:28992",
         revision: "Rev 01",
-        infoLabels: { author: "Author", project: "Project", crs: "CRS", revision: "Rev" },
+        infoLabels: {
+          author: "Author",
+          project: "Project",
+          crs: "CRS",
+          revision: "Rev",
+        },
       }),
     );
     for (const v of ["Jane Cartographer", "PRJ-42", "EPSG:28992", "Rev 01"]) {

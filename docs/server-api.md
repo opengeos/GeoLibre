@@ -237,6 +237,34 @@ Response `201`: `{"project": <project>, "version": <positive integer>}`.
 
 Requires ownership. Deletes metadata and stored objects. Response: `204`.
 
+### `GET /api/projects/{id}/activity`
+
+Requires ownership. Returns the project's activity log, newest first, capped
+at 100 entries:
+
+```json
+{"activity": [
+  {"id": "…", "action": "visibility_change", "actorId": "…",
+   "details": {"before": "private", "after": "public"}, "createdAt": "…"},
+  {"id": "…", "action": "open", "actorId": null,
+   "details": {"date": "2026-08-21", "count": 40}, "createdAt": "…"}
+]}
+```
+
+Actions and their `details`: `version_save` (`version`), `fork`
+(`forked_project_id`), `visibility_change` (`before`, `after`), `fetch` of
+the raw JSON (`version`) and `open` of the project page. `actorId` is the
+acting account, or `null` for an anonymous visitor. Anonymous `open` and
+`fetch` events are **never stored per visitor**: they are aggregated into one
+row per action and UTC day carrying a `count`, and no IP address or other
+visitor fingerprint is recorded. Rows are pruned after
+`GEOLIBRE_ACTIVITY_RETENTION_DAYS` (default 90) the next time the project logs
+an event. The log is visible only to the owner and never appears in listings.
+
+### `DELETE /api/projects/{id}/activity`
+
+Requires ownership. Deletes every activity row for the project. Response: `204`.
+
 ### `POST /api/projects/{id}/forks`
 
 Requires auth. Creates a new project owned by the caller from the visible

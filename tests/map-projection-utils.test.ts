@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Map as MapboxMap } from "mapbox-gl";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   acquireMercatorProjectionLock,
@@ -162,4 +163,67 @@ describe("mercator projection lock", () => {
     assert.deepEqual(fake.setProjectionCalls, []);
     assert.equal(fake.projection, "globe");
   });
+});
+
+it("uses Mapbox's named projection API and keeps Mercator until both overlay holders release", () => {
+  let projection = "globe";
+  const map = {
+    getProjection: () => ({ name: projection }),
+    setProjection: (next: { name: string }) => {
+      projection = next.name;
+    },
+    once: () => {},
+  } as unknown as MapboxMap;
+  const app = {
+    getMapboxMap: () => map,
+    getMapProjection: () => projection as ProjectionType,
+    setMapProjection: (next: ProjectionType) => {
+      projection = next;
+    },
+  };
+  ensureMercatorProjection(map);
+  assert.equal(projection, "mercator");
+  projection = "globe";
+  acquireMercatorProjectionLock("test-mapbox-tiles", app);
+  acquireMercatorProjectionLock("test-mapbox-lidar", app);
+  releaseMercatorProjectionLock("test-mapbox-tiles", app);
+  assert.equal(projection, "mercator");
+  releaseMercatorProjectionLock("test-mapbox-lidar", app);
+  assert.equal(projection, "globe");
+});
+
+it("keeps ArcGIS local scenes in 3D when a Mercator plugin acquires its lock", () => {
+  const changes: string[] = [];
+  const app = {
+    getMapRenderer: () => "arcgis",
+    getMapProjection: () => "globe" as const,
+    setMapProjection: (value: string) => changes.push(value),
+  };
+  acquireMercatorProjectionLock("arcgis-lidar-test", app);
+  releaseMercatorProjectionLock("arcgis-lidar-test", app);
+  assert.deepEqual(changes, []);
+});
+
+it("does not restore a captured Mapbox projection after switching to ArcGIS", () => {
+  let renderer = "mapbox";
+  let projection: "globe" | "mercator" = "globe";
+  const changes: string[] = [];
+  const app = {
+    getMapRenderer: () => renderer,
+    getMapProjection: () => projection,
+    setMapProjection: (value: "globe" | "mercator") => {
+      projection = value;
+      changes.push(value);
+    },
+  };
+  acquireMercatorProjectionLock("switch-to-arcgis", app);
+  assert.deepEqual(changes, ["mercator"]);
+  renderer = "arcgis";
+  releaseMercatorProjectionLock("switch-to-arcgis", app);
+  assert.deepEqual(changes, ["mercator"]);
+  // The old capture was cleared; a later Mapbox lock starts from current state.
+  renderer = "mapbox";
+  acquireMercatorProjectionLock("after-arcgis", app);
+  releaseMercatorProjectionLock("after-arcgis", app);
+  assert.deepEqual(changes, ["mercator", "mercator"]);
 });

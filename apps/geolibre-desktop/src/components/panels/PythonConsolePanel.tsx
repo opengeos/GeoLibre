@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -49,7 +49,7 @@ interface Entry {
 }
 
 interface PythonConsolePanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /**

@@ -2183,6 +2183,9 @@ export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
     id: HUGGINGFACE_PLUGIN_ID,
     name: "Hugging Face",
     version: "0.1.0",
+    // Store-only: the browser adds ordinary GeoLibre layers and never touches
+    // the map itself.
+    engines: ["maplibre", "mapbox"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

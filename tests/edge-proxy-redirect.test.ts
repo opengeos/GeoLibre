@@ -15,6 +15,7 @@ import {
   assertPublicHttpUrl,
   assertResolvedPublicHost,
   fetchWithGuard,
+  guardedLookup,
   PROXY_MAX_BODY_BYTES,
   PROXY_MAX_REDIRECT_HOPS,
   readBodyWithLimit,
@@ -459,5 +460,71 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
       /10\.0\.0\.5/,
     );
     assert.equal(called, false);
+  });
+});
+
+describe("guarded connector DNS lookup", () => {
+  // `dns.lookup(host, { all: true }, cb)` stand-in.
+  const resolving = (addresses: Array<{ address: string; family: number }>) =>
+    ((hostname: string, options: unknown, cb: (err: unknown, addresses: unknown) => void) => {
+      cb(null, addresses);
+    }) as never;
+
+  it("answers the array form when the connector asked for all addresses", () => {
+    // Node's `net` enables autoSelectFamily by default, so it passes
+    // `all: true` and then reads `addresses[0].address` off the reply. Replying
+    // with the single-address string form makes it index into a string and
+    // throw `ERR_INVALID_IP_ADDRESS: undefined`, which 502s every proxied
+    // raster fetch.
+    const addresses = [
+      { address: "93.184.216.34", family: 4 },
+      { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+    ];
+    let reply: unknown[] | undefined;
+    guardedLookup(
+      "example.com",
+      { all: true },
+      (err, address, family) => {
+        assert.equal(err, null);
+        reply = [address, family];
+      },
+      resolving(addresses),
+    );
+
+    assert.deepEqual(reply?.[0], addresses, "hands back every validated address");
+  });
+
+  it("answers the single-address form when the connector did not ask for all", () => {
+    let reply: unknown[] | undefined;
+    guardedLookup(
+      "example.com",
+      {},
+      (err, address, family) => {
+        assert.equal(err, null);
+        reply = [address, family];
+      },
+      resolving([{ address: "93.184.216.34", family: 4 }]),
+    );
+
+    assert.deepEqual(reply, ["93.184.216.34", 4]);
+  });
+
+  it("refuses a host that resolves to a private address in either reply shape", () => {
+    for (const options of [{ all: true }, {}]) {
+      let error: Error | null = null;
+      guardedLookup(
+        "rebind.example",
+        options,
+        (err) => {
+          error = err as Error;
+        },
+        resolving([
+          { address: "93.184.216.34", family: 4 },
+          { address: "169.254.169.254", family: 4 },
+        ]),
+      );
+
+      assert.match(String(error), /169\.254\.169\.254/);
+    }
   });
 });

@@ -1,8 +1,9 @@
 import { useAppStore } from "@geolibre/core";
-import type maplibregl from "maplibre-gl";
-import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type * as maplibregl from "maplibre-gl";
+import { type RefObject, useEffect, useRef } from "react";
+import type { MapEngine } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
+import { shouldAwaitNativeMap } from "../lib/native-map-attach";
 
 // The host side of the notebook scripting bridge. This is the MIRROR of
 // useCommandBridge: there, the app is the embedded iframe talking up to a host;
@@ -40,8 +41,16 @@ interface CommandMessage {
  */
 export function useNotebookBridge(
   iframeRef: RefObject<HTMLIFrameElement | null>,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
+  /**
+   * Bumped whenever a canvas publishes an engine. The ref itself is stable, so
+   * without this the effect would never re-run on an engine hand-off and the
+   * click listener would stay bound to the old map (#2268 review).
+   */
+  mapReadyGeneration: number,
 ): void {
+  // Survives the effect re-running on an engine hand-off; see `connected` below.
+  const connectedRef = useRef(false);
   useEffect(() => {
     const controller = () => mapControllerRef.current;
     const handlers = createScriptingHandlers({ getController: controller });
@@ -63,7 +72,12 @@ export function useNotebookBridge(
     // not broadcast; refined to the actual origin once a message is accepted.
     let frameOrigin = expectedOrigin() ?? window.location.origin;
     // Whether the notebook client has announced itself; gates outbound events.
-    let connected = false;
+    // Held in a ref, not a local, because this effect now re-runs on an engine
+    // hand-off (`mapReadyGeneration`) while `NotebookPanel` keeps the iframe
+    // mounted — a fresh `connected = false` would silently drop every selection,
+    // layer, and click event until the notebook happened to re-announce itself,
+    // which it has no reason to do (#2268 review).
+    const connected = connectedRef;
 
     const frameWindow = (): Window | null => iframeRef.current?.contentWindow ?? null;
 
@@ -106,7 +120,7 @@ export function useNotebookBridge(
       const data = event.data as { type?: string; requestId?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:notebook-ready") {
-        connected = true;
+        connected.current = true;
         return;
       }
       if (data.type === "geolibre:command" && typeof data.requestId === "string") {
@@ -115,7 +129,7 @@ export function useNotebookBridge(
     };
 
     const emit = (eventName: string, payload: unknown) => {
-      if (!connected) return;
+      if (!connected.current) return;
       const win = frameWindow();
       if (!win) return;
       win.postMessage({ type: "geolibre:event", event: eventName, payload }, frameOrigin);
@@ -152,7 +166,7 @@ export function useNotebookBridge(
 
     // Map click events. The controller/map appear asynchronously after the map
     // loads, so poll on animation frames until the map exists, then attach.
-    let clickMap: ReturnType<MapController["getMap"]> | null = null;
+    let clickMap: ReturnType<MapEngine["getMap"]> | null = null;
     const onMapClick = (event: maplibregl.MapMouseEvent) => {
       const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
       emit("click", {
@@ -162,7 +176,10 @@ export function useNotebookBridge(
     };
     let rafId: number | null = null;
     const attachClick = () => {
-      const map = controller()?.getMap();
+      const engine = controller();
+      // Stops the poll once a map can no longer arrive; see the helper.
+      if (!shouldAwaitNativeMap(engine)) return;
+      const map = engine?.getMap();
       if (map) {
         clickMap = map;
         map.on("click", onMapClick);
@@ -178,6 +195,6 @@ export function useNotebookBridge(
       if (rafId !== null) cancelAnimationFrame(rafId);
       clickMap?.off("click", onMapClick);
     };
-    // Mount-only: both refs are stable and read lazily inside the closures.
-  }, [iframeRef, mapControllerRef]);
+    // Re-runs on each engine hand-off; both refs are stable and read lazily.
+  }, [iframeRef, mapControllerRef, mapReadyGeneration]);
 }

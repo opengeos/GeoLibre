@@ -24,6 +24,10 @@ import com.google.android.gms.location.Priority
 
 
 public class Geolocation(private val context: Context) {
+    private companion object {
+        const val SATELLITE_STALENESS_NANOS = 3_000_000_000L
+    }
+
     private var fusedLocationClient: FusedLocationProviderClient? = null
     private var locationCallback: LocationCallback? = null
     private val locationManager =
@@ -32,6 +36,7 @@ public class Geolocation(private val context: Context) {
     private val satelliteListeners = mutableSetOf<(Int) -> Unit>()
     @Volatile var satellitesUsed: Int? = null
         private set
+    @Volatile private var satellitesUpdatedAtNanos: Long? = null
 
     @SuppressLint("MissingPermission")
     fun startGnssStatusUpdates() {
@@ -44,6 +49,7 @@ public class Geolocation(private val context: Context) {
                         if (status.usedInFix(index)) used += 1
                     }
                     satellitesUsed = used
+                    satellitesUpdatedAtNanos = SystemClock.elapsedRealtimeNanos()
                     val listeners = satelliteListeners.toList()
                     satelliteListeners.clear()
                     listeners.forEach { it(used) }
@@ -51,6 +57,7 @@ public class Geolocation(private val context: Context) {
 
                 override fun onStopped() {
                     satellitesUsed = null
+                    satellitesUpdatedAtNanos = null
                 }
             }
         try {
@@ -65,7 +72,25 @@ public class Geolocation(private val context: Context) {
             }
         } catch (_: SecurityException) {
             satellitesUsed = null
+            satellitesUpdatedAtNanos = null
         }
+    }
+
+    /**
+     * Return GNSS metadata only when it was observed close to this location.
+     * Fused fixes may come from Wi-Fi/cell positioning, while the GNSS status
+     * callback is global and otherwise leaves a stale count attached indoors.
+     */
+    fun satellitesUsedFor(location: Location): Int? {
+        val updatedAt = satellitesUpdatedAtNanos ?: return null
+        val ageNanos = kotlin.math.abs(location.elapsedRealtimeNanos - updatedAt)
+        return satellitesUsed?.takeIf { ageNanos <= SATELLITE_STALENESS_NANOS }
+    }
+
+    /** True when a future GNSS callback could still match this location fix. */
+    fun canWaitForSatellites(location: Location): Boolean {
+        val locationAgeNanos = SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+        return locationAgeNanos in 0..SATELLITE_STALENESS_NANOS
     }
 
     /**
@@ -73,9 +98,15 @@ public class Geolocation(private val context: Context) {
      * returned callback unregisters the listener when a caller times out.
      */
     fun onSatellitesUsedAvailable(callback: (Int) -> Unit): () -> Unit {
-        satellitesUsed?.let {
-            callback(it)
-            return {}
+        val updatedAt = satellitesUpdatedAtNanos
+        if (
+            updatedAt != null &&
+            SystemClock.elapsedRealtimeNanos() - updatedAt <= SATELLITE_STALENESS_NANOS
+        ) {
+            satellitesUsed?.let {
+                callback(it)
+                return {}
+            }
         }
         satelliteListeners.add(callback)
         return { satelliteListeners.remove(callback) }
@@ -190,6 +221,7 @@ public class Geolocation(private val context: Context) {
         }
         gnssStatusCallback = null
         satellitesUsed = null
+        satellitesUpdatedAtNanos = null
     }
 
     @SuppressLint("MissingPermission")

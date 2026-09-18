@@ -1,4 +1,9 @@
-import { type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
+import {
+  applyStoryLayerOpacity,
+  type GeoLibreLayer,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
 import { ensureMercatorProjection } from "../map-projection-utils";
@@ -86,7 +91,18 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   // supplies the "deckviz" layer list.
   await ensureSharedDeckOverlay(app);
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers) renderDeckVizLayers();
+    // Story playback fades layers outside the store's `layers` (see
+    // `ui.storymapLayerOpacity`), so those fades rebuild the overlay too.
+    if (
+      state.layers !== previous.layers ||
+      state.ui.storymapLayerOpacity !== previous.ui.storymapLayerOpacity ||
+      // ArcgisCanvas publishes its camera when the native view becomes stationary.
+      (appRef?.getArcgisView?.() &&
+        state.mapView !== previous.mapView &&
+        state.layers.some(isDiagramLayer))
+    ) {
+      renderDeckVizLayers();
+    }
   });
   renderDeckVizLayers();
 }
@@ -129,11 +145,26 @@ function syncViewListeners(target: ViewListenerMap | null): void {
 function renderDeckVizLayers(): void {
   if (!deckGL || !appRef) return;
 
-  const storeLayers = useAppStore.getState().layers;
-  const vizLayers = storeLayers.filter(isDeckVizLayer);
-  const diagramLayers = storeLayers.filter((layer) => layer.visible && isDiagramLayer(layer));
+  const state = useAppStore.getState();
+  // Fold the active story presentation's fades into each layer's opacity so
+  // diagrams and 3D geometry follow a chapter like the MapLibre layers do
+  // (discussion #2326). Untouched layers keep their identity, so the
+  // FeatureCollection-keyed atlas/elevation caches still hit; with no fades
+  // recorded (the common case, including every animation frame outside a
+  // presentation) the store array is used as-is rather than copied.
+  const storyOpacity = state.ui.storymapLayerOpacity;
+  const storeLayers =
+    Object.keys(storyOpacity).length === 0
+      ? state.layers
+      : state.layers.map((layer) => applyStoryLayerOpacity(layer, storyOpacity));
+  // A hidden or fully faded layer has nothing to draw, so it is left out of
+  // every decision below: it must not keep the animation loop, the Mercator
+  // projection, or the diagram view listeners alive on its own.
+  const renderableLayers = storeLayers.filter((layer) => layer.visible && layer.opacity > 0);
+  const vizLayers = renderableLayers.filter(isDeckVizLayer);
+  const diagramLayers = renderableLayers.filter(isDiagramLayer);
   const hasRenderableLayers =
-    vizLayers.length > 0 || diagramLayers.length > 0 || storeLayers.some(isElevation3dLayer);
+    vizLayers.length > 0 || diagramLayers.length > 0 || renderableLayers.some(isElevation3dLayer);
 
   if (!hasRenderableLayers) {
     setSharedDeckLayers("deckviz", []);
@@ -143,12 +174,13 @@ function renderDeckVizLayers(): void {
   }
 
   // The deck.gl overlay renders in a Mercator viewport and does not align with
-  // MapLibre's globe projection, so force Mercator while deck layers are shown
-  // (same contract as the DuckDB deck overlay).
-  ensureMercatorProjection(appRef.getMap?.());
+  // either engine's globe projection, so force Mercator while deck layers are
+  // shown (same contract as the DuckDB deck overlay). `getMap` is MapLibre-only;
+  // on the Mapbox renderer the overlay is bound to the Mapbox map instead.
+  const map = appRef.getMap?.() ?? appRef.getMapboxMap?.() ?? null;
+  ensureMercatorProjection(map);
 
   const contexts = vizLayers
-    .filter((layer) => layer.visible)
     .map((layer) => buildContext(layer))
     .filter((entry): entry is RenderEntry => entry !== null);
 
@@ -156,11 +188,24 @@ function renderDeckVizLayers(): void {
   const contextById = new Map(contexts.map((entry) => [entry.id, entry]));
 
   // Diagram layers need the live view for their min-zoom gate and optional
-  // screen-space decluttering, and a rebuild when the view settles.
-  const map = appRef.getMap?.() ?? null;
+  // screen-space decluttering, and a rebuild when the view settles. Both
+  // Style Spec maps expose getZoom/project/on/off; ArcGIS exposes zoom/toScreen
+  // and uses the settled camera store subscription above.
+  const arcgis = appRef.getArcgisView?.();
   const diagramOptions = {
-    zoom: map?.getZoom(),
-    project: map ? (position: [number, number]) => map.project(position) : null,
+    zoom: map?.getZoom() ?? (arcgis ? state.mapView.zoom : undefined),
+    viewKey: arcgis ? JSON.stringify(state.mapView) : undefined,
+    project: map
+      ? (position: [number, number]) => map.project(position)
+      : arcgis
+        ? (position: [number, number]) =>
+            arcgis.toScreen({
+              type: "point",
+              x: position[0],
+              y: position[1],
+              spatialReference: { wkid: 4326 },
+            }) ?? { x: Number.NaN, y: Number.NaN }
+        : null,
   };
   syncViewListeners(
     diagramLayers.some(
@@ -176,8 +221,7 @@ function renderDeckVizLayers(): void {
   // layers, and feature diagrams interleave exactly as the Layers panel shows
   // them.
   const deckLayers: Layer[] = [];
-  for (const layer of storeLayers) {
-    if (!layer.visible) continue;
+  for (const layer of renderableLayers) {
     const entry = contextById.get(layer.id);
     try {
       // Diagrams go first so the final reverse() puts them on top of the same
@@ -192,7 +236,7 @@ function renderDeckVizLayers(): void {
             currentTime,
           }),
         );
-      } else if (isElevation3dLayer(layer)) {
+      } else if (appRef.getMapRenderer?.() !== "arcgis" && isElevation3dLayer(layer)) {
         deckLayers.push(...buildElevation3dLayers(deckGL, layer));
       }
     } catch (error) {

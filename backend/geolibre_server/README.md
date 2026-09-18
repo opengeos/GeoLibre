@@ -50,10 +50,10 @@ WBW_EXTERNAL_PYTHON=/path/to/python
 
 ## Conversion runtime
 
-The **Processing → Conversion** menu uses a dedicated managed runtime
-(DuckDB + rio-cogeo + freestiler), bootstrapped the same way as Whitebox: the
-sidecar finds or installs `uv`, creates a virtual environment, and installs the
-conversion packages on first use.
+The **Processing → GeoLibre Toolbox → Conversion** menu uses a dedicated managed
+runtime (DuckDB + rio-cogeo + freestiler), bootstrapped the same way as Whitebox:
+the sidecar finds or installs `uv`, creates a virtual environment, and installs
+the conversion packages on first use.
 
 - **Vector → GeoParquet** and **CSV → GeoParquet** also run entirely in the
   browser with DuckDB-WASM, so they work in the web build with **no sidecar**.

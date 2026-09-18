@@ -1,0 +1,149 @@
+name: Sync download mirror
+
+on:
+  workflow_run:
+    workflows:
+      - Release Desktop App
+      - Android
+      - iOS
+      - Build Mac App Store package
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to mirror (defaults to latest)
+        required: false
+        type: string
+  schedule:
+    # Safety net for release assets added or replaced outside the build workflows.
+    - cron: "17 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: download-mirror
+  # Each completed release workflow starts this job. The final producer cancels
+  # earlier waiters and performs one upload after every producer has settled.
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Publish latest artifacts
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'release' &&
+       github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DOWNLOADS_DEPLOY_KEY: ${{ secrets.DOWNLOADS_DEPLOY_KEY }}
+      DESTINATION_REPOSITORY: opengeos/geolibre-downloads
+    steps:
+      - name: Check out GeoLibre
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Wait for release asset producers
+        if: github.event_name == 'workflow_run'
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          required=("Release Desktop App" "Android" "iOS" "Build Mac App Store package")
+          for attempt in {1..90}; do
+            runs="$(gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/actions/runs?event=release&head_sha=$RELEASE_SHA&per_page=100")"
+            pending=()
+            for workflow in "${required[@]}"; do
+              status="$(jq -r --arg workflow "$workflow" \
+                '[.workflow_runs[] | select(.name == $workflow)][0].status // "missing"' <<< "$runs")"
+              [[ "$status" == "completed" ]] || pending+=("$workflow ($status)")
+            done
+            if (( ${#pending[@]} == 0 )); then
+              echo "All release asset producers have completed."
+              exit 0
+            fi
+            echo "Waiting for: ${pending[*]}"
+            sleep 60
+          done
+          echo "::warning::Timed out waiting for every release workflow; publishing the assets available now."
+
+      - name: Configure destination deploy key
+        run: |
+          set -euo pipefail
+          if [[ -z "${DOWNLOADS_DEPLOY_KEY:-}" ]]; then
+            echo "::error::DOWNLOADS_DEPLOY_KEY is not configured."
+            exit 1
+          fi
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DOWNLOADS_DEPLOY_KEY" > "$HOME/.ssh/geolibre-downloads"
+          chmod 600 "$HOME/.ssh/geolibre-downloads"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          {
+            echo 'Host github.com'
+            echo '  IdentityFile ~/.ssh/geolibre-downloads'
+            echo '  IdentitiesOnly yes'
+          } > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+
+      - name: Resolve release tag
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+          WORKFLOW_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          tag="${REQUESTED_TAG:-${WORKFLOW_TAG:-}}"
+          if [[ -z "$tag" ]]; then
+            tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build candidate manifest
+        env:
+          DOWNLOAD_MIRROR_METADATA_ONLY: "true"
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: scripts/build-download-mirror.sh "$RUNNER_TEMP/candidate" "$RELEASE_TAG"
+
+      - name: Skip an unchanged mirror
+        id: changes
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --filter=blob:none --no-checkout \
+            "git@github.com:$DESTINATION_REPOSITORY.git" current
+          if git -C current show HEAD:manifest.json > current-manifest.json 2>/dev/null; then
+            jq 'del(.generated_at)' current-manifest.json > current-normalized.json
+            jq 'del(.generated_at)' candidate/manifest.json > candidate-normalized.json
+            if cmp -s current-normalized.json candidate-normalized.json; then
+              echo "The mirror already contains this release and asset set."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build mirror
+        if: steps.changes.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: scripts/build-download-mirror.sh "$RUNNER_TEMP/site" "$RELEASE_TAG"
+
+      - name: Publish an orphan snapshot
+        if: steps.changes.outputs.publish == 'true'
+        working-directory: ${{ runner.temp }}/site
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git init --initial-branch=main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "git@github.com:$DESTINATION_REPOSITORY.git"
+          git add --all
+          git commit -m "Mirror GeoLibre ${RELEASE_TAG}"
+          # Parentless snapshots prevent old release binaries accumulating in
+          # the reachable history of this latest-release-only repository.
+          git push --force origin HEAD:main

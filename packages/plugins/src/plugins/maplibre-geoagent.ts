@@ -29,6 +29,7 @@ import {
   projectValue as earthEngineProjectValue,
   shouldUseTauriEarthEngineOAuth,
 } from "./earth-engine-auth";
+import { geoAgentMapEngine } from "./geoagent-map-engine";
 import { GEOAGENT_PLUGIN_ID } from "../plugin-ids";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
@@ -73,7 +74,10 @@ const GEOAGENT_OPTIONS = {
 } satisfies Omit<GeoAgentControlOptions, "position">;
 
 let geoAgentControl: GeoAgentControl | null = null;
-let geoAgentControlPromise: Promise<GeoAgentControl> | null = null;
+/** The dynamic import, shared across activations: the module is engine-neutral. */
+let geoAgentModulePromise: Promise<typeof import("maplibre-gl-geoagent")> | null = null;
+/** A mount in flight, so a second one is not started on top of it. */
+let geoAgentControlPromise: Promise<GeoAgentControl | null> | null = null;
 let geoAgentActive = false;
 // Bumped on every (re)mount so a slow async mount from an earlier
 // activate/deactivate cycle cannot resume and mount over a newer one. Only the
@@ -89,7 +93,12 @@ export { GEOAGENT_PLUGIN_ID };
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: GEOAGENT_PLUGIN_ID,
   name: "GeoAgent",
-  version: "0.4.2",
+  version: "0.5.0",
+  // Both 2D engines: the tools that cannot stay on the shared Style Spec
+  // surface follow `mapEngine` (see geoAgentMapEngine). A renderer swap tears
+  // every active plugin down and re-activates it, so the rebuilt control is
+  // told the engine that is now primary.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     geoAgentActive = true;
     // Return the mount promise so the host can roll back the Plugins menu when
@@ -142,9 +151,9 @@ async function mountGeoAgentControl(
   app: GeoLibreAppAPI,
   activationGeneration: number,
 ): Promise<boolean> {
-  let control: GeoAgentControl;
+  let control: GeoAgentControl | null;
   try {
-    control = await loadGeoAgentControl();
+    control = await loadGeoAgentControl(app, activationGeneration);
   } catch (error) {
     // The dynamic import failed (offline, or a chunk orphaned by a web
     // redeploy). Clear the active flag and report the failure so the host can
@@ -163,8 +172,9 @@ async function mountGeoAgentControl(
     return false;
   }
   // Ignore a continuation superseded by a later activate/deactivate cycle so it
-  // cannot mount a stale control on top of the current one.
-  if (!geoAgentActive || activationGeneration !== geoAgentActivationGeneration) {
+  // cannot mount a stale control on top of the current one. `control` is null
+  // when the same check already refused to build one.
+  if (!control || !geoAgentActive || activationGeneration !== geoAgentActivationGeneration) {
     return false;
   }
 
@@ -180,12 +190,50 @@ async function mountGeoAgentControl(
   return true;
 }
 
-async function loadGeoAgentControl(): Promise<GeoAgentControl> {
+/**
+ * Resolve the shared control, importing the GeoAgent chunk on first use.
+ *
+ * @param app - The plugin host this activation is mounting into; its renderer
+ *   is what `mapEngine` is built from, and the control cannot be re-pointed at
+ *   another engine afterwards.
+ * @param activationGeneration - The activation asking. Only the latest may
+ *   build the control.
+ * @returns The control, or `null` when a later activation superseded this one
+ *   while the chunk was still loading.
+ */
+async function loadGeoAgentControl(
+  app: GeoLibreAppAPI,
+  activationGeneration: number,
+): Promise<GeoAgentControl | null> {
   if (geoAgentControl) return geoAgentControl;
   installEarthEngineFunctionInfoFallback();
-  geoAgentControlPromise ??= import("maplibre-gl-geoagent")
+  // Cache the *module*, not the control. A single memoized promise that also
+  // constructed the control would build it from whichever activation started
+  // the import — GeoAgent's chunk is large, so a renderer swap can easily land
+  // inside that window — and every later activation would reuse that instance.
+  // The module is engine-neutral and safe to share; the control is not.
+  geoAgentModulePromise ??= import("maplibre-gl-geoagent").catch((error: unknown) => {
+    // A rejected promise is cached like any other, so without this an import
+    // that failed once (offline, or a chunk orphaned by a redeploy) would keep
+    // rejecting every later activation until the page reloads. Forget it and
+    // the next activation retries — which is what the caller's catch, and the
+    // host-side rollback it drives, assume happens.
+    geoAgentModulePromise = null;
+    throw error;
+  });
+  geoAgentControlPromise = geoAgentModulePromise
     .then(({ GeoAgentControl }) => {
-      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions());
+      // Caching the module is not on its own enough: continuations run in the
+      // order they were registered, so an activation superseded mid-import
+      // still runs first and would win the race to fill `geoAgentControl` with
+      // its (now stale) engine baked in — leaving the current activation's
+      // `??=` to hand back that wrong-engine instance and mount it. Refuse
+      // here, and the generation that is actually current builds it. A plain
+      // deactivate mid-import is refused for the same reason: it does not bump
+      // the generation, and the control it would leave behind is one nothing
+      // tears down.
+      if (!geoAgentActive || activationGeneration !== geoAgentActivationGeneration) return null;
+      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions(app));
       return geoAgentControl;
     })
     .finally(() => {
@@ -194,10 +242,11 @@ async function loadGeoAgentControl(): Promise<GeoAgentControl> {
   return geoAgentControlPromise;
 }
 
-function getGeoAgentOptions(): GeoAgentControlOptions {
+function getGeoAgentOptions(app: GeoLibreAppAPI | null): GeoAgentControlOptions {
   return {
     ...GEOAGENT_OPTIONS,
     position: geoAgentPosition,
+    mapEngine: geoAgentMapEngine(app),
   };
 }
 

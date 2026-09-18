@@ -126,6 +126,12 @@ export function NetcdfProfileChart({
     const xMin = Math.min(...positions);
     const xMax = Math.max(...positions);
     const xSpan = xMax - xMin || 1;
+    // A band axis counts bands, so "1.5" labels a band that does not exist —
+    // most visible on a 4-band scene, where the default steps halve. Read off
+    // the positions rather than the axis name, because the axis is band numbers
+    // for some files and wavelengths for others, and a wavelength list that
+    // happens to be whole numbers is just as well served by whole ticks.
+    const integerAxis = positions.every(Number.isInteger);
     const scaleX = (position: number) => MARGIN.left + ((position - xMin) / xSpan) * INNER_W;
     const scaleY = (value: number) =>
       MARGIN.top + INNER_H - ((value - min) / (max - min || 1)) * INNER_H;
@@ -188,7 +194,7 @@ export function NetcdfProfileChart({
           {formatValue(min)}
         </text>
 
-        {niceTickValues(xMin, xMax, X_TICK_TARGET).map((position) => (
+        {niceTickValues(xMin, xMax, X_TICK_TARGET, { integerOnly: integerAxis }).map((position) => (
           <g key={position}>
             <line
               x1={scaleX(position)}

@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, LineString, MultiPolygon, Polygon } from "geojson";
+import { decodePolyline } from "./polyline";
 import { getRuntimeEnvironment } from "./runtime-env";
 
 /**
@@ -254,53 +255,6 @@ export function buildRouteRequest(points: RoutingPoint[], mode: RoutingMode): Ro
   };
 }
 
-/**
- * Decodes an encoded-polyline string into `[lon, lat]` coordinate pairs.
- * Valhalla encodes route geometry with 6 digits of precision (factor 1e6),
- * unlike Google's 5-digit polylines, so `precision` defaults to 6.
- *
- * @param encoded - The encoded polyline string.
- * @param precision - Number of decimal digits the encoder used (6 for Valhalla).
- * @returns The decoded `[lon, lat]` coordinates in order.
- */
-export function decodePolyline(encoded: string, precision = 6): [number, number][] {
-  const factor = 10 ** precision;
-  const len = encoded.length;
-  const coordinates: [number, number][] = [];
-  let index = 0;
-  let lat = 0;
-  let lon = 0;
-  while (index < len) {
-    let shift = 0;
-    let result = 0;
-    let byte: number;
-    do {
-      // Truncated input: stop cleanly rather than reading NaN past the end and
-      // pushing a garbage coordinate.
-      if (index >= len) return coordinates;
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    // Unsigned shift (>>>) so the zigzag decode is correct even if the
-    // accumulator's bit 31 is set, rather than sign-extending.
-    lat += result & 1 ? ~(result >>> 1) : result >>> 1;
-
-    shift = 0;
-    result = 0;
-    do {
-      if (index >= len) return coordinates;
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lon += result & 1 ? ~(result >>> 1) : result >>> 1;
-
-    coordinates.push([lon / factor, lat / factor]);
-  }
-  return coordinates;
-}
-
 type RouteLeg = {
   shape?: string;
   summary?: { time?: number; length?: number };
@@ -335,7 +289,7 @@ export function routeResponseToFeatures(
   const out: Feature<LineString, RouteFeatureProps>[] = [];
   legs.forEach((leg, index) => {
     if (typeof leg?.shape !== "string") return;
-    const coordinates = decodePolyline(leg.shape);
+    const coordinates = decodePolyline(leg.shape, 6);
     if (coordinates.length < 2) return;
     const from = points[index];
     const to = points[index + 1];

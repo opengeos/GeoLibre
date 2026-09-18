@@ -5,9 +5,9 @@
  * (not per-project), mirroring `browser-folders.ts`. UI-free so it unit-tests in
  * isolation.
  *
- * A favorite stores enough to rebuild and activate its node without looking up
- * the live original (which may have been deleted), keyed by the node's stable
- * id so add/remove/lookup are by id.
+ * A favorite stores the metadata needed to rebuild its node, keyed by the node's
+ * stable id so add/remove/lookup are by id. Services resolve their definitions
+ * from the live library when activated; those definitions are never copied here.
  */
 
 import type { ServiceLibraryKind } from "../components/layout/add-data/service-library";
@@ -39,6 +39,8 @@ export interface BrowserFavorite {
   serviceKind?: ServiceLibraryKind;
   /** Whether the favorited service is a built-in preset, for the badge. */
   builtin?: boolean;
+  /** Whether the favorited service is deployment-managed, for the badge. */
+  deployment?: boolean;
   /** Absolute path (kind `folder`/`file`). */
   path?: string;
 }

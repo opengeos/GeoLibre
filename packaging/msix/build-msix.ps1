@@ -152,6 +152,16 @@ $manifest = @"
         BackgroundColor="transparent"
         Square44x44Logo="Assets\Square44x44Logo.png"
         Square150x150Logo="Assets\Square150x150Logo.png" />
+      <Extensions>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="geolibre">
+            <uap:DisplayName>GeoLibre Project</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType ContentType="application/vnd.geolibre.project+json">.geolibre</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>

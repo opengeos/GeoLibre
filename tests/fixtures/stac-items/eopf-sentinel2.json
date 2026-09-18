@@ -1,0 +1,215 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "S2C_MSIL2A_20260817T140731_N0512_R053_T26WNC_20260817T173008",
+      "bbox": [-27.000531759045845, 69.96042949564324, -26.385625443366187, 70.30601749291662],
+      "type": "Feature",
+      "links": [
+        {
+          "rel": "collection",
+          "type": "application/json",
+          "href": "https://stac.core.eopf.eodc.eu/collections/sentinel-2-l2a"
+        },
+        {
+          "rel": "parent",
+          "type": "application/json",
+          "href": "https://stac.core.eopf.eodc.eu/collections/sentinel-2-l2a"
+        },
+        {
+          "rel": "root",
+          "type": "application/json",
+          "href": "https://stac.core.eopf.eodc.eu/"
+        },
+        {
+          "rel": "self",
+          "type": "application/geo+json",
+          "href": "https://stac.core.eopf.eodc.eu/collections/sentinel-2-l2a/items/S2C_MSIL2A_20260817T140731_N0512_R053_T26WNC_20260817T173008"
+        },
+        {
+          "rel": "cite-as",
+          "href": "https://doi.org/10.5270/S2_-znk9xsj"
+        },
+        {
+          "rel": "license",
+          "href": "https://sentinel.esa.int/documents/247904/690755/Sentinel_Data_Legal_Notice",
+          "type": "application/pdf",
+          "title": "Legal notice on the use of Copernicus Sentinel Data and Service Information"
+        }
+      ],
+      "assets": {
+        "SR_10m": {
+          "gsd": 10,
+          "href": "https://objects.eodc.eu:443/e05ab01a9d56408d82ac32d69a5aae2a:202608-s02msil2a-eu/17/products/cpm_v270/S2C_MSIL2A_20260817T140731_N0512_R053_T26WNC_20260817T173008.zarr/measurements/reflectance/r10m",
+          "type": "application/vnd+zarr",
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:common_name": "blue",
+              "eo:center_wavelength": 0.49,
+              "eo:full_width_half_max": 0.098
+            },
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:common_name": "green",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.045
+            },
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:common_name": "red",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.038
+            },
+            {
+              "name": "B08",
+              "description": "NIR 1 (band 8)",
+              "eo:common_name": "nir",
+              "eo:center_wavelength": 0.842,
+              "eo:full_width_half_max": 0.145
+            }
+          ],
+          "roles": ["data", "reflectance", "dataset"],
+          "title": "Surface Reflectance - 10m",
+          "xarray:open_dataset_kwargs": {
+            "chunks": {},
+            "engine": "eopf-zarr",
+            "op_mode": "native"
+          }
+        },
+        "B02_10m": {
+          "gsd": 10,
+          "href": "https://objects.eodc.eu:443/e05ab01a9d56408d82ac32d69a5aae2a:202608-s02msil2a-eu/17/products/cpm_v270/S2C_MSIL2A_20260817T140731_N0512_R053_T26WNC_20260817T173008.zarr/measurements/reflectance/r10m/b02",
+          "type": "application/vnd+zarr",
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:common_name": "blue",
+              "eo:center_wavelength": 0.49,
+              "eo:full_width_half_max": 0.098
+            }
+          ],
+          "roles": ["data", "reflectance"],
+          "title": "Blue (band 2) - 10m",
+          "nodata": 0,
+          "data_type": "uint16",
+          "description": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1
+        },
+        "product": {
+          "href": "https://objects.eodc.eu:443/e05ab01a9d56408d82ac32d69a5aae2a:202608-s02msil2a-eu/17/products/cpm_v270/S2C_MSIL2A_20260817T140731_N0512_R053_T26WNC_20260817T173008.zarr",
+          "type": "application/vnd+zarr",
+          "roles": ["data", "metadata"],
+          "title": "EOPF Product",
+          "description": "The full Zarr store of the EOPF product",
+          "xarray:open_datatree_kwargs": {
+            "chunks": {},
+            "engine": "eopf-zarr",
+            "op_mode": "native"
+          }
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-26.385625443366187, 70.3010445034563],
+            [-26.434867437468647, 70.27396670489176],
+            [-26.671767070514104, 70.14663258542298],
+            [-26.884987317010175, 70.02817017727583],
+            [-26.89736343506775, 70.02134370941629],
+            [-26.898747523146785, 70.02052518491543],
+            [-26.9028912205555, 70.01822300028833],
+            [-27.000523240890825, 69.96042949564324],
+            [-27.000531759045845, 70.30601749291662],
+            [-26.385625443366187, 70.3010445034563]
+          ]
+        ]
+      },
+      "collection": "sentinel-2-l2a",
+      "properties": {
+        "gsd": 10.0,
+        "created": "2026-08-17T18:34:03.665457Z",
+        "mission": "Sentinel-2",
+        "sci:doi": "10.5270/S2_-znk9xsj",
+        "updated": "2026-08-17T18:34:03.665457Z",
+        "datetime": "2026-08-17T14:07:31.025000Z",
+        "platform": "sentinel-2c",
+        "grid:code": "MGRS-26WNC",
+        "proj:bbox": [499980.0, 7690200.0, 609780.0, 7800000.0],
+        "proj:code": "EPSG:32626",
+        "providers": [
+          {
+            "url": "https://commission.europa.eu/",
+            "name": "European Commission",
+            "roles": ["licensor"]
+          },
+          {
+            "url": "https://sentinel.esa.int/web/sentinel/missions/sentinel-2",
+            "name": "ESA",
+            "roles": ["producer", "processor"]
+          },
+          {
+            "url": "https://zarr.eopf.copernicus.eu/",
+            "name": "EOPF Sentinel Zarr Samples Service",
+            "roles": ["host", "processor"]
+          }
+        ],
+        "published": "2026-08-17T18:34:03.665457Z",
+        "deprecated": false,
+        "instruments": ["msi"],
+        "end_datetime": "2026-08-17T14:07:31.025000Z",
+        "product:type": "S02MSIL2A",
+        "constellation": "sentinel-2",
+        "eo:snow_cover": 18.94667,
+        "mgrs:utm_zone": 26,
+        "eo:cloud_cover": 2.835319,
+        "start_datetime": "2026-08-17T14:07:31.025000Z",
+        "sat:orbit_state": "ascending",
+        "eopf:datatake_id": "GS2C_20260817T140731_010176_N05.12",
+        "mgrs:grid_square": "NC",
+        "processing:level": "L2A",
+        "view:sun_azimuth": 187.605038698754,
+        "eopf:datastrip_id": "S2C_OPER_MSI_L2A_DS_2CPS_20260817T173008_S20260817T140731_N05.12",
+        "mgrs:latitude_band": "W",
+        "processing:lineage": "systematic",
+        "processing:version": "05.12",
+        "product:timeliness": "PT3H",
+        "sat:absolute_orbit": 10176,
+        "sat:relative_orbit": 53,
+        "view:sun_elevation": 56.6732341416443,
+        "processing:facility": "ESA",
+        "processing:software": {
+          "EOPF-CPM": "2.7.0"
+        },
+        "eopf:instrument_mode": "INS-NOBS",
+        "product:timeliness_category": "NRT",
+        "sat:platform_international_designator": "2015-028A",
+        "geolibre:fixture_note": "Captured from stac.core.eopf.eodc.eu; 19 sibling band assets removed to keep the fixture small."
+      },
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/sat/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/mgrs/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/view/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/product/v0.1.0/schema.json",
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/version/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+      ]
+    }
+  ],
+  "numberMatched": 1,
+  "links": []
+}

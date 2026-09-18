@@ -21,6 +21,17 @@ repos:
         exclude: ^e2e/fixtures/malformed\.geojson$
       - id: check-added-large-files
         args: ["--maxkb=1024", "--enforce-all"]
+        # Two generated files legitimately exceed the generic 1MB guard, which
+        # exists to catch an accidentally committed binary or data dump:
+        # the full processing locale catalogs (still reviewable as source
+        # catalogs), and package-lock.json, which npm writes and which grows
+        # with the dependency tree -- raising the limit for every file in the
+        # repo just to admit it would buy a bump on every dependency wave.
+        exclude: >-
+          (?x)^(
+            apps/geolibre-desktop/src/i18n/locales/(en|zh)\.json
+            |package-lock\.json
+          )$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
@@ -95,7 +106,19 @@ repos:
         language: system
         pass_filenames: false
 
-  - repo: https://github.com/kynan/nbstripout
-    rev: 0.9.1
+  # Strip every tracked notebook on every commit, not only notebooks included
+  # in that commit. This prevents locally executed outputs from lingering when
+  # a contributor commits an unrelated file. Note the blast radius that buys:
+  # nbstripout rewrites in place, so outputs a contributor is holding onto in
+  # an unstaged notebook are erased from the working copy by any commit at all.
+  # Narrowing this to staged files would reopen exactly the gap it closes; the
+  # tradeoff is documented in docs/contributing.md.
+  - repo: local
     hooks:
-      - id: nbstripout
+      - id: strip-notebook-outputs
+        name: strip all tracked notebook outputs
+        entry: python scripts/strip-notebook-outputs.py
+        language: python
+        additional_dependencies: [nbstripout==0.9.1]
+        pass_filenames: false
+        always_run: true

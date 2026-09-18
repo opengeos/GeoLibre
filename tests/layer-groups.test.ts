@@ -4,9 +4,14 @@ import {
   DEFAULT_LAYER_STYLE,
   applyGroupEffects,
   applyProjectToStore,
+  buildLayerPanelUnits,
   buildLayerTree,
   createEmptyProject,
+  effectiveLayerRenderState,
+  layerGroupMoveability,
+  layerPanelGroupHeaders,
   normalizeGroupContiguity,
+  reorderLayerGroupInPanel,
   parseProject,
   projectFromStore,
   serializeProject,
@@ -76,7 +81,7 @@ describe("buildLayerTree", () => {
     assert.equal(tree[2].kind, "layer");
   });
 
-  it("emits empty groups pinned at the top", () => {
+  it("emits an empty group at the top when no other group is positioned", () => {
     const tree = buildLayerTree([layer("a")], [group("empty")]);
     assert.equal(tree[0].kind, "group");
     if (tree[0].kind === "group") {
@@ -89,6 +94,383 @@ describe("buildLayerTree", () => {
     const tree = buildLayerTree([layer("a", { groupId: "missing" })], []);
     assert.equal(tree.length, 1);
     assert.equal(tree[0].kind, "layer");
+  });
+});
+
+/** Panel rows top-first as `layer:<id>` / `group:<id>`, for readable asserts. */
+function panelOrder(layers: GeoLibreLayer[], groups: LayerGroup[]): string[] {
+  return buildLayerPanelUnits(layers, groups).map((unit) =>
+    unit.groupId ? `group:${unit.groupId}` : `layer:${unit.layers[0].id}`,
+  );
+}
+
+describe("buildLayerPanelUnits", () => {
+  it("stacks empty groups in group order at the top of an empty panel", () => {
+    assert.deepEqual(panelOrder([], [group("g1"), group("g2")]), ["group:g1", "group:g2"]);
+  });
+
+  it("keeps an empty group below the populated group it follows (GeoLibre#1739)", () => {
+    // Group 1 gains a layer; Group 2 is still empty and must stay under it.
+    const layers = [layer("a", { groupId: "g1" })];
+    assert.deepEqual(panelOrder(layers, [group("g1"), group("g2")]), ["group:g1", "group:g2"]);
+  });
+
+  it("puts an empty group above the populated group that follows it", () => {
+    const layers = [layer("a", { groupId: "g2" })];
+    assert.deepEqual(panelOrder(layers, [group("g1"), group("g2")]), ["group:g1", "group:g2"]);
+  });
+
+  it("places an empty child group directly below its parent's block", () => {
+    const layers = [layer("a", { groupId: "parent" })];
+    // "child" precedes "parent" in the array, so only the parent link can put
+    // it under the parent rather than above it.
+    assert.deepEqual(
+      panelOrder(layers, [group("child", { parentId: "parent" }), group("parent")]),
+      ["group:parent", "group:child"],
+    );
+  });
+
+  it("keeps a fully empty parent visible when its child precedes it", () => {
+    // "Move to group" only rewrites parentId, so a child can sit ahead of its
+    // own parent in the array. Both folders are empty, so neither can be drawn
+    // against a descendant layer and both need a block of their own.
+    assert.deepEqual(panelOrder([], [group("child", { parentId: "parent" }), group("parent")]), [
+      "group:parent",
+      "group:child",
+    ]);
+  });
+
+  it("gives an empty organizer's own empty child a block, not the organizer", () => {
+    // "outer" has a layer beneath it via "inner", so the panel draws its header
+    // against that layer; only "spare", whose subtree is empty, needs a block.
+    const layers = [layer("a", { groupId: "inner" })];
+    const groups = [
+      group("outer"),
+      group("inner", { parentId: "outer" }),
+      group("spare", { parentId: "outer" }),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:inner", "group:spare"]);
+  });
+
+  it("keeps a nested empty folder beside its sibling, not outside its parent", () => {
+    // The reported follow-up to GeoLibre#1739: "c2" gains the first layer, and
+    // "c1" has to stay next to it under "p" rather than being pushed past the
+    // unrelated top-level "other".
+    const layers = [layer("a", { groupId: "c2" })];
+    const groups = [
+      group("p"),
+      group("c1", { parentId: "p" }),
+      group("c2", { parentId: "p" }),
+      group("other"),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c1", "group:c2", "group:other"]);
+  });
+
+  it("anchors a top-level folder past a whole subtree, not inside it", () => {
+    // "other" follows "p" in the array, so it belongs below everything nested
+    // in it. The nested "c2" sits at the top of p's block, so anchoring on the
+    // nearest group in array order rather than on the nearest *sibling* would
+    // wedge "other" between p's two children.
+    const layers = [layer("a1", { groupId: "c1" }), layer("a2", { groupId: "c2" })];
+    const groups = [
+      group("p"),
+      group("c1", { parentId: "p" }),
+      group("c2", { parentId: "p" }),
+      group("other"),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c2", "group:c1", "group:other"]);
+  });
+
+  it("draws a parent header above the nested folder it holds", () => {
+    // "p" has a layer only through "c2", so its header is drawn against that
+    // layer's row; the empty "c1" is drawn against the same row and must follow
+    // the parent it sits inside.
+    const layers = [layer("a", { groupId: "c2" })];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("c2", { parentId: "p" })];
+    const headers = layerPanelGroupHeaders(layers, groups);
+    assert.deepEqual(
+      headers.aboveLayer.get("a")?.map((g) => g.id),
+      ["p", "c1", "c2"],
+    );
+    assert.equal(headers.bottom.length, 0);
+  });
+
+  it("orders and draws grandchild folders at two levels of nesting", () => {
+    // Depth 2: only "leafB" holds a layer, so "leafA" is placed by its own
+    // sibling rather than by "mid" or "p", both of which are ancestors whose
+    // ranges already contain the slot. "other" clears the whole subtree.
+    const layers = [layer("a", { groupId: "leafB" })];
+    const groups = [
+      group("p"),
+      group("mid", { parentId: "p" }),
+      group("leafA", { parentId: "mid" }),
+      group("leafB", { parentId: "mid" }),
+      group("other"),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:leafA", "group:leafB", "group:other"]);
+    // Every ancestor header precedes the folders nested in it.
+    const headers = layerPanelGroupHeaders(layers, groups);
+    assert.deepEqual(
+      headers.aboveLayer.get("a")?.map((g) => g.id),
+      ["p", "mid", "leafA", "leafB"],
+    );
+    assert.deepEqual(
+      headers.bottom.map((g) => g.id),
+      ["other"],
+    );
+  });
+
+  it("anchors headers against the layer rows the panel draws", () => {
+    const layers = [layer("bottom"), layer("a", { groupId: "g1" }), layer("top")];
+    const headers = layerPanelGroupHeaders(layers, [group("g1"), group("g2")]);
+    // Display order is top-first: top, [g1: a], bottom. g2 follows g1's block,
+    // so it draws immediately above "bottom".
+    assert.deepEqual(
+      headers.aboveLayer.get("a")?.map((g) => g.id),
+      ["g1"],
+    );
+    assert.deepEqual(
+      headers.aboveLayer.get("bottom")?.map((g) => g.id),
+      ["g2"],
+    );
+    assert.equal(headers.bottom.length, 0);
+  });
+
+  it("drops an empty group to the panel bottom when nothing follows it", () => {
+    const layers = [layer("a", { groupId: "g1" })];
+    const headers = layerPanelGroupHeaders(layers, [group("g1"), group("g2")]);
+    assert.deepEqual(
+      headers.bottom.map((g) => g.id),
+      ["g2"],
+    );
+    assert.deepEqual(
+      headers.aboveLayer.get("a")?.map((g) => g.id),
+      ["g1"],
+    );
+  });
+
+  it("emits a scattered group's header once, at its top-most block", () => {
+    const layers = [layer("g1", { groupId: "g" }), layer("x"), layer("g2", { groupId: "g" })];
+    const headers = layerPanelGroupHeaders(layers, [group("g")]);
+    assert.deepEqual(
+      headers.aboveLayer.get("g2")?.map((h) => h.id),
+      ["g"],
+    );
+    assert.equal(headers.aboveLayer.has("g1"), false);
+  });
+
+  it("terminates on a parentId cycle instead of hanging", () => {
+    // Each group is the other's parent, so the ancestor walk gives both a
+    // position from the one layer and neither is emitted as an empty folder.
+    const groups = [group("g1", { parentId: "g2" }), group("g2", { parentId: "g1" })];
+    assert.deepEqual(panelOrder([layer("a", { groupId: "g1" })], groups), ["group:g1"]);
+  });
+
+  it("ends the ancestor walk at a parentId that names no group", () => {
+    const groups = [group("g1", { parentId: "missing" })];
+    assert.deepEqual(panelOrder([layer("a", { groupId: "g1" })], groups), ["group:g1"]);
+  });
+});
+
+describe("reorderLayerGroupInPanel", () => {
+  it("swaps two empty groups without touching the layers", () => {
+    const layers = [layer("a")];
+    const groups = [group("g1"), group("g2")];
+    const moved = reorderLayerGroupInPanel(layers, groups, "g2", "up");
+    assert.ok(moved);
+    assert.deepEqual(
+      moved.groups.map((g) => g.id),
+      ["g2", "g1"],
+    );
+    assert.deepEqual(
+      moved.layers.map((l) => l.id),
+      ["a"],
+    );
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), ["group:g2", "group:g1", "layer:a"]);
+  });
+
+  it("moves a populated group past an empty one (GeoLibre#1739)", () => {
+    const layers = [layer("a", { groupId: "g1" })];
+    const groups = [group("g1"), group("g2")];
+    const moved = reorderLayerGroupInPanel(layers, groups, "g1", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), ["group:g2", "group:g1"]);
+  });
+
+  it("compacts a subtree that straddles an unrelated block when moving it", () => {
+    // Nesting only rewrites parentId, so "loose" can sit between two sibling
+    // child groups. Moving the parent gathers the subtree into one block and
+    // leaves "loose" on the far side of it — more than one row shifts.
+    const layers = [
+      layer("bottom"),
+      layer("c1layer", { groupId: "c1" }),
+      layer("loose"),
+      layer("c2layer", { groupId: "c2" }),
+      layer("top"),
+    ];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("c2", { parentId: "p" })];
+    assert.deepEqual(panelOrder(layers, groups), [
+      "layer:top",
+      "group:c2",
+      "layer:loose",
+      "group:c1",
+      "layer:bottom",
+    ]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "p", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "layer:top",
+      "layer:loose",
+      "layer:bottom",
+      "group:c2",
+      "group:c1",
+    ]);
+  });
+
+  it("carries a whole subtree past a sibling group as one block", () => {
+    const layers = [layer("c1", { groupId: "childA" }), layer("s1", { groupId: "sib" })];
+    const groups = [
+      group("parent"),
+      group("childA", { parentId: "parent" }),
+      group("childB", { parentId: "parent" }),
+      group("sib"),
+    ];
+    // Panel before: sib, [childA: c1], childB (empty, under its parent).
+    assert.deepEqual(panelOrder(layers, groups), ["group:sib", "group:childA", "group:childB"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "parent", "up");
+    assert.ok(moved);
+    // Both children travel with the parent and stay in its block.
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:childA",
+      "group:childB",
+      "group:sib",
+    ]);
+    assert.deepEqual(
+      moved.layers.map((l) => l.id),
+      ["s1", "c1"],
+    );
+  });
+
+  it("returns null at the ends of the panel", () => {
+    const layers = [layer("a", { groupId: "g1" })];
+    const groups = [group("g1"), group("g2")];
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "g1", "up"), null);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "g2", "down"), null);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "missing", "up"), null);
+  });
+
+  it("swaps two nested folders inside their parent", () => {
+    const layers = [layer("a", { groupId: "c2" })];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("c2", { parentId: "p" })];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c1", "group:c2"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "c1", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), ["group:c2", "group:c1"]);
+  });
+
+  it("keeps a nested group inside its parent at either end", () => {
+    // "other" is not a sibling, so it is a wall rather than the next block:
+    // "c1" cannot move up past its parent's header, nor "c2" down out of it.
+    const layers = [layer("a", { groupId: "c1" })];
+    const groups = [
+      group("p"),
+      group("c1", { parentId: "p" }),
+      group("c2", { parentId: "p" }),
+      group("other"),
+    ];
+    const moveability = layerGroupMoveability(layers, groups);
+    assert.deepEqual(moveability.get("c1"), { up: false, down: true });
+    assert.deepEqual(moveability.get("c2"), { up: true, down: false });
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "c2", "down"), null);
+  });
+
+  it("steps a nested group over its parent's own layers without leaving it", () => {
+    // "p" owns "L" directly and holds the populated child "c1". Those rows are
+    // one more block inside "p", so ordering the child against them is a real
+    // reorder — but "other" is outside "p" and stays a wall.
+    const layers = [
+      layer("Z", { groupId: "other" }),
+      layer("L", { groupId: "p" }),
+      layer("M", { groupId: "c1" }),
+    ];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("other")];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c1", "group:p", "group:other"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "c1", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:p",
+      "group:c1",
+      "group:other",
+    ]);
+    // Still the last block inside "p": it cannot go on to cross "other".
+    assert.equal(reorderLayerGroupInPanel(moved.layers, moved.groups, "c1", "down"), null);
+  });
+
+  it("leaves an empty child where it is when only layer rows are adjacent", () => {
+    // An empty folder cannot record a position between two layer rows, so a
+    // move that would only cross its parent's own layers changes nothing — the
+    // same limit empty folders have at the top level.
+    const layers = [layer("L", { groupId: "p" })];
+    const groups = [group("p"), group("c1", { parentId: "p" })];
+    assert.deepEqual(panelOrder(layers, groups), ["group:p", "group:c1"]);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "up"), null);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "down"), null);
+  });
+
+  it("moves a grandchild among its siblings and stops at its own parent", () => {
+    const layers = [layer("a", { groupId: "leafB" })];
+    const groups = [
+      group("p"),
+      group("mid", { parentId: "p" }),
+      group("leafA", { parentId: "mid" }),
+      group("leafB", { parentId: "mid" }),
+      group("other"),
+    ];
+    // "mid" is the wall for its children, not the outer "p" or "other".
+    const moveability = layerGroupMoveability(layers, groups);
+    assert.deepEqual(moveability.get("leafA"), { up: false, down: true });
+    assert.deepEqual(moveability.get("leafB"), { up: true, down: false });
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "leafA", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:leafB",
+      "group:leafA",
+      "group:other",
+    ]);
+  });
+
+  it("steps a top-level group over a whole subtree in one move", () => {
+    const layers = [layer("a", { groupId: "c1" }), layer("b", { groupId: "c2" })];
+    const groups = [
+      group("p"),
+      group("c1", { parentId: "p" }),
+      group("c2", { parentId: "p" }),
+      group("other"),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c2", "group:c1", "group:other"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "other", "up");
+    assert.ok(moved);
+    // "other" clears both of p's children rather than landing between them.
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:other",
+      "group:c2",
+      "group:c1",
+    ]);
+  });
+
+  it("reports the directions each group can move", () => {
+    const moveability = layerGroupMoveability(
+      [layer("a", { groupId: "g1" })],
+      [group("g1"), group("g2")],
+    );
+    assert.deepEqual(moveability.get("g1"), { up: false, down: true });
+    assert.deepEqual(moveability.get("g2"), { up: true, down: false });
   });
 });
 
@@ -126,6 +508,36 @@ describe("applyGroupEffects", () => {
     const result = applyGroupEffects(layers, groups);
     assert.equal(result[0].visible, false);
     assert.equal(result[0].opacity, 0.1);
+  });
+});
+
+describe("effectiveLayerRenderState", () => {
+  it("folds the whole group chain, matching applyGroupEffects", () => {
+    const child = layer("a", { groupId: "child", opacity: 0.8 });
+    const groups = [
+      group("parent", { opacity: 0.5, visible: false }),
+      group("child", { parentId: "parent", opacity: 0.25 }),
+    ];
+    assert.deepEqual(effectiveLayerRenderState(child, groups), {
+      visible: false,
+      opacity: 0.1,
+    });
+  });
+
+  it("returns the layer's own values when it is ungrouped", () => {
+    const orphan = layer("a", { opacity: 0.3, visible: false });
+    assert.deepEqual(effectiveLayerRenderState(orphan, [group("g", { visible: false })]), {
+      visible: false,
+      opacity: 0.3,
+    });
+  });
+
+  it("ignores a dangling groupId rather than dropping the layer", () => {
+    const dangling = layer("a", { groupId: "gone", opacity: 0.6 });
+    assert.deepEqual(effectiveLayerRenderState(dangling, [group("g", { opacity: 0.5 })]), {
+      visible: true,
+      opacity: 0.6,
+    });
   });
 });
 
@@ -352,6 +764,50 @@ describe("layer group store actions", () => {
     assert.deepEqual(
       useAppStore.getState().layers.map((candidate) => candidate.id),
       [neighbor, childLayer],
+    );
+  });
+
+  it("keeps the group order when a group gains its first layer, and reorders empty groups (GeoLibre#1739)", () => {
+    const g1 = useAppStore.getState().addLayerGroup("Group 1");
+    const g2 = useAppStore.getState().addLayerGroup("Group 2");
+    const order = () =>
+      buildLayerPanelUnits(useAppStore.getState().layers, useAppStore.getState().layerGroups)
+        .map((unit) => unit.groupId)
+        .filter(Boolean);
+    assert.deepEqual(order(), [g1, g2]);
+
+    // Both folders are empty, and both must still be movable.
+    useAppStore.getState().reorderLayerGroup(g2, "up");
+    assert.deepEqual(order(), [g2, g1]);
+    useAppStore.getState().reorderLayerGroup(g2, "down");
+    assert.deepEqual(order(), [g1, g2]);
+
+    // Adding a layer to Group 1 must not push it below the still-empty Group 2.
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().moveLayerToGroup(a, g1);
+    assert.deepEqual(order(), [g1, g2]);
+
+    // And the now-populated group can still be moved past the empty one.
+    useAppStore.getState().reorderLayerGroup(g1, "down");
+    assert.deepEqual(order(), [g2, g1]);
+  });
+
+  it("undoes a reorder that only moved empty groups", () => {
+    // Swapping two empty folders leaves `layers` untouched, so the history
+    // entry rests entirely on the group order having changed.
+    const g1 = useAppStore.getState().addLayerGroup("Group 1");
+    const g2 = useAppStore.getState().addLayerGroup("Group 2");
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().reorderLayerGroup(g2, "up");
+    assert.deepEqual(
+      useAppStore.getState().layerGroups.map((group) => group.id),
+      [g2, g1],
+    );
+    undo();
+    assert.deepEqual(
+      useAppStore.getState().layerGroups.map((group) => group.id),
+      [g1, g2],
     );
   });
 

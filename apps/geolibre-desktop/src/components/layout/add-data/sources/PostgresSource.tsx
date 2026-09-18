@@ -5,7 +5,7 @@ import {
   type PostgisTableInfo,
 } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ensureMartinBinary,
@@ -16,9 +16,10 @@ import {
   stopMartinServer,
 } from "../../../../lib/martin";
 import { postgisFeatureKeys, registerPostgisConnection } from "../../../../lib/postgis-connections";
+import { postgisTableKey, postgisTableLabel } from "../../../../lib/postgis-table-selection";
 import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
-import { isTauri } from "../../../../lib/tauri-io";
+import { isDesktopRuntime } from "../../../../lib/is-mobile";
 import {
   createBaseLayer,
   errorMessage,
@@ -32,10 +33,6 @@ import type { OpenAddDataPostgres } from "../open-add-data";
 
 type PostgresLoadMode = "tiles" | "editable";
 
-function postgisTableKey(table: PostgisTableInfo): string {
-  return `${table.schema}.${table.table}`;
-}
-
 interface PostgresSourceProps {
   /** Prefill from the Browser panel (saved connection / clicked table). */
   initialPostgres?: OpenAddDataPostgres;
@@ -45,6 +42,12 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.postgres.defaultName"));
   const { martin } = source.shell;
+  // Both load modes need a local helper process the desktop shell alone can
+  // start: the Martin tile server for vector tiles, the Python sidecar for the
+  // editable mode. `isTauri()` is true in the packaged Android/iOS apps too, so
+  // gating on it let a tablet run straight into a raw sidecar connection error
+  // (GeoLibre#2091). The user agent is stable for the session, so evaluate once.
+  const desktopRuntime = useMemo(() => isDesktopRuntime(), []);
   const [postgresConnectionString, setPostgresConnectionString] = useState(
     () => initialPostgres?.connection ?? readSavedPostgresConnections()[0] ?? "",
   );
@@ -63,6 +66,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   const [loadMode, setLoadMode] = useState<PostgresLoadMode>("tiles");
   const [postgisTables, setPostgisTables] = useState<PostgisTableInfo[]>([]);
   const [selectedTableKey, setSelectedTableKey] = useState("");
+  const [selectedGeometryColumn, setSelectedGeometryColumn] = useState("");
   const [postgisStatus, setPostgisStatus] = useState<string | null>(null);
   // The connection string the table list was fetched with. The submit uses
   // this snapshot (not the live input) so editing the field after a Connect
@@ -129,9 +133,10 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     source.shell.setIsSubmitting(true);
     setPostgisTables([]);
     setSelectedTableKey("");
+    setSelectedGeometryColumn("");
 
     try {
-      if (!isTauri()) {
+      if (!desktopRuntime) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
       // Defensive: the source is hidden from the Add Data menu in the Mac App
@@ -165,17 +170,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         // not revive a table list that belongs to the previous string.
         return;
       }
-      // geometry_columns lists one row per geometry column, so a table with
-      // several geometry columns appears several times; keep the first entry
-      // (the /postgis/read endpoint edits that table's first geometry column)
-      // so the select has unique keys.
-      const seen = new Set<string>();
-      const tables = listed.filter((table) => {
-        const key = postgisTableKey(table);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      const tables = listed;
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
@@ -194,12 +189,15 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         : undefined;
       const defaultTable = desiredTable ?? tables.find((table) => table.primary_key);
       setSelectedTableKey(defaultTable ? postgisTableKey(defaultTable) : "");
+      setSelectedGeometryColumn(defaultTable?.geometry_column ?? "");
       // Consumed once: a later reconnect on the same connection must not undo a
       // manual table pick by re-applying the originally-clicked table.
       desiredTableRef.current = null;
       setPostgisStatus(
         tables.length > 0
-          ? t("addData.postgres.statusTablesFound", { count: tables.length })
+          ? t("addData.postgres.statusTablesFound", {
+              count: new Set(tables.map(postgisTableKey)).size,
+            })
           : t("addData.postgres.statusNoTables"),
       );
     } catch (err) {
@@ -223,7 +221,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     martin.setSelectedSourceId("");
 
     try {
-      if (!isTauri()) {
+      if (!desktopRuntime) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
       // Defensive, mirroring handleConnectEditable: no martin server in the
@@ -359,7 +357,11 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   // the layer metadata) so "Save edits to PostGIS table" can commit changes
   // back without persisting credentials in the project file.
   const addEditableTable = async (tableKey: string) => {
-    const table = postgisTables.find((candidate) => postgisTableKey(candidate) === tableKey);
+    const table = postgisTables.find(
+      (candidate) =>
+        postgisTableKey(candidate) === tableKey &&
+        candidate.geometry_column === selectedGeometryColumn,
+    );
     if (!table) {
       throw new Error(t("addData.postgres.errorSelectTable"));
     }
@@ -372,6 +374,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       connection: connectionString,
       schema_name: table.schema,
       table: table.table,
+      geometry_column: table.geometry_column,
     });
     const layer = {
       ...createBaseLayer(
@@ -424,6 +427,19 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     await addMartinSource(martin.selectedSourceId);
   });
 
+  const uniquePostgisTables = (() => {
+    const seen = new Set<string>();
+    return postgisTables.filter((table) => {
+      const key = postgisTableKey(table);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
+  const selectedTableGeometries = postgisTables.filter(
+    (table) => postgisTableKey(table) === selectedTableKey,
+  );
+
   return (
     <AddDataSourceForm
       layerName={source.layerName}
@@ -438,7 +454,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       }
     >
       <div className="space-y-3">
-        {!isTauri() ? (
+        {!desktopRuntime ? (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             {t("addData.postgres.desktopOnlyNotice")}
           </p>
@@ -545,7 +561,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 type="button"
                 variant="outline"
                 onClick={loadMode === "editable" ? handleConnectEditable : handleConnectPostgres}
-                disabled={source.isSubmitting || !isTauri()}
+                disabled={source.isSubmitting || !desktopRuntime}
               >
                 {t("addData.postgres.connect")}
               </Button>
@@ -574,19 +590,45 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
             <Select
               id="postgis-table"
               value={selectedTableKey}
-              onChange={(event) => setSelectedTableKey(event.target.value)}
+              onChange={(event) => {
+                const tableKey = event.target.value;
+                setSelectedTableKey(tableKey);
+                setSelectedGeometryColumn(
+                  postgisTables.find((table) => postgisTableKey(table) === tableKey)
+                    ?.geometry_column ?? "",
+                );
+              }}
             >
-              {postgisTables.map((table) => {
+              {uniquePostgisTables.map((table) => {
                 const key = postgisTableKey(table);
+                const label = postgisTableLabel(table);
                 // Tables without a usable key stay visible (so the user sees
                 // why they are missing) but cannot be picked: this mode exists
                 // to save edits back, which needs a primary key.
                 return (
                   <option key={key} value={key} disabled={!table.primary_key}>
-                    {table.primary_key ? key : t("addData.postgres.tableReadOnly", { table: key })}
+                    {table.primary_key
+                      ? label
+                      : t("addData.postgres.tableReadOnly", { table: label })}
                   </option>
                 );
               })}
+            </Select>
+          </div>
+        ) : null}
+        {loadMode === "editable" && selectedTableGeometries.length > 1 ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="postgis-geometry-column">{t("addData.postgres.geometryColumn")}</Label>
+            <Select
+              id="postgis-geometry-column"
+              value={selectedGeometryColumn}
+              onChange={(event) => setSelectedGeometryColumn(event.target.value)}
+            >
+              {selectedTableGeometries.map((table) => (
+                <option key={table.geometry_column} value={table.geometry_column}>
+                  {table.geometry_column} ({table.geometry_type}, EPSG:{table.srid})
+                </option>
+              ))}
             </Select>
           </div>
         ) : null}

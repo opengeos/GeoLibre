@@ -14,6 +14,7 @@
 import { lookup as dnsLookupCallback } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { LookupFunction } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
 
 export const PROXY_MAX_REDIRECT_HOPS = 5;
@@ -179,50 +180,86 @@ export async function assertResolvedPublicHost(
   }
 }
 
+/** One resolved address, as `dns.lookup(..., { all: true })` returns them. */
+export type LookupAddress = { address: string; family: number };
+
 /**
- * undici Agent whose DNS lookup validates every address and only hands the
- * connector a previously-checked public address — closing the rebinding
- * window between check and connect. This lookup is the authoritative SSRF
- * gate for production fetches (no separate pre-resolve).
+ * The reply a `net`/undici connector lookup accepts: the single-address form
+ * `(err, address, family)`, or — when the caller asked for `all: true` — the
+ * array form `(err, addresses)`.
  */
+export type LookupReply = (
+  err: NodeJS.ErrnoException | null,
+  address: string | LookupAddress[],
+  family?: number,
+) => void;
+
+/**
+ * DNS lookup that validates every resolved address and only hands the connector
+ * previously-checked public ones — closing the rebinding window between check
+ * and connect. This is the authoritative SSRF gate for production fetches (no
+ * separate pre-resolve).
+ *
+ * `resolve` is injectable so unit tests can cover it offline.
+ *
+ * @param hostname - The host being connected to.
+ * @param options - The connector's lookup options; `all` selects the reply shape.
+ * @param callback - Answered in whichever shape `options.all` asked for.
+ * @param resolve - The DNS resolver to use; defaults to `dns.lookup`.
+ */
+export function guardedLookup(
+  hostname: string,
+  options: { all?: boolean } & Record<string, unknown>,
+  callback: LookupReply,
+  resolve: typeof dnsLookupCallback = dnsLookupCallback,
+): void {
+  // Always query in all-address mode so every candidate is validated, even when
+  // the caller only asked for one -- the connector must not be able to downgrade
+  // us to a single unchecked answer.
+  //
+  // The REPLY, though, has to match the shape the caller asked for. Node's
+  // `net.Socket` enables `autoSelectFamily` by default (Node 20+), which makes
+  // it pass `all: true` and then read `addresses[0].address` off the result.
+  // Answering such a call with the 3-argument string form makes it index into a
+  // string and fail with `ERR_INVALID_IP_ADDRESS: undefined`, which took every
+  // dev-server raster/tile proxy fetch down with a 502.
+  const wantsAll = options?.all === true;
+  const fail = (message: string): void => {
+    callback(Object.assign(new Error(message), { code: "ENOTFOUND" }), "", 4);
+  };
+  resolve(hostname, { ...options, all: true, verbatim: true }, (err, addresses) => {
+    if (err) {
+      callback(err as NodeJS.ErrnoException, "", 4);
+      return;
+    }
+    const list = addresses as unknown as LookupAddress[];
+    if (!Array.isArray(list) || list.length === 0) {
+      fail(`DNS lookup returned no addresses for ${hostname}`);
+      return;
+    }
+    for (const entry of list) {
+      if (isPrivateHost(entry.address)) {
+        fail(`Blocked private/reserved address: ${hostname} → ${entry.address}`);
+        return;
+      }
+    }
+    if (wantsAll) {
+      // Every entry was validated above, so handing back the whole list keeps
+      // the connection pinned to checked addresses.
+      callback(null, list);
+      return;
+    }
+    const chosen = list[0];
+    callback(null, chosen.address, chosen.family);
+  });
+}
+
+/** undici Agent that connects only through {@link guardedLookup}. */
 const guardedDispatcher = new Agent({
   connect: {
-    lookup(hostname, options, callback) {
-      // Force all-address mode after spreading connector options so the
-      // caller cannot downgrade us to the single-address callback form.
-      dnsLookupCallback(hostname, { ...options, all: true, verbatim: true }, (err, addresses) => {
-        if (err) {
-          callback(err as NodeJS.ErrnoException, "", 4);
-          return;
-        }
-        const list = addresses as Array<{ address: string; family: number }>;
-        if (!Array.isArray(list) || list.length === 0) {
-          callback(
-            Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
-              code: "ENOTFOUND",
-            }),
-            "",
-            4,
-          );
-          return;
-        }
-        for (const entry of list) {
-          if (isPrivateHost(entry.address)) {
-            callback(
-              Object.assign(
-                new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
-                { code: "ENOTFOUND" },
-              ),
-              "",
-              4,
-            );
-            return;
-          }
-        }
-        const chosen = list[0];
-        callback(null, chosen.address, chosen.family);
-      });
-    },
+    // undici types the reply as the single-address form only; `net` also accepts
+    // (and with `all: true` requires) the array form that guardedLookup sends.
+    lookup: guardedLookup as unknown as LookupFunction,
   },
 });
 

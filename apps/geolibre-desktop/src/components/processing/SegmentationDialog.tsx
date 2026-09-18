@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { fetchMlStatus, mlSegment, type MlSegmentMode, type MlStatus } from "@geolibre/processing";
 import {
   Button,
@@ -33,7 +33,7 @@ import { UPDATE_URL } from "../../lib/updates";
 import { SidecarHelpBanner, SIDECAR_PORT, SIDECAR_URL } from "./SidecarHelpBanner";
 
 interface SegmentationDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff", "png", "jpg", "jpeg"] }];

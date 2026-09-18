@@ -12,6 +12,8 @@ import {
   type OvertureMapsControlOptions,
   type OvertureMapsEventHandler,
   type OvertureMapsState,
+  type OverturePopup,
+  type OverturePopupOptions,
   type OvertureLayerState,
   type OvertureThemeState,
   type OvertureTheme,
@@ -39,14 +41,44 @@ let overtureControl: OvertureMapsControl | null = null;
 // Holds the panel state while the control is detached so re-activating or
 // repositioning it restores the user's release, visibility, and opacity.
 let pendingState: RestorableOvertureState | null = null;
+// Whether the hosting engine reads `.pmtiles` archives natively (Mapbox GL
+// JS). The control then emits plain https URLs instead of MapLibre's
+// `pmtiles://` protocol, and the store mirrors record the same URL.
+let nativePmtiles = false;
 
-function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
+/**
+ * The engine-specific pieces of the control's options: on a Mapbox host, plain
+ * PMTiles URLs (mapbox-gl reads the archives through its own tile provider,
+ * `maplibregl.addProtocol` never reaches it) and an inspection popup built
+ * from mapbox-gl's `Popup` (MapLibre's throws on a mapbox-gl map). Returns
+ * `null` on a Mapbox host that does not hand out the mapbox-gl namespace,
+ * because the control would then open MapLibre popups on the Mapbox map.
+ */
+function engineOvertureOptions(
+  app: GeoLibreAppAPI,
+): Pick<OvertureMapsControlOptions, "nativePmtiles" | "createPopup"> | null {
+  const mapboxMap = app.getMapboxMap?.() ?? null;
+  if (!mapboxMap) return {};
+  const mapboxGl = app.getMapboxGl?.() ?? null;
+  if (!mapboxGl) return null;
+  return {
+    nativePmtiles: true,
+    createPopup: (options: OverturePopupOptions) =>
+      new mapboxGl.Popup(options) as unknown as OverturePopup,
+  };
+}
+
+function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl | null {
+  const engineOptions = engineOvertureOptions(app);
+  if (!engineOptions) return null;
+  nativePmtiles = engineOptions.nativePmtiles === true;
   // Construct with the static defaults, then let setState restore the full
   // saved state (release, panel size, and per-layer themes). setState alone
   // covers collapsed/panelWidth/release too, so they are not duplicated as
   // constructor options.
   const control = new OvertureMapsControl({
     ...OVERTURE_OPTIONS,
+    ...engineOptions,
     position: overturePosition,
     // Route the layer GeoJSON export through the host so it works in desktop
     // webviews (Tauri), where the control's built-in anchor download is a
@@ -302,9 +334,17 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-overture-maps",
   name: "Overture Maps",
   version: "0.2.0",
+  // The control only touches the Style Spec surface both 2D engines share
+  // (sources, layers, paint, `queryRenderedFeatures`, click and style events);
+  // its two MapLibre-specific pieces, the `pmtiles://` protocol and the
+  // inspection popup class, are swapped through options on a Mapbox host (see
+  // `engineOvertureOptions`).
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     if (!overtureControl) {
-      overtureControl = createOvertureControl(app);
+      const control = createOvertureControl(app);
+      if (!control) return false;
+      overtureControl = control;
       attachStoreSync(overtureControl);
     }
     const added = app.addMapControl(overtureControl, overturePosition);
@@ -559,7 +599,7 @@ function createOvertureStoreLayer(
 ): GeoLibreLayer {
   const sourceId = sourceIdForTheme(unit.theme);
   const tileUrl = options.release
-    ? tileUrlForTheme(DEFAULT_TILES_BASE_URL, options.release, unit.theme)
+    ? tileUrlForTheme(DEFAULT_TILES_BASE_URL, options.release, unit.theme, nativePmtiles)
     : undefined;
   return {
     id: storeLayerId(unit),

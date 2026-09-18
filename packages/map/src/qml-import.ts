@@ -148,7 +148,7 @@ interface SymbolInfo {
   geometry: "fill" | "line" | "marker" | "unknown";
   /** Primary color: fill for fill/marker symbols, stroke for line symbols. */
   color?: string;
-  /** 0..1 opacity from the primary color's alpha. */
+  /** 0..1 opacity: the primary color's alpha channel times the symbol's own `alpha`. */
   opacity?: number;
   strokeColor?: string;
   strokeWidth?: number;
@@ -166,11 +166,24 @@ function readSymbol(symbol: unknown): SymbolInfo {
   const layer = toArray(symbol.layer)[0];
   const opts = optionMap(layer);
 
+  // QGIS carries opacity in two places and multiplies them: the color's own alpha channel, and the
+  // `alpha` attribute on <symbol>, which is what the Layer Styling panel's opacity slider writes. A
+  // half-transparent color inside a half-transparent symbol draws at a quarter.
+  //
+  // GeoLibre's exporter folds the layer opacity into the color and leaves `alpha="1"`
+  // (see `qml-export.ts`), so its own files round-trip whether or not this is read — which is why
+  // a QGIS-authored QML silently importing at full opacity went unnoticed.
+  const declaredAlpha = toNum(attr(symbol, "alpha"));
+  const symbolAlpha = declaredAlpha === null ? 1 : Math.max(0, Math.min(1, declaredAlpha));
+
   if (geometry === "line") {
     const line = rgbaToHex(opts.get("line_color") ?? null);
     if (line) {
       info.color = line.hex;
-      info.opacity = line.alpha;
+      // Computed for consistency. `applySymbol` does not carry a line symbol's opacity into the
+      // flat style — GeoLibre has no stroke-opacity of its own for it to land in — though
+      // `symbolOverrides` still emits it as a rule's fillOpacity, where it is inert at render.
+      info.opacity = line.alpha * symbolAlpha;
     }
     const width = toNum(opts.get("line_width") ?? null);
     if (width !== null) info.strokeWidth = width;
@@ -181,7 +194,7 @@ function readSymbol(symbol: unknown): SymbolInfo {
   const fill = rgbaToHex(opts.get("color") ?? null);
   if (fill) {
     info.color = fill.hex;
-    info.opacity = fill.alpha;
+    info.opacity = fill.alpha * symbolAlpha;
   }
   const outline = rgbaToHex(opts.get("outline_color") ?? null);
   if (outline) info.strokeColor = outline.hex;
@@ -556,13 +569,23 @@ export function parseQml(xml: string): QmlImportResult {
   try {
     root = parser.parse(xml);
   } catch {
-    warnings.push("The file could not be parsed as XML; nothing was imported.");
+    warnings.push("That could not be parsed as XML; nothing was imported.");
     return { style: patch, labels, warnings, matchedRuleCount: 0 };
   }
 
-  const qgis = isNode(root) ? root.qgis : undefined;
+  // A whole .qml has a <qgis> root. A fragment copied out of one does not, and `isQmlStyleXml`
+  // accepts a bare <renderer-v2> as QML, so read the root itself when the wrapper is absent.
+  // Without this a pasted fragment routes here and then reports that it is not a QML.
+  const rootNode = isNode(root) ? root : undefined;
+  const qgis = isNode(rootNode?.qgis)
+    ? rootNode.qgis
+    : rootNode && (isNode(rootNode["renderer-v2"]) || isNode(rootNode.labeling))
+      ? rootNode
+      : undefined;
   if (!isNode(qgis)) {
-    warnings.push("This file is not a QGIS QML style (no <qgis> root); nothing was imported.");
+    warnings.push(
+      "That is not a QGIS QML style (no <qgis> or <renderer-v2> root); nothing was imported.",
+    );
     return { style: patch, labels, warnings, matchedRuleCount: 0 };
   }
 

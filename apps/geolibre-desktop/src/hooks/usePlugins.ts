@@ -2,9 +2,14 @@ import {
   clearExternalNativePaintBridge,
   setExternalNativePaintBridge,
   useAppStore,
+  type AppState,
 } from "@geolibre/core";
+import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
+import { nativeWmsTileUrl } from "../lib/native-wms-url";
 import {
   addRasterToMap,
+  readRasterWindow,
+  setRasterRenderEngine,
   addZarrRasterLayer,
   buildSelectorTimeBinding,
   queryZarrLayer,
@@ -16,6 +21,7 @@ import {
   setZarrLayerSelector,
   setZarrLocalStoreProvider,
   maplibreAnnotationsPlugin,
+  maplibreDimensionsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
   maplibreDeckGlVizPlugin,
@@ -36,6 +42,7 @@ import {
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreOsmDownloaderPlugin,
   maplibreArcGisHubPlugin,
   maplibreCkanPlugin,
   maplibreSocrataPlugin,
@@ -44,6 +51,9 @@ import {
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
   maplibreGeoLensPlugin,
+  maplibreVantorPlugin,
+  maplibrePlanetOpenDataPlugin,
+  maplibrePortolanPlugin,
   maplibreOvertureMapsPlugin,
   queryOvertureFeatures,
   maplibreGraticulePlugin,
@@ -60,6 +70,7 @@ import {
   maplibreMapillaryPlugin,
   maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
+  maplibreSamGeoPlugin,
   maplibreSunPlugin,
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
@@ -69,6 +80,7 @@ import {
   maplibreTimeSliderPlugin,
   setTimelapseVideoSaver,
   maplibreUsgsLidarPlugin,
+  maplibreUsgsNldiPlugin,
   PluginManager,
   registerRightPanel,
   unregisterRightPanel,
@@ -78,6 +90,9 @@ import {
   getActiveRightPanel,
   setActiveRightPanelDock,
   getActiveRightPanelDock,
+  registerAssistantTool,
+  registerAssistantToolSpec,
+  registerAssistantGuidance,
   registerToolbarMenu,
   unregisterToolbarMenu,
   registerFloatingPanel,
@@ -86,9 +101,10 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import { CesiumEngine, getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
 import type {
   GeoLibreCogLayerOptions,
+  GeoLibreCogRenderEngine,
   GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
@@ -99,7 +115,9 @@ import type {
   GeoLibreZarrQueryGeometry,
   GeoLibreZarrQueryOptions,
   GeoLibreZarrQuerySelector,
+  GeoLibreRasterWindowOptions,
 } from "@geolibre/plugins";
+import { cogEngineDefaults } from "../lib/cog-render-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
@@ -121,10 +139,19 @@ import { appendDiagnostic } from "../lib/diagnostics";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
+import {
+  dedupeVectorUrlFetch,
+  fetchBrowserShapefileZip,
+  isBlockedUrlError,
+  vectorDownloadFileName,
+} from "../lib/vector-url-fetch";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
+import i18n from "../i18n";
+import { createPluginLocaleApi } from "../lib/plugin-locale";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
+import { createPluginLayerQueries } from "../lib/plugin-layer-queries";
 import { mergeStringLists } from "../lib/string-lists";
 import {
   browserSaveFallsBackToDownload,
@@ -173,6 +200,7 @@ manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
+  maplibreDimensionsPlugin,
   maplibreBasemapControlPlugin,
   // The web service plugins (WEB_SERVICE_PLUGIN_IDS) are grouped into the
   // "Web Services" submenu, rendered where the first of them appears in this
@@ -181,8 +209,13 @@ manager.registerAll([
   maplibreNasaEarthdataPlugin,
   maplibreEnviroAtlasPlugin,
   maplibreNationalMapPlugin,
+  maplibreUsgsNldiPlugin,
+  maplibreVantorPlugin,
+  maplibrePlanetOpenDataPlugin,
+  maplibrePortolanPlugin,
   maplibreEarthdataGisPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreOsmDownloaderPlugin,
   maplibreArcGisHubPlugin,
   maplibreSocrataPlugin,
   maplibreCkanPlugin,
@@ -218,6 +251,9 @@ manager.registerAll([
   maplibreSunPlugin,
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
+  // Last visible entry of the Plugins menu; the ids below are skipped by
+  // PluginsMenu and surface elsewhere.
+  maplibreSamGeoPlugin,
   maplibreDirectionsPlugin,
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
@@ -254,7 +290,12 @@ setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
   const saved = await saveBinaryFileWithFallback(cogBytes, {
     defaultName,
     filters: [{ name: "Cloud Optimized GeoTIFF", extensions: ["tif"] }],
-    browserTypes: [{ description: "Cloud Optimized GeoTIFF", accept: { "image/tiff": [".tif"] } }],
+    browserTypes: [
+      {
+        description: "Cloud Optimized GeoTIFF",
+        accept: { "image/tiff": [".tif"] },
+      },
+    ],
     mimeType: "image/tiff",
   });
   return saved !== null;
@@ -307,7 +348,7 @@ export function subscribeToExternalPluginLoads(listener: () => void): () => void
 // action.
 export async function upgradeExternalPlugin(
   manifestUrl: string,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
   await reloadExternalUrlPlugin(manager, manifestUrl, createAppAPI(mapControllerRef));
 }
@@ -321,7 +362,7 @@ export async function upgradeExternalPlugin(
 // plugin id.
 export async function installPluginArchive(
   sourcePath: string,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<string> {
   if (!isTauriRuntime()) {
     throw new Error("Installing plugin archives requires the desktop app.");
@@ -348,7 +389,7 @@ export async function installPluginArchive(
 export async function installPluginArchiveFromFile(
   fileName: string,
   bytes: Uint8Array,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<string> {
   return installWebPluginArchive(manager, fileName, bytes, createAppAPI(mapControllerRef));
 }
@@ -356,7 +397,7 @@ export async function installPluginArchiveFromFile(
 // Uninstall a plugin that was installed from a file in the browser.
 export async function uninstallPluginArchiveFromFile(
   pluginId: string,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
   await uninstallWebPlugin(manager, pluginId, createAppAPI(mapControllerRef));
 }
@@ -468,9 +509,7 @@ export function usePluginRegistry() {
 // Built-in plugins are registered at module load so the toolbar can render
 // plugin menu items on the first pass. This hook additionally kicks off the
 // external plugin scan and reports whether it has finished.
-export function useExternalPluginsReady(
-  mapControllerRef: RefObject<MapController | null>,
-): boolean {
+export function useExternalPluginsReady(mapControllerRef: RefObject<MapEngine | null>): boolean {
   const desktopSettings = useDesktopSettingsStore((state) => state.desktopSettings);
 
   useEffect(() => {
@@ -575,9 +614,7 @@ export function useProjectPluginTrust(): ProjectPluginTrustState {
  * Mounted once near the app root so it covers every way into split view — the
  * View menu, loading a project, or a plugin — not just the toolbar item.
  */
-export function useSwipeSplitViewExclusivity(
-  mapControllerRef: RefObject<MapController | null>,
-): void {
+export function useSwipeSplitViewExclusivity(mapControllerRef: RefObject<MapEngine | null>): void {
   const paneCount = useAppStore((state) => state.mapLayout.rows * state.mapLayout.cols);
 
   useEffect(() => {
@@ -727,7 +764,7 @@ function ensureExternalPluginsLoadedWithSettings(
 export function bindTemporalLayer(
   layerId: string,
   adapter: TemporalLayerAdapter,
-  mapControllerRef?: RefObject<MapController | null>,
+  mapControllerRef?: RefObject<MapEngine | null>,
 ): boolean {
   const binding = buildSelectorTimeBinding(adapter.dimension ?? "time", adapter.getTimeValues(), {
     granularity: adapter.granularity,
@@ -763,9 +800,7 @@ export function bindTemporalLayer(
  *
  * @param mapControllerRef - Used to build the app API for activation.
  */
-export function activateTimeSliderForBinding(
-  mapControllerRef?: RefObject<MapController | null>,
-): void {
+export function activateTimeSliderForBinding(mapControllerRef?: RefObject<MapEngine | null>): void {
   if (manager.isActive(TIME_SLIDER_PLUGIN_ID)) return;
   const before = JSON.stringify(projectPluginStateSnapshot());
   try {
@@ -799,7 +834,7 @@ export function activateTimeSliderForBinding(
  * Mounted once near the app root so it covers every way a binding can
  * disappear, not just the Layers panel.
  */
-export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapController | null>): void {
+export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapEngine | null>): void {
   useEffect(() => {
     // Subscribed rather than selected from the store so no component re-renders
     // on every layer edit just to run this check.
@@ -824,17 +859,44 @@ export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapController
   }, [mapControllerRef]);
 }
 
-export function createAppAPI(mapControllerRef?: RefObject<MapController | null>) {
+/**
+ * The basemap a plugin sees as active: the Mapbox-only style while Mapbox is
+ * the primary renderer, otherwise the shared MapLibre/Cesium basemap.
+ *
+ * `setBasemap` writes the same two fields, so `getActiveBasemap` and
+ * `onBasemapChange` must read them through this one helper or a Mapbox style
+ * change is written but never reported to `onBasemapChange` subscribers.
+ */
+function effectiveBasemapUrl(
+  state: Pick<AppState, "primaryRenderer" | "preferences" | "basemapStyleUrl">,
+): string {
+  return state.primaryRenderer === "mapbox"
+    ? (state.preferences.map.mapboxStyleUrl ?? state.basemapStyleUrl)
+    : state.basemapStyleUrl;
+}
+
+export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
   const store = useAppStore.getState();
   // Captured so methods that delegate to plugin helpers taking the AppAPI
   // itself (e.g. addCogLayer -> addRasterToMap) can pass `api`. Only read
   // when those methods are called, which is always after assignment.
   const api = {
-    setBasemap: (url: string) => store.setBasemapStyleUrl(url),
+    setBasemap: (url: string) => {
+      const state = useAppStore.getState();
+      if (state.primaryRenderer === "mapbox") {
+        state.setPreferences({
+          ...state.preferences,
+          map: { ...state.preferences.map, mapboxStyleUrl: url },
+        });
+      } else {
+        state.setBasemapStyleUrl(url);
+      }
+    },
     addGeoJsonLayer: (name: string, data: GeoJSON.FeatureCollection, sourcePath?: string) => {
       const id = store.addGeoJsonLayer(name, data, sourcePath);
       return id;
     },
+    ...createPluginLayerQueries(),
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,
@@ -896,7 +958,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         name,
         {
           type: "wms",
-          tiles: [tileUrl],
+          tiles: [isTauriRuntime() ? nativeWmsTileUrl(tileUrl) : tileUrl],
           url,
           // Persist the WMS request parameters so the layer round-trips through
           // a saved project, mirroring the Add Data dialog's WMS source.
@@ -927,11 +989,8 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           : undefined;
       return addRasterToMap(api, url, {
         name,
-        // STAC assets are already COGs with an HTTP(S) range-readable URL.
-        // Render them directly through the GPU COG engine; the WASM tiler is
-        // intended for local files and can leave remote programmatic layers
-        // registered without producing pixels.
-        defaults: { engine: "maplibre-gl-raster" },
+        // Control-wide, not per layer: see cogEngineDefaults.
+        defaults: cogEngineDefaults(options?.engine),
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
           ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),
@@ -942,6 +1001,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         ...(options?.beforeLayerId ? { beforeId: options.beforeLayerId } : {}),
       });
     },
+    setCogRenderEngine: (engine: GeoLibreCogRenderEngine) => setRasterRenderEngine(api, engine),
     // Zarr goes through the components plugin's shared @carbonplan/zarr-layer
     // control for the same reason as addCogLayer: the host owns the renderer, so
     // a plugin does not bundle (and fail to activate) a second copy.
@@ -989,11 +1049,24 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       return detach;
     },
     unregisterTemporalLayer: (layerId: string) => unregisterTemporalLayer(layerId),
-    getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
+    getActiveBasemap: () => effectiveBasemapUrl(useAppStore.getState()),
+    getBasemapLayerIds: () => mapControllerRef?.current?.getBasemapStyleLayerIds() ?? [],
     onBasemapChange: (callback: (styleUrl: string) => void) =>
       useAppStore.subscribe((state, prev) => {
-        if (state.basemapStyleUrl !== prev.basemapStyleUrl) {
-          callback(state.basemapStyleUrl);
+        const current = effectiveBasemapUrl(state);
+        if (current !== effectiveBasemapUrl(prev)) {
+          callback(current);
+        }
+      }),
+    getLayers: () => useAppStore.getState().layers.map((layer) => layer.id),
+    onLayersChanged: (callback: (layerIds: string[]) => void) =>
+      useAppStore.subscribe((state, prev) => {
+        const layerIds = state.layers.map((layer) => layer.id);
+        if (
+          layerIds.length !== prev.layers.length ||
+          layerIds.some((id, index) => id !== prev.layers[index]?.id)
+        ) {
+          callback(layerIds);
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
@@ -1023,45 +1096,127 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     queryOvertureFeatures,
     addLayerGroup: (name?: string, layerIds?: string[]) =>
       useAppStore.getState().addLayerGroup(name, layerIds),
+    moveLayersToGroup: (layerIds: string[], groupId: string | null) =>
+      useAppStore.getState().moveLayersToGroup(layerIds, groupId),
     removeLayerGroup: (id: string) => useAppStore.getState().removeLayerGroup(id),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
+    getViewBounds: () => mapControllerRef?.current?.getViewBounds() ?? null,
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
+    readRasterWindow: (layerId: string, options: GeoLibreRasterWindowOptions) =>
+      readRasterWindow(layerId, options),
+    getMapRenderer: () => useAppStore.getState().primaryRenderer,
+    getArcgisView: () => {
+      const engine = mapControllerRef?.current;
+      return engine?.kind === "arcgis" &&
+        "getView" in engine &&
+        typeof engine.getView === "function"
+        ? engine.getView()
+        : null;
+    },
+    getMapboxMap: () => {
+      const engine = mapControllerRef?.current;
+      return engine?.kind === "mapbox" &&
+        "getMapboxMap" in engine &&
+        typeof engine.getMapboxMap === "function"
+        ? engine.getMapboxMap()
+        : null;
+    },
+    getMapboxGl: () => {
+      const engine = mapControllerRef?.current;
+      return engine?.kind === "mapbox" &&
+        "getMapboxGl" in engine &&
+        typeof engine.getMapboxGl === "function"
+        ? engine.getMapboxGl()
+        : null;
+    },
+    getMapboxAccessToken: () => {
+      const engine = mapControllerRef?.current;
+      return engine?.kind === "mapbox" &&
+        "getMapboxAccessToken" in engine &&
+        typeof engine.getMapboxAccessToken === "function"
+        ? engine.getMapboxAccessToken()
+        : null;
+    },
+    getCesiumScene: () => {
+      const engine = mapControllerRef?.current;
+      return engine instanceof CesiumEngine ? engine.getCesiumScene() : null;
+    },
+    getProjectSnapshot: () => buildProjectEgressSnapshot(mapControllerRef ?? { current: null }),
     openExternalUrl: (url: string) => void openExternalLink(url),
     pickLocalDirectoryFiles,
     // Present only on desktop (filesystem access); the Vector panel keys off its
     // presence to auto-discover shapefile sidecars instead of forcing the user
     // to select every component, and to capture the file's path for restore.
     pickVectorFilesWithSidecars: isTauriRuntime() ? pickVectorFilesWithSidecars : undefined,
-    fetchVectorUrl: async (url: string) => {
-      if (isTauriRuntime()) {
-        try {
-          const bytes = await fetchUrlBytes(url, { context: "Add Vector Layer" });
-          const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-          return new Blob([array as Uint8Array<ArrayBuffer>]);
-        } catch {
-          // The shared native command has a short, tile-oriented timeout.
-          // Preserve the former browser path for large CORS-enabled datasets.
+    // Shared across the sibling layers of one multi-layer container, which all
+    // carry the container's URL: without this a six-layer KMZ downloaded itself
+    // six times over on every project open and every refresh tick.
+    fetchVectorUrl: (url: string) =>
+      dedupeVectorUrlFetch(url, async () => {
+        const name = vectorDownloadFileName(url);
+        // Each attempt gets its own budget rather than sharing one across all
+        // three. A shared deadline would be spent by the native call in exactly
+        // the case the fallbacks exist for (a slow origin), leaving them to
+        // reject instantly on an already-aborted signal. Sibling layers now
+        // await a single download, so an unbounded fetch would hold all of them
+        // pending, which is why each attempt is bounded at all.
+        const budget = () => AbortSignal.timeout(VECTOR_DOWNLOAD_TIMEOUT_SECS * 1000);
+        if (isTauriRuntime()) {
           try {
-            const response = await fetch(url);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            const bytes = await fetchUrlBytes(url, {
+              context: "Add Vector Layer",
+              // The default budget on this command is tile-sized (8s). A vector
+              // dataset is not a tile. A few megabytes from a slow origin
+              // routinely needs longer, and timing out here used to drop the
+              // layer entirely, so ask for a download-sized budget instead.
+              timeoutSecs: VECTOR_DOWNLOAD_TIMEOUT_SECS,
+            });
+            const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+            return new File([array as Uint8Array<ArrayBuffer>], name);
+          } catch (error) {
+            // The webview is not subject to the backend's SSRF guard, so a URL
+            // the native command refused by policy must not be retried here.
+            if (isBlockedUrlError(error)) throw error;
+            // Keep the browser path as a fallback for CORS-enabled origins the
+            // native command could not reach.
+            try {
+              const response = await fetch(url, { signal: budget() });
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+              }
+              return new File([await response.blob()], name);
+            } catch {
+              // GitHub's /raw route rejects browser CORS, so fall through to the
+              // same guarded proxy used by the web build.
             }
-            return response.blob();
-          } catch {
-            // GitHub's /raw route rejects browser CORS, so fall through to the
-            // same guarded proxy used by the web build.
           }
         }
-      }
-      const proxyUrl = githubRawVectorProxyUrl(url);
-      if (!proxyUrl) return null;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      }
-      return response.blob();
-    },
+        const proxyUrl = githubRawVectorProxyUrl(url);
+        if (!isTauriRuntime()) {
+          // DuckDB-WASM cannot read `/vsizip//vsicurl/` in a browser. Download
+          // remote Shapefile archives first so maplibre-gl-vector receives the
+          // same File shape as a working local drop and can unzip/register its
+          // components itself. Leave every non-ZIP URL alone so formats such as
+          // GeoParquet retain their direct range-read path.
+          try {
+            const archive = await fetchBrowserShapefileZip(url, budget());
+            if (archive) return archive;
+          } catch (error) {
+            // GitHub's /raw route rejects browser CORS, so its existing guarded
+            // proxy gets one chance below. For every other origin, preserve the
+            // browser's real download/CORS failure instead of falling through to
+            // DuckDB's misleading "does not exist in the file system" error.
+            if (!proxyUrl) throw error;
+          }
+        }
+        if (!proxyUrl) return null;
+        const response = await fetch(proxyUrl, { signal: budget() });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+        return new File([await response.blob()], name);
+      }),
     readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => {
       const description = options?.description ?? "GeoJSON";
@@ -1124,24 +1279,32 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }
     },
     addMapControl: (
-      control: Parameters<MapController["addControl"]>[0],
-      position?: Parameters<MapController["addControl"]>[1],
-    ) => mapControllerRef?.current?.addControl(control, position) ?? false,
-    removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
-      mapControllerRef?.current?.removeControl(control),
+      control: Parameters<MapEngine["addControl"]>[0],
+      position?: Parameters<MapEngine["addControl"]>[1],
+    ) =>
+      mapControllerRef?.current?.addControl(control, position) ??
+      getPrimaryCesiumControlHost()?.addControl(control, position) ??
+      false,
+    removeMapControl: (control: Parameters<MapEngine["removeControl"]>[0]) => {
+      if (mapControllerRef?.current) {
+        mapControllerRef.current.removeControl(control);
+      } else {
+        getPrimaryCesiumControlHost()?.removeControl(control);
+      }
+    },
     setBuiltInMapControlVisible: (
-      control: Parameters<MapController["setBuiltInControlVisible"]>[0],
+      control: Parameters<MapEngine["setBuiltInControlVisible"]>[0],
       visible: boolean,
     ) => mapControllerRef?.current?.setBuiltInControlVisible(control, visible) ?? false,
     setTerrainEnabled: (enabled: boolean) =>
       mapControllerRef?.current?.setTerrainEnabled(enabled) ?? false,
     isTerrainEnabled: () => mapControllerRef?.current?.isTerrainEnabled() ?? false,
     getBuiltInMapControlPosition: (
-      control: Parameters<MapController["getBuiltInControlPosition"]>[0],
+      control: Parameters<MapEngine["getBuiltInControlPosition"]>[0],
     ) => mapControllerRef?.current?.getBuiltInControlPosition(control) ?? "top-right",
     setBuiltInMapControlPosition: (
-      control: Parameters<MapController["setBuiltInControlPosition"]>[0],
-      position: Parameters<MapController["setBuiltInControlPosition"]>[1],
+      control: Parameters<MapEngine["setBuiltInControlPosition"]>[0],
+      position: Parameters<MapEngine["setBuiltInControlPosition"]>[1],
     ) => mapControllerRef?.current?.setBuiltInControlPosition(control, position) ?? false,
     // Hand external plugins GeoLibre's own deck.gl modules so they render on the
     // host's single deck.gl instance (a bundled second copy throws on the
@@ -1216,6 +1379,10 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     getActiveRightPanel,
     setActiveRightPanelDock,
     getActiveRightPanelDock,
+    ...createPluginLocaleApi(i18n),
+    registerAssistantTool,
+    registerAssistantToolSpec,
+    registerAssistantGuidance,
     registerToolbarMenu,
     unregisterToolbarMenu,
     registerFloatingPanel,
@@ -1227,7 +1394,16 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
   return api;
 }
 
-async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
+/**
+ * The app's CORS/Tauri-aware whole-file fetch: native HTTP on the desktop
+ * (bypassing webview CORS), the dev raster proxy in local development, plain
+ * `fetch` otherwise.
+ *
+ * Exported for readers outside the plugin API that need the same path — the COG
+ * spectral profile falls back to it when geotiff.js's own range requests are
+ * refused (`useCogSpectralIdentify`).
+ */
+export async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
   if (isTauriRuntime() && isLocalFileReference(url)) {
     return normalizeBytes(await readFile(localPathFromReference(url)));
   }
@@ -1332,6 +1508,14 @@ function isTauriRuntime(): boolean {
 }
 
 const GITHUB_RAW_VECTOR_PROXY = "https://tiles.geolibre.app/github-raw";
+
+/**
+ * Budget for a native Add Vector Layer download, in seconds. Deliberately far
+ * above `fetch_url_bytes`'s tile-sized default: this command carries whole
+ * datasets, not 256px tiles, and a timeout here is not a slow tile that resolves
+ * next frame but a layer that fails to restore.
+ */
+const VECTOR_DOWNLOAD_TIMEOUT_SECS = 180;
 
 function githubRawVectorProxyUrl(value: string): string | null {
   let url: URL;

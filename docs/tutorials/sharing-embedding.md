@@ -20,7 +20,7 @@ You only need to do this once.
    https://share.geolibre.app/you/my-map.geolibre.json
    ```
 
-The shared file captures the same layers, styles, plugin state, and map view as a local save.
+The shared file captures the same layers, styles, plugin state, and map view as a local save. Layers that read files on your computer are the exception: the dialog lists them as missing before you share, since `share.geolibre.app` stores the project file and never your data files. See [Sharing local data](../user-guide/projects.md#sharing-local-data) for how to host them instead.
 
 ## 3. Open the shared map
 
@@ -52,6 +52,7 @@ Adjust the look with parameters (they combine):
 - `layout=viewer` gives a read-only map: Layers, View, Controls, basemaps, and
   search/identify stay, while everything that edits the project is hidden.
 - `layout=compact` keeps a slim, icon-only toolbar.
+- `toolbar=none` hides the top toolbar while keeping panels and the status bar.
 - `panels=none` hides the side and bottom panels but keeps the toolbar.
 - `theme=dark` forces the dark theme on load.
 

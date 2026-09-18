@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
+  getVectorColorRamp,
   type GeoLibreLayer,
   type LegendConfig,
 } from "../packages/core/src/index";
@@ -38,6 +39,30 @@ function config(over: Partial<LegendConfig> = {}): LegendConfig {
 
 const EN = { locale: "en" };
 
+function polygonGeojson(): NonNullable<GeoLibreLayer["geojson"]> {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { count: 10 },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              [0, 0],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
+
 describe("formatLegendNumber", () => {
   it("abbreviates large values but keeps 4-digit values (years) exact", () => {
     assert.equal(formatLegendNumber(8918925.75, "en"), "8.9M");
@@ -64,6 +89,159 @@ describe("buildAutoLegend — vector layers", () => {
     );
     assert.equal(entries[0].shape, "line");
     assert.equal(entries[1].shape, "circle");
+  });
+
+  it("adds a fixed-size generated centroid after the parent symbol", () => {
+    const [entry] = buildAutoLegend(
+      [
+        layer({
+          name: "Regions",
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator: "centroid",
+            geometryGeneratorFillColor: "#f59e0b",
+            geometryGeneratorCircleRadius: 7,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+
+    assert.equal(entry.headerSwatch?.color, DEFAULT_LAYER_STYLE.fillColor);
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.color, row.shape, row.size]),
+      [["Centroids", "#f59e0b", "circle", 7]],
+    );
+  });
+
+  it("adds the generated centroid's proportional-size ramp and field caption", () => {
+    const [entry] = buildAutoLegend(
+      [
+        layer({
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator: "centroid",
+            geometryGeneratorFillColor: "#ef4444",
+            geometryGeneratorSizeProperty: "count",
+            geometryGeneratorSizeMinValue: 0,
+            geometryGeneratorSizeMaxValue: 100,
+            geometryGeneratorSizeMinRadius: 4,
+            geometryGeneratorSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      {
+        ...EN,
+        geometryGeneratorLabels: { centroid: "Centroides" },
+      },
+    );
+
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.size, row.shape, row.caption]),
+      [
+        ["0", 4, "circle", "Centroides · count"],
+        ["50", 14, "circle", undefined],
+        ["100", 24, "circle", undefined],
+      ],
+    );
+    assert.ok(entry.rows.every((row) => row.color === "#ef4444"));
+  });
+
+  it("adds generated polygon types with their own fill and label", () => {
+    for (const [geometryGenerator, expectedLabel] of [
+      ["bounding-box", "Bounding boxes"],
+      ["convex-hull", "Convex hulls"],
+      ["buffer", "Buffers"],
+    ] as const) {
+      const [entry] = buildAutoLegend(
+        [
+          layer({
+            geojson: polygonGeojson(),
+            metadata: { geometryType: "polygon" },
+            style: {
+              ...DEFAULT_LAYER_STYLE,
+              geometryGenerator,
+              geometryGeneratorFillColor: "#22c55e",
+            },
+          }),
+        ],
+        config(),
+        EN,
+      );
+      const generated = entry.rows.at(-1);
+      assert.deepEqual(
+        [generated?.label, generated?.color, generated?.shape],
+        [expectedLabel, "#22c55e", "square"],
+      );
+    }
+  });
+
+  it("omits generated geometry while the renderer suppresses it", () => {
+    const base = layer({
+      geojson: polygonGeojson(),
+      metadata: { geometryType: "polygon" },
+      style: { ...DEFAULT_LAYER_STYLE, geometryGenerator: "centroid" },
+    });
+    const suppressed = [
+      { ...base, style: { ...base.style, extrusionEnabled: true } },
+      { ...base, timeFilter: ["==", ["get", "year"], 2026] },
+      { ...base, embedFilter: ["==", ["get", "kind"], "active"] },
+      { ...base, metadata: { ...base.metadata, externalDeckLayer: true } },
+      { ...base, metadata: { ...base.metadata, nativeLayerIds: ["external-fill"] } },
+      {
+        ...base,
+        metadata: {
+          ...base.metadata,
+          sourceKind: "maplibre-gl-vector",
+          customLayerType: "fill",
+          nativeLayerIds: [],
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          geometryGenerator: "buffer" as const,
+          geometryGeneratorBufferDistance: 0,
+          geometryGeneratorBufferProperty: "",
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          vectorStyleMode: "rule-based" as const,
+          vectorRules: [
+            {
+              id: "active",
+              label: "Active",
+              filter: '["==", ["get", "kind"], "active"]',
+              color: "#22c55e",
+              isElse: false,
+            },
+            {
+              id: "else",
+              label: "Other",
+              filter: "",
+              color: "#94a3b8",
+              isElse: true,
+              enabled: false,
+            },
+          ],
+        },
+      },
+    ];
+
+    for (const candidate of suppressed) {
+      const [entry] = buildAutoLegend([candidate], config(), EN);
+      assert.ok(entry.rows.every((row) => row.label !== "Centroids"));
+    }
   });
 
   it("renders a graduated layer as range-labelled class rows with a field caption", () => {
@@ -165,7 +343,33 @@ describe("buildAutoLegend — vector layers", () => {
     assert.ok(entry.gradient);
     assert.equal(entry.gradient?.minLabel, null);
     assert.equal(entry.gradient?.maxLabel, null);
+    assert.equal(entry.gradient?.colors[0], "rgba(0,0,0,0)");
     assert.ok((entry.gradient?.colors.length ?? 0) >= 2);
+  });
+
+  it("falls back to the default heatmap ramp the map paints, not the first ramp", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "heat",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            pointRenderer: "heatmap",
+            heatmapColorRamp: "not-a-ramp",
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    // getVectorColorRamp alone would answer "viridis" here, which is not what
+    // heatmapPaint renders: both go through heatmapRampColors, so an unknown
+    // ramp name resolves to the default ("turbo") in the legend too.
+    assert.deepEqual(entries[0].gradient?.colors, [
+      "rgba(0,0,0,0)",
+      ...getVectorColorRamp(DEFAULT_LAYER_STYLE.heatmapColorRamp).colors,
+    ]);
   });
 
   it("adds proportional-symbol size rows for a point layer", () => {
@@ -282,6 +486,116 @@ describe("buildAutoLegend — vector layers", () => {
         ["100", "#31688e", 12, undefined],
       ],
     );
+  });
+
+  it("draws the size ramp with the layer's marker, not a plain circle", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "marked",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            markerEnabled: true,
+            markerShape: "custom",
+            markerColor: "#3b82f6",
+            markerSvg: "https://example.com/bee.svg",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "nb_ruches",
+            proportionalSizeMinValue: 1,
+            proportionalSizeMaxValue: 86,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    // The map scales the marker sprite through icon-size, so every sized row
+    // carries the marker; a plain circle would advertise a symbol the map does
+    // not draw (GH discussion #1711).
+    assert.deepEqual(
+      entry.rows.map((row) => [row.size, row.marker?.shape, row.marker?.svg]),
+      [
+        [4, "custom", "https://example.com/bee.svg"],
+        [14, "custom", "https://example.com/bee.svg"],
+        [24, "custom", "https://example.com/bee.svg"],
+      ],
+    );
+    // The heading chip stays the marker too, so the entry reads as one symbol.
+    assert.equal(entry.headerSwatch?.marker?.shape, "custom");
+  });
+
+  it("carries the marker onto merged graduated class rows", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "merged",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "pop_max",
+            vectorStyleStops: [
+              { value: 0, color: "#440154" },
+              { value: 100, color: "#31688e" },
+              { value: 200, color: "#fde725" },
+            ],
+            markerEnabled: true,
+            markerShape: "star",
+            markerColor: "#f59e0b",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 200,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.deepEqual(
+      entry.rows.map((row) => [row.size, row.marker?.shape]),
+      [
+        [9, "star"],
+        [19, "star"],
+        [24, "star"],
+      ],
+    );
+  });
+
+  it("leaves a line layer's size ramp markerless", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "line",
+          metadata: { geometryType: "line" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            // markerEnabled on a line layer draws nothing on the map, so the
+            // stroke ramp must not pick up a marker.
+            markerEnabled: true,
+            markerShape: "star",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "flow",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 1,
+            proportionalSizeMaxRadius: 8,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.ok(entry.rows.length > 0);
+    assert.ok(entry.rows.every((row) => row.marker === undefined && row.shape === "line"));
   });
 
   it("omits size rows when the proportional range is degenerate", () => {

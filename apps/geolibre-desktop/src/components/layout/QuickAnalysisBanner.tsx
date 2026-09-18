@@ -40,7 +40,7 @@ export function QuickAnalysisBanner() {
     <div className="pointer-events-none absolute bottom-10 left-1/2 z-20 flex w-[min(92vw,28rem)] -translate-x-1/2 justify-center">
       <div
         role="status"
-        className="pointer-events-auto flex w-full items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs shadow-md backdrop-blur"
+        className="pointer-events-auto flex w-full items-center gap-2 rounded-md border map-glass px-3 py-2 text-xs shadow-md"
       >
         {running ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />

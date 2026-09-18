@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { TerrainControl } from "../packages/map/src/terrain-control";
 
 // TerrainControl.onAdd builds DOM nodes; node:test has no DOM, so stand up a

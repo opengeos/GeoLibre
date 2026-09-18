@@ -1,9 +1,30 @@
 # Downloads
 
-GeoLibre desktop installers are published from GitHub Releases.
+GeoLibre desktop installers are published from GitHub Releases and mirrored on
+a separate download site for regions where GitHub is unavailable.
 
-[View releases](https://github.com/opengeos/GeoLibre/releases){ .md-button .md-button--primary }
+[Download the latest release](https://downloads.geolibre.app/){ .md-button .md-button--primary }
+[View GitHub releases](https://github.com/opengeos/GeoLibre/releases){ .md-button }
 [Launch GeoLibre Web](https://web.geolibre.app/){ .md-button }
+
+## Download mirror
+
+Use [downloads.geolibre.app](https://downloads.geolibre.app/) when GitHub is
+blocked or slow in your region. The directory groups the latest public release
+downloads by platform and provides search, file sizes, SHA-256 checksums, and a
+machine-readable JSON manifest.
+
+Release assets up to 100 MiB are served directly from the mirror. Larger files
+are listed with their original GitHub download link because GitHub Pages cannot
+store individual files over that limit. Store-submission packages and automatic
+update metadata are not shown because they are not files users install
+directly.
+
+The mirror updates automatically after the release build workflows finish and
+runs a daily reconciliation in case an asset is added or replaced later. It
+keeps only the latest release; use the
+[GitHub Releases archive](https://github.com/opengeos/GeoLibre/releases) for
+older versions.
 
 ## Release assets
 
@@ -132,7 +153,7 @@ shipping them broken. Here is how the two macOS builds compare:
 | Feature | Homebrew / DMG | Mac App Store |
 | --- | --- | --- |
 | Whitebox toolbox (1,000+ WebAssembly tools) | Yes | Yes |
-| Processing → Vector, browser-engine Conversion, client raster tools | Yes | Yes |
+| Processing → GeoLibre Toolbox → Vector, browser-engine Conversion, client raster tools | Yes | Yes |
 | SQL Workspace (DuckDB-WASM, PGlite/PostGIS, in-browser Apache Sedona on CereusDB) | Yes | Yes |
 | Python sidecar engines (GeoPandas vector, rasterio raster, GDAL conversion, SamGeo segmentation, the SedonaDB sidecar behind the Apache Sedona engine) | Yes | No |
 | Add Data → PostgreSQL / PostGIS (martin tile server) | Yes | No |
@@ -285,6 +306,51 @@ Tools that need a local desktop process — the Raster, Conversion, and AI
 Segmentation toolboxes, and the PostgreSQL data source — are hidden on Android.
 The Whitebox geoprocessing toolbox runs on WebAssembly and stays available. See
 [Android](android.md) for the full list and for build instructions.
+
+## iOS installation
+
+GeoLibre is on the
+[App Store](https://apps.apple.com/app/geolibre/id6796039674) as a native app for
+iPhone and iPad, built from the same codebase as the desktop, web, and Android
+builds:
+
+[Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
+
+GeoLibre does not publish a sideloadable `.ipa` for end users. A release may
+include an `*_ios_app-store.ipa` archive for App Store submission, but that
+archive cannot be installed directly. Use the App Store for released builds or
+TestFlight for beta builds; to run an unreleased build, build it yourself on a
+Mac (see [iOS](ios.md)).
+
+The tools that are hidden on Android are hidden on iOS too, for the same reason:
+the Raster, Conversion, and AI Segmentation toolboxes and the PostgreSQL data
+source all need a local desktop process, and the iOS sandbox forbids spawning
+one. The Whitebox geoprocessing toolbox runs on WebAssembly and stays available.
+See [iOS](ios.md) for the full list.
+
+!!! note
+
+    The App Store listing above is the iPhone and iPad app
+    (`org.geolibre.app`). The [Mac App Store](#mac-app-store) listing is a
+    separate record for the sandboxed macOS **desktop** build
+    (`org.geolibre.desktop`); the two are different apps with different feature
+    sets.
+
+## Chrome extension
+
+**Open data in GeoLibre** is a companion browser extension that finds supported
+geospatial dataset links and map services on the page you are viewing and opens
+the ones you pick in GeoLibre. It is published on the Chrome Web Store, so it
+installs in one click and updates automatically:
+
+[Get Open data in GeoLibre from the Chrome Web Store](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj){ .md-button .md-button--primary }
+
+It works in any Chromium-based browser that can install from the Chrome Web
+Store, including Chrome, Edge, Brave, Vivaldi, Opera, and Arc. A packaged ZIP is
+also attached to each [GitHub release](https://github.com/opengeos/GeoLibre/releases)
+(the asset whose name starts with `geolibre-chrome-`) if you prefer to load it
+unpacked. See the [Chrome Extension](user-guide/chrome-extension.md) guide for
+both installation paths and what the extension detects.
 
 ## Build from source
 

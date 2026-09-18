@@ -5,13 +5,41 @@ import type { Feature, FeatureCollection, GeoJSON, Geometry, Position } from "ge
  * GPX tracks with `<ele>` readings or LineStringZ/PointZ geometries. MapLibre's
  * 2D style layers ignore the third coordinate, so layers that want to render
  * their Z values use these helpers to detect and rescale elevations before
- * handing the data to a deck.gl overlay.
+ * handing the data to a deck.gl overlay. The same data can carry its elevation
+ * in a `bbox` member too, which `horizontalBbox` trims back to two dimensions.
  */
+
+/**
+ * Reduces a bounding box to its horizontal extent, `[west, south, east, north]`.
+ *
+ * RFC 7946 §5 lets a `bbox` member carry elevation, in which case it holds six
+ * values — `[west, south, minAltitude, east, north, maxAltitude]` — and
+ * `@turf/bbox` returns a collection's own member verbatim rather than
+ * recomputing it. A consumer reading such a box as four values takes the
+ * altitude for a longitude and the east edge for a latitude; that is how a 3D
+ * feed reached MapLibre as an out-of-range latitude (#2358).
+ *
+ * Returns null when there is no usable horizontal extent: a box of any other
+ * length, or one carrying a non-finite value anywhere — an empty collection, or
+ * one whose features all have a null geometry, bboxes to ±Infinity, and a box
+ * whose altitudes are not finite is not one to trust the rest of.
+ *
+ * @param box - A GeoJSON or Turf bounding box, of four or six values.
+ */
+export function horizontalBbox(
+  box: readonly number[] | null | undefined,
+): [number, number, number, number] | null {
+  if (!box) return null;
+  if (box.length !== 4 && box.length !== 6) return null;
+  if (!box.every((value) => Number.isFinite(value))) return null;
+  return box.length === 6 ? [box[0], box[1], box[3], box[4]] : [box[0], box[1], box[2], box[3]];
+}
 
 // Proving the *negative* (no Z anywhere) walks every coordinate, so cache the
 // verdict per GeoJSON object — the map sync, the deck overlay, and the Style
 // panel all ask the same question about the same (immutable) data.
 const hasZCache = new WeakMap<object, boolean>();
+const hasFiniteZCache = new WeakMap<object, boolean>();
 
 /**
  * Returns true when any coordinate in the GeoJSON carries a finite, non-zero
@@ -20,18 +48,23 @@ const hasZCache = new WeakMap<object, boolean>();
  * cached per GeoJSON object, so repeated calls on the same data are free.
  *
  * @param geojson - Any GeoJSON object (geometry, feature, or collection).
+ * @param includeZero - Accept zero elevations when explicit absolute-height placement matters.
  */
-export function geojsonHasZCoordinates(geojson: GeoJSON | null | undefined): boolean {
+export function geojsonHasZCoordinates(
+  geojson: GeoJSON | null | undefined,
+  includeZero = false,
+): boolean {
   if (!geojson) return false;
-  const cached = hasZCache.get(geojson);
+  const cache = includeZero ? hasFiniteZCache : hasZCache;
+  const cached = cache.get(geojson);
   if (cached !== undefined) return cached;
   const result = someGeometry(geojson, (geometry) =>
     somePosition(geometry, (position) => {
       const z = position[2];
-      return typeof z === "number" && Number.isFinite(z) && z !== 0;
+      return typeof z === "number" && Number.isFinite(z) && (includeZero || z !== 0);
     }),
   );
-  hasZCache.set(geojson, result);
+  cache.set(geojson, result);
   return result;
 }
 

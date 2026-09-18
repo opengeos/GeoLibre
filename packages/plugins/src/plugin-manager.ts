@@ -1,4 +1,9 @@
-import type { ProjectPluginState } from "@geolibre/core";
+import { isPluginEngineSupported } from "./types";
+import {
+  getAssistantToolOwnerScope,
+  unregisterAssistantToolsByOwner,
+} from "./assistant-tool-registry";
+import type { MapRendererKind, ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
@@ -8,6 +13,37 @@ import type {
 } from "./types";
 
 export class PluginManager {
+  private renderer: MapRendererKind | null = null;
+  private deferredState: ProjectPluginState | null = null;
+  private deferredActive = new Set<string>();
+
+  private supportsEngine(id: string, app: GeoLibreAppAPI): boolean {
+    return isPluginEngineSupported(this.plugins.get(id), app.getMapRenderer?.() ?? "maplibre");
+  }
+
+  private scopeAppToPlugin(
+    app: GeoLibreAppAPI,
+    id: string,
+    options: ScopeAppOptions = {},
+  ): GeoLibreAppAPI {
+    const generation = this.activationGenerations.get(id);
+    // Settings and restore callbacks may register UI synchronously before
+    // activation. Retained callbacks need a live activation after this turn.
+    let synchronous = true;
+    queueMicrotask(() => {
+      synchronous = false;
+    });
+    return scopeAppToPlugin(app, id, {
+      ...options,
+      canAddControl: () =>
+        this.supportsEngine(id, app) &&
+        this.activationGenerations.get(id) === generation &&
+        (this.activating.has(id) ||
+          this.active.has(id) ||
+          (!options.assistantTools && synchronous)),
+    });
+  }
+
   private plugins = new Map<string, GeoLibrePlugin>();
   private active = new Set<string>();
   private defaultActive = new Set<string>();
@@ -76,13 +112,15 @@ export class PluginManager {
     if (!plugin) return;
     if (this.active.has(id)) {
       try {
-        plugin.deactivate(scopeAppToPlugin(app, id));
+        plugin.deactivate(this.scopeAppToPlugin(app, id));
       } catch (error) {
         console.warn(`Plugin '${id}' threw while deactivating during unregister.`, error);
       }
       this.active.delete(id);
     }
+    unregisterAssistantToolsByOwner(id);
     this.plugins.delete(id);
+    this.deferredActive.delete(id);
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
@@ -129,6 +167,13 @@ export class PluginManager {
     const mapControlPositions: ProjectPluginState["mapControlPositions"] = {};
     const settings: ProjectPluginState["settings"] = {};
     for (const plugin of this.plugins.values()) {
+      if (this.renderer && !isPluginEngineSupported(plugin, this.renderer)) {
+        const position = this.deferredState?.mapControlPositions[plugin.id];
+        if (position) mapControlPositions[plugin.id] = position;
+        if (this.deferredState?.settings && plugin.id in this.deferredState.settings)
+          settings[plugin.id] = this.deferredState.settings[plugin.id];
+        continue;
+      }
       const position = plugin.getMapControlPosition?.();
       if (position) mapControlPositions[plugin.id] = position;
       const pluginState = plugin.getProjectState?.();
@@ -140,7 +185,9 @@ export class PluginManager {
       // persist project state must overwrite manifestUrls with the real list
       // (see TopToolbar.handleSave and persistProjectPluginState).
       manifestUrls: [],
-      activePluginIds: Array.from(this.plugins.keys()).filter((id) => this.active.has(id)),
+      activePluginIds: Array.from(this.plugins.keys()).filter(
+        (id) => this.active.has(id) || this.deferredActive.has(id),
+      ),
       mapControlPositions,
       settings,
     };
@@ -161,23 +208,41 @@ export class PluginManager {
 
   activate(id: string, app: GeoLibreAppAPI): boolean | Promise<boolean> {
     const plugin = this.plugins.get(id);
-    if (!plugin || this.activating.has(id)) return false;
+    if (!plugin || !this.supportsEngine(id, app) || this.activating.has(id)) return false;
     const pendingResult = this.activationResults.get(id);
     if (pendingResult) return pendingResult;
     if (this.active.has(id)) return true;
-    const scopedApp = scopeAppToPlugin(app, id);
+    const displaced = this.deactivateExclusiveSiblings(id, plugin, app);
+    const restoreDisplaced = () => {
+      for (const displacedId of displaced) this.activate(displacedId, app);
+    };
+    const generation = this.nextActivationGeneration(id);
+    const scopedApp = this.scopeAppToPlugin(app, id, { assistantTools: true });
     this.activating.add(id);
     let activated: ReturnType<GeoLibrePlugin["activate"]>;
     try {
       activated = plugin.activate(scopedApp);
+    } catch (error) {
+      unregisterAssistantToolsByOwner(id);
+      restoreDisplaced();
+      throw error;
     } finally {
       this.activating.delete(id);
     }
-    if (activated === false) return false;
-    const generation = this.nextActivationGeneration(id);
+    if (activated === false) {
+      unregisterAssistantToolsByOwner(id);
+      restoreDisplaced();
+      return false;
+    }
     this.active.add(id);
     this.notify();
-    const result = this.watchAsyncActivation(id, activated, scopedApp, generation);
+    const result = this.watchAsyncActivation(
+      id,
+      activated,
+      scopedApp,
+      generation,
+      restoreDisplaced,
+    );
     if (!result) return true;
     this.trackActivationResult(id, result);
     return result;
@@ -199,6 +264,7 @@ export class PluginManager {
     activated: boolean | void | PromiseLike<boolean | void>,
     app: GeoLibreAppAPI,
     generation: number,
+    onFailure?: () => void,
   ): Promise<boolean> | null {
     // An async plugin (e.g. one mounted behind a dynamic import) reports
     // failure after the fact by resolving false or rejecting. Roll back so the
@@ -208,13 +274,13 @@ export class PluginManager {
     return Promise.resolve(activated).then(
       (result) => {
         if (result === false) {
-          this.rollbackFailedActivation(id, app, generation);
+          if (this.rollbackFailedActivation(id, app, generation)) onFailure?.();
           return false;
         }
         return this.active.has(id) && this.activationGenerations.get(id) === generation;
       },
       (error) => {
-        this.rollbackFailedActivation(id, app, generation, error);
+        if (this.rollbackFailedActivation(id, app, generation, error)) onFailure?.();
         return false;
       },
     );
@@ -230,9 +296,9 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     generation: number,
     error?: unknown,
-  ): void {
+  ): boolean {
     if (!this.active.has(id) || this.activationGenerations.get(id) !== generation) {
-      return;
+      return false;
     }
     if (error !== undefined) {
       console.warn(`Plugin '${id}' failed to activate; reverting.`, error);
@@ -250,7 +316,9 @@ export class PluginManager {
         console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
+    unregisterAssistantToolsByOwner(id);
     this.notify();
+    return true;
   }
 
   private trackActivationResult(id: string, result: Promise<boolean>): void {
@@ -263,10 +331,36 @@ export class PluginManager {
   deactivate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.active.has(id)) return;
-    plugin.deactivate(scopeAppToPlugin(app, id));
-    this.active.delete(id);
-    this.activationResults.delete(id);
-    this.notify();
+    try {
+      plugin.deactivate(this.scopeAppToPlugin(app, id));
+    } finally {
+      unregisterAssistantToolsByOwner(id);
+      this.active.delete(id);
+      this.nextActivationGeneration(id);
+      this.activationResults.delete(id);
+      this.notify();
+    }
+  }
+
+  /** Deactivate and return active siblings that conflict with `plugin`. */
+  private deactivateExclusiveSiblings(
+    id: string,
+    plugin: GeoLibrePlugin,
+    app: GeoLibreAppAPI,
+  ): string[] {
+    if (!plugin.exclusiveGroup) return [];
+    const displaced: string[] = [];
+    for (const [otherId, otherPlugin] of this.plugins) {
+      if (
+        otherId !== id &&
+        this.active.has(otherId) &&
+        otherPlugin.exclusiveGroup === plugin.exclusiveGroup
+      ) {
+        displaced.push(otherId);
+        this.deactivate(otherId, app);
+      }
+    }
+    return displaced;
   }
 
   toggle(id: string, app: GeoLibreAppAPI): void {
@@ -280,8 +374,8 @@ export class PluginManager {
    */
   applyPluginState(id: string, app: GeoLibreAppAPI, state: unknown): boolean {
     const plugin = this.plugins.get(id);
-    if (!plugin?.applyProjectState) return false;
-    const updated = plugin.applyProjectState(scopeAppToPlugin(app, id), state);
+    if (!plugin?.applyProjectState || !this.supportsEngine(id, app)) return false;
+    const updated = plugin.applyProjectState(this.scopeAppToPlugin(app, id), state);
     if (updated === false) return false;
     this.notify();
     return true;
@@ -322,7 +416,7 @@ export class PluginManager {
 
     try {
       for (const [id, plugin] of this.plugins) {
-        if (!plugin.handleUrlParameters) continue;
+        if (!plugin.handleUrlParameters || !this.supportsEngine(id, app)) continue;
 
         const parameterNames = this.urlParameterNamesById.get(id) ?? [];
         if (parameterNames.length === 0 || !parameterNames.some((name) => params.has(name))) {
@@ -368,7 +462,10 @@ export class PluginManager {
         }
 
         try {
-          await plugin.handleUrlParameters(scopeAppToPlugin(app, id), new URLSearchParams(params));
+          await plugin.handleUrlParameters(
+            this.scopeAppToPlugin(app, id),
+            new URLSearchParams(params),
+          );
         } catch (error) {
           // Unmark so a later dispatch for the same context retries the
           // plugin instead of silently skipping it after a failure.
@@ -389,8 +486,8 @@ export class PluginManager {
     position: GeoLibreMapControlPosition,
   ): void {
     const plugin = this.plugins.get(id);
-    if (!plugin?.setMapControlPosition) return;
-    const updated = plugin.setMapControlPosition(scopeAppToPlugin(app, id), position);
+    if (!plugin?.setMapControlPosition || !this.supportsEngine(id, app)) return;
+    const updated = plugin.setMapControlPosition(this.scopeAppToPlugin(app, id), position);
     if (updated === false) return;
     this.notify();
   }
@@ -400,7 +497,27 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     options: { resetMissingSettings?: boolean } = {},
   ): void {
-    const targetActive = new Set(state?.activePluginIds ?? Array.from(this.defaultActive));
+    const renderer = app.getMapRenderer?.() ?? "maplibre";
+    if (this.renderer !== null && renderer !== this.renderer) {
+      for (const id of Array.from(this.active)) this.deactivate(id, app);
+    }
+    this.renderer = renderer;
+    this.deferredState = state;
+    this.deferredActive.clear();
+    const requestedActive = state?.activePluginIds ?? Array.from(this.defaultActive);
+    const targetActive = new Set<string>();
+    const exclusiveTargets = new Map<string, string>();
+    for (const id of requestedActive) {
+      if (!this.supportsEngine(id, app)) {
+        this.deferredActive.add(id);
+        continue;
+      }
+      const group = this.plugins.get(id)?.exclusiveGroup;
+      const previous = group ? exclusiveTargets.get(group) : undefined;
+      if (previous) targetActive.delete(previous);
+      if (group) exclusiveTargets.set(group, id);
+      targetActive.add(id);
+    }
     let changed = false;
 
     // Plugins pop their control panel open when activated so a user who just
@@ -425,14 +542,21 @@ export class PluginManager {
         setTimeout(() => collapsible.collapse?.(), 0);
       }, 0);
     };
+    const collapseRestoredRightPanel = (panelId: string): void => {
+      app.collapseRightPanel?.(panelId);
+    };
     // A plugin that persists its own collapsed state is exempt: the saved
     // project already says whether its panel should be open, and collapsing it
     // here would both override that and (since collapse() mutates the control)
     // write the collapsed state back on the next save.
-    const scopeForRestore = (id: string): GeoLibreAppAPI =>
+    const scopeForRestore = (id: string, assistantTools = false): GeoLibreAppAPI =>
       this.plugins.get(id)?.restoresPanelCollapseState
-        ? scopeAppToPlugin(app, id)
-        : scopeAppToPlugin(app, id, { onControlAdded: collapseRestoredPanel });
+        ? this.scopeAppToPlugin(app, id, { assistantTools })
+        : this.scopeAppToPlugin(app, id, {
+            assistantTools,
+            onControlAdded: collapseRestoredPanel,
+            onRightPanelOpened: collapseRestoredRightPanel,
+          });
 
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of
@@ -441,9 +565,7 @@ export class PluginManager {
       if (targetActive.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
-      plugin.deactivate(scopeAppToPlugin(app, id));
-      this.active.delete(id);
-      this.activationResults.delete(id);
+      this.deactivate(id, app);
       changed = true;
     }
 
@@ -451,6 +573,7 @@ export class PluginManager {
     // are inactive at this point, so applyProjectState only caches their state
     // for the upcoming activate() call rather than doing live DOM work.
     for (const [id, plugin] of this.plugins) {
+      if (!this.supportsEngine(id, app)) continue;
       // One scoped app per plugin so any menu it (re)registers from
       // setMapControlPosition/applyProjectState is owner-tagged correctly.
       const scopedApp = scopeForRestore(id);
@@ -480,16 +603,22 @@ export class PluginManager {
       if (this.active.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin || this.activating.has(id)) continue;
-      const scopedApp = scopeForRestore(id);
+      const generation = this.nextActivationGeneration(id);
+      const scopedApp = scopeForRestore(id, true);
       this.activating.add(id);
       let activated: ReturnType<GeoLibrePlugin["activate"]>;
       try {
         activated = plugin.activate(scopedApp);
+      } catch (error) {
+        unregisterAssistantToolsByOwner(id);
+        throw error;
       } finally {
         this.activating.delete(id);
       }
-      if (activated === false) continue;
-      const generation = this.nextActivationGeneration(id);
+      if (activated === false) {
+        unregisterAssistantToolsByOwner(id);
+        continue;
+      }
       this.active.add(id);
       changed = true;
       // Restoring a saved project re-activates plugins the same way the user
@@ -532,12 +661,25 @@ export class PluginManager {
  * applies.
  */
 interface ScopeAppOptions {
+  canAddControl?: () => boolean;
   /**
    * Called with every control a plugin adds through `addMapControl` while the
    * scope is active. Used during project restore to keep newly added panels
    * collapsed (#952).
    */
   onControlAdded?: (control: IControl) => void;
+  /** Called when a plugin opens a native right panel during project restore. */
+  onRightPanelOpened?: (panelId: string) => void;
+  /**
+   * Expose assistant tool registration. Only activation scopes set this: a
+   * tool lives for exactly one activation, and the manager only tears down
+   * registrations when a plugin it activated goes away. The other lifecycle
+   * callbacks (`applyProjectState`, `setMapControlPosition`,
+   * `handleUrlParameters`, `deactivate`) run for inactive plugins too, so a
+   * registration from one of those would outlive every cleanup path and stay
+   * callable by the assistant until the plugin is unregistered.
+   */
+  assistantTools?: boolean;
 }
 
 function scopeAppToPlugin(
@@ -545,13 +687,50 @@ function scopeAppToPlugin(
   pluginId: string,
   options: ScopeAppOptions = {},
 ): GeoLibreAppAPI {
-  const { onControlAdded } = options;
+  const { onControlAdded, onRightPanelOpened, assistantTools = false, canAddControl } = options;
   const register = app.registerToolbarMenu;
+  const registerRightPanel = app.registerRightPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
-  if (!register && !onControlAdded && !activatePlugin && !deactivatePlugin) return app;
+  const hasAssistantRegistration = Boolean(
+    app.registerAssistantTool || app.registerAssistantToolSpec || app.registerAssistantGuidance,
+  );
+  if (
+    !canAddControl &&
+    !hasAssistantRegistration &&
+    !register &&
+    !onControlAdded &&
+    !onRightPanelOpened &&
+    !activatePlugin &&
+    !deactivatePlugin
+  )
+    return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
+  if (!assistantTools) {
+    // Registration is activation-only, so a non-activation scope does not carry
+    // it at all rather than handing back the host's unscoped implementation.
+    delete scoped.registerAssistantTool;
+    delete scoped.registerAssistantToolSpec;
+    delete scoped.registerAssistantGuidance;
+  } else {
+    const toolScope = getAssistantToolOwnerScope(pluginId);
+    if (app.registerAssistantTool) {
+      const registerTool = app.registerAssistantTool;
+      scoped.registerAssistantTool = (tool) =>
+        toolScope.active ? registerTool(tool, pluginId) : () => {};
+    }
+    if (app.registerAssistantToolSpec) {
+      const registerSpec = app.registerAssistantToolSpec;
+      scoped.registerAssistantToolSpec = (spec) =>
+        toolScope.active ? registerSpec(spec, pluginId) : () => {};
+    }
+    if (app.registerAssistantGuidance) {
+      const registerGuidance = app.registerAssistantGuidance;
+      scoped.registerAssistantGuidance = (text) =>
+        toolScope.active ? registerGuidance(text, pluginId) : () => {};
+    }
+  }
 
   if (register) {
     // The public `registerToolbarMenu` is single-arg; the host's concrete impl
@@ -561,15 +740,46 @@ function scopeAppToPlugin(
       menu: GeoLibreToolbarMenu,
       ownerPluginId: string,
     ) => () => void;
-    scoped.registerToolbarMenu = (menu) => registerWithOwner(menu, pluginId);
+    scoped.registerToolbarMenu = (menu) =>
+      canAddControl?.() === false ? () => {} : registerWithOwner(menu, pluginId);
   }
 
-  if (onControlAdded) {
+  if (registerRightPanel) {
+    scoped.registerRightPanel = (panel) =>
+      canAddControl?.() === false
+        ? () => {}
+        : registerRightPanel(
+            panel.deactivatePluginOnClose
+              ? {
+                  ...panel,
+                  onExplicitClose: () => {
+                    try {
+                      panel.onExplicitClose?.();
+                    } finally {
+                      if (deactivatePlugin) setTimeout(() => deactivatePlugin(pluginId), 0);
+                    }
+                  },
+                }
+              : panel,
+          );
+  }
+
+  if (app.addMapControl && (onControlAdded || canAddControl)) {
     const addMapControl = app.addMapControl;
     scoped.addMapControl = (control, position) => {
+      if (canAddControl?.() === false) return false;
       const added = addMapControl(control, position);
-      if (added !== false) onControlAdded(control);
+      if (added !== false) onControlAdded?.(control);
       return added;
+    };
+  }
+
+  if (onRightPanelOpened && app.openRightPanel) {
+    const openRightPanel = app.openRightPanel;
+    scoped.openRightPanel = (panelId) => {
+      const opened = openRightPanel(panelId);
+      if (opened) onRightPanelOpened(panelId);
+      return opened;
     };
   }
 

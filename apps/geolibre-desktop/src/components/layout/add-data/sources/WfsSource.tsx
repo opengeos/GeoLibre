@@ -31,11 +31,20 @@ interface WfsFormCache {
 }
 let wfsFormCache: WfsFormCache | null = null;
 
-export function WfsSource() {
+export function WfsSource({
+  initialUrl = "",
+  initialTypeName = "",
+}: {
+  initialUrl?: string;
+  initialTypeName?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wfs.defaultName"));
-  const [wfsEndpoint, setWfsEndpoint] = useState(wfsFormCache?.endpoint ?? "");
-  const [wfsTypeName, setWfsTypeName] = useState(wfsFormCache?.typeName ?? "");
+  const [wfsEndpoint, setWfsEndpoint] = useState(initialUrl || wfsFormCache?.endpoint || "");
+  // See WmsSource: a deep link's endpoint must not inherit the feature type or
+  // the retrieved type list cached from an unrelated service.
+  const serviceCache = initialUrl ? null : wfsFormCache;
+  const [wfsTypeName, setWfsTypeName] = useState(initialTypeName || (serviceCache?.typeName ?? ""));
   const [wfsVersion, setWfsVersion] = useState(wfsFormCache?.version ?? "2.0.0");
   const [wfsOutputFormat, setWfsOutputFormat] = useState(
     wfsFormCache?.outputFormat ?? "application/json",
@@ -43,7 +52,7 @@ export function WfsSource() {
   const [wfsSrsName, setWfsSrsName] = useState(wfsFormCache?.srsName ?? "EPSG:4326");
   const [wfsMaxFeatures, setWfsMaxFeatures] = useState(wfsFormCache?.maxFeatures ?? "1000");
   const [typeOptions, setTypeOptions] = useState<WfsFeatureTypeOption[]>(
-    wfsFormCache?.options ?? [],
+    serviceCache?.options ?? [],
   );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);

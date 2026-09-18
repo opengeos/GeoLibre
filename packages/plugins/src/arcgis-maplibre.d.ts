@@ -1,5 +1,5 @@
 declare module "@esri/maplibre-arcgis" {
-  import type maplibregl from "maplibre-gl";
+  import type * as maplibregl from "maplibre-gl";
 
   export interface IHostedLayerOptions {
     attribution?: string;

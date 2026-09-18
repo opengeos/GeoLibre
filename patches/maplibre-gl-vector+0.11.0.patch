@@ -1,0 +1,38 @@
+diff --git a/node_modules/maplibre-gl-vector/dist/VectorControl-C26oecdR.cjs b/node_modules/maplibre-gl-vector/dist/VectorControl-C26oecdR.cjs
+index 41aaea03..e56837bb 100644
+--- a/node_modules/maplibre-gl-vector/dist/VectorControl-C26oecdR.cjs
++++ b/node_modules/maplibre-gl-vector/dist/VectorControl-C26oecdR.cjs
+@@ -6668,10 +6668,10 @@ var VectorControl = class {
+ 	_getControlPosition() {
+ 		const parent = this._container?.parentElement;
+ 		if (!parent) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-top-left")) return "top-left";
+-		if (parent.classList.contains("maplibregl-ctrl-top-right")) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-left")) return "bottom-left";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-right")) return "bottom-right";
++		if ((parent.classList.contains("maplibregl-ctrl-top-left") || parent.classList.contains("mapboxgl-ctrl-top-left"))) return "top-left";
++		if ((parent.classList.contains("maplibregl-ctrl-top-right") || parent.classList.contains("mapboxgl-ctrl-top-right"))) return "top-right";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-left") || parent.classList.contains("mapboxgl-ctrl-bottom-left"))) return "bottom-left";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-right") || parent.classList.contains("mapboxgl-ctrl-bottom-right"))) return "bottom-right";
+ 		return "top-right";
+ 	}
+ 	/**
+diff --git a/node_modules/maplibre-gl-vector/dist/VectorControl-DkhCCBsj.js b/node_modules/maplibre-gl-vector/dist/VectorControl-DkhCCBsj.js
+index 40cdc213..4e02641e 100644
+--- a/node_modules/maplibre-gl-vector/dist/VectorControl-DkhCCBsj.js
++++ b/node_modules/maplibre-gl-vector/dist/VectorControl-DkhCCBsj.js
+@@ -6668,10 +6668,10 @@ var VectorControl = class {
+ 	_getControlPosition() {
+ 		const parent = this._container?.parentElement;
+ 		if (!parent) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-top-left")) return "top-left";
+-		if (parent.classList.contains("maplibregl-ctrl-top-right")) return "top-right";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-left")) return "bottom-left";
+-		if (parent.classList.contains("maplibregl-ctrl-bottom-right")) return "bottom-right";
++		if ((parent.classList.contains("maplibregl-ctrl-top-left") || parent.classList.contains("mapboxgl-ctrl-top-left"))) return "top-left";
++		if ((parent.classList.contains("maplibregl-ctrl-top-right") || parent.classList.contains("mapboxgl-ctrl-top-right"))) return "top-right";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-left") || parent.classList.contains("mapboxgl-ctrl-bottom-left"))) return "bottom-left";
++		if ((parent.classList.contains("maplibregl-ctrl-bottom-right") || parent.classList.contains("mapboxgl-ctrl-bottom-right"))) return "bottom-right";
+ 		return "top-right";
+ 	}
+ 	/**

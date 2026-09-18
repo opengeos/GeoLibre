@@ -19,6 +19,7 @@
  * mirror these files into a GeoLibre-controlled repo so the built-in option does
  * not depend on an external account.
  */
+import { NO_EXTERNAL_CDN } from "./build-flags";
 
 /** The 80 COCO class names, in model output order. */
 export const COCO_CLASSES = [
@@ -118,22 +119,24 @@ export interface BuiltinDetectionModel {
   inputSize: number;
 }
 
-export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = [
-  {
-    id: "yolov8n-coco",
-    label: "YOLOv8n (COCO, 80 classes)",
-    url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov8-onnxruntime-web@fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
-    classNames: COCO_CLASSES,
-    inputSize: 640,
-  },
-  {
-    id: "yolov5n-coco",
-    label: "YOLOv5n (COCO, 80 classes)",
-    url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov5-onnxruntime-web@203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
-    classNames: COCO_CLASSES,
-    inputSize: 640,
-  },
-];
+export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = NO_EXTERNAL_CDN
+  ? []
+  : [
+      {
+        id: "yolov8n-coco",
+        label: "YOLOv8n (COCO, 80 classes)",
+        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov8-onnxruntime-web@fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
+        classNames: COCO_CLASSES,
+        inputSize: 640,
+      },
+      {
+        id: "yolov5n-coco",
+        label: "YOLOv5n (COCO, 80 classes)",
+        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov5-onnxruntime-web@203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
+        classNames: COCO_CLASSES,
+        inputSize: 640,
+      },
+    ];
 
 /** Cache bucket holding downloaded model files so a model is fetched once. */
 const MODEL_CACHE = "geolibre-detection-models";

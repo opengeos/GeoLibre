@@ -126,6 +126,41 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
   emit();
 }
 
+/**
+ * Drop one sample by id.
+ *
+ * Used when a click turns out to have nothing to chart (a single-band raster, a
+ * point outside the raster, an all-nodata pixel, a failed read). Clearing the
+ * whole layer for those would discard the comparison the user has been
+ * building — and an all-nodata pixel sits right beside valid data on any
+ * cloud-masked or rotated scene, so it is a click they will make often.
+ *
+ * A no-op for an id that is no longer in the list, so a late result for a
+ * sample that has since been cleared or aged off the cap lands nowhere.
+ */
+export function removeNetcdfProfileSample(id: number): void {
+  const removed = samples.find((item) => item.id === id);
+  if (!removed) return;
+  samples = samples.filter((item) => item.id !== id);
+  if (samples.length === 0) {
+    orderCounter = 0;
+    poppedOut = false;
+  } else if (removed.order === orderCounter) {
+    // Give the number back when the sample being dropped is the newest one,
+    // which is the usual case: the caller adds a marker on click and removes it
+    // when the read comes back with nothing to chart. Without this the next
+    // click is labelled "3" beside a "1", and since the series color is keyed
+    // off the number the chart's colors skip too.
+    //
+    // Only the newest, because `order` is assigned once and never renumbered —
+    // a point keeps its label and color when an older one falls off the cap. So
+    // a failed read that resolves *after* a later click still leaves a gap;
+    // renumbering to close it would move the labels under the user's cursor.
+    orderCounter -= 1;
+  }
+  emit();
+}
+
 /** The current samples, for `useSyncExternalStore`. */
 export function getNetcdfProfileSamples(): NetcdfProfileSample[] {
   return samples;

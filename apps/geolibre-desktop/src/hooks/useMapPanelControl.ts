@@ -6,7 +6,7 @@
  * the control corners, and inclusion in Record Video's on-map panel capture,
  * which rasterizes elements inside the map container.
  */
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { ControlPosition, IControl } from "maplibre-gl";
 import { useEffect, useState, type RefObject } from "react";
 
@@ -24,7 +24,7 @@ import { useEffect, useState, type RefObject } from "react";
  * @returns The mounted host element, or null while hidden / map not ready.
  */
 export function useMapPanelControl(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
   visible: boolean,
   position: ControlPosition,
   className: string,

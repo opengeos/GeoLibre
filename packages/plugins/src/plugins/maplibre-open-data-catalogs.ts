@@ -184,6 +184,12 @@ async function searchCkan(query: string, page: number, signal: AbortSignal): Pro
   return { items, total: payload.result?.count ?? items.length };
 }
 
+/**
+ * Creates a GeoLibre right-panel plugin for searching and browsing an open data catalog (CKAN or Socrata).
+ *
+ * @param options - Configuration options for the catalog plugin, including ID, name, hint, and search handler.
+ * @returns A {@link GeoLibrePlugin} instance configured for the catalog.
+ */
 function createCatalogPlugin(options: {
   id: string;
   name: string;
@@ -197,6 +203,7 @@ function createCatalogPlugin(options: {
     id: options.id,
     name: options.name,
     version: "0.1.0",
+    engines: ["maplibre", "cesium", "mapbox"],
     activate(app) {
       unregister =
         app.registerRightPanel?.({

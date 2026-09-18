@@ -1,0 +1,240 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import {
+  inspectScreenshotLayers,
+  screenshotReadinessEnabled,
+  type LayerLoadProbe,
+} from "../apps/geolibre-desktop/src/lib/screenshot-readiness";
+
+const layer: GeoLibreLayer = {
+  id: "nlcd",
+  name: "NLCD",
+  type: "cog",
+  source: {},
+  visible: true,
+  opacity: 1,
+  style: DEFAULT_LAYER_STYLE,
+  metadata: { sourceKind: "maplibre-gl-raster" },
+};
+const map = {
+  getZoom: () => 4,
+  getLayersOrder: () => ["nlcd"],
+  getLayer: () => ({ id: "nlcd", type: "raster", source: "tiles" }),
+  getSource: () => ({}),
+  isSourceLoaded: () => true,
+} as unknown as MapLibreMap;
+const probe: LayerLoadProbe = {
+  raster: () => ({ loading: false, error: null, native: true, deckTracked: false }),
+  deck: () => ({ found: false, loading: false, error: null }),
+};
+
+test("screenshot readiness is opt-in, including in map-only embeds", () => {
+  for (const value of ["", "=true", "=1", "=yes", "=on", "=TRUE"]) {
+    assert.equal(screenshotReadinessEnabled(`?maponly&loading${value}`), true);
+  }
+  for (const query of ["", "?maponly", "?loading=false", "?loading=0", "?loading=no"]) {
+    assert.equal(screenshotReadinessEnabled(query), false);
+  }
+});
+
+test("an attached native layer cannot mask an unfinished COG header", () => {
+  const result = inspectScreenshotLayers(map, [layer], [], {
+    ...probe,
+    raster: () => ({ loading: true, error: null, native: true, deckTracked: false }),
+  });
+  assert.deepEqual(result, { pending: ["NLCD"], errors: [] });
+});
+
+test("a loaded COG header cannot mask unfinished deck tiles or tile failures", () => {
+  assert.deepEqual(
+    inspectScreenshotLayers(map, [layer], [], {
+      ...probe,
+      deck: () => ({ found: true, loading: true, error: null }),
+    }),
+    { pending: ["NLCD"], errors: [] },
+  );
+  assert.deepEqual(
+    inspectScreenshotLayers(map, [layer], [], {
+      ...probe,
+      deck: () => ({ found: true, loading: false, error: "Tile request failed" }),
+    }),
+    { pending: [], errors: ["NLCD: Tile request failed"] },
+  );
+});
+
+test("a deck-rendered raster waits for the shared overlay only when interleaved", () => {
+  // Interleaved (web): the shared deck overlay is the load signal, so a raster
+  // it has not registered yet is still pending.
+  const interleaved: LayerLoadProbe = {
+    ...probe,
+    raster: () => ({ loading: false, error: null, native: false, deckTracked: true }),
+  };
+  assert.deepEqual(inspectScreenshotLayers(map, [layer], [], interleaved), {
+    pending: ["NLCD"],
+    errors: [],
+  });
+  // Overlaid (Tauri): a private deck canvas the probe cannot see, so the
+  // control's own loaded header is the whole answer -- never pending forever.
+  const overlaid: LayerLoadProbe = {
+    ...probe,
+    raster: () => ({ loading: false, error: null, native: false, deckTracked: false }),
+  };
+  assert.deepEqual(inspectScreenshotLayers(map, [layer], [], overlaid), {
+    pending: [],
+    errors: [],
+  });
+});
+
+test("missing native layers and unfinished native sources remain pending", () => {
+  const missing = { ...map, getLayersOrder: () => [] } as unknown as MapLibreMap;
+  assert.deepEqual(inspectScreenshotLayers(missing, [layer], [], probe).pending, ["NLCD"]);
+  const fetching = { ...map, isSourceLoaded: () => false } as unknown as MapLibreMap;
+  assert.deepEqual(inspectScreenshotLayers(fetching, [layer], [], probe).pending, ["NLCD"]);
+  assert.deepEqual(inspectScreenshotLayers(map, [layer], [], probe), { pending: [], errors: [] });
+});
+
+test("hidden layers do not block a screenshot, unsupported visible renderers fail closed", () => {
+  const lidar = { ...layer, type: "lidar" as const, metadata: {} };
+  assert.deepEqual(inspectScreenshotLayers(map, [{ ...lidar, visible: false }], [], probe), {
+    pending: [],
+    errors: [],
+  });
+  assert.match(
+    inspectScreenshotLayers(map, [lidar], [], probe).errors[0],
+    /not supported for lidar/,
+  );
+});
+
+test("a deck-viz layer is probed through the shared overlay, not failed closed", () => {
+  const viz = { ...layer, type: "deckgl-viz" as const, metadata: {} };
+  assert.deepEqual(
+    inspectScreenshotLayers(map, [viz], [], {
+      ...probe,
+      deck: () => ({ found: true, loading: true, error: null }),
+    }),
+    { pending: ["NLCD"], errors: [] },
+  );
+  // Nothing was built for it, so there is no rendering to wait on -- fail
+  // closed rather than call an absent layer ready.
+  assert.match(
+    inspectScreenshotLayers(map, [viz], [], probe).errors[0],
+    /no deck\.gl output was built/,
+  );
+});
+
+/**
+ * A Time Slider layer mirrors into the store with `nativeLayerIds: [sourceId]`,
+ * but its client-rendered mosaic is drawn by maplibre-gl-raster under a
+ * generated id (`acdom-mosaic-xra0fk3`, source `mlrcog0-src-...`) that nothing
+ * can predict when the mirror is built. Before GeoLibre#2257 no native layer
+ * matched, so `inspectScreenshotLayers` reported the layer pending forever and
+ * every share.geolibre.app thumbnail of such a project fell back to a
+ * placeholder after the 120s deadline.
+ */
+const timeSliderLayer: GeoLibreLayer = {
+  id: "acdom",
+  name: "aCDOM440",
+  type: "raster",
+  source: {},
+  visible: true,
+  opacity: 1,
+  style: DEFAULT_LAYER_STYLE,
+  metadata: { sourceKind: "time-slider", nativeLayerIds: ["acdom"], clientRenderedRaster: true },
+};
+
+function mosaicMap(sourceLoaded: boolean, layerIds = ["acdom-mosaic-xra0fk3"]): MapLibreMap {
+  return {
+    getZoom: () => 8,
+    getLayersOrder: () => layerIds,
+    getLayer: (id: string) => ({ id, type: "raster", source: `mlrcog0-src-${id}` }),
+    getSource: () => ({}),
+    isSourceLoaded: () => sourceLoaded,
+  } as unknown as MapLibreMap;
+}
+
+test("a time-slider mosaic drawn under a generated id is found, not pending forever", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(true), [timeSliderLayer], [], probe), {
+    pending: [],
+    errors: [],
+  });
+});
+
+test("a found mosaic still waits for its own source to finish loading", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(false), [timeSliderLayer], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
+
+test("a layer with no native layer at all is still pending", () => {
+  assert.deepEqual(inspectScreenshotLayers(mosaicMap(true, []), [timeSliderLayer], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
+
+test("a derived native layer belongs to the longest matching layer id", () => {
+  // `acdom` must not claim `acdom-2`'s mosaic: `acdom-2` is the real owner, so
+  // `acdom` has nothing rendered and stays pending.
+  const sibling: GeoLibreLayer = { ...timeSliderLayer, id: "acdom-2", name: "aCDOM440 v2" };
+  const map2 = mosaicMap(true, ["acdom-2-mosaic-xra0fk3"]);
+  assert.deepEqual(inspectScreenshotLayers(map2, [timeSliderLayer, sibling], [], probe), {
+    pending: ["aCDOM440"],
+    errors: [],
+  });
+});
+
+test("swipe checks comparison tiles instead of requiring right-only rasters on the main map", () => {
+  const swipeProbe = (loading: boolean, mainVisible = false): LayerLoadProbe => ({
+    ...probe,
+    swipe: () => ({ loading, mainVisible, error: null }),
+  });
+  const missing = {
+    ...map,
+    getLayersOrder: () => [],
+  } as unknown as MapLibreMap;
+  assert.deepEqual(inspectScreenshotLayers(missing, [layer], [], swipeProbe(false)), {
+    pending: [],
+    errors: [],
+  });
+  assert.deepEqual(inspectScreenshotLayers(missing, [layer], [], swipeProbe(true)), {
+    pending: ["NLCD"],
+    errors: [],
+  });
+  // Both-side rasters still need their main-map rendering.
+  assert.deepEqual(inspectScreenshotLayers(missing, [layer], [], swipeProbe(false, true)), {
+    pending: ["NLCD"],
+    errors: [],
+  });
+  assert.deepEqual(
+    inspectScreenshotLayers(missing, [layer], [], {
+      ...probe,
+      swipe: () => ({
+        loading: false,
+        mainVisible: false,
+        error: "Tile failed",
+      }),
+    }),
+    { pending: [], errors: ["NLCD: Tile failed"] },
+  );
+});
+
+test("legacy CogLayerControl output without a swipe probe still fails closed", () => {
+  const cog = { ...layer, metadata: { sourceKind: "cog-url", nativeLayerIds: [layer.id] } };
+  const custom = {
+    ...map,
+    getLayer: () => ({ id: layer.id, type: "custom" }),
+  } as unknown as MapLibreMap;
+  const legacyProbe: LayerLoadProbe = { ...probe, swipe: () => null };
+  assert.deepEqual(inspectScreenshotLayers(custom, [cog], [], legacyProbe), {
+    pending: [],
+    errors: ["NLCD: screenshot readiness is not supported for this custom renderer"],
+  });
+  const absent = { ...map, getLayersOrder: () => [] } as unknown as MapLibreMap;
+  assert.deepEqual(inspectScreenshotLayers(absent, [cog], [], legacyProbe), {
+    pending: ["NLCD"],
+    errors: [],
+  });
+});

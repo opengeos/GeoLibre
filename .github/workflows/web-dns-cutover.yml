@@ -1,0 +1,137 @@
+name: Cut over web.geolibre.app DNS
+
+# One-way migration helper for moving web.geolibre.app from the viewer Worker
+# custom domain to the dedicated GitHub Pages repository. It is deliberately
+# manual: the initial Pages snapshot must be built and verified before DNS is
+# changed. Re-running it is safe and restores the intended DNS state.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: web-dns-cutover
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cutover:
+    name: Replace the Worker domain with a Pages CNAME
+    if: github.repository == 'opengeos/GeoLibre'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify DNS access and apply the cutover
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOSTNAME: web.geolibre.app
+          PAGES_HOSTNAME: opengeos.github.io
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CF_API_TOKEN:-}" ] || [ -z "${CF_ACCOUNT_ID:-}" ]; then
+            echo "::error::Cloudflare credentials are not configured."
+            exit 1
+          fi
+
+          cf_request() {
+            local method=$1
+            local path=$2
+            local body=${3:-}
+            if [ -n "$body" ]; then
+              curl --fail-with-body --silent --show-error \
+                --request "$method" \
+                --header "Authorization: Bearer $CF_API_TOKEN" \
+                --header "Content-Type: application/json" \
+                --data "$body" \
+                "https://api.cloudflare.com/client/v4/$path"
+            else
+              curl --fail-with-body --silent --show-error \
+                --request "$method" \
+                --header "Authorization: Bearer $CF_API_TOKEN" \
+                --header "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/$path"
+            fi
+          }
+
+          if ! zone_response=$(cf_request GET "zones?name=geolibre.app"); then
+            echo "::error::The Cloudflare token cannot read the geolibre.app zone."
+            exit 1
+          fi
+          zone_id=$(jq -r '.result[0].id // empty' <<< "$zone_response")
+          if [ -z "$zone_id" ]; then
+            echo "::error::The Cloudflare token cannot resolve the geolibre.app zone."
+            exit 1
+          fi
+
+          # Prove DNS *write* access before detaching the live Worker domain.
+          # A token with Workers permissions but no DNS edit permission fails
+          # here and leaves web.geolibre.app completely untouched.
+          check_name="_geolibre-pages-cutover-check.geolibre.app"
+          check_body=$(jq -nc \
+            --arg name "$check_name" \
+            --arg content "github-actions-$GITHUB_RUN_ID" \
+            '{type:"TXT", name:$name, content:$content, ttl:60}')
+          if ! check_response=$(cf_request POST "zones/$zone_id/dns_records" "$check_body"); then
+            echo "::error::The Cloudflare token cannot create DNS records; the Worker domain was not changed."
+            exit 1
+          fi
+          check_id=$(jq -r '.result.id // empty' <<< "$check_response")
+          if [ -z "$check_id" ]; then
+            echo "::error::The Cloudflare token cannot create DNS records; the Worker domain was not changed."
+            exit 1
+          fi
+          cf_request DELETE "zones/$zone_id/dns_records/$check_id" >/dev/null
+          echo "DNS write access verified."
+
+          domains=$(cf_request GET "accounts/$CF_ACCOUNT_ID/workers/domains?hostname=$HOSTNAME")
+          domain_id=$(jq -r --arg hostname "$HOSTNAME" \
+            '.result[] | select(.hostname == $hostname) | .id' <<< "$domains")
+          if [ -n "$domain_id" ]; then
+            cf_request DELETE "accounts/$CF_ACCOUNT_ID/workers/domains/$domain_id" >/dev/null
+            echo "Detached $HOSTNAME from its Worker."
+          else
+            echo "$HOSTNAME is already detached from Workers."
+          fi
+
+          # Worker custom domains own a managed DNS record. Wait for Cloudflare
+          # to remove it before creating the replacement CNAME.
+          records='[]'
+          for _ in {1..30}; do
+            records_response=$(cf_request GET "zones/$zone_id/dns_records?name=$HOSTNAME")
+            records=$(jq '.result' <<< "$records_response")
+            if [ "$(jq length <<< "$records")" -eq 0 ]; then
+              break
+            fi
+            if [ "$(jq length <<< "$records")" -eq 1 ] && \
+               [ "$(jq -r '.[0].type' <<< "$records")" = CNAME ] && \
+               [ "$(jq -r '.[0].content' <<< "$records")" = "$PAGES_HOSTNAME" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          count=$(jq length <<< "$records")
+          if [ "$count" -eq 0 ]; then
+            cname_body=$(jq -nc \
+              --arg name "$HOSTNAME" \
+              --arg content "$PAGES_HOSTNAME" \
+              '{type:"CNAME", name:$name, content:$content, ttl:1, proxied:false, comment:"GeoLibre web app on GitHub Pages"}')
+            cf_request POST "zones/$zone_id/dns_records" "$cname_body" >/dev/null
+          elif [ "$count" -eq 1 ] && \
+               [ "$(jq -r '.[0].type' <<< "$records")" = CNAME ] && \
+               [ "$(jq -r '.[0].content' <<< "$records")" = "$PAGES_HOSTNAME" ]; then
+            record_id=$(jq -r '.[0].id' <<< "$records")
+            cname_body=$(jq -nc \
+              --arg name "$HOSTNAME" \
+              --arg content "$PAGES_HOSTNAME" \
+              '{type:"CNAME", name:$name, content:$content, ttl:1, proxied:false, comment:"GeoLibre web app on GitHub Pages"}')
+            cf_request PUT "zones/$zone_id/dns_records/$record_id" "$cname_body" >/dev/null
+          else
+            echo "::error::Unexpected DNS records remain for $HOSTNAME; refusing to overwrite them."
+            jq -r '.[] | [.type, .name, .content] | @tsv' <<< "$records"
+            exit 1
+          fi
+
+          echo "$HOSTNAME now points directly to $PAGES_HOSTNAME."

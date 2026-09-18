@@ -49,3 +49,17 @@ export async function dropGeoJson(page: Page, name: string, text: string): Promi
 export function layerRow(page: Page, name: string) {
   return page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`);
 }
+
+/**
+ * What one rendering-engine swap is allowed to cost, click and repaint alike.
+ *
+ * `setPrimaryRenderer` is a discrete React update, so the entire swap runs
+ * inside the menu radio item's own click handler: the outgoing engine's
+ * `map.remove()` drops its WebGL context, taking any deck overlay's buffers
+ * with it, and on the way back to MapLibre `new maplibregl.Map()` builds the
+ * replacement before the click event returns. Playwright does not resolve
+ * `click` until the browser acknowledges that event, so the whole swap is
+ * charged against `actionTimeout`. On CI's software renderer it outran the 30 s
+ * the mapbox specs set, and `retries: 1` was what made them green (#2432).
+ */
+export const RENDERER_SWAP_TIMEOUT = 90_000;

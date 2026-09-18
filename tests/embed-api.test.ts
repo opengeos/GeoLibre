@@ -214,10 +214,54 @@ describe("parseEmbedRequest: v2 commands", () => {
         requestId: null,
       },
     );
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addData", {
+          url: "https://example.com/data.parquet",
+          styleUrl: "https://example.com/style.json",
+          fit: false,
+        }),
+      ),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/data.parquet",
+          styleUrl: "https://example.com/style.json",
+          fit: false,
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(
+      parseEmbedRequest(message("addData", { url: "https://example.com/data.geojson" })),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/data.geojson",
+          styleUrl: null,
+          fit: true,
+        },
+        requestId: null,
+      },
+    );
     assert.deepEqual(parseEmbedRequest(message("exportImage")), {
       command: { type: "exportImage" },
       requestId: null,
     });
+  });
+
+  it("rejects invalid addData URLs and options", () => {
+    for (const payload of [
+      { url: "file:///tmp/data.geojson" },
+      { url: "/relative.geojson" },
+      { url: "https://example.com/data.geojson", styleUrl: "data:text/json,{}" },
+      { url: "https://example.com/data.geojson", fit: "yes" },
+    ]) {
+      assert.match(
+        (parseEmbedRequest(message("addData", payload)) as { error: string }).error,
+        /^addData:/,
+      );
+    }
   });
 });
 
@@ -726,5 +770,22 @@ describe("buildEmbedEvent", () => {
       type: "ready",
       payload: { version: "2.2.0" },
     });
+  });
+});
+
+it("validates renderer selection commands", () => {
+  assert.deepEqual(
+    parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "cesium" } }),
+    {
+      command: { type: "setRenderer", renderer: "cesium" },
+      requestId: null,
+    },
+  );
+  assert.ok(
+    "error" in parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "unknown" } })!,
+  );
+  assert.deepEqual(parseEmbedRequest({ v: 2, type: "getRenderer" }), {
+    command: { type: "getRenderer" },
+    requestId: null,
   });
 });

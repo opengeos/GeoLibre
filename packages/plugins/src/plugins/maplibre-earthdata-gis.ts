@@ -39,6 +39,7 @@ import {
 } from "./earthdata-gis-api";
 import { layerTypeForTiles } from "./web-service-sync";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 
 export const EARTHDATA_GIS_PLUGIN_ID = "maplibre-gl-earthdata-gis";
 const PANEL_ID = EARTHDATA_GIS_PLUGIN_ID;
@@ -389,7 +390,7 @@ function revealRasterLayer(
   bbox: [number, number, number, number],
   minVisibleZoom: number | null,
 ): boolean {
-  const map = appRef?.getMap?.();
+  const map = getStyleMap(appRef);
   if (!map || minVisibleZoom === null) {
     appRef?.fitBounds?.(bbox);
     return false;
@@ -989,7 +990,7 @@ function formatBbox(bbox: [number, number, number, number]): string {
 
 /** Reads the current map view as a valid [w, s, e, n] bbox. */
 function currentBbox(): [number, number, number, number] | null {
-  const map = appRef?.getMap?.();
+  const map = getStyleMap(appRef);
   if (!map) return null;
   const bounds = map.getBounds();
   const clampLat = (n: number): number => Math.max(-90, Math.min(90, n));
@@ -1538,6 +1539,9 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
   id: EARTHDATA_GIS_PLUGIN_ID,
   name: "Earthdata GIS",
   version: "0.1.0",
+  // Store-only adds (tile layers and ArcGIS feature layers) plus camera reads
+  // through the shared map surface.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

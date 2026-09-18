@@ -15,6 +15,8 @@ export interface ArcgisProjectImportWarning {
     | "layer-type"
     | "missing-source"
     | "format"
+    | "file-geodatabase"
+    | "file-geodatabase-raster"
     | "network-path"
     | "service"
     | "browser-local-file"
@@ -445,9 +447,28 @@ function resolveRasterSource(
   const dataset = stringValue(connection.dataset);
   if (!workspace && !dataset) return { reason: "missing-source" };
   if (isNetworkPath(workspace)) return { reason: "network-path" };
-  if (!workspace || !dataset) return { reason: "missing-source" };
+  // Reported under its own reason rather than the feature class one: the
+  // desktop build's Add Data -> File Geodatabase source lists only feature
+  // classes that carry geometry, so pointing a raster at it would send the
+  // user somewhere that cannot open their data.
+  if (stringValue(connection.workspaceFactory).toLowerCase().includes("filegdb")) {
+    return { reason: "file-geodatabase-raster" };
+  }
+  // Past this point the factory did not name a geodatabase, so only the
+  // workspace suffix is left to go on -- and it is consulted last, after the
+  // joined path fails. A readable GeoTIFF is therefore still loaded from a
+  // plain folder that happens to be named "*.gdb"; only a dataset the app
+  // cannot open falls through to the suffix, where naming the geodatabase
+  // beats a bare "format".
+  const looksLikeGeodatabase = extension(workspace) === "gdb";
+  if (!workspace || !dataset) {
+    return looksLikeGeodatabase
+      ? { reason: "file-geodatabase-raster" }
+      : { reason: "missing-source" };
+  }
   const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);
-  return ["tif", "tiff"].includes(extension(path)) ? { path } : { reason: "format" };
+  if (["tif", "tiff"].includes(extension(path))) return { path };
+  return looksLikeGeodatabase ? { reason: "file-geodatabase-raster" } : { reason: "format" };
 }
 
 function resolveDataSource(
@@ -468,8 +489,15 @@ function resolveDataSource(
     path = joinPath(workspace, /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`);
   } else if (workspaceFactory.includes("text") && dataset) {
     path = joinPath(workspace, dataset);
-  } else if (workspaceFactory.includes("filegdb")) {
-    return { reason: "format" };
+  } else if (workspaceFactory.includes("filegdb") || extension(workspace) === "gdb") {
+    // Reported distinctly from a plain unsupported "format" because a File
+    // Geodatabase backs whole projects at a time -- a .gdb-based project can
+    // produce hundreds of identical warnings, and "data format is not
+    // supported" leaves the user with no idea which format that was, nor that
+    // the desktop build can add those feature classes another way. The
+    // workspace path is checked as well as the factory because not every
+    // connection names one, and a .gdb workspace is a geodatabase either way.
+    return { reason: "file-geodatabase" };
   } else if (dataset && extension(workspace) === "gpkg") {
     path = workspace;
   } else if (!path && dataset) {

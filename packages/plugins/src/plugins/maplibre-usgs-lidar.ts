@@ -131,7 +131,11 @@ const mountUsgsLidarControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-usgs-lidar",
   name: "USGS LiDAR",
-  version: "0.11.1",
+  version: "0.11.5",
+  // The point clouds stream through a deck.gl overlay (`lidar-url` layers are
+  // plugin-owned on Mapbox) and the 3DEP coverage index is a raster tile
+  // layer the engine adopts under its native ids.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
 

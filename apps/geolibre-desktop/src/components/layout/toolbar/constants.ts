@@ -1,5 +1,5 @@
 import type { ConversionToolKind, RasterToolKind, VectorToolKind } from "@geolibre/core";
-import { type BuiltInMapControl, type MapController } from "@geolibre/map";
+import { type BuiltInMapControl, type MapEngine } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
 import type { createAppAPI } from "../../../hooks/usePlugins";
@@ -8,8 +8,8 @@ import type { AddDataKind } from "../AddDataDialog";
 /** The live app API surface plugins and panels are driven through. */
 export type AppApi = ReturnType<typeof createAppAPI>;
 
-/** A ref to the live MapController, shared across the toolbar pieces. */
-export type MapControllerRef = React.RefObject<MapController | null>;
+/** A ref to the live map engine, shared across the toolbar pieces. */
+export type MapControllerRef = React.RefObject<MapEngine | null>;
 
 /** Built-in map controls that the Controls menu can toggle (all but the layer control). */
 export type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;
@@ -113,6 +113,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "video", titleKey: "toolbar.layerType.video" },
   { kind: "deckgl-viz", titleKey: "toolbar.layerType.deckglViz" },
   { kind: "postgres", titleKey: "toolbar.layerType.postgres" },
+  { kind: "iceberg", titleKey: "toolbar.layerType.iceberg" },
 ];
 
 export const CONVERSION_COMMANDS: Array<{
@@ -154,6 +155,8 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dissolve", titleKey: "toolbar.vectorTool.dissolve" },
   { kind: "bounding-box", titleKey: "toolbar.vectorTool.boundingBox" },
   { kind: "simplify", titleKey: "toolbar.vectorTool.simplify" },
+  { kind: "decode-polyline", titleKey: "toolbar.vectorTool.decodePolyline" },
+  { kind: "encode-polyline", titleKey: "toolbar.vectorTool.encodePolyline" },
   { kind: "clip", titleKey: "toolbar.vectorTool.clip" },
   { kind: "intersection", titleKey: "toolbar.vectorTool.intersection" },
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
@@ -169,6 +172,11 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "explode", titleKey: "toolbar.vectorTool.explode" },
   { kind: "aggregate", titleKey: "toolbar.vectorTool.aggregate" },
   { kind: "smooth", titleKey: "toolbar.vectorTool.smooth" },
+  { kind: "extract-vertices", titleKey: "toolbar.vectorTool.extractVertices" },
+  {
+    kind: "points-along-geometry",
+    titleKey: "toolbar.vectorTool.pointsAlongGeometry",
+  },
   { kind: "grid", titleKey: "toolbar.vectorTool.grid" },
   { kind: "voronoi", titleKey: "toolbar.vectorTool.voronoi" },
   { kind: "dggs-grid", titleKey: "toolbar.vectorTool.dggsGenerator" },

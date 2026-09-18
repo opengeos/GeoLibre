@@ -1,5 +1,5 @@
 import bbox from "@turf/bbox";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { type GeoLibreLayer, horizontalBbox } from "@geolibre/core";
 import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 
 function getLayer(ctx: ProcessingContext, paramId = "layer"): GeoLibreLayer | undefined {
@@ -18,7 +18,11 @@ export const calculateBoundsAlgorithm: ProcessingAlgorithm = {
       ctx.log("Error: layer has no GeoJSON data");
       return;
     }
-    const bounds = bbox(layer.geojson) as [number, number, number, number];
+    const bounds = horizontalBbox(bbox(layer.geojson));
+    if (!bounds) {
+      ctx.log("Error: layer has no usable extent");
+      return;
+    }
     ctx.log(`Bounds: [${bounds.map((n) => n.toFixed(6)).join(", ")}]`);
     ctx.fitBounds?.(bounds);
   },

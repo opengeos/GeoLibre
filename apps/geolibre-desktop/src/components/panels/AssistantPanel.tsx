@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, Select, Textarea, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -26,7 +26,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
+import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
 import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
+import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
@@ -36,6 +38,7 @@ import {
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
+  resolveProviderConfig,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -103,7 +106,7 @@ interface Turn {
 }
 
 interface AssistantPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** Short human-readable summary of a finished tool call. */
@@ -145,6 +148,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const promptDraftRef = useRef("");
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
+  // A runtime credential change that arrived mid-run, deferred because reset()
+  // would cancel the in-flight agent. Flushed when the run finishes.
+  const envResetPendingRef = useRef(false);
   // Generation that was stopped (0 = none), so a stopped run's rejection isn't
   // shown as an error even after a newer send has started.
   const cancelledGenerationRef = useRef(0);
@@ -287,15 +293,38 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   // Track which provider keys are configured; rebuild the agent on change so a
-  // newly-added key takes effect without reopening the panel.
+  // newly-added key takes effect without reopening the panel. Credentials are
+  // read when the agent is built, so the reset has to be explicit here — the
+  // profile effect below deliberately does nothing when the profile itself is
+  // unchanged, and would leave the agent on the superseded key.
+  //
+  // Deferred rather than dropped while a response is streaming: reset() cancels
+  // the in-flight agent, and that cancellation is not user-initiated, so send()'s
+  // catch would surface it as an error turn and drop the reply. The effect below
+  // flushes the deferred reset once the run finishes.
   useEffect(() => {
     const onEnvChange = () => {
       setHasKey(hasProviderKey());
       setProviders(availableProviders());
+      if (runningRef.current) {
+        envResetPendingRef.current = true;
+        return;
+      }
+      session.reset();
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
-  }, []);
+  }, [session]);
+
+  // Flush a credential change that arrived mid-run, now that the run is over.
+  // Nothing else would: the profile effect below no-ops when the profile itself
+  // is unchanged, so without this the agent would keep serving the superseded
+  // key until some later env change or profile switch happened to reset it.
+  useEffect(() => {
+    if (running || !envResetPendingRef.current) return;
+    envResetPendingRef.current = false;
+    session.reset();
+  }, [running, session]);
 
   // When the default profile changes (user set a new default in Settings),
   // reset the "user explicitly chose" flag so the new default takes effect.
@@ -314,12 +343,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
   //
-  // Deferred while a response is streaming: setSelection resets the session,
-  // which cancels the in-flight agent. That cancellation is not user-initiated,
-  // so send()'s catch would surface it as an error turn and drop the reply. The
-  // panel dropdown is disabled while running, but Settings can still change the
-  // default profile, so guard here. `running` is a dependency, so the latest
-  // activeProfile is applied as soon as the run finishes.
+  // Deferred while a response is streaming: applying a *changed* profile resets
+  // the session, which cancels the in-flight agent. That cancellation is not
+  // user-initiated, so send()'s catch would surface it as an error turn and drop
+  // the reply. The panel dropdown is disabled while running, but Settings can
+  // still change the default profile, so guard here. `running` is a dependency,
+  // so the latest activeProfile is applied as soon as the run finishes — and it
+  // flips back to false after every turn, which re-runs this effect on turns
+  // where nothing changed. setSelection compares the selection by value and
+  // no-ops on those, which is what keeps the conversation history alive.
   useEffect(() => {
     if (running) return;
     session.setSelection(activeProfile ?? null);
@@ -390,7 +422,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       // Compare against myGeneration so a newer send can't unmask this older
       // run's cancellation as a failure.
       if (cancelledGenerationRef.current !== myGeneration) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message =
+          (activeProfile?.provider ?? resolveProviderConfig()?.provider) === "ollama" &&
+          isOllamaNetworkFailure(error)
+            ? withOllamaOriginHint(t("settings.ai.ollamaNetworkFailure"))
+            : error instanceof Error
+              ? error.message
+              : String(error);
         const errorId = (turnIdRef.current += 1);
         setTurns((prev) => [...prev, { id: errorId, role: "error", text: message }]);
       }
@@ -429,7 +467,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (
+      isSendKey(
+        {
+          key: event.key,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          isComposing: event.nativeEvent.isComposing,
+          keyCode: event.nativeEvent.keyCode,
+        },
+        Boolean(input.trim()) && !runningRef.current && hasKey,
+      )
+    ) {
       event.preventDefault();
       void send();
       return;
@@ -613,7 +662,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   disabled={running}
                   onChange={(event) => onModelChange(event.target.value)}
                 >
-                  {PROVIDER_MODELS[activeProfile.provider].map((modelId) => (
+                  {[
+                    ...new Set(
+                      [activeProfile.modelId, ...PROVIDER_MODELS[activeProfile.provider]].filter(
+                        Boolean,
+                      ),
+                    ),
+                  ].map((modelId) => (
                     <option key={modelId} value={modelId}>
                       {modelId}
                     </option>

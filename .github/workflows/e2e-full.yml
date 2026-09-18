@@ -1,0 +1,114 @@
+name: E2E full
+
+# The per-feature Playwright specs (the `features` project): mapbox/cesium/stac
+# engine integration, exports, story maps, the scene graph, plugin install.
+#
+# These do not gate a pull request. They are ~27 min of the ~36 min full suite,
+# which made CI's critical path 29-39 min per commit while every other job
+# finished in under 10. Most of them guard a specific shipped regression, so
+# they are kept and run here instead of being deleted:
+#
+#   - every night, against `main`
+#   - on demand (workflow_dispatch)
+#   - on a pull request labelled `full-e2e`, when a change touches one of these
+#     areas and you want the check before merging
+#
+# Sharded 4x so the whole thing still lands in roughly 10 minutes.
+
+on:
+  schedule:
+    # 07:00 UTC daily — after US evening commits, before EU morning review.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    # `opened` covers a PR created with the label already on it, where no
+    # separate `labeled` event fires.
+    types: [opened, labeled, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed on the event as well as the ref: `schedule` and `workflow_dispatch`
+  # both report `refs/heads/main`, so without this a manual run and the nightly
+  # cron would share a group and cancel each other.
+  group: e2e-full-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  features:
+    # On a PR this runs only when it carries the `full-e2e` label; the schedule
+    # and manual dispatch always run. `synchronize`/`reopened` are listed above
+    # so a labelled PR re-checks on later pushes rather than going stale.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'full-e2e')
+    name: E2E features ${{ matrix.shard }}/4
+    runs-on: ubuntu-22.04
+    strategy:
+      # One shard failing should not hide results from the other three.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # Each shard rebuilds rather than downloading a shared artifact: the Vite
+      # build is ~16 s, well under what the extra job plus artifact round-trip
+      # would cost.
+      # Pinned to one worker on purpose. Sharding is what makes this job fast
+      # (~27 min of specs split four ways); parallel workers would shave only
+      # about another minute, and this suite is where the slow engine specs
+      # (Cesium/Mapbox renderer swaps, export downloads) live — the ones most
+      # sensitive to contention on a 4-vCPU runner. Nothing is waiting on a
+      # nightly result, so the trade is not worth it. Raise it once the nightly
+      # has a stable history.
+      - name: Run E2E feature tests
+        run: npm run test:e2e -- --project=features --shard=${{ matrix.shard }}/4 --workers=1
+        env:
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+      # The artifact name must carry the shard — four jobs uploading the same
+      # name is an error on upload-artifact v4+.
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-features-${{ matrix.shard }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

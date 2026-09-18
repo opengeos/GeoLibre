@@ -70,6 +70,254 @@ def test_add_wmts(m):
     assert _last_layer(m)["type"] == "wmts"
 
 
+def test_add_wms_and_add_wmts_forward_bounds(m):
+    # Without an extent a service layer cannot be reached by zoom-to-layer,
+    # and a notebook has no other way to give it one.
+    m.add_wms("https://e/wms", "a", bounds=[8.14, 38.85, 9.83, 41.31])
+    assert _last_layer(m)["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
+    m.add_wmts("https://t/{z}/{y}/{x}.png", bounds=[-10, 35, 5, 45])
+    assert _last_layer(m)["source"]["bounds"] == [-10.0, 35.0, 5.0, 45.0]
+
+
+def test_add_ee_layer_from_map_id(m):
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/test/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            assert vis_params == {"min": 0, "max": 3000, "palette": ["blue", "green"]}
+            return {"mapid": "test-map", "tile_fetcher": TileFetcher()}
+
+    layer_id = m.add_ee_layer(
+        Image(),
+        {"min": 0, "max": 3000, "palette": ["blue", "green"]},
+        name="Elevation",
+        shown=False,
+        opacity=0.4,
+    )
+    layer = _last_layer(m)
+    assert layer["id"] == layer_id
+    assert layer["name"] == "Elevation"
+    assert layer["type"] == "xyz"
+    assert layer["visible"] is False
+    assert layer["opacity"] == 0.4
+    assert layer["source"]["tiles"] == [TileFetcher.url_format]
+    assert layer["source"]["attribution"] == "Google Earth Engine"
+    assert layer["metadata"]["sourceKind"] == "xyz-url"
+    assert layer["metadata"]["provider"] == "earth-engine"
+    assert layer["metadata"]["earthEngineMapId"] == "test-map"
+
+
+@pytest.mark.parametrize("opacity", [-0.1, 1.1, float("nan"), "bad"])
+def test_add_ee_layer_rejects_invalid_opacity(m, opacity):
+    with pytest.raises(ValueError, match="opacity must"):
+        m.add_ee_layer(object(), opacity=opacity)
+
+
+def test_add_ee_layer_requires_tile_url(m):
+    class Image:
+        def getMapId(self, _vis_params):
+            return {"mapid": "missing-fetcher"}
+
+    with pytest.raises(ValueError, match="without a tile URL"):
+        m.add_ee_layer(Image())
+
+
+def test_add_ee_layer_wraps_earth_engine_errors(m):
+    class Image:
+        def getMapId(self, _vis_params):
+            raise RuntimeError("not initialized")
+
+    with pytest.raises(RuntimeError, match="Authenticate and initialize"):
+        m.add_ee_layer(Image())
+
+
+def test_add_ee_layer_mosaics_image_collection(monkeypatch, m):
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/collection/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            assert vis_params == {"bands": ["B4", "B3", "B2"]}
+            return {"tile_fetcher": TileFetcher()}
+
+    class ImageCollection:
+        # The real ee.ImageCollection exposes getMapId, so dispatch must not
+        # take a duck-typed shortcut past mosaic().
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("ImageCollection.getMapId must not be called")
+
+        def mosaic(self):
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=ImageCollection,
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    m.add_ee_layer(ImageCollection(), {"bands": ["B4", "B3", "B2"]})
+    assert _last_layer(m)["source"]["tiles"] == [TileFetcher.url_format]
+
+
+def test_add_ee_layer_rejects_unsupported_object(monkeypatch, m):
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(TypeError, match="ee_object must be"):
+        m.add_ee_layer(object())
+
+
+def test_add_ee_layer_styles_feature_collection(monkeypatch, m):
+    captured = {}
+
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/features/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            captured["map_params"] = vis_params
+            return {"tile_fetcher": TileFetcher()}
+
+    class FeatureCollection:
+        # The real ee.FeatureCollection exposes getMapId, but it honours only
+        # `color`; styling must run so width/fillColor/pointSize survive.
+        def getMapId(self, _vis_params):  # pragma: no cover - must not be called
+            raise AssertionError("FeatureCollection.getMapId must not be called")
+
+        def style(self, **style):
+            captured["style"] = style
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    m.add_ee_layer(FeatureCollection(), {"color": "ff0000", "width": 4})
+    assert captured["style"]["color"] == "ff0000"
+    assert captured["style"]["width"] == 4
+    assert captured["style"]["fillColor"] == "00000000"
+    assert captured["map_params"] == {}
+
+
+@pytest.mark.parametrize("vis_params", [["min", "max"], "min", 3])
+def test_add_ee_layer_rejects_non_mapping_vis_params(m, vis_params):
+    with pytest.raises(TypeError, match="vis_params must be a mapping"):
+        m.add_ee_layer(object(), vis_params)
+
+
+def _fake_vector_ee(captured):
+    """Fake `ee` module whose vector types record the conversion chain."""
+
+    class TileFetcher:
+        url_format = "https://earthengine.googleapis.com/maps/vector/tiles/{z}/{x}/{y}"
+
+    class Image:
+        def getMapId(self, vis_params):
+            captured["map_params"] = vis_params
+            return {"tile_fetcher": TileFetcher()}
+
+    class Geometry:
+        pass
+
+    class Feature:
+        def __init__(self, geometry=None):
+            captured["feature_from"] = geometry
+
+    class FeatureCollection:
+        def __init__(self, features=None):
+            captured["collection_from"] = features
+
+        def style(self, **style):
+            captured["style"] = style
+            return Image()
+
+    fake_ee = types.SimpleNamespace(
+        Image=Image,
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=Feature,
+        Geometry=Geometry,
+    )
+    return fake_ee, TileFetcher.url_format
+
+
+def test_add_ee_layer_wraps_feature_in_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    feature = fake_ee.Feature()
+    m.add_ee_layer(feature, {"color": "00ff00"})
+
+    assert captured["collection_from"] == [feature]
+    assert captured["style"]["color"] == "00ff00"
+    assert captured["style"]["pointSize"] == 3
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
+def test_add_ee_layer_wraps_geometry_in_feature_and_collection(monkeypatch, m):
+    captured = {}
+    fake_ee, url = _fake_vector_ee(captured)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+
+    geometry = fake_ee.Geometry()
+    m.add_ee_layer(geometry, {"width": 5})
+
+    assert captured["feature_from"] is geometry
+    assert isinstance(captured["collection_from"][0], fake_ee.Feature)
+    assert captured["style"]["width"] == 5
+    assert captured["style"]["fillColor"] == "00000000"
+    assert captured["map_params"] == {}
+    assert _last_layer(m)["source"]["tiles"] == [url]
+
+
+def test_add_ee_layer_rejects_image_vis_params_on_vector(monkeypatch, m):
+    class FeatureCollection:
+        def style(self, **_style):  # pragma: no cover - must not be reached
+            raise AssertionError("style() must not be called with bad vis_params")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=type("ImageCollection", (), {}),
+        FeatureCollection=FeatureCollection,
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(ValueError, match="may only contain"):
+        m.add_ee_layer(FeatureCollection(), {"min": 0, "max": 3000})
+
+
+def test_add_ee_layer_wraps_preparation_errors(monkeypatch, m):
+    class ImageCollection:
+        def mosaic(self):
+            raise RuntimeError("collection is empty")
+
+    fake_ee = types.SimpleNamespace(
+        Image=type("Image", (), {}),
+        ImageCollection=ImageCollection,
+        FeatureCollection=type("FeatureCollection", (), {}),
+        Feature=type("Feature", (), {}),
+        Geometry=type("Geometry", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    with pytest.raises(RuntimeError, match="could not prepare this object"):
+        m.add_ee_layer(ImageCollection())
+
+
 def test_add_raster_is_cog(m):
     m.add_raster("https://e/dem.tif", bands=[1, 2, 3])
     layer = _last_layer(m)
@@ -122,6 +370,40 @@ def test_add_3d_tiles(m):
     layer = _last_layer(m)
     assert layer["type"] == "3d-tiles"
     assert layer["source"]["altitudeOffset"] == 5
+
+
+def test_add_3d_tiles_from_ion_asset(m):
+    m.add_3d_tiles(ion_asset_id=96188, name="Buildings")
+    layer = _last_layer(m)
+    assert layer["type"] == "3d-tiles"
+    assert layer["source"]["ionAssetId"] == 96188
+    assert layer["metadata"]["sourceKind"] == "cesium-ion"
+
+
+def test_add_cesium_ion_imagery(m):
+    m.add_cesium_ion(2, kind="imagery", name="Aerial")
+    layer = _last_layer(m)
+    assert layer["type"] == "raster"
+    assert layer["source"]["ionAssetId"] == 2
+    assert layer["metadata"]["externalNativeLayer"] is True
+
+
+def test_add_czml_url(m):
+    m.add_czml("https://e/sat.czml", name="Satellites")
+    layer = _last_layer(m)
+    assert layer["type"] == "3d-tiles"
+    assert layer["name"] == "Satellites"
+    assert layer["source"]["url"] == "https://e/sat.czml"
+    assert layer["metadata"]["sourceKind"] == "czml"
+    assert layer["metadata"]["externalNativeLayer"] is True
+
+
+def test_add_czml_inline_packets(m):
+    packets = [{"id": "document", "version": "1.0"}, {"id": "p", "point": {"pixelSize": 6}}]
+    m.add_czml(data=packets, source_path="/local/p.czml")
+    layer = _last_layer(m)
+    assert layer["source"]["czmlData"] == packets
+    assert layer["sourcePath"] == "/local/p.czml"
 
 
 def test_add_video_wraps_single_url(m):
@@ -255,6 +537,304 @@ def test_add_raster_url_not_served(monkeypatch, m):
     assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
 
 
+def _fake_xarray_modules(monkeypatch):
+    """Install tiny xarray/rioxarray stand-ins for conversion unit tests."""
+
+    class Rio:
+        def __init__(self, owner):
+            self.owner = owner
+            self.crs = owner.crs
+
+        def set_spatial_dims(self, *, x_dim, y_dim, inplace):
+            assert not inplace
+            self.owner.spatial_dims = (x_dim, y_dim)
+            return self.owner
+
+        def write_crs(self, crs, *, inplace):
+            assert not inplace
+            self.owner.crs = crs
+            self.crs = crs
+            return self.owner
+
+        def write_nodata(self, nodata, *, inplace):
+            assert not inplace
+            self.owner.nodata = nodata
+            return self.owner
+
+        def to_raster(self, path, **options):
+            self.owner.raster_options = options
+            path.write_bytes(b"fake geotiff")
+
+    class DataArray:
+        def __init__(self, dims=("lat", "lon"), crs=None):
+            self.dims = dims
+            self.crs = crs
+            self.rio = Rio(self)
+
+        def isel(self, indexers):
+            self.indexers = indexers
+            return self
+
+    class Dataset(DataArray):
+        def __init__(self, variables):
+            super().__init__()
+            self.data_vars = variables
+
+        def __getitem__(self, key):
+            return self.data_vars[key]
+
+        def __setitem__(self, key, value):
+            self.data_vars[key] = value
+
+        def copy(self):
+            """Model xarray's shallow copy: a new Dataset over the same variables."""
+            duplicate = Dataset(dict(self.data_vars))
+            duplicate.dims = self.dims
+            duplicate.crs = self.crs
+            duplicate.rio.crs = self.crs
+            return duplicate
+
+    monkeypatch.setitem(
+        sys.modules, "xarray", types.SimpleNamespace(DataArray=DataArray, Dataset=Dataset)
+    )
+    monkeypatch.setitem(sys.modules, "rioxarray", types.SimpleNamespace())
+    return DataArray, Dataset
+
+
+def test_add_raster_xarray_dataarray_materializes_geotiff(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://127.0.0.1/xarray.tif",
+    )
+
+    array = DataArray()
+    m.add_raster(array, colormap="viridis", array_args={"nodata": -9999, "compress": "LZW"})
+
+    assert array.spatial_dims == ("lon", "lat")
+    assert array.crs == "EPSG:4326"
+    assert array.nodata == -9999
+    assert array.raster_options == {"driver": "COG", "compress": "LZW"}
+    assert captured["path"].read_bytes() == b"fake geotiff"
+    assert _last_layer(m)["source"]["url"] == "http://127.0.0.1/xarray.tif"
+    m.close()
+    assert not captured["path"].exists()
+
+
+def test_add_raster_xarray_dataset_selects_variable(monkeypatch, m):
+    DataArray, Dataset = _fake_xarray_modules(monkeypatch)
+    selected = DataArray(dims=("time", "y", "x"), crs="EPSG:3857")
+    dataset = Dataset({"temperature": selected})
+    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/x.tif")
+
+    m.add_raster(
+        dataset,
+        array_args={"variable": "temperature", "isel": {"time": 0}},
+    )
+
+    assert selected.indexers == {"time": 0}
+    assert selected.spatial_dims == ("x", "y")
+    m.close()
+
+
+def test_add_raster_xarray_dataset_applies_nodata_to_each_variable(monkeypatch, m):
+    DataArray, Dataset = _fake_xarray_modules(monkeypatch)
+    red = DataArray()
+    green = DataArray()
+    dataset = Dataset({"red": red, "green": green})
+    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/rgb.tif")
+
+    m.add_raster(dataset, array_args={"nodata": 255})
+
+    assert red.nodata == 255
+    assert green.nodata == 255
+    # The GeoTIFF must be written from the copy, not from the caller's Dataset.
+    assert not hasattr(dataset, "raster_options")
+    m.close()
+
+
+def test_add_raster_xarray_requires_recognizable_spatial_dims(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    with pytest.raises(ValueError, match="Could not identify x/y dimensions"):
+        m.add_raster(DataArray(dims=("row", "column")))
+
+
+def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
+    """The finalizer must clean up when the user never calls Map.close()."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://local/x.tif",
+    )
+
+    unregistered = []
+    monkeypatch.setattr(gmod, "unregister_local_file", unregistered.append)
+
+    widget = Map()
+    widget.add_raster(DataArray())
+    assert captured["path"].exists()
+
+    assert widget._raster_cleanup.alive
+    widget._raster_cleanup()  # what weakref runs at interpreter exit
+    assert not captured["path"].exists()
+    assert widget._temporary_rasters == []
+    # The static server's token goes with the file, so a looping session does
+    # not leave a registry entry per materialization behind.
+    assert unregistered == [captured["path"]]
+
+
+def test_add_raster_xarray_round_trip_with_real_rioxarray(monkeypatch, m):
+    """Pin real rioxarray behavior the fake modules above cannot model.
+
+    The Dataset nodata path copies the Dataset and reassigns every variable,
+    which drops rio's cached spatial dims (hence the explicit re-set) but not
+    the CRS, which lives in each variable's ``spatial_ref``. Assert the written
+    COG really keeps both, so a rioxarray change is caught here rather than by
+    a user staring at an unplaced raster.
+    """
+    xr = pytest.importorskip("xarray")
+    pytest.importorskip("rioxarray")
+    rasterio = pytest.importorskip("rasterio")
+    np = pytest.importorskip("numpy")
+
+    dataset = xr.Dataset(
+        {
+            "red": (("lat", "lon"), np.zeros((4, 5), dtype="float32")),
+            "green": (("lat", "lon"), np.ones((4, 5), dtype="float32")),
+        },
+        coords={"lat": np.linspace(40, 30, 4), "lon": np.linspace(-100, -90, 5)},
+    )
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_local_file",
+        lambda path: captured.update(path=path) or "http://local/ds.tif",
+    )
+
+    m.add_raster(dataset, array_args={"nodata": 255})
+
+    with rasterio.open(captured["path"]) as src:
+        assert src.crs.to_string() == "EPSG:4326"  # inferred from lon/lat
+        assert src.count == 2
+        assert src.nodata == 255
+        assert src.driver == "GTiff"  # what rasterio reports for a COG
+    m.close()
+    assert not captured["path"].exists()
+
+
+def test_add_raster_xarray_uses_xyz_tiles_on_colab(monkeypatch, m):
+    DataArray, _ = _fake_xarray_modules(monkeypatch)
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    captured = {}
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **options: (
+            captured.update(path=path, options=options)
+            or "http://127.0.0.1:1234/_geolibre_tiles/token/{z}/{x}/{y}.png"
+        ),
+    )
+
+    m.add_raster(
+        DataArray(),
+        name="Temperature",
+        bands=[1],
+        colormap="turbo",
+        rescale=[[-5, 35]],
+    )
+
+    layer = _last_layer(m)
+    assert layer["type"] == "xyz"
+    assert layer["name"] == "Temperature"
+    assert "_geolibre_tiles/token/{z}/{x}/{y}.png" in layer["source"]["tiles"][0]
+    assert captured["options"] == {
+        "bands": [1],
+        "colormap": "turbo",
+        "rescale": [[-5, 35]],
+    }
+
+
+def test_add_cog_on_colab_computes_bounds_from_the_local_raster(monkeypatch, m, tmp_path):
+    """The Colab tile branch reads the raster's own extent, reprojected to WGS84."""
+    rasterio = pytest.importorskip("rasterio")
+    np = pytest.importorskip("numpy")
+    from rasterio.transform import from_bounds
+
+    raster = tmp_path / "dem.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=4,
+        height=4,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_bounds(-120, 30, -100, 45, 4, 4),
+    ) as dst:
+        dst.write(np.zeros((1, 4, 4), dtype="float32"))
+
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
+    )
+    # "~" is what GDAL will not expand on its own, so hand add_cog that form.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    m.add_cog("~/dem.tif", name="DEM")
+
+    bounds = _last_layer(m)["source"]["bounds"]
+    assert bounds == pytest.approx([-120, 30, -100, 45], abs=1e-6)
+
+
+def test_add_cog_on_colab_tolerates_an_unreadable_raster(monkeypatch, m, tmp_path):
+    """A file rasterio cannot open still yields a layer, just without bounds."""
+    raster = tmp_path / "not-a.tif"
+    raster.write_bytes(b"fake geotiff")
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        gmod,
+        "register_raster_tiles",
+        lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
+    )
+
+    m.add_cog(raster, name="DEM")
+
+    assert _last_layer(m)["source"].get("bounds") is None
+
+
+def test_add_raster_accepts_deprecated_url_keyword(m):
+    """The pre-rename `url=` keyword still works, with a DeprecationWarning."""
+    with pytest.warns(DeprecationWarning, match="add_raster\\(url=...\\) is deprecated"):
+        m.add_raster(url="https://e/dem.tif", name="DEM")
+    assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
+
+
+def test_add_raster_rejects_source_and_url_together(m):
+    with pytest.raises(TypeError, match="deprecated alias"):
+        m.add_raster("https://e/a.tif", url="https://e/b.tif")
+
+
+def test_add_raster_requires_a_source(m):
+    with pytest.raises(TypeError, match="missing required argument"):
+        m.add_raster()
+
+
+def test_add_raster_rejects_non_raster_object(monkeypatch, m):
+    _fake_xarray_modules(monkeypatch)
+    with pytest.raises(TypeError, match="xarray DataArray/Dataset"):
+        m.add_raster(object())
+
+
 # -- markers --------------------------------------------------------------
 
 
@@ -330,11 +910,19 @@ def test_add_circle_markers_sets_radius(m):
 
 
 def test_add_heatmap_sets_renderer(m):
-    m.add_heatmap([(0, 0), (1, 1)], radius=42, intensity=1.5)
+    m.add_heatmap(
+        [(0, 0), (1, 1)],
+        radius=42,
+        intensity=1.5,
+        color_ramp="viridis",
+        weight_field="nb_ruches",
+    )
     style = _last_layer(m)["style"]
     assert style["pointRenderer"] == "heatmap"
     assert style["heatmapRadius"] == 42
     assert style["heatmapIntensity"] == 1.5
+    assert style["heatmapColorRamp"] == "viridis"
+    assert style["heatmapWeightProperty"] == "nb_ruches"
 
 
 def test_add_heatmap_validates_parameters(m):
@@ -663,3 +1251,228 @@ def test_legend_and_colorbar_coexist(m):
     # Adding a colorbar must not drop the existing legend, and vice versa.
     assert "legend" in components
     assert "colorbar" in components
+
+
+def test_renderer_and_mixed_layout_roundtrip(m, tmp_path):
+    m.set_map_layout(1, 2, view_kinds=["cesium", "maplibre"])
+    assert m.get_renderer() == "cesium"
+    pane = m.project["secondaryMapViews"][0]
+    m.set_renderer("cesium", pane_id=pane["id"])
+    m.set_map_layout(2, 2)
+    assert m.project["secondaryMapViews"][0]["id"] == pane["id"]
+    assert m.get_renderer(pane_id=pane["id"]) == "cesium"
+    path = tmp_path / "globe.geolibre.json"
+    m.save_project(path)
+    import json
+
+    saved = json.loads(path.read_text())
+    assert saved["primaryRenderer"] == "cesium"
+    assert saved["secondaryMapViews"][0]["viewKind"] == "cesium"
+    before = m.to_project()
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2, view_kinds=["cesium"])
+    with pytest.raises(ValueError):
+        m.set_renderer("invalid")
+    with pytest.raises(ValueError):
+        m.set_renderer("cesium", pane_id="missing")
+    assert m.to_project() == before
+
+
+def test_malformed_secondary_map_views_raise_value_error(m):
+    # A hand-edited file can carry panes without ids or a non-list value; the
+    # renderer/layout API must reject those as ValueError, never KeyError.
+    m.load_project({**m.project, "secondaryMapViews": [{}]})
+    with pytest.raises(ValueError):
+        m.set_renderer("cesium", pane_id="x")
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="x")
+    m.load_project({**m.project, "secondaryMapViews": "panes"})
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2)
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="x")
+    # An omitted viewKind is MapLibre; a present one must name a renderer.
+    m.load_project({**m.project, "secondaryMapViews": [{"id": "p"}]})
+    assert m.get_renderer(pane_id="p") == "maplibre"
+    # Unhashable JSON values must surface as ValueError too, not TypeError.
+    for bad in (None, "webgl", ["cesium"], {"kind": "cesium"}):
+        m.load_project({**m.project, "secondaryMapViews": [{"id": "p", "viewKind": bad}]})
+        with pytest.raises(ValueError):
+            m.get_renderer(pane_id="p")
+        with pytest.raises(ValueError):
+            m.set_map_layout(1, 2)
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 2, view_kinds=["maplibre", ["cesium"]])
+    # Duplicate ids would make pane lookups silently pick the first match.
+    m.load_project({**m.project, "secondaryMapViews": [{"id": "p"}, {"id": "p"}]})
+    with pytest.raises(ValueError):
+        m.get_renderer(pane_id="p")
+    with pytest.raises(ValueError):
+        m.set_map_layout(1, 3)
+
+
+# -- marker symbology, popups, and tooltips ------------------------------------
+
+
+def test_add_markers_named_style_args_reach_the_layer_style(m):
+    m.add_markers([(-100, 40)], color="#e11d48", radius=9, stroke_width=1)
+    style = _last_layer(m)["style"]
+    assert style["fillColor"] == "#e11d48"
+    assert style["circleRadius"] == 9
+    assert style["strokeWidth"] == 1
+
+
+def test_add_markers_shape_switches_to_a_marker_sprite(m):
+    m.add_markers([(-100, 40)], shape="pin", color="#e11d48", size=32)
+    style = _last_layer(m)["style"]
+    assert style["markerEnabled"] is True
+    assert style["markerShape"] == "pin"
+    assert style["markerSize"] == 32
+
+
+def test_add_markers_custom_icon(m):
+    m.add_markers([(-100, 40)], icon="<svg viewBox='0 0 1 1'/>")
+    style = _last_layer(m)["style"]
+    assert style["markerShape"] == "custom"
+    assert style["markerSvg"] == "<svg viewBox='0 0 1 1'/>"
+
+
+def test_add_markers_rejects_a_named_color_for_a_sprite(m):
+    with pytest.raises(ValueError, match="marker sprites need a hex color"):
+        m.add_markers([(-100, 40)], shape="star", color="crimson")
+
+
+def test_add_marker_takes_the_same_style_args(m):
+    m.add_marker(-100, 40, shape="star", color="#22c55e", size=20)
+    assert _last_layer(m)["style"]["markerShape"] == "star"
+
+
+def test_add_circle_markers_still_sets_the_radius(m):
+    m.add_circle_markers([(-100, 40)], radius=12)
+    assert _last_layer(m)["style"]["circleRadius"] == 12
+
+
+def test_an_explicit_style_key_wins_over_the_named_argument(m):
+    # The raw style key is the escape hatch; this is also the precedence
+    # add_circle_markers had before the named arguments existed.
+    m.add_markers([(-100, 40)], color="#ffffff", fillColor="#000000")
+    assert _last_layer(m)["style"]["fillColor"] == "#000000"
+
+
+def test_add_circle_markers_keeps_an_explicit_circle_radius(m):
+    m.add_circle_markers([(-100, 40)], radius=8, circleRadius=20)
+    assert _last_layer(m)["style"]["circleRadius"] == 20
+
+
+def test_add_markers_rejects_circle_only_settings_on_a_sprite(m):
+    with pytest.raises(ValueError, match="only applies to circle markers"):
+        m.add_markers([(-100, 40)], shape="pin", radius=9)
+
+
+def test_add_markers_popup_and_tooltip_land_on_the_layer(m):
+    m.add_markers(
+        [{"lon": -100, "lat": 40, "name": "A", "photo": "https://example.org/a.jpg"}],
+        popup=["name", {"field": "photo", "kind": "image", "label": "Photo"}],
+        tooltip="name",
+    )
+    layer = _last_layer(m)
+    assert layer["popup"] == {
+        "fields": [
+            {"field": "name", "hover": True},
+            {"field": "photo", "label": "Photo", "kind": "image"},
+        ],
+        "hover": True,
+    }
+    # The popup config is a layer key, not a style key; left in the style the
+    # app would never read it.
+    assert "popup" not in layer["style"]
+
+
+def test_add_geojson_also_accepts_a_popup(m):
+    m.add_geojson({"type": "FeatureCollection", "features": []}, popup="name")
+    assert _last_layer(m)["popup"] == {"fields": [{"field": "name"}]}
+
+
+def test_set_popup_replaces_the_config(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a", "b"])
+    m.set_popup(layer_id, ["c"], title="c")
+    assert m.get_layer(layer_id).popup == {"titleField": "c", "fields": [{"field": "c"}]}
+
+
+def test_set_popup_merge_keeps_what_it_does_not_mention(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"])
+    m.set_popup(layer_id, title="a", merge=True)
+    popup = m.get_layer(layer_id).popup
+    assert popup["titleField"] == "a"
+    assert popup["fields"] == [{"field": "a"}]
+
+
+def test_set_tooltip_flags_an_existing_field_rather_than_duplicating_it(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a", "b"])
+    m.set_tooltip(layer_id, "a")
+    popup = m.get_layer(layer_id).popup
+    assert popup["hover"] is True
+    assert popup["fields"] == [{"field": "a", "hover": True}, {"field": "b"}]
+
+
+def test_set_tooltip_false_turns_the_tooltip_off(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"], tooltip="a")
+    m.set_tooltip(layer_id, False)
+    assert m.get_layer(layer_id).popup["hover"] is False
+
+
+def test_clear_popup_restores_the_default(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"])
+    m.clear_popup(layer_id)
+    assert m.get_layer(layer_id).popup == {}
+    assert "popup" not in _last_layer(m)
+
+
+def test_layer_popup_property_is_a_copy(m):
+    layer = m.get_layer(m.add_markers([(-100, 40)], popup=["a"]))
+    layer.popup["fields"].clear()
+    assert layer.popup["fields"] == [{"field": "a"}]
+
+
+def test_layer_set_popup_bumps_the_sync_sequence(m):
+    layer = m.get_layer(m.add_markers([(-100, 40)]))
+    seq = m._seq
+    layer.set_popup(["a"])
+    assert m._seq > seq
+
+
+def test_mapbox_renderer_roundtrip(m, tmp_path):
+    """Mapbox survives project save/load and mixed renderer split views."""
+    from geolibre import Map
+
+    m.set_renderer("mapbox")
+    m.set_map_layout(1, 2, view_kinds=["mapbox", "cesium"])
+    assert m.get_renderer() == "mapbox"
+    pane = m.project["secondaryMapViews"][0]
+    m.set_renderer("mapbox", pane_id=pane["id"])
+    path = tmp_path / "mapbox.geolibre.json"
+    m.save_project(path)
+    reopened = Map(renderer="mapbox")
+    reopened.load_project(path)
+    assert reopened.get_renderer() == "mapbox"
+    assert reopened.get_renderer(pane_id=pane["id"]) == "mapbox"
+
+
+def test_arcgis_renderer_roundtrip(m, tmp_path):
+    """ArcGIS survives project save/load and mixed renderer split views."""
+    from geolibre import Map
+
+    m.set_renderer("arcgis")
+    m.set_map_layout(1, 3, view_kinds=["arcgis", "maplibre", "cesium"])
+    assert m.get_renderer() == "arcgis"
+    maplibre_pane, cesium_pane = m.project["secondaryMapViews"]
+    m.set_renderer("arcgis", pane_id=cesium_pane["id"])
+    path = tmp_path / "arcgis.geolibre.json"
+    m.save_project(path)
+    reopened = Map(renderer="arcgis")
+    reopened.load_project(path)
+    # A mixed layout survives: the primary and one pane on ArcGIS, the other
+    # pane still on MapLibre.
+    assert reopened.get_renderer() == "arcgis"
+    assert reopened.get_renderer(pane_id=maplibre_pane["id"]) == "maplibre"
+    assert reopened.get_renderer(pane_id=cesium_pane["id"]) == "arcgis"

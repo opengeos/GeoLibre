@@ -17,6 +17,7 @@ export { Textarea } from "./components/textarea";
 export { Select } from "./components/select";
 export { Label } from "./components/label";
 export { Slider } from "./components/slider";
+export { RangeSlider, type RangeSliderProps } from "./components/range-slider";
 export { Separator } from "./components/separator";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/tooltip";
 export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area";

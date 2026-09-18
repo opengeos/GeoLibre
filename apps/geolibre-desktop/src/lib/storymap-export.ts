@@ -7,6 +7,7 @@ import {
   type MapProjection,
   type StoryMap,
 } from "@geolibre/core";
+import { NO_EXTERNAL_CDN } from "./build-flags";
 import { sanitizeStoryHtml } from "./sanitize-html";
 import {
   STORY_END_STEP_ID,
@@ -81,6 +82,15 @@ const BLANK_EXPORT_STYLE: Record<string, unknown> = {
  * @returns A complete HTML document as a string.
  */
 export function buildStoryMapHtml(options: StoryMapExportOptions): string {
+  // The exported standalone HTML loads maplibre-gl, scrollama, and the RTL text
+  // plugin from external CDNs (unpkg.com). When external CDN references are
+  // stripped from the build, the export cannot produce a functioning page.
+  if (NO_EXTERNAL_CDN) {
+    throw new Error(
+      "Story map HTML export is unavailable in this build (external CDN resources are disabled).",
+    );
+  }
+
   const {
     storymap,
     basemapStyleUrl,

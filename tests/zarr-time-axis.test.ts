@@ -6,6 +6,7 @@ import {
   fetchZarrTimeAttributes,
   parseCfTimeUnits,
   pickTimeDimension,
+  readCoordinateTimeAttributes,
   resolveZarrTimeAxis,
 } from "../packages/plugins/src/plugins/zarr-time-axis.ts";
 
@@ -346,5 +347,52 @@ describe("the @carbonplan/zarr-layer coordinate mirror", () => {
       "dimensionValues" in layer,
       "@carbonplan/zarr-layer no longer exposes `dimensionValues`; update readZarrDimensionValues",
     );
+  });
+});
+
+// The same walk serves HTTP, a folder on disk and an Icechunk manifest, so it is
+// the reader that differs between them rather than the sequence of documents.
+describe("readCoordinateTimeAttributes", () => {
+  it("prefers the coordinate's own .zattrs", async () => {
+    const asked: string[] = [];
+    const attributes = await readCoordinateTimeAttributes(async (key) => {
+      asked.push(key);
+      return key === "time/.zattrs" ? { units: "days since 1970-01-01" } : undefined;
+    }, "time");
+    assert.deepEqual(attributes, { units: "days since 1970-01-01" });
+    assert.deepEqual(asked, ["time/.zattrs"]);
+  });
+
+  it("unwraps a v3 node's attributes", async () => {
+    const attributes = await readCoordinateTimeAttributes(
+      async (key) =>
+        key === "time/zarr.json" ? { attributes: { calendar: "360_day" } } : undefined,
+      "time",
+    );
+    assert.deepEqual(attributes, { calendar: "360_day" });
+  });
+
+  it("finds a pyramid's coordinates one level down", async () => {
+    const attributes = await readCoordinateTimeAttributes(
+      async (key) => (key === "0/time/.zattrs" ? { units: "seconds since 2020-01-01" } : undefined),
+      "time",
+    );
+    assert.deepEqual(attributes, { units: "seconds since 2020-01-01" });
+  });
+
+  it("reports nothing when no document declares units or calendar", async () => {
+    const asked: string[] = [];
+    const attributes = await readCoordinateTimeAttributes(async (key) => {
+      asked.push(key);
+      return { long_name: "time" };
+    }, "time");
+    assert.equal(attributes, null);
+    // Every layout is tried before giving up: both versions, root and pyramid.
+    assert.deepEqual(asked, [
+      "time/.zattrs",
+      "time/zarr.json",
+      "0/time/.zattrs",
+      "0/time/zarr.json",
+    ]);
   });
 });

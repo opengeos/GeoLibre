@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import i18next from "i18next";
 import { IS_MAS_BUILD } from "./build-flags";
-import { isTauri } from "./tauri-io";
+import { isDesktopRuntime } from "./is-mobile";
 
 export interface MartinBinaryInfo {
   path: string;
@@ -111,8 +111,11 @@ function assertMartinAllowed(): void {
   if (IS_MAS_BUILD) {
     throw new Error(i18next.t("masBuild.unavailable"));
   }
-  if (!isTauri()) {
-    throw new Error("PostgreSQL layers require GeoLibre Desktop.");
+  // Not just "outside Tauri": the packaged Android/iOS apps are Tauri too, and
+  // martin has no mobile build, so they are as unable to spawn it as the web
+  // app is (GeoLibre#2091).
+  if (!isDesktopRuntime()) {
+    throw new Error(i18next.t("addData.postgres.errorDesktopOnly"));
   }
 }
 

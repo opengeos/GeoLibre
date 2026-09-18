@@ -110,6 +110,11 @@ export const EXPRESSION_FUNCTION_CATEGORIES: ExpressionFunctionCategory[] = [
       fn("upcase", '["upcase", ["get", "field"]]', "upcase"),
       fn("downcase", '["downcase", ["get", "field"]]', "downcase"),
       fn("slice", '["slice", ["get", "field"], 0, 3]', "slice"),
+      fn(
+        "number-format",
+        '["number-format", ["get", "field"], {"locale": "en-US", "max-fraction-digits": 2}]',
+        "numberFormat",
+      ),
     ],
   },
   {
@@ -426,7 +431,12 @@ export interface CompiledFeatureExpression {
   ok: boolean;
   /** Parse/compile problems when `ok` is false. */
   errors: string[];
-  evaluate?: (feature: Feature) => unknown;
+  /**
+   * Runs the expression against one feature. `zoom` overrides the zoom the
+   * expression was compiled with, for callers that re-evaluate a
+   * zoom-dependent expression as the camera moves.
+   */
+  evaluate?: (feature: Feature, zoom?: number) => unknown;
 }
 
 /**
@@ -454,11 +464,11 @@ export function compileFeatureExpression(
   if (!validation.ok || !expression) {
     return { ok: false, errors: validation.errors };
   }
-  const zoom = options.zoom ?? 0;
+  const compiledZoom = options.zoom ?? 0;
   return {
     ok: true,
     errors: [],
-    evaluate: (feature) =>
+    evaluate: (feature, zoom = compiledZoom) =>
       expression.evaluateWithoutErrorHandling({ zoom }, {
         type: feature.geometry?.type ?? "Unknown",
         properties: feature.properties ?? {},

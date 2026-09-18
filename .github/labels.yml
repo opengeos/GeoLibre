@@ -45,3 +45,6 @@
 - name: wontfix
   color: "ffffff"
   description: This will not be worked on
+- name: full-e2e
+  color: "1d76db"
+  description: Run the full Playwright feature suite on this pull request

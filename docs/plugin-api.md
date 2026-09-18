@@ -3,7 +3,7 @@
 ## Interface
 
 ```typescript
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition =
@@ -28,6 +28,18 @@ export interface GeoLibrePlugin {
   name: string;
   version: string;
   activeByDefault?: boolean;
+  /**
+   * Renderers this plugin supports. Defaults to `["maplibre"]`.
+   * Engine-neutral plugins (e.g. catalog/service browsers that only write to
+   * the GeoLibre store) or plugins with multi-engine adapters declare
+   * `["maplibre", "cesium"]`; plugins that stay on the Style Spec surface the
+   * two 2D engines share declare `["maplibre", "mapbox"]` (see "Supporting the
+   * Mapbox renderer" below). The Plugins menu gates options against the active
+   * renderer.
+   */
+  engines?: ("maplibre" | "mapbox" | "cesium" | "arcgis")[];
+  /** Plugins in the same group cannot be active at the same time. */
+  exclusiveGroup?: string;
   /** At least one name is required for handleUrlParameters to be called. */
   urlParameterNames?: string[];
   activate: (app: GeoLibreAppAPI) => boolean | void;
@@ -55,6 +67,36 @@ export interface GeoLibreDeckGL {
   mapbox: typeof import("@deck.gl/mapbox");
 }
 
+export interface GeoLibreLayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  opacity: number;
+}
+
+export interface GeoLibreSelection {
+  layerId: string | null;
+  features: Feature<Geometry | null>[];
+}
+
+export interface GeoLibreRasterWindowOptions {
+  bounds: [number, number, number, number];  // WGS84 [west, south, east, north]
+  width?: number;                            // sample grid, default 32
+  height?: number;
+  band?: number;                             // 1-based, default 1
+  signal?: AbortSignal;
+}
+
+export interface GeoLibreRasterWindowReading {
+  values: number[];        // row-major, width * height, nodata included
+  width: number;
+  height: number;
+  band: number;
+  nodata: number | null;
+  overviewLevel: number;
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -62,6 +104,20 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string,
   ) => string;
+  listLayers?: () => GeoLibreLayerSummary[];
+  getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  getSelectedLayerId?: () => string | null;
+  // Sample a raster layer over a geographic window. See "Sampling raster
+  // values" below.
+  readRasterWindow?: (
+    layerId: string,
+    options: GeoLibreRasterWindowOptions,
+  ) => Promise<GeoLibreRasterWindowReading | null>;
+  getDrawnFeatures?: () => Feature<Geometry | null>[];
+  onSelectionChange?: (
+    callback: (selection: GeoLibreSelection) => void,
+  ) => () => void;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
@@ -112,7 +168,25 @@ export interface GeoLibreAppAPI {
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
+  // The extent the primary map currently shows, [west, south, east, north] in
+  // degrees, on either renderer. The engine-neutral replacement for
+  // getMap()?.getBounds() — see "Reading the viewport" below.
+  getViewBounds?: () => [number, number, number, number] | null;
   getMap?: () => import("maplibre-gl").Map | null;
+  // The active primary renderer, including while its canvas is being replaced.
+  getMapRenderer?: () => "maplibre" | "mapbox" | "cesium" | "arcgis";
+  // The native mapbox-gl map, only while Mapbox is the primary renderer; null
+  // otherwise. Built-in plugins read the 2D map through getStyleMap(app), which
+  // falls back to this when getMap() is null — see "Supporting the Mapbox
+  // renderer" below.
+  getMapboxMap?: () => import("mapbox-gl").Map | null;
+  // The primary ArcGIS MapView or SceneView, or null on another renderer.
+  // The shared deck overlay hosts flat maps and local scenes only.
+  getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
+  // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
+  // canvas, readView), or null when the primary map is not a globe. The globe's
+  // counterpart to getMap for plugins that declare engines: ["maplibre", "cesium"].
+  getCesiumScene?: () => import("@geolibre/map").CesiumSceneHandle | null;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,
@@ -142,6 +216,14 @@ export interface GeoLibreAppAPI {
   getActiveRightPanel?: () => string | null;
   setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
+  // Localization (see "Following the app language" below).
+  getLocale?: () => string;
+  onLocaleChange?: (listener: (locale: string) => void) => () => void;
+  translate?: (
+    key: string,
+    defaultValue: string,
+    params?: Record<string, string | number>,
+  ) => string;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -339,6 +421,7 @@ change. If you also touched pages under `docs/`, build the site — CI runs
 | `maplibre-gl-basemap-control` | Adds a MapLibre basemap picker                                                                                      |
 | `maplibre-gl-components`      | Adds the MapLibre Components control grid and panels for FlatGeobuf, COG, PMTiles, Zarr, LiDAR, and Gaussian splats |
 | `maplibre-gl-geo-editor`      | Adds GeoEditor drawing controls                                                                                     |
+| `maplibre-gl-dimensions`      | Adds Dimension tools (linear/angular CAD-style dimension lines, with optional vertex snapping)                     |
 | `maplibre-gl-geoagent`        | Adds GeoAgent map assistant controls                                                                                |
 | `maplibre-gl-lidar`           | Adds LiDAR controls                                                                                                 |
 | `maplibre-gl-streetview`      | Adds street view controls                                                                                           |
@@ -416,6 +499,48 @@ https://web.geolibre.app/?url=https://example.com/project.geolibre.json&exampleG
 
 A URL parameter activates only an already-registered (installed) plugin that owns it; it never loads a plugin from the URL. For external plugins, include the plugin manifest URL in the project `plugins` state (so the plugin is registered) before relying on its URL handler — the matching parameter then activates and dispatches it even if it is not in the active set.
 
+## Read-only layer and feature queries
+
+External plugins can inspect the current layer list, a layer's GeoJSON features,
+the current feature selection, and features in GeoEditor's Sketches layers. The
+methods are optional so the same plugin remains compatible with older hosts.
+
+```typescript
+const layers = app.listLayers?.() ?? [];
+const selectedLayerId = app.getSelectedLayerId?.() ?? null;
+const selectedFeatures = app.getSelectedFeatures?.() ?? [];
+
+if (selectedLayerId && app.getLayerFeatures) {
+  const layerFeatures = app.getLayerFeatures(selectedLayerId);
+  console.log(layers, layerFeatures, selectedFeatures);
+}
+
+const drawnFeatures = app.getDrawnFeatures?.() ?? [];
+```
+
+`getSelectedFeatures` returns every selected feature in the selected layer, not
+only the most recently selected feature. Features without a GeoJSON `id` are
+matched using their zero-based array index converted to a string. An empty
+selection returns an empty array. `getLayerFeatures` throws when the layer id is
+unknown and returns an empty array for a layer that has no GeoJSON features.
+
+Selection subscriptions fire after the selected layer or selected feature-id
+array changes. Keep and call the returned unsubscribe function during plugin
+deactivation:
+
+```typescript
+const unsubscribe = app.onSelectionChange?.(({ layerId, features }) => {
+  console.log(layerId, features);
+});
+
+// In deactivate or another cleanup path:
+unsubscribe?.();
+```
+
+These methods are a read-only query surface: calling them does not change the
+GeoLibre store. Plugins must also treat returned GeoJSON features as read-only
+and use host APIs such as `addGeoJsonLayer` when they need to add data.
+
 ## Raster and tile layers
 
 `addGeoJsonLayer` registers vector data as a native layer. For raster and tile data there are three matching helpers — `addTileLayer` (XYZ), `addWmtsLayer` (WMTS), and `addWmsLayer` (WMS). Each returns the new layer's id, and the layer appears in the Layers panel with full opacity, reorder, and styling support and persists with the project, so a plugin no longer has to call `getMap().addSource()/addLayer()` directly (which leaves the layer invisible to GeoLibre's layer store).
@@ -479,6 +604,8 @@ const cogId = await app.addCogLayer?.(
 );
 ```
 
+`options.engine` picks the renderer (`"maplibre-gl-raster"` for the GPU/deck.gl path, `"cog-tiler-wasm"` for the WebAssembly tiler, `"titiler"` for a TiTiler server). Unlike the other options it is **not per layer**: the raster control holds one engine for every raster it manages, so naming one re-renders the rasters already on the map. Pass `"auto"` to leave whatever the control is on alone; omit it and the GPU renderer is used. The GPU renderer requires a Mercator projection, so a plugin that expects to work on the globe should ask for `"cog-tiler-wasm"`.
+
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 
 The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
@@ -487,7 +614,7 @@ The helpers are typed optional for forward-compatibility with host variants, so 
 
 ## Zarr layers
 
-`addZarrLayer` renders a Zarr store (Zarr v2/v3, Icechunk over HTTP, kerchunk-backed cloud NetCDF) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`.
+`addZarrLayer` renders a Zarr store (Zarr v2/v3 over HTTP) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`. Stores that are not read from a URL — a kerchunk-backed cloud NetCDF, an Icechunk repository, a folder on disk — reach the same renderer through an internal `store` option that this API does not expose, so they are added by GeoLibre's own panels rather than by a plugin.
 
 Do not bundle `@carbonplan/zarr-layer` in a plugin: a second copy ships a duplicate numcodecs WASM payload, and adding the renderer's layer yourself with `getMap().addLayer()` produces a MapLibre **custom** layer, which has no paint properties for the Style panel to drive.
 
@@ -769,6 +896,49 @@ Each item is an **action** (`onSelect`, the default when `type` is omitted), a *
 
 Menus from **external plugins** (loaded from a zip, a manifest URL, or a bundled drop-in) render at the end of the banner, after the Help menu, so third-party menus sit together past the built-in menus. Menus from built-in plugins render beside the built-in menus. The host decides placement from the menu's owning plugin, so you do not need to do anything special.
 
+Every `label` (the menu button's, a submenu trigger's, an action's) accepts a **getter function** as well as a plain string, the same way panel titles do:
+
+```typescript
+app.registerToolbarMenu?.({
+  id: "my-plugin-menu",
+  label: () => app.translate?.("plugin.my-plugin.menu", "Workbench") ?? "Workbench",
+  items: [
+    {
+      id: "open",
+      label: () => app.translate?.("plugin.my-plugin.open", "Open workbench") ?? "Open workbench",
+      onSelect: () => app.openRightPanel?.("my-workbench"),
+    },
+  ],
+});
+```
+
+The host re-reads every label each time it renders the menu tree, and it re-renders on a language change, so a getter follows the app language without your plugin re-registering its menu. A plain string is frozen at registration time. A getter that throws or returns nothing usable degrades to the item's id path and warns once, so a broken label cannot make the menu disappear.
+
+## Following the app language
+
+The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Three methods bridge that gap:
+
+```typescript
+// The active catalog code ("en", "zh", "pt-BR", ...).
+const locale = app.getLocale?.() ?? "en";
+
+// Resolve a key, falling back to your own English text when no catalog has it.
+const title = app.translate?.("plugin.my-plugin.title", "Workbench") ?? "Workbench";
+const label = app.translate?.("plugin.my-plugin.count", "{{n}} features", { n: 3 });
+
+// Re-render when the user switches language. Returns an unsubscribe function —
+// call it from `deactivate`, or the listener keeps re-rendering DOM you no
+// longer own.
+const stop = app.onLocaleChange?.((next) => renderPanel(container, next));
+```
+
+Conventions:
+
+- **Always pass your own English text as `defaultValue`.** GeoLibre's catalogs do not ship your plugin's strings, so the fallback is what makes your UI read correctly today; translations are an upgrade, not a prerequisite.
+- **Namespace your keys by plugin id** (`plugin.<your-id>.<something>`) so they cannot collide with the host's own keys.
+- These methods are typed optional like the rest of the API, so call them with optional chaining and keep a literal fallback.
+- Panel titles and toolbar labels take getters precisely so they can call `app.translate?.()` and stay current; use those rather than re-registering on every language change.
+
 ## Floating panels
 
 A floating panel is a draggable, closeable card the host overlays on the map's top-left corner. Unlike a dockable right panel (one active panel docked at a fixed position), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
@@ -840,11 +1010,12 @@ If instead you want a plugin compiled into the main JS bundle (no `plugin.json`,
   "version": "0.1.0",
   "entry": "dist/index.js",
   "description": "Optional short description",
-  "style": "dist/style.css"
+  "style": "dist/style.css",
+  "engines": ["maplibre", "cesium"]
 }
 ```
 
-The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader.
+The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which of GeoLibre's four map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`). Plugins supporting the native globe add `"cesium"`; plugins that stay on the Style Spec surface can add `"mapbox"` (see "Supporting the Mapbox renderer"); and plugins with an ArcGIS-native adapter can add `"arcgis"` (see the [ArcGIS renderer](arcgis-renderer.md)). The host suspends a plugin when the selected engine is not in this list and restores it when a compatible engine becomes active.
 
 External plugin entries are executed with `import(URL.createObjectURL(...))`, which is why the desktop CSP in `tauri.conf.json` includes `blob:` in `script-src`. Removing `blob:` from `script-src` breaks external plugin loading. Combined with `'unsafe-eval'`, this means code that can create a blob URL can execute scripts, which is acceptable because external plugins are trusted local files installed by the user.
 
@@ -892,3 +1063,343 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by de
 `id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so a plugin hosted alongside the registry (e.g. `sample/plugin.json`) can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. Curate the registry and host plugin bundles in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo, which ships a `sample/` template.
 
 Uninstalling prompts for confirmation, then unregisters the plugin at runtime (deactivating any active map control) so the Plugins menu updates without a reload. When a registry entry advertises a newer `version` than the loaded plugin, the marketplace shows an Update action that re-fetches the manifest URL and re-registers the published version in place; the new version is fetched and validated before the old one is removed, so a failed update leaves the installed plugin intact.
+
+## Assistant tools
+
+Plugins can expose the same action to their panel and the AI Assistant. External
+plugins can use `app.registerAssistantToolSpec` with a plain JSON Schema and a
+callback, without importing or bundling `@strands-agents/sdk` or zod:
+
+```js
+let disposeTool;
+
+export default {
+  id: "city-loader",
+  name: "City loader",
+  version: "1.0.0",
+  activate(app) {
+    // Share this function with the panel's Add button.
+    async function addCities(input) {
+      if (!input || typeof input !== "object" || typeof input.name !== "string") {
+        throw new Error("name must be a string");
+      }
+      const response = await fetch(
+        "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/us_cities.geojson",
+      );
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+      const data = await response.json();
+      const layerId = app.addGeoJsonLayer(input.name, data);
+      return { layerId, featureCount: data.features.length };
+    }
+    disposeTool = app.registerAssistantToolSpec?.({
+      name: "add_cities",
+      description: "Add US cities to the map as a GeoJSON layer",
+      inputSchema: {
+        type: "object",
+        properties: { name: { type: "string" } },
+        required: ["name"],
+        additionalProperties: false,
+      },
+      callback: addCities,
+    });
+  },
+  deactivate() {
+    disposeTool?.();
+    disposeTool = undefined;
+  },
+};
+```
+
+**JSON Schema input is not automatically validated.** The callback must validate
+model-supplied input before performing an action. Return JSON-serializable data
+or a promise of it; a callback returning `undefined` produces `null`. Thrown
+errors become assistant tool error results. Omitting `inputSchema` describes an
+empty object with no additional properties.
+
+Built-in plugins that already import the SDK can instead call
+`app.registerAssistantTool(tool({ name, description, inputSchema, callback }))`,
+using the SDK's `tool()` factory with a zod schema for automatic validation. Both
+entry points use one registry and return an unregister function. External
+plugins should feature-detect these optional methods for older hosts.
+
+The host injects the plugin owner, ignoring any owner argument supplied by a
+plugin. Model-facing names are `plugin_<owner-length>_<plugin-id>_<tool-name>`.
+Names and plugin IDs use letters, digits, underscores, or hyphens, and the full
+name must fit within 64 characters. Names that differ only in case or
+underscore/hyphen spelling are rejected if they collide. Registering the same
+name for the same owner replaces it; an older disposer cannot remove the
+replacement. Tools are removed on deactivation, failed activation, and plugin
+removal, and stale asynchronous registrations after teardown are ignored.
+
+Register from `activate` (or from the app it hands you, including
+asynchronously). A tool lives for exactly one activation, so the app passed to
+the other lifecycle callbacks — `applyProjectState`, `setMapControlPosition`,
+`handleUrlParameters`, `deactivate` — omits both methods: those run for inactive
+plugins, whose registrations no cleanup path would reach.
+
+The assistant refreshes its tools before the next prompt while retaining its
+conversation history. Plugin callbacks execute plugin-authored code, like a
+panel button; they should use the app API to update layers and other app state.
+
+### Assistant guidance
+
+A tool's description is read only after the model has already decided which
+tool to call; that decision is driven by the system prompt. When a plugin's
+tools need rules about *when* to use them (for example, "call
+`get_pm25_ranking` directly, never as a table function inside `run_sql`"),
+register that text as guidance and the host appends it to the assistant's
+system prompt:
+
+```js
+let disposeGuidance;
+
+export default {
+  id: "air-quality",
+  name: "Air quality",
+  version: "1.0.0",
+  activate(app) {
+    // ...register tools as above...
+    disposeGuidance = app.registerAssistantGuidance?.(
+      [
+        "For PM2.5 questions, call plugin_11_air-quality_get_pm25_ranking directly",
+        "with its own arguments. Never wrap it in run_sql or use it as a FROM clause;",
+        "it is not a SQL table function.",
+      ].join(" "),
+    );
+  },
+  deactivate() {
+    disposeGuidance?.();
+    disposeGuidance = undefined;
+  },
+};
+```
+
+Guidance is appended under a `Plugin guidance:` heading after GeoLibre's own
+prompt, in registration order, each block labelled `[plugin <id>]` with the
+plugin that registered it, and never replaces or edits the host text. The
+heading tells the model the text only governs when and how to call the plugin's
+own tools and that the host guidelines still apply. The text itself is not
+filtered: like plugin code, it is trusted once the plugin is loaded, so only
+install plugins you trust. It must be a non-empty string of at most 4000 characters; identical text from the
+same plugin replaces the earlier registration instead of repeating it. Like
+tools, guidance is activation-only: the host injects the plugin owner, ignores
+any owner argument a plugin supplies, removes the text on deactivation, failed
+activation, and plugin removal, and the app handed to the other lifecycle
+callbacks omits the method. The assistant recomposes its system prompt together
+with its tools before the next prompt, keeping the conversation history.
+Feature-detect the method for older hosts.
+
+The host exposes `app.getMapRenderer()` to read the current primary renderer.
+Engine declarations are enforced by the plugin manager for activation, URL
+parameters, project restoration, and delayed control registration, as well as
+by the Plugins menu and command palette. Renderer changes suspend unsupported
+plugins and retain their saved settings and activation for the return trip.
+Compatible plugins remount their controls on the replacement renderer.
+
+### Reading the viewport
+
+A catalog or service browser that narrows its search to what the user can see
+must read the extent through `app.getViewBounds()`, not
+`app.getMap()?.getBounds()`. `getMap()` is null on the globe, so the second
+form yields no bounds there — and a plugin that reads "no bounds" as "no
+filter" then searches the whole world while its "current view only" checkbox
+stays ticked, which is exactly the silent success an `engines` declaration is
+meant to rule out. `getViewBounds` answers from whichever engine is primary
+and unwraps an antimeridian crossing (east > 180), as `MapExtent` does
+everywhere else in the app.
+
+`getViewBounds` has its own `null`: no map mounted yet, the globe mid-morph
+between scene modes, or a camera pointed away from Earth. Do not read that as
+"no filter" — widening the search is the same lie in a second place. Refuse the
+search and say the extent is unavailable, as the ArcGIS Hub panel does.
+
+A frontend test scans every plugin that declares Cesium support, follows its
+relative imports so a plugin split across a subdirectory is covered too, and
+fails on a `getMap()`-routed bounds read — chained or split across two
+statements. A call that deliberately branches on `getMap()` being null carries
+an `engine-audit-allow: getMap-bounds` comment on its own line or just above
+it, with the reason — the opt-out is scoped to that call, so a second bounds
+read elsewhere in the same module still reports.
+
+A plugin that drives the renderer directly branches on which handle is
+non-null: `app.getMap()` on MapLibre, `app.getCesiumScene()` on the globe. The
+Cesium handle carries the `@cesium/engine` namespace alongside the live widget,
+scene, camera, and clock, so a plugin constructs Cesium objects (`SunLight`,
+`JulianDate`, `Cartesian3`) without importing the engine itself — which is what
+keeps Cesium off the 2D boot path. Its `primary` flag distinguishes the primary
+map area from a grid pane; the built-in environment plugins bind to the
+primary map only, as they do on MapLibre. The Sun simulation (native
+`SunLight`, globe lighting, and the scene clock), Atmospheric Effects (the sky
+box, `SkyAtmosphere` hue/saturation/brightness shifts, and the background
+colour), the Flight Simulator (`camera.setView` each frame with navigation
+inputs suspended), and the Clouds / Precipitation overlays (store tile layers)
+are the reference implementations of this pattern. A plugin bound to the globe
+must restore any scene state it changes on `deactivate`, because both engines
+are rebuilt on a renderer swap and the host re-activates compatible plugins
+against the new one.
+
+### Sampling raster values
+
+`app.readRasterWindow(layerId, options)` reads one band of a raster layer over
+a geographic window, downsampled to a small grid. It is what the viewport
+stretch uses: pair it with `getViewBounds()` to compute a rescale range from
+the pixels actually on screen, rather than from the whole scene.
+
+It resolves `null` when the layer is unavailable: missing, or not a raster the
+control has loaded. Bounds that do not intersect the raster are **not** `null`.
+That is a reading with an empty `values`, so check the length rather than only
+the null. It reads from the nearest suitable overview for the requested
+`width`/`height`, so a 32x32 window over a continent is a cheap batched read
+rather than one request per sample.
+
+`values` is row-major, and the two ways a cell can be unusable are different.
+Unreadable tiles come back as `NaN`, but **NoData pixels keep their sentinel
+value**, and a sentinel like `-9999` is perfectly finite. Filtering on
+`Number.isFinite` alone therefore leaves the fill in and drags a min/max
+stretch down to it. Compare against `reading.nodata` as well:
+
+```typescript
+const bounds = app.getViewBounds?.();
+if (!bounds) return;  // no map mounted, or the globe is mid-morph
+const reading = await app.readRasterWindow?.(layerId, {
+  bounds,
+  band: 1,
+  width: 32,
+  height: 32,
+  signal: controller.signal,
+});
+const values =
+  reading?.values.filter(
+    (value) => Number.isFinite(value) && value !== reading.nodata,
+  ) ?? [];
+if (values.length === 0) return;  // window missed the raster entirely
+```
+
+Pass a `signal` for anything driven by camera movement and abort the previous
+read when a new one starts, so a fast pan does not queue a backlog of reads
+whose results land out of order.
+
+### Supporting the Mapbox renderer
+
+The Mapbox renderer (`docs/mapbox-renderer.md`) draws with Mapbox GL JS, whose
+runtime API is the Style Spec surface MapLibre grew out of: sources and style
+layers (`addSource`, `addLayer`, `setPaintProperty`, `setLayoutProperty`,
+`setFilter`, `getSource`, `getLayer`, `getStyle`, `moveLayer`), images
+(`addImage`, `updateImage`), the camera (`getBounds`, `getZoom`, `easeTo`,
+`jumpTo`, `fitBounds`, `project`, `unproject`), events (`on` / `off` / `once`),
+the DOM (`getCanvas`, `getContainer`) and picking (`queryRenderedFeatures`).
+`IControl` is the same contract, and `app.addMapControl` mounts a MapLibre-typed
+control on the Mapbox map through an adapter that aliases the
+`.maplibregl-ctrl-*` corner classes; the docked right-panel bridge the Web
+Services panels use mounts through the same door. A plugin that stays on that
+surface declares `engines: ["maplibre", "mapbox"]` and users can toggle it from
+the Plugins menu on either 2D engine; the plugin manager re-activates it
+against the new map on a renderer swap.
+
+`app.getMap()` is `null` on Mapbox by design, so such a plugin must not reach
+the map through it alone — that is the same silent no-op the globe rule above
+guards against. Built-in plugins read the map through
+`getStyleMap(app)` (`packages/plugins/src/plugins/style-map.ts`): the MapLibre
+map when there is one, else the Mapbox map through MapLibre's types (the cast
+the engine itself applies when hosting a control). External plugins do the
+equivalent with `app.getMap?.() ?? app.getMapboxMap?.()`. The cast is honest
+only for the shared surface; a mapbox-gl map has none of MapLibre's extensions:
+
+- `addProtocol` / `removeProtocol` — `pmtiles://`, COG and other custom tile
+  protocols do not load, which is why the COG raster control stays
+  MapLibre-only (Overture Maps instead asks `maplibre-gl-overture-maps` for
+  plain `.pmtiles` URLs, which mapbox-gl 3.30+ reads through its own tile
+  provider). `setTransformRequest` — Mapbox takes `transformRequest`
+  only at construction, so GeoLens private rasters (whose API key is injected
+  per request) are MapLibre-only. Custom `CustomLayerInterface` layers
+  (`capabilities.customLayers` is false on Mapbox). The terrain camera helpers
+  (`calculateCameraOptionsFromCameraLngLatAltRotation`,
+  `getCenterClampedToGround`): Mapbox kept the free camera those replaced, so
+  the Flight Simulator flies it there through `setFreeCameraOptions` and a
+  `MercatorCoordinate` carrying the altitude. The `transform` / `_camera`
+  internals some upstream controls read.
+- `getProjection()` differs in shape: `{ type: "globe" }` on MapLibre,
+  `{ name: "globe" }` on Mapbox; `setProjection` takes `{ type }` on MapLibre
+  and a name string (or `{ name }`) on Mapbox. Read both.
+- MapLibre's `Popup` and `Marker` classes imported from `maplibre-gl` do not
+  work on a mapbox-gl map: their update path reads `map._camera.transform` and
+  throws on the first move. A plugin that needs markers on both engines
+  positions a DOM element through `map.project` instead, as the Elements panel
+  does. When an upstream library insists on constructing the engine's own
+  classes, `app.getMapboxGl()` hands out the mapbox-gl namespace: the Geo Editor
+  feeds its `Marker` / `LngLatBounds` to Geoman's map adapter and its `Popup` to
+  `maplibre-gl-geo-editor`'s `createPopup` option (`geo-editor-mapbox.ts`),
+  Street View feeds its `Marker` to `maplibre-gl-streetview`'s `createMarker`
+  option, Layer Swipe feeds its `Map` to `maplibre-gl-swipe`'s `createMap`
+  option, which builds the clipped comparison pane, and GeoAgent hands
+  `maplibre-gl-geoagent`'s `mapEngine` option the whole namespace
+  (`geoagent-map-engine.ts`) — not a narrowed subset, because its
+  `run_maplibre_script` tool passes it straight to the script it runs. The
+  pattern upstream is the same each time: the library keeps the element and its
+  styling and takes only the engine class that positions it.
+  A plugin that constructs a *second* Mapbox map must also pass
+  `app.getMapboxAccessToken()` in its constructor options: mapbox-gl reads its
+  token from the global `mapboxgl.accessToken` unless handed one, and GeoLibre
+  sets it per map, so a second map built without it renders nothing and logs
+  every frame.
+
+The same frontend audit that scans Cesium-capable plugins scans every plugin
+declaring Mapbox support, follows its relative imports, and fails on a read
+through `app.getMap()` that does not fall back to `getMapboxMap` on the same
+line (mark a deliberate MapLibre-detection branch with
+`engine-audit-allow: getMap-mapbox`) and on any of the MapLibre-only members
+above (`engine-audit-allow: maplibre-only` for a call behind a runtime engine
+check). Both opt-outs are scoped to the call, on its line or just above it.
+
+Store layers work the same way on both 2D engines. A raster or WMS layer a
+control created natively and mirrored into the store as an external native
+layer (`externalNativeLayer: true` with `metadata.sourceId` and
+`nativeLayerIds`, as the Web Services, basemap, Esri Wayback and USGS LiDAR
+index controls do) is adopted by the Mapbox engine under those native ids — it
+is not drawn twice, store visibility/opacity/removal apply to the control's
+layer, and a style reload rebuilds it, exactly as MapLibre's layer-sync does.
+A store layer the engine cannot compile from its `source` — a
+`registerExternalNativeLayer` record with no drawable source, or a kind whose
+pixels only the plugin can produce (`time-slider`, `timelapse`,
+`openaerialmap-footprints`) — counts as plugin-owned (`isMapboxPluginLayer` in
+`packages/map/src/mapbox-layers.ts`): the engine leaves drawing to the plugin
+and only mirrors the store's visibility and opacity onto the plugin's
+`nativeLayerIds` through the shared paint builders, honouring
+`metadata.controlOwnsPaint`.
+
+### What a MapLibre control gets on the globe
+
+`app.addMapControl` works under Cesium too. The globe mounts the control's DOM
+in the same four `.maplibregl-ctrl-{top,bottom}-{left,right}` corner containers
+over its canvas — so the scoped CSS in `index.css` keeps applying — and hands
+`onAdd` a MapLibre-shaped facade over the Cesium scene rather than a real
+`Map`. The facade answers:
+
+- `getContainer`, `getCanvas`, `isStyleLoaded`, and the `Evented` methods
+  (`on` / `off` / `once` / `fire`). `getContainer` returns the sized canvas
+  parent so controls can anchor their panels. Camera `movestart`, `move`, and
+  `moveend`, canvas `resize`, and geographic mouse events reach subscriptions;
+  pointer events over space are omitted because they have no ground location.
+  The host removes these subscriptions when the globe is destroyed.
+- `getCenter`, `getZoom`, `getBearing`, `getPitch` from the store's map view,
+  and `jumpTo` / `flyTo` / `easeTo` by writing it back.
+- `project`, `unproject`, and `getBounds` from the live scene: a coordinate is
+  projected on the terrain surface, a screen point is picked against terrain
+  then the ellipsoid, and the bounds come from the camera's view rectangle. A
+  coordinate the scene cannot place reads as off-screen window coordinates, a
+  screen point that misses the globe unprojects to the view centre, and a
+  camera with no bounded view rectangle reports the whole world — the same
+  shapes MapLibre's globe projection answers with, so a control keeps running
+  instead of throwing mid-render.
+- `setStyle(url)`, routed to the project basemap.
+
+Everything that paints through the Mapbox Style Spec, including `addSource`,
+`removeSource`, `addLayer`, `removeLayer`,
+`setPaintProperty`, `setLayoutProperty`, `getStyle` — **throws**. That is the
+honest boundary: a control that draws its own map layers has no globe
+representation, and a silent no-op would leave it reporting success while
+nothing appears. `addMapControl` catches the throw and returns `false`, so a
+control that trips it fails to mount rather than taking plugin activation down
+with it. A plugin whose control needs those methods should keep the default
+`engines: ["maplibre"]` and, if the globe matters, add a Cesium branch through
+`app.getCesiumScene()`.

@@ -1,5 +1,7 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { isFullViewportMapCanvas } from "./print-capture";
+// The subpath keeps this module loadable outside the browser (the package
+// barrel pulls in MapLibre's stylesheet), which the recorder tests rely on.
+import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
 
 /**
  * Records the live map to a video file by capturing the MapLibre canvas.
@@ -565,7 +567,7 @@ export async function rasterizeDomOverlays(
 }
 
 export interface RecordMapOptions {
-  map: MapLibreMap;
+  map: Pick<MapLibreMap, "getCanvas" | "getContainer">;
   /** Screen rectangle to capture, or null/omitted for the whole viewport. */
   region?: RecordRegion | null;
   /**

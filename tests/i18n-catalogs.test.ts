@@ -72,6 +72,46 @@ describe("i18n catalogs", () => {
 
   const enStrings = flatStrings(loadCatalog("en"));
 
+  it("keeps optional Whitebox metadata out of bundled locale catalogs", () => {
+    for (const code of localeCodes) {
+      const processing = loadCatalog(code).processing as {
+        toolMeta?: Record<string, unknown>;
+        whitebox?: Record<string, unknown>;
+      };
+      assert.equal(processing.toolMeta?.whitebox, undefined, `${code}.json bundles Whitebox tools`);
+      assert.equal(processing.whitebox?.categories, undefined, `${code}.json bundles categories`);
+      assert.equal(processing.whitebox?.menuTool, undefined, `${code}.json bundles menu tools`);
+      assert.equal(
+        processing.whitebox?.menuSubcategory,
+        undefined,
+        `${code}.json bundles menu subcategories`,
+      );
+    }
+  });
+
+  it("covers the Processing vector toolbar keys in English and Chinese", () => {
+    const keys = [
+      "decodePolyline",
+      "encodePolyline",
+      "reproject",
+      "explode",
+      "aggregate",
+      "smooth",
+    ];
+    for (const code of ["en", "zh"]) {
+      const toolbar = loadCatalog(code).toolbar as {
+        vectorTool: Record<string, unknown>;
+      };
+      for (const key of keys) {
+        assert.equal(
+          typeof toolbar.vectorTool[key],
+          "string",
+          `${code}.json toolbar.vectorTool.${key}`,
+        );
+      }
+    }
+  });
+
   for (const code of localeCodes.filter((c) => c !== "en")) {
     it(`${code}: preserves interpolation placeholders for translated keys`, () => {
       const strings = flatStrings(loadCatalog(code));

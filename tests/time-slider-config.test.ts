@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  __resetBoundFilterScheduleForTests,
   __reconcileBoundLayersForTests,
+  __scheduleBoundFiltersForTests,
+  buildDefaultOptions,
   configToOptions,
   getLayerTimeBinding,
   createStoreLayer,
@@ -37,7 +40,69 @@ function baseConfig(overrides: Record<string, unknown> = {}): Record<string, unk
 // Clear the plugin's persisted config between tests (no control is active, so a
 // null state simply resets savedConfig to null).
 afterEach(() => {
+  __resetBoundFilterScheduleForTests();
   apply(null);
+});
+
+describe("Time Slider playback defaults", () => {
+  it("stops at the end unless the user explicitly enables looping", () => {
+    assert.equal(buildDefaultOptions().loop, false);
+  });
+});
+
+describe("Time Slider bound-filter backpressure", () => {
+  it("applies the first date immediately and collapses rapid ticks to the latest date", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const previousLayers = useAppStore.getState().layers;
+    const layer = {
+      id: "buildings",
+      name: "Buildings",
+      type: "vector-tiles",
+      source: { type: "vector" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {
+        timeBinding: {
+          property: "construction_year",
+          valueKind: "year",
+          min: Date.UTC(1719, 0, 1),
+          max: Date.UTC(2026, 0, 1),
+          granularity: "year",
+          cumulative: true,
+          window: { unit: "year", before: 0, after: 1 },
+        },
+      },
+    } satisfies GeoLibreLayer;
+    let currentDate = "1900-01-01T00:00:00.000Z";
+    const control = {
+      getConfig: () => ({ currentDate }),
+    } as unknown as TimeSliderControl;
+    const upperYear = (): number | undefined => {
+      const filter = useAppStore.getState().layers[0]?.timeFilter;
+      return Array.isArray(filter) ? ((filter.at(-1) as unknown[])?.at(-1) as number) : undefined;
+    };
+
+    try {
+      useAppStore.setState({ layers: [layer] });
+      __scheduleBoundFiltersForTests(control);
+      assert.equal(upperYear(), 1901, "the leading date should render immediately");
+
+      currentDate = "1901-01-01T00:00:00.000Z";
+      __scheduleBoundFiltersForTests(control);
+      currentDate = "1902-01-01T00:00:00.000Z";
+      __scheduleBoundFiltersForTests(control);
+      assert.equal(upperYear(), 1901, "intermediate worker-invalidating filters are held back");
+
+      t.mock.timers.tick(249);
+      assert.equal(upperYear(), 1901);
+      t.mock.timers.tick(1);
+      assert.equal(upperYear(), 1903, "the trailing apply should use only the newest date");
+    } finally {
+      __resetBoundFilterScheduleForTests();
+      useAppStore.setState({ layers: previousLayers });
+    }
+  });
 });
 
 describe("Time Slider open-ended end date persistence", () => {
@@ -121,6 +186,43 @@ describe("Time Slider selector display-unit restoration", () => {
     } finally {
       detach();
       useAppStore.setState({ layers: previousLayers });
+    }
+  });
+});
+
+describe("Time Slider KML frame granularity", () => {
+  it("offers the hour unit for sub-day KML frames on a year/month/day track", () => {
+    const store = useAppStore.getState();
+    const previousLayers = store.layers;
+    const frame = (id: string, begin: number): GeoLibreLayer => ({
+      id,
+      name: id,
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: { timeSpan: { begin, end: begin + 3_600_000 } },
+    });
+    const ranges: unknown[][] = [];
+    const granularities: string[][] = [];
+    const control = {
+      getConfig: () => baseConfig({ granularities: ["year", "month", "day"] }),
+      setRange: (...args: unknown[]) => ranges.push(args),
+      setGranularities: (units: string[]) => granularities.push(units),
+    } as unknown as TimeSliderControl;
+
+    try {
+      useAppStore.setState({
+        layers: [frame("t0", Date.UTC(2024, 0, 1)), frame("t1", Date.UTC(2024, 0, 1, 1))],
+      });
+      __reconcileBoundLayersForTests(control);
+      assert.equal(ranges.at(-1)?.[3], "hour");
+      assert.deepEqual(granularities.at(-1), ["hour", "year", "month", "day"]);
+    } finally {
+      useAppStore.setState({ layers: previousLayers });
+      // Reset the module's captured pre-binding range for later tests.
+      __reconcileBoundLayersForTests(control);
     }
   });
 });
@@ -237,6 +339,31 @@ describe("Time Slider store layer identify metadata", () => {
     } as SourceSpec);
     assert.equal(layer.metadata.identifiable, true);
     assert.equal(layer.metadata.pixelIdentify, true);
+  });
+
+  it("keeps the hosted mosaic template on its store mirror for share readiness", () => {
+    const url =
+      "https://huggingface.co/datasets/giswqs/PACE-Water-Quality/resolve/main/json/{date:YYYYMMDD}_acdom.json";
+    const layer = createStoreLayer({
+      type: "mosaic",
+      id: "acdom",
+      name: "aCDOM440",
+      url,
+    } as SourceSpec);
+
+    assert.equal(layer.source.sourceId, "acdom");
+    assert.equal(layer.metadata.originalUrl, url);
+  });
+
+  it("uses the first non-empty authored URL", () => {
+    const layer = createStoreLayer({
+      type: "xyz",
+      id: "tiles",
+      url: "",
+      tiles: "https://example.com/{z}/{x}/{y}.png",
+    } as unknown as SourceSpec);
+
+    assert.equal(layer.metadata.originalUrl, "https://example.com/{z}/{x}/{y}.png");
   });
 
   it("leaves pre-rendered tile sources unidentifiable", () => {

@@ -1,5 +1,5 @@
 import { isAllowedPluginManifestUrl } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -30,6 +30,8 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type ComponentType,
+  type ReactElement,
   type RefObject,
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
@@ -44,7 +46,7 @@ import {
   uninstallPluginArchiveFromFile,
   upgradeExternalPlugin,
 } from "../../hooks/usePlugins";
-import type { InstalledWebPlugin } from "../../lib/external-plugins";
+import { pluginManifestUrlsForIds, type InstalledWebPlugin } from "../../lib/external-plugins";
 import {
   fetchPluginRegistry,
   isNewerVersion,
@@ -58,6 +60,7 @@ import {
   pickLocalPathWithFallback,
 } from "../../lib/tauri-io";
 import { openExternalLink } from "../../lib/open-external";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 
 type ManageSection = "all" | "installed" | "not-installed" | "upgradeable" | "settings";
 
@@ -77,10 +80,17 @@ const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
 const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
 const getPluginManagerVersion = () => getPluginManager().getVersion();
 
+type ManagePluginsTransProps = {
+  i18nKey: "managePlugins.description";
+  components: Record<string, ReactElement>;
+};
+
+const ManagePluginsTrans = Trans as ComponentType<ManagePluginsTransProps>;
+
 interface ManagePluginsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 export function ManagePluginsDialog({
@@ -208,7 +218,13 @@ export function ManagePluginsDialog({
   const isUpgradeable = useCallback(
     (entry: PluginRegistryEntry) => {
       const loaded = loadedVersions.get(entry.id);
-      return isInstalled(entry) && loaded !== undefined && isNewerVersion(entry.version, loaded);
+      const ownsLoadedPlugin = pluginManifestUrlsForIds([entry.id]).includes(entry.manifestUrl);
+      return (
+        isInstalled(entry) &&
+        ownsLoadedPlugin &&
+        loaded !== undefined &&
+        isNewerVersion(entry.version, loaded)
+      );
     },
     [isInstalled, loadedVersions],
   );
@@ -371,7 +387,15 @@ export function ManagePluginsDialog({
     setSettingsError(null);
   }, [newManifestUrl, installUrl]);
 
-  const entries = registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
+  const registryEntries = registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
+  // A registry entry whose id is already provided by GeoLibre (or by a bundled
+  // drop-in) must not offer an Install button: the loader would reject it as an
+  // id collision. Keep entries that were previously installed by URL visible
+  // so users can remove that old installation after a plugin moves built-in.
+  const entries = useMemo(
+    () => registryEntries.filter((entry) => isInstalled(entry) || !loadedVersions.has(entry.id)),
+    [isInstalled, loadedVersions, registryEntries],
+  );
   const installedCount = useMemo(() => entries.filter(isInstalled).length, [entries, isInstalled]);
   const upgradeableCount = useMemo(
     () => entries.filter(isUpgradeable).length,
@@ -396,7 +420,14 @@ export function ManagePluginsDialog({
     const term = query.trim().toLowerCase();
     const matches = (entry: PluginRegistryEntry) =>
       !term ||
-      [entry.name, entry.id, entry.description, ...(entry.categories ?? [])]
+      [
+        entry.name,
+        // The card shows the localized name, so it must be searchable too.
+        pluginDisplayName(t, entry),
+        entry.id,
+        entry.description,
+        ...(entry.categories ?? []),
+      ]
         .filter((field): field is string => Boolean(field))
         .some((field) => field.toLowerCase().includes(term));
     return (
@@ -421,7 +452,7 @@ export function ManagePluginsDialog({
             a.id.localeCompare(b.id),
         )
     );
-  }, [entries, isInstalled, isUpgradeable, query, section]);
+  }, [entries, isInstalled, isUpgradeable, query, section, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -432,7 +463,7 @@ export function ManagePluginsDialog({
         <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>{t("managePlugins.title")}</DialogTitle>
           <DialogDescription>
-            <Trans
+            <ManagePluginsTrans
               i18nKey="managePlugins.description"
               components={{
                 registryLink: (
@@ -558,6 +589,11 @@ export function ManagePluginsDialog({
                     const updateAvailable = isUpgradeable(entry);
                     const loadPending = isLoadPending(entry);
                     const loadIssue = externalLoadIssues.get(entry.manifestUrl);
+                    // One resolution per card: the visible title and every
+                    // accessible label must announce the same string, or a
+                    // screen reader reads the plugin's English name over a
+                    // localized title.
+                    const displayName = pluginDisplayName(t, entry);
                     return (
                       <div
                         key={entry.id}
@@ -565,7 +601,7 @@ export function ManagePluginsDialog({
                       >
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{entry.name}</span>
+                            <span className="truncate text-sm font-medium">{displayName}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               v{entry.version}
                             </span>
@@ -576,7 +612,7 @@ export function ManagePluginsDialog({
                                 rel="noreferrer"
                                 className="shrink-0 text-muted-foreground hover:text-foreground"
                                 aria-label={t("managePlugins.openHomepageAria", {
-                                  name: entry.name,
+                                  name: displayName,
                                 })}
                                 onClick={(event) => {
                                   event.preventDefault();
@@ -632,7 +668,7 @@ export function ManagePluginsDialog({
                               size="sm"
                               variant="outline"
                               disabled={!compatible}
-                              aria-label={t("managePlugins.installAria", { name: entry.name })}
+                              aria-label={t("managePlugins.installAria", { name: displayName })}
                               onClick={() => installUrl(entry.manifestUrl)}
                             >
                               <Download className="h-3.5 w-3.5" />
@@ -649,7 +685,7 @@ export function ManagePluginsDialog({
                                 variant="outline"
                                 className="text-destructive"
                                 aria-label={t("managePlugins.confirmUninstallAria", {
-                                  name: entry.name,
+                                  name: displayName,
                                 })}
                                 onClick={() => {
                                   uninstallUrl(entry.manifestUrl);
@@ -675,7 +711,7 @@ export function ManagePluginsDialog({
                                   size="sm"
                                   variant="outline"
                                   disabled={busyId === entry.id}
-                                  aria-label={t("managePlugins.updateAria", { name: entry.name })}
+                                  aria-label={t("managePlugins.updateAria", { name: displayName })}
                                   onClick={() => void handleUpgrade(entry)}
                                 >
                                   {busyId === entry.id ? (
@@ -708,7 +744,7 @@ export function ManagePluginsDialog({
                                 variant="ghost"
                                 className="h-8 w-8"
                                 disabled={busyId === entry.id}
-                                aria-label={t("managePlugins.uninstallAria", { name: entry.name })}
+                                aria-label={t("managePlugins.uninstallAria", { name: displayName })}
                                 onClick={() => {
                                   setActionError(null);
                                   setConfirmRemoveId(entry.id);
@@ -820,7 +856,9 @@ function SettingsTab({
               <div key={plugin.id} className="flex items-center gap-2 rounded-md border p-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-xs font-medium">{plugin.name}</span>
+                    <span className="truncate text-xs font-medium">
+                      {pluginDisplayName(t, plugin)}
+                    </span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       v{plugin.version}
                     </span>
@@ -834,7 +872,9 @@ function SettingsTab({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 shrink-0"
-                  aria-label={t("managePlugins.uninstallAria", { name: plugin.name })}
+                  aria-label={t("managePlugins.uninstallAria", {
+                    name: pluginDisplayName(t, plugin),
+                  })}
                   onClick={() => onUninstallFromFile(plugin.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

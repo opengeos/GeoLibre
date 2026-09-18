@@ -7,11 +7,19 @@
 // operator repoints a *prebuilt* image with `-e GEOLIBRE_…=…` instead of
 // rebuilding it.
 //
+// One exception to the `VITE_*` rule: the entrypoint also writes the bare
+// `GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT`, whose reader is a plugin loaded from
+// outside this repo and so is not bound by our naming. It is published alongside
+// the `VITE_*` aliases this module reads, not instead of them, so nothing here
+// needs to handle it.
+//
 // Precedence for anything configurable both ways is deployment env first, then
 // the build-time Vite env — the deployment is the more specific statement, and
 // the published image is built with the defaults. `readDeploymentAssistantEnv`
 // and `readEmbedOrigins` established that order; this module is the shared
 // implementation for the settings that are a single URL.
+
+import { getBuildEnvironment } from "@geolibre/core";
 
 /** A `VITE_*`-keyed env record, from either the build or the deployment. */
 export type EnvRecord = Record<string, string | undefined> | undefined;
@@ -28,13 +36,13 @@ export function readDeploymentEnv(): EnvRecord {
  *
  * @param key - The variable name, e.g. `VITE_GEOLIBRE_SHARE_URL`.
  * @param deploymentEnv - Runtime env; defaults to the value on `window`.
- * @param buildEnv - Build-time env; defaults to `import.meta.env`.
+ * @param buildEnv - Build-time env; defaults to the allowlisted build env.
  * @returns The first non-blank value found, or undefined when neither sets it.
  */
 export function readDeploymentEnvValue(
   key: string,
   deploymentEnv: EnvRecord = readDeploymentEnv(),
-  buildEnv: EnvRecord = import.meta.env as EnvRecord,
+  buildEnv: EnvRecord = getBuildEnvironment() as EnvRecord,
 ): string | undefined {
   for (const source of [deploymentEnv, buildEnv]) {
     const value = source?.[key];

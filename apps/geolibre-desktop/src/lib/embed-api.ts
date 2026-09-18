@@ -13,7 +13,12 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
-import { LAYER_TYPES, hasRestorableLayerSource, validateMapExpression } from "@geolibre/core";
+import {
+  LAYER_TYPES,
+  getBuildEnvironment,
+  hasRestorableLayerSource,
+  validateMapExpression,
+} from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
@@ -75,7 +80,7 @@ export function parseEmbedOrigins(raw: unknown): string[] {
  * so an operator can set it with `-e GEOLIBRE_EMBED_ORIGINS=...` without
  * rebuilding) before the build-time Vite env.
  *
- * @param viteEnv - Build-time env; defaults to `import.meta.env`.
+ * @param viteEnv - Build-time env; defaults to the allowlisted build env.
  * @param deploymentEnv - Runtime env; defaults to the value the Docker image
  *   writes onto `window`.
  * @returns The allowed origins, empty when the API is not enabled.
@@ -89,7 +94,7 @@ export function readEmbedOrigins(viteEnv?: EnvRecord, deploymentEnv?: EnvRecord)
           .__GEOLIBRE_DEPLOYMENT_ENV__);
   const fromRuntime = parseEmbedOrigins(runtime?.[EMBED_ORIGINS_ENV]);
   if (fromRuntime.length > 0) return fromRuntime;
-  const build = viteEnv ?? (import.meta.env as EnvRecord);
+  const build = viteEnv ?? (getBuildEnvironment() as EnvRecord);
   return parseEmbedOrigins(build?.[EMBED_ORIGINS_ENV]);
 }
 
@@ -141,8 +146,11 @@ export type EmbedCommand =
   | { type: "setLayerVisibility"; layerId: string; visible: boolean }
   | { type: "listLayers" }
   | { type: "setFilter"; layerId: string; expression: unknown[] | null }
+  | { type: "getRenderer" }
+  | { type: "setRenderer"; renderer: "maplibre" | "cesium" | "mapbox" | "arcgis" }
   | { type: "getViewport" }
   | { type: "addLayer"; spec: AddLayerSpec }
+  | { type: "addData"; url: string; styleUrl: string | null; fit: boolean }
   | { type: "exportImage" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
@@ -158,6 +166,7 @@ export type EmbedEventType =
   | "ack"
   | "projectLoaded"
   | "selectionChanged"
+  | "rendererchange"
   | "viewChanged"
   | "toolCompleted"
   | "serverFileWritten";
@@ -335,7 +344,9 @@ function parseToolParams(value: unknown): Record<string, string> {
  * null when it is a usable filter.
  *
  * `setFilter` stores its expression as `layer.embedFilter`, which `layer-sync`
- * merges into every render layer's filter (`["all", <geometry>, …]`). A
+ * merges into every render layer's filter (`["all", <geometry>, …]`) alongside
+ * the layer's own quick filters, so a host filter and a user's filter narrow
+ * the layer together rather than clobbering each other. A
  * malformed one cannot be reported from there: the store write always succeeds,
  * so the host would get `ok: true` and the failure would surface later, on a
  * `setFilter` call the host is no longer waiting on — or not at all. Compiling
@@ -494,6 +505,17 @@ export function parseEmbedRequest(
       }
       return { command: { type: "loadProject", url: payload.url }, requestId };
     }
+    case "getRenderer":
+      return { command: { type: "getRenderer" }, requestId };
+    case "setRenderer":
+      if (
+        payload.renderer !== "maplibre" &&
+        payload.renderer !== "cesium" &&
+        payload.renderer !== "mapbox" &&
+        payload.renderer !== "arcgis"
+      )
+        return fail("setRenderer: renderer must be maplibre, cesium, mapbox, or arcgis");
+      return { command: { type: "setRenderer", renderer: payload.renderer }, requestId };
     case "setView": {
       const target = parseSetView(payload);
       if (!target) return fail("setView: expected a bbox or a center/zoom camera");
@@ -580,6 +602,29 @@ export function parseEmbedRequest(
       }
       return {
         command: { type: "addLayer", spec: spec as unknown as AddLayerSpec },
+        requestId,
+      };
+    }
+    case "addData": {
+      if (!isFetchableUrl(payload.url) || !/^https?:/i.test(payload.url)) {
+        return fail("addData: url must be an http(s) URL");
+      }
+      if (
+        payload.styleUrl !== undefined &&
+        (!isFetchableUrl(payload.styleUrl) || !/^https?:/i.test(payload.styleUrl))
+      ) {
+        return fail("addData: styleUrl must be an http(s) URL");
+      }
+      if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
+        return fail("addData: fit must be a boolean");
+      }
+      return {
+        command: {
+          type: "addData",
+          url: payload.url,
+          styleUrl: typeof payload.styleUrl === "string" ? payload.styleUrl : null,
+          fit: payload.fit ?? true,
+        },
         requestId,
       };
     }

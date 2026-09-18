@@ -19,6 +19,18 @@ describe("isKnownWhiteboxToolId", () => {
     assert.equal(isKnownWhiteboxToolId("write_geoparquet"), true);
   });
 
+  it("accepts the app-native global DEM tool without adding a duplicate menu entry", () => {
+    assert.equal(isKnownWhiteboxToolId("download_global_dem"), true);
+    assert.deepEqual(
+      whiteboxToolFromSearch("?tool=download_global_dem&bbox=-84%2C35%2C-83%2C36&bbox_crs=4326"),
+      {
+        toolId: "download_global_dem",
+        known: true,
+        parameters: { bbox: "-84,35,-83,36", bbox_crs: "4326" },
+      },
+    );
+  });
+
   it("rejects ids not in the catalog", () => {
     assert.equal(isKnownWhiteboxToolId("not_a_real_tool"), false);
     assert.equal(isKnownWhiteboxToolId(""), false);

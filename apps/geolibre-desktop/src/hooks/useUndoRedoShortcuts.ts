@@ -25,6 +25,11 @@ export function useUndoRedoShortcuts(): void {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       if (isEditableTarget(e.target)) return;
+      // Undo/redo author the project, so a deployment that withheld
+      // `project:edit` withholds the keys too (issue #1673). This handler is
+      // its own listener rather than a registry command, so the capability
+      // filter on the command palette never sees it.
+      if (!useAppStore.getState().deploymentCapabilities.has("project:edit")) return;
       const key = e.key.toLowerCase();
       // Ctrl/Cmd+Shift+Z, or the Windows-style Ctrl+Y (Ctrl only, not Cmd+Y).
       const isRedo = (key === "z" && e.shiftKey) || (key === "y" && e.ctrlKey && !e.shiftKey);

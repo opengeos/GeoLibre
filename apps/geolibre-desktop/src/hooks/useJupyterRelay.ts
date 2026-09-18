@@ -1,5 +1,5 @@
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { subscribeJupyterServer } from "../lib/jupyter";
 import {
   type RelayCommand,
@@ -34,7 +34,7 @@ import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   command handlers.
  */
-export function useJupyterRelay(mapControllerRef: RefObject<MapController | null>): void {
+export function useJupyterRelay(mapControllerRef: RefObject<MapEngine | null>): void {
   useEffect(() => {
     const handlers = createScriptingHandlers({
       getController: () => mapControllerRef.current,

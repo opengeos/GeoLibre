@@ -11,7 +11,7 @@ Photogrammetry and mesh datasets stream in as [3D Tiles](user-guide/adding-data.
 and render on deck.gl over the MapLibre map, including authenticated tilesets via
 custom request headers.
 
-[![GeoLibre showing 3D Tiles rendered on a MapLibre map](https://files.opengeos.org/GeoLibre-demo.webp)](https://files.opengeos.org/GeoLibre-demo.webp)
+[![GeoLibre showing 3D Tiles rendered on a MapLibre map](https://assets.geolibre.app/images/GeoLibre-demo.webp)](https://assets.geolibre.app/images/GeoLibre-demo.webp)
 
 [Open the live project](https://share.geolibre.app/giswqs/3d-tiles){ .md-button .md-button--primary }
 
@@ -21,14 +21,14 @@ Manhattan building footprints extruded in 3D and colored by construction era,
 with the MTA subway lines and stations on top. The legend is
 [generated automatically](user-guide/styling.md) from the layers' symbology.
 
-[![Manhattan buildings extruded in 3D and colored by construction era, with MTA subway lines and stations and an auto-generated legend](https://files.opengeos.org/nyc-buildings.webp)](https://files.opengeos.org/nyc-buildings.webp)
+[![Manhattan buildings extruded in 3D and colored by construction era, with MTA subway lines and stations and an auto-generated legend](https://assets.geolibre.app/images/nyc-buildings.webp)](https://assets.geolibre.app/images/nyc-buildings.webp)
 
 The animation below runs the [Time Slider](features.md#plugins) along the
 buildings' construction year, from 1850 to 2025, so Manhattan fills in era by
 era — the camera stays put and the data moves. Click it to play the
 full-quality video.
 
-[![Animation of Manhattan buildings appearing by construction year as the Time Slider advances from 1850 to 2025](https://files.opengeos.org/nyc-buildings-gif.gif)](https://files.opengeos.org/nyc-buildings.webm)
+[![Animation of Manhattan buildings appearing by construction year as the Time Slider advances from 1850 to 2025](https://assets.geolibre.app/demos/nyc-buildings-gif.gif)](https://assets.geolibre.app/demos/nyc-buildings.webm)
 
 [Open the live project](https://share.geolibre.app/giswqs/nyc-buildings-and-subways){ .md-button .md-button--primary }
 
@@ -48,9 +48,9 @@ The deep-space starfield behind each globe comes from the
 
 <table>
   <tr>
-    <td width="33%"><a href="https://files.opengeos.org/earth.webp"><img src="https://files.opengeos.org/earth.webp" alt="GeoLibre globe view of Earth over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/moon.webp"><img src="https://files.opengeos.org/moon.webp" alt="GeoLibre globe view of the Moon over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/mars.webp"><img src="https://files.opengeos.org/mars.webp" alt="GeoLibre globe view of Mars over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/earth.webp"><img src="https://assets.geolibre.app/images/earth.webp" alt="GeoLibre globe view of Earth over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/moon.webp"><img src="https://assets.geolibre.app/images/moon.webp" alt="GeoLibre globe view of the Moon over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/mars.webp"><img src="https://assets.geolibre.app/images/mars.webp" alt="GeoLibre globe view of Mars over a starfield backdrop"></a></td>
   </tr>
   <tr>
     <td align="center"><b>Earth</b><br>Street, satellite, and cloudless imagery</td>
@@ -58,9 +58,9 @@ The deep-space starfield behind each globe comes from the
     <td align="center"><b>Mars</b><br>Colour MOLA Elevation (NASA / MOLA)</td>
   </tr>
   <tr>
-    <td width="33%"><a href="https://files.opengeos.org/mercury.webp"><img src="https://files.opengeos.org/mercury.webp" alt="GeoLibre globe view of Mercury over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/pluto.webp"><img src="https://files.opengeos.org/pluto.webp" alt="GeoLibre globe view of Pluto over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/venus.webp"><img src="https://files.opengeos.org/venus.webp" alt="GeoLibre globe view of Venus over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/mercury.webp"><img src="https://assets.geolibre.app/images/mercury.webp" alt="GeoLibre globe view of Mercury over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/pluto.webp"><img src="https://assets.geolibre.app/images/pluto.webp" alt="GeoLibre globe view of Pluto over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/venus.webp"><img src="https://assets.geolibre.app/images/venus.webp" alt="GeoLibre globe view of Venus over a starfield backdrop"></a></td>
   </tr>
   <tr>
     <td align="center"><b>Mercury</b><br>MESSENGER Colour Mosaic (NASA / JHU APL / CIW)</td>
@@ -68,9 +68,9 @@ The deep-space starfield behind each globe comes from the
     <td align="center"><b>Venus</b><br>Magellan C3-MDIR Colour (NASA / JPL)</td>
   </tr>
   <tr>
-    <td width="33%"><a href="https://files.opengeos.org/europa.webp"><img src="https://files.opengeos.org/europa.webp" alt="GeoLibre globe view of Europa over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/callisto.webp"><img src="https://files.opengeos.org/callisto.webp" alt="GeoLibre globe view of Callisto over a starfield backdrop"></a></td>
-    <td width="33%"><a href="https://files.opengeos.org/charon.webp"><img src="https://files.opengeos.org/charon.webp" alt="GeoLibre globe view of Charon over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/europa.webp"><img src="https://assets.geolibre.app/images/europa.webp" alt="GeoLibre globe view of Europa over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/callisto.webp"><img src="https://assets.geolibre.app/images/callisto.webp" alt="GeoLibre globe view of Callisto over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://assets.geolibre.app/images/charon.webp"><img src="https://assets.geolibre.app/images/charon.webp" alt="GeoLibre globe view of Charon over a starfield backdrop"></a></td>
   </tr>
   <tr>
     <td align="center"><b>Europa</b><br>Galileo / Voyager (NASA / JPL)</td>
@@ -85,7 +85,7 @@ Run DuckDB Spatial SQL against loaded layers, local files, and remote URLs
 without leaving the map, then add the result as a layer or export it. PostGIS
 (PGlite) and Apache Sedona engines are available from the same panel.
 
-[![The SQL Workspace panel docked beside the map, running a spatial query](https://data.geolibre.app/images/geolibre-sql-workspace.webp)](https://data.geolibre.app/images/geolibre-sql-workspace.webp)
+[![The SQL Workspace panel docked beside the map, running a spatial query](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)](https://assets.geolibre.app/images/geolibre-sql-workspace.webp)
 
 See [SQL Workspace](user-guide/sql-workspace.md) and the
 [Spatial SQL tutorial](tutorials/spatial-sql.md).
@@ -95,7 +95,7 @@ See [SQL Workspace](user-guide/sql-workspace.md) and the
 Any shared project can be embedded with `maponly` for a pure map with no
 toolbar, panels, or status bar.
 
-[![Chrome-free maponly embed of a 3D Tiles project](https://data.geolibre.app/images/geolibre-embed-maponly.webp)](https://data.geolibre.app/images/geolibre-embed-maponly.webp)
+[![Chrome-free maponly embed of a 3D Tiles project](https://assets.geolibre.app/images/geolibre-embed-maponly.webp)](https://assets.geolibre.app/images/geolibre-embed-maponly.webp)
 
 See [Embedding & Sharing](user-guide/embedding.md) for every URL parameter.
 
@@ -103,6 +103,16 @@ See [Embedding & Sharing](user-guide/embedding.md) for every URL parameter.
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI) — a tour of the browser, desktop, and Jupyter builds.
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8) — the Whitebox toolbox running entirely on WebAssembly.
+- [Access Free High-Resolution Disaster Satellite Imagery in Your Browser](https://youtu.be/QQ9i5CTNh84) — pre- and post-event imagery through the Vantor Open Data plugin.
+- [Regularize Building Footprints in the Browser with GeoLibre](https://youtu.be/xjfPYxgEEEc) — squaring up AI-derived building polygons with the Rust engine.
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o) — pairing GeoLibre with GeoLens for a self-hosted geospatial data stack.
+- [Create Reusable GIS Workflows with GeoLibre Model Builder and AI Assistant](https://youtu.be/dzjNKM6slgs) — graphical models, including ones the AI Assistant builds from a prompt.
+- [Mapping the 2026 Nepal Floods with Free High-Resolution Satellite Imagery](https://youtu.be/UDO1BCwOAAc) — disaster imagery from Vantor, Planet, and OpenAerialMap in one before-and-after map.
+- [Building Cloud-Native GIS Workflows with GeoLibre](https://youtu.be/RgNoKsvZ5Hk) — an hour-long webinar on the cloud-native stack behind GeoLibre.
+- [Image Georeferencing Using GeoLibre in the Browser](https://youtu.be/lbioujkDSG0) — pinning a scanned campus map to the basemap with ground control points.
+
+All of them, with chapters and summaries, are on
+[Video Tutorials](tutorials/videos.md).
 
 ## Try it yourself
 

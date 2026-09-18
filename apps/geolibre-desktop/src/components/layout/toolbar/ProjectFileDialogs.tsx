@@ -9,10 +9,16 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import {
+  LARGE_EMBED_WARNING_BYTES,
+  type ProjectFileActions,
+} from "../../../hooks/useProjectFileActions";
+import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
+import type { QgisProjectImportWarning } from "../../../lib/qgis-project-import";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
+import { ImportWarningList } from "./ImportWarningList";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -32,8 +38,59 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   }
   const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
 
+  // Stable identities so the warning lists regroup only when the warnings change.
+  const describeArcgisWarning = useCallback(
+    (warning: ArcgisProjectImportWarning) =>
+      t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
+        layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
+      }),
+    [t],
+  );
+  const describeQgisWarning = useCallback(
+    (warning: QgisProjectImportWarning) =>
+      t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+        provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+      }),
+    [t],
+  );
+
   return (
     <>
+      <Dialog
+        open={projectFiles.droppedProjectPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) void projectFiles.resolveDroppedProjectPrompt("cancel");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.fileDrop.savePromptTitle")}</DialogTitle>
+            <DialogDescription>{t("toolbar.fileDrop.savePromptDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={projectFiles.droppedProjectSaving}
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("cancel")}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={projectFiles.droppedProjectSaving}
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("discard")}
+            >
+              {t("newProject.doNotSave")}
+            </Button>
+            <Button
+              disabled={projectFiles.droppedProjectSaving}
+              onClick={() => void projectFiles.resolveDroppedProjectPrompt("save")}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={projectFiles.projectUrlDialogOpen}
         onOpenChange={projectFiles.handleProjectUrlDialogOpenChange}
@@ -91,16 +148,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-            {projectFiles.arcgisImportWarnings?.map((warning, index) => (
-              <li key={`${warning.layerName}-${index}`}>
-                <strong>{warning.layerName}:</strong>{" "}
-                {t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
-                  layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
-                })}
-              </li>
-            ))}
-          </ul>
+          <ImportWarningList
+            warnings={projectFiles.arcgisImportWarnings ?? []}
+            describe={describeArcgisWarning}
+          />
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setArcgisImportWarnings(null)}>
               {t("common.ok")}
@@ -141,16 +192,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-            {projectFiles.qgisImportWarnings?.map((warning, index) => (
-              <li key={`${warning.layerName}-${index}`}>
-                <strong>{warning.layerName}:</strong>{" "}
-                {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
-                  provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
-                })}
-              </li>
-            ))}
-          </ul>
+          <ImportWarningList
+            warnings={projectFiles.qgisImportWarnings ?? []}
+            describe={describeQgisWarning}
+          />
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
               {t("common.ok")}
@@ -240,9 +285,13 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{t("toolbar.item.embedVectorTitle")}</DialogTitle>
             <DialogDescription>
               {t(
-                projectFiles.embedVectorDataPrompt?.desktop
-                  ? "toolbar.item.embedVectorDescDesktop"
-                  : "toolbar.item.embedVectorDesc",
+                projectFiles.embedVectorDataPrompt?.hasGeometryEdits
+                  ? "toolbar.item.embedEditedGeometryDesc"
+                  : projectFiles.embedVectorDataPrompt?.allowFileReferences
+                    ? "toolbar.item.embedVectorDescDesktop"
+                    : projectFiles.embedVectorDataPrompt?.desktop
+                      ? "toolbar.item.embedVectorDescMas"
+                      : "toolbar.item.embedVectorDesc",
                 {
                   count: projectFiles.embedVectorDataPrompt?.count ?? 0,
                   size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
@@ -250,6 +299,16 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               )}
             </DialogDescription>
           </DialogHeader>
+          {(projectFiles.embedVectorDataPrompt?.bytes ?? 0) >= LARGE_EMBED_WARNING_BYTES ? (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              {t("toolbar.item.embedVectorLargeWarning", {
+                size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
+              })}
+            </p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
@@ -257,16 +316,19 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             >
               {t("common.cancel")}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("noembed")}
-            >
-              {t(
-                projectFiles.embedVectorDataPrompt?.desktop
-                  ? "toolbar.item.embedVectorReferenceButton"
-                  : "toolbar.item.embedVectorSkipButton",
-              )}
-            </Button>
+            {projectFiles.embedVectorDataPrompt?.allowFileReferences ||
+            !projectFiles.embedVectorDataPrompt?.desktop ? (
+              <Button
+                variant="outline"
+                onClick={() => projectFiles.resolveEmbedVectorDataPrompt("noembed")}
+              >
+                {t(
+                  projectFiles.embedVectorDataPrompt?.desktop
+                    ? "toolbar.item.embedVectorReferenceButton"
+                    : "toolbar.item.embedVectorSkipButton",
+                )}
+              </Button>
+            ) : null}
             <Button onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}>
               {t("toolbar.item.embedVectorEmbedButton")}
             </Button>

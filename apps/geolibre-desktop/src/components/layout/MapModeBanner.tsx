@@ -9,7 +9,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   subscribeDirectionsState,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";
 import type { TFunction } from "i18next";
@@ -18,7 +18,7 @@ import { Button } from "@geolibre/ui";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 
 interface MapModeBannerProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 function formatDistance(meters: number, locale: string, t: TFunction): string {
@@ -110,7 +110,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
     <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex w-[min(92vw,30rem)] -translate-x-1/2 flex-col gap-2">
       {directionsActive ? (
         <div
-          className="pointer-events-auto flex flex-col gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+          className="pointer-events-auto flex flex-col gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
           role="region"
           aria-label={t("map.directionsMode.title")}
           data-testid="directions-mode-banner"
@@ -231,7 +231,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
 
       {reverseGeocodeActive ? (
         <div
-          className="pointer-events-auto flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+          className="pointer-events-auto flex items-center gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
           role="region"
           aria-label={t("map.reverseGeocodeMode.title")}
           data-testid="reverse-geocode-mode-banner"

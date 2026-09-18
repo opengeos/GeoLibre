@@ -6,6 +6,7 @@ import {
   getActiveBasemapControl,
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
+import { isPluginEngineSupported } from "../packages/plugins/src/types";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 /** A raster basemap layer as the control leaves it in the store when stacked. */
@@ -88,5 +89,24 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
     // basemap) and is back in overlay/stack mode.
     assert.ok(state.activeBasemapIds.includes("google-satellite"));
     assert.equal(state.allowMultiple, true);
+  });
+});
+
+describe("Mapbox basemap control", () => {
+  it("supports Mapbox and restores its native style selection", () => {
+    assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
+    const app = fakeApp([]);
+    app.getMapboxMap = () =>
+      ({}) as NonNullable<ReturnType<NonNullable<GeoLibreAppAPI["getMapboxMap"]>>>;
+    app.getActiveBasemap = () => "mapbox://styles/mapbox/satellite-v9";
+    try {
+      plugin.activate(app);
+      const control = getActiveBasemapControl()!;
+      assert.equal(control.getState().activeBasemapId, "mapbox-satellite");
+      assert.ok(control.getBasemaps().some((b) => b.id === "mapbox-standard"));
+      assert.ok(control.getBasemaps().some((b) => b.id === "openfreemap-liberty"));
+    } finally {
+      plugin.deactivate?.(app);
+    }
   });
 });

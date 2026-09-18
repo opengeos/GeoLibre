@@ -256,6 +256,7 @@ class PostgisReadRequest(BaseModel):
     connection: str
     schema_name: str = "public"
     table: str
+    geometry_column: Optional[str] = None
     excluded_fields: list[str] = []
 
 
@@ -265,12 +266,20 @@ class PostgisWriteRequest(BaseModel):
     connection: str
     schema_name: str = "public"
     table: str
+    geometry_column: Optional[str] = None
     geojson: dict
     # Primary-key values the edit session started from (the last read). When
     # provided, deletions are scoped to these keys, so rows inserted by another
     # session between the read and this save survive. When omitted, every row
     # absent from the payload is deleted (full-table diff).
     baseline_keys: Optional[list] = None
+    # The layer's declared capabilities, forwarded by the client so a save
+    # cannot quietly perform an operation the layer's own configuration
+    # disallows. This is a consistency guard, not an access-control boundary:
+    # the sidecar has no independent record of a table's capabilities, so a
+    # caller that omits the field (or sends its own) is trusted. Anything that
+    # must hold against an untrusted caller belongs in database grants.
+    capabilities: Optional[dict[str, bool]] = None
 
 
 def _connect(connection: str) -> Any:
@@ -317,7 +326,9 @@ def _connect(connection: str) -> Any:
         ) from exc
 
 
-def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
+def _table_info(
+    conn: Any, schema: str, table: str, geometry_column: Optional[str] = None
+) -> dict[str, Any]:
     """Resolve geometry column, SRID, primary key and columns from the catalogs.
 
     The client only names the schema and table; every identifier used in the
@@ -328,6 +339,8 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         conn: An open psycopg connection.
         schema: Schema name as stored in ``geometry_columns``.
         table: Table name as stored in ``geometry_columns``.
+        geometry_column: Requested registered geometry column, or None to use
+            the alphabetically first column for backward compatibility.
 
     Returns:
         A dict with ``geometry_column``, ``srid``, ``primary_key`` (None when
@@ -353,10 +366,17 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
                 status_code=404,
                 detail=f"Spatial table not found: {schema}.{table}",
             )
-        geometry_column, srid = geom_rows[0][0], int(geom_rows[0][1] or 0)
+        geometry_by_name = {row[0]: int(row[1] or 0) for row in geom_rows}
+        if geometry_column is not None and geometry_column not in geometry_by_name:
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Geometry column not found on {schema}.{table}: {geometry_column}"),
+            )
+        geometry_column = geom_rows[0][0] if geometry_column is None else geometry_column
+        srid = geometry_by_name[geometry_column]
         # A table can register several geometry columns; the layer edits only
-        # the first, and the others must not leak into the attribute list (they
-        # would be read as WKB hex and written back as text).
+        # the selected one, and the others must not leak into the attribute
+        # list (they would be read as WKB hex and written back as text).
         all_geometry_columns = {row[0] for row in geom_rows}
 
         # Single-column primary key, if any. Composite keys are unsupported for
@@ -529,7 +549,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
 
     try:
         with _connect(request.connection) as conn:
-            info = _table_info(conn, request.schema_name, request.table)
+            info = _table_info(conn, request.schema_name, request.table, request.geometry_column)
             geom = sql.Identifier(info["geometry_column"])
             # A zero/unknown SRID cannot be transformed; serve the coordinates
             # as stored (the common convention for srid 0 data is lon/lat
@@ -657,7 +677,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         )
 
     with _connect(request.connection) as conn:
-        info = _table_info(conn, request.schema_name, request.table)
+        info = _table_info(conn, request.schema_name, request.table, request.geometry_column)
         pk = info["primary_key"]
         if pk is None:
             raise HTTPException(
@@ -674,6 +694,13 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         table_ident = sql.Identifier(request.table)
         geom_ident = sql.Identifier(info["geometry_column"])
         geom_param = _geometry_param(sql, info["srid"])
+
+        # Absent flags default to allowed, matching the frontend's inference
+        # for a layer that declares no explicit capabilities.
+        caps = request.capabilities or {}
+        allow_create = caps.get("create", True)
+        allow_update = caps.get("update", True)
+        allow_delete = caps.get("delete", True)
 
         skipped: set[str] = set()
         inserted = updated = 0
@@ -787,6 +814,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                                 for column in columns
                             ):
                                 continue
+                            if not allow_update:
+                                raise HTTPException(
+                                    status_code=403,
+                                    detail="Layer capability excludes feature updates.",
+                                )
                             assignments = [
                                 sql.SQL("{col} = ").format(col=geom_ident)
                                 + (geom_param if geometry_value is not None else sql.SQL("NULL"))
@@ -818,6 +850,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             # is inserted explicitly so client-assigned keys
                             # survive; a GENERATED ALWAYS identity column rejects
                             # explicit values unless the insert overrides it.
+                            if not allow_create:
+                                raise HTTPException(
+                                    status_code=403,
+                                    detail="Layer capability excludes feature creation.",
+                                )
                             insert_columns = list(columns)
                             insert_values = list(values)
                             overriding = sql.SQL("")
@@ -860,6 +897,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 to_delete = sorted(deletable - kept_keys, key=lambda value: str(value))
                 deleted = 0
                 if to_delete:
+                    if not allow_delete:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Layer capability excludes feature deletion.",
+                        )
                     # Compare as text so the (JSON-native) keys match uuid /
                     # numeric / date key columns; both sides render the same
                     # canonical form the /read endpoint serialized. Known edge:

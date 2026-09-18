@@ -15,6 +15,7 @@ import {
   bundleFromZipBytes,
   type ExternalPluginBundle,
   isExternalPluginManifest,
+  isPluginEngineList,
   MAX_PLUGIN_ASSET_BYTES,
 } from "./plugin-archive-unpack";
 import {
@@ -71,16 +72,34 @@ const externallyLoadedPluginSources = new Map<string, string>();
 // bypassed (e.g. the dialog is closed and reopened mid-upgrade).
 const inFlightUrlUpgrades = new Map<string, Promise<GeoLibrePlugin>>();
 
+// Manifest URLs this session has tried to load under the SHA-256 pin (bundled
+// drop-ins are exempt from pinning and never appear here). Uninstalling a URL
+// has to drop its pin, and the loaded-source map above cannot say which URLs
+// need that: a bundle the pin held back never registers a plugin, so it is
+// absent from that map. Leaving its pin behind made the block unrecoverable
+// through the UI, because reinstalling matched the same stale pin and failed
+// again (#2318). Recording the attempt instead of the registration covers it.
+const pinnedUrlLoadAttempts = new Set<string>();
+
 export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
   pluginManifestUrls: string[] = [],
   options: {
     /**
-     * Manifest URLs of bundled drop-ins (public/plugins/<id>/). Only manifests
-     * fetched from these URLs may use `activeByDefault`; deployer-baked
-     * drop-ins are as trusted as built-ins, while runtime-installed zips and
-     * URL plugins must not force themselves active.
+     * Manifest URLs of bundled drop-ins (public/plugins/<id>/). Deployer-baked
+     * drop-ins are as trusted as built-ins: they are served by the same
+     * deployment as the app, so anyone able to swap one could equally swap the
+     * app's own chunks. Two privileges follow, and only these URLs get them.
+     *
+     * They may use `activeByDefault`, while runtime-installed zips and URL
+     * plugins must not force themselves active.
+     *
+     * They are exempt from the SHA-256 pin (see plugin-integrity.ts), which
+     * cannot detect the attack it was written for when the bundle and the app
+     * share an origin, and whose cost is real: the hash changes on every
+     * redeploy that touches the plugin, so a returning user's baked-in plugin
+     * would stop loading until they reloaded it from Settings.
      */
     bundledManifestUrls?: readonly string[];
   } = {},
@@ -100,7 +119,7 @@ export async function loadExternalPlugins(
           bundles: [],
           errors: [],
         }),
-    loadPluginUrlBundles(pluginManifestUrls, issues),
+    loadPluginUrlBundles(pluginManifestUrls, issues, bundledUrls),
     loadWebInstalledPluginBundles(),
   ]);
   for (const error of filesystemResult.errors) {
@@ -215,42 +234,59 @@ async function loadFilesystemPluginBundles(
 async function loadPluginUrlBundles(
   manifestUrls: string[],
   issues: ExternalPluginLoadIssue[],
+  /** Manifest URLs of deployer-baked drop-ins, exempt from SHA-256 pinning. */
+  bundledUrls: ReadonlySet<string>,
 ): Promise<ExternalPluginBundle[]> {
   const bundles: ExternalPluginBundle[] = [];
+  // Record the attempt before the fetch, not after a successful verification:
+  // a URL whose host is down this session still carries a pin from an earlier
+  // one, and uninstalling it must clear that pin too.
+  for (const manifestUrl of manifestUrls) {
+    if (!bundledUrls.has(manifestUrl)) pinnedUrlLoadAttempts.add(manifestUrl);
+  }
   const results = await Promise.allSettled(
     manifestUrls.map((manifestUrl) => loadPluginUrlBundle(manifestUrl)),
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") {
       const bundle = result.value;
-      // Refuse to auto-execute a URL bundle whose code changed since it was
-      // last trusted (a silent-update / compromised-host vector). First sight
-      // pins it; a changed hash is held back until the user reloads it
-      // explicitly (which re-pins). Isolate a verification failure (e.g.
-      // crypto.subtle unavailable) to this one URL — letting it throw here would
-      // reject the whole loadExternalPlugins Promise.all and drop every plugin.
-      try {
-        const integrity = await verifyPluginBundleIntegrity(manifestUrls[index], bundle);
-        if (integrity.status === "changed") {
+      // Bundled drop-ins are exempt from the pin; see `bundledManifestUrls` in
+      // loadExternalPlugins for why. Everything else still goes through it.
+      if (!bundledUrls.has(manifestUrls[index])) {
+        // Refuse to auto-execute a URL bundle whose code changed since it was
+        // last trusted (a silent-update / compromised-host vector). First sight
+        // pins it; a changed hash is held back until the user reloads it
+        // explicitly (which re-pins). Isolate a verification failure (e.g.
+        // crypto.subtle unavailable) to this one URL — letting it throw here would
+        // reject the whole loadExternalPlugins Promise.all and drop every plugin.
+        try {
+          const integrity = await verifyPluginBundleIntegrity(manifestUrls[index], bundle);
+          if (integrity.status === "changed") {
+            issues.push({
+              archiveName: bundle.archiveName,
+              sourceUrl: bundle.sourceUrl,
+              // Point at the recovery that actually works. A held-back bundle
+              // never registers, so the marketplace's Update action (which
+              // upgrades a *loaded* plugin) is not offered for it; uninstalling
+              // the URL clears the pin, and reinstalling re-pins the published
+              // bundle after the user has had the chance to review it.
+              message:
+                `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
+                "Open Settings → Plugins, uninstall it, then install it again to review and accept the update.",
+            });
+            continue;
+          }
+        } catch (error) {
           issues.push({
             archiveName: bundle.archiveName,
             sourceUrl: bundle.sourceUrl,
             message:
-              `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
-              "Open Settings → Plugins and reload it to review and accept the update.",
+              error instanceof Error
+                ? `Could not verify plugin integrity: ${error.message}`
+                : "Could not verify plugin bundle integrity.",
           });
           continue;
         }
-      } catch (error) {
-        issues.push({
-          archiveName: bundle.archiveName,
-          sourceUrl: bundle.sourceUrl,
-          message:
-            error instanceof Error
-              ? `Could not verify plugin integrity: ${error.message}`
-              : "Could not verify plugin bundle integrity.",
-        });
-        continue;
       }
       bundles.push(bundle);
     } else {
@@ -377,6 +413,13 @@ async function fetchPluginText(url: string, label: string, signal?: AbortSignal)
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Imports an external plugin bundle by creating an ephemeral object URL, verifying its export contract,
+ * and propagating manifest engines metadata when omitted by the candidate plugin.
+ *
+ * @param bundle - The unpacked external plugin bundle.
+ * @returns A promise resolving to the validated {@link GeoLibrePlugin}.
+ */
 async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLibrePlugin> {
   const moduleUrl = URL.createObjectURL(
     new Blob([bundle.entrySource], { type: "text/javascript" }),
@@ -394,6 +437,15 @@ async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLi
     validateManifestMatchesPlugin(bundle.manifest, candidate);
     if (candidate.activeByDefault) {
       throw new Error("External plugins cannot use activeByDefault.");
+    }
+    // The manifest's engines are validated by isExternalPluginManifest; the
+    // exported plugin's own engines are not, so check them here rather than
+    // letting an unexpected value reach isPluginEngineSupported.
+    if (candidate.engines !== undefined && !isPluginEngineList(candidate.engines)) {
+      throw new Error('Plugin engines must be an array of "maplibre" or "cesium".');
+    }
+    if (bundle.manifest.engines && !candidate.engines) {
+      candidate.engines = bundle.manifest.engines;
     }
     return candidate;
   } finally {
@@ -625,7 +677,15 @@ export function unloadRemovedUrlPlugins(
   }
   // Drop integrity pins for URLs no longer installed, so re-adding one later
   // re-pins from a fresh review rather than silently matching a stale hash.
+  // Registering a plugin is not a precondition: a bundle the pin held back
+  // (see plugin-integrity.ts) never reaches the loaded-source map, and keying
+  // this off `toRemove` alone left exactly that plugin stuck: uninstall could
+  // not clear its pin, and reinstalling hit the same stale hash (#2318).
+  for (const url of pinnedUrlLoadAttempts) {
+    if (!keep.has(url)) removedUrls.add(url);
+  }
   for (const url of removedUrls) {
+    pinnedUrlLoadAttempts.delete(url);
     removePluginBundlePin(url);
   }
   return toRemove;

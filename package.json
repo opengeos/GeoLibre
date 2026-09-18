@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "2.4.1",
+  "version": "3.0.0",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -9,21 +9,29 @@
     "workers/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/apply-dependency-patches.mjs",
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
+    "lite:build": "node scripts/lite-build.mjs",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
+    "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
-    "test:frontend:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=78 --test-coverage-branches=78 --test-coverage-functions=63 --test-coverage-exclude=\"tests/**\" --test-coverage-exclude=\"e2e/**\" --test-coverage-exclude=\"**/*.config.*\" tests/*.test.ts",
+    "test:frontend:coverage": "node scripts/coverage-check.mjs",
     "test:backend": "python -m pytest backend/geolibre_server/tests",
     "test:backend:coverage": "python -m pytest backend/geolibre_server/tests --cov=geolibre_server --cov-report=term-missing --cov-fail-under=55",
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
+    "test:e2e:core": "playwright test --project=core",
+    "test:e2e:features": "playwright test --project=features",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
-    "ci": "npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
+    "audit:ci": "node scripts/audit-check.mjs",
+    "i18n:tools": "node --import tsx scripts/gen-processing-i18n-catalog.mjs",
+    "i18n:tools:check": "node --import tsx scripts/gen-processing-i18n-catalog.mjs --check",
+    "ci": "npm run lint && npm run i18n:tools:check && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
@@ -32,21 +40,35 @@
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
+  "dependencies": {
+    "patch-package": "^8.0.1"
+  },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.2",
-    "eslint": "^10.8.0",
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.1",
+    "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fflate": "^0.8.3",
     "linkedom": "^0.18.13",
-    "tsx": "^4.23.1",
-    "typescript-eslint": "^8.65.0"
+    "tsx": "^4.23.13",
+    "typescript-eslint": "^8.70.0"
   },
   "overrides": {
-    "brace-expansion": "^5.0.8",
-    "fast-uri": "^3.1.5",
+    "@loaders.gl/compression": {
+      "fflate": "^0.8.3"
+    },
+    "brace-expansion": "^5.0.9",
+    "fast-uri": "^3.1.7",
     "filelist": "^2.0.2",
+    "maplibre-gl": "^6.3.0",
+    "miniflare": {
+      "undici": "^7.29.0"
+    },
     "sweepline-intersections": "^1.5.0",
+    "texture-compressor": {
+      "image-size": "^2.0.4"
+    },
     "uuid": "^14.0.0"
   },
   "engines": {

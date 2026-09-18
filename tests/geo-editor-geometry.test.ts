@@ -6,7 +6,10 @@ import {
   GEOMAN_SHAPE_PROPERTIES,
   GEOMETRY_EDIT_FID_PROPERTY,
   type OverlayOrderLayer,
+  applySyncedEditorTracking,
   canEditLayerGeometry,
+  canonicalGeometryKey,
+  captureEditedGeometries,
   captureEditedProperties,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
@@ -457,5 +460,305 @@ describe("captureEditedProperties — null properties", () => {
     const snapshot = captureEditedProperties(tagged);
     // Without the pre-tag source the best available answer is the tagged one.
     assert.deepEqual(snapshot.get(String(tagged.features[0].id)), {});
+  });
+});
+
+describe("reconcileEditedFeatures — editor tracking", () => {
+  const config = { enabled: true };
+  const original: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: 1,
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { name: "untouched" },
+      },
+      {
+        type: "Feature",
+        id: 2,
+        geometry: { type: "Point", coordinates: [10, 10] },
+        properties: { name: "moved" },
+      },
+    ],
+  };
+
+  /** Tag, snapshot, and hand back what the editor would return after `edit`. */
+  function session(edit: (tagged: FeatureCollection) => FeatureCollection) {
+    const tagged = tagFeatureKeys(original);
+    return reconcileEditedFeatures(edit(structuredClone(tagged)), captureEditedProperties(tagged), {
+      config,
+      userIdentity: "ada",
+      timestamp: "2026-08-15T00:00:00.000Z",
+      originalGeometries: captureEditedGeometries(tagged),
+    });
+  }
+
+  it("stamps only the feature whose geometry changed", () => {
+    const reconciled = session((tagged) => {
+      tagged.features[1].geometry = { type: "Point", coordinates: [11, 11] };
+      return tagged;
+    });
+
+    // Untouched: no tracking columns at all, so a session that only looked at
+    // the layer does not rewrite its edit history.
+    assert.deepEqual(reconciled.features[0].properties, { name: "untouched" });
+    assert.deepEqual(reconciled.features[1].properties, {
+      name: "moved",
+      edited_by: "ada",
+      edited_at: "2026-08-15T00:00:00.000Z",
+    });
+  });
+
+  it("treats a feature drawn during the session as a creation", () => {
+    const reconciled = session((tagged) => {
+      tagged.features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [5, 5] },
+        properties: { name: "drawn" },
+      });
+      return tagged;
+    });
+
+    assert.deepEqual(reconciled.features[2].properties, {
+      name: "drawn",
+      created_by: "ada",
+      created_at: "2026-08-15T00:00:00.000Z",
+      edited_by: "ada",
+      edited_at: "2026-08-15T00:00:00.000Z",
+    });
+  });
+
+  it("ignores a sub-millimetre coordinate difference from the round-trip", () => {
+    const reconciled = session((tagged) => {
+      // Geoman re-serializes every feature it loaded; a last-bit float
+      // difference is not an edit (see GEOMETRY_COMPARE_PRECISION).
+      tagged.features[0].geometry = { type: "Point", coordinates: [1e-12, 0] };
+      return tagged;
+    });
+    assert.deepEqual(reconciled.features[0].properties, { name: "untouched" });
+  });
+
+  it("honors renamed tracking columns", () => {
+    const tagged = tagFeatureKeys(original);
+    const moved = structuredClone(tagged);
+    moved.features[0].geometry = { type: "Point", coordinates: [3, 3] };
+    const reconciled = reconcileEditedFeatures(moved, captureEditedProperties(tagged), {
+      config: { enabled: true, editedByField: "author", editedAtField: "touched" },
+      userIdentity: "ada",
+      timestamp: "2026-08-15T00:00:00.000Z",
+      originalGeometries: captureEditedGeometries(tagged),
+    });
+    assert.deepEqual(reconciled.features[0].properties, {
+      name: "untouched",
+      author: "ada",
+      touched: "2026-08-15T00:00:00.000Z",
+    });
+  });
+
+  it("stamps nothing when the layer does not track edits", () => {
+    const tagged = tagFeatureKeys(original);
+    const moved = structuredClone(tagged);
+    moved.features[0].geometry = { type: "Point", coordinates: [3, 3] };
+    const reconciled = reconcileEditedFeatures(moved, captureEditedProperties(tagged), {
+      config: { enabled: false },
+      originalGeometries: captureEditedGeometries(tagged),
+    });
+    assert.deepEqual(reconciled.features[0].properties, { name: "untouched" });
+  });
+});
+
+describe("applySyncedEditorTracking", () => {
+  const config = { enabled: true };
+  const keyOf = (feature: { id?: string | number }, index: number) => String(feature.id ?? index);
+  const stamp = { config, userIdentity: "ada", timestamp: "2026-08-15T00:00:00.000Z" };
+
+  function collection(...features: FeatureCollection["features"]): FeatureCollection {
+    return { type: "FeatureCollection", features };
+  }
+
+  it("stamps a feature the editor has that the store does not", () => {
+    const next = collection(point("a", { note: "new" }));
+    const result = applySyncedEditorTracking(next, collection(), keyOf, stamp);
+    assert.deepEqual(result.features[0].properties, {
+      note: "new",
+      created_by: "ada",
+      created_at: "2026-08-15T00:00:00.000Z",
+      edited_by: "ada",
+      edited_at: "2026-08-15T00:00:00.000Z",
+    });
+  });
+
+  it("carries the store's columns back onto the editor's copy", () => {
+    // The editor never sees the tracking columns, so an unchanged feature would
+    // otherwise lose them on the next sync and be re-created from scratch.
+    const previous = collection(
+      point("a", {
+        note: "kept",
+        created_by: "ada",
+        created_at: "2026-08-01T00:00:00.000Z",
+        edited_by: "ada",
+        edited_at: "2026-08-01T00:00:00.000Z",
+      }),
+    );
+    const result = applySyncedEditorTracking(
+      collection(point("a", { note: "kept" })),
+      previous,
+      keyOf,
+      stamp,
+    );
+    assert.deepEqual(result.features[0].properties, previous.features[0].properties);
+  });
+
+  it("keeps the creation columns but refreshes the edit ones when the geometry moves", () => {
+    const previous = collection(
+      point("a", {
+        note: "kept",
+        created_by: "bob",
+        created_at: "2026-08-01T00:00:00.000Z",
+        edited_by: "bob",
+        edited_at: "2026-08-01T00:00:00.000Z",
+      }),
+    );
+    const moved = collection(point("a", { note: "kept" }));
+    moved.features[0].geometry = { type: "Point", coordinates: [4, 4] };
+    const result = applySyncedEditorTracking(moved, previous, keyOf, stamp);
+    assert.deepEqual(result.features[0].properties, {
+      note: "kept",
+      created_by: "bob",
+      created_at: "2026-08-01T00:00:00.000Z",
+      edited_by: "ada",
+      edited_at: "2026-08-15T00:00:00.000Z",
+    });
+  });
+
+  it("returns the collection untouched when tracking is off", () => {
+    const next = collection(point("a", { note: "new" }));
+    assert.equal(
+      applySyncedEditorTracking(next, collection(), keyOf, { config: { enabled: false } }),
+      next,
+    );
+  });
+});
+
+describe("canonicalGeometryKey", () => {
+  it("matches geometries that differ below the comparison precision", () => {
+    assert.equal(
+      canonicalGeometryKey({ type: "Point", coordinates: [1.0000000001, 2] }),
+      canonicalGeometryKey({ type: "Point", coordinates: [1, 2] }),
+    );
+  });
+
+  it("separates geometries that actually differ", () => {
+    assert.notEqual(
+      canonicalGeometryKey({ type: "Point", coordinates: [1.001, 2] }),
+      canonicalGeometryKey({ type: "Point", coordinates: [1, 2] }),
+    );
+  });
+
+  it("distinguishes a null geometry from a real one", () => {
+    assert.equal(canonicalGeometryKey(null), "null");
+    assert.notEqual(canonicalGeometryKey({ type: "Point", coordinates: [0, 0] }), "null");
+  });
+
+  it("walks a geometry collection's members", () => {
+    const key = (lng: number) =>
+      canonicalGeometryKey({
+        type: "GeometryCollection",
+        geometries: [{ type: "Point", coordinates: [lng, 0] }],
+      });
+    assert.equal(key(1), key(1));
+    assert.notEqual(key(1), key(2));
+  });
+});
+
+describe("editor tracking — copied and id-less features", () => {
+  const config = { enabled: true };
+  const stamp = { config, userIdentity: "ada", timestamp: "2026-08-16T00:00:00.000Z" };
+
+  it("records a duplicated feature as newly created, not as its source", () => {
+    // Geoman's `copy` edit mode clones properties, and the session loaded the
+    // layer's features with their tracking columns — so the copy arrives
+    // carrying the original's creation stamp for a feature that did not exist
+    // then. It has no tag, so it is new to the session and gets its own.
+    const original: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 1,
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: {
+            name: "source",
+            created_by: "bob",
+            created_at: "2020-01-01T00:00:00.000Z",
+            edited_by: "bob",
+            edited_at: "2020-01-01T00:00:00.000Z",
+          },
+        },
+      ],
+    };
+    const tagged = tagFeatureKeys(original);
+    const withCopy = structuredClone(tagged);
+    const copy = structuredClone(tagged.features[0]);
+    delete (copy.properties as Record<string, unknown>)[GEOMETRY_EDIT_FID_PROPERTY];
+    delete copy.id;
+    withCopy.features.push(copy);
+
+    const reconciled = reconcileEditedFeatures(withCopy, captureEditedProperties(tagged), {
+      ...stamp,
+      originalGeometries: captureEditedGeometries(tagged),
+    });
+
+    // The source is untouched: it was loaded and not moved.
+    assert.equal(reconciled.features[0].properties?.created_by, "bob");
+    assert.equal(reconciled.features[0].properties?.created_at, "2020-01-01T00:00:00.000Z");
+    assert.deepEqual(reconciled.features[1].properties, {
+      name: "source",
+      created_by: "ada",
+      created_at: "2026-08-16T00:00:00.000Z",
+      edited_by: "ada",
+      edited_at: "2026-08-16T00:00:00.000Z",
+    });
+  });
+
+  it("keeps matching an id-less feature after it has been stamped once", () => {
+    // The tracking columns only ever exist on the store side, so a key that read
+    // them would give one feature two identities once stamped and every sync
+    // would reset its creation stamp. `sketchFeatureKey`, replicated here,
+    // hashes the geometry rather than the whole feature for exactly this reason.
+    const keyOf = (feature: Feature, index: number) =>
+      String(
+        feature.id ?? feature.properties?.__gm_id ?? `${JSON.stringify(feature.geometry)}@${index}`,
+      );
+    const editorCopy: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { note: "sketch" },
+        },
+      ],
+    };
+    const stored: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: {
+            note: "sketch",
+            created_by: "ada",
+            created_at: "2026-08-01T00:00:00.000Z",
+            edited_by: "ada",
+            edited_at: "2026-08-01T00:00:00.000Z",
+          },
+        },
+      ],
+    };
+
+    const result = applySyncedEditorTracking(editorCopy, stored, keyOf, stamp);
+    assert.equal(result.features[0].properties?.created_at, "2026-08-01T00:00:00.000Z");
   });
 });

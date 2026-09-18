@@ -43,18 +43,22 @@ interface OgcFeaturesSample {
  * feature count is reached, because a single `/items` request returns only one
  * server-sized page.
  */
-export function OgcFeaturesSource() {
+export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.ogcFeatures.defaultName"));
-  const [endpoint, setEndpoint] = useState(ogcFeaturesFormCache?.endpoint ?? "");
-  const [collectionId, setCollectionId] = useState(ogcFeaturesFormCache?.collectionId ?? "");
+  const [endpoint, setEndpoint] = useState(initialUrl || ogcFeaturesFormCache?.endpoint || "");
+  // See WmsSource: submitting prefers this field over the collection id in the
+  // URL, so a value cached from another service would quietly request that
+  // collection from the deep-linked one.
+  const serviceCache = initialUrl ? null : ogcFeaturesFormCache;
+  const [collectionId, setCollectionId] = useState(serviceCache?.collectionId ?? "");
   const [maxFeatures, setMaxFeatures] = useState(
     ogcFeaturesFormCache?.maxFeatures ?? String(DEFAULT_OGC_FEATURES_MAX_FEATURES),
   );
   const [bbox, setBbox] = useState(ogcFeaturesFormCache?.bbox ?? "");
   const [datetime, setDatetime] = useState(ogcFeaturesFormCache?.datetime ?? "");
   const [collectionOptions, setCollectionOptions] = useState<OgcFeaturesCollectionOption[]>(
-    ogcFeaturesFormCache?.options ?? [],
+    serviceCache?.options ?? [],
   );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);

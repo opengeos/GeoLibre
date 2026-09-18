@@ -1,9 +1,10 @@
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
+  getStyleMap,
   getGeometryEditTargetLayerId,
   hasViewImportBaseline,
   isGeoEditorAvailableForImport,
@@ -35,7 +36,7 @@ import { exportVectorLayer } from "../../lib/vector-export";
 interface LoadFeaturesIntoEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   /** Store layer to preselect (set when opened from a layer's context menu). */
   initialLayerId: string | null;
 }
@@ -120,7 +121,7 @@ export function LoadFeaturesIntoEditorDialog({
   // Sketches layer (the editor's own output) is excluded. Recomputed when the
   // Layers panel changes or the dialog reopens.
   const computeEligible = useCallback((): EligibleLayer[] => {
-    const style = mapControllerRef.current?.getMap()?.getStyle();
+    const style = getStyleMap(mapControllerRef.current)?.getStyle();
     const result: EligibleLayer[] = [];
     for (const layer of storeLayers) {
       if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) continue;
@@ -167,7 +168,7 @@ export function LoadFeaturesIntoEditorDialog({
     // Open at the bottom-left of the map canvas by default (measured from the
     // map container, so it clears the left Layers panel), leaving a gap above
     // the status bar. Anchored by `bottom` so growing content extends upward.
-    const mapRect = mapControllerRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
+    const mapRect = getStyleMap(mapControllerRef.current)?.getContainer()?.getBoundingClientRect();
     const left = mapRect ? mapRect.left + EDGE_MARGIN : EDGE_MARGIN;
     const bottomOffset = (mapRect ? window.innerHeight - mapRect.bottom : 0) + STATUS_BAR_GAP;
     setAnchor({ x: left, bottom: bottomOffset });
@@ -256,7 +257,7 @@ export function LoadFeaturesIntoEditorDialog({
   // load immediately, or report that none are in view.
   const runLoad = useCallback(
     (replace: boolean) => {
-      const map = mapControllerRef.current?.getMap();
+      const map = getStyleMap(mapControllerRef.current);
       if (!map || !selectedLayer) {
         setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
         return;

@@ -1,3 +1,4 @@
+import { restoreMapboxTiles, isMapboxTilesLayer, flyToDeckTilesLocation } from "./mapbox-3d-tiles";
 import {
   DEFAULT_LAYER_STYLE,
   GOOGLE_MAPS_API_KEY_HEADER,
@@ -48,8 +49,24 @@ const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 // against. Only used as a fallback when the control does not expose its own
 // decoder paths (see getThreeDTilesDecoderOptions).
 const THREE_VERSION = "0.184.0";
-const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
-const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
+// When the build strips external CDN references there is no host to fetch the
+// Draco/KTX2 decoders from, so the fallback paths are left empty and only the
+// control's own decoder paths (if it exposes any) are used.
+const NO_EXTERNAL_CDN = typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__;
+
+const DEFAULT_DRACO_DECODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
+const DEFAULT_KTX2_TRANSCODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
@@ -153,8 +170,19 @@ export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
+  const renderer = app.getMapRenderer?.() ?? "";
+  if (renderer === "arcgis") {
+    if (useAppStore.getState().layers.some(isMapboxTilesLayer))
+      void restoreMapboxTiles(app).catch(console.error);
+    return;
+  }
   restoreGooglePhotorealisticTilesLayers(app);
   restoreArcgisI3sTilesLayers(app);
+  if (renderer === "mapbox") {
+    if (useAppStore.getState().layers.some(isMapboxTilesLayer))
+      void restoreMapboxTiles(app).catch(console.error);
+    return;
+  }
 
   const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
@@ -267,7 +295,7 @@ function createThreeDTilesControl(): ThreeDTilesControl {
   addThreeDTilesRuntimeEnvListener(control);
   threeDTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
-      updateGooglePhotorealisticTilesPanelList(control);
+      updateDeckTilesPanelList(control);
     }
 
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
@@ -299,6 +327,7 @@ function createThreeDTilesControl(): ThreeDTilesControl {
 }
 
 function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
+  if (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "")) return;
   const store = useAppStore.getState();
   const state = control.getState();
   const tilesetIds = new Set(state.tilesets.map((tileset) => tileset.id));
@@ -330,6 +359,7 @@ function hydrateThreeDTilesControlFromStore(
   control: ThreeDTilesControl,
   options: { replaceExisting?: boolean } = {},
 ): void {
+  if (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "")) return;
   const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
 
@@ -610,7 +640,7 @@ function installThreeDTilesPanelHandlers(control: ThreeDTilesControl | null): vo
     installThreeDTilesCloseHandler(control, panel);
     if (control) {
       installGooglePhotorealisticTilesPanelHandlers(control, panel);
-      updateGooglePhotorealisticTilesPanelList(control);
+      updateDeckTilesPanelList(control);
       installArcgisI3sTilesPanelHandlers(control, panel);
     }
   }
@@ -664,7 +694,70 @@ function installGooglePhotorealisticTilesPanelHandlers(
         return;
       }
       applyDefaults();
-      if (!isGooglePhotorealisticTilesetUrl(urlInput?.value ?? "")) return;
+      const url = urlInput?.value.trim() ?? "";
+      if (
+        activeThreeDTilesApp?.getMapRenderer?.() === "arcgis" &&
+        (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url))
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
+        if (status) {
+          status.dataset.status = "error";
+          const message =
+            "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.";
+          status.textContent =
+            activeThreeDTilesApp?.translate?.("plugin.3d-tiles.arcgisSourceUnsupported", message) ??
+            message;
+        }
+        return;
+      }
+      // A blank URL falls through to the library's own submit handler so its
+      // "Tileset URL is required." error is shown, on Mapbox as on MapLibre.
+      if (
+        url &&
+        activeThreeDTilesApp &&
+        ["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "") &&
+        !isGooglePhotorealisticTilesetUrl(url) &&
+        !isArcgisI3sSceneLayerUrl(url)
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const id = `tiles-${crypto.randomUUID()}`;
+        const layer = createThreeDTilesStoreLayer(
+          {
+            id,
+            layerId: `${id}-tiles`,
+            tilesetUrl: url,
+            layerName:
+              panel
+                .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
+                ?.value.trim() || "3D Tiles",
+            altitudeOffset: numberInputValue(
+              panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
+              0,
+            ),
+            opacity: control.getState().opacity,
+            visible:
+              panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
+                ?.checked ?? true,
+            requestHeaders: parseThreeDTilesRequestHeaders(
+              panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Request headers"]')
+                ?.value ?? "",
+            ),
+            status: "loading",
+          },
+          control.getState().opacity,
+        );
+        useAppStore.getState().addLayer(layer);
+        const flyTo =
+          panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
+            ?.checked ?? true;
+        void restoreMapboxTiles(activeThreeDTilesApp, flyTo ? id : undefined).catch(console.error);
+        control.collapse();
+        return;
+      }
+      if (!isGooglePhotorealisticTilesetUrl(url)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       void addGooglePhotorealisticTilesFromPanel(control, panel);
@@ -871,7 +964,7 @@ async function addGooglePhotorealisticTilesFromPanel(
     map: control.getMap(),
   });
   control.collapse();
-  updateGooglePhotorealisticTilesPanelList(control);
+  updateDeckTilesPanelList(control);
 }
 
 /**
@@ -993,18 +1086,25 @@ function addGooglePhotorealisticTilesLayer(
   return id;
 }
 
-function updateGooglePhotorealisticTilesPanelList(control: ThreeDTilesControl | null): void {
+function updateDeckTilesPanelList(control: ThreeDTilesControl | null): void {
   const panel = getThreeDTilesPanel(control);
   if (!panel) return;
 
   const nativeTilesetCount = control?.getState().tilesets.length ?? 0;
-  const googleLayers = useAppStore.getState().layers.filter(isGooglePhotorealisticTilesLayer);
+  const googleLayers = useAppStore
+    .getState()
+    .layers.filter(
+      (layer) =>
+        isGooglePhotorealisticTilesLayer(layer) ||
+        (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "") &&
+          isMapboxTilesLayer(layer)),
+    );
   const nativeStatus = panel.querySelector<HTMLElement>(".three-d-tiles-status");
   if (nativeStatus) {
     nativeStatus.hidden = nativeTilesetCount === 0 && googleLayers.length > 0;
   }
 
-  const googleList = ensureGooglePhotorealisticTilesPanelList(panel);
+  const googleList = ensureDeckTilesPanelList(panel);
   googleList.hidden = googleLayers.length === 0;
 
   // Only rebuild the DOM when the SET of Google layers changes. This runs on
@@ -1015,18 +1115,34 @@ function updateGooglePhotorealisticTilesPanelList(control: ThreeDTilesControl | 
   // is updated by renderGooglePhotorealisticTilesLayers, so skipping the
   // rebuild when the ids are unchanged is safe.
   const idSignature = googleLayers.map((layer) => layer.id).join("|");
-  if (googleList.dataset.geolibreGoogleListIds === idSignature) return;
+  if (googleList.dataset.geolibreGoogleListIds === idSignature) {
+    for (const layer of googleLayers) {
+      const item = Array.from(googleList.children).find(
+        (child) => (child as HTMLElement).dataset.layerId === layer.id,
+      );
+      const status = item?.querySelector<HTMLElement>(".three-d-tiles-list-status");
+      if (status) {
+        status.textContent = String(layer.metadata.error ?? layer.metadata.status ?? "loaded");
+        status.dataset.status = String(layer.metadata.status ?? "loaded");
+      }
+      const visible = item?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      if (visible) visible.checked = layer.visible;
+      const opacity = item?.querySelector<HTMLInputElement>('input[type="range"]');
+      if (opacity) opacity.value = String(layer.opacity);
+    }
+    return;
+  }
   googleList.dataset.geolibreGoogleListIds = idSignature;
 
   googleList.replaceChildren();
   if (googleLayers.length === 0) return;
 
   for (const layer of googleLayers) {
-    googleList.appendChild(createGooglePhotorealisticTilesPanelListItem(layer));
+    googleList.appendChild(createDeckTilesPanelListItem(layer));
   }
 }
 
-function ensureGooglePhotorealisticTilesPanelList(panel: HTMLElement): HTMLElement {
+function ensureDeckTilesPanelList(panel: HTMLElement): HTMLElement {
   const existing = panel.querySelector<HTMLElement>(".geolibre-google-tiles-list");
   if (existing) return existing;
 
@@ -1044,9 +1160,10 @@ function ensureGooglePhotorealisticTilesPanelList(panel: HTMLElement): HTMLEleme
   return googleList;
 }
 
-function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
+function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const item = document.createElement("div");
   item.className = "geolibre-google-tiles-list-item three-d-tiles-list-item active";
+  item.dataset.layerId = layer.id;
 
   const meta = document.createElement("div");
   meta.className = "three-d-tiles-list-meta";
@@ -1055,18 +1172,28 @@ function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTM
   title.className = "three-d-tiles-list-title";
   title.type = "button";
   title.textContent = layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
-  title.addEventListener("click", () => {
-    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
-  });
+  const flyToLayer = () => {
+    if (isMapboxTilesLayer(layer)) {
+      const current = useAppStore.getState().layers.find(({ id }) => id === layer.id);
+      const center = current?.metadata.center;
+      if (Array.isArray(center) && activeThreeDTilesApp)
+        flyToDeckTilesLocation(
+          activeThreeDTilesApp,
+          [Number(center[0]), Number(center[1])],
+          Number(current?.metadata.zoom ?? 16),
+        );
+    } else if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
+  };
+  title.addEventListener("click", flyToLayer);
 
   const url = document.createElement("span");
   url.className = "three-d-tiles-list-url";
-  url.textContent = GOOGLE_PHOTOREALISTIC_TILES_URL;
+  url.textContent = String(layer.source.url ?? GOOGLE_PHOTOREALISTIC_TILES_URL);
 
   const status = document.createElement("span");
   status.className = "three-d-tiles-list-status";
-  status.dataset.status = "loaded";
-  status.textContent = "loaded";
+  status.dataset.status = String(layer.metadata.status ?? "loaded");
+  status.textContent = String(layer.metadata.error ?? layer.metadata.status ?? "loaded");
 
   meta.appendChild(title);
   meta.appendChild(url);
@@ -1102,9 +1229,7 @@ function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTM
   });
 
   const flyTo = createGooglePhotorealisticTilesPanelSmallButton("Fly");
-  flyTo.addEventListener("click", () => {
-    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
-  });
+  flyTo.addEventListener("click", flyToLayer);
 
   const remove = createGooglePhotorealisticTilesPanelSmallButton("Remove");
   remove.addEventListener("click", () => {
@@ -1141,7 +1266,7 @@ function flyToGooglePhotorealisticTiles(
     },
     false,
   );
-  const map = mapOverride ?? app.getMap?.();
+  const map = mapOverride ?? app.getMap?.() ?? app.getMapboxMap?.();
   if (!map) {
     app.fitBounds?.([14.35, 50.05, 14.49, 50.12]);
     return;
@@ -1504,8 +1629,12 @@ function getThreeDTilesDecoderOptions(control: ThreeDTilesControl): {
     // When it does not, fall back to a CDN build of three pinned to the
     // version maplibre-gl-3d-tiles depends on (THREE_VERSION). This is a
     // network-dependent supply-chain fallback, so surface it for diagnosis.
+    // A no-external-CDN build has no such fallback to offer, so say that
+    // rather than naming a unpkg URL this build will never request.
     console.warn(
-      `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
+      NO_EXTERNAL_CDN
+        ? "[GeoLibre] ThreeDTilesControl decoder paths unavailable and external CDNs are disabled in this build; Draco/KTX2-compressed tilesets will fail to load."
+        : `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
     );
   }
   return {

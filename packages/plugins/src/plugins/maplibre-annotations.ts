@@ -1,8 +1,12 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
-import maplibregl from "maplibre-gl";
+// A value (not type-only) namespace import: main added runtime use of
+// `maplibregl.LngLat`/`maplibregl.Marker` here, and v6 has no default export.
+import * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { ANNOTATIONS_PLUGIN_ID } from "../plugin-ids";
+import { type AnnotationMarker, createAnnotationMarker } from "./annotation-marker";
+import { getStyleMap } from "./style-map";
 
 /**
  * Annotation layer plugin: lightweight cartographic decoration (free text,
@@ -31,6 +35,7 @@ const TEXT_MARKER_SHAPE = "text_marker";
 const PREVIEW_SOURCE_ID = "geolibre-annotation-preview";
 const PREVIEW_FILL_LAYER_ID = "geolibre-annotation-preview-fill";
 const PREVIEW_LINE_LAYER_ID = "geolibre-annotation-preview-line";
+const ANNOTATION_TOOLS_ID = "geolibre-annotation-tools";
 
 const DEFAULT_COLOR = "#ef4444";
 const DEFAULT_WIDTH = 3;
@@ -64,6 +69,7 @@ let activeTool: AnnotationTool | null = null;
 let strokeColor = DEFAULT_COLOR;
 let strokeWidth = DEFAULT_WIDTH;
 let annotationLayerId: string | null = null;
+let movingAnnotationId: string | null = null;
 let unregisterRightPanelDisposer: (() => void) | null = null;
 
 // Transient draw state.
@@ -82,6 +88,11 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
   id: ANNOTATIONS_PLUGIN_ID,
   name: "Annotations",
   version: "0.1.0",
+  // Elements live in a store GeoJSON layer both 2D engines draw; the draw
+  // preview and the pin/sticky/image markers go through the style API and
+  // `project`, which mapbox-gl shares (see annotation-marker.ts for the one
+  // MapLibre-specific class this avoids).
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     appApi = app;
     pluginActive = true;
@@ -95,7 +106,7 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
       return false;
     }
 
-    const map = app.getMap?.();
+    const map = getStyleMap(app);
     if (map) bindMap(map);
     rediscoverAnnotationLayer();
 
@@ -196,6 +207,8 @@ const WIDTH_VALUES = [2, 3, 5] as const;
  */
 export interface AnnotationLabels {
   toolbar: string;
+  collapse: string;
+  expand: string;
   /** Name of the layer the annotations are stored in (shown in the Layers panel). */
   layerName: string;
   elementsPanelTitle: string;
@@ -205,6 +218,10 @@ export interface AnnotationLabels {
   widthOptions: { thin: string; medium: string; thick: string };
   deleteLast: string;
   clearAll: string;
+  newLayer: string;
+  edit: string;
+  move: string;
+  moveToLayer: string;
   textPlaceholder: string;
   pinTitlePrompt: string;
   pinDescPrompt: string;
@@ -218,6 +235,8 @@ export interface AnnotationLabels {
 
 let labels: AnnotationLabels = {
   toolbar: "Annotation tools",
+  collapse: "Collapse annotation tools",
+  expand: "Expand annotation tools",
   layerName: ANNOTATIONS_LAYER_NAME,
   elementsPanelTitle: "Elements",
   tools: {
@@ -235,6 +254,10 @@ let labels: AnnotationLabels = {
   widthOptions: { thin: "Thin", medium: "Medium", thick: "Thick" },
   deleteLast: "Delete last annotation",
   clearAll: "Clear all annotations",
+  newLayer: "New annotation layer",
+  edit: "Edit element",
+  move: "Move element (then click its new position)",
+  moveToLayer: "Move to layer",
   textPlaceholder: "Type label, Enter to place",
   pinTitlePrompt: "Pin title:",
   pinDescPrompt: "Pin description (optional):",
@@ -271,7 +294,10 @@ function widthOptionLabel(value: number): string {
 /** A plain-DOM MapLibre control hosting the annotation tools and style inputs. */
 class AnnotationToolbarControl implements maplibregl.IControl {
   private container: HTMLElement | null = null;
+  private toolsContainer: HTMLElement | null = null;
+  private collapseButton: HTMLButtonElement | null = null;
   private toolButtons = new Map<AnnotationTool, HTMLButtonElement>();
+  private collapsed = false;
   // Closures that re-apply each element's translated text from `labels`, run on
   // mount and again whenever the active language changes (see relabel()).
   private relabelers: (() => void)[] = [];
@@ -280,6 +306,24 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
     this.relabelers = [() => container.setAttribute("aria-label", labels.toolbar)];
+
+    const collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "geolibre-annotations-collapse";
+    collapseButton.setAttribute("aria-controls", ANNOTATION_TOOLS_ID);
+    collapseButton.addEventListener("click", () => {
+      this.collapsed = !this.collapsed;
+      if (this.collapsed) setActiveTool(null);
+      this.syncCollapsedState();
+      this.relabel();
+    });
+    this.applyLabel(collapseButton, () => (this.collapsed ? labels.expand : labels.collapse));
+    container.appendChild(collapseButton);
+
+    const toolsContainer = document.createElement("div");
+    toolsContainer.id = ANNOTATION_TOOLS_ID;
+    toolsContainer.className = "geolibre-annotations-tools";
+    container.appendChild(toolsContainer);
 
     for (const tool of TOOL_ORDER) {
       const button = document.createElement("button");
@@ -291,7 +335,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       });
       this.applyLabel(button, () => labels.tools[tool] || tool);
       this.toolButtons.set(tool, button);
-      container.appendChild(button);
+      toolsContainer.appendChild(button);
     }
 
     const color = document.createElement("input");
@@ -302,7 +346,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       strokeColor = color.value;
     });
     this.applyLabel(color, () => labels.color);
-    container.appendChild(color);
+    toolsContainer.appendChild(color);
 
     // A cycling button (thin → medium → thick) rather than a native <select>:
     // the icon uses currentColor so it themes with the other tools, and there is
@@ -324,23 +368,33 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     });
     renderWidth();
     this.applyLabel(width, () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`);
-    container.appendChild(width);
+    toolsContainer.appendChild(width);
+
+    const newLayer = this.makeActionButton(
+      () => labels.newLayer,
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
+      () => createAnnotationLayer(),
+    );
+    toolsContainer.appendChild(newLayer);
 
     const deleteLast = this.makeActionButton(
       () => labels.deleteLast,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>',
       () => deleteLastAnnotation(),
     );
-    container.appendChild(deleteLast);
+    toolsContainer.appendChild(deleteLast);
 
     const clearAll = this.makeActionButton(
       () => labels.clearAll,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
       () => clearAllAnnotations(),
     );
-    container.appendChild(clearAll);
+    toolsContainer.appendChild(clearAll);
 
     this.container = container;
+    this.toolsContainer = toolsContainer;
+    this.collapseButton = collapseButton;
+    this.syncCollapsedState();
     this.relabel();
     return container;
   }
@@ -348,6 +402,8 @@ class AnnotationToolbarControl implements maplibregl.IControl {
   onRemove(): void {
     this.container?.remove();
     this.container = null;
+    this.toolsContainer = null;
+    this.collapseButton = null;
     this.toolButtons.clear();
     this.relabelers = [];
   }
@@ -386,6 +442,17 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       button.classList.toggle("is-active", activeTool === tool);
     }
   }
+
+  /** Reduce the tall toolbar to its toggle while keeping it discoverable. */
+  private syncCollapsedState(): void {
+    if (!this.container || !this.toolsContainer || !this.collapseButton) return;
+    this.container.classList.toggle("is-collapsed", this.collapsed);
+    this.toolsContainer.hidden = this.collapsed;
+    this.collapseButton.setAttribute("aria-expanded", String(!this.collapsed));
+    this.collapseButton.innerHTML = this.collapsed
+      ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +460,13 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 // ---------------------------------------------------------------------------
 
 function setActiveTool(tool: AnnotationTool | null): void {
+  if (movingAnnotationId) {
+    movingAnnotationId = null;
+    if (boundMap) {
+      const canvas = liveCanvas(boundMap);
+      if (canvas) canvas.style.cursor = tool ? "crosshair" : "";
+    }
+  }
   if (activeTool === tool) return;
   resetDrawState();
   // Drop any in-progress preview (e.g. an arrow whose start point was placed)
@@ -552,9 +626,9 @@ function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, featur
   activePopupContainer = container;
 }
 
-const activeImageMarkers = new Map<string, maplibregl.Marker>();
-const activePinMarkers = new Map<string, maplibregl.Marker>();
-const activeStickyMarkers = new Map<string, maplibregl.Marker>();
+const activeImageMarkers = new Map<string, AnnotationMarker>();
+const activePinMarkers = new Map<string, AnnotationMarker>();
+const activeStickyMarkers = new Map<string, AnnotationMarker>();
 let elementMarkerUnsub: (() => void) | null = null;
 
 /** Sync all element HTML markers (pins, sticky notes, placed images). */
@@ -573,8 +647,9 @@ function syncPinMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -620,7 +695,9 @@ function syncPinMarkers(): void {
       titleEl.className = "pin-title";
       titleEl.style.cssText =
         "background: var(--geolibre-bg, #fff); color: var(--geolibre-fg, #1f2937); font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-top: -6px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid var(--geolibre-border, #d1d5db);";
-      titleEl.textContent = String(props.title || "Pin");
+      const pinTitle = String(props.title || "").trim();
+      titleEl.textContent = pinTitle;
+      titleEl.hidden = !pinTitle;
       container.appendChild(titleEl);
 
       container.onclick = (e) => {
@@ -628,9 +705,10 @@ function syncPinMarkers(): void {
         showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
       };
 
-      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
-        .setLngLat(coords as [number, number])
-        .addTo(map);
+      const marker = createAnnotationMarker(map, {
+        element: container,
+        anchor: "bottom",
+      }).setLngLat(coords as [number, number]);
 
       activePinMarkers.set(id, marker);
     } else {
@@ -642,8 +720,10 @@ function syncPinMarkers(): void {
         pinSvg.innerHTML = `<svg viewBox="0 0 24 36" width="28" height="42" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z"/><circle cx="12" cy="11" r="4.5" fill="#ffffff" opacity="0.9"/></svg>`;
       }
       const titleEl = container.querySelector(".pin-title");
-      if (titleEl) {
-        titleEl.textContent = String(props.title || "Pin");
+      if (titleEl instanceof HTMLElement) {
+        const pinTitle = String(props.title || "").trim();
+        titleEl.textContent = pinTitle;
+        titleEl.hidden = !pinTitle;
       }
       container.onclick = (e) => {
         e.stopPropagation();
@@ -675,8 +755,9 @@ function syncStickyNoteMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -754,9 +835,10 @@ function syncStickyNoteMarkers(): void {
         showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
       };
 
-      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
-        .setLngLat(coords as [number, number])
-        .addTo(map);
+      const marker = createAnnotationMarker(map, {
+        element: container,
+        anchor: "bottom",
+      }).setLngLat(coords as [number, number]);
 
       activeStickyMarkers.set(id, marker);
     } else {
@@ -834,8 +916,9 @@ function syncPlacedImageMarkers(): void {
   const map = boundMap;
   if (!map) return;
   const store = useAppStore.getState();
-  const layer = findAnnotationLayer(store.layers);
-  const features = (layer?.geojson?.features as Feature[]) ?? [];
+  const features = store.layers
+    .filter((layer) => isAnnotationLayer(layer) && layer.visible)
+    .flatMap((layer) => (layer.geojson?.features as Feature[]) ?? []);
 
   const currentIds = new Set<string>();
 
@@ -883,9 +966,9 @@ function syncPlacedImageMarkers(): void {
         showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
       };
 
-      const marker = new maplibregl.Marker({ element: container })
-        .setLngLat(coords as [number, number])
-        .addTo(map);
+      const marker = createAnnotationMarker(map, { element: container }).setLngLat(
+        coords as [number, number],
+      );
 
       activeImageMarkers.set(id, marker);
     } else {
@@ -925,6 +1008,15 @@ function clearAllElementMarkers(): void {
   activePinMarkers.clear();
   for (const marker of activeStickyMarkers.values()) marker.remove();
   activeStickyMarkers.clear();
+}
+
+/**
+ * The map canvas, or nothing once the map is gone. Deactivation on a renderer
+ * swap runs after the old map is torn down, and a removed mapbox-gl map has
+ * no canvas any more (`getCanvas()` returns `undefined` despite its type).
+ */
+function liveCanvas(map: maplibregl.Map): HTMLCanvasElement | undefined {
+  return map.getCanvas() as HTMLCanvasElement | undefined;
 }
 
 function bindMap(map: maplibregl.Map): void {
@@ -968,17 +1060,24 @@ function unbindMap(): void {
   map.off("mouseup", handleMouseUp);
   map.off("move", repositionElementPopup);
   window.removeEventListener("mouseup", handleWindowMouseUp);
-  map.getCanvas().removeEventListener("keydown", handleKeyDown, {
+  const canvas = liveCanvas(map);
+  canvas?.removeEventListener("keydown", handleKeyDown, {
     capture: true,
   });
-  map.dragPan.enable();
-  map.getCanvas().style.cursor = "";
+  // Handlers are gone with the map as well.
+  (map.dragPan as typeof map.dragPan | undefined)?.enable();
+  if (canvas) canvas.style.cursor = "";
   clearPreview(map);
   boundMap = null;
 }
 
 function handleKeyDown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
+  if (movingAnnotationId) {
+    movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    return;
+  }
   if (activeTextInput) {
     cancelTextInput();
     return;
@@ -1212,9 +1311,11 @@ function openElementDialog(
     "padding: 5px 10px; border-radius: 6px; border: none; background: var(--geolibre-primary, #3b82f6); color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;";
   saveBtn.onclick = (e) => {
     e.stopPropagation();
+    const enteredTitle = titleInput.value.trim();
     const title =
-      titleInput.value.trim() ||
-      (type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image");
+      type === "pin"
+        ? enteredTitle
+        : enteredTitle || (type === "sticky_note" ? "Sticky Note" : "Placed Image");
     const description = descInput ? descInput.value.trim() : "";
 
     if (type === "placed_image" && !description) {
@@ -1252,6 +1353,12 @@ function openElementDialog(
 
 function handleClick(event: maplibregl.MapMouseEvent): void {
   if (!pluginActive) return;
+  if (movingAnnotationId) {
+    moveElementTo(movingAnnotationId, event.lngLat);
+    movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+    return;
+  }
   if (activeTool === "text") {
     openTextInput(event);
     return;
@@ -1276,6 +1383,10 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
     openElementDialog(event, "placed_image", (data) => {
       const imageUrl = data.imageUrl || "";
       if (data.placementMode === "extent") {
+        const storeBeforeOverlay = useAppStore.getState();
+        const selectedAnnotationLayerId = storeBeforeOverlay.layers.find(
+          (layer) => layer.id === storeBeforeOverlay.selectedLayerId && isAnnotationLayer(layer),
+        )?.id;
         // Corner-pinned placement: use the store's addImageOverlayLayer API.
         // Compute a rectangular extent around the click point, then let the
         // image overlay layer handle rendering. Also create a tracking feature
@@ -1313,6 +1424,11 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
             visible: true,
           },
         };
+        // Adding the linked overlay selects that non-annotation layer. Restore
+        // the user's annotation target before routing the tracking feature.
+        if (selectedAnnotationLayerId) {
+          useAppStore.getState().selectLayer(selectedAnnotationLayerId);
+        }
         appendAnnotationFeatures([trackingFeature]);
       } else {
         appendAnnotationFeatures([placedImageFeature(event.lngLat, imageUrl, data.title)]);
@@ -1834,9 +1950,16 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
 }
 
 function clearPreview(map: maplibregl.Map): void {
-  if (map.getLayer(PREVIEW_LINE_LAYER_ID)) map.removeLayer(PREVIEW_LINE_LAYER_ID);
-  if (map.getLayer(PREVIEW_FILL_LAYER_ID)) map.removeLayer(PREVIEW_FILL_LAYER_ID);
-  if (map.getSource(PREVIEW_SOURCE_ID)) map.removeSource(PREVIEW_SOURCE_ID);
+  // Deactivation on a renderer swap runs after the old map is torn down, and a
+  // removed mapbox-gl map throws from `getLayer` (its style is gone); there is
+  // nothing left to clear from it either way.
+  try {
+    if (map.getLayer(PREVIEW_LINE_LAYER_ID)) map.removeLayer(PREVIEW_LINE_LAYER_ID);
+    if (map.getLayer(PREVIEW_FILL_LAYER_ID)) map.removeLayer(PREVIEW_FILL_LAYER_ID);
+    if (map.getSource(PREVIEW_SOURCE_ID)) map.removeSource(PREVIEW_SOURCE_ID);
+  } catch {
+    // Already torn down with the map.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1848,6 +1971,12 @@ function isAnnotationLayer(layer: GeoLibreLayer): boolean {
 }
 
 function findAnnotationLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
+  const selectedId = useAppStore.getState().selectedLayerId;
+  const selected = layers.find((layer) => layer.id === selectedId);
+  if (selected && isAnnotationLayer(selected)) {
+    annotationLayerId = selected.id;
+    return selected;
+  }
   if (annotationLayerId) {
     const tracked = layers.find((layer) => layer.id === annotationLayerId);
     // Verify the tracked layer is still an annotation layer: after a project
@@ -1869,8 +1998,18 @@ function rediscoverAnnotationLayer(): void {
 
 function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
   const store = useAppStore.getState();
-  const layer = annotationLayer ?? findAnnotationLayer(store.layers);
-  if (!layer || !layer.geojson || !Array.isArray(layer.geojson.features)) return;
+  // Without an explicit layer, backfill every annotation layer: markers render
+  // across all of them, so legacy features in a non-selected layer would
+  // otherwise never get an `annotationId` and would group under "undefined".
+  const layers = annotationLayer ? [annotationLayer] : store.layers.filter(isAnnotationLayer);
+  for (const layer of layers) backfillLayerAnnotationIds(store, layer);
+}
+
+function backfillLayerAnnotationIds(
+  store: ReturnType<typeof useAppStore.getState>,
+  layer: GeoLibreLayer,
+): void {
+  if (!layer.geojson || !Array.isArray(layer.geojson.features)) return;
 
   const rawFeatures = layer.geojson.features as Feature[];
   let changed = false;
@@ -1904,6 +2043,11 @@ function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
 function appendAnnotationFeatures(features: Feature[]): void {
   if (!features.length) return;
   const store = useAppStore.getState();
+  // Prefer the selected layer when it is an annotation layer, but fall back to
+  // the tracked/first one: `store.addLayer` moves `selectedLayerId` onto every
+  // newly added layer (including the image overlay an extent-placed image
+  // creates), and without the fallback each annotation after that would spawn
+  // its own "Annotations N" layer.
   const existing = findAnnotationLayer(store.layers);
 
   if (existing) {
@@ -1921,10 +2065,23 @@ function appendAnnotationFeatures(features: Feature[]): void {
   // render the first annotation without its per-feature colors). Text labels
   // carry their own `text-color`, shapes/arrows their own stroke/fill, so no
   // layer-level color needs setting here.
+  createAnnotationLayer(features);
+}
+
+/** Create and select an annotation layer, including an intentionally empty one. */
+function createAnnotationLayer(features: Feature[] = []): string {
+  const store = useAppStore.getState();
   const id = crypto.randomUUID();
+  const names = new Set(store.layers.filter(isAnnotationLayer).map((layer) => layer.name));
+  let ordinal = 1;
+  let name = labels.layerName;
+  while (names.has(name)) {
+    ordinal += 1;
+    name = `${labels.layerName} ${ordinal}`;
+  }
   const layer: GeoLibreLayer = {
     id,
-    name: labels.layerName,
+    name,
     type: "geojson",
     source: { type: "geojson" },
     visible: true,
@@ -1937,10 +2094,12 @@ function appendAnnotationFeatures(features: Feature[]): void {
     },
     metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
     geojson: { type: "FeatureCollection", features },
-    sourcePath: ANNOTATIONS_SOURCE_PATH,
+    sourcePath: `${ANNOTATIONS_SOURCE_PATH}/${id}`,
   };
   store.addLayer(layer);
+  store.selectLayer(id);
   annotationLayerId = id;
+  return id;
 }
 
 /** Remove the most recently added annotation (and its arrowhead, if any). */
@@ -1988,7 +2147,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
   container.innerHTML = "";
   container.className = "geolibre-elements-panel";
   container.style.cssText =
-    "padding: 12px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--geolibre-fg, #1f2937); height: 100%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;";
+    "--geolibre-bg:hsl(var(--card)); --geolibre-bg-subtle:hsl(var(--accent)); --geolibre-fg:hsl(var(--foreground)); --geolibre-fg-muted:hsl(var(--muted-foreground)); --geolibre-border:hsl(var(--border)); padding: 12px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--geolibre-fg, #1f2937); height: 100%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;";
 
   let editingId: string | null = null;
 
@@ -2032,6 +2191,71 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     header.textContent = `${labels.elementsPanelTitle} (${elements.length})`;
     container.appendChild(header);
 
+    const layerRow = document.createElement("div");
+    layerRow.style.cssText = "display:flex; gap:6px; align-items:center;";
+    const layerPicker = document.createElement("div");
+    layerPicker.style.cssText = "position:relative; flex:1; min-width:0;";
+    const layerSelect = document.createElement("button");
+    layerSelect.type = "button";
+    layerSelect.setAttribute("aria-label", labels.layerName);
+    layerSelect.setAttribute("aria-haspopup", "listbox");
+    layerSelect.setAttribute("aria-expanded", "false");
+    layerSelect.style.cssText =
+      "width:100%; min-width:0; padding:5px 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; cursor:pointer; text-align:left;";
+    const selectedLayerName = document.createElement("span");
+    selectedLayerName.style.cssText =
+      "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+    selectedLayerName.textContent = layer?.name ?? labels.layerName;
+    const layerChevron = document.createElement("span");
+    layerChevron.textContent = "⌄";
+    layerChevron.setAttribute("aria-hidden", "true");
+    layerSelect.append(selectedLayerName, layerChevron);
+    const layerMenu = document.createElement("div");
+    layerMenu.hidden = true;
+    layerMenu.setAttribute("role", "listbox");
+    layerMenu.style.cssText =
+      "position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:100; padding:4px; display:flex; flex-direction:column; gap:2px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; box-shadow:0 6px 18px rgba(0,0,0,.2);";
+    for (const candidate of store.layers.filter(isAnnotationLayer)) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(candidate.id === layer?.id));
+      option.textContent = candidate.name;
+      option.style.cssText =
+        "width:100%; padding:6px 8px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; text-align:left;";
+      option.onclick = () => {
+        annotationLayerId = candidate.id;
+        store.selectLayer(candidate.id);
+        update();
+      };
+      layerMenu.appendChild(option);
+    }
+    layerSelect.onclick = () => {
+      layerMenu.hidden = !layerMenu.hidden;
+      layerSelect.setAttribute("aria-expanded", String(!layerMenu.hidden));
+    };
+    layerPicker.addEventListener("focusout", (event) => {
+      if (!layerPicker.contains((event as FocusEvent).relatedTarget as Node | null)) {
+        layerMenu.hidden = true;
+        layerSelect.setAttribute("aria-expanded", "false");
+      }
+    });
+    layerPicker.append(layerSelect, layerMenu);
+    layerRow.appendChild(layerPicker);
+    const addLayer = document.createElement("button");
+    addLayer.type = "button";
+    addLayer.textContent = "+";
+    addLayer.title = labels.newLayer;
+    addLayer.setAttribute("aria-label", labels.newLayer);
+    addLayer.style.cssText =
+      "width:30px; height:30px; flex:0 0 30px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg-subtle,#f3f4f6); color:inherit; font-size:20px; font-weight:500; line-height:1; cursor:pointer;";
+    addLayer.onclick = () => {
+      createAnnotationLayer();
+      update();
+    };
+    layerRow.appendChild(addLayer);
+    container.appendChild(layerRow);
+
     if (elements.length === 0) {
       const empty = document.createElement("div");
       empty.style.cssText = "color: #9ca3af; text-align: center; padding: 24px 0;";
@@ -2060,24 +2284,62 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         "flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
 
       if (editingId === el.id) {
+        titleContainer.style.cssText = "flex:1; min-width:0; display:grid; gap:5px;";
+        const firstProps = (el.features[0]?.properties as Record<string, unknown>) ?? {};
         const input = document.createElement("input");
         input.type = "text";
-        input.value = el.title;
-        input.style.cssText =
-          "width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px; border: 1px solid #3b82f6; border-radius: 3px;";
+        input.value =
+          typeof firstProps.title === "string"
+            ? firstProps.title
+            : el.type === "pin"
+              ? ""
+              : el.title;
+        input.placeholder = labels.pinTitlePrompt;
+        const description = document.createElement("textarea");
+        description.value = el.description ?? "";
+        description.placeholder = labels.pinDescPrompt;
+        description.rows = 2;
+        const supportsColor = el.type !== "placed_image";
+        const supportsWidth = ["highlight", "freehand", "line"].includes(el.type);
+        const color = document.createElement("input");
+        color.type = "color";
+        color.value = String(
+          firstProps.pinColor ||
+            firstProps["text-color"] ||
+            firstProps.stroke ||
+            firstProps.fill ||
+            DEFAULT_COLOR,
+        );
+        color.title = labels.color;
+        const width = document.createElement("input");
+        width.type = "number";
+        width.min = "1";
+        width.max = "20";
+        width.value = String(firstProps["stroke-width"] || DEFAULT_WIDTH);
+        width.title = labels.width;
+        for (const field of [input, description, width]) {
+          field.style.cssText =
+            "width:100%; box-sizing:border-box; font-size:12px; padding:4px; border:1px solid #3b82f6; border-radius:3px;";
+        }
         const commit = () => {
           const val = input.value.trim();
-          if (val && val !== el.title) {
-            const patch: Record<string, unknown> = { title: val };
-            if (el.type === "text") {
-              patch.text = val;
-            }
-            updateElementProps(el.id, patch);
+          const nextTitle = el.type === "pin" ? val : val || el.title;
+          const patch: Record<string, unknown> = {
+            title: nextTitle,
+            description: description.value.trim(),
+          };
+          if (supportsColor) {
+            patch.stroke = color.value;
+            patch.fill = color.value;
+            patch.pinColor = color.value;
+            patch["text-color"] = color.value;
           }
+          if (supportsWidth) patch["stroke-width"] = Number(width.value) || DEFAULT_WIDTH;
+          if (el.type === "text") patch.text = nextTitle;
+          updateElementProps(el.id, patch);
           editingId = null;
           update();
         };
-        input.addEventListener("blur", commit);
         input.addEventListener("keydown", (e) => {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") {
@@ -2085,7 +2347,22 @@ export function renderElementsPanel(container: HTMLElement): () => void {
             update();
           }
         });
-        titleContainer.appendChild(input);
+        titleContainer.append(input, description);
+        if (supportsColor) titleContainer.appendChild(color);
+        if (supportsWidth) titleContainer.appendChild(width);
+        titleContainer.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            editingId = null;
+            update();
+          }
+        });
+        const save = document.createElement("button");
+        save.type = "button";
+        save.textContent = labels.saveElement;
+        save.style.cssText =
+          "border: none; background: none; cursor: pointer; color: #2563eb; padding: 2px;";
+        save.onclick = commit;
+        titleContainer.appendChild(save);
         setTimeout(() => input.focus(), 10);
       } else {
         const t = document.createElement("span");
@@ -2104,13 +2381,39 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       row.appendChild(titleContainer);
 
       const ctrl = document.createElement("div");
-      ctrl.style.cssText = "display: flex; align-items: center; gap: 2px;";
+      ctrl.style.cssText =
+        "display:flex; align-items:center; justify-content:flex-end; gap:2px; flex:0 1 auto; min-width:0; max-width:100%;";
+      const actionButtonStyle =
+        "border:none; background:none; cursor:pointer; width:26px; height:26px; flex:0 0 26px; display:inline-flex; align-items:center; justify-content:center; color:var(--geolibre-fg-muted,#9ca3af); padding:0; line-height:1;";
+
+      const edit = document.createElement("button");
+      edit.textContent = "✎";
+      edit.title = labels.edit;
+      edit.setAttribute("aria-label", labels.edit);
+      edit.style.cssText = `${actionButtonStyle} font-size:18px;`;
+      edit.onclick = (e) => {
+        e.stopPropagation();
+        editingId = editingId === el.id ? null : el.id;
+        update();
+      };
+      ctrl.appendChild(edit);
+
+      const move = document.createElement("button");
+      move.textContent = "⌖";
+      move.title = labels.move;
+      move.setAttribute("aria-label", labels.move);
+      move.style.cssText = `${actionButtonStyle} font-size:19px;`;
+      move.onclick = (e) => {
+        e.stopPropagation();
+        movingAnnotationId = el.id;
+        boundMap?.getCanvas().style.setProperty("cursor", "crosshair");
+      };
+      ctrl.appendChild(move);
 
       const up = document.createElement("button");
-      up.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
+      up.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
       up.title = "Move Up";
-      up.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      up.style.cssText = actionButtonStyle;
       up.disabled = index === 0;
       up.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2119,10 +2422,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       ctrl.appendChild(up);
 
       const down = document.createElement("button");
-      down.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      down.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
       down.title = "Move Down";
-      down.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      down.style.cssText = actionButtonStyle;
       down.disabled = index === elements.length - 1;
       down.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2135,19 +2437,63 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
         : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
       vis.title = el.visible ? "Hide" : "Show";
-      vis.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #4b5563; padding: 2px;";
+      vis.style.cssText = actionButtonStyle;
       vis.addEventListener("click", (e) => {
         e.stopPropagation();
         updateElementProps(el.id, { visible: !el.visible });
       });
       ctrl.appendChild(vis);
 
+      const otherLayers = store.layers.filter(
+        (candidate) => isAnnotationLayer(candidate) && candidate.id !== layer?.id,
+      );
+      if (otherLayers.length > 0) {
+        const transferPicker = document.createElement("div");
+        transferPicker.style.cssText = "position:relative; width:32px; flex:0 0 32px;";
+        const transfer = document.createElement("button");
+        transfer.type = "button";
+        transfer.textContent = "↪";
+        transfer.title = labels.moveToLayer;
+        transfer.setAttribute("aria-label", labels.moveToLayer);
+        transfer.setAttribute("aria-haspopup", "menu");
+        transfer.setAttribute("aria-expanded", "false");
+        transfer.style.cssText =
+          "width:32px; height:26px; flex:0 0 32px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:4px; background:var(--geolibre-bg,#fff); color:inherit; cursor:pointer;";
+        const transferMenu = document.createElement("div");
+        transferMenu.hidden = true;
+        transferMenu.setAttribute("role", "menu");
+        transferMenu.style.cssText =
+          "position:absolute; top:calc(100% + 4px); right:0; z-index:100; min-width:150px; padding:4px; display:flex; flex-direction:column; gap:2px; border:1px solid var(--geolibre-border,#d1d5db); border-radius:5px; background:var(--geolibre-bg,#fff); color:inherit; box-shadow:0 6px 18px rgba(0,0,0,.2);";
+        for (const target of otherLayers) {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.setAttribute("role", "menuitem");
+          option.textContent = target.name;
+          option.style.cssText =
+            "width:100%; padding:6px 8px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; text-align:left; white-space:nowrap;";
+          option.onclick = () => {
+            if (layer) moveElementToLayer(el.id, layer.id, target.id);
+          };
+          transferMenu.appendChild(option);
+        }
+        transfer.onclick = () => {
+          transferMenu.hidden = !transferMenu.hidden;
+          transfer.setAttribute("aria-expanded", String(!transferMenu.hidden));
+        };
+        transferPicker.addEventListener("focusout", (event) => {
+          if (!transferPicker.contains((event as FocusEvent).relatedTarget as Node | null)) {
+            transferMenu.hidden = true;
+            transfer.setAttribute("aria-expanded", "false");
+          }
+        });
+        transferPicker.append(transfer, transferMenu);
+        ctrl.appendChild(transferPicker);
+      }
+
       const del = document.createElement("button");
       del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
       del.title = "Delete";
-      del.style.cssText =
-        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #ef4444; padding: 2px;";
+      del.style.cssText = `${actionButtonStyle} color:#ef4444;`;
       del.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteElementById(el.id);
@@ -2163,11 +2509,15 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
   update();
   const unsub = useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers) {
+    if (state.layers !== previous.layers || state.selectedLayerId !== previous.selectedLayerId) {
       update();
     }
   });
-  return () => unsub();
+  return () => {
+    unsub();
+    movingAnnotationId = null;
+    if (boundMap) boundMap.getCanvas().style.cursor = activeTool ? "crosshair" : "";
+  };
 }
 
 function getGlyphIcon(type: string): string {
@@ -2253,6 +2603,140 @@ export function updateElementProps(annotationId: string, newProps: Record<string
     if (typeof overlayId === "string") {
       store.setLayerVisibility(overlayId, newProps.visible !== false);
     }
+  }
+}
+
+/** Translate every geometry belonging to an annotation so its centre lands at the clicked point. */
+export function moveElementTo(annotationId: string, lngLat: maplibregl.LngLat): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find(
+    (candidate) =>
+      isAnnotationLayer(candidate) &&
+      candidate.geojson?.features.some(
+        (feature) =>
+          (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+      ),
+  );
+  if (!layer?.geojson) return;
+  const targets = layer.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+  );
+  const positions: Position[] = [];
+  const collect = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      positions.push(value as Position);
+      return;
+    }
+    value.forEach(collect);
+  };
+  targets.forEach((feature) => {
+    if (feature.geometry.type !== "GeometryCollection") collect(feature.geometry.coordinates);
+  });
+  if (!positions.length) return;
+  const bounds = positions.reduce(
+    ([minX, minY, maxX, maxY], [x, y]) => [
+      Math.min(minX, x),
+      Math.min(minY, y),
+      Math.max(maxX, x),
+      Math.max(maxY, y),
+    ],
+    [Infinity, Infinity, -Infinity, -Infinity],
+  );
+  const centre: Position = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
+  const dx = lngLat.lng - centre[0];
+  const dy = lngLat.lat - centre[1];
+  const overlayIds = new Set(
+    targets
+      .map((feature) => (feature.properties as Record<string, unknown> | null)?.overlayLayerId)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const translate = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      return [value[0] + dx, value[1] + dy, ...value.slice(2)];
+    }
+    return value.map(translate);
+  };
+  store.updateLayer(layer.id, {
+    geojson: {
+      ...layer.geojson,
+      features: layer.geojson.features.map((feature) =>
+        (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId &&
+        feature.geometry.type !== "GeometryCollection"
+          ? {
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: translate(feature.geometry.coordinates),
+              },
+            }
+          : feature,
+      ) as Feature[],
+    },
+  });
+  for (const overlayId of overlayIds) {
+    const overlay = useAppStore.getState().layers.find((candidate) => candidate.id === overlayId);
+    if (overlay?.source.type !== "image" || !Array.isArray(overlay.source.coordinates)) continue;
+    store.updateLayer(overlay.id, {
+      source: {
+        ...overlay.source,
+        coordinates: overlay.source.coordinates.map(([lng, lat]) => [lng + dx, lat + dy]),
+      },
+      metadata: {
+        ...overlay.metadata,
+        ...(Array.isArray(overlay.metadata.bounds) && overlay.metadata.bounds.length === 4
+          ? {
+              bounds: [
+                Number(overlay.metadata.bounds[0]) + dx,
+                Number(overlay.metadata.bounds[1]) + dy,
+                Number(overlay.metadata.bounds[2]) + dx,
+                Number(overlay.metadata.bounds[3]) + dy,
+              ],
+            }
+          : {}),
+      },
+    });
+  }
+}
+
+/** Move a grouped annotation between tagged annotation layers. */
+export function moveElementToLayer(
+  annotationId: string,
+  sourceLayerId: string,
+  targetLayerId: string,
+): void {
+  const store = useAppStore.getState();
+  const source = store.layers.find(
+    (layer) => layer.id === sourceLayerId && isAnnotationLayer(layer),
+  );
+  const target = store.layers.find(
+    (layer) => layer.id === targetLayerId && isAnnotationLayer(layer),
+  );
+  if (!source?.geojson || !target?.geojson || source.id === target.id) return;
+  const moved = source.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId === annotationId,
+  );
+  if (!moved.length) return;
+  store.updateLayer(target.id, {
+    geojson: {
+      ...target.geojson,
+      features: [...target.geojson.features, ...moved],
+    },
+  });
+  const remaining = source.geojson.features.filter(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.annotationId !== annotationId,
+  );
+  if (remaining.length === 0) {
+    store.removeLayer(source.id);
+    if (annotationLayerId === source.id) annotationLayerId = target.id;
+  } else {
+    store.updateLayer(source.id, {
+      geojson: { ...source.geojson, features: remaining },
+    });
   }
 }
 

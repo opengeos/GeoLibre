@@ -132,13 +132,30 @@ ci` gate does.
 
 ### End-to-end smoke tests
 
-`npm run test:e2e` runs the Playwright smoke suite in `e2e/` against the built
-web app (it builds, serves it with `vite preview`, and drives a headless
-Chromium). It is a render-path guardrail — it loads a GeoJSON layer, opens the
-attribute table, toggles visibility, and runs an accessibility check — not
-exhaustive coverage. Install the browser once with `npx playwright install
-chromium`. The suite runs as a separate `E2E smoke (Playwright)` job in CI and
-uploads its report as an artifact on failure.
+`npm run test:e2e` runs the Playwright suite in `e2e/` against the built web app
+(it builds, serves it with `vite preview`, and drives a headless Chromium).
+Install the browser once with `npx playwright install chromium`.
+
+The suite is split into two Playwright projects, which together partition
+`e2e/` — a plain `npm run test:e2e` still runs every spec exactly once:
+
+| Project | Command | What it covers | When it runs |
+| --- | --- | --- | --- |
+| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `features` | `npm run test:e2e:features` | Per-feature integration: Mapbox/Cesium engines, STAC, exports, story maps, the scene graph, plugin install. | Nightly and on demand via `e2e-full.yml`, sharded 4x — or on a PR labelled `full-e2e`. |
+
+The split is a wall-clock decision, not a judgement about value: the full suite
+is ~36 min serial on a CI runner and the feature specs are ~27 min of it, which
+made this job the sole critical path of CI while every other job finished in
+under 10 minutes. Most feature specs guard a specific shipped regression, so
+they are still run — just not against every commit.
+
+**Add a new spec to `core` only if it would break for every user.** The list
+lives in `CORE_SPECS` in `playwright.config.ts`; anything not named there is
+automatically part of `features`. If you are touching an area the nightly suite
+covers, label the PR `full-e2e` to get that check before merging.
+
+Both jobs upload their Playwright report as an artifact on failure.
 
 ### Coding conventions
 
@@ -167,6 +184,14 @@ uploads its report as an artifact on failure.
     `e2e/fixtures/malformed.geojson` fixture is also excluded.
   - **ESLint** enforces the React Hooks rules on TS/JS; a `npm run build`
     typecheck runs too.
+- **Notebook outputs are stripped repo-wide on every commit.** The
+  `strip-notebook-outputs` hook runs `nbstripout` over *every tracked*
+  `.ipynb`, not just the notebooks in your commit, so an output that was
+  executed locally cannot ride along in a later, unrelated commit. Because
+  `nbstripout` rewrites in place, this also erases outputs from a notebook you
+  are still iterating on the next time you commit anything — re-run the
+  notebook to get them back, or keep an untracked scratch copy. No `.ipynb`
+  should ever carry outputs in git.
 - All text files are normalized to LF via `.gitattributes` (`* text=auto eol=lf`),
   so line endings are consistent across platforms; `core.autocrlf` is overridden.
 - The remaining pre-commit hooks enforce LF line endings (`mixed-line-ending
@@ -197,6 +222,56 @@ links and pages left out of the navigation fail the build. Link to other docs
 pages with a relative path (for example `architecture.md`), and link to files
 outside `docs/` with a full GitHub URL.
 
+### Images, demos, and sample data
+
+**Do not commit screenshots, GIFs, videos, or sample datasets to this
+repository.** Binaries are never really deleted from Git history, so every one
+of them permanently enlarges the clone for everyone, including CI.
+
+Put them in [opengeos/geolibre-assets](https://github.com/opengeos/geolibre-assets)
+instead. It is a plain static host, so any file type works. Anything pushed to
+that repository's `main` branch is published by GitHub Pages at the matching
+path under its one hostname, <https://assets.geolibre.app>, usually within a
+minute:
+
+| Repository path        | Published URL                                      |
+| ---------------------- | -------------------------------------------------- |
+| `images/my-panel.webp` | `https://assets.geolibre.app/images/my-panel.webp` |
+| `demos/my-demo.gif`    | `https://assets.geolibre.app/demos/my-demo.gif`    |
+| `data/sample.parquet`  | `https://assets.geolibre.app/data/sample.parquet`  |
+
+Then reference the published URL from your Markdown:
+
+```markdown
+![Raster style panel](https://assets.geolibre.app/images/raster-style-panel.webp)
+```
+
+This is the one exception to the "link to files outside `docs/` with a full
+GitHub URL" rule above: an asset in `geolibre-assets` is referenced by its
+published `assets.geolibre.app` URL, never by a GitHub blob or raw URL.
+
+A few things worth knowing:
+
+- Use `images/` for stills, `demos/` for animations and screen recordings,
+  `data/` for sample datasets, and `styles/` or `fonts/` for map resources.
+- Prefer **WebP** or AVIF for stills, and PMTiles or GeoParquet for data. The
+  screenshots on this site are WebP.
+- Keep individual files under 100 MB, GitHub's hard limit.
+- Published paths are effectively permanent. Renaming or deleting a file breaks
+  every page already pointing at it, so pick the name once.
+- Assets are served with permissive CORS, so the app can fetch them
+  cross-origin.
+
+Sample datasets are still served from another GeoLibre-operated host,
+`data.geolibre.app`. Those URLs keep working and do not need rewriting;
+`geolibre-assets` is simply the one you can open a pull request against, so send
+new assets there.
+
+The only images that belong in this repository are the site chrome under
+`docs/assets/` — currently just the icon `mkdocs.yml` uses for the logo and
+favicon. Do not add to that directory; if you find something there that nothing
+references, it is a leftover, not a precedent.
+
 ## Plugins and extensions
 
 GeoLibre supports external plugins loaded from a zip, a local directory, or a
@@ -224,6 +299,14 @@ launch), see the [sidecar README](https://github.com/opengeos/GeoLibre/blob/main
 
 Run its tests with `npm run test:backend` from the repository root, or
 `python -m pytest` from the backend directory.
+
+## Sponsoring
+
+Code is not the only way to contribute. If you or your organization depend on
+GeoLibre, financial support keeps development, hosting, and app-store
+distribution going — see [Become a Sponsor](sponsor.md) for
+[GitHub Sponsors](https://github.com/sponsors/giswqs) and
+[Buy Me a Coffee](https://buymeacoffee.com/giswqs).
 
 ## License
 

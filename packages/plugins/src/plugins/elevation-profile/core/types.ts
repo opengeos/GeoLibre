@@ -1,5 +1,8 @@
+import type { Feature, Geometry } from "geojson";
+
 import type { LngLat } from "../elevation/geometry";
 import type { UnitSystem } from "../elevation/format";
+import type { NativeProfileMap } from "./native";
 
 /** Corner of the map the control can dock to. */
 export type ControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -34,6 +37,8 @@ export type ExportTextFile = (
 
 /** Options for configuring the {@link ElevationProfileControl}. */
 export interface ElevationProfileControlOptions {
+  /** Optional native renderer for profile geometry and terrain sampling. */
+  nativeMap?: NativeProfileMap;
   /** Start collapsed (toggle button only). @default true */
   collapsed?: boolean;
   /** Title shown in the panel header. @default 'Elevation Profile' */
@@ -55,6 +60,10 @@ export interface ElevationProfileControlOptions {
    * browser. Falls back to a browser download when not provided.
    */
   exportTextFile?: ExportTextFile;
+  /** Read the features currently selected in the host application. */
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  /** Subscribe to host selection changes. Returns a function that unsubscribes. */
+  onSelectionChange?: (callback: () => void) => () => void;
 }
 
 /** Serializable state persisted with a GeoLibre project. */
@@ -65,4 +74,6 @@ export interface ElevationProfileState {
   unitSystem: UnitSystem;
   /** The profiled line as `[lng, lat]` vertices, or `null` when none is drawn. */
   line: LngLat[] | null;
+  /** Embedded elevations aligned with {@link line}, or null for sampled terrain. */
+  elevations: number[] | null;
 }

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   BUILTIN_SERVICES,
   createServiceEntry,
+  isManagedService,
+  listAllServices,
   listServices,
   mergeImportedServices,
   normalizeServiceEntries,
   parseImportedServices,
+  readDeploymentServices,
+  readUserServices,
   removeServiceEntry,
   serializeUserServices,
   serviceCategories,
@@ -14,6 +18,7 @@ import {
   serviceFieldString,
   type ServiceLibraryEntry,
   upsertServiceEntry,
+  writeUserServices,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
 function makeEntry(overrides: Partial<ServiceLibraryEntry> = {}): ServiceLibraryEntry {
@@ -195,5 +200,156 @@ describe("import / export round-trip", () => {
     const merged = mergeImportedServices([], imported);
     assert.equal(merged.length, 1);
     assert.notEqual(merged[0].id, builtinId);
+  });
+});
+
+describe("deployment service library", () => {
+  let deploymentEnv: Record<string, string>;
+  let storage: Map<string, string>;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+
+  beforeEach(() => {
+    deploymentEnv = {};
+    storage = new Map();
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        __GEOLIBRE_DEPLOYMENT_ENV__: deploymentEnv,
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => storage.set(key, value),
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else delete (globalThis as { window?: unknown }).window;
+  });
+
+  it("keeps configured ids stable and separate from built-ins and user connections", () => {
+    const id = BUILTIN_SERVICES[0].id;
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({
+      services: [makeEntry({ id, name: "Organization", fields: { endpoint: "/geoserver/wms" } })],
+    });
+    const [managed] = readDeploymentServices();
+    const [user] = normalizeServiceEntries([makeEntry({ id: managed.id, name: "Personal" })]);
+    const catalog = listAllServices([user]);
+    assert.equal(
+      catalog.find((entry) => entry.id === id),
+      BUILTIN_SERVICES[0],
+    );
+    assert.equal(catalog.find((entry) => entry.id === managed.id)?.name, "Organization");
+    assert.equal(catalog.find((entry) => entry.id === user.id)?.name, "Personal");
+    assert.notEqual(user.id, managed.id);
+    assert.deepEqual(
+      listServices("wms", [user]),
+      catalog.filter((entry) => entry.kind === "wms"),
+    );
+    assert.deepEqual(catalog.slice(BUILTIN_SERVICES.length), [managed, user]);
+
+    // A changed payload is parsed again, as on a fresh page load. Identity must
+    // not depend on random IDs or the configured entry's name.
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({
+      services: [makeEntry({ id, name: "Renamed organization" })],
+    });
+    assert.equal(readDeploymentServices()[0].id, managed.id);
+  });
+
+  it("does not persist or export managed definitions but allows an editable personal copy", () => {
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({ services: [makeEntry()] });
+    const [managed] = readDeploymentServices();
+    const copy = createServiceEntry({
+      name: "Personal copy",
+      category: managed.category,
+      kind: managed.kind,
+      fields: { ...managed.fields, endpoint: "/my/wms" },
+    });
+    assert.equal(isManagedService(managed), true);
+    assert.equal(isManagedService(copy), false);
+    const combined = [...BUILTIN_SERVICES, managed, copy];
+    writeUserServices(combined);
+    assert.deepEqual(readUserServices(), [copy]);
+    assert.deepEqual(parseImportedServices(serializeUserServices(combined)), [copy]);
+    assert.equal(readDeploymentServices()[0].fields.endpoint, "https://x.test/wms");
+  });
+
+  it("does not let imported ownership flags or reserved ids create managed entries", () => {
+    const imported = parseImportedServices(
+      JSON.stringify({
+        services: [{ ...makeEntry({ id: "deployment:org" }), builtin: true, deployment: true }],
+      }),
+    );
+    const merged = mergeImportedServices([], imported);
+    assert.equal(isManagedService(merged[0]), false);
+    assert.equal(merged[0].id.startsWith("deployment:"), false);
+    writeUserServices(merged);
+    assert.deepEqual(readUserServices(), merged);
+  });
+
+  it("ignores unusable entries and retains the first valid duplicate without random ids", (t) => {
+    t.mock.method(console, "warn", () => {});
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({
+      services: [
+        { ...makeEntry(), id: "" },
+        { ...makeEntry(), kind: "unsupported" },
+        { ...makeEntry(), fields: [] },
+        makeEntry({ id: "org", name: "First" }),
+        makeEntry({ id: "org", name: "Duplicate" }),
+        makeEntry({ id: "second", kind: "csw", name: "Catalog" }),
+      ],
+    });
+    assert.deepEqual(
+      readDeploymentServices().map(({ id, name }) => ({ id, name })),
+      [
+        { id: "deployment:org", name: "First" },
+        { id: "deployment:second", name: "Catalog" },
+      ],
+    );
+  });
+
+  it("falls back to the ordinary catalog on invalid or removed configuration", (t) => {
+    t.mock.method(console, "warn", () => {});
+    for (const raw of ["{broken", "[]", '{"services":{}}']) {
+      deploymentEnv.VITE_GEOLIBRE_SERVICES = raw;
+      assert.deepEqual(listAllServices([]), BUILTIN_SERVICES);
+    }
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({ services: [makeEntry()] });
+    const managedId = readDeploymentServices()[0].id;
+    delete deploymentEnv.VITE_GEOLIBRE_SERVICES;
+    assert.equal(
+      listAllServices([]).some((entry) => entry.id === managedId),
+      false,
+    );
+    assert.deepEqual(listAllServices([]), BUILTIN_SERVICES);
+  });
+
+  it("hides the built-in presets when the deployment turns them off", () => {
+    deploymentEnv.VITE_GEOLIBRE_SERVICES = JSON.stringify({
+      services: [makeEntry({ id: "org", kind: "xyz", name: "Org tiles" })],
+    });
+    deploymentEnv.VITE_GEOLIBRE_BUILTIN_SERVICES = "off";
+    const [managed] = readDeploymentServices();
+    const user = makeEntry({ id: "u1", name: "Personal", kind: "wms" });
+    const catalog = listAllServices([user]);
+    assert.deepEqual(
+      catalog.map((e) => e.id),
+      [managed.id, user.id],
+    );
+    // The kind picker mirrors the shared catalog.
+    assert.equal(
+      listServices("wms", [user]).some((e) => e.builtin),
+      false,
+    );
+    assert.deepEqual(listServices("xyz", [user]), [managed]);
+    // Hidden ids stay reserved, so re-enabling the built-ins later cannot
+    // shadow an entry the user had already saved.
+    const [collision] = normalizeServiceEntries([makeEntry({ id: BUILTIN_SERVICES[0].id })]);
+    assert.notEqual(collision.id, BUILTIN_SERVICES[0].id);
+  });
+
+  it("keeps the built-in presets when the toggle is unset", () => {
+    assert.deepEqual(listAllServices([]), BUILTIN_SERVICES);
   });
 });

@@ -299,6 +299,36 @@ describe("QGIS project import", () => {
     assert.equal(rendered.find((layer) => layer.name === "Cities")?.visible, false);
   });
 
+  it("ignores the frozen layer trees inside Print Layout legends", () => {
+    const legend = (name: string, entries: string) => `
+      <Layout name="${name}" units="mm">
+        <LayoutItem type="65642" autoUpdateModel="0">
+          <layer-tree-group name="" checked="Qt::Checked">${entries}</layer-tree-group>
+        </LayoutItem>
+      </Layout>`;
+    const xml = projectXml().replace(
+      "</qgis>",
+      `<Layouts>
+        ${legend(
+          "Baseline",
+          `<layer-tree-layer id="roads" checked="Qt::Checked"/>
+           <layer-tree-layer id="cities" checked="Qt::Unchecked"/>`,
+        )}
+        ${legend("Proposed", '<layer-tree-layer id="cities" checked="Qt::Unchecked"/>')}
+        ${legend("Stale template", '<layer-tree-layer id="deleted" checked="Qt::Checked"/>')}
+      </Layouts></qgis>`,
+    );
+    const result = importQgisProject(xml, "/work/example.qgs");
+
+    assert.deepEqual(
+      result.project.layers.map((layer) => [layer.id, layer.name, layer.visible]),
+      [
+        ["cities", "Cities", true],
+        ["roads", "Roads", false],
+      ],
+    );
+  });
+
   it("normalizes Windows file URLs, query strings, encoded delimiters, and bare names", () => {
     const windows = importQgisProject(
       projectXml({

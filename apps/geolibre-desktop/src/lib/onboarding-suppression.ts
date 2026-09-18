@@ -1,5 +1,8 @@
 import { PROJECT_URL_PARAMS, projectUrlFromLocation } from "./project-url";
 
+import { coordinateTargetFromSearch } from "./coordinate-url";
+import { initialNativeCoordinateTarget } from "./native-coordinate-open";
+
 // Values of `?welcome=` that turn the first-launch wizard off.
 const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
 
@@ -43,9 +46,18 @@ export function shouldSuppressOnboarding(env: OnboardingEnv = importMetaEnv()): 
   return (
     welcomeDisabledByEnv(env) ||
     hasProjectDeepLinkIntent() ||
+    hasDataDeepLinkIntent() ||
+    initialNativeCoordinateTarget() !== null ||
+    (typeof window !== "undefined" &&
+      coordinateTargetFromSearch(window.location.search) !== null) ||
     embeddedByParam() ||
     welcomeDisabledByParam()
   );
+}
+
+/** A remote data/API deep link should open directly onto its imported layer. */
+function hasDataDeepLinkIntent(): boolean {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("data");
 }
 
 /**

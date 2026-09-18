@@ -11,6 +11,8 @@ install. The console exposes a single object, **`geolibre`**, that drives the
 live app — its methods mirror the [`geolibre` Python package](../python.md), so
 what you learn here transfers to notebooks and back.
 
+![The Python Console docked below the map, with `geolibre` calls driving the live map above it](https://assets.geolibre.app/images/geolibre-python-console.webp)
+
 ## First run
 
 The Python runtime downloads the first time you open the console (a one-time

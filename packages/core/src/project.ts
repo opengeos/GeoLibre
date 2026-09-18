@@ -1,3 +1,4 @@
+import { normalizeCesiumBasemap } from "./cesium-imagery";
 import { v4 as uuidv4 } from "uuid";
 import {
   DEFAULT_BASEMAP,
@@ -6,6 +7,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_MAP_GRID_LAYOUT,
+  DEFAULT_PRIMARY_RENDERER,
   DEFAULT_STORY_MAP,
   MAX_DASHBOARD_COLUMNS,
   MAX_MAP_GRID_DIM,
@@ -24,10 +26,16 @@ import {
   type LegendCustomItem,
   type LegendItemOverride,
   type MapGridLayout,
+  type MapRendererKind,
   type MapScaleUnit,
   type MapViewState,
   MAX_PROCESSING_HISTORY,
+  type ModelGraphEdge,
+  type ModelGraphNode,
+  type ModelGraphNodeKind,
+  type ModelToolProvider,
   type ProcessingModel,
+  type ProcessingModelGraph,
   type ProcessingRun,
   type ProcessingRunKind,
   type SecondaryMapView,
@@ -51,6 +59,15 @@ import {
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
+import { normalizeLayerCapabilities } from "./capabilities";
+import { validateMapExpression } from "./expressions";
+import {
+  createDefaultPrintLayout,
+  isDefaultPrintLayout,
+  normalizePrintLayoutConfig,
+  scrubPrintLayoutForLayers,
+  type PrintLayoutConfig,
+} from "./print-layout-config";
 import { getEllipsoid } from "./ellipsoids";
 import {
   scrubWidgetsForRemovedLayers,
@@ -66,6 +83,10 @@ export interface CreateProjectOptions {
   mapView?: MapViewState;
   /** Celestial body the project describes; defaults to Earth when omitted. */
   ellipsoidId?: string;
+}
+
+export function normalizeBlankBackgroundColor(value: unknown): string | null {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
 }
 
 export function createDefaultMapView(): MapViewState {
@@ -88,6 +109,7 @@ export function createEmptyProject(
     basemapStyleUrl: options.basemapStyleUrl ?? DEFAULT_BASEMAP,
     basemapVisible: true,
     basemapOpacity: 1,
+    blankBackgroundColor: null,
     layers: [],
     layerGroups: [],
     styles: {},
@@ -106,8 +128,138 @@ export function createEmptyProject(
   };
 }
 
+/**
+ * GeoJSON `type` values that mark a subtree as feature data rather than project
+ * structure. Everything under one of these is written compactly by
+ * {@link serializeProject}.
+ */
+const GEOJSON_TYPES = new Set([
+  "FeatureCollection",
+  "Feature",
+  "GeometryCollection",
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon",
+]);
+
+/** One level of indentation in a serialized project. */
+const PROJECT_INDENT = "  ";
+
+/**
+ * Whether a value is a GeoJSON feature, geometry, or collection.
+ *
+ * Decided from the `type` string alone, so this is an implicit contract on the
+ * project schema: no field may store a non-GeoJSON object under a `type` of one
+ * of the nine {@link GEOJSON_TYPES} names, or it would silently be written
+ * compact as if it were feature data. Nothing in `types.ts` does today; a new
+ * field that wants one of those names (a drawing-tool or geometry-filter config,
+ * say) needs a different discriminator.
+ */
+function isGeoJsonValue(value: object): boolean {
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" && GEOJSON_TYPES.has(type);
+}
+
+/**
+ * Serialize a value exactly as `JSON.stringify(value, null, 2)` would, except
+ * that GeoJSON features, geometries and collections are written compactly on a
+ * single line.
+ *
+ * Coordinate arrays are never hand-edited, but indenting them costs roughly
+ * three bytes of whitespace for every one byte of data: a project embedding
+ * 13,000 features weighed 179 MB pretty-printed and 54 MB compact
+ * (GeoLibre#1829), which is the difference between reopening and running the
+ * tab out of memory. The surrounding project structure stays indented so the
+ * file is still readable and diffs still make sense.
+ *
+ * @param value Value to serialize.
+ * @param depth Current nesting depth, driving the indent width.
+ * @param key Property name (or stringified array index) this value sits under,
+ *   `""` at the root — the argument `JSON.stringify` passes to `toJSON`.
+ * @param ancestors Containers currently open on the recursion stack, used to
+ *   detect cycles.
+ * @returns The serialized text, or undefined for values `JSON.stringify` also
+ *   drops (undefined, functions, symbols).
+ */
+function serializeProjectValue(
+  value: unknown,
+  depth: number,
+  key: string,
+  ancestors: Set<object>,
+): string | undefined {
+  if (value !== null && typeof value === "object") {
+    // Honor the toJSON hook the way JSON.stringify does, so a value that
+    // replaces itself is inspected in its replaced form. It receives the same
+    // key JSON.stringify would pass, since a custom hook may branch on it.
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === "function") {
+      value = (toJSON as (key: string) => unknown).call(value, key);
+    }
+  }
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  // A boxed Number/String/Boolean writes as its primitive rather than as an
+  // object, the way JSON.stringify unwraps it.
+  if (value instanceof Number || value instanceof String || value instanceof Boolean) {
+    return JSON.stringify(value);
+  }
+  // Feature data: hand the whole subtree to JSON.stringify with no spacing.
+  if (isGeoJsonValue(value)) return JSON.stringify(value);
+
+  // A cycle would recurse until the stack overflowed, and the RangeError that
+  // raises is indistinguishable from the string-length cap the save path reads
+  // as "project too large". Fail the way JSON.stringify does instead. Only the
+  // open ancestors are tracked, so a value referenced twice side by side (not a
+  // cycle) still serializes.
+  if (ancestors.has(value)) throw new TypeError("Converting circular structure to JSON");
+  ancestors.add(value);
+  try {
+    const pad = PROJECT_INDENT.repeat(depth + 1);
+    const closePad = PROJECT_INDENT.repeat(depth);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "[]";
+      // Indexed rather than mapped so a sparse array's holes are visited: like
+      // an unserializable entry, a hole becomes null, matching JSON.stringify.
+      const entries = Array.from(
+        { length: value.length },
+        (_unused, index) =>
+          serializeProjectValue(value[index], depth + 1, String(index), ancestors) ?? "null",
+      );
+      return `[\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}]`;
+    }
+    const entries: string[] = [];
+    for (const [entryKey, entry] of Object.entries(value)) {
+      const serialized = serializeProjectValue(entry, depth + 1, entryKey, ancestors);
+      // An unserializable object value is omitted, matching JSON.stringify.
+      if (serialized === undefined) continue;
+      entries.push(`${JSON.stringify(entryKey)}: ${serialized}`);
+    }
+    if (entries.length === 0) return "{}";
+    return `{\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}}`;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+/**
+ * Serialize a project to `.geolibre.json` text: indented project structure with
+ * compact (unindented) embedded GeoJSON. See {@link serializeProjectValue} for
+ * why the two halves are formatted differently.
+ *
+ * @param project Project to serialize.
+ * @returns The file contents to write.
+ */
 export function serializeProject(project: GeoLibreProject): string {
-  return JSON.stringify(project, null, 2);
+  return (
+    serializeProjectValue(
+      { ...project, layers: project.layers.map(withoutLocalRasterBytes) },
+      0,
+      "",
+      new Set(),
+    ) ?? "null"
+  );
 }
 
 export function parseProject(json: string): GeoLibreProject {
@@ -132,6 +284,7 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
+  const blankBackgroundColor = normalizeBlankBackgroundColor(data.blankBackgroundColor);
   // Secondary panes already go through normalizeMapViewState; the primary
   // camera must too so a hand-edited project cannot store an out-of-range
   // view that MapLibre would silently clamp, leaving saved state wrong.
@@ -150,6 +303,7 @@ export function parseProject(json: string): GeoLibreProject {
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
+    blankBackgroundColor,
     layers,
     ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
@@ -157,6 +311,7 @@ export function parseProject(json: string): GeoLibreProject {
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
     legend: normalizeLegendConfig(data.legend),
+    printLayout: normalizePrintLayoutConfig(data.printLayout) ?? undefined,
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
     processingHistory: normalizeProcessingHistory(data.processingHistory) ?? undefined,
@@ -174,6 +329,11 @@ export function parseProject(json: string): GeoLibreProject {
             ? { primaryMapLabel: normalizeString(data.primaryMapLabel) }
             : {}),
         }
+      : {}),
+    // The primary renderer is independent of the grid, so it sits outside the
+    // `mapLayout` block above: a 1x1 Cesium project has no grid to persist.
+    ...(normalizePrimaryRenderer(data.primaryRenderer)
+      ? { primaryRenderer: normalizePrimaryRenderer(data.primaryRenderer)! }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(parsedComments.length > 0 ? { comments: parsedComments } : {}),
@@ -537,9 +697,87 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
       });
     }
     seen.add(id);
-    models.push({ id, name: normalizeString(candidate.name), steps });
+    const graph = normalizeModelGraph((candidate as { graph?: unknown }).graph);
+    models.push({
+      id,
+      name: normalizeString(candidate.name),
+      steps,
+      ...(graph ? { graph } : {}),
+    });
   }
   return models.length > 0 ? models : null;
+}
+
+const MODEL_NODE_KINDS = new Set<ModelGraphNodeKind>(["input", "tool", "output"]);
+const MODEL_TOOL_PROVIDERS = new Set<ModelToolProvider>(["vector", "whitebox"]);
+
+/** Coerce an untrusted number to a finite canvas coordinate. */
+function normalizeCoordinate(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Coerce an untrusted `graph` value into a {@link ProcessingModelGraph}. Drops
+ * nodes without a usable id or an unknown kind, de-duplicates node ids, and
+ * drops edges that do not connect two surviving nodes or that name an empty
+ * port. Self-edges are dropped too, since a node cannot feed itself.
+ *
+ * Structural validity beyond this (cycles, type mismatches, missing required
+ * inputs) is the runner's job — those depend on the tool registries, which the
+ * project layer deliberately does not import.
+ *
+ * @param value Raw `graph` value from the project JSON.
+ * @returns The normalized graph, or `null` when it has no usable nodes.
+ */
+export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<ProcessingModelGraph>;
+  const nodes: ModelGraphNode[] = [];
+  const nodeIds = new Set<string>();
+  for (const entry of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const node = entry as Partial<ModelGraphNode>;
+    const nodeId = normalizeString(node.id).trim();
+    const kind = node.kind as ModelGraphNodeKind;
+    if (!nodeId || nodeIds.has(nodeId) || !MODEL_NODE_KINDS.has(kind)) continue;
+    nodeIds.add(nodeId);
+    const layerId = normalizeString(node.layerId).trim();
+    const toolId = normalizeString(node.toolId).trim();
+    const name = normalizeString(node.name).trim();
+    const provider = node.provider as ModelToolProvider;
+    nodes.push({
+      id: nodeId,
+      kind,
+      x: normalizeCoordinate(node.x),
+      y: normalizeCoordinate(node.y),
+      ...(layerId ? { layerId } : {}),
+      ...(toolId ? { toolId } : {}),
+      ...(MODEL_TOOL_PROVIDERS.has(provider) ? { provider } : {}),
+      ...(node.parameters && typeof node.parameters === "object" && !Array.isArray(node.parameters)
+        ? { parameters: node.parameters as Record<string, unknown> }
+        : {}),
+      ...(name ? { name } : {}),
+    });
+  }
+  if (nodes.length === 0) return null;
+
+  const edges: ModelGraphEdge[] = [];
+  const edgeIds = new Set<string>();
+  for (const entry of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const edge = entry as Partial<ModelGraphEdge>;
+    const edgeId = normalizeString(edge.id).trim();
+    const from = normalizeString(edge.from).trim();
+    const to = normalizeString(edge.to).trim();
+    const fromPort = normalizeString(edge.fromPort).trim();
+    const toPort = normalizeString(edge.toPort).trim();
+    if (!edgeId || edgeIds.has(edgeId)) continue;
+    if (!nodeIds.has(from) || !nodeIds.has(to) || from === to) continue;
+    if (!fromPort || !toPort) continue;
+    edgeIds.add(edgeId);
+    edges.push({ id: edgeId, from, fromPort, to, toPort });
+  }
+  return { nodes, edges };
 }
 
 const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
@@ -696,6 +934,20 @@ export function normalizeMapLayout(value: unknown): MapGridLayout | null {
 }
 
 /**
+ * Coerce an untrusted `primaryRenderer` into a known engine id (issue #2217).
+ *
+ * Returns null for the default 2D map — absent, unknown, or an explicit
+ * `"maplibre"` — because the field is only written when it is not the default,
+ * so a MapLibre project serializes byte-identically to before this existed.
+ * The return type is narrowed to `"cesium" | "mapbox" | "arcgis" | null` rather
+ * than the full {@link MapRendererKind} for that reason: `"maplibre"` is never a
+ * result.
+ */
+export function normalizePrimaryRenderer(value: unknown): "cesium" | "mapbox" | "arcgis" | null {
+  return value === "cesium" || value === "mapbox" || value === "arcgis" ? value : null;
+}
+
+/**
  * Coerce an untrusted `secondaryMapViews` array into valid
  * {@link SecondaryMapView} records, dropping entries without a usable id and
  * de-duplicating by id. Returns null when none are valid.
@@ -714,7 +966,10 @@ export function normalizeSecondaryMapViews(value: unknown): SecondaryMapView[] |
     // Only the known engine ids survive; an absent/unknown value is omitted so
     // the pane defaults to the 2D map (back-compat with pre-globe projects).
     const viewKind =
-      candidate.viewKind === "cesium" || candidate.viewKind === "maplibre"
+      candidate.viewKind === "cesium" ||
+      candidate.viewKind === "maplibre" ||
+      candidate.viewKind === "mapbox" ||
+      candidate.viewKind === "arcgis"
         ? candidate.viewKind
         : undefined;
     views.push({
@@ -972,6 +1227,33 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       // Coerce unknown/missing bodies to Earth so measurements never break.
       ellipsoidId: getEllipsoid((map as Partial<ProjectPreferences["map"]>).ellipsoidId).id,
       scaleUnit: normalizeScaleUnit((map as Partial<ProjectPreferences["map"]>).scaleUnit),
+      // Absent in every project written before #1813, and the default is off,
+      // so an older project opens without the elevation lookup enabled.
+      showPointerElevation: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
+        DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
+      ),
+      // Missing means follow the saved project basemap. Do not reapply the
+      // new-project Streets default after a user has selected a shared style.
+      mapboxStyleUrl:
+        normalizeString((map as Partial<ProjectPreferences["map"]>).mapboxStyleUrl) || undefined,
+      arcgisBasemap:
+        normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
+      cesiumBasemap: normalizeCesiumBasemap(
+        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap,
+      ),
+      // Older projects omit this field and continue to open with terrain off.
+      terrainEnabled: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).terrainEnabled,
+        DEFAULT_PROJECT_PREFERENCES.map.terrainEnabled,
+      ),
+      // Kept as a free string here; the app coerces an unknown notation to
+      // decimal degrees when it renders, so a hand-edited project cannot break
+      // the readout.
+      coordinateFormat:
+        typeof (map as Partial<ProjectPreferences["map"]>).coordinateFormat === "string"
+          ? ((map as Partial<ProjectPreferences["map"]>).coordinateFormat as string)
+          : DEFAULT_PROJECT_PREFERENCES.map.coordinateFormat,
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables
@@ -1175,14 +1457,36 @@ function isPlainObject(value: object): boolean {
   return prototype === Object.prototype || prototype === null;
 }
 
+/** Browser byte URLs belong to the live session, never a saved project. */
+function withoutLocalRasterBytes(layer: GeoLibreLayer): GeoLibreLayer {
+  if (layer.metadata?.localBytesUrl === undefined) return layer;
+  const { localBytesUrl: _localBytesUrl, ...metadata } = layer.metadata;
+  return { ...layer, metadata };
+}
+
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
+  layer = withoutLocalRasterBytes(layer);
+  // `capabilities` is split off the spread rather than overwritten: a raw value
+  // that normalizes to nothing (`{}`, an array, a string, an object with no
+  // boolean flag) must not survive into the normalized layer and be written
+  // back out on the next save.
+  const { capabilities: rawCapabilities, filterExpression: rawFilterExpression, ...rest } = layer;
+  const capabilities = normalizeLayerCapabilities(rawCapabilities);
+  const filterExpression =
+    Array.isArray(rawFilterExpression) &&
+    rawFilterExpression.length > 0 &&
+    validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
+      ? rawFilterExpression
+      : undefined;
   return {
-    ...layer,
+    ...rest,
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
     visible: layer.visible ?? true,
     opacity: layer.opacity ?? 1,
     metadata: layer.metadata ?? {},
     source: layer.source ?? {},
+    ...(capabilities ? { capabilities } : {}),
+    ...(filterExpression ? { filterExpression } : {}),
   };
 }
 
@@ -1286,12 +1590,14 @@ export function projectFromStore(state: {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  blankBackgroundColor?: string | null;
   layers: GeoLibreLayer[];
   selectedLayerId?: string | null;
   layerGroups?: LayerGroup[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
   legend?: LegendConfig | null;
+  printLayout?: PrintLayoutConfig | null;
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
   processingHistory?: ProcessingRun[] | null;
@@ -1300,6 +1606,7 @@ export function projectFromStore(state: {
   mapLayout?: MapGridLayout;
   secondaryMapViews?: SecondaryMapView[];
   primaryMapLabel?: string;
+  primaryRenderer?: MapRendererKind;
   /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
   styleLibrary?: StyleLibraryEntry[] | null;
   comments?: ProjectComment[] | null;
@@ -1311,6 +1618,9 @@ export function projectFromStore(state: {
   }
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
+  // Persist the composer only once it differs from the defaults, so a project
+  // that never opened Print Layout keeps its previous byte-for-byte shape.
+  const printLayout = normalizePrintLayoutConfig(state.printLayout);
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
   const processingHistory = normalizeProcessingHistory(state.processingHistory);
@@ -1350,6 +1660,7 @@ export function projectFromStore(state: {
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
+    ...(state.blankBackgroundColor ? { blankBackgroundColor: state.blankBackgroundColor } : {}),
     layers: state.layers.map(prepareLayerForSave),
     ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
@@ -1357,6 +1668,7 @@ export function projectFromStore(state: {
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
     ...(legend ? { legend } : {}),
+    ...(printLayout && !isDefaultPrintLayout(printLayout) ? { printLayout } : {}),
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
     ...(processingHistory ? { processingHistory } : {}),
@@ -1370,6 +1682,12 @@ export function projectFromStore(state: {
             ? { primaryMapLabel: normalizeString(state.primaryMapLabel) }
             : {}),
         }
+      : {}),
+    // Written only for the non-default renderer, and independently of the grid:
+    // a single-pane Cesium project persists `primaryRenderer` with no
+    // `mapLayout`, and a MapLibre project writes neither.
+    ...(normalizePrimaryRenderer(state.primaryRenderer)
+      ? { primaryRenderer: normalizePrimaryRenderer(state.primaryRenderer)! }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(comments.length > 0 ? { comments } : {}),
@@ -1393,6 +1711,14 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  layer = withoutLocalRasterBytes(layer);
+  // This flag describes unsaved changes to the live source, not persisted
+  // project state. A reference-only save reloads the original geometries;
+  // carrying the flag into that project would warn about nonexistent edits.
+  if (layer.metadata.geometryEdited !== undefined) {
+    const { geometryEdited: _geometryEdited, ...metadata } = layer.metadata;
+    layer = { ...layer, metadata };
+  }
   // The live time filter is derived from the Time Slider's current date, so it
   // is transient: strip it before saving so a reopened project never starts
   // with a stale time-window filter hiding most of a layer's features. The
@@ -1440,6 +1766,15 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  if (layer.type === "wms") {
+    const tiles = layer.source.tiles;
+    if (!Array.isArray(tiles)) return layer;
+    const portableTiles = tiles.map((tile) => portableWmsTileUrl(tile));
+    return portableTiles.some((tile, index) => tile !== tiles[index])
+      ? { ...layer, source: { ...layer.source, tiles: portableTiles } }
+      : layer;
+  }
+
   if (layer.type !== "xyz") return layer;
 
   const originalUrl =
@@ -1453,15 +1788,39 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   const metadata = { ...layer.metadata };
   delete metadata.resolvedUrl;
 
+  // The collapse below rewinds a resolved short URL (or a desktop protocol URL)
+  // back to what the user typed, because those tile URLs are not portable. A
+  // TileJSON layer is the exception: `tiles` holds the document's own https
+  // templates, which are portable, while its `originalUrl` is the *document*
+  // URL and carries no {z}/{x}/{y}. Collapsing onto it would leave the saved
+  // layer unable to request a tile until a re-fetch succeeds — and
+  // `resolveProjectXyzLayers` keeps the on-disk layer when the document is
+  // unreachable, so an offline reopen would strand it. Rewind only `url`.
+  const tiles = typeof layer.metadata.tilejsonUrl === "string" ? {} : { tiles: [originalUrl] };
+
   return {
     ...layer,
     source: {
       ...layer.source,
-      tiles: [originalUrl],
+      ...tiles,
       url: originalUrl,
     },
     metadata,
   };
+}
+
+function portableWmsTileUrl(tile: unknown): unknown {
+  // Keep this protocol prefix in sync with WMS_TILE_PROTOCOL in the desktop
+  // app, which packages/core cannot import without reversing dependencies.
+  if (typeof tile !== "string" || !tile.startsWith("geolibre-wms://")) return tile;
+  try {
+    const url = new URL(tile).searchParams.get("url");
+    if (!url) return tile;
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : tile;
+  } catch {
+    return tile;
+  }
 }
 
 export function applyProjectToStore(project: GeoLibreProject): {
@@ -1470,11 +1829,13 @@ export function applyProjectToStore(project: GeoLibreProject): {
   basemapStyleUrl: string;
   basemapVisible: boolean;
   basemapOpacity: number;
+  blankBackgroundColor: string | null;
   layers: GeoLibreLayer[];
   layerGroups: LayerGroup[];
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
+  printLayout: PrintLayoutConfig;
   storymap: StoryMap | null;
   models: ProcessingModel[];
   processingHistory: ProcessingRun[];
@@ -1483,14 +1844,19 @@ export function applyProjectToStore(project: GeoLibreProject): {
   mapLayout: MapGridLayout;
   secondaryMapViews: SecondaryMapView[];
   primaryMapLabel: string;
+  primaryRenderer: MapRendererKind;
   projectStyleLibrary: StyleLibraryEntry[];
   comments: ProjectComment[];
   metadata: Record<string, unknown>;
 } {
+  // Legacy and externally-authored projects can carry a partial top-level
+  // style alongside newer fields on the layer itself. Preserve those layer
+  // fields while keeping the top-level copy authoritative where it explicitly
+  // supplies a value.
   const layers = project.layers.map((layer) => ({
     ...layer,
     style: project.styles[layer.id]
-      ? { ...DEFAULT_LAYER_STYLE, ...project.styles[layer.id] }
+      ? { ...DEFAULT_LAYER_STYLE, ...layer.style, ...project.styles[layer.id] }
       : { ...DEFAULT_LAYER_STYLE, ...layer.style },
   }));
   // Re-normalize here (even though `parseProject` already did) because
@@ -1511,6 +1877,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapStyleUrl = project.basemapStyleUrl;
   const basemapVisible = project.basemapVisible ?? true;
   const basemapOpacity = project.basemapOpacity ?? 1;
+  const blankBackgroundColor = normalizeBlankBackgroundColor(project.blankBackgroundColor);
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
   const mapView = normalizeMapViewState(project.mapView);
@@ -1553,6 +1920,12 @@ export function applyProjectToStore(project: GeoLibreProject): {
     orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
   const scrubbedLegend =
     orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  // The composer's data/atlas blocks name a layer directly rather than through
+  // `allReferencedIds`, so they are scrubbed against the surviving layer set.
+  const printLayout = scrubPrintLayoutForLayers(
+    normalizePrintLayoutConfig(project.printLayout) ?? createDefaultPrintLayout(),
+    existingLayerIds,
+  );
 
   return {
     projectName: project.name,
@@ -1560,11 +1933,13 @@ export function applyProjectToStore(project: GeoLibreProject): {
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
+    blankBackgroundColor,
     layers: normalizedLayers,
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: scrubbedLegend,
+    printLayout,
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
@@ -1573,6 +1948,9 @@ export function applyProjectToStore(project: GeoLibreProject): {
     mapLayout,
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
+    // An unknown or absent value resolves to the 2D map, so a project written
+    // before #2217 (and any hand-edited one) opens on MapLibre as before.
+    primaryRenderer: normalizePrimaryRenderer(project.primaryRenderer) ?? DEFAULT_PRIMARY_RENDERER,
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
     comments: scrubbedComments,
     metadata: project.metadata,

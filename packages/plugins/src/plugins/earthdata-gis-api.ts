@@ -156,6 +156,30 @@ function asText(value: unknown): string {
 }
 
 /**
+ * Removes every `<...>` tag, matching `text.replace(/<[^>]*>/g, "")` exactly.
+ *
+ * That regex is quadratic on a long run of `<` with no closing `>`: every `<`
+ * rescans to the end of the string before failing. Scanning with `indexOf`
+ * stops at the first unclosed `<`, since no later `<` can close either.
+ *
+ * @param text - Text that may contain HTML tags
+ * @returns The text with all complete tags removed
+ */
+function stripTags(text: string): string {
+  let out = "";
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("<", from);
+    if (open === -1) break;
+    const close = text.indexOf(">", open + 1);
+    if (close === -1) break;
+    out += text.slice(from, open);
+    from = close + 1;
+  }
+  return out + text.slice(from);
+}
+
+/**
  * Converts the portal's HTML description/license fields to plain text.
  *
  * Tags are stripped with a regex rather than parsed into a detached DOM: the
@@ -178,23 +202,27 @@ export function plainText(html: unknown): string {
   // A sentinel that cannot occur in the portal's text, so real paragraph breaks
   // survive the pass that collapses the cosmetic in-paragraph newlines.
   const PARAGRAPH_BREAK = "\u0000";
-  return raw
-    .replace(/<br\s*\/?>/gi, "\n\n")
-    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/[ \t]*\n[ \t]*\n[\s]*/g, PARAGRAPH_BREAK)
-    .replace(/[ \t]*\n[ \t]*/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .split(PARAGRAPH_BREAK)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  const text = raw.replace(/<br\s*\/?>/gi, "\n\n").replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n");
+  return (
+    stripTags(text)
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#0*39;|&apos;/gi, "'")
+      // Collapse horizontal whitespace runs BEFORE the newline passes. Both open
+      // with `[ \t]*\n`, which backtracks quadratically across a long space/tab
+      // run that holds no newline; once every run is one character wide they stay
+      // linear, and the output is unchanged.
+      .replace(/[ \t]+/g, " ")
+      .replace(/[ \t]*\n[ \t]*\n[\s]*/g, PARAGRAPH_BREAK)
+      .replace(/[ \t]*\n[ \t]*/g, " ")
+      .split(PARAGRAPH_BREAK)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .join("\n\n")
+  );
 }
 
 /**

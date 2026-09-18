@@ -1,5 +1,5 @@
 import { geojsonHasZCoordinates, styleValue, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
@@ -78,7 +78,7 @@ interface LineLayerOption {
 }
 
 interface RouteAnimationPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /**
@@ -356,7 +356,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
 
   return (
     <div
-      className="absolute z-30 rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur"
+      className="absolute z-30 rounded-lg border border-border map-glass shadow-lg"
       style={{ left: position.x, top: position.y, width: PANEL_WIDTH }}
       role="dialog"
       aria-label={t("toolbar.routeAnimation.title")}

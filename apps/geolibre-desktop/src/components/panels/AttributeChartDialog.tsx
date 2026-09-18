@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 import { downloadChartPng, downloadChartSvg } from "../../lib/chart-export";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 import {
-  categoricalColumns,
+  categoryColumnOptions,
   DEFAULT_HISTOGRAM_BINS,
   MAX_HISTOGRAM_BINS,
   MIN_HISTOGRAM_BINS,
@@ -54,7 +54,7 @@ export function AttributeChartDialog({
 }: AttributeChartDialogProps) {
   const { t } = useTranslation();
   const numericCols = useMemo(() => numericColumns(rows, columns), [rows, columns]);
-  const categoryCols = useMemo(() => categoricalColumns(rows, columns), [rows, columns]);
+  const categoryCols = useMemo(() => categoryColumnOptions(rows, columns), [rows, columns]);
 
   const [chartType, setChartType] = useState<ChartType>("histogram");
   const [field, setField] = useState("");

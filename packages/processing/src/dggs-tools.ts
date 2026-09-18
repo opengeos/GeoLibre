@@ -1,6 +1,6 @@
 import type { FeatureCollection } from "geojson";
 import bbox from "@turf/bbox";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { type GeoLibreLayer, horizontalBbox } from "@geolibre/core";
 import type {
   DuckDbCapability,
   DuckDbGeoJsonSource,
@@ -437,7 +437,12 @@ export const createDggsGridTool: ProcessingAlgorithm = {
         }
       }
       inputGeojson = layer.geojson;
-      const bb = normalizeLonLatBbox(bbox(layer.geojson) as [number, number, number, number]);
+      const layerBox = horizontalBbox(bbox(layer.geojson));
+      if (!layerBox) {
+        ctx.log('Error: parameter "layer" has no usable extent');
+        return;
+      }
+      const bb = normalizeLonLatBbox(layerBox);
       areaKm2 = bboxAreaKm2(bb);
       if (source === "extent") areaBbox = bb;
       // A5 `geometry_to_cells` returns [] for a ±180° world ring; use the bbox
@@ -656,7 +661,11 @@ export const dggsBinPointsTool: ProcessingAlgorithm = {
       return;
     }
 
-    const bb = bbox(layer.geojson) as [number, number, number, number];
+    const bb = horizontalBbox(bbox(layer.geojson));
+    if (!bb) {
+      ctx.log('Error: parameter "layer" has no usable extent');
+      return;
+    }
     const dggridType = resolveDggridGridType(ctx.parameters.dggridType);
     const dggalType = resolveDggalGridType(ctx.parameters.dggalType);
     const res = resolveResolution(ctx, type, bboxAreaKm2(bb), dggridType, dggalType);

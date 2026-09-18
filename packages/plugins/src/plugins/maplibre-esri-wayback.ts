@@ -30,6 +30,9 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-esri-wayback",
   name: "Historical Imagery",
   version: "0.2.0",
+  // The upstream control adds raster sources/layers through the shared Style
+  // Spec API; the engine adopts them under their native ids on Mapbox.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
     if (!esriWaybackControl) {
       esriWaybackControl = new EsriWaybackControl(getEsriWaybackControlOptions());

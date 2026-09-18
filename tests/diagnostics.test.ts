@@ -355,6 +355,37 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(getDiagnosticsSnapshot().errorCount, 1);
   });
 
+  for (const responseType of ["opaque", "opaqueredirect"] as const) {
+    it(`treats a resolved ${responseType} response as informational`, async () => {
+      setCaptureNetworkInfo(true);
+      try {
+        // Browsers expose a successful no-cors response with these exact fields:
+        // the actual HTTP status is intentionally hidden, so status 0 and
+        // ok=false must not be mistaken for a network failure. A manual
+        // cross-origin redirect exposes the same fields as `opaqueredirect`.
+        const opaqueResponse = {
+          ok: false,
+          status: 0,
+          statusText: "",
+          type: responseType,
+        } as Response;
+        win.fetch = (() => Promise.resolve(opaqueResponse)) as unknown as typeof fetch;
+        install();
+        await (win.fetch as typeof fetch)("https://www.google-analytics.com/g/collect", {
+          mode: "no-cors",
+          method: "POST",
+        });
+        const [record] = getDiagnosticsSnapshot().records;
+        assert.equal(record.category, "network");
+        assert.equal(record.level, "info");
+        assert.equal(record.status, 0);
+        assert.equal(getDiagnosticsSnapshot().errorCount, 0);
+      } finally {
+        setCaptureNetworkInfo(false);
+      }
+    });
+  }
+
   it("downgrades a non-ok response on an optional-resource request", async () => {
     setCaptureNetworkInfo(true);
     try {

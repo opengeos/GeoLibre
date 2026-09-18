@@ -86,6 +86,8 @@ export interface BrowserNode {
   libraryImportExport?: boolean;
   /** True for a built-in preset service (read-only), for badge display. */
   builtin?: boolean;
+  /** True for a deployment-managed service (read-only), for badge display. */
+  deployment?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
   projectPath?: string;
   /** Leaf count under a `section`/`category`, for a count badge. */
@@ -94,7 +96,7 @@ export interface BrowserNode {
 
 /** Inputs the Browser tree is assembled from. */
 export interface BrowserTreeInput {
-  /** Every service to list — built-in presets and the user's saved entries. */
+  /** Every service to list — built-in, deployment, and the user's saved entries. */
   services: readonly ServiceLibraryEntry[];
   /** The recent-projects list from the store, most-recent first. */
   recentProjects: readonly RecentProjectEntry[];
@@ -162,16 +164,17 @@ const KIND_LABEL: Record<ServiceLibraryKind, string> = {
   wfs: "WFS",
   wmts: "WMTS",
   arcgis: "ArcGIS",
+  csw: "CSW",
 };
 
 /** Kind grouping order under Services, mirroring the Add Data source order. */
-const KIND_ORDER: readonly ServiceLibraryKind[] = ["xyz", "wms", "wfs", "wmts", "arcgis"];
+const KIND_ORDER: readonly ServiceLibraryKind[] = ["xyz", "wms", "csw", "wfs", "wmts", "arcgis"];
 
 /**
  * Groups services by kind (XYZ / WMS / WFS / WMTS / ArcGIS) so the tree mirrors
  * the Add Data web-service sources, ordering the groups by {@link KIND_ORDER}
- * and the services within each by name. Built-in presets and user entries are
- * interleaved so each kind reads as one catalog.
+ * and the services within each by name. Built-in, deployment, and user entries
+ * are interleaved so each kind reads as one catalog.
  */
 function buildServiceKinds(services: readonly ServiceLibraryEntry[]): BrowserNode[] {
   const byKind = new Map<ServiceLibraryKind, ServiceLibraryEntry[]>();
@@ -199,6 +202,7 @@ function buildServiceKinds(services: readonly ServiceLibraryEntry[]): BrowserNod
           serviceId: entry.id,
           serviceKind: entry.kind,
           builtin: entry.builtin,
+          deployment: entry.deployment,
         }),
       ),
     };
@@ -414,6 +418,7 @@ export interface FavoriteNodeInput {
   serviceId?: string;
   serviceKind?: ServiceLibraryKind;
   builtin?: boolean;
+  deployment?: boolean;
   path?: string;
 }
 
@@ -438,8 +443,9 @@ export function buildFavoriteNodes(favorites: readonly FavoriteNodeInput[]): Bro
           addable: true,
           serviceId: fav.serviceId,
           serviceKind: fav.serviceKind,
-          // Keep the "built-in" badge on a favorited preset service.
+          // Keep the origin badge on a favorited managed service.
           builtin: fav.builtin,
+          deployment: fav.deployment,
         };
       case "folder":
         return {

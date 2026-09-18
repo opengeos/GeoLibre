@@ -10,6 +10,8 @@ export {
   getVectorTool,
   resolveVectorRerun,
   matchFeaturesByLocation,
+  decodePolylineTool,
+  encodePolylineTool,
   MAX_CLIENT_PAIRS,
   SELECT_LOCATION_PREDICATES,
   type LocationMatches,
@@ -45,10 +47,16 @@ export {
   kernelDensityTool,
   emergingHotSpotTool,
   emergingPattern,
+  compositeScoreTool,
+  computeCompositeScores,
+  normalizeFieldValues,
+  numericFieldValue,
+  type CompositeAggregation,
+  type CompositeNullHandling,
+  type CompositeScoreOptions,
+  type CompositeScoreResult,
 } from "./statistics-tools";
 export {
-  H3_TOOLS,
-  getH3Tool,
   buildBinSql,
   buildGridFromBboxSql,
   buildH3CompactSql,
@@ -174,8 +182,10 @@ export {
   type FocalStatistic,
 } from "./raster-client";
 export {
+  LOCAL_SIDECAR_URL,
   checkSidecarHealth,
   setSidecarAuthToken,
+  setSidecarFetch,
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchConversionJob,
   fetchConversionStatus,
@@ -211,6 +221,7 @@ export {
   runWhiteboxTool,
   WHITEBOX_CATALOG_URL,
   VECTOR_OUTPUT_FORMATS,
+  isMultipleWhiteboxDatasetParameter,
   normalizeVectorOutputFormat,
   type ConversionJob,
   type ConversionStatus,
@@ -264,6 +275,7 @@ export {
   outputBaseName,
   fileOutputTargetExtension,
   outputTextFormatHint,
+  prepareGeographicBufferInput,
   isTiff,
 } from "./wasm-client";
 export {
@@ -271,7 +283,12 @@ export {
   readGeoTiffInfo,
   isTiledGeoTiff,
   convertGeoTiffToCog,
+  convertRasterDataToCog,
   COG_WASM_COMPRESSIONS,
+  exceedsBrowserCogConversionLimit,
+  geoTiffSampleCount,
+  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
+  MAX_BROWSER_COG_CONVERSION_SAMPLES,
   type CogWasmCompression,
   type ConvertGeoTiffToCogOptions,
   type GeoTiffInfo,
@@ -311,6 +328,7 @@ export {
   type SegmentMask,
   type SegmentEverythingOptions,
 } from "./segment-everything";
+export { isOrtAvailable } from "./ort";
 export {
   extractCogSubset,
   extractWmsSubset,
@@ -319,3 +337,34 @@ export {
   type ExtractWmsSubsetOptions,
   type ExtractXyzTileSubsetOptions,
 } from "./raster-subset";
+
+export {
+  assembleTerrainDem,
+  computeViewshed,
+  computeViewshedAsync,
+  decodeTerrariumElevation,
+  viewshedToRgba,
+  MAX_VIEWSHED_RADIUS_METERS,
+  MIN_VIEWSHED_RADIUS_METERS,
+  type AssembleTerrainDemOptions,
+  type TerrainDem,
+  type ViewshedObserver,
+  type ViewshedResult,
+} from "./terrain-viewshed";
+export {
+  INPUT_NODE_PORT,
+  OUTPUT_NODE_PORT,
+  graphToLinearSteps,
+  portKindsCompatible,
+  runModelGraph,
+  topologicalOrder,
+  validateModelGraph,
+  type DescriptorResolver,
+  type ModelGraphIssue,
+  type ModelGraphRunResult,
+  type ModelToolDescriptor,
+  type ModelToolExecutor,
+  type ModelToolPort,
+  type ModelValue,
+  type RunModelGraphOptions,
+} from "./model-graph";

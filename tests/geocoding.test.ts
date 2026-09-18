@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   buildForwardGeocodeUrl,
   buildReverseGeocodeUrl,
+  CARTOCIUDAD_MIN_INTERVAL_MS,
+  CARTOCIUDAD_PUBLIC_HOST,
   csvRowsToGeocodeRequests,
   geocodeMatchToFeature,
   geocodeForward,
@@ -191,10 +193,24 @@ describe("shouldThrottle / rowCap", () => {
 });
 
 describe("geocoderMinIntervalMs", () => {
+  const CARTOCIUDAD = "https://www.cartociudad.es/geocoder/api/geocoder/find";
+
   it("paces by hostname: only the public Nominatim host", () => {
     assert.equal(geocoderMinIntervalMs(PUBLIC_FORWARD), NOMINATIM_MIN_INTERVAL_MS);
     assert.equal(geocoderMinIntervalMs(SELF_HOSTED), 0);
     assert.equal(geocoderMinIntervalMs("https://api.mapbox.com/x"), 0);
+  });
+
+  it("paces the public CartoCiudad host gently, without Nominatim's row cap", () => {
+    assert.equal(geocoderMinIntervalMs(CARTOCIUDAD), CARTOCIUDAD_MIN_INTERVAL_MS);
+    assert.equal(
+      geocoderMinIntervalMs(`https://${CARTOCIUDAD_PUBLIC_HOST}/x`),
+      CARTOCIUDAD_MIN_INTERVAL_MS,
+    );
+    assert.ok(CARTOCIUDAD_MIN_INTERVAL_MS < NOMINATIM_MIN_INTERVAL_MS);
+    // Paced, but not subject to Nominatim's published policy gate.
+    assert.equal(shouldThrottle(CARTOCIUDAD), false);
+    assert.equal(rowCap(CARTOCIUDAD), Number.POSITIVE_INFINITY);
   });
 
   it("paces any provider pointed at the public Nominatim host (matches rowCap)", () => {
@@ -243,7 +259,7 @@ describe("provider registry", () => {
 
   it("includes the proposed alternatives", () => {
     const ids = GEOCODING_PROVIDERS.map((p) => p.id).sort();
-    assert.deepEqual(ids, ["arcgis", "google", "mapbox", "nominatim", "pelias"]);
+    assert.deepEqual(ids, ["arcgis", "cartociudad", "google", "mapbox", "nominatim", "pelias"]);
   });
 
   it("normalizes unknown provider ids to Nominatim", () => {
@@ -569,5 +585,222 @@ describe("setGeocodingFetch", () => {
     } finally {
       setGeocodingFetch(null);
     }
+  });
+
+  it("treats an HTTP 204 or empty body as no results rather than a parse error", async () => {
+    // CartoCiudad answers an unmatched query this way; `response.json()` on an
+    // empty body would throw and surface as "Search failed" instead of no match.
+    setGeocodingFetch(() => Promise.resolve(new Response(null, { status: 204 })));
+    try {
+      assert.deepEqual(await geocodeForward("zzzqqq", { config: NOMINATIM }), []);
+      assert.equal(await geocodeReverse(2.35, 48.85, { config: NOMINATIM }), null);
+    } finally {
+      setGeocodingFetch(null);
+    }
+    setGeocodingFetch(() => Promise.resolve(new Response("   ", { status: 200 })));
+    try {
+      assert.deepEqual(await geocodeForward("zzzqqq", { config: NOMINATIM }), []);
+      assert.equal(await geocodeReverse(2.35, 48.85, { config: NOMINATIM }), null);
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
+
+  it("wraps an unwrapped longitude from a repeated world copy into range", async () => {
+    // MapLibre reports lngLat.lng unwrapped for clicks on non-primary world
+    // copies, so 210 must reach the provider as -150, not be dropped.
+    const seen: string[] = [];
+    setGeocodingFetch((input) => {
+      seen.push(String(input));
+      return Promise.resolve(
+        new Response(JSON.stringify({ display_name: "Somewhere", address: {} }), { status: 200 }),
+      );
+    });
+    try {
+      const result = await geocodeReverse(210, 48.85, { config: NOMINATIM });
+      assert.equal(result?.displayName, "Somewhere");
+      assert.equal(new URL(seen[0]!).searchParams.get("lon"), "-150");
+      // An in-range longitude is passed through untouched — the modulo
+      // round-trip would otherwise return -3.7 as -3.7000000000000455.
+      await geocodeReverse(-3.7, 40.4, { config: NOMINATIM });
+      assert.equal(new URL(seen[1]!).searchParams.get("lon"), "-3.7");
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
+});
+
+// --- CartoCiudad provider tests -------------------------------------------
+
+describe("CartoCiudad provider", () => {
+  const provider = getGeocodingProvider("cartociudad");
+
+  it("is registered with correct metadata", () => {
+    assert.equal(provider.id, "cartociudad");
+    assert.equal(provider.label, "CartoCiudad (IGN España)");
+    assert.equal(provider.forward, true);
+    assert.equal(provider.reverse, true);
+    assert.equal(provider.requiresApiKey, false);
+    assert.equal(provider.acceptsApiKey, false);
+  });
+
+  it("builds a forward URL with q param", () => {
+    const config = configFor("cartociudad");
+    const url = new URL(provider.buildForwardUrl(config, "Calle Mayor 1, Madrid", {}));
+    assert.equal(url.searchParams.get("q"), "Calle Mayor 1, Madrid");
+    assert.ok(url.hostname.includes("cartociudad"));
+    assert.ok(url.pathname.includes("find"));
+  });
+
+  it("parses a forward result object into a single match", () => {
+    const matches = provider.parseForward({
+      lat: 40.416461059323886,
+      lng: -3.7046584169537073,
+      address: "MAYOR",
+      tip_via: "CALLE",
+      portalNumber: 1,
+      postalCode: "28013",
+      poblacion: "Madrid",
+      muni: "Madrid",
+      province: "Madrid",
+      type: "portal",
+      refCatastral: "0343302VK4704C",
+      state: 0,
+    });
+    assert.equal(matches.length, 1);
+    const m = matches[0];
+    assert.deepEqual([m.lat, m.lon], [40.416461059323886, -3.7046584169537073]);
+    assert.ok(m.displayName.includes("MAYOR"));
+    assert.ok(m.displayName.includes("Madrid"));
+    assert.equal(m.score, null);
+  });
+
+  it("returns empty array for null/undefined forward data", () => {
+    assert.deepEqual(provider.parseForward(null), []);
+    assert.deepEqual(provider.parseForward(undefined), []);
+  });
+
+  it("returns empty array when lat/lng are missing, null, or blank", () => {
+    assert.deepEqual(provider.parseForward({ address: "No coords" }), []);
+    assert.deepEqual(provider.parseForward({ lat: null, lng: null, address: "Null coords" }), []);
+    assert.deepEqual(provider.parseForward({ lat: "", lng: "", address: "Empty coords" }), []);
+  });
+
+  it("returns empty array for non-finite or out-of-range forward coordinates", () => {
+    assert.deepEqual(provider.parseForward({ lat: NaN, lng: -3.7, address: "NaN lat" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 40.4, lng: Infinity, address: "Inf lng" }), []);
+    assert.deepEqual(provider.parseForward({ lat: "NaN", lng: "invalid", address: "Junk" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 95, lng: -3.7, address: "Lat too high" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 40.4, lng: 200, address: "Lng too high" }), []);
+  });
+
+  it("returns empty array when the response is an array rather than an object", () => {
+    // `find` answers with one object even for an ambiguous query; an array is a
+    // shape we do not understand, not a candidate list to pick the first of.
+    assert.deepEqual(provider.parseForward([{ lat: 40.4, lng: -3.7, address: "MAYOR" }]), []);
+  });
+
+  it("omits a blank portal number instead of appending a trailing space", () => {
+    const matches = provider.parseForward({
+      lat: 40.4,
+      lng: -3.7,
+      tip_via: "CALLE",
+      address: "MAYOR",
+      portalNumber: "",
+      poblacion: "Madrid",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.startsWith("CALLE MAYOR,"));
+  });
+
+  it("falls back to muni for the locality when poblacion is absent", () => {
+    // Shape taken from a live "A-6 km 120" response: a road kilometre point
+    // carries muni but no poblacion, so the municipality must not be dropped.
+    const matches = provider.parseForward({
+      lat: 40.9,
+      lng: -4.8,
+      address: "A-6",
+      postalCode: "05296",
+      poblacion: null,
+      muni: "Espinosa de los Caballeros",
+      province: "Ávila",
+      type: "portal",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.includes("05296 Espinosa de los Caballeros"));
+  });
+
+  it("prefers poblacion over muni when both are present", () => {
+    const matches = provider.parseForward({
+      lat: 42.05,
+      lng: 1.74,
+      address: "Cal Mayoral",
+      poblacion: "Cal Mayoral",
+      muni: "l'Espunyola",
+      province: "Barcelona",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.includes("Cal Mayoral"));
+    assert.ok(!matches[0].displayName.includes("Espunyola"));
+  });
+
+  it("builds a reverse URL with lat/lon params", () => {
+    const config = configFor("cartociudad");
+    const url = new URL(provider.buildReverseUrl(config, -3.7038, 40.4168, {}));
+    assert.equal(url.searchParams.get("lat"), "40.4168");
+    assert.equal(url.searchParams.get("lon"), "-3.7038");
+    assert.ok(url.pathname.includes("reverseGeocode"));
+  });
+
+  it("parses a reverse result into display + structured parts", () => {
+    const result = provider.parseReverse({
+      lat: 40.41652681555059,
+      lng: -3.7037876690807514,
+      address: "PUERTA DEL SOL",
+      tip_via: "PLAZA",
+      portalNumber: 7,
+      postalCode: "28012",
+      poblacion: "Madrid",
+      muni: "Madrid",
+      province: "Madrid",
+      type: "portal",
+      refCatastral: "0444101VK4704C",
+      state: 0,
+    });
+    assert.ok(result);
+    assert.ok(result!.displayName.includes("PUERTA DEL SOL"));
+    assert.equal(result!.parts.tip_via, "PLAZA");
+    assert.equal(result!.parts.postalCode, "28012");
+    assert.equal(result!.parts.refCatastral, "0444101VK4704C");
+    assert.equal(result!.parts.province, "Madrid");
+  });
+
+  it("returns null for null/undefined reverse data", () => {
+    assert.equal(provider.parseReverse(null), null);
+    assert.equal(provider.parseReverse(undefined), null);
+  });
+
+  it("returns null for non-finite or out-of-range reverse coordinates", () => {
+    assert.equal(provider.parseReverse({ address: "No coords" }), null);
+    assert.equal(provider.parseReverse({ lat: null, lng: null, address: "Null" }), null);
+    assert.equal(provider.parseReverse({ lat: "NaN", lng: "invalid", address: "Junk" }), null);
+    assert.equal(provider.parseReverse({ lat: 95, lng: -3.7, address: "Lat too high" }), null);
+    assert.equal(provider.parseReverse({ lat: 40.4, lng: -200, address: "Lng too low" }), null);
+  });
+
+  it("does not require an API key", () => {
+    assert.equal(
+      geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "cartociudad", apiKeys: {} })),
+      false,
+    );
+  });
+
+  it("rejects non-finite and out-of-bounds coordinates in geocodeReverse", async () => {
+    // Longitude is wrapped rather than rejected (see the world-copy test above),
+    // so only a non-finite longitude or an impossible latitude short-circuits.
+    assert.equal(await geocodeReverse(NaN, 40.4), null);
+    assert.equal(await geocodeReverse(-3.7, Infinity), null);
+    assert.equal(await geocodeReverse(-3.7, -95), null);
+    assert.equal(await geocodeReverse(-3.7, 95), null);
   });
 });

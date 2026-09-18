@@ -48,6 +48,17 @@ m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
+Google Earth Engine layers are optional and need `pip install earthengine-api`
+plus credentials (`ee.Authenticate()` once, then a Google Cloud project):
+
+```python
+import ee
+
+ee.Authenticate()  # once per machine
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
+```
+
 Round-trip the project:
 
 ```python
@@ -62,23 +73,48 @@ m.to_project()["mapView"]["center"]
 
 ## API
 
+### Dash
+
+Install the optional Dash integration with `pip install "geolibre[dash]"`.
+`DashMap` is a Dash component and exposes map interactions as callback
+properties while retaining GeoLibre's existing map implementation:
+
+```python
+from dash import Dash, Input, Output, html
+from geolibre import DashMap
+
+app = Dash(__name__)
+m = DashMap(center=(-119.0, 39.8), zoom=12, basemap="dark", height="800px")
+app.layout = html.Div([m, html.Div(id="click-output")])
+
+@app.callback(Output("click-output", "children"), Input(m, "clickData"))
+def show_click(click_data):
+    return "Click the map" if click_data is None else str(click_data)
+```
+
+The click payload has the form `{"lngLat": {"lng": ..., "lat": ...},
+"features": [...]}`. `selectionData` is also available for Dash callbacks;
+`viewData` is reserved for future camera-event support. The existing
+`Map.on_click()` API is unchanged.
+
 | Method | Description |
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. `layout` is `"embed"`, `"full"`, or `"maponly"`. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON (dict, path, URL, JSON, or GeoDataFrame). |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv` / `add_xy_data` `(data, x=, y=, name=, **style)` | Add points from CSV, a DataFrame, or row mappings. |
-| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add a point density heatmap. |
+| `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add a point density heatmap, optionally weighted by a numeric field. |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON) or a local file (read via GeoPandas, inlined). |
 | `add_geoparquet` / `add_flatgeobuf` / `add_shp` / `add_kml` / `add_gpkg` | Format-specific wrappers over `add_vector`. |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add vector tiles from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
+| `add_ee_layer(ee_object, vis_params=, name=, shown=, opacity=)` | Add an authenticated Google Earth Engine object as raster tiles. |
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS (GetMap) tiled raster layer. |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
-| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (alias of `add_cog`). |
+| `add_raster(source, name=, bands=, colormap=, rescale=, array_args=)` | Add a COG/GeoTIFF or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |
@@ -86,11 +122,92 @@ m.to_project()["mapView"]["center"]
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
 | `zoom_to_bounds(bounds)` / `zoom_to_layer(layer)` | Fit the view to bounds or a layer id/name/handle. |
 | `layer_names` / `find_layer(name)` / `set_layer_visibility` / `set_layer_opacity` | Inspect and update layers conveniently. |
-| `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
+| `rename_layer` / `move_layer` / `duplicate_layer` / `show_layer` / `hide_layer` | Manage layers by id, name, or `Layer` handle. |
+| `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
+| `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
+| `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
+| `set_zoom` / `set_bearing` / `set_pitch` / `fit_project_bounds` | Persist camera changes without requiring the widget to be displayed. |
+| `list_whitebox_tools()` / `run_whitebox_tool(id, parameters)` | Discover and run bundled Whitebox tools locally via browser WASM. |
 | `to_project()` / `load_project(src)` / `save_project(path)` | Project I/O. |
+
+Layer handles provide the same operations in an object-oriented form:
+
+```python
+m.add_geojson("https://example.com/roads.geojson", name="Roads")
+
+roads = m.find_layer("Roads")  # None when no layer has that name
+roads.opacity = 0.6
+roads.set_style(lineColor="#e63946", lineWidth=3)
+roads.move(0)
+
+print(roads.properties())      # sampled values for every property
+print(roads.column("highway")) # one value per feature
+roads_copy = roads.duplicate(name="Roads (proposed)")
+```
+
+Run a Whitebox tool against a map layer (the map must be displayed first):
+
+```python
+dem = m.get_layer(m.add_raster("https://example.com/dem.tif", name="DEM"))
+result = m.run_whitebox_tool("slope", {"input": dem, "units": "degrees"})
+slope = m.get_layer(result["resultLayerIds"][0])
+```
+
+For headless authoring and scripts that do not need a widget, commonly used
+project utilities are available directly from the top-level package:
+
+```python
+from geolibre import (
+    basemap_catalog,
+    builtin_legend_names,
+    color_ramp_names,
+    describe_project,
+    load_project,
+    save_project,
+)
+
+project = load_project("my-map.geolibre.json")
+print(describe_project(project))
+save_project("copy.geolibre.json", project)
+```
+
+These are the lossless file primitives: unlike `Map.save_project`, the top-level
+`save_project` writes the project **verbatim**, credentials included, so that
+editing a project in place cannot strip your own API keys out of it. Pass a
+project through `geolibre.project.redact_credentials` first if the file is going
+anywhere untrusted, or use `Map.save_project`, which redacts by default.
 
 ## Notes
 
+- **marimo** can render the anywidget, but its browser may not be able to reach
+  GeoLibre's random localhost port. If the iframe reports
+  `127.0.0.1 refused to connect`, select the hosted app before displaying the
+  map:
+
+  ```python
+  from geolibre import Map
+
+  m = Map(center=(-100, 40), zoom=4)
+  m._app_url = "https://web.geolibre.app/"
+  m.add_basemap("dark")
+  m.add_vector(
+      "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+      name="World cities",
+  )
+  m
+  ```
+
+  Set `_app_url` before returning `m` from the cell. With the hosted app, use
+  hosted URLs for rasters and other browser-loaded sources; it cannot access
+  files served from the kernel's temporary localhost server. Local GeoJSON,
+  CSV, and vector files that are read in Python and inlined still work. The
+  example uses `add_vector()` so the browser, rather than Python, fetches the
+  remote GeoJSON URL.
+
+  **Privacy:** The widget sends its synchronized project, including any inlined
+  local data, to the origin in `_app_url` through `window.postMessage`. Use only
+  a trusted app URL, or host the GeoLibre app yourself, when working with
+  sensitive data.
 - The bundled app is served from a localhost HTTP server, so the interactive
   widget works in local Jupyter and VS Code directly. **Google Colab** routes
   through its built-in port proxy automatically. On **JupyterHub** (including
@@ -102,12 +219,37 @@ m.to_project()["mapView"]["center"]
   (works in the running server with no restart where it is installed). On other
   remote servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)` to
   use that same remote path; `Map(server_proxy=False)` forces the direct path.
+- `add_ee_layer` needs the Earth Engine Python API, which is **not** a
+  dependency of this package: `pip install earthengine-api`. Authenticate once
+  with `ee.Authenticate()` and initialize with `ee.Initialize(project=...)`
+  before adding a layer. The generated tile URL is tied to an Earth Engine map
+  id that expires, so a saved project may need the layer regenerated later.
 - Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),
-  which the kernel reads and inlines as GeoJSON. Remote URLs for the same formats stream through
-  the in-browser vector control and need no extras.
+  plus xarray/rioxarray/rasterio/rio-tiler support for in-memory rasters.
+  Colab uses rio-tiler to serve these as PNG XYZ tiles because its proxy does
+  not preserve browser COG byte ranges. `[vector]` and
+  `[raster]` install just one half each -- `[all]` pulls in rasterio (and GDAL).
+  The kernel reads local vectors and inlines them as GeoJSON; remote URLs for
+  those formats stream through the in-browser vector control and need no extras.
 - `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large
   dataset is held in memory and re-synced on every project update. For very large
   layers, prefer a tile or COG source (`add_tile_layer`/`add_cog`) the app fetches
   directly.
+
+## MCP server
+
+The package also ships a headless [MCP](https://modelcontextprotocol.io) server
+that authors `.geolibre.json` projects from an AI client:
+
+```bash
+pip install "geolibre[mcp]"
+geolibre-mcp --root ~/maps
+```
+
+It confines every read and write to the roots you pass (`--root`, repeatable, or
+`GEOLIBRE_MCP_ROOTS`) and builds projects through the same builders this package
+uses, so anything it writes opens in the widget unchanged. See
+[docs/mcp.md](https://geolibre.app/mcp/) for the tool list and client
+configuration.
