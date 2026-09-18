@@ -33,8 +33,10 @@ after(() => {
 function engineWith(
   applyView: () => void | Promise<void>,
   pending: () => string[] = () => [],
+  kind: MapEngine["kind"] = "maplibre",
 ): MapEngine {
   return {
+    kind,
     applyView,
     getRenderStatus: () => ({ pending: pending(), errors: [] }),
     isCameraMoving: () => false,
@@ -46,12 +48,18 @@ function engineWith(
 describe("applyStoryViewAndWait", () => {
   it("resolves synchronous camera applications after a rendered frame", async () => {
     let applied = false;
-    const engine = engineWith(() => {
-      applied = true;
-    });
+    const engine = engineWith(
+      () => {
+        applied = true;
+      },
+      () => [],
+      "cesium",
+    );
 
-    await applyStoryViewAndWait(engine, location, () => false, 100);
+    const started = performance.now();
+    await applyStoryViewAndWait(engine, location, () => false, 1_000);
     assert.equal(applied, true);
+    assert.ok(performance.now() - started >= 450);
   });
 
   it("waits for an asynchronous engine camera application", async () => {
@@ -61,7 +69,7 @@ describe("applyStoryViewAndWait", () => {
     });
     const engine = engineWith(() => application);
     let resolved = false;
-    const waiting = applyStoryViewAndWait(engine, location, () => false, 100).then(() => {
+    const waiting = applyStoryViewAndWait(engine, location, () => false, 1_000).then(() => {
       resolved = true;
     });
 

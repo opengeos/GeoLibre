@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
 async function waitForMap(page: Page): Promise<void> {
@@ -175,6 +176,18 @@ test("returns to the editor after exiting a presentation", async ({ page }) => {
 
 test("presents and composes a story on Mapbox", async ({ page }) => {
   test.skip(!process.env.MAPBOX_TOKEN, "requires an authenticated Mapbox map");
+  await page.addInitScript(
+    ({ key, token }) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...JSON.parse(localStorage.getItem(key) || "{}"),
+          mapboxAccessToken: token,
+        }),
+      );
+    },
+    { key: DESKTOP_SETTINGS_STORAGE_KEY, token: process.env.MAPBOX_TOKEN! },
+  );
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();

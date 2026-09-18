@@ -2,6 +2,8 @@ import * as maplibregl from "maplibre-gl";
 import type { StoryChapterLocation } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 
+const RENDER_STABILITY_MS = 500;
+
 export interface StoryMapMarker {
   setLngLat(lngLat: [number, number]): void;
   getElement(): HTMLElement;
@@ -71,6 +73,7 @@ export function applyStoryViewAndWait(
     let cameraMoved = false;
     let cameraIdle = false;
     let viewApplied = false;
+    let stableSince = 0;
     let stopMoving = () => {};
     let stopIdle = () => {};
     let timer = 0;
@@ -85,12 +88,19 @@ export function applyStoryViewAndWait(
       resolve();
     };
     const maybeFinish = () => {
-      if (renderedFrame && cameraIdle && engine.getRenderStatus().pending.length === 0) finish();
+      const ready = renderedFrame && cameraIdle && engine.getRenderStatus().pending.length === 0;
+      if (!ready) {
+        stableSince = 0;
+        return;
+      }
+      stableSince ||= performance.now();
+      if (performance.now() - stableSince >= RENDER_STABILITY_MS) finish();
     };
     stopMoving = engine.onCameraMove(() => {
       cameraMoved = true;
       cameraIdle = false;
       renderedFrame = true;
+      stableSince = 0;
     });
     stopIdle = engine.onCameraIdle(() => {
       if (!viewApplied || !cameraMoved) return;
