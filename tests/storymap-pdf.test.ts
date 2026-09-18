@@ -76,6 +76,10 @@ describe("htmlToPlainText", () => {
       htmlToPlainText("<style>body{color:red}</style>Hello<script>x=1</script>"),
       "Hello",
     );
+    assert.equal(
+      htmlToPlainText("<scripting>kept</scripting> visible <script>alert(1)</script> more text"),
+      "kept visible more text",
+    );
   });
 
   it("strips tags with a '>' inside a quoted attribute value", () => {

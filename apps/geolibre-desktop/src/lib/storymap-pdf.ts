@@ -159,15 +159,16 @@ function stripRawTextBlocks(text: string): string {
   const output: string[] = [];
   let plainStart = 0;
   let searchFrom = 0;
+  const hasTagName = (open: number, candidate: "script" | "style"): boolean => {
+    if (!lower.startsWith(`<${candidate}`, open)) return false;
+    const boundary = lower[open + candidate.length + 1];
+    return boundary === ">" || boundary === "/" || /\s/.test(boundary ?? "");
+  };
 
   for (;;) {
     const open = lower.indexOf("<", searchFrom);
     if (open === -1) break;
-    const name = lower.startsWith("<script", open)
-      ? "script"
-      : lower.startsWith("<style", open)
-        ? "style"
-        : null;
+    const name = hasTagName(open, "script") ? "script" : hasTagName(open, "style") ? "style" : null;
     if (name === null || lastClose[name] <= open) {
       searchFrom = open + 1;
       continue;
