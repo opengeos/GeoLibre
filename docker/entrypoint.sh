@@ -493,7 +493,11 @@ if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then
 fi
 
 if [ -n "$(trim "${GEOLIBRE_GEOLENS_URL:-}")" ]; then
-  echo "GeoLens server: $(trim "$GEOLIBRE_GEOLENS_URL")"
+  GEOLENS_URL_LOG=$(trim "$GEOLIBRE_GEOLENS_URL")
+  case "$GEOLENS_URL_LOG" in
+    [oO][fF][fF]) echo "GeoLens disabled (GEOLIBRE_GEOLENS_URL=off)." ;;
+    *) echo "GeoLens server: $GEOLENS_URL_LOG" ;;
+  esac
 fi
 
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then
