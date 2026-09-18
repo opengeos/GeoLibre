@@ -8378,7 +8378,7 @@
       "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر."
     },
     "geolibre-osm-downloader": {
-      "title": "مُتَّحَدٌ OSM",
+      "title": "مُنزِّل OSM",
       "hint": "تنزيل ميزات OpenStreetMap من المنطقة الحالية على الخريطة باستخدام واجهة Overpass العامة.",
       "attribution": "البيانات © مُساهِمِي OpenStreetMap، متاحة تحت ترخيص ODbL.",
       "featureType": "نوع الميزة",

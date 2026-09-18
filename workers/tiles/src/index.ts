@@ -495,6 +495,32 @@ async function readRequestBodyWithLimit(request: Request, limit: number): Promis
   return body + decoder.decode();
 }
 
+/** Clear the upstream deadline only once its response body closes or is cancelled. */
+function streamWithTimeoutCleanup(body: ReadableStream, timeout: ReturnType<typeof setTimeout>) {
+  const reader = body.getReader();
+  const finish = () => clearTimeout(timeout);
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      await reader.cancel(reason);
+    },
+  });
+}
+
 async function handleOverpass(request: Request): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
@@ -535,14 +561,19 @@ async function handleOverpass(request: Request): Promise<Response> {
       signal: upstreamController.signal,
     });
   } catch {
+    clearTimeout(upstreamTimeout);
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
-  } finally {
+  }
+  if (!originResponse.body) {
     clearTimeout(upstreamTimeout);
   }
   const headers = new Headers(CORS_HEADERS);
   headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
   headers.set("cache-control", "no-store");
-  return new Response(originResponse.body, { status: originResponse.status, headers });
+  const responseBody = originResponse.body
+    ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout)
+    : null;
+  return new Response(responseBody, { status: originResponse.status, headers });
 }
 
 interface Env {}

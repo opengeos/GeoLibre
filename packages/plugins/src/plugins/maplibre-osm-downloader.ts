@@ -129,11 +129,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   customGrid.hidden = true;
 
   const coordGrid = element("div", CSS.grid);
-  const coordInputs = ["west", "south", "east", "north"].map((name) => {
+  const coordInputs = ["west", "south", "east", "north"].map(() => {
     const input = element("input", CSS.input);
     input.type = "number";
     input.step = "any";
-    input.setAttribute("aria-label", name);
     return input;
   });
   const coordLabels = [

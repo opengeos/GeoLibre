@@ -42,6 +42,33 @@ describe("Overpass edge proxy", () => {
     assert.equal(calls[0].input, "https://z.overpass-api.de/api/interpreter");
     assert.equal(calls[0].init?.method, "POST");
     assert.equal(calls[0].init?.body, body);
+    await response.text();
+  });
+
+  it("accepts a bounded antimeridian split and rejects injected selector text", async () => {
+    globalThis.fetch = async () =>
+      new Response('{"elements":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const query = buildOsmDownloadQuery([179.9, -0.1, 180.1, 0.1], {
+      preset: "buildings",
+    });
+
+    const accepted = await tilesWorker.fetch(
+      request("data=" + encodeURIComponent(query)),
+      {},
+      {} as ExecutionContext,
+    );
+    const rejected = await tilesWorker.fetch(
+      request("data=" + encodeURIComponent(query.replace(");nwr", ");node; nwr"))),
+      {},
+      {} as ExecutionContext,
+    );
+
+    assert.equal(accepted.status, 200);
+    assert.equal(rejected.status, 400);
+    await accepted.text();
   });
 
   it("rejects untrusted origins and oversized bodies before fetching upstream", async () => {

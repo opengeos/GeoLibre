@@ -8033,7 +8033,7 @@
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",
       "hint": "Scarica le caratteristiche OpenStreetMap dall'area della mappa corrente utilizzando l'Overpass API pubblica.",
-      "attribution": "Dati © contribuenti OpenStreetMap, disponibili sotto la ODbL.",
+      "attribution": "Dati © contributori OpenStreetMap, disponibili sotto la ODbL.",
       "featureType": "Tipo di caratteristica",
       "presetBuildings": "Edifici",
       "presetRoads": "Strade",

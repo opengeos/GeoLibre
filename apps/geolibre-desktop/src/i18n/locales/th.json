@@ -7944,7 +7944,7 @@
       "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น"
     },
     "geolibre-osm-downloader": {
-      "title": "OSM Downloader",
+      "title": "ตัวดาวน์โหลด OSM",
       "hint": "ดาวน์โหลดข้อมูล OpenStreetMap จากพื้นที่บนแผนที่ปัจจุบันผ่าน Overpass API สาธารณะ",
       "attribution": "ข้อมูล © ผู้มีส่วนร่วมใน OpenStreetMap ใช้งานภายใต้สัญญาอนุญาต ODbL",
       "featureType": "ประเภทฟีเจอร์",

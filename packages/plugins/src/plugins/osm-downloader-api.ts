@@ -78,6 +78,12 @@ export function escapeOverpassString(value: string): string {
     .replace(/[\r\n]/g, " ");
 }
 
+/** Render WGS84 coordinates without exponent notation rejected by the relay grammar. */
+function formatOverpassCoordinate(value: number): string {
+  const rendered = String(value);
+  return /e/i.test(rendered) ? value.toFixed(15).replace(/\.?0+$/, "") : rendered;
+}
+
 /** Build a bounded Overpass QL query that returns complete element geometry. */
 export function buildOsmDownloadQuery(
   bbox: [number, number, number, number],
@@ -123,10 +129,14 @@ export function buildOsmDownloadQuery(
   // renderer-neutral antimeridian-crossing view into its east and west halves.
   const boxes =
     east <= 180
-      ? [`${south},${west},${north},${east}`]
-      : [`${south},${west},${north},180`, `${south},-180,${north},${east - 360}`];
-  const selectors = boxes.map((box) => `nwr${tagFilter}(${box});`).join("");
-  return `[out:json][timeout:60];${boxes.length > 1 ? `(${selectors});` : selectors}out geom;`;
+      ? [[south, west, north, east]]
+      : [
+          [south, west, north, 180],
+          [south, -180, north, east - 360],
+        ];
+  const formattedBoxes = boxes.map((box) => box.map(formatOverpassCoordinate).join(","));
+  const selectors = formattedBoxes.map((box) => `nwr${tagFilter}(${box});`).join("");
+  return `[out:json][timeout:60];${formattedBoxes.length > 1 ? `(${selectors});` : selectors}out geom;`;
 }
 
 /** Run a bounded Overpass query and convert its JSON response to GeoJSON. */

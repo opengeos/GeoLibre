@@ -33,6 +33,14 @@ describe("OSM download query", () => {
     );
   });
 
+  it("renders tiny coordinates without exponent notation", () => {
+    const query = buildOsmDownloadQuery([0.0000005, 0, 0.0000015, 0.001], {
+      preset: "buildings",
+    });
+    assert.match(query, /\(0,0\.0000005,0\.001,0\.0000015\)/);
+    assert.doesNotMatch(query, /e-/i);
+  });
+
   it("rejects oversized all-feature downloads", () => {
     assert.throws(
       () => buildOsmDownloadQuery([0, 0, 1, 1], { preset: "all" }),

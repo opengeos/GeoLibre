@@ -7971,7 +7971,7 @@
       "mapUnavailable": "Batas peta tidak tersedia saat ini.",
       "extentApplied": "Batas peta diterapkan.",
       "downloading": "Mengunduh dari OpenStreetMap…",
-      "downloaded": "Unduh {{count}} fitur.",
+      "downloaded": "{{count}} fitur berhasil diunduh.",
       "noFeatures": "Tidak ada fitur yang cocok ditemukan di area ini.",
       "error": "Tidak dapat mengunduh data OSM: {{message}}",
       "added": "Ditambahkan {{count}} fitur ke peta."
