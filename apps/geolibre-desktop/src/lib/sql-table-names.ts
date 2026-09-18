@@ -116,14 +116,20 @@ function sanitizeTableName(layerName: string, layerId: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  // Keep `normalized` empty when `base` is empty so the layer_<id> fallback is
-  // reached; prefixing an empty base would yield "t_" and bypass the fallback.
+    .replace(/^_/, "")
+    .replace(/_$/, "");
+
+  if (!base) {
+    return `layer_${layerId.replace(/[^a-z0-9]+/gi, "_")}`;
+  }
+
   // A leading digit or a reserved keyword is prefixed with `t_` so the name is
   // a usable bare identifier in the SQL the user writes.
-  const needsPrefix = !!base && (!/^[a-z_]/.test(base) || RESERVED_TABLE_NAMES.has(base));
-  const normalized = base ? (needsPrefix ? `t_${base}` : base) : "";
-  return normalized || `layer_${layerId.replace(/[^a-z0-9]+/gi, "_")}`;
+  if (!/^[a-z_]/.test(base) || RESERVED_TABLE_NAMES.has(base)) {
+    return `t_${base}`;
+  }
+
+  return base;
 }
 
 /**
