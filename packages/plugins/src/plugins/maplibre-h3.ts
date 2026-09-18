@@ -34,6 +34,9 @@ const LABEL_LAYER_ID = "geolibre-h3-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-h3-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-h3-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-h3-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-h3-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-h3-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-h3-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-h3-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-h3-parents-line";
 const ICOSAHEDRON_SOURCE_ID = "geolibre-h3-icosahedron-source";
@@ -126,7 +129,7 @@ export const DEFAULT_H3_LABELS: H3Labels = {
   noSelection: "No cell selected",
   copyId: "Copy ID",
   copied: "Copied",
-  parent: "Parent(s)",
+  parent: "Parent",
   children: "Children",
   neighbors: "Neighbors",
   baseCell: "Base cell",
@@ -139,7 +142,7 @@ export const DEFAULT_H3_LABELS: H3Labels = {
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
-  includeParents: "Include selected cell parent(s)",
+  includeParents: "Include selected cell parent",
   showIcosahedron: "Show icosahedron",
 };
 
@@ -392,6 +395,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     ICOSAHEDRON_LINE_LAYER_ID,
     LABEL_LAYER_ID,
@@ -400,7 +405,13 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, ICOSAHEDRON_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [
+    SELECTED_SOURCE_ID,
+    NEIGHBORS_SOURCE_ID,
+    PARENTS_SOURCE_ID,
+    ICOSAHEDRON_SOURCE_ID,
+    SOURCE_ID,
+  ]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -456,8 +467,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) parents.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // cell stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -468,8 +479,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -537,46 +570,32 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? gridDisk(selectedCell, 1) : [selectedCell];
+function neighborCells(cell: string): string[] {
+  return gridDisk(cell, 1).filter((neighbor) => neighbor !== cell);
 }
 
 /**
- * Every resolution r-1 cell the selected cell overlaps. H3's hierarchy is
- * approximate — a child hexagon is not perfectly contained in cellToParent,
- * its corners can spill into the parent's neighbors. Any overlapping coarser
- * cell is larger than the cell itself, so it must cover part of the boundary:
- * sampling the boundary vertices, nudged slightly toward the center so parents
- * that merely touch the edge are excluded, finds them all.
+ * The canonical parent at resolution r-1, or none for a resolution-0 cell.
+ * Uses h3-js `cellToParent` — one unique parent per cell.
  */
 function parentCells(cell: string): string[] {
   const resolution = getResolution(cell);
-  if (resolution <= 0) return [];
-  const [centerLat, centerLng] = cellToLatLng(cell);
-  const parents = new Set<string>([cellToParent(cell, resolution - 1)]);
-  // The unwrapped ring keeps vertex longitudes adjacent to the center for
-  // dateline cells; latLngToCell accepts longitudes outside [-180, 180].
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
-  const ringCenterLng =
-    centerLng > 0 && ring.some(([lng]) => lng < -130) ? centerLng - 360 : centerLng;
-  for (const [lng, lat] of ring) {
-    parents.add(
-      latLngToCell(
-        centerLat + (lat - centerLat) * 0.999,
-        ringCenterLng + (lng - ringCenterLng) * 0.999,
-        resolution - 1,
-      ),
-    );
-  }
-  return [...parents];
+  return resolution > 0 ? [cellToParent(cell, resolution - 1)] : [];
 }
 
 function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(h3CellFeature),
+    features: selectedCell ? [h3CellFeature(selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map(h3CellFeature)
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -754,8 +773,6 @@ function renderPanel(container: HTMLElement): void {
       dd.textContent = value;
       dd.style.margin = "0";
       dd.style.overflowWrap = "anywhere";
-      // Multi-line values (one overlapping parent per line) keep their breaks.
-      dd.style.whiteSpace = "pre-line";
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
@@ -764,9 +781,7 @@ function renderPanel(container: HTMLElement): void {
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     addDetail(labels.pentagon, isPentagon(selectedCell) ? labels.yes : labels.no);
     if (getResolution(selectedCell) > 0) {
-      // Every overlapping r-1 cell (canonical cellToParent first), matching
-      // the dashed parent outlines on the map.
-      addDetail(labels.parent, parentCells(selectedCell).join("\n"));
+      addDetail(labels.parent, cellToParent(selectedCell, getResolution(selectedCell) - 1));
     }
     if (getResolution(selectedCell) < 15) {
       addDetail(
@@ -774,7 +789,7 @@ function renderPanel(container: HTMLElement): void {
         String(cellToChildren(selectedCell, getResolution(selectedCell) + 1).length),
       );
     }
-    addDetail(labels.neighbors, String(gridDisk(selectedCell, 1).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");

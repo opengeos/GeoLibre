@@ -13,6 +13,9 @@ const LABEL_LAYER_ID = "geolibre-s2-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-s2-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-s2-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-s2-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-s2-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-s2-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-s2-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-s2-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-s2-parents-line";
 
@@ -401,6 +404,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -408,7 +413,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -447,8 +452,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) parent.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // cell stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -459,8 +464,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -523,25 +550,15 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
-/** The cell plus its edge and vertex neighbors at the same level. */
+/** Edge neighbors only — `allNeighbors` would also include vertex neighbors. */
 function neighborCells(cell: string): string[] {
   const id = cellIdFromToken(cell);
-  const level = s2.cellid.level(id);
-  const tokens = new Set<string>([cell]);
-  for (const neighbor of s2.cellid.allNeighbors(id, level)) {
-    tokens.add(s2.cellid.toToken(neighbor));
-  }
-  return [...tokens];
-}
-
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
+  return s2.cellid.edgeNeighbors(id).map((neighbor) => s2.cellid.toToken(neighbor));
 }
 
 /**
- * The direct parent, or none for a level-0 (face) cell. Unlike A5, S2 cells
- * nest exactly, so a cell always has a single parent.
+ * The direct parent, or none for a level-0 (face) cell. S2 cells nest exactly,
+ * so a cell always has a single parent.
  */
 function parentCells(cell: string): string[] {
   const id = cellIdFromToken(cell);
@@ -553,7 +570,15 @@ function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(s2CellFeature),
+    features: selectedCell ? [s2CellFeature(selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map(s2CellFeature)
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -745,7 +770,7 @@ function renderPanel(container: HTMLElement): void {
     if (cellLevel < MAX_S2_LEVEL) {
       addDetail(labels.children, String(s2.cellid.children(id).length));
     }
-    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");

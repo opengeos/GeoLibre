@@ -12,6 +12,9 @@ const LABEL_LAYER_ID = "geolibre-dggal-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-dggal-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-dggal-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-dggal-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-dggal-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-dggal-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-dggal-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-dggal-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-dggal-parents-line";
 
@@ -526,6 +529,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -533,7 +538,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -572,8 +577,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected zone stays on top of its
-  // (larger, overlapping) parents.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // zone stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -584,8 +589,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -715,13 +742,13 @@ function childZones(engine: DggalDggrs, cell: string): string[] {
   return [...children];
 }
 
-/** The zone plus its edge/vertex neighbors at the same level. */
+/** Edge/vertex neighbors at the same level (excludes the zone itself). */
 function neighborCells(cell: string): string[] {
   const engine = activeDggrs();
-  if (!engine) return [cell];
+  if (!engine) return [];
   const zone = engine.getZoneFromTextID(cell);
   const level = engine.getZoneLevel(zone);
-  const ids = new Set<string>([cell]);
+  const ids = new Set<string>();
   for (const { zone: neighbor } of engine.getZoneNeighbors(zone)) {
     try {
       if (engine.getZoneLevel(neighbor) === level) {
@@ -731,12 +758,8 @@ function neighborCells(cell: string): string[] {
       // Garbage padding entry — skip.
     }
   }
+  ids.delete(cell);
   return [...ids];
-}
-
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
 }
 
 function updateSelectedSource(): void {
@@ -745,7 +768,15 @@ function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map((cell) => dggalZoneFeature(engine, cell)),
+    features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map((cell) => dggalZoneFeature(engine, cell))
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -968,7 +999,7 @@ function renderPanel(container: HTMLElement): void {
     if (level < DGGAL_TYPES[settings.dggrsType]) {
       addDetail(labels.children, String(childZones(engine, selectedCell).length));
     }
-    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");

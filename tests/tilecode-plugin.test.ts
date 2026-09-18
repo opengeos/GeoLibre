@@ -145,13 +145,13 @@ describe("Tilecode plugin helpers", () => {
     assert.equal(tilecodeParentCell("z0x0y0"), null);
 
     const neighbors = tilecodeNeighborCells("z8x203y112");
-    assert.equal(neighbors.length, 9);
+    assert.equal(neighbors.length, 5);
     assert.ok(neighbors.includes("z8x203y112"));
     // The x axis wraps around the world…
     const wrapped = tilecodeNeighborCells("z4x0y7");
     assert.ok(wrapped.includes("z4x15y7"));
     // …but the y axis clips at the top row (no tiles beyond the mercator cap).
     const topRow = tilecodeNeighborCells("z4x7y0");
-    assert.equal(topRow.length, 6);
+    assert.equal(topRow.length, 4);
   });
 });

@@ -2880,7 +2880,7 @@
     "noSelection": "No cell selected",
     "copyId": "Copy ID",
     "copied": "Copied",
-    "parent": "Parent(s)",
+    "parent": "Parent",
     "children": "Children",
     "neighbors": "Neighbors",
     "baseCell": "Base cell",
@@ -2893,7 +2893,7 @@
     "exportGeoJson": "Export GeoJSON",
     "exportCsv": "Export CSV",
     "includeNeighbors": "Include selected cell neighbors",
-    "includeParents": "Include selected cell parent(s)",
+    "includeParents": "Include selected cell parent",
     "showIcosahedron": "Show icosahedron"
   },
   "s2Plugin": {
@@ -2939,7 +2939,7 @@
     "selectedCell": "Selected cell",
     "noSelection": "No cell selected",
     "copyId": "Copy ID",
-    "parent": "Parent(s)",
+    "parent": "Parent",
     "children": "Children",
     "neighbors": "Neighbors",
     "center": "Center",
@@ -2948,7 +2948,7 @@
     "exportGeoJson": "Export GeoJSON",
     "exportCsv": "Export CSV",
     "includeNeighbors": "Include selected cell neighbors",
-    "includeParents": "Include selected cell parent(s)"
+    "includeParents": "Include selected cell parent"
   },
   "dggridPlugin": {
     "title": "DGGRID",
@@ -2972,7 +2972,7 @@
     "selectedCell": "Selected cell",
     "noSelection": "No cell selected",
     "copyId": "Copy ID",
-    "parent": "Parent(s)",
+    "parent": "Parent",
     "children": "Children",
     "neighbors": "Neighbors",
     "center": "Center",
@@ -2981,7 +2981,7 @@
     "exportGeoJson": "Export GeoJSON",
     "exportCsv": "Export CSV",
     "includeNeighbors": "Include selected cell neighbors",
-    "includeParents": "Include selected cell parent(s)"
+    "includeParents": "Include selected cell parent"
   },
   "dggalPlugin": {
     "title": "DGGAL",

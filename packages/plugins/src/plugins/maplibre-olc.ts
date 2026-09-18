@@ -19,6 +19,9 @@ const LABEL_LAYER_ID = "geolibre-olc-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-olc-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-olc-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-olc-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-olc-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-olc-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-olc-neighbors-line";
 const PARENT_SOURCE_ID = "geolibre-olc-parent-source";
 const PARENT_LINE_LAYER_ID = "geolibre-olc-parent-line";
 
@@ -421,24 +424,25 @@ export function olcChildCount(cell: string): number {
 }
 
 /**
- * The cell plus its (up to 8) surrounding grid cells, encoded from offset
- * centroids. Cells in the top and bottom rows have no neighbors past the
- * poles; the longitude wraps via encode's normalization.
+ * The cell plus its (up to 4) edge neighbors, encoded from offset centroids.
+ * Diagonals are omitted — only north/south/east/west. Cells in the top and
+ * bottom rows have no neighbors past the poles; the longitude wraps via
+ * encode's normalization.
  */
 export function olcNeighborCells(cell: string): string[] {
   const area = OpenLocationCode.decode(cell);
   const latHeight = area.getLatitudeHeight();
   const lngWidth = area.getLongitudeWidth();
   const ids = new Set<string>([cell]);
-  for (const dLat of [-1, 0, 1]) {
-    for (const dLng of [-1, 0, 1]) {
-      if (dLat === 0 && dLng === 0) continue;
-      const lat = area.latitudeCenter + dLat * latHeight;
-      if (lat < -90 || lat > 90) continue;
-      ids.add(
-        OpenLocationCode.encode(lat, area.longitudeCenter + dLng * lngWidth, area.codeLength),
-      );
-    }
+  for (const [dLat, dLng] of [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+  ] as const) {
+    const lat = area.latitudeCenter + dLat * latHeight;
+    if (lat < -90 || lat > 90) continue;
+    ids.add(OpenLocationCode.encode(lat, area.longitudeCenter + dLng * lngWidth, area.codeLength));
   }
   return [...ids];
 }
@@ -447,6 +451,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENT_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -454,7 +460,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENT_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENT_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -493,8 +499,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected cell stays on top of its
-  // (larger, surrounding) parent.
+  // Parent and neighbors are added before the selected layers so the clicked
+  // cell stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENT_SOURCE_ID)) {
     map.addSource(PARENT_SOURCE_ID, {
       type: "geojson",
@@ -505,8 +511,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENT_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -569,16 +597,21 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? olcNeighborCells(selectedCell) : [selectedCell];
-}
-
 function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map((cell) => olcCellFeature(cell)),
+    features: selectedCell ? [olcCellFeature(selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? olcNeighborCells(selectedCell)
+            .filter((cell) => cell !== selectedCell)
+            .map((cell) => olcCellFeature(cell))
+        : [],
   });
   const parent = settings.includeParent && selectedCell ? olcParentCell(selectedCell) : null;
   const parentSource = map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined;

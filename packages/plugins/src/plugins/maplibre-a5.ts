@@ -29,6 +29,9 @@ const LABEL_LAYER_ID = "geolibre-a5-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-a5-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-a5-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-a5-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-a5-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-a5-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-a5-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-a5-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-a5-parents-line";
 
@@ -115,7 +118,7 @@ export const DEFAULT_A5_LABELS: A5Labels = {
   selectedCell: "Selected cell",
   noSelection: "No cell selected",
   copyId: "Copy ID",
-  parent: "Parent(s)",
+  parent: "Parent",
   children: "Children",
   neighbors: "Neighbors",
   center: "Center",
@@ -124,7 +127,7 @@ export const DEFAULT_A5_LABELS: A5Labels = {
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
-  includeParents: "Include selected cell parent(s)",
+  includeParents: "Include selected cell parent",
 };
 
 let labels: A5Labels = { ...DEFAULT_A5_LABELS };
@@ -395,6 +398,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -402,7 +407,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -441,8 +446,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) ancestors.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // cell stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -453,8 +458,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -520,44 +547,33 @@ function refresh(): void {
 function neighborCells(cell: string): string[] {
   const id = hexToU64(cell);
   // gridDisk compacts its result, so expand back to the cell's resolution.
-  return [...uncompact(gridDisk(id, 1), getResolution(id))].map(u64ToHex);
-}
-
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
+  return [...uncompact(gridDisk(id, 1), getResolution(id))]
+    .map(u64ToHex)
+    .filter((neighbor) => neighbor !== cell);
 }
 
 /**
- * Every resolution r-1 cell the selected cell overlaps. A5 pentagons do not
- * nest, so a cell can spill across several coarser cells beyond its canonical
- * cellToParent (sampled across the sphere, ~half of all cells overlap 2–3).
- * Any overlapping coarser cell is larger than the cell itself, so it must
- * cover part of the boundary: sampling a densified boundary, nudged slightly
- * toward the center so parents that merely touch the edge are excluded, finds
- * them all.
+ * The canonical parent at resolution r-1, or none for a resolution-0 cell.
+ * Uses a5-js `cellToParent` — one unique parent per cell.
  */
 function parentCells(cell: string): string[] {
   const id = hexToU64(cell);
-  const resolution = getResolution(id);
-  if (resolution <= 0) return [];
-  const [centerLng, centerLat] = cellToLonLat(id);
-  const parents = new Set<string>([u64ToHex(cellToParent(id))]);
-  for (const [lng, lat] of cellToBoundary(id, { closedRing: false, segments: 12 })) {
-    const inset = [
-      centerLng + (lng - centerLng) * 0.999,
-      centerLat + (lat - centerLat) * 0.999,
-    ] as A5LonLat;
-    parents.add(u64ToHex(lonLatToCell(inset, resolution - 1)));
-  }
-  return [...parents];
+  return getResolution(id) > 0 ? [u64ToHex(cellToParent(id))] : [];
 }
 
 function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(a5CellFeature),
+    features: selectedCell ? [a5CellFeature(selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map(a5CellFeature)
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -738,22 +754,18 @@ function renderPanel(container: HTMLElement): void {
       dd.textContent = value;
       dd.style.margin = "0";
       dd.style.overflowWrap = "anywhere";
-      // Multi-line values (one overlapping parent per line) keep their breaks.
-      dd.style.whiteSpace = "pre-line";
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
     addDetail(labels.resolution, String(cellResolution));
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     if (cellResolution > 0) {
-      // Every overlapping r-1 cell (canonical cellToParent first), matching
-      // the dashed parent outlines on the map.
-      addDetail(labels.parent, parentCells(selectedCell).join("\n"));
+      addDetail(labels.parent, u64ToHex(cellToParent(id)));
     }
     if (cellResolution < MAX_RESOLUTION) {
       addDetail(labels.children, String(cellToChildren(id).length));
     }
-    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");
