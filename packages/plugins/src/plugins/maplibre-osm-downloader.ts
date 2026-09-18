@@ -157,16 +157,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   status.setAttribute("role", "status");
   status.textContent = tr(app, "ready", "Choose an area and feature type.");
 
-  const addButton = element("button", CSS.button);
-  addButton.type = "button";
-  addButton.textContent = tr(app, "addToMap", "Add to map");
-  addButton.disabled = true;
   const exportButton = element("button", CSS.button);
   exportButton.type = "button";
   exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
   exportButton.disabled = true;
   const resultActions = element("div", CSS.actions);
-  resultActions.append(addButton, exportButton);
+  resultActions.append(exportButton);
 
   const presetField = field(tr(app, "featureType", "Feature type"), preset);
   root.append(
@@ -184,7 +180,6 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   let controller: AbortController | null = null;
   let result: FeatureCollection | null = null;
   let resultPreset: OsmDownloadPreset | null = null;
-  let added = false;
   let disposed = false;
 
   const refreshLabels = () => {
@@ -224,7 +219,6 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     valueInput.placeholder = tr(app, "tagValuePlaceholder", "optional, e.g. bakery");
     useView.textContent = tr(app, "useMapExtent", "Use map extent");
     downloadButton.textContent = tr(app, "download", "Download OSM data");
-    addButton.textContent = tr(app, "addToMap", "Add to map");
     exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
   };
   refreshPanelLabels = refreshLabels;
@@ -262,8 +256,6 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     controller = requestController;
     result = null;
     resultPreset = null;
-    added = false;
-    addButton.disabled = true;
     exportButton.disabled = true;
     downloadButton.disabled = true;
     status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
@@ -272,10 +264,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       if (disposed) return;
       resultPreset = selectedPreset;
       const count = result.features.length;
-      status.textContent = count
-        ? tr(app, "downloaded", "Downloaded {{count}} features.", { count })
-        : tr(app, "noFeatures", "No matching features were found in this area.");
-      addButton.disabled = count === 0;
+      if (count) {
+        app.addGeoJsonLayer(resultName(app, selectedPreset), result);
+        status.textContent = tr(app, "added", "Added {{count}} features to the map.", {
+          count,
+        });
+      } else {
+        status.textContent = tr(app, "noFeatures", "No matching features were found in this area.");
+      }
       exportButton.disabled = count === 0;
     } catch (error) {
       if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -289,17 +285,6 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         downloadButton.disabled = false;
       }
     }
-  });
-
-  addButton.addEventListener("click", () => {
-    if (!result || !resultPreset || added) return;
-    const name = resultName(app, resultPreset);
-    app.addGeoJsonLayer(name, result);
-    added = true;
-    addButton.disabled = true;
-    status.textContent = tr(app, "added", "Added {{count}} features to the map.", {
-      count: result.features.length,
-    });
   });
 
   exportButton.addEventListener("click", () => {
