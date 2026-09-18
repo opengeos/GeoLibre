@@ -67,6 +67,38 @@ describe("Overpass edge proxy", () => {
     assert.equal(fetched, false);
   });
 
+  it("stops reading a streamed body once it exceeds the limit", async () => {
+    let fetched = false;
+    globalThis.fetch = async () => {
+      fetched = true;
+      return new Response();
+    };
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data=${"x".repeat(20_001)}`));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const streamedRequest = new Request("https://tiles.geolibre.app/overpass", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        origin: "https://preview.geolibre-preview.pages.dev",
+      },
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await tilesWorker.fetch(streamedRequest, {}, {} as ExecutionContext);
+
+    assert.equal(response.status, 413);
+    assert.equal(cancelled, true);
+    assert.equal(fetched, false);
+  });
+
   it("rejects forged unbounded queries before fetching upstream", async () => {
     let fetched = false;
     globalThis.fetch = async () => {

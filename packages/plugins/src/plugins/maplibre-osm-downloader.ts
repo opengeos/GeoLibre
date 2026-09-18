@@ -249,12 +249,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   applyViewBounds();
 
   downloadButton.addEventListener("click", async () => {
-    const bbox = coordInputs.map((input) => Number(input.value)) as [
-      number,
-      number,
-      number,
-      number,
-    ];
+    const bbox = coordInputs.map((input) =>
+      input.value.trim() === "" ? Number.NaN : Number(input.value),
+    ) as [number, number, number, number];
     const selectedPreset = preset.value as OsmDownloadPreset;
     const filter: OsmDownloadFilter = {
       preset: selectedPreset,

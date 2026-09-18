@@ -476,6 +476,25 @@ export function isAllowedOverpassQuery(query: string): boolean {
 }
 
 /** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
+async function readRequestBodyWithLimit(request: Request, limit: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > limit) {
+      await reader.cancel();
+      return null;
+    }
+    body += decoder.decode(value, { stream: true });
+  }
+  return body + decoder.decode();
+}
+
 async function handleOverpass(request: Request): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
@@ -484,8 +503,8 @@ async function handleOverpass(request: Request): Promise<Response> {
   if (Number.isFinite(declaredLength) && declaredLength > OVERPASS_MAX_BODY_BYTES) {
     return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
   }
-  const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > OVERPASS_MAX_BODY_BYTES) {
+  const body = await readRequestBodyWithLimit(request, OVERPASS_MAX_BODY_BYTES);
+  if (body === null) {
     return new Response("Payload Too Large", { status: 413, headers: CORS_HEADERS });
   }
   const params = new URLSearchParams(body);
