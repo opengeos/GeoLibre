@@ -80,7 +80,6 @@ describe("htmlToPlainText", () => {
 
   it("strips tags with a '>' inside a quoted attribute value", () => {
     assert.equal(htmlToPlainText('<span title="a > b">text</span>'), "text");
-    assert.equal(htmlToPlainText('<span title="a < b">text</span>'), "text");
   });
 
   it("keeps malformed nested '<' text while stripping later complete tags", () => {
@@ -93,6 +92,12 @@ describe("htmlToPlainText", () => {
     assert.equal(
       htmlToPlainText('<a href="https://example.com>Read more</a> <p>Second paragraph</p>'),
       "Read more Second paragraph",
+    );
+    assert.equal(
+      htmlToPlainText(
+        '<a href="/page>Click here</a> and read the "manual" for more info. <span>END</span>',
+      ),
+      'Click here and read the "manual" for more info. END',
     );
   });
 

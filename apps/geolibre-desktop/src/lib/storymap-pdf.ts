@@ -162,8 +162,13 @@ function stripTags(text: string): string {
   let tagStart = -1;
   let quote: '"' | "'" | null = null;
 
-  const hasClosingQuote = (start: number, delimiter: '"' | "'"): boolean =>
-    text.indexOf(delimiter, start) !== -1;
+  const closesBeforeNextTag = (start: number, delimiter: '"' | "'"): boolean => {
+    for (let index = start; index < text.length; index += 1) {
+      if (text[index] === delimiter) return true;
+      if (text[index] === "<") return false;
+    }
+    return false;
+  };
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
@@ -177,10 +182,10 @@ function stripTags(text: string): string {
       continue;
     }
     if (character === '"' || character === "'") {
-      // Only enter quote mode when the delimiter closes. This lets an unmatched
-      // attribute quote degrade locally instead of preventing every later
-      // well-formed tag from being stripped.
-      if (hasClosingQuote(index + 1, character)) quote = character;
+      // Only enter quote mode when the delimiter closes before another tag can
+      // begin. This lets malformed attribute quotes degrade locally instead of
+      // consuming unrelated quoted text and well-formed tags later on.
+      if (closesBeforeNextTag(index + 1, character)) quote = character;
     } else if (character === "<") {
       output.push(text.slice(plainStart, index));
       plainStart = index;
