@@ -7966,12 +7966,10 @@
       "useMapExtent": "地図の範囲を使用",
       "download": "OSMデータをダウンロード",
       "ready": "エリアと特徴タイプを選択してください。",
-      "addToMap": "地図に追加",
       "exportGeoJson": "GeoJSONを保存",
       "mapUnavailable": "地図の範囲はまだ利用できません。",
       "extentApplied": "地図範囲が適用されました。",
       "downloading": "OpenStreetMapからダウンロード中…",
-      "downloaded": "{{count}}個の特徴をダウンロードしました。",
       "noFeatures": "このエリアには一致する特徴が見つかりませんでした。",
       "error": "OSMデータをダウンロードできませんでした: {{message}}",
       "added": "{{count}}個の特徴を地図に追加しました。"

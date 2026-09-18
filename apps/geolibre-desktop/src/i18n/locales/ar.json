@@ -8400,12 +8400,10 @@
       "useMapExtent": "استخدام مدى الخريطة",
       "download": "تنزيل بيانات OSM",
       "ready": "اختر منطقة ونوع ميزة.",
-      "addToMap": "إضافة إلى الخريطة",
       "exportGeoJson": "حفظ GeoJSON",
       "mapUnavailable": "مدى الخريطة غير متوفر بعد.",
       "extentApplied": "تم تطبيق مدى الخريطة.",
       "downloading": "تنزيل من OpenStreetMap...",
-      "downloaded": "تم تنزيل {{count}} ميزات.",
       "noFeatures": "لم تُعثر على أي ميزات تطابق في هذه المنطقة.",
       "error": "لم يتم تنزيل بيانات OSM: {{message}}",
       "added": "تم إضافة {{count}} ميزات إلى الخريطة."

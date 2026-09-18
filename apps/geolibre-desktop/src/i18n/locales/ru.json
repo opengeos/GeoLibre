@@ -8227,12 +8227,10 @@
       "useMapExtent": "Использовать границы карты",
       "download": "Загрузить данные OSM",
       "ready": "Выберите область и тип объекта.",
-      "addToMap": "Добавить на карту",
       "exportGeoJson": "Сохранить GeoJSON",
       "mapUnavailable": "Границы карты пока недоступны.",
       "extentApplied": "Границы карты применены.",
       "downloading": "Загрузка из OpenStreetMap…",
-      "downloaded": "Загружено объектов: {{count}}.",
       "noFeatures": "В этой области не найдено подходящих объектов.",
       "error": "Не удалось загрузить данные OSM: {{message}}",
       "added": "Добавлено объектов на карту: {{count}}."

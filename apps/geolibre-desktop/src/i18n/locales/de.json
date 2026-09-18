@@ -8053,12 +8053,10 @@
       "useMapExtent": "Kartenbereich verwenden",
       "download": "OSM-Daten herunterladen",
       "ready": "Wählen Sie einen Bereich und Feature-Typ aus.",
-      "addToMap": "Zur Karte hinzufügen",
       "exportGeoJson": "GeoJSON speichern",
       "mapUnavailable": "Der Kartenbereich ist noch nicht verfügbar.",
       "extentApplied": "Kartenbereich angewendet.",
       "downloading": "Von OpenStreetMap herunterladen…",
-      "downloaded": "{{count}} Features heruntergeladen.",
       "noFeatures": "In diesem Bereich wurden keine passenden Features gefunden.",
       "error": "OSM-Daten konnten nicht heruntergeladen werden: {{message}}",
       "added": "{{count}} Features zur Karte hinzugefügt."

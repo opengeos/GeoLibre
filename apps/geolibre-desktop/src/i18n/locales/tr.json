@@ -8053,12 +8053,10 @@
       "useMapExtent": "Harita kapsamını kullan",
       "download": "OSM verilerini indir",
       "ready": "Bir alan ve özellik türü seçin.",
-      "addToMap": "Haritaya ekle",
       "exportGeoJson": "GeoJSON olarak kaydet",
       "mapUnavailable": "Harita kapsamı henüz kullanılamıyor.",
       "extentApplied": "Harita kapsamı uygulandı.",
       "downloading": "OpenStreetMap'ten indiriliyor…",
-      "downloaded": "{{count}} özellik indirildi.",
       "noFeatures": "Bu alanda eşleşen özellik bulunamadı.",
       "error": "OSM verileri indirilemedi: {{message}}",
       "added": "{{count}} özellik haritaya eklendi."

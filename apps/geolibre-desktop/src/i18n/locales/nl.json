@@ -8053,12 +8053,10 @@
       "useMapExtent": "Gebruik kaartbereik",
       "download": "Download OSM-data",
       "ready": "Kies een gebied en een type object.",
-      "addToMap": "Toevoegen aan kaart",
       "exportGeoJson": "Opslaan als GeoJSON",
       "mapUnavailable": "Het kaartbereik is nog niet beschikbaar.",
       "extentApplied": "Kaartbereik toegepast.",
       "downloading": "Downloaden van OpenStreetMap…",
-      "downloaded": "{{count}} objecten gedownload.",
       "noFeatures": "Geen overeenkomende objecten gevonden in dit gebied.",
       "error": "OSM-data kon niet worden gedownload: {{message}}",
       "added": "{{count}} objecten toegevoegd aan de kaart."

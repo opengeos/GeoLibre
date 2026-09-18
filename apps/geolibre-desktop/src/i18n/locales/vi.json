@@ -7966,12 +7966,10 @@
       "useMapExtent": "Dùng phạm vi bản đồ",
       "download": "Tải dữ liệu OSM",
       "ready": "Chọn khu vực và loại đối tượng.",
-      "addToMap": "Thêm vào bản đồ",
       "exportGeoJson": "Lưu GeoJSON",
       "mapUnavailable": "Phạm vi bản đồ chưa khả dụng.",
       "extentApplied": "Đã áp dụng phạm vi bản đồ.",
       "downloading": "Đang tải từ OpenStreetMap…",
-      "downloaded": "Đã tải {{count}} đối tượng.",
       "noFeatures": "Không tìm thấy đối tượng phù hợp trong khu vực này.",
       "error": "Không thể tải dữ liệu OSM: {{message}}",
       "added": "Đã thêm {{count}} đối tượng vào bản đồ."

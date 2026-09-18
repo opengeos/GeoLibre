@@ -7966,12 +7966,10 @@
       "useMapExtent": "ใช้ขอบเขตแผนที่",
       "download": "ดาวน์โหลดข้อมูล OSM",
       "ready": "เลือกพื้นที่และประเภทฟีเจอร์",
-      "addToMap": "เพิ่มลงบนแผนที่",
       "exportGeoJson": "บันทึกเป็น GeoJSON",
       "mapUnavailable": "ยังไม่มีขอบเขตแผนที่",
       "extentApplied": "ใช้ขอบเขตแผนที่แล้ว",
       "downloading": "กำลังดาวน์โหลดจาก OpenStreetMap…",
-      "downloaded": "ดาวน์โหลดฟีเจอร์ {{count}} รายการ",
       "noFeatures": "ไม่พบฟีเจอร์ที่ตรงกันในพื้นที่นี้",
       "error": "ไม่สามารถดาวน์โหลดข้อมูล OSM ได้: {{message}}",
       "added": "เพิ่มฟีเจอร์ {{count}} รายการลงบนแผนที่"

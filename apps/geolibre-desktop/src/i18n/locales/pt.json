@@ -8053,12 +8053,10 @@
       "useMapExtent": "Usar extensão do mapa",
       "download": "Baixar dados OSM",
       "ready": "Escolha uma área e um tipo de recurso.",
-      "addToMap": "Adicionar ao mapa",
       "exportGeoJson": "Salvar GeoJSON",
       "mapUnavailable": "A extensão do mapa ainda não está disponível.",
       "extentApplied": "Extensão do mapa aplicada.",
       "downloading": "Baixando do OpenStreetMap…",
-      "downloaded": "Baixados {{count}} recursos.",
       "noFeatures": "Nenhum recurso correspondente foi encontrado nesta área.",
       "error": "Não foi possível baixar os dados OSM: {{message}}",
       "added": "Adicionados {{count}} recursos ao mapa."

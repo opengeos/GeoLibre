@@ -8053,12 +8053,10 @@
       "useMapExtent": "استفاده از محدوده نقشه",
       "download": "دانلود داده OSM",
       "ready": "یک محدوده و نوع عارضه انتخاب کنید.",
-      "addToMap": "افزودن به نقشه",
       "exportGeoJson": "ذخیره فایل GeoJSON",
       "mapUnavailable": "محدوده نقشه هنوز در دسترس نیست.",
       "extentApplied": "محدوده نقشه اعمال شد.",
       "downloading": "در حال دانلود از OpenStreetMap…",
-      "downloaded": "{{count}} عارضه بارگیری شد.",
       "noFeatures": "هیچ عارضه منطبقی در این محدوده یافت نشد.",
       "error": "بارگیری داده‌های OSM انجام نشد: {{message}}",
       "added": "{{count}} عارضه به نقشه افزوده شد."

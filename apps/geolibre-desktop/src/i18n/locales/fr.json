@@ -8053,12 +8053,10 @@
       "useMapExtent": "Utiliser l'étendue de la carte",
       "download": "Télécharger les données OSM",
       "ready": "Choisissez une zone et un type de caractéristique.",
-      "addToMap": "Ajouter à la carte",
       "exportGeoJson": "Enregistrer GeoJSON",
       "mapUnavailable": "L'étendue de la carte n'est pas disponible pour le moment.",
       "extentApplied": "L'étendue de la carte a été appliquée.",
       "downloading": "Téléchargement depuis OpenStreetMap…",
-      "downloaded": "Téléchargé {{count}} caractéristiques.",
       "noFeatures": "Aucune caractéristique correspondante n'a été trouvée dans cette zone.",
       "error": "Impossible de télécharger les données OSM : {{message}}",
       "added": "Ajouté {{count}} caractéristiques à la carte."
