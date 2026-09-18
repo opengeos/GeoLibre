@@ -464,7 +464,11 @@ if geolens_url:
                 "ERROR: GEOLIBRE_GEOLENS_URL must not include query parameters or a fragment."
             )
         deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
-            "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
+            "GEOLIBRE_GEOLENS_URL",
+            geolens_url,
+            ("https",),
+            ("http",),
+            ("localhost", "127.0.0.1", "::1"),
         )
 
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
