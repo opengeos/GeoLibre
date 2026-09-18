@@ -1,3 +1,4 @@
+import { canOpenLayerAttributeTable } from "../../lib/attribute-table-source";
 import {
   arcGISLayerHasPendingEdits,
   isArcGISWritableLayer,
@@ -3271,10 +3272,7 @@ export function LayerPanel({
             const geometryEditElsewhere = geometryEditLayerId !== null && !geometryEditActive;
             const canMaterializeDuckDB =
               isDuckDBQueryLayer(layer) && typeof layer.metadata.query === "string";
-            // The attribute table reads features from geojson layers (including
-            // Add Vector Layer geojson-mode) and DuckDB query layers.
-            const canOpenAttributeTable =
-              layerCaps.query && (layer.type === "geojson" || isDuckDBQueryLayer(layer));
+            const canOpenAttributeTable = canOpenLayerAttributeTable(layer);
             // The interactive selection dialogs (#1314) resolve selection ids
             // against in-store features, like the highlight overlay does, and
             // inspecting which features match is a read of the layer's data.

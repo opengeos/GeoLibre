@@ -249,6 +249,11 @@ export async function reloadVectorControlLayer(id: string): Promise<VectorLayerI
   return vectorControl.reloadLayer(id);
 }
 
+/** Read complete source features for an imported vector layer, including tiled layers. */
+export async function getVectorLayerGeoJSON(id: string): Promise<FeatureCollection | null> {
+  return vectorControl?.getLayerGeoJSON(id) ?? null;
+}
+
 /**
  * Reads one Add Vector Layer attribute without materializing tiled geometry.
  *

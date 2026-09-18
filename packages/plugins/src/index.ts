@@ -306,6 +306,7 @@ export {
   addVectorFileToMap,
   closeVectorLayerPanel,
   getVectorLayerPropertyValues,
+  getVectorLayerGeoJSON,
   materializeEmbeddableVectorLayers,
   openVectorLayerPanel,
   reloadVectorControlLayer,

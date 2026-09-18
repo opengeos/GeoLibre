@@ -1,3 +1,4 @@
+import { isVectorControlAttributeSource } from "../../lib/attribute-table-source";
 import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
@@ -18,6 +19,7 @@ import {
 } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
+  getVectorLayerGeoJSON,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
   updateDuckDBLayerRows,
@@ -511,11 +513,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     : geojsonRows;
   const layerCaps = resolveLayerCapabilities(layer);
   const hasAttributeSource = Boolean((layer?.geojson || isDuckDBLayer) && layerCaps.query);
-  // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
+  // Add Vector Layer layers render from a source the
   // control owns, and their `layer.geojson` is dropped when a project is saved.
   // Edits made here would neither redraw on the map nor survive a save, so the
   // attribute table is read-only for them.
-  const isReadOnlyVectorLayer = geojsonVectorSourceId(layer) !== null;
+  const isReadOnlyVectorLayer =
+    geojsonVectorSourceId(layer) !== null || isVectorControlAttributeSource(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
   const geometryEditLayerId = useSyncExternalStore(
@@ -524,26 +527,25 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   );
   const isGeometryEditing = layer != null && geometryEditLayerId === layer.id;
 
-  // Vector layers added via the Add Vector Layer control keep their features in
-  // a MapLibre GeoJSON source rather than in `layer.geojson`. Read the data back
-  // from the map once so the table (and export) can use it like any other
-  // vector layer. Tiles-mode vector layers are not handled here.
+  // Read full source features on demand. Tiled imports use the control's local
+  // table, not rendered tiles, so off-screen rows and original geometry remain
+  // available. GeoJSON-mode imports keep their existing map-source fallback.
   useEffect(() => {
-    if (!layer || layer.geojson) {
+    if (!attributeTableOpen || !layer || layer.geojson || !layerCaps.query) {
       setLoadingVectorGeojson(false);
       return;
     }
     const sourceId = geojsonVectorSourceId(layer);
-    if (!sourceId) {
-      setLoadingVectorGeojson(false);
-      return;
-    }
-    const source = mapControllerRef.current?.getMap()?.getSource(sourceId) as
-      | GeoJSONSource
-      | undefined;
-    if (!source || typeof source.getData !== "function") {
-      // Reset here too: a prior run may have left the indicator true, and this
-      // early return would otherwise leave it stuck after a layer switch.
+    const source = sourceId
+      ? (mapControllerRef.current?.getMap()?.getSource(sourceId) as GeoJSONSource | undefined)
+      : undefined;
+    const readData =
+      isVectorControlAttributeSource(layer) && layer.type === "vector-tiles"
+        ? () => getVectorLayerGeoJSON(layer.id)
+        : source && typeof source.getData === "function"
+          ? () => source.getData()
+          : null;
+    if (!readData) {
       setLoadingVectorGeojson(false);
       return;
     }
@@ -551,8 +553,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     let cancelled = false;
     const layerId = layer.id;
     setLoadingVectorGeojson(true);
-    source
-      .getData()
+    readData()
       .then((data) => {
         if (cancelled) return;
         if (
@@ -574,7 +575,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     return () => {
       cancelled = true;
     };
-  }, [layer, mapControllerRef, updateLayer]);
+  }, [attributeTableOpen, layer, layerCaps.query, mapControllerRef, updateLayer]);
   const hasEdits = hasDraftEdits(drafts);
   const hasInvalidDrafts = attributeRows.some((row) => {
     const rowDrafts = drafts[row.featureId];

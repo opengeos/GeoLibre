@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import {
+  canOpenLayerAttributeTable,
+  isVectorControlAttributeSource,
+} from "../apps/geolibre-desktop/src/lib/attribute-table-source";
+
+function tiledLayer(): GeoLibreLayer {
+  return {
+    id: "cores",
+    name: "evaluation_cores",
+    type: "vector-tiles",
+    source: { type: "vector-tiles" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      sourceKind: "maplibre-gl-vector",
+      externalNativeLayer: true,
+      vectorState: { ingestMode: "table", renderMode: "tiles" },
+    },
+  };
+}
+
+describe("attribute table sources", () => {
+  it("offers the attribute table for a tiled GeoPackage before features are materialized", () => {
+    const layer = tiledLayer();
+    assert.equal(layer.geojson, undefined);
+    assert.equal(canOpenLayerAttributeTable(layer), true);
+    assert.equal(isVectorControlAttributeSource(layer), true);
+  });
+  it("respects the query capability override", () => {
+    assert.equal(
+      canOpenLayerAttributeTable({ ...tiledLayer(), capabilities: { query: false } }),
+      false,
+    );
+  });
+  it("does not offer complete tables for arbitrary tiles or streamed GeoParquet", () => {
+    assert.equal(canOpenLayerAttributeTable({ ...tiledLayer(), metadata: {} }), false);
+    const layer = tiledLayer();
+    layer.metadata.vectorState = { ingestMode: "stream" };
+    assert.equal(canOpenLayerAttributeTable(layer), false);
+    assert.equal(canOpenLayerAttributeTable(undefined), false);
+  });
+  it("keeps GeoJSON tables available", () => {
+    const layer = { ...tiledLayer(), type: "geojson" as const };
+    assert.equal(canOpenLayerAttributeTable(layer), true);
+    assert.equal(isVectorControlAttributeSource(layer), true);
+    assert.equal(canOpenLayerAttributeTable({ ...layer, metadata: {} }), true);
+  });
+});
