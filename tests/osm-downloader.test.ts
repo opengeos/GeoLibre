@@ -167,6 +167,30 @@ describe("Overpass JSON conversion", () => {
     assert.equal(result.features.length, 0);
   });
 
+  it("drops coordinates outside valid WGS84 ranges at every conversion path", () => {
+    const result = overpassJsonToGeoJson({
+      elements: [
+        { type: "node", id: 1, lon: 500, lat: 20, tags: { amenity: "cafe" } },
+        {
+          type: "way",
+          id: 2,
+          tags: { highway: "road" },
+          geometry: [
+            { lon: 0, lat: 0 },
+            { lon: 1, lat: 100 },
+          ],
+        },
+        {
+          type: "relation",
+          id: 3,
+          tags: { type: "route" },
+          members: [{ type: "node", ref: 4, lon: -181, lat: 0 }],
+        },
+      ],
+    });
+    assert.equal(result.features.length, 0);
+  });
+
   it("drops an incomplete multipolygon instead of mixing inner and outer lines", () => {
     const result = overpassJsonToGeoJson({
       elements: [

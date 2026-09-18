@@ -179,12 +179,25 @@ export async function downloadOsmGeoJson(
   }
 }
 
+function isValidPosition(point: { lat?: number; lon?: number } | null | undefined): point is {
+  lat: number;
+  lon: number;
+} {
+  return (
+    point !== null &&
+    point !== undefined &&
+    Number.isFinite(point.lon) &&
+    Number.isFinite(point.lat) &&
+    point.lon! >= -180 &&
+    point.lon! <= 180 &&
+    point.lat! >= -90 &&
+    point.lat! <= 90
+  );
+}
+
 function coordinates(geometry: Array<{ lat: number; lon: number } | null> | undefined): Position[] {
   if (!geometry) return [];
-  const complete = geometry.every(
-    (point): point is { lat: number; lon: number } =>
-      point !== null && Number.isFinite(point.lon) && Number.isFinite(point.lat),
-  );
+  const complete = geometry.every(isValidPosition);
   if (!complete) {
     return [];
   }
@@ -313,7 +326,7 @@ function relationGeometry(element: OverpassElement): Geometry | null {
   if (lines.length)
     return { type: "MultiLineString", coordinates: lines } satisfies MultiLineString;
   const points = members
-    .filter((member) => Number.isFinite(member.lon) && Number.isFinite(member.lat))
+    .filter(isValidPosition)
     .map((member) => [member.lon!, member.lat!] as Position);
   if (points.length === 1) return { type: "Point", coordinates: points[0] } satisfies Point;
   if (points.length > 1) return { type: "MultiPoint", coordinates: points };
@@ -322,7 +335,7 @@ function relationGeometry(element: OverpassElement): Geometry | null {
 
 function elementFeature(element: OverpassElement): Feature | null {
   let geometry: Geometry | null = null;
-  if (element.type === "node" && Number.isFinite(element.lon) && Number.isFinite(element.lat)) {
+  if (element.type === "node" && isValidPosition(element)) {
     geometry = { type: "Point", coordinates: [element.lon!, element.lat!] } satisfies Point;
   } else if (element.type === "way") {
     const line = coordinates(element.geometry);

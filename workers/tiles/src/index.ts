@@ -93,6 +93,7 @@ const CKAN_MAX_ROWS = 50;
 // proxies. Responses are never cached because OSM data changes continuously.
 const OVERPASS_PATH = "/overpass";
 const OVERPASS_MAX_BODY_BYTES = 20_000;
+const OVERPASS_UPSTREAM_TIMEOUT_MS = 65_000;
 const OVERPASS_QUERY_PREFIX = "[out:json][timeout:60];";
 const OVERPASS_QUERY_SUFFIX = "out geom;";
 const OVERPASS_NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
@@ -498,6 +499,11 @@ async function handleOverpass(request: Request): Promise<Response> {
     return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
   }
   let originResponse: Response;
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(
+    () => upstreamController.abort(),
+    OVERPASS_UPSTREAM_TIMEOUT_MS,
+  );
   try {
     originResponse = await fetchAllowlistedUpstream(OVERPASS_API_UPSTREAM, {
       method: "POST",
@@ -507,9 +513,12 @@ async function handleOverpass(request: Request): Promise<Response> {
         referer: "https://geolibre.app/",
       },
       body,
+      signal: upstreamController.signal,
     });
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  } finally {
+    clearTimeout(upstreamTimeout);
   }
   const headers = new Headers(CORS_HEADERS);
   headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
