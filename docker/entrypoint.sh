@@ -452,14 +452,19 @@ if collab_url:
 # is the zero-config path when GeoLibre and GeoLens share a reverse proxy.
 geolens_url = os.environ.get("GEOLIBRE_GEOLENS_URL", "").strip()
 if geolens_url:
-    if geolens_url.lower() == "off":
-        deployment["VITE_GEOLENS_DEFAULT_URL"] = "off"
+    geolens_setting = geolens_url.lower()
+    if geolens_setting in ("off", "same-origin"):
+        deployment["VITE_GEOLENS_DEFAULT_URL"] = geolens_setting
     else:
-        if urlsplit(geolens_url).query:
-            raise SystemExit("ERROR: GEOLIBRE_GEOLENS_URL must not include query parameters.")
+        parsed_geolens_url = urlsplit(geolens_url)
+        if parsed_geolens_url.query or parsed_geolens_url.fragment:
+            raise SystemExit(
+                "ERROR: GEOLIBRE_GEOLENS_URL must not include query parameters or a fragment."
+            )
         deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
             "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
         )
+
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))

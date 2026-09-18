@@ -489,7 +489,7 @@ docker run --rm -p 8080:80 \
 | --- | --- |
 | `GEOLIBRE_SHARE_URL` | Base URL of the project sharing server. Unset uses `share.geolibre.app`. Set it to `off` to remove Share and the Project Gallery from the UI entirely. |
 | `GEOLIBRE_COLLAB_URL` | Base URL of the [collaboration](collaboration.md) relay. Unset leaves live collaboration disabled. |
-| `GEOLIBRE_GEOLENS_URL` | Default GeoLens server. The plugin connects automatically and remembers the last successful server; unset uses the app's browser origin for co-located deployments. Set `off` to leave the panel idle until the user chooses a server. |
+| `GEOLIBRE_GEOLENS_URL` | Default GeoLens server root without a query or fragment. The plugin connects automatically and remembers the last successful server; unset uses the image's baked default. Set `same-origin` for a co-located deployment or `off` to leave the panel idle until the user chooses a server. |
 
 All three are read at container startup, so a prebuilt image can be repointed by
 restarting it with different values, with no rebuild. (The equivalent build
