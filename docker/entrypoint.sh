@@ -455,6 +455,8 @@ if geolens_url:
     if geolens_url.lower() == "off":
         deployment["VITE_GEOLENS_DEFAULT_URL"] = "off"
     else:
+        if urlsplit(geolens_url).query:
+            raise SystemExit("ERROR: GEOLIBRE_GEOLENS_URL must not include query parameters.")
         deployment["VITE_GEOLENS_DEFAULT_URL"] = service_url(
             "GEOLIBRE_GEOLENS_URL", geolens_url, ("https",), ("http",), ("localhost", "127.0.0.1")
         )

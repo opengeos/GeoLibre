@@ -282,6 +282,11 @@ describe("GeoLens server preference", () => {
     assert.equal(resolveGeoLensInitialServerUrl("", "", "https://maps.example/"), "");
     assert.equal(resolveGeoLensInitialServerUrl("", "off", "https://maps.example/"), "");
     assert.equal(resolveGeoLensInitialServerUrl("", "OFF", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", " OFF ", "https://maps.example/"), "");
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", " SAME-ORIGIN ", "https://maps.example/"),
+      "https://maps.example",
+    );
     assert.equal(
       resolveGeoLensInitialServerUrl("https://saved.example", "off", "https://maps.example/"),
       "",

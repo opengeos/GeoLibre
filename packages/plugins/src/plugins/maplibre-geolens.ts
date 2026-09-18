@@ -353,7 +353,7 @@ export function resolveGeoLensInitialServerUrl(
   configuredUrl: string,
   currentOrigin: string,
 ): string {
-  const normalizedConfiguredUrl = configuredUrl.toLowerCase();
+  const normalizedConfiguredUrl = configuredUrl.trim().toLowerCase();
   if (normalizedConfiguredUrl === DISABLED_DEFAULT) return "";
   if (savedUrl) return normalizeBaseUrl(savedUrl);
   if (normalizedConfiguredUrl === CURRENT_ORIGIN_DEFAULT) return normalizeBaseUrl(currentOrigin);
