@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import { selectionFitKey } from "./map-selection";
 
 /** Selection ownership recorded while an Identify popup is open. */
 export interface IdentifyPopupState {
@@ -16,16 +17,33 @@ export interface PopupLike {
   off(type: "close", listener: () => void): unknown;
 }
 
-// Module-level, not per canvas: the restore and the store notification that
-// reads this flag run in one synchronous call stack, and only the primary
-// MapboxCanvas (no viewId) opens Identify popups today. If a second engine
-// (e.g. MapCanvas) adopts this module while both can be mounted, scope the
-// flag per caller so one engine's restore can't suppress the other's fit.
-let restoringIdentifySelection = false;
+// Fit key of the selection a restore is writing back, read once by whichever
+// engine observes it. A synchronous flag can't serve both engines: MapboxCanvas
+// reads it in a store subscription inside the restore's call stack, but
+// MapCanvas reads it in a React effect that runs after the restore returned.
+// Module-level is fine because only the primary canvas of the active 2D
+// engine opens Identify popups.
+let pendingIdentifyRestoreKey: string | null = null;
 
-/** Whether the store is synchronously restoring the selection from an Identify popup. */
-export function isRestoringIdentifySelection(): boolean {
-  return restoringIdentifySelection;
+/**
+ * Report, exactly once, whether a selection is the one an Identify restore wrote back.
+ *
+ * Call with the fit key of the selection being applied. Any call clears the
+ * marker; only a key matching the restored selection reports true. A
+ * different key means a newer selection (e.g. a miss clearing the restored
+ * features) superseded the restore before this reader saw it.
+ *
+ * Args:
+ *   key: The selection's fit key, as computed by `selectionFitKey`.
+ *
+ * Returns:
+ *   True when the camera fit for this selection should be suppressed.
+ */
+export function consumePendingIdentifyRestore(key: string | null): boolean {
+  if (pendingIdentifyRestoreKey === null) return false;
+  const matches = key === pendingIdentifyRestoreKey;
+  pendingIdentifyRestoreKey = null;
+  return matches;
 }
 
 /** Snapshot the current selection before an Identify result takes ownership of it. */
@@ -66,18 +84,18 @@ export function restoreIdentifySelection(
   const previousLayerExists =
     selection.previousSelectedLayerId !== null &&
     next.layers.some((layer) => layer.id === selection.previousSelectedLayerId);
-  restoringIdentifySelection = true;
-  try {
-    // selectLayer also clears the feature selection.
-    next.selectLayer(previousLayerExists ? selection.previousSelectedLayerId : null);
-    if (previousLayerExists && selection.previousSelectedFeatureIds.length > 0) {
-      next.selectFeatures(
-        selection.previousSelectedFeatureIds,
-        selection.previousSelectedFeatureId,
-      );
-    }
-  } finally {
-    restoringIdentifySelection = false;
+  // selectLayer also clears the feature selection.
+  next.selectLayer(previousLayerExists ? selection.previousSelectedLayerId : null);
+  if (previousLayerExists && selection.previousSelectedFeatureIds.length > 0) {
+    // Only a restored feature selection can trigger a fit. Record its key
+    // after selectLayer so that intermediate write can't consume it; Mapbox
+    // consumes it inside selectFeatures, MapCanvas in its later effect.
+    pendingIdentifyRestoreKey = selectionFitKey({
+      selectedLayerId: selection.previousSelectedLayerId,
+      selectedFeatureIds: selection.previousSelectedFeatureIds,
+      selectedFeatureId: selection.previousSelectedFeatureId,
+    });
+    next.selectFeatures(selection.previousSelectedFeatureIds, selection.previousSelectedFeatureId);
   }
 }
 

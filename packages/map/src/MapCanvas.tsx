@@ -50,12 +50,12 @@ import { createMapController, type MapController } from "./map-controller";
 import type { MapEngine } from "./map-engine";
 import {
   createIdentifyPopupState,
-  isRestoringIdentifySelection,
+  consumePendingIdentifyRestore,
   removeIdentifyPopup as removeIdentifyPopupLifecycle,
   restoreIdentifySelection,
   type IdentifyPopupState,
 } from "./map-identify-lifecycle";
-import { applySelectionHighlight, resolveHighlightIds } from "./map-selection";
+import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -1392,6 +1392,11 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
     const previousKey = previousSelectedFeatureKey.current;
+    // This effect runs after an Identify restore has returned, so it reads
+    // the restore's read-once marker rather than a synchronous flag.
+    const restoring = consumePendingIdentifyRestore(
+      selectionFitKey({ selectedLayerId, selectedFeatureIds, selectedFeatureId }),
+    );
     const nextKey = applySelectionHighlight(
       controller.current,
       layers,
@@ -1400,9 +1405,11 @@ export const MapCanvas = memo(function MapCanvas({
       selectedFeatureIds,
       zoomToSelectedFeature,
       previousKey,
-      isRestoringIdentifySelection(),
+      restoring,
     );
-    const shouldFit = Boolean(zoomToSelectedFeature && nextKey && nextKey !== previousKey);
+    const shouldFit = Boolean(
+      !restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey,
+    );
     previousSelectedFeatureKey.current = nextKey;
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);

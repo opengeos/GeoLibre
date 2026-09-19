@@ -12,10 +12,10 @@ import {
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
-import { applySelectionHighlight, resolveHighlightIds } from "./map-selection";
+import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
 import {
   createIdentifyPopupState,
-  isRestoringIdentifySelection,
+  consumePendingIdentifyRestore,
   removeIdentifyPopup as removeIdentifyPopupLifecycle,
   restoreIdentifySelection,
   type IdentifyPopupState,
@@ -235,9 +235,9 @@ export function MapboxCanvas({
                 next.selectedFeatureIds,
                 next.ui.zoomToSelectedFeature,
                 previousSelectedFeatureKey,
-                // Module-wide flag; safe for the single primary canvas only
+                // Read-once Identify restore marker; primary canvas only
                 // (see map-identify-lifecycle.ts).
-                isRestoringIdentifySelection(),
+                consumePendingIdentifyRestore(selectionFitKey(next)),
               );
             }
             if (!viewId && previous && next.projectGeneration !== previous.projectGeneration) {
