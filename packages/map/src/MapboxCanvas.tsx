@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   applyGroupEffects,
+  createPointerElevationResolver,
   DEFAULT_BASEMAP,
+  getActiveEllipsoid,
   redactUrlCredentials,
   useAppStore,
+  type PointerElevationResolver,
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
@@ -26,6 +29,7 @@ export interface MapboxCanvasProps {
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
+  canUseRemoteElevation?: () => boolean;
 }
 
 /** The namespace and its CSS load only when a Mapbox pane is mounted. */
@@ -35,12 +39,15 @@ export function MapboxCanvas({
   engineRef,
   onEngineReady,
   onMapDiagnosticEvent,
+  canUseRemoteElevation,
 }: MapboxCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   const readyCallback = useRef(onEngineReady);
   readyCallback.current = onEngineReady;
   const diagnosticCallback = useRef(onMapDiagnosticEvent);
   diagnosticCallback.current = onMapDiagnosticEvent;
+  const canUseRemoteElevationRef = useRef(canUseRemoteElevation);
+  canUseRemoteElevationRef.current = canUseRemoteElevation;
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +113,7 @@ export function MapboxCanvas({
           // They share the swipe panel's layer-name bridge too, which is a
           // window global with room for one publisher.
           ownsLayerLabels: !viewId,
+          onDiagnostic: (event) => diagnosticCallback.current?.(event),
         });
         const current = engine;
         const featureSelection: FeatureSelectionState = {
@@ -125,6 +133,7 @@ export function MapboxCanvas({
         cleanupTasks.push(detachFeatureSelection);
         let applying = false;
         let popup: Popup | undefined;
+        let pointerElevation: PointerElevationResolver | undefined;
         let previousSelectedFeatureKey: string | null = null;
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
@@ -205,9 +214,28 @@ export function MapboxCanvas({
                 { fit },
               );
             }
-            if (previous && next.identifyLayerId !== previous.identifyLayerId) {
+            if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
               popup?.remove();
               if (next.identifyLayerId) featureSelection.cancel.current?.();
+              if (!featureSelection.active.current)
+                map.getCanvas().style.cursor = next.identifyLayerId ? "crosshair" : "";
+            }
+            if (
+              !viewId &&
+              previous &&
+              next.preferences.map.showPointerElevation !==
+                previous.preferences.map.showPointerElevation
+            ) {
+              if (!next.preferences.map.showPointerElevation) {
+                pointerElevation?.invalidate();
+                next.setPointerElevation(null);
+              } else if (next.pointerCoords) {
+                pointerElevation?.update(next.pointerCoords);
+              }
+            }
+            if (!viewId && previous && next.projectGeneration !== previous.projectGeneration) {
+              pointerElevation?.invalidate();
+              next.setPointerElevation(null);
             }
           } finally {
             applying = false;
@@ -215,6 +243,25 @@ export function MapboxCanvas({
         };
         const unsubscribe = useAppStore.subscribe(update);
         cleanupTasks.push(unsubscribe);
+        if (!viewId) {
+          pointerElevation = createPointerElevationResolver({
+            getMap: () => ({
+              getTerrain: () => {
+                const terrain = map.getTerrain();
+                if (!terrain) return terrain;
+                return {
+                  exaggeration: typeof terrain.exaggeration === "number" ? terrain.exaggeration : 1,
+                };
+              },
+              queryTerrainElevation: (point) => map.queryTerrainElevation(point) ?? null,
+            }),
+            isEarth: () => getActiveEllipsoid().id === "earth",
+            isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+            canUseRemote: () => canUseRemoteElevationRef.current?.() ?? false,
+            emit: (elevation) => useAppStore.getState().setPointerElevation(elevation),
+          });
+          cleanupTasks.push(() => pointerElevation?.dispose());
+        }
         update(state);
         update(useAppStore.getState(), state);
         const handleStyleLoad = () => {
@@ -287,10 +334,17 @@ export function MapboxCanvas({
           map.getContainer().removeEventListener("click", handleGlobeToggleClick),
         );
         const handleMouseMove = (e: MapEventOf<"mousemove">) => {
-          if (!viewId) useAppStore.getState().setPointerCoords(e.lngLat.toArray());
+          if (!viewId) {
+            const point = e.lngLat.toArray() as [number, number];
+            useAppStore.getState().setPointerCoords(point);
+            pointerElevation?.update(point);
+          }
         };
         const handleMouseOut = () => {
-          if (!viewId) useAppStore.getState().setPointerCoords(null);
+          if (!viewId) {
+            pointerElevation?.invalidate();
+            useAppStore.getState().setPointerCoords(null);
+          }
         };
         const handleClick = (e: MapEventOf<"click">) => {
           if (viewId || featureSelection.active.current) return;
@@ -354,12 +408,7 @@ export function MapboxCanvas({
           attributeFilter: ["class"],
         });
         cleanupTasks.push(() => themeObserver.disconnect());
-        const status = window.setInterval(() => {
-          const errors = current.getRenderStatus().errors;
-          setError(errors.length ? errors.join("; ") : null);
-        }, 1000);
         cleanupTasks.push(() => {
-          window.clearInterval(status);
           popup?.remove();
         });
       })
@@ -368,7 +417,11 @@ export function MapboxCanvas({
         if (engineRef && engineRef.current === engine) engineRef.current = null;
         engine?.destroy();
         engine = undefined;
-        if (!cancelled) setError(redactMapboxError(String(error)));
+        if (!cancelled) {
+          const message = redactMapboxError(String(error));
+          setError(message);
+          diagnosticCallback.current?.({ message, source: "Mapbox" });
+        }
       });
     return () => {
       cancelled = true;

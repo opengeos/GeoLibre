@@ -120,6 +120,14 @@ export function redactMapboxError(message: string): string {
     .replace(/\b(?:pk|sk)\.[\w.-]+/g, "[redacted]");
 }
 
+export interface MapboxDiagnosticEvent {
+  message: string;
+  detail?: string;
+  source?: string;
+  status?: number;
+  url?: string;
+}
+
 /** Mapbox owns its own native objects; getMap deliberately remains MapLibre-only. */
 export class MapboxEngine implements MapEngine {
   readonly kind = "mapbox" as const;
@@ -192,6 +200,7 @@ export class MapboxEngine implements MapEngine {
   // paint on those layers.
   private storyPaintBackups = new Map<string, Map<string, Map<string, unknown>>>();
   private storyCameraToken = 0;
+  private onDiagnostic?: (event: MapboxDiagnosticEvent) => void;
   private pendingStoryRotate:
     | ((event: mapboxgl.MapEventOf<"moveend"> & { storyCameraToken?: number }) => void)
     | null = null;
@@ -225,9 +234,12 @@ export class MapboxEngine implements MapEngine {
        * the swipe panel listing raw ids. Secondary panes pass `false`.
        */
       ownsLayerLabels?: boolean;
+      /** Report renderer failures through the app's Diagnostics panel. */
+      onDiagnostic?: (event: MapboxDiagnosticEvent) => void;
     } = {},
   ) {
     this.map = map;
+    this.onDiagnostic = options.onDiagnostic;
     this.ownsLayerLabels = options.ownsLayerLabels ?? true;
     this.controlVisibility = {
       ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -293,8 +305,34 @@ export class MapboxEngine implements MapEngine {
   getMapboxAccessToken(): string | null {
     return this.accessToken || null;
   }
-  private onError = (event: { error: Error; sourceId?: string }) => {
-    this.errors.set(event.sourceId ?? "map", redactMapboxError(event.error.message));
+  private recordError(key: string, event: MapboxDiagnosticEvent): void {
+    const message = redactMapboxError(event.message);
+    const alreadyReported = this.errors.has(key);
+    this.errors.set(key, message);
+    if (alreadyReported) return;
+    this.onDiagnostic?.({
+      ...event,
+      message,
+      ...(event.detail ? { detail: redactMapboxError(event.detail) } : {}),
+      ...(event.url ? { url: redactMapboxError(event.url) } : {}),
+    });
+  }
+  private onError = (event: {
+    error: Error & { status?: number; url?: string; resource?: string };
+    sourceId?: string;
+    status?: number;
+    url?: string;
+  }) => {
+    const source = event.sourceId;
+    const status = event.status ?? event.error.status;
+    const url = event.url ?? event.error.url ?? event.error.resource;
+    this.recordError(source ?? "map", {
+      message: event.error.message || "Mapbox reported an error.",
+      detail: JSON.stringify({ source, status, url, error: event.error.message }, null, 2),
+      source,
+      status,
+      url,
+    });
   };
   /**
    * A source error is stored under the source id and must not outlive the
@@ -636,11 +674,14 @@ export class MapboxEngine implements MapEngine {
         this.errors.delete(`layer:${layer.id}`);
       } catch (error) {
         this.removeLayer(original.id);
-        if (original.visible)
-          this.errors.set(
-            `layer:${original.id}`,
-            `${original.name}: ${redactMapboxError(String(error))}`,
-          );
+        if (original.visible) {
+          const message = `${original.name}: ${redactMapboxError(String(error))}`;
+          this.recordError(`layer:${original.id}`, {
+            message,
+            detail: `Mapbox could not compile or synchronize layer ${original.id}.`,
+            source: original.name,
+          });
+        }
       }
     }
     this.publishLayerDisplayNames(layers);

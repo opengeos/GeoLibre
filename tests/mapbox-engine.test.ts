@@ -849,6 +849,40 @@ describe("MapboxEngine.syncLayers", () => {
     ]);
   });
 
+  it("reports renderer errors to Diagnostics once with structured context", () => {
+    const diagnosticMap = makeMap();
+    const diagnostics: Array<{
+      message: string;
+      detail?: string;
+      source?: string;
+      status?: number;
+      url?: string;
+    }> = [];
+    new MapboxEngine(diagnosticMap as unknown as mapboxgl.Map, gl, "", {
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+    const error = Object.assign(new Error("Tile pk.secret failed"), {
+      status: 404,
+      resource: "https://api.mapbox.com/tile?access_token=pk.secret",
+    });
+
+    diagnosticMap.fire("error", { error, sourceId: "roads" });
+    diagnosticMap.fire("error", {
+      error: Object.assign(new Error("Another tile failed"), { status: 404 }),
+      sourceId: "roads",
+    });
+
+    assert.equal(diagnostics.length, 1, "one broken source reports once per failure episode");
+    assert.deepEqual(diagnostics[0], {
+      message: "Tile [redacted] failed",
+      detail:
+        '{\n  "source": "roads",\n  "status": 404,\n  "url": "https://api.mapbox.com/tile?access_token=[redacted]",\n  "error": "Tile [redacted] failed"\n}',
+      source: "roads",
+      status: 404,
+      url: "https://api.mapbox.com/tile?access_token=[redacted]",
+    });
+  });
+
   it("labels with the font the loaded basemap style uses", () => {
     const layer = geojsonLayer();
     layer.style = {

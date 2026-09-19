@@ -2706,6 +2706,7 @@ export function DesktopShell({
                   available under either engine. */}
               {primaryRenderer === "mapbox" ? (
                 <PrimaryMapboxCanvas
+                  canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
                   onMapDiagnosticEvent={handleMapDiagnosticEvent}

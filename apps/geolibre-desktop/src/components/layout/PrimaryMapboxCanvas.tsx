@@ -17,11 +17,13 @@ export function PrimaryMapboxCanvas({
   engineRef,
   onEngineReady,
   onMapDiagnosticEvent,
+  canUseRemoteElevation,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
+  canUseRemoteElevation?: () => boolean;
   viewId?: string;
 }) {
   const token = useMapboxAccessToken();
@@ -30,6 +32,7 @@ export function PrimaryMapboxCanvas({
       {token ? (
         <MapboxCanvas
           accessToken={token}
+          canUseRemoteElevation={canUseRemoteElevation}
           engineRef={engineRef}
           onEngineReady={onEngineReady}
           onMapDiagnosticEvent={onMapDiagnosticEvent}
