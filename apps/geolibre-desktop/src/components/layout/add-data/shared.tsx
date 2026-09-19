@@ -35,13 +35,17 @@ export function useAddDataSource(defaultLayerName: string) {
   };
 
   /** Adds a retrieved service selection as separate layers in list order. */
-  const addManyAndClose = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
+  const addMany = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
     for (const layer of layers) shell.addLayer(layer, beforeLayer);
     // Fitting each layer in turn would only leave the last camera position
     // visible. Fit the last selected layer once, matching addAndClose's
     // deterministic behavior without animating through every selection.
     const fitLayer = layers.at(-1);
     if (options.fit && fitLayer) shell.mapControllerRef.current?.fitLayer(fitLayer);
+  };
+
+  const addManyAndClose = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
+    addMany(layers, options);
     shell.closeDialog();
   };
 
@@ -73,6 +77,7 @@ export function useAddDataSource(defaultLayerName: string) {
     error,
     setError,
     addAndClose,
+    addMany,
     addManyAndClose,
     runSubmit,
     isSubmitting: shell.isSubmitting,
@@ -306,6 +311,7 @@ export function AddDataSourceForm({
   submitDisabled,
   useServiceIcon,
   hideLayerFields = false,
+  hideLayerName = false,
   children,
 }: {
   layerName: string;
@@ -321,11 +327,15 @@ export function AddDataSourceForm({
    * are named and placed by an importer (e.g. a KML document's folders).
    */
   hideLayerFields?: boolean;
+  /** Hides only the single-layer name field when a source is adding a batch. */
+  hideLayerName?: boolean;
   children: ReactNode;
 }) {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
-      {!hideLayerFields && <LayerNameField value={layerName} onChange={onLayerNameChange} />}
+      {!hideLayerFields && !hideLayerName && (
+        <LayerNameField value={layerName} onChange={onLayerNameChange} />
+      )}
       {!hideLayerFields && (
         <InsertBeforeField value={beforeLayerId} onChange={onBeforeLayerIdChange} />
       )}

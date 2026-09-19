@@ -10,6 +10,7 @@ import {
   type OgcFeaturesCollectionOption,
 } from "../../../../lib/ogc-api-features";
 import { buildOgcFeaturesLayer } from "../apply-service";
+import { settleNamedRequests, type NamedRequestFailure } from "../batch-requests";
 import { DEFAULT_OGC_FEATURES_COLLECTION, DEFAULT_OGC_FEATURES_ENDPOINT } from "../constants";
 import { serviceRequestErrorMessage } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -223,28 +224,45 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     submitAbortRef.current?.abort();
     const controller = new AbortController();
     submitAbortRef.current = controller;
-    const results = await Promise.all(
-      collections.map(async (collection) => ({
-        collection,
-        result: await fetchOgcFeatureItems(
-          {
-            baseUrl: parsed.baseUrl,
-            collectionId: collection,
-            extraQuery: parsed.extraQuery,
-            maxFeatures: Math.floor(requestedMax),
-            bbox: trimmedBbox || undefined,
-            datetime: datetime.trim() || undefined,
-          },
-          { signal: controller.signal },
-        ),
+    const settled = await settleNamedRequests(
+      collections.map((collection) => ({
+        key: collection,
+        run: () =>
+          fetchOgcFeatureItems(
+            {
+              baseUrl: parsed.baseUrl,
+              collectionId: collection,
+              extraQuery: parsed.extraQuery,
+              maxFeatures: Math.floor(requestedMax),
+              bbox: trimmedBbox || undefined,
+              datetime: datetime.trim() || undefined,
+            },
+            { signal: controller.signal },
+          ),
       })),
     );
     // A superseded/cancelled request must not add a layer after the fact.
     if (controller.signal.aborted) return;
-    const emptyResult = results.find(({ result }) => result.data.features.length === 0);
-    if (emptyResult) {
-      throw new Error(t("addData.ogcFeatures.errorNoFeatures"));
-    }
+    const failures: NamedRequestFailure[] = [...settled.failures];
+    const results = settled.successes.flatMap(({ key: collection, value: result }) => {
+      if (result.data.features.length > 0) return [{ collection, result }];
+      failures.push({
+        key: collection,
+        reason: new Error(t("addData.ogcFeatures.errorNoFeatures")),
+      });
+      return [];
+    });
+    const failureMessage = failures
+      .map(
+        ({ key, reason }) =>
+          `${key}: ${serviceRequestErrorMessage(
+            reason,
+            t,
+            t("addData.ogcFeatures.retrieveError"),
+          )}`,
+      )
+      .join("\n");
+    if (results.length === 0) throw new Error(failureMessage);
     for (const { collection, result } of results) {
       if (!result.truncated) continue;
       // Not an error: the layer holds the requested slice of a larger
@@ -277,6 +295,20 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
         truncated: result.truncated,
       });
     });
+    if (failures.length > 0) {
+      source.addMany(layers, { fit: true });
+      const failedCollectionIds = failures.map(({ key }) => key);
+      setSelectedCollectionIds(failedCollectionIds);
+      setCollectionId(failedCollectionIds[0] ?? "");
+      if (failedCollectionIds.length === 1) {
+        const failedOption = collectionOptions.find(
+          (option) => option.id === failedCollectionIds[0],
+        );
+        source.setLayerName(failedOption?.title || failedCollectionIds[0]);
+      }
+      source.setError(failureMessage);
+      return;
+    }
     source.addManyAndClose(layers, { fit: true });
   });
 
@@ -290,6 +322,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       error={source.error}
       submitDisabled={source.isSubmitting}
       useServiceIcon
+      hideLayerName={selectedCollectionIds.length > 1}
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
@@ -331,6 +364,11 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
               <Label htmlFor={collectionListId}>
                 {t("addData.ogcFeatures.retrievedCollections")}
               </Label>
+              <p className="text-xs text-muted-foreground">
+                {t("addData.ogcFeatures.selectCollection", {
+                  count: collectionOptions.length,
+                })}
+              </p>
               {/* Native multi-select preserves familiar Ctrl/Cmd toggle and
                   Shift range behavior while keeping manual entry available. */}
               <Select

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchWfsGeoJson } from "../../../../lib/layer-refresh";
 import { buildWfsGeoJsonLayer } from "../apply-service";
+import { settleNamedRequests } from "../batch-requests";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
 import {
   fetchWfsFeatureTypes,
@@ -199,22 +200,31 @@ export function WfsSource({
     // GeoJSON as "GEOJSON" rather than "application/json"), so it returns the
     // URL and output format that actually worked.
     const endpoint = stripOgcOperationParams(wfsEndpoint.trim(), "WFS");
-    const results = await Promise.all(
-      typeNames.map(async (typeName) => ({
-        typeName,
-        result: await fetchWfsGeoJson(
-          {
-            endpoint,
-            typeName,
-            version: wfsVersion,
-            outputFormat: wfsOutputFormat.trim(),
-            srsName: wfsSrsName.trim(),
-            maxFeatures: wfsMaxFeatures.trim() || undefined,
-          },
-          { useWfsProxy: true },
-        ),
+    const { successes, failures } = await settleNamedRequests(
+      typeNames.map((typeName) => ({
+        key: typeName,
+        run: () =>
+          fetchWfsGeoJson(
+            {
+              endpoint,
+              typeName,
+              version: wfsVersion,
+              outputFormat: wfsOutputFormat.trim(),
+              srsName: wfsSrsName.trim(),
+              maxFeatures: wfsMaxFeatures.trim() || undefined,
+            },
+            { useWfsProxy: true },
+          ),
       })),
     );
+    const results = successes.map(({ key: typeName, value: result }) => ({ typeName, result }));
+    const failureMessage = failures
+      .map(
+        ({ key, reason }) =>
+          `${key}: ${serviceRequestErrorMessage(reason, t, t("addData.wfs.retrieveError"))}`,
+      )
+      .join("\n");
+    if (results.length === 0) throw new Error(failureMessage);
     // The fallback may have loaded the layer under a different output format
     // than the user entered (e.g. "GEOJSON" instead of "application/json"). The
     // resolved value is what gets persisted to source.outputFormat, so note the
@@ -254,6 +264,18 @@ export function WfsSource({
         srsName: wfsSrsName.trim(),
       });
     });
+    if (failures.length > 0) {
+      source.addMany(layers, { fit: true });
+      const failedTypeNames = failures.map(({ key }) => key);
+      setSelectedTypeNames(failedTypeNames);
+      setWfsTypeName(failedTypeNames[0] ?? "");
+      if (failedTypeNames.length === 1) {
+        const failedOption = typeOptions.find((option) => option.name === failedTypeNames[0]);
+        source.setLayerName(failedOption?.title || failedTypeNames[0]);
+      }
+      source.setError(failureMessage);
+      return;
+    }
     source.addManyAndClose(layers, { fit: true });
   });
 
@@ -267,6 +289,7 @@ export function WfsSource({
       error={source.error}
       submitDisabled={source.isSubmitting}
       useServiceIcon
+      hideLayerName={selectedTypeNames.length > 1}
     >
       <div className="space-y-3">
         <ServiceLibrarySection
@@ -318,6 +341,9 @@ export function WfsSource({
           {typeOptions.length > 0 ? (
             <div className="space-y-1.5">
               <Label htmlFor={typeListId}>{t("addData.wfs.retrievedTypes")}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t("addData.wfs.selectType", { count: typeOptions.length })}
+              </p>
               {/* Native multi-select preserves familiar Ctrl/Cmd toggle and
                   Shift range behavior while keeping manual entry available. */}
               <Select
