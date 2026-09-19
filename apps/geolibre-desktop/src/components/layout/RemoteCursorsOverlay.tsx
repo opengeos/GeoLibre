@@ -11,6 +11,7 @@ import {
 
 interface ParticipantOverlays {
   cursor?: ProjectedElementHandle;
+  cursorElement?: HTMLDivElement;
   extent?: ProjectedExtentHandle;
 }
 
@@ -58,18 +59,22 @@ export function RemoteCursorsOverlay({
       const overlays = overlaysRef.current.get(id) ?? {};
       if (participant.cursor) {
         if (overlays.cursor) {
+          if (overlays.cursorElement) updateCursorElement(overlays.cursorElement, participant);
           overlays.cursor.setCoordinate([participant.cursor.lng, participant.cursor.lat]);
         } else {
+          const cursorElement = createCursorElement(participant);
           overlays.cursor = mountProjectedElement(
             engine,
-            createCursorElement(participant),
+            cursorElement,
             [participant.cursor.lng, participant.cursor.lat],
             "top-left",
           );
+          overlays.cursorElement = cursorElement;
         }
       } else {
         overlays.cursor?.remove();
         delete overlays.cursor;
+        delete overlays.cursorElement;
       }
       if (participant.view?.bbox) {
         if (overlays.extent) {
@@ -126,6 +131,16 @@ function createCursorElement(p: CollaborationPresence): HTMLDivElement {
   label.textContent = p.displayName;
   el.appendChild(label);
   return el;
+}
+
+function updateCursorElement(el: HTMLElement, p: CollaborationPresence): void {
+  const path = el.querySelector<SVGPathElement>("path");
+  if (path) path.setAttribute("fill", p.color);
+  const label = el.querySelector<HTMLElement>(".geolibre-collab-cursor-label");
+  if (label) {
+    label.style.background = p.color;
+    label.textContent = p.displayName;
+  }
 }
 
 // Inline SVG arrow cursor tinted with the participant's color, built with DOM
