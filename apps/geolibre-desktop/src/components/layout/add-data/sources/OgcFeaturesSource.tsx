@@ -257,14 +257,14 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       return [];
     });
     const failureMessage = failures
-      .map(
-        ({ key, reason }) =>
-          `${key}: ${serviceRequestErrorMessage(
-            reason,
-            t,
-            t("addData.ogcFeatures.retrieveError"),
-          )}`,
-      )
+      .map(({ key, reason }) => {
+        const message = serviceRequestErrorMessage(
+          reason,
+          t,
+          t("addData.ogcFeatures.retrieveError"),
+        );
+        return collections.length > 1 ? `${key}: ${message}` : message;
+      })
       .join("\n");
     if (results.length === 0) throw new Error(failureMessage);
     for (const { collection, result } of results) {

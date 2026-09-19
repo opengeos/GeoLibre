@@ -39,11 +39,17 @@ export function useAddDataSource(defaultLayerName: string) {
     // The layer panel renders the store in reverse, so insert the batch in
     // reverse to keep the picker's top-to-bottom order visible to the user.
     for (const layer of [...layers].reverse()) shell.addLayer(layer, beforeLayer);
-    // Fitting each layer in turn would only leave the last camera position
-    // visible. Fit the last selected layer once, matching addAndClose's
-    // deterministic behavior without animating through every selection.
+    // Fit one transient layer carrying every batch feature so geographically
+    // separated selections are all visible without animating through them.
     const fitLayer = layers.at(-1);
-    if (options.fit && fitLayer) shell.mapControllerRef.current?.fitLayer(fitLayer);
+    if (options.fit && fitLayer) {
+      const features = layers.flatMap((layer) => layer.geojson?.features ?? []);
+      shell.mapControllerRef.current?.fitLayer(
+        features.length > 0
+          ? { ...fitLayer, geojson: { type: "FeatureCollection", features } }
+          : fitLayer,
+      );
+    }
   };
 
   const addManyAndClose = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
