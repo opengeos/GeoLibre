@@ -294,7 +294,7 @@ export function ArcgisCanvas({
               // the same selection only redraws the highlight.
               const key =
                 next.selectedLayerId && ids !== null && (Array.isArray(ids) ? ids.length : true)
-                  ? `${next.selectedLayerId}:${Array.isArray(ids) ? ids.join("\u0000") : ids}`
+                  ? JSON.stringify([next.selectedLayerId, Array.isArray(ids) ? ids : [ids]])
                   : null;
               const fit = Boolean(
                 next.ui.zoomToSelectedFeature && key && key !== selectionKey && previous,

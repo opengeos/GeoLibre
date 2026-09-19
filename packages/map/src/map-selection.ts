@@ -35,11 +35,12 @@ export function applySelectionHighlight(
   // Key on the whole selection set, not just the anchor: a Shift-range pick
   // keeps the anchor fixed while adding features, so an anchor-only key would
   // never re-fit. Any change to the set re-triggers the fit to frame them all.
-  // Join on NUL — a byte that can't appear in a feature id — so ids containing
-  // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
+  // Serialize structurally rather than joining on a delimiter: feature and
+  // layer ids are free-form strings, so any separator could appear inside one
+  // (["a,b"] vs ["a","b"]) and collide two different selections into one key.
   const nextKey =
     selectedLayerId && highlightIds.length > 0
-      ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
+      ? JSON.stringify([selectedLayerId, highlightIds])
       : null;
   const fit = Boolean(!restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey);
   engine?.highlightFeature(layer, highlightIds.length > 0 ? highlightIds : null, { fit });

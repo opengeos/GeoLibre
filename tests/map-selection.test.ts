@@ -48,11 +48,48 @@ describe("map selection highlight", () => {
       null,
       false,
     );
-    assert.equal(key, `${layer.id}:a\u0000b`);
+    assert.equal(key, JSON.stringify([layer.id, ["a", "b"]]));
     assert.deepEqual(calls.at(-1), { layer, ids: ["a", "b"], fit: true });
 
     applySelectionHighlight(engine, [layer], layer.id, "a", ["a", "b"], true, key, false);
     assert.equal(calls.at(-1)?.fit, false);
+  });
+
+  it("refits when ids differ only by where a delimiter falls", () => {
+    const layer = geojsonLayer();
+    let fit: boolean | undefined;
+    const engine = {
+      highlightFeature: (
+        _layer: GeoLibreLayer | undefined,
+        _ids: string | string[] | null,
+        options?: { fit?: boolean }
+      ) => {
+        fit = options?.fit;
+      },
+    } as unknown as MapEngine;
+
+    const key = applySelectionHighlight(
+      engine,
+      [layer],
+      layer.id,
+      "a\u0000b",
+      ["a\u0000b"],
+      true,
+      null,
+      false
+    );
+    const nextKey = applySelectionHighlight(
+      engine,
+      [layer],
+      layer.id,
+      "a",
+      ["a", "b"],
+      true,
+      key,
+      false
+    );
+    assert.notEqual(nextKey, key);
+    assert.equal(fit, true);
   });
 
   it("does not fit while restoring an identify selection", () => {
