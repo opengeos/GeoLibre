@@ -8063,8 +8063,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "Durchsuchen Sie die IGN LiDAR HD-Kachelabdeckung für den aktuellen Kartenbereich, fügen Sie Kacheln als Punktwolken zur Karte hinzu oder laden Sie ihre COPC-LAZ-Dateien vom Géoplateforme des IGN herunter.",
-      "attribution": "Daten © IGN — LiDAR HD, veröffentlicht unter der Open Licence (Etalab 2.0).",
+      "hint": "Durchsuchen Sie die IGN LiDAR HD-Kachelabdeckung für den aktuellen Kartenbereich, fügen Sie Kacheln als Punktwolken zur Karte hinzu oder laden Sie ihre COPC-LAZ-Dateien von den Servern des IGN herunter.",
       "west": "Westen",
       "south": "Süden",
       "east": "Osten",

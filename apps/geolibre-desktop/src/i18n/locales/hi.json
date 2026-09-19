@@ -8063,8 +8063,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "वर्तमान मैप क्षेत्र के लिए IGN LiDAR HD टाइल कवरेज खोजें, टाइलों को पॉइंट क्लाउड के रूप में मैप में जोड़ें, या IGN के Géoplateforme से उनकी COPC LAZ फ़ाइलें डाउनलोड करें।",
-      "attribution": "डेटा © IGN — LiDAR HD, Open Licence (Etalab 2.0) के तहत प्रकाशित।",
+      "hint": "वर्तमान मैप क्षेत्र के लिए IGN LiDAR HD टाइल कवरेज खोजें, टाइलों को पॉइंट क्लाउड के रूप में मैप में जोड़ें, या IGN के सर्वर से उनकी COPC LAZ फ़ाइलें डाउनलोड करें।",
       "west": "पश्चिम",
       "south": "दक्षिण",
       "east": "पूर्व",

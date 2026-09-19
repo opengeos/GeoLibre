@@ -8063,8 +8063,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "Doorzoek de IGN LiDAR HD-tegeldekking voor het huidige kaartgebied, voeg tegels als puntenwolken aan de kaart toe, of download hun COPC LAZ-bestanden van het Géoplateforme van IGN.",
-      "attribution": "Data © IGN — LiDAR HD, gepubliceerd onder de Open Licence (Etalab 2.0).",
+      "hint": "Doorzoek de IGN LiDAR HD-tegeldekking voor het huidige kaartgebied, voeg tegels als puntenwolken aan de kaart toe, of download hun COPC LAZ-bestanden van de servers van IGN.",
       "west": "West",
       "south": "Zuid",
       "east": "Oost",

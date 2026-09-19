@@ -472,13 +472,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   hint.textContent = tr(
     app,
     "hint",
-    "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's Géoplateforme.",
-  );
-  const attribution = element("p", CSS.hint);
-  attribution.textContent = tr(
-    app,
-    "attribution",
-    "Data © IGN — LiDAR HD, published under the Open Licence (Etalab 2.0).",
+    "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's servers.",
   );
 
   const coordGrid = element("div", CSS.grid);
@@ -527,7 +521,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const list = element("div", CSS.list);
 
-  root.append(hint, attribution, coordGrid, queryActions, status, listToolbar, list);
+  root.append(hint, coordGrid, queryActions, status, listToolbar, list);
   container.append(root);
 
   let controller: AbortController | null = null;
@@ -591,12 +585,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     hint.textContent = tr(
       app,
       "hint",
-      "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's Géoplateforme.",
-    );
-    attribution.textContent = tr(
-      app,
-      "attribution",
-      "Data © IGN — LiDAR HD, published under the Open Licence (Etalab 2.0).",
+      "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's servers.",
     );
     const translatedCoords = [
       tr(app, "west", "West"),

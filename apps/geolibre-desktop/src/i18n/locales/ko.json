@@ -7976,8 +7976,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "현재 지도 영역에 대한 IGN LiDAR HD 타일 범위를 검색하고, 타일을 포인트 클라우드로 지도에 추가하거나, IGN의 Géoplateforme에서 COPC LAZ 파일을 다운로드하세요.",
-      "attribution": "데이터 © IGN — LiDAR HD, Open Licence(Etalab 2.0)에 따라 게시됨.",
+      "hint": "현재 지도 영역에 대한 IGN LiDAR HD 타일 범위를 검색하고, 타일을 포인트 클라우드로 지도에 추가하거나, IGN 서버에서 COPC LAZ 파일을 다운로드하세요.",
       "west": "서쪽",
       "south": "남쪽",
       "east": "동쪽",

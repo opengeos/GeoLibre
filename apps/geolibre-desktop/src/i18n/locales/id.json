@@ -7976,8 +7976,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "Cari cakupan tile IGN LiDAR HD untuk area peta saat ini, tambahkan tile ke peta sebagai point cloud, atau unduh file COPC LAZ-nya dari Géoplateforme milik IGN.",
-      "attribution": "Data © IGN — LiDAR HD, dipublikasikan di bawah Open Licence (Etalab 2.0).",
+      "hint": "Cari cakupan tile IGN LiDAR HD untuk area peta saat ini, tambahkan tile ke peta sebagai point cloud, atau unduh file COPC LAZ-nya dari server IGN.",
       "west": "Barat",
       "south": "Selatan",
       "east": "Timur",

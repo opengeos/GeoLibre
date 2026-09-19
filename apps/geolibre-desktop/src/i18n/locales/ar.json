@@ -8410,8 +8410,7 @@
     },
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
-      "hint": "البحث في تغطية بلاطات IGN LiDAR HD لمنطقة الخريطة الحالية، وإضافة البلاطات إلى الخريطة كسحابات نقاط، أو تنزيل ملفات COPC LAZ الخاصة بها من Géoplateforme التابعة لـ IGN.",
-      "attribution": "البيانات © IGN — LiDAR HD، منشورة بموجب Open Licence (Etalab 2.0).",
+      "hint": "البحث في تغطية بلاطات IGN LiDAR HD لمنطقة الخريطة الحالية، وإضافة البلاطات إلى الخريطة كسحابات نقاط، أو تنزيل ملفات COPC LAZ الخاصة بها من خوادم IGN.",
       "west": "الغرب",
       "south": "الجنوب",
       "east": "الشرق",
