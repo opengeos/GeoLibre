@@ -26,6 +26,8 @@ export interface LandXmlParseResult {
   detectedCrs?: string;
   /** Human-readable coordinate-system metadata from the document. */
   coordinateSystem?: string;
+  /** Linear unit declared by the LandXML Units element, if present. */
+  linearUnit?: string;
   /** True when every parsed XY coordinate fits WGS84 longitude/latitude bounds. */
   coordinatesLookGeographic: boolean;
   /** Diagnostics for malformed source objects that were skipped during parsing. */
@@ -70,6 +72,12 @@ export function parseLandXml(text: string): LandXmlParseResult {
   const coordinates: Position[] = [];
   const layers: LandXmlLayer[] = [];
   const warnings: string[] = [];
+  const linearUnit = readLinearUnit(root);
+  if (linearUnit && !/^(?:metre|meter)$/i.test(linearUnit)) {
+    warnings.push(
+      `LandXML declares linear unit "${linearUnit}". Verify that the selected CRS uses the same coordinate unit.`,
+    );
+  }
   const surfaces = descendants(root, "Surface");
   for (const [surfaceIndex, surface] of surfaces.entries()) {
     const layer = parseSurface(surface, surfaceIndex, coordinates, warnings);
@@ -110,6 +118,7 @@ export function parseLandXml(text: string): LandXmlParseResult {
     layers,
     detectedCrs: coordinateInfo.detectedCrs,
     coordinateSystem: coordinateInfo.description,
+    linearUnit,
     warnings,
     coordinatesLookGeographic:
       coordinates.length > 0 &&
@@ -407,6 +416,16 @@ function readCoordinateSystem(root: Element): { detectedCrs?: string; descriptio
   };
 }
 
+function readLinearUnit(root: Element): string | undefined {
+  const units = firstDescendant(root, "Units");
+  if (!units) return undefined;
+  for (const child of Array.from(units.children)) {
+    const linearUnit = child.getAttribute("linearUnit")?.trim();
+    if (linearUnit) return linearUnit;
+  }
+  return units.getAttribute("linearUnit")?.trim() || undefined;
+}
+
 function landXmlPosition(text: string | null | undefined): Position | null {
   const values = numericTokens(text);
   if (values.length < 2 || values.length > 3) return null;
@@ -473,7 +492,16 @@ function descendants(parent: Element, localName: string): Element[] {
 }
 
 function firstDescendant(parent: Element, localName: string): Element | undefined {
-  return descendants(parent, localName)[0];
+  const expected = localName.toLowerCase();
+  const visit = (element: Element): Element | undefined => {
+    for (const child of Array.from(element.children)) {
+      if (child.localName.toLowerCase() === expected) return child;
+      const nested = visit(child);
+      if (nested) return nested;
+    }
+    return undefined;
+  };
+  return visit(parent);
 }
 
 function copyNumericAttribute(

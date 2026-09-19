@@ -23,6 +23,7 @@ describe("LandXML parser", () => {
 
     assert.equal(result.detectedCrs, "EPSG:4326");
     assert.match(result.coordinateSystem ?? "", /WGS 84/);
+    assert.equal(result.linearUnit, undefined);
     assert.equal(result.coordinatesLookGeographic, true);
     assert.equal(result.surfaceCount, 1);
     assert.equal(result.alignmentCount, 1);
@@ -118,6 +119,19 @@ describe("LandXML parser", () => {
     `);
     assert.equal(result.coordinatesLookGeographic, false);
     assert.equal(result.detectedCrs, undefined);
+  });
+
+  it("reports a declared non-meter coordinate unit", () => {
+    const result = parseLandXml(`
+      <LandXML>
+        <Units><Imperial linearUnit="USSurveyFoot" /></Units>
+        <CgPoints><CgPoint name="P1">40 -75 10</CgPoint></CgPoints>
+      </LandXML>
+    `);
+    assert.equal(result.linearUnit, "USSurveyFoot");
+    assert.deepEqual(result.warnings, [
+      'LandXML declares linear unit "USSurveyFoot". Verify that the selected CRS uses the same coordinate unit.',
+    ]);
   });
 
   it("prefers the canonical EPSG attribute over conflicting descriptive text", () => {

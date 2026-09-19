@@ -138,13 +138,15 @@ export function LandXmlSource() {
     // NAD83 is also longitude/latitude, but the shared helper intentionally
     // identifies only map-ready WGS84 aliases because other importers use its
     // result to decide whether reprojection is required.
-    const geographicCrs =
+    const longitudeLatitudeCrs =
       isGeographicCrs(normalizedCrs) ||
       normalizedCrs.replace(/\s+/g, "").toUpperCase() === "EPSG:4269";
-    if (normalizedCrs && geographicCrs && !selectedSource.parsed.coordinatesLookGeographic) {
+    if (normalizedCrs && longitudeLatitudeCrs && !selectedSource.parsed.coordinatesLookGeographic) {
       throw new Error(t("addData.landxml.errorGeographicCrsBounds"));
     }
-    const reprojectionCrs = normalizedCrs && !geographicCrs ? normalizedCrs : null;
+    // Only WGS84 aliases are already map-ready. Other longitude/latitude CRSs,
+    // including NAD83, still need their datum transformation.
+    const reprojectionCrs = normalizedCrs && !isGeographicCrs(normalizedCrs) ? normalizedCrs : null;
     const baseName = source.layerName.trim() || defaultName;
     const layers: GeoLibreLayer[] = [];
 
@@ -162,6 +164,7 @@ export function LandXmlSource() {
           featureCount: geojson.features.length,
           sourceCrs: normalizedCrs || null,
           coordinateSystem: selectedSource.parsed.coordinateSystem,
+          linearUnit: selectedSource.parsed.linearUnit,
           surfaceCount: selectedSource.parsed.surfaceCount,
           alignmentCount: selectedSource.parsed.alignmentCount,
           pointCount: selectedSource.parsed.pointCount,
