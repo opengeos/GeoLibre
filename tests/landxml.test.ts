@@ -104,6 +104,33 @@ describe("LandXML parser", () => {
     assert.equal(result.detectedCrs, undefined);
   });
 
+  it("prefers the canonical EPSG attribute over conflicting descriptive text", () => {
+    const result = parseLandXml(`
+      <LandXML>
+        <CoordinateSystem name="Legacy EPSG:4326 label" epsgCode="26915" desc="EPSG:3857" />
+        <CgPoints><CgPoint name="P1">4978000 479000 25</CgPoint></CgPoints>
+      </LandXML>
+    `);
+    assert.equal(result.detectedCrs, "EPSG:26915");
+  });
+
+  it("rejects malformed and oversized coordinate tuples", () => {
+    assert.throws(
+      () =>
+        parseLandXml(`
+          <LandXML><CgPoints><CgPoint name="P1">45 invalid -122</CgPoint></CgPoints></LandXML>
+        `),
+      /No supported LandXML/,
+    );
+    assert.throws(
+      () =>
+        parseLandXml(`
+          <LandXML><CgPoints><CgPoint name="P1">45 -122 10 999</CgPoint></CgPoints></LandXML>
+        `),
+      /No supported LandXML/,
+    );
+  });
+
   it("rejects non-LandXML and empty LandXML documents", () => {
     assert.throws(() => parseLandXml("<root />"), /does not contain a LandXML document/);
     assert.throws(() => parseLandXml("<LandXML />"), /No supported LandXML/);

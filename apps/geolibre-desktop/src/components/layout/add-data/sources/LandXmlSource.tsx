@@ -101,7 +101,11 @@ export function LandXmlSource() {
     if (!normalizedCrs && !selectedSource.parsed.coordinatesLookGeographic) {
       throw new Error(t("addData.landxml.errorMissingCrs"));
     }
-    const reprojectionCrs = normalizedCrs && !isGeographicCrs(normalizedCrs) ? normalizedCrs : null;
+    const geographicCrs = isGeographicCrs(normalizedCrs);
+    if (normalizedCrs && geographicCrs && !selectedSource.parsed.coordinatesLookGeographic) {
+      throw new Error(t("addData.landxml.errorGeographicCrsBounds"));
+    }
+    const reprojectionCrs = normalizedCrs && !geographicCrs ? normalizedCrs : null;
     const baseName = source.layerName.trim() || defaultName;
     const layers: GeoLibreLayer[] = [];
 

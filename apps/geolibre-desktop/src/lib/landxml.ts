@@ -323,15 +323,18 @@ function readCoordinateSystem(root: Element): { detectedCrs?: string; descriptio
   const values = Array.from(element.attributes)
     .map((attribute) => attribute.value.trim())
     .filter(Boolean);
-  let detectedCrs: string | undefined;
-  for (const attribute of Array.from(element.attributes)) {
-    const value = attribute.value.trim();
-    const match = value.match(/EPSG(?::+|[ _-])?(\d{3,6})/i);
-    if (match) detectedCrs = `EPSG:${match[1]}`;
-    if (!detectedCrs && /epsg/i.test(attribute.name) && /^\d{3,6}$/.test(value)) {
-      detectedCrs = `EPSG:${value}`;
-    }
-  }
+  const attributes = Array.from(element.attributes);
+  const canonicalEpsg = attributes.find(
+    (attribute) => /epsg/i.test(attribute.name) && /^\d{3,6}$/.test(attribute.value.trim()),
+  );
+  const textMatch = attributes
+    .map((attribute) => attribute.value.trim().match(/EPSG(?::+|[ _-])?(\d{3,6})/i))
+    .find((match) => match !== null);
+  const detectedCrs = canonicalEpsg
+    ? `EPSG:${canonicalEpsg.value.trim()}`
+    : textMatch
+      ? `EPSG:${textMatch[1]}`
+      : undefined;
   return {
     detectedCrs,
     description: values.join(" | ") || undefined,
@@ -340,7 +343,7 @@ function readCoordinateSystem(root: Element): { detectedCrs?: string; descriptio
 
 function landXmlPosition(text: string | null | undefined): Position | null {
   const values = numericTokens(text);
-  if (values.length < 2) return null;
+  if (values.length < 2 || values.length > 3) return null;
   const [northing, easting, elevation] = values;
   return [easting, northing, ...(elevation === undefined ? [] : [elevation])];
 }
@@ -374,9 +377,8 @@ function samePosition(first: Position, second: Position): boolean {
 }
 
 function numericTokens(text: string | null | undefined): number[] {
-  return tokens(text)
-    .map(Number)
-    .filter((value) => Number.isFinite(value));
+  const values = tokens(text).map(Number);
+  return values.every((value) => Number.isFinite(value)) ? values : [];
 }
 
 function numberPair(text: string | null | undefined): [number, number] | null {
