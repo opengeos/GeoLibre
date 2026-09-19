@@ -106,6 +106,10 @@ export function MapboxCanvas({
               featureIdAtPoint: (layer, point) => current.featureIdAtPoint(layer.id, point),
               onDiagnostic: (event) => diagnosticCallback.current?.(event),
             });
+        // Arm the global-listener cleanup before any engine/store setup that
+        // can throw, so a rejected initialization cannot leak the selection
+        // request listener until this effect happens to run again.
+        cleanup = detachFeatureSelection;
         let applying = false;
         let popup: Popup | undefined;
         const update = (next: typeof state, previous?: typeof state) => {
@@ -181,7 +185,10 @@ export function MapboxCanvas({
           }
         };
         const unsubscribe = useAppStore.subscribe(update);
-        cleanup = unsubscribe;
+        cleanup = () => {
+          detachFeatureSelection();
+          unsubscribe();
+        };
         update(state);
         update(useAppStore.getState(), state);
         map.on("moveend", (event: MapEventOf<"moveend"> & { flightCameraToken?: number }) => {
@@ -279,6 +286,8 @@ export function MapboxCanvas({
         };
       })
       .catch((error) => {
+        cleanup();
+        cleanup = () => {};
         if (!cancelled) setError(redactMapboxError(String(error)));
       });
     return () => {
