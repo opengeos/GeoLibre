@@ -143,23 +143,48 @@ export function MapboxCanvas({
         let popup: Popup | undefined;
         type IdentifyPopupState = {
           identifiedLayerId: string;
+          identifiedFeatureId: string | null;
           previousSelectedLayerId: string | null;
-          changedSelection: boolean;
+          previousSelectedFeatureId: string | null;
+          previousSelectedFeatureIds: string[];
           onClose: () => void;
         };
         let identifyPopupState: IdentifyPopupState | undefined;
         let pointerElevation: PointerElevationResolver | undefined;
         let previousSelectedFeatureKey: string | null = null;
+        // Restoring the pre-popup selection must not fly the camera back to
+        // it under "zoom to selected feature".
+        let restoringIdentifySelection = false;
         const restoreIdentifySelection = (selection: IdentifyPopupState, force = false) => {
-          if (!selection.changedSelection) return;
           const next = useAppStore.getState();
-          if (!force && next.selectedLayerId !== selection.identifiedLayerId) return;
-          next.selectLayer(
-            selection.previousSelectedLayerId &&
-              next.layers.some((layer) => layer.id === selection.previousSelectedLayerId)
-              ? selection.previousSelectedLayerId
-              : null,
-          );
+          // Only undo the popup's own selection; a layer or feature the user
+          // picked while the popup was open is theirs to keep.
+          if (
+            !force &&
+            (next.selectedLayerId !== selection.identifiedLayerId ||
+              next.selectedFeatureId !== selection.identifiedFeatureId ||
+              next.selectedFeatureIds.length !== (selection.identifiedFeatureId ? 1 : 0) ||
+              (selection.identifiedFeatureId !== null &&
+                next.selectedFeatureIds[0] !== selection.identifiedFeatureId))
+          ) {
+            return;
+          }
+          const previousLayerExists =
+            selection.previousSelectedLayerId !== null &&
+            next.layers.some((layer) => layer.id === selection.previousSelectedLayerId);
+          restoringIdentifySelection = true;
+          try {
+            // selectLayer also clears the feature selection.
+            next.selectLayer(previousLayerExists ? selection.previousSelectedLayerId : null);
+            if (previousLayerExists && selection.previousSelectedFeatureIds.length > 0) {
+              next.selectFeatures(
+                selection.previousSelectedFeatureIds,
+                selection.previousSelectedFeatureId,
+              );
+            }
+          } finally {
+            restoringIdentifySelection = false;
+          }
         };
         const removeIdentifyPopup = (
           options: { restore?: boolean; forceRestore?: boolean } = {},
@@ -244,7 +269,10 @@ export function MapboxCanvas({
                   ? `${next.selectedLayerId}:${ids.join("\u0000")}`
                   : null;
               const fit = Boolean(
-                next.ui.zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey,
+                !restoringIdentifySelection &&
+                  next.ui.zoomToSelectedFeature &&
+                  nextKey &&
+                  nextKey !== previousSelectedFeatureKey,
               );
               previousSelectedFeatureKey = nextKey;
               current.highlightFeature(
@@ -266,8 +294,8 @@ export function MapboxCanvas({
                 // removeLayer chooses a fallback selected layer before
                 // subscribers run. Force the earlier user selection back when
                 // it still exists instead of leaving that arbitrary fallback.
+                // Restoring also drops the popup's feature selection.
                 removeIdentifyPopup({ forceRestore: !identifiedLayer });
-                if (!identifiedLayer) next.selectFeature(null);
               }
             }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
@@ -434,7 +462,11 @@ export function MapboxCanvas({
 
           removeIdentifyPopup();
           const selectionState = useAppStore.getState();
-          const previousSelectedLayerId = selectionState.selectedLayerId;
+          const {
+            selectedLayerId: previousSelectedLayerId,
+            selectedFeatureId: previousSelectedFeatureId,
+            selectedFeatureIds: previousSelectedFeatureIds,
+          } = selectionState;
           if (previousSelectedLayerId !== match.layerId) selectionState.selectLayer(match.layerId);
           selectionState.selectFeature(match.featureId);
           const feature = match.geometry
@@ -475,8 +507,10 @@ export function MapboxCanvas({
           };
           popupState = {
             identifiedLayerId: match.layerId,
+            identifiedFeatureId: match.featureId,
             previousSelectedLayerId,
-            changedSelection: previousSelectedLayerId !== match.layerId,
+            previousSelectedFeatureId,
+            previousSelectedFeatureIds,
             onClose,
           };
           identifyPopupState = popupState;
