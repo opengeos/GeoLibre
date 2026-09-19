@@ -8,7 +8,11 @@ import type {
 } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { fetchIgnLidarHdTiles, type IgnLidarHdTile } from "./ign-lidar-hd-api";
-import { LIDAR_SOURCE_KIND, openLidarLayerPanel, restoreLidarLayers } from "./maplibre-components";
+import {
+  LIDAR_SOURCE_KIND,
+  restoreLidarLayers,
+  withLidarAutoZoomSuppressed,
+} from "./maplibre-components";
 import { getStyleMap } from "./style-map";
 
 export const IGN_LIDAR_HD_PLUGIN_ID = "geolibre-ign-lidar-hd";
@@ -158,6 +162,16 @@ function ignLidarLayerId(tile: IgnLidarHdTile): string {
   return `ign-lidar-hd-${tile.id}`;
 }
 
+// IGN's Géoplateforme rate-limits (429 Too Many Requests) when several COPC
+// files are requested back-to-back, which is exactly what firing off the
+// bulk "Add selected to map" loop without delay does. Spacing requests out
+// gives it room to breathe.
+const ADD_SELECTED_DELAY_MS = 1500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer";
 
 /**
@@ -165,12 +179,9 @@ type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer";
  * convention the Components plugin's Add LiDAR Layer panel uses: a store
  * layer carries the URL, and `restoreLidarLayers` streams it into the shared
  * LiDAR control (COPC/LAZ via deck.gl), matching how a saved project or
- * library layer re-attaches its point cloud on load. `openLidarLayerPanel`
- * then reveals that same control so the point size, color scheme, color
- * range, and elevation offset controls the "Add Data → LiDAR Layer" dialog
- * offers are available here too — `restoreLidarLayers` alone only mounts the
- * control hidden, matching a silent project-restore rather than a user-facing
- * add.
+ * library layer re-attaches its point cloud on load. Does not reveal the
+ * shared LiDAR control's panel itself — see callers, which reveal it at most
+ * once per user action instead of once per tile.
  */
 async function addTileToMap(
   app: GeoLibreAppAPI,
@@ -184,10 +195,7 @@ async function addTileToMap(
     (layer) =>
       layer.metadata.sourceKind === LIDAR_SOURCE_KIND && layer.sourcePath === tile.downloadUrl,
   );
-  if (alreadyAdded) {
-    openLidarLayerPanel(app);
-    return "duplicate";
-  }
+  if (alreadyAdded) return "duplicate";
   const id = ignLidarLayerId(tile);
   const layer: GeoLibreLayer = {
     id,
@@ -209,10 +217,6 @@ async function addTileToMap(
   // the point cloud has finished loading (matches restoreLidarLayers's own
   // fire-and-forget per-layer loads).
   await restoreLidarLayers(app);
-  // Reveal the shared LiDAR control so the point cloud's own rendering
-  // controls (point size, color scheme, color range, elevation offset) are
-  // reachable, same as adding through the Add Data dialog.
-  openLidarLayerPanel(app);
   return "added";
 }
 
@@ -639,16 +643,20 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     let added = 0;
     let duplicate = 0;
     let failed = 0;
-    for (const tile of tiles) {
-      try {
-        const result = await addTileToMap(app, tile);
-        if (result === "added") added++;
-        else if (result === "duplicate") duplicate++;
-        else failed++;
-      } catch {
-        failed++;
+    await withLidarAutoZoomSuppressed(app, async () => {
+      for (const [index, tile] of tiles.entries()) {
+        if (index > 0) await sleep(ADD_SELECTED_DELAY_MS);
+        if (disposed) return;
+        try {
+          const result = await addTileToMap(app, tile);
+          if (result === "added") added++;
+          else if (result === "duplicate") duplicate++;
+          else failed++;
+        } catch {
+          failed++;
+        }
       }
-    }
+    });
     if (disposed) return;
     selectedTileIds.clear();
     const parts: string[] = [];
@@ -714,7 +722,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       addButton.addEventListener("click", async () => {
         addButton.disabled = true;
         try {
-          const result = await addTileToMap(app, tile);
+          const result = await withLidarAutoZoomSuppressed(app, () => addTileToMap(app, tile));
           if (result === "added") {
             status.textContent = tr(app, "addedToMap", "Added {{name}} to the map.", {
               name: tileTitle(tile),

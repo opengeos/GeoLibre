@@ -3079,6 +3079,69 @@ export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
 }
 
+/** Safety net for {@link waitForPendingLidarRestores}: how long to wait for
+ * queued restores to settle before giving up regardless. */
+const PENDING_LIDAR_RESTORE_TIMEOUT_MS = 60_000;
+
+/** Resolves once every currently-queued {@link pendingLidarRestores} entry has
+ * been consumed by a `load` (or dropped by a `loaderror`) — i.e. once every
+ * `restoreLidarLayers` call in flight has actually finished loading its point
+ * cloud, not just issued the request. Falls back to a fixed timeout so a
+ * leaked entry (a load that never fires either event) cannot wedge a caller
+ * forever. */
+function waitForPendingLidarRestores(): Promise<void> {
+  if (pendingLidarRestores.size === 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (pendingLidarRestores.size === 0 || Date.now() - start > PENDING_LIDAR_RESTORE_TIMEOUT_MS) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 250);
+    };
+    check();
+  });
+}
+
+/**
+ * Runs `fn` with the shared LiDAR control's `autoZoom` temporarily disabled,
+ * so a point cloud loaded through `fn` does not fly the camera to it.
+ * `autoZoom` is a constructor-only option with no public runtime setter, so
+ * this reaches into the control's private `_options` the same way
+ * maplibre-gl-lidar's own `restoreFromUrl` does internally when it needs to
+ * load several point clouds without flying to each one in turn. If a future
+ * upgrade removes that private field, the cast below quietly no-ops (runs
+ * `fn` unsuppressed) instead of throwing — see docs/maintenance.md for the
+ * other upstream internals this app already mirrors by hand.
+ *
+ * `fn` (via `restoreLidarLayers`) only awaits the request being *issued*, not
+ * the point cloud finishing loading, so this also waits for every restore
+ * queued during `fn` to actually finish before re-enabling autoZoom —
+ * otherwise a still-loading point cloud (typical for a bulk "add several
+ * tiles" action, where the earliest ones load before the loop even finishes
+ * issuing the rest) fires its `load` event, and hence its fly-to, after
+ * autoZoom was already switched back on.
+ */
+export async function withLidarAutoZoomSuppressed<T>(
+  app: GeoLibreAppAPI,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await openStandaloneLidarControl(app, { reveal: false });
+  const options = (lidarControl as unknown as { _options?: { autoZoom?: boolean } } | null)
+    ?._options;
+  if (!options || !("autoZoom" in options)) return fn();
+  const previous = options.autoZoom;
+  options.autoZoom = false;
+  try {
+    const result = await fn();
+    await waitForPendingLidarRestores();
+    return result;
+  } finally {
+    options.autoZoom = previous;
+  }
+}
+
 export function openSplattingLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneSplattingControl(app);
 }
