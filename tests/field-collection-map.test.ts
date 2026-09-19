@@ -143,13 +143,29 @@ describe("Field Collection renderer-neutral map bridge", () => {
         [8, 9],
       ]);
 
-      stop();
-      assert.equal(canvas.style.cursor, "grab");
+      // A pointer released off the canvas must not make the next tap look multi-touch.
+      const down = new window.Event("pointerdown", { bubbles: true });
+      Object.assign(down, { clientX: 20, clientY: 30, pointerId: 3 });
+      canvas.dispatchEvent(down);
+      const upOutside = new window.Event("pointerup", { bubbles: true });
+      Object.assign(upOutside, { clientX: 300, clientY: 300, pointerId: 3 });
+      document.body.dispatchEvent(upOutside);
+      for (const type of ["pointerdown", "pointerup"] as const) {
+        const pointer = new window.Event(type, { bubbles: true });
+        Object.assign(pointer, { clientX: 18, clientY: 29, pointerId: 4 });
+        canvas.dispatchEvent(pointer);
+      }
       canvas.dispatchEvent(event);
       assert.deepEqual(clicks, [
         [8, 9],
         [8, 9],
+        [8, 9],
       ]);
+
+      stop();
+      assert.equal(canvas.style.cursor, "grab");
+      canvas.dispatchEvent(event);
+      assert.equal(clicks.length, 3);
     });
   });
 

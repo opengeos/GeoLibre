@@ -181,15 +181,18 @@ export function listenForFieldCollectionClicks(
   };
   canvas.addEventListener("pointerdown", onPointerDown, true);
   canvas.addEventListener("pointermove", onPointerMove, true);
-  canvas.addEventListener("pointerup", onPointerUp, true);
-  canvas.addEventListener("pointercancel", onPointerUp, true);
+  // A pointer can be released off the canvas; listen document-wide so it never
+  // lingers in pointersDown and turns the next tap into a "multi-touch" drag.
+  const doc = canvas.ownerDocument;
+  doc.addEventListener("pointerup", onPointerUp, true);
+  doc.addEventListener("pointercancel", onPointerUp, true);
   canvas.addEventListener("click", onClick, true);
   canvas.addEventListener("dblclick", onDoubleClick, true);
   return () => {
     canvas.removeEventListener("pointerdown", onPointerDown, true);
     canvas.removeEventListener("pointermove", onPointerMove, true);
-    canvas.removeEventListener("pointerup", onPointerUp, true);
-    canvas.removeEventListener("pointercancel", onPointerUp, true);
+    doc.removeEventListener("pointerup", onPointerUp, true);
+    doc.removeEventListener("pointercancel", onPointerUp, true);
     canvas.removeEventListener("click", onClick, true);
     canvas.removeEventListener("dblclick", onDoubleClick, true);
     canvas.style.cursor = previousCursor;
