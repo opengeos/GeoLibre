@@ -110,7 +110,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className={chrome.secondaryButtonClass}
+          className={chrome.buttonClass}
           variant="ghost"
           size={chrome.buttonSize}
           aria-label={t("toolbar.menu.edit")}

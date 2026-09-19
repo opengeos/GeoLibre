@@ -2149,11 +2149,6 @@ export function TopToolbar({
 
   const toolbarButtonSize = compact ? "icon" : "sm";
   const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
-  // Class for "secondary" toolbar menus that may be hidden on narrow screens to
-  // reduce toolbar wrapping. The menu stays reachable other ways (e.g. Edit's
-  // actions also have keyboard shortcuts). To make a future menu hideable, give
-  // its trigger Button this class instead of `toolbarButtonClass`.
-  const toolbarSecondaryButtonClass = cn(toolbarButtonClass, "hidden md:inline-flex");
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:me-1");
   // "GeoLibre Desktop" is the *desktop* product name. `isTauri()` alone is true
   // on iOS and Android too — where the app is named plain "GeoLibre" (the bundle
@@ -2164,7 +2159,6 @@ export function TopToolbar({
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
   const chrome: ToolbarChrome = {
     buttonClass: toolbarButtonClass,
-    secondaryButtonClass: toolbarSecondaryButtonClass,
     buttonSize: toolbarButtonSize,
     iconClassName: toolbarIconClassName,
     renderLabel: renderToolbarLabel,

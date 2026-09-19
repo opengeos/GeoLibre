@@ -35,7 +35,6 @@ export interface AddLayerHandlers {
 /** Shared styling/affordances passed to each toolbar menu's trigger button. */
 export interface ToolbarChrome {
   buttonClass: string;
-  secondaryButtonClass: string;
   buttonSize: "icon" | "sm";
   iconClassName: string;
   renderLabel: (label: string) => React.ReactNode;
