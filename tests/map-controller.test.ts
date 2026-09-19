@@ -37,7 +37,7 @@ interface FakeMap {
   /** Move the camera without firing anything, as a jump before a sync would. */
   setZoom: (zoom: number) => void;
   /** Fire a map event at every handler the controller registered for it. */
-  emit: (event: string) => void;
+  emit: (event: string, payload?: unknown) => void;
 }
 
 /**
@@ -223,8 +223,8 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     setZoom: (next) => {
       zoom = next;
     },
-    emit: (event) => {
-      for (const handler of [...(handlers.get(event) ?? [])]) handler({ type: event });
+    emit: (event, payload = { type: event }) => {
+      for (const handler of [...(handlers.get(event) ?? [])]) handler(payload);
     },
   };
   return { map, fake };
@@ -1193,6 +1193,20 @@ describe("MapController camera and query helpers", () => {
   // rather than inline: an inline reset after an assertion never runs when that
   // assertion fails, silently leaving a non-Earth body active for later tests.
   afterEach(() => setActiveEllipsoidId("earth"));
+
+  it("publishes geographic map clicks and removes the listener on cleanup", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const clicks: [number, number][] = [];
+    const unsubscribe = controller.onMapClick((lngLat) => clicks.push(lngLat));
+
+    fake.emit("click", { lngLat: { lng: -76.5, lat: 39.25 } });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+
+    unsubscribe();
+    fake.emit("click", { lngLat: { lng: 10, lat: 20 } });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+  });
 
   // The defensive probe in readCameraAltitude exists precisely because a
   // MapLibre bump could drop or rename transform.getCameraAltitude; without

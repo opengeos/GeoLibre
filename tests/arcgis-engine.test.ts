@@ -45,6 +45,7 @@ function makeSdk() {
   const widgets: { kind: string; props: Record<string, unknown>; destroyed: boolean }[] = [];
   const goTo: unknown[] = [];
   let watchers: (() => void)[] = [];
+  const viewHandlers = new Map<string, Set<(event: Record<string, unknown>) => void>>();
   const syncWatchers = new Set<() => void>();
   const layerClass = (kind: string) =>
     class {
@@ -215,7 +216,12 @@ function makeSdk() {
     toMap: (p: { x: number; y: number }) => ({ longitude: p.x, latitude: p.y, x: p.x, y: p.y }),
     hitTest: async () => ({ results: hitResults, screenPoint: { x: 0, y: 0 } }),
     takeScreenshot: async () => ({ dataUrl: "data:image/png;base64,", data: {} as ImageData }),
-    on: (_type: string, _handler: unknown) => ({ remove: () => {} }),
+    on: (type: string, handler: (event: Record<string, unknown>) => void) => {
+      const handlers = viewHandlers.get(type) ?? new Set();
+      handlers.add(handler);
+      viewHandlers.set(type, handlers);
+      return { remove: () => handlers.delete(handler) };
+    },
     destroy: () => {
       view.destroyed = true;
     },
@@ -347,6 +353,9 @@ function makeSdk() {
     uiAdds,
     layers,
     fireWatchers: () => watchers.forEach((w) => w()),
+    fireViewEvent: (type: string, event: Record<string, unknown>) => {
+      for (const handler of viewHandlers.get(type) ?? []) handler(event);
+    },
     setHitResults: (results: unknown[]) => {
       hitResults = results;
     },
@@ -452,6 +461,19 @@ const SQUARE = geojsonLayer({
 });
 
 describe("ArcgisEngine camera conventions", () => {
+  it("publishes geographic map clicks and removes the listener on cleanup", () => {
+    const { engine, fireViewEvent } = makeEngine();
+    const clicks: [number, number][] = [];
+    const unsubscribe = engine.onMapClick((lngLat) => clicks.push(lngLat));
+
+    fireViewEvent("click", { x: -76.5, y: 39.25 });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+
+    unsubscribe();
+    fireViewEvent("click", { x: 10, y: 20 });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+  });
+
   it("maps MapLibre bearings to SDK rotations and back", () => {
     assert.equal(bearingToRotation(0), 0);
     assert.equal(bearingToRotation(90), 270);
