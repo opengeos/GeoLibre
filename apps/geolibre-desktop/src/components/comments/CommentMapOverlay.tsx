@@ -118,6 +118,7 @@ export function CommentMapOverlay({
   showResolved = false,
 }: CommentMapOverlayProps): null {
   const comments = useAppStore((s) => s.comments);
+  const layers = useAppStore((s) => s.layers);
   const markerDisposersRef = useRef<Array<() => void>>([]);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
 
@@ -196,6 +197,7 @@ export function CommentMapOverlay({
     };
   }, [
     comments,
+    layers,
     showResolved,
     primaryRenderer,
     mapReadyGeneration,
