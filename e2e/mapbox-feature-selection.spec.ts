@@ -2,8 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { layerRow } from "./helpers";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 
-const DATA_URL =
-  "https://raw.githubusercontent.com/opengeos/GeoLibre/main/e2e/fixtures/smoke.geojson";
+const DATA_PATH = "e2e/fixtures/smoke.geojson";
 
 test.skip(!process.env.MAPBOX_TOKEN, "Set MAPBOX_TOKEN to test the Mapbox renderer");
 test.use({ actionTimeout: 30_000 });
@@ -18,7 +17,6 @@ async function chooseSelectionTool(page: Page, layerName: string, toolName: stri
 for (const theme of ["light", "dark"] as const) {
   test(`Mapbox feature-selection gestures select real GeoJSON (${theme})`, async ({
     page,
-    request,
   }, testInfo) => {
     test.setTimeout(180_000);
     await page.addInitScript(
@@ -45,15 +43,9 @@ for (const theme of ["light", "dark"] as const) {
     const canvas = page.locator(".mapboxgl-canvas");
     await expect(canvas).toBeVisible();
 
-    const response = await request.get(DATA_URL);
-    expect(response.ok()).toBeTruthy();
     await page.getByRole("button", { name: "Add Data", exact: true }).click();
     await page.getByRole("menuitem", { name: "Vector Layer", exact: true }).click();
-    await page.locator('input[type="file"]').setInputFiles({
-      name: "smoke.geojson",
-      mimeType: "application/geo+json",
-      buffer: await response.body(),
-    });
+    await page.locator('input[type="file"]').setInputFiles(DATA_PATH);
     const row = layerRow(page, "smoke");
     await expect(row).toBeVisible();
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
