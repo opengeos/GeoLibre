@@ -4,6 +4,8 @@ import {
   createPointerElevationResolver,
   DEFAULT_BASEMAP,
   getActiveEllipsoid,
+  IDENTIFY_ALL_LAYERS_ID,
+  isPopupClickEnabled,
   redactUrlCredentials,
   useAppStore,
   type PointerElevationResolver,
@@ -23,6 +25,7 @@ import {
 } from "./map-feature-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
+import { createIdentifyPopupElement } from "./feature-popup";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -138,8 +141,37 @@ export function MapboxCanvas({
         cleanupTasks.push(detachFeatureSelection);
         let applying = false;
         let popup: Popup | undefined;
+        type IdentifyPopupState = {
+          identifiedLayerId: string;
+          previousSelectedLayerId: string | null;
+          changedSelection: boolean;
+          onClose: () => void;
+        };
+        let identifyPopupState: IdentifyPopupState | undefined;
         let pointerElevation: PointerElevationResolver | undefined;
         let previousSelectedFeatureKey: string | null = null;
+        const restoreIdentifySelection = (selection: IdentifyPopupState, force = false) => {
+          if (!selection.changedSelection) return;
+          const next = useAppStore.getState();
+          if (!force && next.selectedLayerId !== selection.identifiedLayerId) return;
+          next.selectLayer(
+            selection.previousSelectedLayerId &&
+              next.layers.some((layer) => layer.id === selection.previousSelectedLayerId)
+              ? selection.previousSelectedLayerId
+              : null,
+          );
+        };
+        const removeIdentifyPopup = (options: { restore?: boolean; forceRestore?: boolean } = {}) => {
+          const openPopup = popup;
+          const popupState = identifyPopupState;
+          popup = undefined;
+          identifyPopupState = undefined;
+          if (openPopup && popupState) openPopup.off("close", popupState.onClose);
+          openPopup?.remove();
+          if (popupState && options.restore !== false) {
+            restoreIdentifySelection(popupState, options.forceRestore);
+          }
+        };
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
           const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
@@ -219,8 +251,25 @@ export function MapboxCanvas({
                 { fit },
               );
             }
+            if (!viewId && previous && next.projectGeneration !== previous.projectGeneration) {
+              // The new project owns its own selection. Drop the old popup and
+              // its ownership record without restoring a layer from the project
+              // that was just replaced.
+              removeIdentifyPopup({ restore: false });
+            } else if (!viewId && identifyPopupState && next.layers !== previous?.layers) {
+              const identifiedLayer = next.layers.find(
+                (layer) => layer.id === identifyPopupState?.identifiedLayerId,
+              );
+              if (!identifiedLayer || !isPopupClickEnabled(identifiedLayer.popup)) {
+                // removeLayer chooses a fallback selected layer before
+                // subscribers run. Force the earlier user selection back when
+                // it still exists instead of leaving that arbitrary fallback.
+                removeIdentifyPopup({ forceRestore: !identifiedLayer });
+                if (!identifiedLayer) next.selectFeature(null);
+              }
+            }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
-              popup?.remove();
+              removeIdentifyPopup();
               if (next.identifyLayerId) featureSelection.cancel.current?.();
               if (!featureSelection.active.current)
                 map.getCanvas().style.cursor = next.identifyLayerId ? "crosshair" : "";
@@ -358,34 +407,78 @@ export function MapboxCanvas({
           if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
           if (!next.identifyLayerId) return;
-          const match = current.identifyFeatures(
-            e.lngLat.toArray(),
-            next.layers.some((l) => l.id === next.identifyLayerId)
-              ? next.identifyLayerId
-              : undefined,
-          )[0];
-          popup?.remove();
-          if (!match) {
+          const identifyAll = next.identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+          const targetLayer = identifyAll
+            ? undefined
+            : next.layers.find((layer) => layer.id === next.identifyLayerId);
+          if (!identifyAll && (!targetLayer || !isPopupClickEnabled(targetLayer.popup))) {
+            removeIdentifyPopup();
             next.selectFeature(null);
             return;
           }
-          next.selectLayer(match.layerId);
-          next.selectFeature(match.featureId);
-          const content = document.createElement("div");
-          const title = document.createElement("strong");
-          title.textContent = next.layers.find((l) => l.id === match.layerId)?.name ?? "";
-          content.append(title);
-          for (const [key, value] of Object.entries(match.properties)) {
-            const row = document.createElement("div");
-            row.textContent = `${key}: ${
-              typeof value === "object" ? JSON.stringify(value) : String(value)
-            }`;
-            content.append(row);
+          const match = current
+            .identifyFeatures(e.lngLat.toArray(), targetLayer?.id)
+            .find((hit) => {
+              const layer = next.layers.find((candidate) => candidate.id === hit.layerId);
+              return layer && isPopupClickEnabled(layer.popup);
+            });
+          if (!match) {
+            removeIdentifyPopup();
+            next.selectFeature(null);
+            return;
           }
-          popup = new gl.Popup({ maxWidth: "360px" })
+          const layer = next.layers.find((candidate) => candidate.id === match.layerId);
+          if (!layer) return;
+
+          removeIdentifyPopup();
+          const selectionState = useAppStore.getState();
+          const previousSelectedLayerId = selectionState.selectedLayerId;
+          if (previousSelectedLayerId !== match.layerId) selectionState.selectLayer(match.layerId);
+          selectionState.selectFeature(match.featureId);
+          const feature = match.geometry
+            ? {
+                type: "Feature" as const,
+                properties: match.properties,
+                geometry: match.geometry,
+                ...(match.featureId === null ? {} : { id: match.featureId }),
+              }
+            : undefined;
+          const content = createIdentifyPopupElement(
+            layer.name,
+            match.properties,
+            match.featureId ?? undefined,
+            {
+              popup: layer.popup,
+              fieldVisibility: layer.fieldVisibility,
+              feature,
+              zoom: map.getZoom(),
+            },
+          );
+          const nextPopup = new gl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: "560px",
+          })
             .setLngLat(e.lngLat)
             .setDOMContent(content)
             .addTo(map);
+          popup = nextPopup;
+          let popupState: IdentifyPopupState;
+          const onClose = () => {
+            if (identifyPopupState !== popupState) return;
+            popup = undefined;
+            identifyPopupState = undefined;
+            restoreIdentifySelection(popupState);
+          };
+          popupState = {
+            identifiedLayerId: match.layerId,
+            previousSelectedLayerId,
+            changedSelection: previousSelectedLayerId !== match.layerId,
+            onClose,
+          };
+          identifyPopupState = popupState;
+          nextPopup.once("close", onClose);
         };
         map.on("mousemove", handleMouseMove);
         map.on("mouseout", handleMouseOut);
@@ -417,7 +510,7 @@ export function MapboxCanvas({
         });
         cleanupTasks.push(() => themeObserver.disconnect());
         cleanupTasks.push(() => {
-          popup?.remove();
+          removeIdentifyPopup();
         });
       })
       .catch((error) => {
