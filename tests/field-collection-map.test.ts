@@ -126,6 +126,23 @@ describe("Field Collection renderer-neutral map bridge", () => {
         [8, 9],
       ]);
 
+      // A pinch: the second finger barely moves, but the click is still suppressed.
+      for (const [type, clientX, clientY, pointerId] of [
+        ["pointerdown", 20, 30, 1],
+        ["pointerdown", 60, 70, 2],
+        ["pointerup", 20, 30, 1],
+        ["pointerup", 61, 70, 2],
+      ] as const) {
+        const pointer = new window.Event(type, { bubbles: true });
+        Object.assign(pointer, { clientX, clientY, pointerId });
+        canvas.dispatchEvent(pointer);
+      }
+      canvas.dispatchEvent(draggedClick);
+      assert.deepEqual(clicks, [
+        [8, 9],
+        [8, 9],
+      ]);
+
       stop();
       assert.equal(canvas.style.cursor, "grab");
       canvas.dispatchEvent(event);

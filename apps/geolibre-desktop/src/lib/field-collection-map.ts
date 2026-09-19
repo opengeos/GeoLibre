@@ -1,9 +1,8 @@
-import * as maplibregl from "maplibre-gl";
 import type { MapEngine, MapRenderSurface } from "@geolibre/map";
+import { createStoryMapMarker } from "../components/storymap/storymap-engine";
 import type { GeometryType, Vertex } from "./field-collection";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const DEFAULT_MARKER_OFFSET_Y = -14;
 const DRAG_THRESHOLD_PX = 5;
 
 export interface FieldCollectionMarker {
@@ -33,36 +32,8 @@ export function createFieldCollectionMarker(
   engine: MapEngine,
   color: string,
 ): FieldCollectionMarker | null {
-  const surface = engine.getRenderSurface();
-  if (!surface) return null;
-  const element = new maplibregl.Marker({ color }).getElement();
-  element.style.pointerEvents = "none";
-  surface.getContainer().appendChild(element);
-  let coordinate: Vertex | null = null;
-  let removed = false;
-  const update = () => {
-    if (removed || !coordinate) return;
-    try {
-      const point = surface.project(coordinate);
-      element.style.display = "";
-      element.style.transform = `translate(-50%, -50%) translate(${point.x}px, ${point.y + DEFAULT_MARKER_OFFSET_Y}px)`;
-    } catch {
-      element.style.display = "none";
-    }
-  };
-  const stopFollowing = followCamera(engine, update);
-  return {
-    setLngLat(lngLat) {
-      coordinate = lngLat;
-      update();
-    },
-    remove() {
-      if (removed) return;
-      removed = true;
-      stopFollowing();
-      element.remove();
-    },
-  };
+  // Share the story-map pin so its hand-mirrored MapLibre offset lives in one place.
+  return createStoryMapMarker(engine, color);
 }
 
 /** Draw an in-progress line or polygon above any renderer's canvas. */
@@ -170,8 +141,15 @@ export function listenForFieldCollectionClicks(
   canvas.style.cursor = "crosshair";
   let pointerStart: { x: number; y: number } | null = null;
   let activePointerId: number | null = null;
+  const pointersDown = new Set<number>();
   let dragged = false;
   const onPointerDown = (event: PointerEvent) => {
+    pointersDown.add(event.pointerId);
+    if (pointersDown.size > 1) {
+      // A second finger means a pinch/rotate gesture, never a capture tap.
+      dragged = true;
+      return;
+    }
     activePointerId = event.pointerId;
     pointerStart = { x: event.clientX, y: event.clientY };
     dragged = false;
@@ -183,6 +161,7 @@ export function listenForFieldCollectionClicks(
     if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) dragged = true;
   };
   const onPointerUp = (event: PointerEvent) => {
+    pointersDown.delete(event.pointerId);
     if (event.pointerId !== activePointerId) return;
     pointerStart = null;
     activePointerId = null;
@@ -203,12 +182,14 @@ export function listenForFieldCollectionClicks(
   canvas.addEventListener("pointerdown", onPointerDown, true);
   canvas.addEventListener("pointermove", onPointerMove, true);
   canvas.addEventListener("pointerup", onPointerUp, true);
+  canvas.addEventListener("pointercancel", onPointerUp, true);
   canvas.addEventListener("click", onClick, true);
   canvas.addEventListener("dblclick", onDoubleClick, true);
   return () => {
     canvas.removeEventListener("pointerdown", onPointerDown, true);
     canvas.removeEventListener("pointermove", onPointerMove, true);
     canvas.removeEventListener("pointerup", onPointerUp, true);
+    canvas.removeEventListener("pointercancel", onPointerUp, true);
     canvas.removeEventListener("click", onClick, true);
     canvas.removeEventListener("dblclick", onDoubleClick, true);
     canvas.style.cursor = previousCursor;

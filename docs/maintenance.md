@@ -79,8 +79,9 @@ suite.
 - **`DEFAULT_MARKER_OFFSET_Y`**
   (`apps/geolibre-desktop/src/components/storymap/storymap-engine.ts`) mirrors the
   `-14` px vertical offset `maplibregl.Marker` applies to its default pin.
-  `createStoryMapMarker` positions that pin by hand on every engine (Mapbox,
-  Cesium, ArcGIS, and MapLibre alike), so if a bump changes the default pin's
+  `createStoryMapMarker` (also reused by Field Collection's capture marker in
+  `apps/geolibre-desktop/src/lib/field-collection-map.ts`) positions that pin by
+  hand on every engine (Mapbox, Cesium, ArcGIS, and MapLibre alike), so if a bump changes the default pin's
   anchor or offset, story markers drift off their coordinate with no error.
   Compare with `defaultMarker.ts`/`marker.ts` upstream and play a story on a
   non-MapLibre renderer.

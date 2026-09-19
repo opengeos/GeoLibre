@@ -424,9 +424,11 @@ export function FieldCollectionDialog({
 
   const recenter = useCallback(
     (lng: number, lat: number) => {
-      mapControllerRef.current?.flyTo({
+      const engine = mapControllerRef.current;
+      if (!engine) return;
+      engine.flyTo({
         center: [lng, lat],
-        zoom: Math.max(mapControllerRef.current.readView().zoom, 15),
+        zoom: Math.max(engine.readView().zoom, 15),
       });
     },
     [mapControllerRef],
