@@ -12,6 +12,7 @@ import {
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
+import { applySelectionHighlight, resolveHighlightIds } from "./map-selection";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
@@ -258,27 +259,15 @@ export function MapboxCanvas({
                 next.selectedLayerId !== previous.selectedLayerId ||
                 next.ui.zoomToSelectedFeature !== previous.ui.zoomToSelectedFeature)
             ) {
-              const ids =
-                next.selectedFeatureIds.length > 0
-                  ? next.selectedFeatureIds
-                  : next.selectedFeatureId
-                    ? [next.selectedFeatureId]
-                    : [];
-              const nextKey =
-                next.selectedLayerId && ids.length > 0
-                  ? `${next.selectedLayerId}:${ids.join("\u0000")}`
-                  : null;
-              const fit = Boolean(
-                !restoringIdentifySelection &&
-                next.ui.zoomToSelectedFeature &&
-                nextKey &&
-                nextKey !== previousSelectedFeatureKey,
-              );
-              previousSelectedFeatureKey = nextKey;
-              current.highlightFeature(
-                next.layers.find((l) => l.id === next.selectedLayerId),
-                ids.length > 0 ? ids : null,
-                { fit },
+              previousSelectedFeatureKey = applySelectionHighlight(
+                current,
+                next.layers,
+                next.selectedLayerId,
+                next.selectedFeatureId,
+                next.selectedFeatureIds,
+                next.ui.zoomToSelectedFeature,
+                previousSelectedFeatureKey,
+                restoringIdentifySelection,
               );
             }
             if (!viewId && previous && next.projectGeneration !== previous.projectGeneration) {
@@ -354,12 +343,7 @@ export function MapboxCanvas({
           if (viewId || cancelled) return;
           const next = useAppStore.getState();
           refreshMapboxPointerElevationAfterStyleLoad(pointerElevation, next.pointerCoords);
-          const ids =
-            next.selectedFeatureIds.length > 0
-              ? next.selectedFeatureIds
-              : next.selectedFeatureId
-                ? [next.selectedFeatureId]
-                : [];
+          const ids = resolveHighlightIds(next);
           current.highlightFeature(
             next.layers.find((layer) => layer.id === next.selectedLayerId),
             ids.length > 0 ? ids : null,

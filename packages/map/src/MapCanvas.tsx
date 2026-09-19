@@ -48,6 +48,7 @@ import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import type { MapEngine } from "./map-engine";
+import { applySelectionHighlight, resolveHighlightIds } from "./map-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -681,20 +682,6 @@ function findFeatureId(layer: GeoLibreLayer, feature: maplibregl.MapGeoJSONFeatu
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
-}
-
-/**
- * The features to highlight for the current selection: the full multi-select
- * set when present, otherwise the single anchor (or none). Shared by the
- * selection effect and the map/basemap style-load handlers so a style reload
- * never collapses a multi-selection down to its anchor.
- */
-function resolveHighlightIds(state: {
-  selectedFeatureIds: string[];
-  selectedFeatureId: string | null;
-}): string[] {
-  if (state.selectedFeatureIds.length > 0) return state.selectedFeatureIds;
-  return state.selectedFeatureId ? [state.selectedFeatureId] : [];
 }
 
 function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
@@ -1388,27 +1375,21 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
-    // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
-    const highlightIds = resolveHighlightIds({
-      selectedFeatureIds,
+    const previousKey = previousSelectedFeatureKey.current;
+    const nextKey = applySelectionHighlight(
+      controller.current,
+      layers,
+      selectedLayerId,
       selectedFeatureId,
-    });
-    // Key on the whole selection set, not just the anchor: a Shift-range pick
-    // keeps the anchor fixed while adding features, so an anchor-only key would
-    // never re-fit. Any change to the set re-triggers the fit to frame them all.
-    // Join on NUL — a byte that can't appear in a feature id — so ids containing
-    // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
-    const nextKey =
-      selectedLayerId && highlightIds.length > 0
-        ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
-        : null;
+      selectedFeatureIds,
+      zoomToSelectedFeature,
+      previousKey,
+      false,
+    );
     const shouldFit = Boolean(
-      zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey.current,
+      zoomToSelectedFeature && nextKey && nextKey !== previousKey,
     );
     previousSelectedFeatureKey.current = nextKey;
-    controller.current?.highlightFeature(layer, highlightIds, {
-      fit: shouldFit,
-    });
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);
       if (shouldFit && selectedFeatureId) {
