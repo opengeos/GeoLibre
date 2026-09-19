@@ -128,6 +128,8 @@ export function ControlsMenu({
     maplibreReverseGeocodePlugin,
     primaryRenderer,
   );
+  const directionsDisabled = !directionsSupported && !directionsActive;
+  const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) =>
     viewer && AUTHORING_CONTROL_ITEMS.includes(id) ? false : isMenuItemVisible(uiProfile, id);
@@ -301,9 +303,9 @@ export function ControlsMenu({
           )}
           {show("controls.directions") && (
             <DropdownMenuItem
-              disabled={!directionsSupported && !directionsActive}
+              disabled={directionsDisabled}
               title={
-                !directionsSupported && !directionsActive
+                directionsDisabled
                   ? t("renderer.pluginUnsupported")
                   : t("toolbar.item.directionsTooltip")
               }
@@ -315,9 +317,9 @@ export function ControlsMenu({
           )}
           {show("controls.reverseGeocode") && (
             <DropdownMenuItem
-              disabled={!reverseGeocodeSupported && !reverseGeocodeActive}
+              disabled={reverseGeocodeDisabled}
               title={
-                !reverseGeocodeSupported && !reverseGeocodeActive
+                reverseGeocodeDisabled
                   ? t("renderer.pluginUnsupported")
                   : t("toolbar.item.reverseGeocodeTooltip")
               }
