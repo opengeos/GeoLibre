@@ -1724,9 +1724,8 @@ export const MapCanvas = memo(function MapCanvas({
         selectFeature(null);
         removeIdentifyPopup();
       };
-      const showIdentifyPopup = (content: HTMLElement) => {
-        removeIdentifyPopup();
-        identifyPopup.current = new maplibregl.Popup({
+      const createAndAddIdentifyPopup = (content: HTMLElement) =>
+        new maplibregl.Popup({
           className: "geolibre-identify-popup",
           closeButton: true,
           closeOnClick: false,
@@ -1735,6 +1734,9 @@ export const MapCanvas = memo(function MapCanvas({
           .setLngLat(event.lngLat)
           .setDOMContent(content)
           .addTo(map);
+      const showIdentifyPopup = (content: HTMLElement) => {
+        removeIdentifyPopup();
+        identifyPopup.current = createAndAddIdentifyPopup(content);
       };
       const showResolvedHitPopup = (content: HTMLElement, featureId: string | null) => {
         removeIdentifyPopup();
@@ -1753,15 +1755,7 @@ export const MapCanvas = memo(function MapCanvas({
         const selectionState = useAppStore.getState();
         if (selectionState.selectedLayerId !== layer.id) selectionState.selectLayer(layer.id);
         selectionState.selectFeature(featureId);
-        const popup = new maplibregl.Popup({
-          className: "geolibre-identify-popup",
-          closeButton: true,
-          closeOnClick: false,
-          maxWidth: "560px",
-        })
-          .setLngLat(event.lngLat)
-          .setDOMContent(content)
-          .addTo(map);
+        const popup = createAndAddIdentifyPopup(content);
         identifyPopup.current = popup;
         identifyPopupState = popupState;
         popup.once("close", onClose);
