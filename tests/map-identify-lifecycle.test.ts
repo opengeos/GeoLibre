@@ -78,6 +78,32 @@ describe("identify popup selection lifecycle", () => {
     }
   });
 
+  it("restores the previous selection when closing a popup for an empty-string feature id", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "identified" }), geojsonLayer({ id: "previous" })],
+      selectedLayerId: "previous",
+      selectedFeatureId: "b",
+      selectedFeatureIds: ["a", "b"],
+      ...originalActions,
+    });
+    const state = createIdentifyPopupState({
+      layerId: "identified",
+      featureId: "",
+      onClose: () => {},
+    });
+    const store = useAppStore.getState();
+    store.selectLayer("identified");
+    store.selectFeature("");
+    assert.deepEqual(useAppStore.getState().selectedFeatureIds, [""]);
+
+    removeIdentifyPopup({ off: () => {}, remove: () => {} }, state);
+
+    const next = useAppStore.getState();
+    assert.equal(next.selectedLayerId, "previous");
+    assert.equal(next.selectedFeatureId, "b");
+    assert.deepEqual(next.selectedFeatureIds, ["a", "b"]);
+  });
+
   it("keeps an independent user selection while the popup is open", () => {
     seedMatchingSelection();
     useAppStore.setState({

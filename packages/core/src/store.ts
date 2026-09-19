@@ -1462,7 +1462,9 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: null,
           selectedFeatureIds: [],
         }),
-      selectFeature: (id) => set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
+      // `""` is a valid feature id; only `null` clears the selection.
+      selectFeature: (id) =>
+        set({ selectedFeatureId: id, selectedFeatureIds: id === null ? [] : [id] }),
       selectFeatures: (ids, anchorId) =>
         set({
           selectedFeatureIds: ids,

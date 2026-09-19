@@ -16,6 +16,11 @@ export interface PopupLike {
   off(type: "close", listener: () => void): unknown;
 }
 
+// Module-level, not per canvas: the restore and the store notification that
+// reads this flag run in one synchronous call stack, and only the primary
+// MapboxCanvas (no viewId) opens Identify popups today. If a second engine
+// (e.g. MapCanvas) adopts this module while both can be mounted, scope the
+// flag per caller so one engine's restore can't suppress the other's fit.
 let restoringIdentifySelection = false;
 
 /** Whether the store is synchronously restoring the selection from an Identify popup. */
@@ -52,7 +57,7 @@ export function restoreIdentifySelection(
     !options.force &&
     (next.selectedLayerId !== selection.identifiedLayerId ||
       next.selectedFeatureId !== selection.identifiedFeatureId ||
-      next.selectedFeatureIds.length !== (selection.identifiedFeatureId ? 1 : 0) ||
+      next.selectedFeatureIds.length !== (selection.identifiedFeatureId !== null ? 1 : 0) ||
       (selection.identifiedFeatureId !== null &&
         next.selectedFeatureIds[0] !== selection.identifiedFeatureId))
   ) {

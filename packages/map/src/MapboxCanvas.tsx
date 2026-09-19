@@ -229,6 +229,8 @@ export function MapboxCanvas({
                 next.selectedFeatureIds,
                 next.ui.zoomToSelectedFeature,
                 previousSelectedFeatureKey,
+                // Module-wide flag; safe for the single primary canvas only
+                // (see map-identify-lifecycle.ts).
                 isRestoringIdentifySelection(),
               );
             }
