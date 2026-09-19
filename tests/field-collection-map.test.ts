@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import type { MapEngine, MapRenderSurface } from "@geolibre/map";
 import {
+  createFieldCollectionMarker,
   createFieldCollectionPreview,
   fieldCollectionEventLngLat,
   listenForFieldCollectionClicks,
@@ -93,24 +94,63 @@ describe("Field Collection renderer-neutral map bridge", () => {
       canvas.dispatchEvent(event);
       assert.deepEqual(clicks, [[8, 9]]);
 
+      for (const [type, clientX, clientY, pointerId] of [
+        ["pointerdown", 20, 30, 1],
+        ["pointermove", 80, 90, 2],
+        ["pointerup", 20, 30, 1],
+      ] as const) {
+        const pointer = new window.Event(type, { bubbles: true });
+        Object.assign(pointer, { clientX, clientY, pointerId });
+        canvas.dispatchEvent(pointer);
+      }
+      canvas.dispatchEvent(event);
+      assert.deepEqual(clicks, [
+        [8, 9],
+        [8, 9],
+      ]);
+
       for (const [type, clientX, clientY] of [
         ["pointerdown", 20, 30],
         ["pointermove", 40, 50],
         ["pointerup", 40, 50],
       ] as const) {
         const pointer = new window.Event(type, { bubbles: true });
-        Object.assign(pointer, { clientX, clientY });
+        Object.assign(pointer, { clientX, clientY, pointerId: 1 });
         canvas.dispatchEvent(pointer);
       }
       const draggedClick = new window.Event("click", { bubbles: true });
       Object.assign(draggedClick, { clientX: 40, clientY: 50 });
       canvas.dispatchEvent(draggedClick);
-      assert.deepEqual(clicks, [[8, 9]]);
+      assert.deepEqual(clicks, [
+        [8, 9],
+        [8, 9],
+      ]);
 
       stop();
       assert.equal(canvas.style.cursor, "grab");
       canvas.dispatchEvent(event);
-      assert.deepEqual(clicks, [[8, 9]]);
+      assert.deepEqual(clicks, [
+        [8, 9],
+        [8, 9],
+      ]);
+    });
+  });
+
+  it("keeps markers positioned as the camera moves until removed", () => {
+    withDom((document) => {
+      const { container, engine, moveCamera, wasStopped } = harness(document);
+      const marker = createFieldCollectionMarker(engine, "#ef4444");
+      assert.ok(marker);
+      marker.setLngLat([1, 2]);
+      const element = container.querySelector(".maplibregl-marker") as HTMLElement;
+      assert.ok(element);
+      assert.equal(element.style.transform, "translate(-50%, -50%) translate(10px, 6px)");
+
+      moveCamera(5);
+      assert.equal(element.style.transform, "translate(-50%, -50%) translate(15px, 6px)");
+      marker.remove();
+      assert.equal(container.querySelector(".maplibregl-marker"), null);
+      assert.equal(wasStopped(), true);
     });
   });
 

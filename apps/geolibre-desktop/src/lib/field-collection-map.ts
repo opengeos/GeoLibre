@@ -4,6 +4,7 @@ import type { GeometryType, Vertex } from "./field-collection";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULT_MARKER_OFFSET_Y = -14;
+const DRAG_THRESHOLD_PX = 5;
 
 export interface FieldCollectionMarker {
   setLngLat(lngLat: Vertex): void;
@@ -168,19 +169,23 @@ export function listenForFieldCollectionClicks(
   const previousCursor = canvas.style.cursor;
   canvas.style.cursor = "crosshair";
   let pointerStart: { x: number; y: number } | null = null;
+  let activePointerId: number | null = null;
   let dragged = false;
   const onPointerDown = (event: PointerEvent) => {
+    activePointerId = event.pointerId;
     pointerStart = { x: event.clientX, y: event.clientY };
     dragged = false;
   };
   const onPointerMove = (event: PointerEvent) => {
-    if (!pointerStart) return;
+    if (!pointerStart || event.pointerId !== activePointerId) return;
     const dx = event.clientX - pointerStart.x;
     const dy = event.clientY - pointerStart.y;
-    if (dx * dx + dy * dy > 25) dragged = true;
+    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) dragged = true;
   };
-  const onPointerUp = () => {
+  const onPointerUp = (event: PointerEvent) => {
+    if (event.pointerId !== activePointerId) return;
     pointerStart = null;
+    activePointerId = null;
   };
   const onClick = (event: MouseEvent) => {
     if (dragged) {
