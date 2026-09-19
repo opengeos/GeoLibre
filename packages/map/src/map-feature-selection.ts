@@ -64,22 +64,17 @@ export interface AttachFeatureSelectionOptions {
   onDiagnostic?: (event: SelectionDiagnostic) => void;
 }
 
-const distance = (a: PointLike, b: PointLike) =>
-  Math.hypot(a.x - b.x, a.y - b.y);
+const distance = (a: PointLike, b: PointLike) => Math.hypot(a.x - b.x, a.y - b.y);
 const equalPoints = (a: PointLike, b: PointLike) => a.x === b.x && a.y === b.y;
 
 /** Install GeoLibre's map-selection gestures on either native GL renderer. */
 export function attachFeatureSelection(
   map: FeatureSelectionMap,
-  { state, featureIdAtPoint, onDiagnostic }: AttachFeatureSelectionOptions
+  { state, featureIdAtPoint, onDiagnostic }: AttachFeatureSelectionOptions,
 ): () => void {
-  const tooManyToScan = (
-    candidate: GeoLibreLayer,
-    shape: FeatureSelectionShape
-  ) => {
+  const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
     const featureCount = candidate.geojson?.features?.length ?? 0;
-    if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES)
-      return false;
+    if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES) return false;
     onDiagnostic?.({
       message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
       detail:
@@ -106,10 +101,7 @@ export function attachFeatureSelection(
       state.cancel.current = null;
     };
 
-    const overlay = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "svg"
-    );
+    const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     overlay.setAttribute("aria-hidden", "true");
     Object.assign(overlay.style, {
       position: "absolute",
@@ -119,10 +111,7 @@ export function attachFeatureSelection(
       pointerEvents: "none",
       zIndex: "5",
     });
-    const shape = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "path"
-    );
+    const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
     shape.setAttribute("fill", "rgba(37, 99, 235, 0.16)");
     shape.setAttribute("stroke", "#2563eb");
     shape.setAttribute("stroke-width", "2");
@@ -152,7 +141,7 @@ export function attachFeatureSelection(
         const [a, b] = points;
         shape.setAttribute(
           "d",
-          `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`
+          `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`,
         );
         return;
       }
@@ -163,7 +152,7 @@ export function attachFeatureSelection(
           "d",
           `M ${center.x - radius} ${center.y} a ${radius} ${radius} 0 1 0 ${
             radius * 2
-          } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`
+          } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
         );
         return;
       }
@@ -172,18 +161,13 @@ export function attachFeatureSelection(
         "d",
         `${points
           .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
-          .join(" ")}${closed && points.length > 2 ? " Z" : ""}`
+          .join(" ")}${closed && points.length > 2 ? " Z" : ""}`,
       );
     };
     const polygonFromPoints = (): Polygon | null => {
       let ring = points;
-      const twoPointShape =
-        request.shape === "rectangle" || request.shape === "radius";
-      if (
-        twoPointShape &&
-        (points.length < 2 || equalPoints(points[0], points[1]))
-      )
-        return null;
+      const twoPointShape = request.shape === "rectangle" || request.shape === "radius";
+      if (twoPointShape && (points.length < 2 || equalPoints(points[0], points[1]))) return null;
       if (request.shape === "rectangle" && points.length >= 2) {
         const [a, b] = points;
         ring = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
@@ -233,11 +217,7 @@ export function attachFeatureSelection(
       applyMatchedSelection(
         layer.id,
         matched,
-        selectionModeFromModifiers(
-          Boolean(event.shiftKey),
-          Boolean(event.altKey),
-          request.mode
-        )
+        selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
       );
       if (!keepsFeatureSelectionActive(request.shape)) state.cancel.current?.();
     };
@@ -266,10 +246,7 @@ export function attachFeatureSelection(
     const endDrag = (point: PointLike, modifiers: MouseEvent) => {
       if (!dragging) return;
       dragging = false;
-      if (
-        request.shape === "freehand" &&
-        !equalPoints(points.at(-1) ?? point, point)
-      )
+      if (request.shape === "freehand" && !equalPoints(points.at(-1) ?? point, point))
         points.push(point);
       else if (request.shape !== "freehand") points = [points[0], point];
       finish(modifiers);
@@ -277,8 +254,7 @@ export function attachFeatureSelection(
     const onMouseMove = (event: SelectionMouseEvent) => moveTo(event.point);
     const onWindowMouseMove = (event: MouseEvent) =>
       moveTo(canvasPoint(event.clientX, event.clientY));
-    const onMouseUp = (event: SelectionMouseEvent) =>
-      endDrag(event.point, event.originalEvent);
+    const onMouseUp = (event: SelectionMouseEvent) => endDrag(event.point, event.originalEvent);
     const onWindowMouseUp = (event: MouseEvent) =>
       endDrag(canvasPoint(event.clientX, event.clientY), event);
     const onClick = (event: SelectionMouseEvent) => {
@@ -294,11 +270,7 @@ export function attachFeatureSelection(
       if (request.shape !== "polygon") return;
       event.preventDefault();
       const [last, previous] = [points.at(-1), points.at(-2)];
-      if (
-        last &&
-        previous &&
-        distance(last, previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE
-      )
+      if (last && previous && distance(last, previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE)
         points.pop();
       if (points.length > 2) finish(event.originalEvent);
     };
@@ -326,11 +298,10 @@ export function attachFeatureSelection(
       () => window.removeEventListener("mousemove", onWindowMouseMove),
       () => window.removeEventListener("mouseup", onWindowMouseUp),
       () => window.removeEventListener("keydown", onKeyDown),
-      () => window.removeEventListener("blur", onBlur)
+      () => window.removeEventListener("blur", onBlur),
     );
   };
-  const onRequest = (event: Event) =>
-    begin((event as CustomEvent<FeatureSelectionRequest>).detail);
+  const onRequest = (event: Event) => begin((event as CustomEvent<FeatureSelectionRequest>).detail);
   window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
   return () => {
     window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);

@@ -81,7 +81,9 @@ for (const theme of ["light", "dark"] as const) {
     await expect(canvas).not.toHaveCSS("cursor", "crosshair");
 
     await row.locator('button[aria-label="Layer actions"]').click();
-    await expect(page.getByRole("menuitem", { name: "Zoom to Selection", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Zoom to Selection", exact: true }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await page.screenshot({ path: testInfo.outputPath(`mapbox-feature-selection-${theme}.png`) });
   });
