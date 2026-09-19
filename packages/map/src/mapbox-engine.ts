@@ -117,7 +117,12 @@ const MAPBOX_HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set(MAPBOX_HO
 
 export function redactMapboxError(message: string): string {
   return message
-    .replace(/([?&]access_token=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/([?&](?:access_token|api_key|apikey|token)=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1 [redacted]")
+    .replace(
+      /(["'](?:access_?token|api_?key|token|authorization)["']\s*:\s*["'])[^"']*(["'])/gi,
+      "$1[redacted]$2",
+    )
     .replace(/\b(?:pk|sk)\.[\w.-]+/g, "[redacted]");
 }
 
@@ -691,7 +696,7 @@ export class MapboxEngine implements MapEngine {
         this.previous.set(layer.id, original);
         this.clearError(`layer:${layer.id}`);
       } catch (error) {
-        this.removeLayer(original.id);
+        this.removeLayer(original.id, { preserveError: true });
         if (original.visible) {
           const message = `${original.name}: ${redactMapboxError(String(error))}`;
           this.recordError(`layer:${original.id}`, {
@@ -870,7 +875,7 @@ export class MapboxEngine implements MapEngine {
     }
     if (backups.size === 0) this.storyPaintBackups.delete(layerId);
   }
-  private removeLayer(id: string): void {
+  private removeLayer(id: string, options: { preserveError?: boolean } = {}): void {
     const plan = this.plans.get(id),
       map = this.map;
     if (map && plan) {
@@ -883,7 +888,7 @@ export class MapboxEngine implements MapEngine {
     }
     this.plans.delete(id);
     this.previous.delete(id);
-    this.clearError(`layer:${id}`);
+    if (!options.preserveError) this.clearError(`layer:${id}`);
     if (plan) this.clearError(plan.sourceId);
     for (const id of Object.keys(plan?.additionalSources ?? {})) this.clearError(id);
   }

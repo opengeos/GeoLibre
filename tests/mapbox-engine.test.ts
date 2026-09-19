@@ -4,7 +4,7 @@ import { parseHTML } from "linkedom";
 import type * as mapboxgl from "mapbox-gl";
 import type { Geometry } from "geojson";
 import { useAppStore, type MapPreferences } from "@geolibre/core";
-import { MapboxEngine } from "../packages/map/src/mapbox-engine";
+import { MapboxEngine, redactMapboxError } from "../packages/map/src/mapbox-engine";
 import { isMapboxSupportedLayer } from "../packages/map/src/mapbox-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
@@ -849,6 +849,17 @@ describe("MapboxEngine.syncLayers", () => {
     ]);
   });
 
+  it("redacts common credential formats from diagnostic text", () => {
+    const redacted = redactMapboxError(
+      'https://example.com/data?api_key=url-secret Authorization: Bearer bearer-secret Basic basic-secret {"token":"json-secret","apiKey":"key-secret"}',
+    );
+
+    assert.equal(
+      redacted,
+      'https://example.com/data?api_key=[redacted] Authorization: Bearer [redacted] Basic [redacted] {"token":"[redacted]","apiKey":"[redacted]"}',
+    );
+  });
+
   it("reports renderer errors to Diagnostics once with structured context", () => {
     const diagnosticMap = makeMap();
     const diagnostics: Array<{
@@ -913,6 +924,27 @@ describe("MapboxEngine.syncLayers", () => {
       diagnostics.map((event) => event.message),
       ["tile zero failed", "sprite failed"],
     );
+  });
+
+  it("reports a repeatedly failing layer once until it recovers", () => {
+    const diagnosticMap = makeMap();
+    const diagnostics: Array<{ message: string }> = [];
+    const diagnosticEngine = new MapboxEngine(diagnosticMap as unknown as mapboxgl.Map, gl, "", {
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+    const layer = geojsonLayer({
+      id: "broken-cog",
+      name: "Broken COG",
+      type: "cog",
+      source: { type: "raster", url: "cog://tiles/broken.tif" },
+      geojson: undefined,
+    });
+
+    diagnosticEngine.syncLayers([layer]);
+    diagnosticEngine.syncLayers([layer]);
+
+    assert.equal(diagnostics.length, 1);
+    assert.match(diagnostics[0].message, /^Broken COG: /);
   });
 
   it("labels with the font the loaded basemap style uses", () => {
