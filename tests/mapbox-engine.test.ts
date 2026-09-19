@@ -84,6 +84,9 @@ function makeMap() {
     getSource: (id: string) =>
       sources.has(id)
         ? {
+            // Expose the stored spec's advertised bounds, if any, so the
+            // engine's source-bounds lookup (fitLayer) can read them.
+            bounds: (sources.get(id) as { bounds?: unknown }).bounds,
             setData: (data: unknown) => {
               calls.push(`setData:${id}`);
               sources.set(id, { ...sources.get(id)!, data });
@@ -163,6 +166,17 @@ function makeMap() {
       center = view.center;
       zoom = view.zoom;
       if (view.pitch !== undefined) pitch = view.pitch;
+    },
+    fitBounds: (
+      box: [[number, number], [number, number]],
+      options?: { padding?: number; maxZoom?: number; duration?: number },
+    ) => {
+      // Two separate records so tests can assert on the exact box and the
+      // exact option object the engine passed, without re-parsing one string.
+      calls.push(`fitBounds:${JSON.stringify(box)}`);
+      calls.push(`fitBoundsOptions:${JSON.stringify(options ?? {})}`);
+      center = [(box[0][0] + box[1][0]) / 2, (box[0][1] + box[1][1]) / 2];
+      zoom = 8;
     },
     setMinZoom: (v: number) => calls.push(`setMinZoom:${v}`),
     setMaxZoom: (v: number) => calls.push(`setMaxZoom:${v}`),
@@ -1145,6 +1159,88 @@ describe("MapboxEngine camera and preferences", () => {
       metadata: { externalNativeLayer: true, center: "nowhere" },
     });
     assert.equal(map.calls.length, 4);
+  });
+
+  it("guards fitBounds: ignores non-finite and flies to a point-sized box", () => {
+    const { engine, map } = makeEngine();
+    // Non-finite coordinates are dropped entirely — no camera move.
+    map.calls.length = 0;
+    engine.fitBounds([-10, -5, Infinity, 5]);
+    assert.deepEqual(map.calls, []);
+    // A point-sized box cannot be fit, so the engine flies to the point at a
+    // sensible floor instead of passing a degenerate rectangle.
+    map.calls.length = 0;
+    engine.fitBounds([116.4, 39.9, 116.4, 39.9]);
+    assert.match(map.calls.at(-1)!, /^flyTo:\{"center":\[116\.4,39\.9\],\"zoom\":14,/);
+  });
+
+  it("stops the world-wide fit at a flat-map zoom instead of zooming in", () => {
+    const { engine, map } = makeEngine();
+    // Lay out a viewport so globeSafeMaxZoom can compute a flat-map ceiling
+    // for a span that is wider than a globe can show.
+    (map.getCanvas as () => HTMLCanvasElement) = () =>
+      ({ clientWidth: 1000, clientHeight: 600 }) as HTMLCanvasElement;
+    map.calls.length = 0;
+    // A full-world span.
+    engine.fitBounds([-180, -85, 180, 85]);
+    const fit = map.calls.find((c) => c.startsWith("fitBounds:"));
+    assert.ok(fit, `expected a fitBounds call, got ${JSON.stringify(map.calls)}`);
+    const options = JSON.parse(
+      map.calls.find((c) => c.startsWith("fitBoundsOptions:"))!.slice("fitBoundsOptions:".length),
+    );
+    // The recorded option must NOT be the old hard-coded 14: the ceiling for a
+    // hemisphere-wide extent under a known viewport is well below 14, proving
+    // the dynamic cap replaced the constant.
+    assert.ok(
+      options.maxZoom === undefined || options.maxZoom !== 14,
+      `expected a dynamic ceiling, not the hard-coded 14; got ${options.maxZoom}`,
+    );
+  });
+
+  it("resolves fitLayer bounds from metadata and then the native source", () => {
+    const { engine, map } = makeEngine();
+    // With no geojson and no metadata bounds, the source's advertised bounds
+    // are the fallback (the previous code only looked at live GeoJSON).
+    const layer = {
+      ...geojsonLayer(),
+      geojson: undefined,
+      source: {},
+      metadata: { bounds: [-120, 32, -114, 40] },
+    };
+    map.calls.length = 0;
+    engine.fitLayer(layer);
+    const fit = map.calls.find((c) => c.startsWith("fitBounds:"));
+    assert.ok(fit, `expected a fitBounds from metadata, got ${JSON.stringify(map.calls)}`);
+    const box = JSON.parse(fit!.slice("fitBounds:".length));
+    assert.deepEqual(box, [
+      [-120, 32],
+      [-114, 40],
+    ]);
+
+    // And a source-bounds fallback when there is no metadata either: the
+    // engine's source plan is the last resort.
+    const { engine: eng2, map: map2 } = makeEngine();
+    map2.sources.set("tile-src", { bounds: [10, 20, 20, 30] });
+    // Prime the plan directly so the source-bounds lookup finds it.
+    (
+      eng2 as unknown as {
+        plans: Map<string, { sourceId: string; additionalSources?: Record<string, unknown> }>;
+      }
+    ).plans.set("geojson-layer", { sourceId: "tile-src", additionalSources: {} } as never);
+    map2.calls.length = 0;
+    eng2.fitLayer({
+      ...geojsonLayer(),
+      id: "geojson-layer",
+      geojson: undefined,
+      source: {},
+      metadata: {},
+    });
+    const fit2 = map2.calls.find((c) => c.startsWith("fitBounds:"));
+    assert.ok(fit2, `expected a fitBounds from source, got ${JSON.stringify(map2.calls)}`);
+    assert.deepEqual(JSON.parse(fit2!.slice("fitBounds:".length)), [
+      [10, 20],
+      [20, 30],
+    ]);
   });
 
   it("clamps a saved camera to the project preferences before moving", () => {
