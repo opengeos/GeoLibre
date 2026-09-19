@@ -132,7 +132,7 @@ function diagnosticResourceKey(url: string | undefined, message: string): string
   try {
     const parsed = new URL(url);
     const path = parsed.pathname
-      .replace(/\/(?:-?\d+(?:\.\d+)?)(?=\/|\.|$)/g, "/{n}")
+      .replace(/\/(?:-?\d+(?:\.\d+)?)(?=[/.@]|$)/g, "/{n}")
       .replace(/\/\d+-\d+(?=\.|$)/g, "/{range}");
     return `map:${parsed.origin}${path}`;
   } catch {

@@ -179,9 +179,14 @@ describe("attachFeatureSelection", () => {
         active: { current: false },
         cancel: { current: null },
       };
+      let ended = 0;
       const detach = attachFeatureSelection(map, {
         state,
         featureIdAtPoint: () => "inside",
+        onEnd: () => {
+          ended += 1;
+          canvas.style.cursor = "crosshair";
+        },
       });
 
       requestSelection("single");
@@ -199,7 +204,8 @@ describe("attachFeatureSelection", () => {
       assert.equal(state.active.current, false);
       assert.equal(state.cancel.current, null);
       assert.equal(cameraEnabled.get("boxZoom"), true);
-      assert.equal(canvas.style.cursor, "");
+      assert.equal(canvas.style.cursor, "crosshair");
+      assert.equal(ended, 1);
       assert.equal(container.querySelector("svg"), null);
       assert.ok([...listeners.values()].every((registered) => registered.size === 0));
     });

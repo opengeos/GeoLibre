@@ -66,6 +66,7 @@ export interface AttachFeatureSelectionOptions {
   state: FeatureSelectionState;
   featureIdAtPoint: (layer: GeoLibreLayer, point: PointLike) => string | null;
   onDiagnostic?: (event: SelectionDiagnostic) => void;
+  onEnd?: () => void;
 }
 
 const distance = (a: PointLike, b: PointLike) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -74,7 +75,7 @@ const equalPoints = (a: PointLike, b: PointLike) => a.x === b.x && a.y === b.y;
 /** Install GeoLibre's map-selection gestures on either native GL renderer. */
 export function attachFeatureSelection(
   map: FeatureSelectionMap,
-  { state, featureIdAtPoint, onDiagnostic }: AttachFeatureSelectionOptions,
+  { state, featureIdAtPoint, onDiagnostic, onEnd }: AttachFeatureSelectionOptions,
 ): () => void {
   const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
     const featureCount = candidate.geojson?.features?.length ?? 0;
@@ -103,6 +104,7 @@ export function attachFeatureSelection(
       cleanups.forEach((cleanup) => cleanup());
       state.active.current = false;
       state.cancel.current = null;
+      onEnd?.();
     };
 
     const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");

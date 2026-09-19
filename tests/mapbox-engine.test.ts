@@ -928,6 +928,16 @@ describe("MapboxEngine.syncLayers", () => {
       }),
     });
     diagnosticMap.fire("error", {
+      error: Object.assign(new Error("retina tile zero failed"), {
+        resource: "https://tiles.example.com/4/2/0@2x.png",
+      }),
+    });
+    diagnosticMap.fire("error", {
+      error: Object.assign(new Error("retina tile one failed"), {
+        resource: "https://tiles.example.com/4/2/1@2x.png",
+      }),
+    });
+    diagnosticMap.fire("error", {
       error: Object.assign(new Error("sprite failed"), {
         resource: "https://tiles.example.com/styles/main/sprite.json",
       }),
@@ -935,7 +945,7 @@ describe("MapboxEngine.syncLayers", () => {
 
     assert.deepEqual(
       diagnostics.map((event) => event.message),
-      ["tile zero failed", "sprite failed"],
+      ["tile zero failed", "retina tile zero failed", "sprite failed"],
     );
   });
 

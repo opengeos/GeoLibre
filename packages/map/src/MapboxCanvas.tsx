@@ -127,6 +127,10 @@ export function MapboxCanvas({
               state: featureSelection,
               featureIdAtPoint: (layer, point) => current.featureIdAtPoint(layer.id, point),
               onDiagnostic: (event) => diagnosticCallback.current?.(event),
+              onEnd: () => {
+                if (!cancelled && useAppStore.getState().identifyLayerId)
+                  map.getCanvas().style.cursor = "crosshair";
+              },
             });
         // Arm the global-listener cleanup before any engine/store setup that
         // can throw, so a rejected initialization cannot leak the selection
