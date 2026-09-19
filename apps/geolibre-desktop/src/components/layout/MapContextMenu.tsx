@@ -128,11 +128,12 @@ export function MapContextMenu({
       let coordinate: { lng: number; lat: number };
       try {
         coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-      } catch {
+      } catch (error) {
         // Globe renderers can return no coordinate when the pointer is over
         // empty space beyond the planet. In that case there is no point for
         // the menu actions to operate on.
-        return;
+        if (error instanceof RangeError) return;
+        throw error;
       }
       seqRef.current += 1;
       setMenu({

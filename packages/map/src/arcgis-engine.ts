@@ -489,7 +489,8 @@ export class ArcgisEngine implements MapEngine {
       },
       unproject: (p) => {
         const point = this.view?.toMap({ x: p[0], y: p[1] });
-        return point ? { lng: point.longitude, lat: point.latitude } : { lng: 0, lat: 0 };
+        if (!point) throw new RangeError("The requested point is outside the map view");
+        return { lng: point.longitude, lat: point.latitude };
       },
       redraw: () => {},
     };

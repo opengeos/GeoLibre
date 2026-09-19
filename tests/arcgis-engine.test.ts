@@ -475,6 +475,11 @@ describe("ArcgisEngine camera conventions", () => {
     engine.applyView({ center: [1, 2], zoom: 7, bearing: 45, pitch: 0 });
     assert.equal(goTo.length, 1);
   });
+  it("rejects a screen point that has no map location", () => {
+    const { engine, rawView } = makeSceneEngine();
+    rawView.toMap = () => null;
+    assert.throws(() => engine.getRenderSurface()?.unproject([10, 20]), /outside the map view/);
+  });
   it("clamps saved views against the project preferences before the jump", () => {
     const { engine, goTo } = makeEngine();
     engine.applyMapPreferences({
