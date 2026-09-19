@@ -123,7 +123,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     if (!getVectorTool(resolved.toolId)) {
       setLog((prev) => [
         ...prev,
-        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
+        `Error: ${t("processing.history.toolUnavailable", {
+          toolId: rerun.toolId,
+        })}`,
       ]);
       setProcessingRerun(null);
       return;
@@ -157,16 +159,15 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       params.north !== undefined
     )
       return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
+    const b = mapControllerRef.current?.getViewBounds();
+    if (!b) return;
     const round = (n: number) => Number(n.toFixed(6));
     setParams((prev) => ({
       ...prev,
-      west: round(b.getWest()),
-      south: round(b.getSouth()),
-      east: round(b.getEast()),
-      north: round(b.getNorth()),
+      west: round(b[0]),
+      south: round(b[1]),
+      east: round(b[2]),
+      north: round(b[3]),
     }));
     // params.west/south/east/north are read as a one-time guard; re-running only
     // when the source changes is intentional.
@@ -333,7 +334,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       for (const message of result.messages) appendLog(message);
       // The engine response is untyped JSON; verify it is a FeatureCollection
       // before handing it to the map.
-      const remoteResult = result.geojson as { type?: string; features?: unknown } | null;
+      const remoteResult = result.geojson as {
+        type?: string;
+        features?: unknown;
+      } | null;
       if (remoteResult?.type === "FeatureCollection" && Array.isArray(remoteResult.features)) {
         addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
         return null;
@@ -397,12 +401,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
           fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
           addResultLayer,
           duckdb,
-          viewportBounds: () => {
-            const map = mapControllerRef.current?.getMap();
-            if (!map) return null;
-            const b = map.getBounds();
-            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-          },
+          viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
         };
         await tool.run(ctx);
       }
@@ -515,7 +514,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                         return {
                           ...localized,
                           max,
-                          label: t("processing.vectorTools.resolutionRange", { max }),
+                          label: t("processing.vectorTools.resolutionRange", {
+                            max,
+                          }),
                         };
                       })()
                     : localized;

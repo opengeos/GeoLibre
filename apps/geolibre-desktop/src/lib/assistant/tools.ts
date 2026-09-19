@@ -268,12 +268,8 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
       : Promise.resolve(true);
 
   /** The current map viewport as [west, south, east, north], or null. */
-  const viewBbox = (): [number, number, number, number] | null => {
-    const map = deps.getMapController()?.getMap();
-    if (!map) return null;
-    const b = map.getBounds();
-    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  };
+  const viewBbox = (): [number, number, number, number] | null =>
+    deps.getMapController()?.getViewBounds() ?? null;
 
   /** Reduce a STAC bbox (2D or 3D) to a 2D [w, s, e, n]. */
   const bbox2d = (bbox: number[]): [number, number, number, number] | null =>
@@ -453,13 +449,19 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
 
   const addTileLayer = tool({
     name: "add_tile_layer",
-    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a custom XYZ url template containing {z}/{x}/{y}. The layer is placed underneath existing layers so it acts as a basemap.`,
+    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map(
+      (basemap) => basemap.id,
+    ).join(
+      ", ",
+    )}) or a custom XYZ url template containing {z}/{x}/{y}. The layer is placed underneath existing layers so it acts as a basemap.`,
     inputSchema: z.object({
       basemap: z
         .string()
         .optional()
         .describe(
-          `Known basemap name, one of: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}.`,
+          `Known basemap name, one of: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(
+            ", ",
+          )}.`,
         ),
       url: z
         .string()
@@ -480,7 +482,9 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
           attribution = attribution || found.attribution;
         } else if (!url) {
           throw new Error(
-            `Unknown basemap "${input.basemap}". Known: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")} — or pass a url.`,
+            `Unknown basemap "${input.basemap}". Known: ${NAMED_TILE_BASEMAPS.map(
+              (basemap) => basemap.id,
+            ).join(", ")} — or pass a url.`,
           );
         }
       }
@@ -545,7 +549,9 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
 
   const setBasemap = tool({
     name: "set_basemap",
-    description: `Switch the basemap. Accepts a known name (${OPENFREEMAP_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a full style URL.`,
+    description: `Switch the basemap. Accepts a known name (${OPENFREEMAP_BASEMAPS.map(
+      (basemap) => basemap.id,
+    ).join(", ")}) or a full style URL.`,
     inputSchema: z.object({
       basemap: z.string().describe("A basemap name/id or a style URL."),
     }),
@@ -625,7 +631,10 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
     }),
     callback: async (input) => {
       if (!(await approveCodeExecution("run_maplibre_js", input.code))) {
-        return json({ ok: false, error: "The user declined to run this code." });
+        return json({
+          ok: false,
+          error: "The user declined to run this code.",
+        });
       }
       const map = deps.getMapController()?.getMap();
       if (!map) throw new Error("The map is not ready yet.");

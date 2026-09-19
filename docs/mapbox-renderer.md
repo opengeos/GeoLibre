@@ -104,8 +104,8 @@ browser against an authenticated Mapbox map):
 - **Time Slider** for XYZ, WMS, GeoJSON and TiTiler-served COG sources. A COG
   bound to the `gpu` / `wasm` engines (MapLibre-only tile protocols) is
   re-added through TiTiler; a mosaic manifest is dropped with a console
-  warning. Pixel identify and time series read the COG bytes directly and are
-  unaffected.
+  warning. Pixel identify and pixel time series are not available while Mapbox
+  is primary because those interactions still depend on the MapLibre map.
 - **Timelapse**, including recording the Mapbox canvas to video.
 - **Elevation Profile**, **USGS LiDAR** (the 3DEP index raster is adopted
   natively; point clouds already drew through deck.gl), and **Mapillary**
@@ -167,12 +167,11 @@ browser against an authenticated Mapbox map):
   rather than by the style layer id it drives, because the engine publishes the
   same style-layer-id-to-name bridge MapController does
   (`packages/map/src/layer-labels.ts`); without it a row read
-  `geolibre-mapbox-<id>-geojson-fill`. The deck.gl **raster provider stays MapLibre-only**: it mirrors
-  COG and `maplibre-gl-raster` layers onto the comparison pane, and both of
-  those controls register MapLibre tile protocols, so neither draws on Mapbox in
-  the first place. A project authored on MapLibre can still carry such layers,
-  and the swipe panel omits them rather than offering sides for layers that are
-  not on screen. One known defect: changing the basemap while the swipe is
+  `geolibre-mapbox-<id>-geojson-fill`. The deck.gl **raster provider stays
+  MapLibre-only**: COG and `maplibre-gl-raster` layers can draw on the primary
+  Mapbox map through its deck.gl adapter, but the swipe provider cannot mirror
+  them into the comparison pane. The swipe panel therefore omits those layers.
+  One known defect: changing the basemap while the swipe is
   active leaves the previous comparison pane — and the map inside it, a live
   WebGL context — orphaned on the Mapbox canvas. The swipe itself keeps working
   against the new basemap. The same sequence on MapLibre leaves one pane, so it

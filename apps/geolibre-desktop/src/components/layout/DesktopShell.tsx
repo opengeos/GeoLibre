@@ -941,7 +941,11 @@ export function DesktopShell({
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef);
-  const commentTool = useCommentTool({ mapControllerRef, collaboration, mapReadyGeneration });
+  const commentTool = useCommentTool({
+    mapControllerRef,
+    collaboration,
+    mapReadyGeneration,
+  });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
@@ -1987,7 +1991,9 @@ export function DesktopShell({
               const containers = await importGeoPackageDrops(restPaths, {
                 readPath: readLocalFileBytes,
                 addFile: (file, sourcePath) =>
-                  addVectorFileToMap(createAppAPI(mapControllerRef), file, { sourcePath }),
+                  addVectorFileToMap(createAppAPI(mapControllerRef), file, {
+                    sourcePath,
+                  }),
                 onError: (name, error) =>
                   setDropError(
                     `${name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -2186,7 +2192,9 @@ export function DesktopShell({
           const containers = await importGeoPackageDrops(restFiles, {
             readPath: readLocalFileBytes,
             addFile: (file, sourcePath) =>
-              addVectorFileToMap(createAppAPI(mapControllerRef), file, { sourcePath }),
+              addVectorFileToMap(createAppAPI(mapControllerRef), file, {
+                sourcePath,
+              }),
             onError: (name, error) =>
               setDropError(`${name}: ${error instanceof Error ? error.message : String(error)}`),
           });
@@ -2765,10 +2773,6 @@ export function DesktopShell({
                     <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
                   </SilentErrorBoundary>
                   <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
-                  <MapLegendPanel
-                    mapControllerRef={mapControllerRef}
-                    mapReadyGeneration={mapReadyGeneration}
-                  />
                   <Suspense fallback={null}>
                     <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
                   </Suspense>
@@ -2779,6 +2783,10 @@ export function DesktopShell({
               )}
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
+              <MapLegendPanel
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <StoryMapComposeBar
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

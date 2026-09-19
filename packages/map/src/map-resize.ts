@@ -1,4 +1,10 @@
-import type { Map as MapLibreMap } from "maplibre-gl";
+/** Shared resize surface implemented by both maplibre-gl and mapbox-gl. */
+interface ResizableGlMap {
+  getCanvas(): HTMLCanvasElement;
+  resize(): unknown;
+  once(type: "render", listener: () => void): unknown;
+  off(type: "render", listener: () => void): unknown;
+}
 
 /** Dispatched by the drag-resizable docked panels when a splitter drag begins. */
 export const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
@@ -12,8 +18,8 @@ export const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 export const RESIZE_DEBOUNCE_MS = 100;
 
 export interface MapResizeSchedulerOptions {
-  /** The MapLibre map, read lazily so the scheduler survives style reloads. */
-  getMap: () => MapLibreMap | null | undefined;
+  /** The GL map, read lazily so the scheduler survives style reloads. */
+  getMap: () => ResizableGlMap | null | undefined;
   /** The element the map is mounted in; observed for size changes. */
   container: HTMLElement;
 }
@@ -50,7 +56,7 @@ export function createMapResizeScheduler({
   let frameSnapshot: HTMLCanvasElement | null = null;
   let frameSnapshotDevicePixelRatio = 1;
   let overlayBackgroundColor = "";
-  let overlayMap: MapLibreMap | null = null;
+  let overlayMap: ResizableGlMap | null = null;
   let renderCleanupArmed = false;
   const backgroundIsTransparent = (color: string) =>
     !color || color === "transparent" || color === "rgba(0, 0, 0, 0)";

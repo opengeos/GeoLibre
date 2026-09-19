@@ -1300,11 +1300,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // raster instead of being occluded by it. Toggling the button (or closing the
   // panel) aborts an in-flight draw.
   const handleDrawBbox = async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const engine = mapControllerRef.current;
+    if (!engine) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
+    const map = engine.getMap();
     if (drawing) {
       drawAbortRef.current?.abort();
       return;
@@ -1313,38 +1314,65 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     const controller = new AbortController();
     drawAbortRef.current = controller;
     setDrawing(true);
+    let enginePreview: (() => void) | undefined;
     try {
-      const extent = await drawPrintExtent(map, {
-        signal: controller.signal,
-        drawBox: false,
-        // Project the box corners to viewport space (map.project is canvas-
-        // relative, so add the canvas offset). The map is pan/zoom-locked during
-        // the draw, so corners only move as the box is dragged.
-        onPreview: (box) => {
-          if (!box) {
-            setDrawPoints(null);
-            return;
-          }
-          const rect = map.getCanvas().getBoundingClientRect();
-          const [w, s, e, n] = box;
-          const corners: [number, number][] = [
-            [w, n],
-            [e, n],
-            [e, s],
-            [w, s],
-          ];
-          setDrawPoints(
-            corners.map(([lng, lat]) => {
-              const p = map.project([lng, lat]);
-              return { x: p.x + rect.left, y: p.y + rect.top };
-            }),
-          );
-        },
-      });
+      const extent = map
+        ? await drawPrintExtent(map, {
+            signal: controller.signal,
+            drawBox: false,
+            // Project the box corners to viewport space (map.project is canvas-
+            // relative, so add the canvas offset). The map is pan/zoom-locked during
+            // the draw, so corners only move as the box is dragged.
+            onPreview: (box) => {
+              if (!box) {
+                setDrawPoints(null);
+                return;
+              }
+              const rect = map.getCanvas().getBoundingClientRect();
+              const [w, s, e, n] = box;
+              const corners: [number, number][] = [
+                [w, n],
+                [e, n],
+                [e, s],
+                [w, s],
+              ];
+              setDrawPoints(
+                corners.map(([lng, lat]) => {
+                  const p = map.project([lng, lat]);
+                  return { x: p.x + rect.left, y: p.y + rect.top };
+                }),
+              );
+            },
+          })
+        : await new Promise<[number, number, number, number] | null>((resolve) => {
+            let settled = false;
+            const finish = (value: [number, number, number, number] | null) => {
+              if (settled) return;
+              settled = true;
+              resolve(value);
+            };
+            const dispose = engine.drawExtent({
+              onChange: (box) => {
+                enginePreview?.();
+                enginePreview = engine.showExtent(box);
+              },
+              onDone: (box) => finish(box),
+              onCancel: () => finish(null),
+            });
+            controller.signal.addEventListener(
+              "abort",
+              () => {
+                dispose();
+                finish(null);
+              },
+              { once: true },
+            );
+          });
       if (controller.signal.aborted) return;
       if (extent) applyMapExtent(extent);
     } finally {
-      clearPrintExtent(map);
+      if (map) clearPrintExtent(map);
+      enginePreview?.();
       setDrawPoints(null);
       if (drawAbortRef.current === controller) {
         drawAbortRef.current = null;
@@ -1434,7 +1462,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         return { name: fileName, bytes, geojson };
       });
       browsedInputsRef.current.set(paramName, inputs);
-      setValues((prev) => ({ ...prev, [paramName]: inputs.map((input) => input.name).join(", ") }));
+      setValues((prev) => ({
+        ...prev,
+        [paramName]: inputs.map((input) => input.name).join(", "),
+      }));
     },
     [],
   );
@@ -3225,7 +3256,10 @@ function PathBrowseButton({
         });
         if (picked.length > 0) {
           onPickFiles(
-            picked.map((file) => ({ fileName: file.path, bytes: new Uint8Array(file.data) })),
+            picked.map((file) => ({
+              fileName: file.path,
+              bytes: new Uint8Array(file.data),
+            })),
           );
         }
       }

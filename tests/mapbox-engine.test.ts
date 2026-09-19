@@ -110,19 +110,28 @@ function makeMap() {
         1,
       );
     },
-    moveLayer: (id: string) => {
+    moveLayer: (id: string, beforeId?: string) => {
       const index = layers.findIndex((l) => l.id === id);
-      layers.push(...layers.splice(index, 1));
+      const [layer] = layers.splice(index, 1);
+      const beforeIndex = beforeId ? layers.findIndex((l) => l.id === beforeId) : -1;
+      if (beforeIndex >= 0) layers.splice(beforeIndex, 0, layer);
+      else layers.push(layer);
     },
     setPaintProperty: (id: string, key: string, value: unknown) => {
       calls.push(`setPaintProperty:${id}:${key}`);
       const layer = layers.find((l) => l.id === id)!;
-      layer.paint = { ...(layer.paint as Record<string, unknown>), [key]: value };
+      layer.paint = {
+        ...(layer.paint as Record<string, unknown>),
+        [key]: value,
+      };
     },
     setLayoutProperty: (id: string, key: string, value: unknown) => {
       calls.push(`setLayoutProperty:${id}:${key}`);
       const layer = layers.find((l) => l.id === id)!;
-      layer.layout = { ...(layer.layout as Record<string, unknown>), [key]: value };
+      layer.layout = {
+        ...(layer.layout as Record<string, unknown>),
+        [key]: value,
+      };
     },
     getPaintProperty: (id: string, key: string) =>
       (layers.find((l) => l.id === id)?.paint as Record<string, unknown> | undefined)?.[key],
@@ -292,7 +301,11 @@ describe("MapboxEngine construction", () => {
     const map = makeMap();
     map.setStyleLoaded(false);
     const engine = new MapboxEngine(map as unknown as mapboxgl.Map, gl, "", {
-      controlVisibility: { attribution: false, terrain: true, "layer-control": false },
+      controlVisibility: {
+        attribution: false,
+        terrain: true,
+        "layer-control": false,
+      },
     });
     // Attribution cannot be hidden by an override either.
     assert.ok(controlNames(map).includes("AttributionControl"));
@@ -371,7 +384,10 @@ describe("MapboxEngine construction", () => {
   it("forwards the translated compass label, including to a compass re-added later", () => {
     const { engine, map } = makeEngine();
     const { document, window } = parseHTML("<html><body></body></html>");
-    const previous = { document: globalThis.document, window: globalThis.window };
+    const previous = {
+      document: globalThis.document,
+      window: globalThis.window,
+    };
     Object.assign(globalThis, { document, window });
     try {
       const compassMap = {
@@ -399,7 +415,10 @@ describe("MapboxEngine construction", () => {
     const scale = () => map.controls.find((c) => c instanceof FakeScaleControl) as FakeControl;
     assert.equal(scale().options?.maxWidth, 120);
     assert.equal(scale().unit, "metric");
-    engine.applyMapPreferences({ scaleUnit: "imperial", bounds: [0, 0, 1, 1] } as MapPreferences);
+    engine.applyMapPreferences({
+      scaleUnit: "imperial",
+      bounds: [0, 0, 1, 1],
+    } as MapPreferences);
     assert.equal(scale().unit, "imperial");
     // A scale bar re-added later is built with the remembered unit.
     engine.setBuiltInControlVisible("scale", false);
@@ -448,13 +467,19 @@ describe("MapboxEngine.syncLayers", () => {
       layers: map.layers as { id: string; type: string }[],
     });
     const { document, window } = parseHTML("<html><body></body></html>");
-    const previous = { document: globalThis.document, window: globalThis.window };
+    const previous = {
+      document: globalThis.document,
+      window: globalThis.window,
+    };
     Object.assign(globalThis, { document, window });
     try {
       body(
         () =>
-          (window as unknown as { __GEOLIBRE_LAYER_LABELS__?: Record<string, string> })
-            .__GEOLIBRE_LAYER_LABELS__ ?? {},
+          (
+            window as unknown as {
+              __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
+            }
+          ).__GEOLIBRE_LAYER_LABELS__ ?? {},
       );
     } finally {
       Object.assign(globalThis, previous);
@@ -487,7 +512,10 @@ describe("MapboxEngine.syncLayers", () => {
           id: "a",
           name: "A",
           type: "xyz",
-          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          source: {
+            type: "raster",
+            tiles: ["https://tiles.test/{z}/{x}/{y}.png"],
+          },
           geojson: undefined,
         }),
         geojsonLayer({ id: "a-b", name: "A B" }),
@@ -509,11 +537,24 @@ describe("MapboxEngine.syncLayers", () => {
       delete layer.geojson;
       layer.source = {
         arcgisSources: {
-          parcels: { type: "vector", tiles: ["https://tiles.test/{z}/{x}/{y}.pbf"] },
+          parcels: {
+            type: "vector",
+            tiles: ["https://tiles.test/{z}/{x}/{y}.pbf"],
+          },
         },
         arcgisLayers: [
-          { id: "parcels-fill", type: "fill", source: "parcels", "source-layer": "parcels" },
-          { id: "parcels-line", type: "line", source: "parcels", "source-layer": "parcels" },
+          {
+            id: "parcels-fill",
+            type: "fill",
+            source: "parcels",
+            "source-layer": "parcels",
+          },
+          {
+            id: "parcels-line",
+            type: "line",
+            source: "parcels",
+            "source-layer": "parcels",
+          },
         ],
       };
       layer.metadata = { nativeLayerIds: ["parcels-fill", "parcels-line"] };
@@ -530,7 +571,10 @@ describe("MapboxEngine.syncLayers", () => {
           id: "raster-a",
           name: "Imagery",
           type: "xyz",
-          source: { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}.png"] },
+          source: {
+            type: "raster",
+            tiles: ["https://tiles.test/{z}/{x}/{y}.png"],
+          },
           geojson: undefined,
         }),
       ]);
@@ -610,7 +654,11 @@ describe("MapboxEngine.syncLayers", () => {
         geojson: {
           type: "FeatureCollection",
           features: [
-            { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 2] } },
+            {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "Point", coordinates: [1, 2] },
+            },
           ],
         },
       },
@@ -630,6 +678,93 @@ describe("MapboxEngine.syncLayers", () => {
     assert.deepEqual(order().slice(0, 3), Array(3).fill("geolibre-mapbox-b"));
     engine.syncLayers([b, a]);
     assert.deepEqual(order().slice(0, 3), Array(3).fill("geolibre-mapbox-a"));
+  });
+
+  it("keeps selection overlays above project layers and adds a polygon fill", () => {
+    map.getStyle = () => ({
+      sources: {},
+      layers: map.layers as { id: string; type: string }[],
+    });
+    const layer = geojsonLayer({
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "polygon",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+    engine.syncLayers([layer]);
+    engine.highlightFeature(layer, ["polygon"]);
+    assert.deepEqual(
+      map.layers.slice(-3).map((entry) => entry.id),
+      [
+        "geolibre-mapbox-highlight-fill",
+        "geolibre-mapbox-highlight-line",
+        "geolibre-mapbox-highlight-point",
+      ],
+    );
+
+    engine.syncLayers([{ ...layer, style: { ...layer.style, fillColor: "#ef4444" } }]);
+    assert.deepEqual(
+      map.layers.slice(-3).map((entry) => entry.id),
+      [
+        "geolibre-mapbox-highlight-fill",
+        "geolibre-mapbox-highlight-line",
+        "geolibre-mapbox-highlight-point",
+      ],
+    );
+  });
+
+  it("leaves Z-aware GeoJSON to deck.gl instead of drawing a flat duplicate", () => {
+    const elevated = geojsonLayer({
+      style: { ...geojsonLayer().style, elevation3dEnabled: true },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [1, 2, 30] },
+          },
+        ],
+      },
+    });
+    engine.syncLayers([elevated]);
+    assert.equal(map.sources.size, 0);
+    assert.equal(map.layers.length, 0);
+
+    engine.syncLayers([
+      {
+        ...elevated,
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "Point", coordinates: [1, 2] },
+            },
+          ],
+        },
+      },
+    ]);
+    assert.ok(map.sources.has(SOURCE));
+    assert.ok(map.layers.length > 0);
   });
 
   it("removes the source and layers of a layer that left the store", () => {
@@ -682,10 +817,22 @@ describe("MapboxEngine.syncLayers", () => {
     map.fire("error", { error: new Error("tile 404"), sourceId: SOURCE });
     assert.deepEqual(engine.getRenderStatus().errors, ["tile 404"]);
     // Metadata and visibility events are not a recovery.
-    map.fire("sourcedata", { sourceId: SOURCE, sourceDataType: "metadata", isSourceLoaded: true });
-    map.fire("sourcedata", { sourceId: SOURCE, sourceDataType: "content", isSourceLoaded: false });
+    map.fire("sourcedata", {
+      sourceId: SOURCE,
+      sourceDataType: "metadata",
+      isSourceLoaded: true,
+    });
+    map.fire("sourcedata", {
+      sourceId: SOURCE,
+      sourceDataType: "content",
+      isSourceLoaded: false,
+    });
     assert.equal(engine.getRenderStatus().errors.length, 1);
-    map.fire("sourcedata", { sourceId: SOURCE, sourceDataType: "content", isSourceLoaded: true });
+    map.fire("sourcedata", {
+      sourceId: SOURCE,
+      sourceDataType: "content",
+      isSourceLoaded: true,
+    });
     assert.deepEqual(engine.getRenderStatus().errors, []);
 
     map.fire("error", { error: new Error("tile 404"), sourceId: SOURCE });
@@ -721,7 +868,10 @@ describe("MapboxEngine.syncLayers", () => {
         {
           id: "place",
           type: "symbol",
-          layout: { "text-field": "{name}", "text-font": ["Noto Sans Regular"] },
+          layout: {
+            "text-field": "{name}",
+            "text-font": ["Noto Sans Regular"],
+          },
         },
       ],
     });
@@ -766,7 +916,10 @@ describe("MapboxEngine.identifyFeatures", () => {
                 ],
               ],
             }),
-            feature(undefined, "Nevada", { type: "Point", coordinates: [0, 0] }),
+            feature(undefined, "Nevada", {
+              type: "Point",
+              coordinates: [0, 0],
+            }),
           ],
         },
       }),
@@ -774,9 +927,24 @@ describe("MapboxEngine.identifyFeatures", () => {
     // `generateId` makes Mapbox report the feature's index as its id, and a
     // polygon spanning two tiles comes back twice.
     map.setQueried([
-      { id: 0, layer: { id: FILL }, properties: { name: "California" }, geometry: null },
-      { id: 0, layer: { id: LINE }, properties: { name: "California" }, geometry: null },
-      { id: 1, layer: { id: CIRCLE }, properties: { name: "Nevada" }, geometry: null },
+      {
+        id: 0,
+        layer: { id: FILL },
+        properties: { name: "California" },
+        geometry: null,
+      },
+      {
+        id: 0,
+        layer: { id: LINE },
+        properties: { name: "California" },
+        geometry: null,
+      },
+      {
+        id: 1,
+        layer: { id: CIRCLE },
+        properties: { name: "Nevada" },
+        geometry: null,
+      },
     ]);
     const found = engine.identifyFeatures([0, 0]);
     assert.deepEqual(
@@ -831,10 +999,17 @@ describe("MapboxEngine camera and preferences", () => {
     engine.fitLayer({
       ...tileset,
       type: "lidar",
-      metadata: { ...tileset.metadata, sourceKind: "lidar-url", zoom: undefined },
+      metadata: {
+        ...tileset.metadata,
+        sourceKind: "lidar-url",
+        zoom: undefined,
+      },
     });
     assert.equal(map.calls.at(-1), 'flyTo:{"center":[-75,40],"zoom":16}');
-    engine.fitLayer({ ...tileset, metadata: { externalNativeLayer: true, center: "nowhere" } });
+    engine.fitLayer({
+      ...tileset,
+      metadata: { externalNativeLayer: true, center: "nowhere" },
+    });
     assert.equal(map.calls.length, 4);
   });
 
@@ -893,7 +1068,11 @@ describe("MapboxEngine camera and preferences", () => {
     assert.equal(engine.isTerrainEnabled(), true);
 
     map.calls.length = 0;
-    engine.applyMapPreferences({ ...preferences, restrictBounds: false, terrainEnabled: false });
+    engine.applyMapPreferences({
+      ...preferences,
+      restrictBounds: false,
+      terrainEnabled: false,
+    });
     assert.ok(map.calls.includes("setMaxBounds:null"));
     assert.ok(map.calls.includes("setTerrain:null"));
   });
@@ -934,7 +1113,11 @@ describe("Mapbox shared raster basemaps", () => {
       type: "raster" as const,
       geojson: undefined,
       source,
-      metadata: { sourceKind: "maplibre-basemap-control", sourceId, nativeLayerIds: [layerId] },
+      metadata: {
+        sourceKind: "maplibre-basemap-control",
+        sourceId,
+        nativeLayerIds: [layerId],
+      },
     };
     engine.syncLayers([layer]);
     assert.equal(map.sources.size, 1);
@@ -953,7 +1136,10 @@ describe("Mapbox plugin-drawn native layers", () => {
     const pending = {
       ...geojsonLayer({ id: "countries" }),
       geojson: undefined,
-      source: { type: "geojson" as const, url: "https://example.test/countries.parquet" },
+      source: {
+        type: "geojson" as const,
+        url: "https://example.test/countries.parquet",
+      },
       metadata: {
         externalNativeLayer: true,
         sourceKind: "maplibre-gl-vector",
@@ -996,7 +1182,11 @@ describe("Mapbox plugin-drawn native layers", () => {
   it("adopts a Web Services raster layer under its native ids and rebuilds it after a style reload", () => {
     const { engine, map } = makeEngine();
     const nativeId = "fema-wms-NFHL";
-    const source = { type: "raster", tiles: ["https://example.test/{z}/{x}/{y}"], tileSize: 256 };
+    const source = {
+      type: "raster",
+      tiles: ["https://example.test/{z}/{x}/{y}"],
+      tileSize: 256,
+    };
     map.addSource(nativeId, source);
     map.addLayer({ id: nativeId, type: "raster", source: nativeId, paint: {} });
     const layer = {
@@ -1040,8 +1230,16 @@ describe("Mapbox plugin-drawn native layers", () => {
     const { engine, map } = makeEngine();
     // A plugin-owned kind (the engine never compiles it) whose plugin also
     // registered a native style layer under the store layer's nativeLayerIds.
-    map.addSource("dep-index", { type: "raster", tiles: ["https://example.test/{z}/{x}/{y}"] });
-    map.addLayer({ id: "dep-index", type: "raster", source: "dep-index", paint: {} });
+    map.addSource("dep-index", {
+      type: "raster",
+      tiles: ["https://example.test/{z}/{x}/{y}"],
+    });
+    map.addLayer({
+      id: "dep-index",
+      type: "raster",
+      source: "dep-index",
+      paint: {},
+    });
     const layer = {
       ...geojsonLayer({ id: "cloud" }),
       type: "lidar" as const,
@@ -1189,7 +1387,12 @@ describe("Mapbox plugin-drawn native layers", () => {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
     });
-    map.addLayer({ id: "footprints-fill", type: "fill", source: "footprints", paint: {} });
+    map.addLayer({
+      id: "footprints-fill",
+      type: "fill",
+      source: "footprints",
+      paint: {},
+    });
     engine.syncLayers([
       {
         ...geojsonLayer({ id: "oam" }),
@@ -1214,8 +1417,16 @@ describe("Mapbox plugin-drawn native layers", () => {
 describe("Mapbox story opacity on plugin-owned layers", () => {
   it("applies a story chapter's transient opacity to a plugin-owned native layer", () => {
     const { engine, map } = makeEngine();
-    map.addSource("dep-index", { type: "raster", tiles: ["https://example.test/{z}/{x}/{y}"] });
-    map.addLayer({ id: "dep-index", type: "raster", source: "dep-index", paint: {} });
+    map.addSource("dep-index", {
+      type: "raster",
+      tiles: ["https://example.test/{z}/{x}/{y}"],
+    });
+    map.addLayer({
+      id: "dep-index",
+      type: "raster",
+      source: "dep-index",
+      paint: {},
+    });
     const layer = {
       ...geojsonLayer({ id: "cloud" }),
       type: "lidar" as const,
@@ -1256,7 +1467,10 @@ describe("Mapbox ArcGIS vector tile services", () => {
           url: "https://example.com/VectorTileServer/",
           tiles: ["https://example.com/VectorTileServer/tile/{z}/{y}/{x}.pbf"],
         },
-        boundaries: { type: "vector", tiles: ["https://example.com/boundaries/{z}/{x}/{y}.pbf"] },
+        boundaries: {
+          type: "vector",
+          tiles: ["https://example.com/boundaries/{z}/{x}/{y}.pbf"],
+        },
       },
       arcgisLayers: [
         {
@@ -1286,11 +1500,17 @@ describe("Mapbox ArcGIS vector tile services", () => {
     const fill = map.layers.find((l) => l.id === "parcels-fill")!;
     assert.deepEqual(fill.filter, ["==", "_symbol", 0]);
     assert.equal(fill.minzoom, 11);
-    assert.deepEqual(fill.paint, { "fill-color": "#ffff00", "fill-opacity": 0.4 });
+    assert.deepEqual(fill.paint, {
+      "fill-color": "#ffff00",
+      "fill-opacity": 0.4,
+    });
     engine.syncLayers([{ ...layer, visible: false }]);
     assert.equal(
-      (map.layers.find((l) => l.id === "parcels-fill")!.layout as { visibility: string })
-        .visibility,
+      (
+        map.layers.find((l) => l.id === "parcels-fill")!.layout as {
+          visibility: string;
+        }
+      ).visibility,
       "none",
     );
     engine.syncLayers([]);
@@ -1305,9 +1525,19 @@ describe("Mapbox ArcGIS vector tile services", () => {
     delete layer.geojson;
     layer.source = {
       // The REST service URL alone is not a TileJSON manifest Mapbox can fetch.
-      arcgisSources: { parcels: { type: "vector", url: "https://example.com/VectorTileServer/" } },
+      arcgisSources: {
+        parcels: {
+          type: "vector",
+          url: "https://example.com/VectorTileServer/",
+        },
+      },
       arcgisLayers: [
-        { id: "parcels-fill", type: "fill", source: "parcels", "source-layer": "parcels" },
+        {
+          id: "parcels-fill",
+          type: "fill",
+          source: "parcels",
+          "source-layer": "parcels",
+        },
       ],
     };
     layer.metadata = { nativeLayerIds: ["parcels-fill"] };
@@ -1339,7 +1569,9 @@ it("retries a Standard visibility change made while its opacity update is loadin
       {
         id: "basemap",
         url: "mapbox://styles/mapbox/standard",
-        data: { schema: { geolibreBasemapOpacity: { type: "number", default: 1 } } },
+        data: {
+          schema: { geolibreBasemapOpacity: { type: "number", default: 1 } },
+        },
       },
     ],
   });
@@ -1431,7 +1663,10 @@ describe("MapboxEngine layer control", () => {
       // The fake's fixed style only names the basemap; the control needs to
       // see the live layer list to classify layers. Start with no root layers
       // at all, the shape of Mapbox Standard (its basemap lives in imports).
-      map.getStyle = () => ({ sources: {}, layers: map.layers as { id: string; type: string }[] });
+      map.getStyle = () => ({
+        sources: {},
+        layers: map.layers as { id: string; type: string }[],
+      });
       // A real map runs a control's onAdd inside addControl; the control
       // detects its layers there, so the fake has to do the same here.
       const mounted = new Map<unknown, HTMLElement>();
@@ -1507,7 +1742,11 @@ describe("MapboxEngine layer control", () => {
 describe("MapboxEngine search result lifecycle", () => {
   it("uses native markers and removes each result exactly once, including on engine teardown", () => {
     const map = makeMap();
-    const markers: { center?: [number, number]; removals: number; color?: string }[] = [];
+    const markers: {
+      center?: [number, number];
+      removals: number;
+      color?: string;
+    }[] = [];
     class Marker {
       center?: [number, number];
       removals = 0;
@@ -1532,8 +1771,14 @@ describe("MapboxEngine search result lifecycle", () => {
       map as unknown as mapboxgl.Map,
       { ...gl, Marker } as unknown as typeof mapboxgl.default,
     );
-    const clearFirst = engine.showSearchResult({ type: "Point", coordinates: [-77.0365, 38.8977] });
-    const clearSecond = engine.showSearchResult({ type: "Point", coordinates: [10, 20] });
+    const clearFirst = engine.showSearchResult({
+      type: "Point",
+      coordinates: [-77.0365, 38.8977],
+    });
+    const clearSecond = engine.showSearchResult({
+      type: "Point",
+      coordinates: [10, 20],
+    });
     assert.deepEqual(markers[0].center, [-77.0365, 38.8977]);
     assert.equal(markers[0].color, "#ef4444");
     clearFirst();

@@ -134,7 +134,9 @@ export function StatisticsToolsDialog({
     if (!getStatisticsTool(rerun.toolId)) {
       setLog((prev) => [
         ...prev,
-        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
+        `Error: ${t("processing.history.toolUnavailable", {
+          toolId: rerun.toolId,
+        })}`,
       ]);
       setProcessingRerun(null);
       return;
@@ -317,12 +319,7 @@ export function StatisticsToolsDialog({
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
         addResultLayer,
-        viewportBounds: () => {
-          const map = mapControllerRef.current?.getMap();
-          if (!map) return null;
-          const b = map.getBounds();
-          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        },
+        viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
       };
       await tool.run(ctx);
       // A logged "Error: ..." line marks a soft failure (the client tools

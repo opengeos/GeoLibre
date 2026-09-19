@@ -137,12 +137,7 @@ function useFieldsByLayer(layers: GeoLibreLayer[], enabled: boolean): Map<string
 function viewportBoundsReader(
   mapControllerRef: React.RefObject<MapEngine | null>,
 ): () => [number, number, number, number] | null {
-  return () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return null;
-    const b = map.getBounds();
-    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  };
+  return () => mapControllerRef.current?.getViewBounds() ?? null;
 }
 
 /**

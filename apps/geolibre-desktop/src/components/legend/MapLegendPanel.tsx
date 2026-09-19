@@ -5,8 +5,8 @@
  * entries, replace a layer's classes with hand-authored items — e.g. NLCD
  * land-cover names — or add standalone custom sections).
  *
- * Mounted as a MapLibre control (see useMapPanelControl) so it stacks with
- * the other corner controls and is captured by Record Video. All state lives
+ * Mounted as a native GL control (see useMapPanelControl) so it stacks with
+ * the other corner controls on MapLibre or Mapbox and is captured by Record Video. All state lives
  * in the store's LegendConfig, so edits persist in the project and are shared
  * with the Print Layout legend.
  */
@@ -203,7 +203,10 @@ export function MapLegendPanel({
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
   const maxHeightRef = useRef<number | null>(null);
   // Live size while a corner handle is being dragged (committed on release).
-  const [dragSize, setDragSize] = useState<{ width: number; height: number } | null>(null);
+  const [dragSize, setDragSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   const visible = legend.panelVisible === true;
   const position = legend.panelPosition ?? "top-left";
@@ -219,7 +222,7 @@ export function MapLegendPanel({
   // never past the map (minus a margin for the corner controls' spacing).
   useEffect(() => {
     if (!host) return;
-    const mapElement = host.closest(".maplibregl-map");
+    const mapElement = host.closest(".maplibregl-map, .mapboxgl-map");
     if (!mapElement) return;
     const update = () => {
       const available = Math.max(MIN_PANEL_HEIGHT, mapElement.clientHeight - 24);
@@ -640,7 +643,10 @@ export function MapLegendPanel({
             <select
               value={position}
               onChange={(event) =>
-                commit({ ...legend, panelPosition: event.target.value as LegendPanelPosition })
+                commit({
+                  ...legend,
+                  panelPosition: event.target.value as LegendPanelPosition,
+                })
               }
               className="h-6 flex-1 rounded-sm border border-input bg-background px-1 text-xs text-foreground focus-visible:outline-none"
             >
@@ -757,12 +763,17 @@ function LegendEntryRow({
           <InlineEdit
             value={entry.name}
             placeholder={entry.defaultName}
-            ariaLabel={t("legendPanel.renameEntry", { name: entry.defaultName })}
+            ariaLabel={t("legendPanel.renameEntry", {
+              name: entry.defaultName,
+            })}
             className="text-sm"
             onCommit={(next) => {
               if (entry.custom && customEntry) {
                 // A custom entry's name lives on the entry itself.
-                onUpdateCustom((current) => ({ ...current, title: next.trim() || undefined }));
+                onUpdateCustom((current) => ({
+                  ...current,
+                  title: next.trim() || undefined,
+                }));
               } else {
                 onCommit(setLegendItemLabel(legend, entry.id, next, entry.defaultName));
               }

@@ -18,6 +18,7 @@ import {
   type FeatureSelectionMap,
   type FeatureSelectionState,
 } from "./map-feature-selection";
+import { createMapResizeScheduler } from "./map-resize";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -44,7 +45,16 @@ export function MapboxCanvas({
   useEffect(() => {
     let cancelled = false;
     let engine: MapboxEngine | undefined;
-    let cleanup = () => {};
+    const cleanupTasks: Array<() => void> = [];
+    const cleanup = () => {
+      for (const dispose of cleanupTasks.splice(0).reverse()) {
+        try {
+          dispose();
+        } catch {
+          // The native map may already have removed a listener/control.
+        }
+      }
+    };
     setError(null);
     void Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")])
       .then(async ([module]) => {
@@ -62,7 +72,9 @@ export function MapboxCanvas({
           // has no handler for it, so fall back rather than load a blank map.
           if (styleUsesUnsupportedSource(style)) {
             console.warn(
-              `Basemap "${redactUrlCredentials(url)}" uses a MapLibre-only source protocol; the Mapbox renderer falls back to the default basemap.`,
+              `Basemap "${redactUrlCredentials(
+                url,
+              )}" uses a MapLibre-only source protocol; the Mapbox renderer falls back to the default basemap.`,
             );
             return DEFAULT_BASEMAP;
           }
@@ -85,6 +97,7 @@ export function MapboxCanvas({
           projection: state.preferences.map.projection,
           attributionControl: false,
           preserveDrawingBuffer: true,
+          trackResize: false,
         });
         engine = new MapboxEngine(map, gl, accessToken, {
           // Split/grid panes share the primary pane's layer control; a second
@@ -109,9 +122,10 @@ export function MapboxCanvas({
         // Arm the global-listener cleanup before any engine/store setup that
         // can throw, so a rejected initialization cannot leak the selection
         // request listener until this effect happens to run again.
-        cleanup = detachFeatureSelection;
+        cleanupTasks.push(detachFeatureSelection);
         let applying = false;
         let popup: Popup | undefined;
+        let previousSelectedFeatureKey: string | null = null;
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
           const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
@@ -165,15 +179,30 @@ export function MapboxCanvas({
             if (
               !viewId &&
               (!previous ||
+                next.layers !== previous.layers ||
                 next.selectedFeatureId !== previous.selectedFeatureId ||
                 next.selectedFeatureIds !== previous.selectedFeatureIds ||
-                next.selectedLayerId !== previous.selectedLayerId)
+                next.selectedLayerId !== previous.selectedLayerId ||
+                next.ui.zoomToSelectedFeature !== previous.ui.zoomToSelectedFeature)
             ) {
-              current.highlightFeature(
-                next.layers.find((l) => l.id === next.selectedLayerId),
+              const ids =
                 next.selectedFeatureIds.length > 0
                   ? next.selectedFeatureIds
-                  : next.selectedFeatureId,
+                  : next.selectedFeatureId
+                    ? [next.selectedFeatureId]
+                    : [];
+              const nextKey =
+                next.selectedLayerId && ids.length > 0
+                  ? `${next.selectedLayerId}:${ids.join("\u0000")}`
+                  : null;
+              const fit = Boolean(
+                next.ui.zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey,
+              );
+              previousSelectedFeatureKey = nextKey;
+              current.highlightFeature(
+                next.layers.find((l) => l.id === next.selectedLayerId),
+                ids.length > 0 ? ids : null,
+                { fit },
               );
             }
             if (previous && next.identifyLayerId !== previous.identifyLayerId) {
@@ -185,27 +214,52 @@ export function MapboxCanvas({
           }
         };
         const unsubscribe = useAppStore.subscribe(update);
-        cleanup = () => {
-          detachFeatureSelection();
-          unsubscribe();
-        };
+        cleanupTasks.push(unsubscribe);
         update(state);
         update(useAppStore.getState(), state);
-        map.on("moveend", (event: MapEventOf<"moveend"> & { flightCameraToken?: number }) => {
+        const handleStyleLoad = () => {
+          if (viewId || cancelled) return;
+          const next = useAppStore.getState();
+          const ids =
+            next.selectedFeatureIds.length > 0
+              ? next.selectedFeatureIds
+              : next.selectedFeatureId
+                ? [next.selectedFeatureId]
+                : [];
+          current.highlightFeature(
+            next.layers.find((layer) => layer.id === next.selectedLayerId),
+            ids.length > 0 ? ids : null,
+          );
+        };
+        map.on("style.load", handleStyleLoad);
+        cleanupTasks.push(() => map.off("style.load", handleStyleLoad));
+        const handleMoveEnd = (
+          event: MapEventOf<"moveend"> & {
+            flightCameraToken?: number;
+            storyCameraToken?: number;
+            originalEvent?: unknown;
+          },
+        ) => {
           if (applying || cancelled) return;
           // The flight simulator owns the camera while it flies and places it
           // every animation frame, tagging each write. Syncing those into the
           // store would overwrite the project's saved view ~60 times a second
           // (MapCanvas skips them the same way).
           if (event?.flightCameraToken !== undefined) return;
+          if (event?.storyCameraToken !== undefined || useAppStore.getState().ui.storymapPresenting)
+            return;
           const next = useAppStore.getState(),
             camera = current.readView();
           // Shared view first (as SecondaryMapCanvas does): each setter notifies
           // subscribers separately, and a synchronized pane reading the changed
           // pane against a stale `mapView` would jump to the old camera first.
-          if (!viewId || next.mapLayout.syncView) next.setMapView(camera, true);
-          if (viewId) next.setSecondaryMapView(viewId, camera, true);
-        });
+          if (!viewId || next.mapLayout.syncView)
+            next.setMapView(camera, Boolean(event?.originalEvent));
+          if (viewId) next.setSecondaryMapView(viewId, camera, Boolean(event?.originalEvent));
+          if (!viewId) next.setCameraAltitude(current.readCameraAltitude());
+        };
+        map.on("moveend", handleMoveEnd);
+        cleanupTasks.push(() => map.off("moveend", handleMoveEnd));
         // Persist clicks on the engine's globe toggle into project preferences,
         // as MapCanvas does for MapLibre's GlobeControl, so a project reopens in
         // the projection it was saved in. The control's own handler runs on the
@@ -220,19 +274,25 @@ export function MapboxCanvas({
           useAppStore.setState((s) => {
             if (s.preferences.map.projection === projection) return s;
             return {
-              preferences: { ...s.preferences, map: { ...s.preferences.map, projection } },
+              preferences: {
+                ...s.preferences,
+                map: { ...s.preferences.map, projection },
+              },
               isDirty: true,
             };
           });
         };
         map.getContainer().addEventListener("click", handleGlobeToggleClick);
-        map.on("mousemove", (e) => {
+        cleanupTasks.push(() =>
+          map.getContainer().removeEventListener("click", handleGlobeToggleClick),
+        );
+        const handleMouseMove = (e: MapEventOf<"mousemove">) => {
           if (!viewId) useAppStore.getState().setPointerCoords(e.lngLat.toArray());
-        });
-        map.on("mouseout", () => {
+        };
+        const handleMouseOut = () => {
           if (!viewId) useAppStore.getState().setPointerCoords(null);
-        });
-        map.on("click", (e) => {
+        };
+        const handleClick = (e: MapEventOf<"click">) => {
           if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
           if (!next.identifyLayerId) return;
@@ -255,39 +315,56 @@ export function MapboxCanvas({
           content.append(title);
           for (const [key, value] of Object.entries(match.properties)) {
             const row = document.createElement("div");
-            row.textContent = `${key}: ${typeof value === "object" ? JSON.stringify(value) : String(value)}`;
+            row.textContent = `${key}: ${
+              typeof value === "object" ? JSON.stringify(value) : String(value)
+            }`;
             content.append(row);
           }
           popup = new gl.Popup({ maxWidth: "360px" })
             .setLngLat(e.lngLat)
             .setDOMContent(content)
             .addTo(map);
+        };
+        map.on("mousemove", handleMouseMove);
+        map.on("mouseout", handleMouseOut);
+        map.on("click", handleClick);
+        cleanupTasks.push(() => {
+          map.off("mousemove", handleMouseMove);
+          map.off("mouseout", handleMouseOut);
+          map.off("click", handleClick);
         });
-        map.on("load", () => {
+        const handleLoad = () => {
           if (cancelled) return;
           if (engineRef) engineRef.current = current;
+          if (!viewId) useAppStore.getState().setCameraAltitude(current.readCameraAltitude());
           readyCallback.current?.();
+        };
+        map.on("load", handleLoad);
+        cleanupTasks.push(() => map.off("load", handleLoad));
+        const disposeResizeScheduler = createMapResizeScheduler({
+          getMap: () => map,
+          container: container.current,
         });
-        const resize = new ResizeObserver(() => map.resize());
-        resize.observe(container.current);
+        cleanupTasks.push(disposeResizeScheduler);
+        const themeObserver = new MutationObserver(() => {
+          current.setBlankBackgroundColor(useAppStore.getState().blankBackgroundColor);
+        });
+        themeObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+        cleanupTasks.push(() => themeObserver.disconnect());
         const status = window.setInterval(() => {
           const errors = current.getRenderStatus().errors;
           setError(errors.length ? errors.join("; ") : null);
         }, 1000);
-        cleanup = () => {
-          detachFeatureSelection();
-          unsubscribe();
-          // A DOM listener on the container outlives map.remove(); drop it so a
-          // re-run of this effect (token change) does not stack another.
-          map.getContainer().removeEventListener("click", handleGlobeToggleClick);
-          resize.disconnect();
+        cleanupTasks.push(() => {
           window.clearInterval(status);
           popup?.remove();
-        };
+        });
       })
       .catch((error) => {
         cleanup();
-        cleanup = () => {};
         if (engineRef && engineRef.current === engine) engineRef.current = null;
         engine?.destroy();
         engine = undefined;
