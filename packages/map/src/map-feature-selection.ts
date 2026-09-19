@@ -16,10 +16,14 @@ import {
   type FeatureSelectionShape,
 } from "./feature-selection";
 
+/** Lets pointer overlays stand down immediately when a menu arms selection. */
 export const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
 
+/** Minimum screen distance between freehand vertices, avoiding oversized rings. */
 const FREEHAND_MIN_POINT_DISTANCE = 3;
+/** Maximum screen distance between duplicate clicks generated before `dblclick`. */
 const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
+/** Main-thread scan cap; larger jobs belong in expression/location selection tools. */
 const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 interface PointLike {
@@ -246,8 +250,8 @@ export function attachFeatureSelection(
     const endDrag = (point: PointLike, modifiers: MouseEvent) => {
       if (!dragging) return;
       dragging = false;
-      if (request.shape === "freehand" && !equalPoints(points.at(-1) ?? point, point))
-        points.push(point);
+      const last = points.at(-1);
+      if (request.shape === "freehand" && (!last || !equalPoints(last, point))) points.push(point);
       else if (request.shape !== "freehand") points = [points[0], point];
       finish(modifiers);
     };
