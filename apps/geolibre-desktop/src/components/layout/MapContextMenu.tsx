@@ -11,7 +11,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import type * as maplibregl from "maplibre-gl";
 import {
   BookOpen,
   Braces,
@@ -85,11 +84,12 @@ async function copyText(value: string): Promise<void> {
 /**
  * Renders the map's right-click context menu (issue #829).
  *
- * Listening to MapLibre's own `contextmenu` event (rather than a raw DOM
- * handler) yields the clicked geographic coordinate directly. The top item
- * shows that coordinate and copies it to the clipboard on click, Google-Maps
- * style; below it sits a curated set of quick actions that operate on the
- * clicked point (copy GeoJSON, recenter, zoom in, open in Google Maps/Earth).
+ * Listening on the renderer-neutral surface keeps the menu available on every
+ * engine. The surface converts the canvas-relative pointer position to a
+ * geographic coordinate. The top item shows that coordinate and copies it to
+ * the clipboard on click, Google-Maps style; below it sits a curated set of
+ * quick actions that operate on the clicked point (copy GeoJSON, recenter,
+ * zoom in, open in Google Maps/Earth).
  *
  * The menu is positioned with an invisible zero-size trigger pinned at the
  * cursor: Radix anchors its content to that trigger. The whole menu is keyed by
@@ -118,24 +118,36 @@ export function MapContextMenu({
   const seqRef = useRef(0);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const surface = mapControllerRef.current?.getRenderSurface();
+    if (!surface) return;
+    const canvas = surface.getCanvas();
 
-    const handleContextMenu = (event: maplibregl.MapMouseEvent) => {
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      let coordinate: { lng: number; lat: number };
+      try {
+        coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      } catch {
+        // Globe renderers can return no coordinate when the pointer is over
+        // empty space beyond the planet. In that case there is no point for
+        // the menu actions to operate on.
+        return;
+      }
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,
-        lng: event.lngLat.lng,
-        lat: event.lngLat.lat,
-        x: event.originalEvent.clientX,
-        y: event.originalEvent.clientY,
+        lng: coordinate.lng,
+        lat: coordinate.lat,
+        x: event.clientX,
+        y: event.clientY,
       });
       setOpen(true);
     };
 
-    map.on("contextmenu", handleContextMenu);
+    canvas.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      map.off("contextmenu", handleContextMenu);
+      canvas.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);
 
@@ -164,7 +176,7 @@ export function MapContextMenu({
     // Read the live zoom; if the map was torn down between right-click and
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
-    const currentZoom = mapControllerRef.current?.getMap()?.getZoom();
+    const currentZoom = mapControllerRef.current?.readView().zoom;
     mapControllerRef.current?.flyTo({
       center: [menu.lng, menu.lat],
       ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
@@ -183,13 +195,13 @@ export function MapContextMenu({
   // city-level view rather than dropping the action.
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const zoom = mapControllerRef.current?.readView().zoom ?? 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const zoom = mapControllerRef.current?.readView().zoom ?? 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 

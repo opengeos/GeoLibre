@@ -2739,11 +2739,6 @@ export function DesktopShell({
                     }}
                     showResolved={showResolvedComments}
                   />
-                  <MapContextMenu
-                    mapControllerRef={mapControllerRef}
-                    mapReadyGeneration={mapReadyGeneration}
-                    onExplorePlace={handleExplorePlace}
-                  />
                   <KnowledgeCardPanel
                     place={knowledgePlace}
                     lang={wikipediaLang(i18n.language)}
@@ -2786,6 +2781,11 @@ export function DesktopShell({
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
+              />
+              <MapContextMenu
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+                onExplorePlace={handleExplorePlace}
               />
               <StoryMapComposeBar
                 mapControllerRef={mapControllerRef}
