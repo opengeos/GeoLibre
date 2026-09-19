@@ -920,9 +920,8 @@ export class MapboxEngine implements MapEngine {
   featureIdAtPoint(layerId: string, point: { x: number; y: number }): string | null {
     const map = this.map;
     if (!map?.isStyleLoaded()) return null;
-    const queryIds = (this.plans.get(layerId)?.layers ?? [])
-      .map((spec) => spec.id)
-      .filter((id) => Boolean(map.getLayer(id)));
+    const layer = this.layers.find((candidate) => candidate.id === layerId);
+    const queryIds = layer ? this.nativeLayerIds(layer) : [];
     if (!queryIds.length) return null;
     const [feature] = map.queryRenderedFeatures(
       [
