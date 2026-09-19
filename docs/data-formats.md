@@ -19,6 +19,7 @@ workflow and [Projects](user-guide/projects.md) for saving and reopening data.
 | MapInfo TAB | `.tab` and companion files | Vector Layer | Requires access to the dataset's companion files. |
 | KML / KMZ | `.kml`, `.kmz` | KML / KMZ Layer or Vector Layer | Supports folders, styles, ground overlays, embedded models, and Super-Overlays; behavior depends on the renderer. |
 | GPX | `.gpx` | GPX Layer | Waypoints, tracks, and routes can become separate layers. |
+| LandXML | `.xml`, `.landxml`, LandXML URL | LandXML Layer | Imports TIN surfaces, horizontal alignments, vertical profile metadata, and survey points; projected data requires a source CRS. |
 | Delimited text | CSV, TSV, and custom-delimited text | Delimited Text Layer | Map coordinate columns, specify their CRS, or geocode address columns. CSV without coordinates can also be loaded as a table. |
 | Excel | Excel workbooks | File import | Select a worksheet and coordinate columns to create point features. |
 | AutoCAD | `.dxf`, `.dwg` | CAD (DXF/DWG) Layer | Select drawing layers and the source CRS. |

@@ -21,6 +21,7 @@ export type KindI18nKey =
   | "ogcFeatures"
   | "ogcVectorTiles"
   | "gpx"
+  | "landxml"
   | "georss"
   | "delimitedText"
   | "cad"
@@ -55,6 +56,7 @@ export const KIND_I18N_KEY: Record<
   "ogc-features": "ogcFeatures",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
+  landxml: "landxml",
   georss: "georss",
   "delimited-text": "delimitedText",
   cad: "cad",
@@ -119,6 +121,31 @@ export const DEFAULT_OGC_VECTOR_TILES_URL =
 export const DEFAULT_OGC_VECTOR_TILES_STYLE_URL =
   "https://api.pdok.nl/lv/bgt/ogc/v1/styles/bgt_standaardvisualisatie__webmercatorquad?f=mapbox";
 export const DEFAULT_GPX_URL = "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
+// Synthetic CC0 civil-design datasets offered in the LandXML dialog. The files
+// are hosted on Source Cooperative with the other GeoLibre samples. Their CRS
+// values are also embedded in the documents, but keeping them here lets the UI
+// fill the field before the remote file is downloaded.
+export const LANDXML_SAMPLES: readonly {
+  label: string;
+  url: string;
+  crs: string;
+}[] = [
+  {
+    label: "Boston civic site (WGS 84)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-boston-site-wgs84.xml",
+    crs: "EPSG:4326",
+  },
+  {
+    label: "Minneapolis road corridor (UTM 15N)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-minneapolis-road-utm15n.xml",
+    crs: "EPSG:26915",
+  },
+  {
+    label: "London earthworks (British National Grid)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-london-earthworks-bng.xml",
+    crs: "EPSG:27700",
+  },
+];
 // USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed (Simple georss:point).
 export const DEFAULT_GEORSS_URL =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom";
