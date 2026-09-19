@@ -26,6 +26,7 @@ interface OgcFeaturesFormCache {
   bbox: string;
   datetime: string;
   options: OgcFeaturesCollectionOption[];
+  selectedCollectionIds: string[];
 }
 let ogcFeaturesFormCache: OgcFeaturesFormCache | null = null;
 
@@ -39,9 +40,9 @@ interface OgcFeaturesSample {
  *
  * The user points at a service (its landing page, or any `/collections/…` URL
  * copied from the service's own HTML browser), retrieves its collections, and
- * picks one. The fetch follows the service's `next` links until the requested
- * feature count is reached, because a single `/items` request returns only one
- * server-sized page.
+ * picks one or more. Each fetch follows the service's `next` links until the
+ * requested feature count is reached, because a single `/items` request
+ * returns only one server-sized page.
  */
 export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
@@ -60,6 +61,9 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
   const [collectionOptions, setCollectionOptions] = useState<OgcFeaturesCollectionOption[]>(
     serviceCache?.options ?? [],
   );
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>(
+    serviceCache?.selectedCollectionIds ?? [],
+  );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const collectionListId = useId();
@@ -74,8 +78,17 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       bbox,
       datetime,
       options: collectionOptions,
+      selectedCollectionIds,
     };
-  }, [endpoint, collectionId, maxFeatures, bbox, datetime, collectionOptions]);
+  }, [
+    endpoint,
+    collectionId,
+    maxFeatures,
+    bbox,
+    datetime,
+    collectionOptions,
+    selectedCollectionIds,
+  ]);
 
   // See WfsSource: guards a stale in-flight retrieval from overwriting the form.
   const retrieveTokenRef = useRef(0);
@@ -105,6 +118,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     if (collectionOptions.length > 0 || isRetrieving) {
       cancelRetrieve();
       setCollectionOptions([]);
+      setSelectedCollectionIds([]);
       setIsRetrieving(false);
     }
     if (retrieveError) setRetrieveError(null);
@@ -126,6 +140,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       if (isStale()) return;
       if (options.length === 0) {
         setCollectionOptions([]);
+        setSelectedCollectionIds([]);
         setRetrieveError(t("addData.ogcFeatures.noCollectionsFound"));
         return;
       }
@@ -133,14 +148,28 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       // A URL pasted from the service's own browser already names a collection;
       // otherwise preselect the first so a single click leaves the form ready.
       const pasted = parsed.collectionId;
-      if (pasted && options.some((option) => option.id === pasted)) {
+      const availableIds = new Set(options.map((option) => option.id));
+      const retainedSelection = selectedCollectionIds.filter((id) => availableIds.has(id));
+      const typedId = collectionId.trim();
+      const preferredId = pasted && availableIds.has(pasted) ? pasted : typedId;
+      const nextSelection =
+        retainedSelection.length > 0
+          ? retainedSelection
+          : preferredId && availableIds.has(preferredId)
+            ? [preferredId]
+            : preferredId
+              ? []
+              : [options[0].id];
+      setSelectedCollectionIds(nextSelection);
+      if (pasted && availableIds.has(pasted)) {
         setCollectionId(pasted);
-      } else if (!collectionId.trim()) {
+      } else if (!typedId) {
         setCollectionId(options[0].id);
       }
     } catch (error) {
       if (isStale()) return;
       setCollectionOptions([]);
+      setSelectedCollectionIds([]);
       setRetrieveError(
         serviceRequestErrorMessage(error, t, t("addData.ogcFeatures.retrieveError")),
       );
@@ -158,6 +187,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     // The new service's collections must be re-retrieved.
     cancelRetrieve();
     setCollectionOptions([]);
+    setSelectedCollectionIds([]);
     setIsRetrieving(false);
     setRetrieveError(null);
   };
@@ -167,8 +197,11 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     const parsed = parseOgcFeaturesUrl(endpoint);
     // A URL pasted straight from the service's HTML browser already names the
     // collection, so an empty field is only an error when neither carries one.
-    const collection = collectionId.trim() || parsed.collectionId;
-    if (!collection) {
+    const collections =
+      selectedCollectionIds.length > 0
+        ? selectedCollectionIds
+        : [collectionId.trim() || parsed.collectionId].filter(Boolean);
+    if (collections.length === 0) {
       throw new Error(t("addData.ogcFeatures.errorCollection"));
     }
     const requestedMax = Number(maxFeatures.trim());
@@ -190,23 +223,30 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     submitAbortRef.current?.abort();
     const controller = new AbortController();
     submitAbortRef.current = controller;
-    const result = await fetchOgcFeatureItems(
-      {
-        baseUrl: parsed.baseUrl,
-        collectionId: collection,
-        extraQuery: parsed.extraQuery,
-        maxFeatures: Math.floor(requestedMax),
-        bbox: trimmedBbox || undefined,
-        datetime: datetime.trim() || undefined,
-      },
-      { signal: controller.signal },
+    const results = await Promise.all(
+      collections.map(async (collection) => ({
+        collection,
+        result: await fetchOgcFeatureItems(
+          {
+            baseUrl: parsed.baseUrl,
+            collectionId: collection,
+            extraQuery: parsed.extraQuery,
+            maxFeatures: Math.floor(requestedMax),
+            bbox: trimmedBbox || undefined,
+            datetime: datetime.trim() || undefined,
+          },
+          { signal: controller.signal },
+        ),
+      })),
     );
     // A superseded/cancelled request must not add a layer after the fact.
     if (controller.signal.aborted) return;
-    if (result.data.features.length === 0) {
+    const emptyResult = results.find(({ result }) => result.data.features.length === 0);
+    if (emptyResult) {
       throw new Error(t("addData.ogcFeatures.errorNoFeatures"));
     }
-    if (result.truncated) {
+    for (const { collection, result } of results) {
+      if (!result.truncated) continue;
       // Not an error: the layer holds the requested slice of a larger
       // collection. Note it so a user comparing counts against the service is
       // not left wondering where the rest went.
@@ -217,9 +257,13 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       );
     }
 
-    const name = source.layerName.trim() || collection || t("addData.ogcFeatures.defaultName");
-    source.addAndClose(
-      buildOgcFeaturesLayer({
+    const multiple = collections.length > 1;
+    const layers = results.map(({ collection, result }) => {
+      const option = collectionOptions.find((candidate) => candidate.id === collection);
+      const name = multiple
+        ? option?.title || collection
+        : source.layerName.trim() || collection || t("addData.ogcFeatures.defaultName");
+      return buildOgcFeaturesLayer({
         name,
         itemsUrl: result.url,
         data: result.data,
@@ -231,9 +275,9 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
         extraQuery: parsed.extraQuery || undefined,
         numberMatched: result.numberMatched,
         truncated: result.truncated,
-      }),
-      { fit: true },
-    );
+      });
+    });
+    source.addManyAndClose(layers, { fit: true });
   });
 
   return (
@@ -287,21 +331,19 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
               <Label htmlFor={collectionListId}>
                 {t("addData.ogcFeatures.retrievedCollections")}
               </Label>
-              {/* Picker listing every retrieved collection; fills the field
-                  below on select. Value stays empty (action menu), so it always
-                  shows the full list and can never mismatch the free-text field. */}
+              {/* Native multi-select preserves familiar Ctrl/Cmd toggle and
+                  Shift range behavior while keeping manual entry available. */}
               <Select
                 id={collectionListId}
-                value=""
+                multiple
+                size={Math.min(collectionOptions.length, 8)}
+                value={selectedCollectionIds}
                 onChange={(event) => {
-                  if (event.target.value) setCollectionId(event.target.value);
+                  const ids = Array.from(event.target.selectedOptions, (option) => option.value);
+                  setSelectedCollectionIds(ids);
+                  setCollectionId(ids[0] ?? "");
                 }}
               >
-                <option value="" disabled>
-                  {t("addData.ogcFeatures.selectCollection", {
-                    count: collectionOptions.length,
-                  })}
-                </option>
                 {collectionOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.title === option.id ? option.id : `${option.title} (${option.id})`}
@@ -320,7 +362,10 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
               id="ogc-features-collection"
               placeholder={t("addData.ogcFeatures.collectionPlaceholder")}
               value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
+              onChange={(event) => {
+                setCollectionId(event.target.value);
+                setSelectedCollectionIds([]);
+              }}
             />
           </div>
           <div className="space-y-1.5">

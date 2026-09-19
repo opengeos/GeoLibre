@@ -34,6 +34,17 @@ export function useAddDataSource(defaultLayerName: string) {
     shell.closeDialog();
   };
 
+  /** Adds a retrieved service selection as separate layers in list order. */
+  const addManyAndClose = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
+    for (const layer of layers) shell.addLayer(layer, beforeLayer);
+    // Fitting each layer in turn would only leave the last camera position
+    // visible. Fit the last selected layer once, matching addAndClose's
+    // deterministic behavior without animating through every selection.
+    const fitLayer = layers.at(-1);
+    if (options.fit && fitLayer) shell.mapControllerRef.current?.fitLayer(fitLayer);
+    shell.closeDialog();
+  };
+
   /**
    * Wraps a submit action with the shared error handling and the
    * submit-in-progress flag, returning a form `onSubmit` handler.
@@ -62,6 +73,7 @@ export function useAddDataSource(defaultLayerName: string) {
     error,
     setError,
     addAndClose,
+    addManyAndClose,
     runSubmit,
     isSubmitting: shell.isSubmitting,
   };

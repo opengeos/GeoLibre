@@ -28,6 +28,7 @@ interface WfsFormCache {
   srsName: string;
   maxFeatures: string;
   options: WfsFeatureTypeOption[];
+  selectedTypeNames: string[];
 }
 let wfsFormCache: WfsFormCache | null = null;
 
@@ -54,6 +55,9 @@ export function WfsSource({
   const [typeOptions, setTypeOptions] = useState<WfsFeatureTypeOption[]>(
     serviceCache?.options ?? [],
   );
+  const [selectedTypeNames, setSelectedTypeNames] = useState<string[]>(
+    serviceCache?.selectedTypeNames ?? [],
+  );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const typeListId = useId();
@@ -69,6 +73,7 @@ export function WfsSource({
       srsName: wfsSrsName,
       maxFeatures: wfsMaxFeatures,
       options: typeOptions,
+      selectedTypeNames,
     };
   }, [
     wfsEndpoint,
@@ -78,6 +83,7 @@ export function WfsSource({
     wfsSrsName,
     wfsMaxFeatures,
     typeOptions,
+    selectedTypeNames,
   ]);
   // See WmsSource: guards a stale in-flight retrieval from overwriting the form.
   const retrieveTokenRef = useRef(0);
@@ -119,16 +125,28 @@ export function WfsSource({
       if (isStale()) return;
       if (options.length === 0) {
         setTypeOptions([]);
+        setSelectedTypeNames([]);
         setRetrieveError(t("addData.wfs.noTypesFound"));
         return;
       }
       setTypeOptions(options);
-      // Preselect the first type when the field is empty so a single click
-      // leaves the form ready to submit.
-      if (!wfsTypeName.trim()) setWfsTypeName(options[0].name);
+      const availableNames = new Set(options.map((option) => option.name));
+      const retainedSelection = selectedTypeNames.filter((name) => availableNames.has(name));
+      const typedName = wfsTypeName.trim();
+      const nextSelection =
+        retainedSelection.length > 0
+          ? retainedSelection
+          : typedName && availableNames.has(typedName)
+            ? [typedName]
+            : typedName
+              ? []
+              : [options[0].name];
+      setSelectedTypeNames(nextSelection);
+      if (!typedName) setWfsTypeName(options[0].name);
     } catch (error) {
       if (isStale()) return;
       setTypeOptions([]);
+      setSelectedTypeNames([]);
       setRetrieveError(serviceRequestErrorMessage(error, t, t("addData.wfs.retrieveError")));
     } finally {
       if (token === retrieveTokenRef.current) setIsRetrieving(false);
@@ -155,13 +173,15 @@ export function WfsSource({
     // and cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
     setTypeOptions([]);
+    setSelectedTypeNames([]);
     setRetrieveError(null);
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || t("addData.wfs.defaultName");
     if (!wfsEndpoint.trim()) throw new Error(t("addData.wfs.errorUrl"));
-    if (!wfsTypeName.trim()) {
+    const typeNames =
+      selectedTypeNames.length > 0 ? selectedTypeNames : [wfsTypeName.trim()].filter(Boolean);
+    if (typeNames.length === 0) {
       throw new Error(t("addData.wfs.errorTypeName"));
     }
     if (!wfsOutputFormat.trim()) {
@@ -178,20 +198,22 @@ export function WfsSource({
     // answers the requested one with XML (e.g. an ArcGIS WFS that advertises
     // GeoJSON as "GEOJSON" rather than "application/json"), so it returns the
     // URL and output format that actually worked.
-    const {
-      data,
-      url: featureUrl,
-      outputFormat: resolvedOutputFormat,
-    } = await fetchWfsGeoJson(
-      {
-        endpoint: stripOgcOperationParams(wfsEndpoint.trim(), "WFS"),
-        typeName: wfsTypeName.trim(),
-        version: wfsVersion,
-        outputFormat: wfsOutputFormat.trim(),
-        srsName: wfsSrsName.trim(),
-        maxFeatures: wfsMaxFeatures.trim() || undefined,
-      },
-      { useWfsProxy: true },
+    const endpoint = stripOgcOperationParams(wfsEndpoint.trim(), "WFS");
+    const results = await Promise.all(
+      typeNames.map(async (typeName) => ({
+        typeName,
+        result: await fetchWfsGeoJson(
+          {
+            endpoint,
+            typeName,
+            version: wfsVersion,
+            outputFormat: wfsOutputFormat.trim(),
+            srsName: wfsSrsName.trim(),
+            maxFeatures: wfsMaxFeatures.trim() || undefined,
+          },
+          { useWfsProxy: true },
+        ),
+      })),
     );
     // The fallback may have loaded the layer under a different output format
     // than the user entered (e.g. "GEOJSON" instead of "application/json"). The
@@ -202,27 +224,37 @@ export function WfsSource({
     // service this session skips straight to the working token instead of
     // re-paying the retry cost.
     const requestedOutputFormat = wfsOutputFormat.trim();
-    if (
-      requestedOutputFormat &&
-      resolvedOutputFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()
-    ) {
-      console.info(
-        `WFS: "${requestedOutputFormat}" returned XML; loaded the layer with "${resolvedOutputFormat}" instead.`,
-      );
-      setWfsOutputFormat(resolvedOutputFormat);
+    for (const { typeName, result } of results) {
+      if (
+        requestedOutputFormat &&
+        result.outputFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()
+      ) {
+        console.info(
+          `WFS: "${requestedOutputFormat}" returned XML for "${typeName}"; loaded it with "${result.outputFormat}" instead.`,
+        );
+      }
     }
-    source.addAndClose(
-      buildWfsGeoJsonLayer({
+    const firstResolvedFormat = results[0].result.outputFormat;
+    if (firstResolvedFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()) {
+      setWfsOutputFormat(firstResolvedFormat);
+    }
+    const multiple = typeNames.length > 1;
+    const layers = results.map(({ typeName, result }) => {
+      const option = typeOptions.find((candidate) => candidate.name === typeName);
+      const name = multiple
+        ? option?.title || typeName
+        : source.layerName.trim() || t("addData.wfs.defaultName");
+      return buildWfsGeoJsonLayer({
         name,
-        featureUrl,
-        data,
-        typeName: wfsTypeName.trim(),
+        featureUrl: result.url,
+        data: result.data,
+        typeName,
         version: wfsVersion,
-        outputFormat: resolvedOutputFormat,
+        outputFormat: result.outputFormat,
         srsName: wfsSrsName.trim(),
-      }),
-      { fit: true },
-    );
+      });
+    });
+    source.addManyAndClose(layers, { fit: true });
   });
 
   return (
@@ -261,6 +293,7 @@ export function WfsSource({
                 if (typeOptions.length > 0 || isRetrieving) {
                   cancelRetrieve();
                   setTypeOptions([]);
+                  setSelectedTypeNames([]);
                   setIsRetrieving(false);
                 }
                 if (retrieveError) setRetrieveError(null);
@@ -285,19 +318,19 @@ export function WfsSource({
           {typeOptions.length > 0 ? (
             <div className="space-y-1.5">
               <Label htmlFor={typeListId}>{t("addData.wfs.retrievedTypes")}</Label>
-              {/* Picker listing every retrieved feature type; fills the field
-                  below on select. Value stays empty (action menu), so it always
-                  shows the full list and can never mismatch the free-text field. */}
+              {/* Native multi-select preserves familiar Ctrl/Cmd toggle and
+                  Shift range behavior while keeping manual entry available. */}
               <Select
                 id={typeListId}
-                value=""
+                multiple
+                size={Math.min(typeOptions.length, 8)}
+                value={selectedTypeNames}
                 onChange={(event) => {
-                  if (event.target.value) setWfsTypeName(event.target.value);
+                  const names = Array.from(event.target.selectedOptions, (option) => option.value);
+                  setSelectedTypeNames(names);
+                  setWfsTypeName(names[0] ?? "");
                 }}
               >
-                <option value="" disabled>
-                  {t("addData.wfs.selectType", { count: typeOptions.length })}
-                </option>
                 {typeOptions.map((option) => (
                   <option key={option.name} value={option.name}>
                     {option.title === option.name
@@ -318,7 +351,10 @@ export function WfsSource({
               id="wfs-type-name"
               placeholder={t("addData.common.workspaceLayerPlaceholder")}
               value={wfsTypeName}
-              onChange={(event) => setWfsTypeName(event.target.value)}
+              onChange={(event) => {
+                setWfsTypeName(event.target.value);
+                setSelectedTypeNames([]);
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -334,6 +370,7 @@ export function WfsSource({
                 if (typeOptions.length > 0 || isRetrieving) {
                   cancelRetrieve();
                   setTypeOptions([]);
+                  setSelectedTypeNames([]);
                   setIsRetrieving(false);
                 }
                 if (retrieveError) setRetrieveError(null);
@@ -376,7 +413,10 @@ export function WfsSource({
           samples={[
             {
               label: t("addData.wfs.sampleLabel"),
-              value: { endpoint: DEFAULT_WFS_ENDPOINT, typeName: DEFAULT_WFS_TYPE_NAME },
+              value: {
+                endpoint: DEFAULT_WFS_ENDPOINT,
+                typeName: DEFAULT_WFS_TYPE_NAME,
+              },
             },
           ]}
           onSelect={applyFields}
