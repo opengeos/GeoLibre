@@ -14,6 +14,29 @@ async function chooseSelectionTool(page: Page, layerName: string, toolName: stri
   await page.getByRole("menuitem", { name: toolName, exact: true }).click();
 }
 
+async function bindMapboxMap(page: Page) {
+  await page.waitForFunction(() => {
+    const header = document.querySelector("header") as unknown as Record<string, unknown>;
+    if (!header) return false;
+    let fiber = header[Object.keys(header).find((key) => key.startsWith("__reactFiber"))!] as any;
+    while (fiber) {
+      for (const side of [fiber, fiber.alternate]) {
+        let hook = side?.memoizedState;
+        while (hook) {
+          const engine = hook.memoizedState?.current;
+          if (engine?.kind === "mapbox" && engine.getMapboxMap?.()) {
+            (window as any).mapboxCursorTestMap = engine.getMapboxMap();
+            return true;
+          }
+          hook = hook.next;
+        }
+      }
+      fiber = fiber.return;
+    }
+    return false;
+  });
+}
+
 for (const theme of ["light", "dark"] as const) {
   test(`Mapbox feature-selection gestures select real GeoJSON (${theme})`, async ({
     page,
@@ -49,6 +72,46 @@ for (const theme of ["light", "dark"] as const) {
     const row = layerRow(page, "smoke");
     await expect(row).toBeVisible();
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
+
+    await bindMapboxMap(page);
+    await row.getByRole("button", { name: "Identify features", exact: true }).click();
+    await expect(canvas).toHaveCSS("cursor", "crosshair");
+    expect(
+      await page.evaluate(
+        () => getComputedStyle((window as any).mapboxCursorTestMap.getCanvasContainer()).cursor,
+      ),
+    ).toBe("crosshair");
+    await row.getByRole("button", { name: "Zoom to layer", exact: true }).click();
+    await page.waitForFunction(() => !(window as any).mapboxCursorTestMap.isMoving());
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const map = (window as any).mapboxCursorTestMap;
+          const point = map.project([-118.24, 34.05]);
+          return map
+            .queryRenderedFeatures(point)
+            .some((feature: any) => feature.properties?.name === "Bravo");
+        }),
+      )
+      .toBe(true);
+    const featurePoint = await page.evaluate(() => {
+      const map = (window as any).mapboxCursorTestMap;
+      const point = map.project([-118.24, 34.05]);
+      const rect = map.getCanvas().getBoundingClientRect();
+      return { x: rect.left + point.x, y: rect.top + point.y };
+    });
+    await page.mouse.click(featurePoint.x, featurePoint.y);
+    await expect(page.locator(".mapboxgl-popup.geolibre-identify-popup")).toBeVisible();
+    await expect(canvas).toHaveCSS("cursor", "crosshair");
+    expect(
+      await page.evaluate(({ x, y }) => {
+        const element = document.elementFromPoint(x, y);
+        return element
+          ? { className: element.className, cursor: getComputedStyle(element).cursor }
+          : null;
+      }, featurePoint),
+    ).toMatchObject({ cursor: "crosshair" });
+    await row.getByRole("button", { name: "Deactivate identify", exact: true }).click();
 
     for (const tool of [
       "Select features by click",

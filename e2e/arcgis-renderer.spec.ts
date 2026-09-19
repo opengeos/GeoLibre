@@ -137,6 +137,20 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
   ).toBeVisible();
   await layerRow(page, "smoke").getByRole("button", { name: "Show layer", exact: true }).click();
   await expect(page.getByRole("button", { name: "Hide smoke", exact: true })).toBeVisible();
+  await layerRow(page, "smoke")
+    .getByRole("button", { name: "Identify features", exact: true })
+    .click();
+  await expect(page.locator("[data-testid=arcgis-canvas] .esri-view-surface")).toHaveCSS(
+    "cursor",
+    "crosshair",
+  );
+  await layerRow(page, "smoke")
+    .getByRole("button", { name: "Deactivate identify", exact: true })
+    .click();
+  await expect(page.locator("[data-testid=arcgis-canvas] .esri-view-surface")).not.toHaveCSS(
+    "cursor",
+    "crosshair",
+  );
   await expect(page.locator("[data-testid=arcgis-canvas] [role=alert]")).toHaveCount(0);
 });
 

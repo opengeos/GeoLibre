@@ -84,6 +84,14 @@ export interface MapCanvasProps {
   identifyRasterLayerAt?: MapCanvasRasterIdentify;
 }
 
+function setMapLibreIdentifyCursor(map: maplibregl.Map, active: boolean): void {
+  // MapLibre's grab cursor belongs to the interactive canvas container. Its
+  // native crosshair mode covers that container and active/drag states, while
+  // the inline value keeps the canvas itself explicit for other cursor owners.
+  map.getContainer().classList.toggle("maplibregl-crosshair", active);
+  map.getCanvas().style.cursor = active ? "crosshair" : "";
+}
+
 /** Text formatters used by the grouped, all-layer Identify popup. */
 export interface MapCanvasIdentifyAllLabels {
   title: (count: number) => string;
@@ -1371,6 +1379,7 @@ export const MapCanvas = memo(function MapCanvas({
         return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
       },
       onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
+      onEnd: () => setMapLibreIdentifyCursor(map, Boolean(useAppStore.getState().identifyLayerId)),
     });
   }, []);
 
@@ -1433,7 +1442,7 @@ export const MapCanvas = memo(function MapCanvas({
       identifyPopup.current = null;
       // Same guard as the cleanup below: picking a gesture turns Identify off,
       // and begin() has already claimed the crosshair by the time this runs.
-      if (map && !featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      if (map && !featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
       return;
     }
 
@@ -1443,7 +1452,7 @@ export const MapCanvas = memo(function MapCanvas({
     cancelFeatureSelection.current?.();
 
     if (identifyAllLayers) {
-      map.getCanvas().style.cursor = "crosshair";
+      setMapLibreIdentifyCursor(map, true);
       let globalIdentifyAbortController: AbortController | null = null;
       const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
         if (featureSelectionActive.current) return;
@@ -1671,7 +1680,7 @@ export const MapCanvas = memo(function MapCanvas({
         identifyPopup.current?.remove();
         identifyPopup.current = null;
         globalIdentifyActivatedLayerId.current = null;
-        if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+        if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
       };
     }
 
@@ -1696,7 +1705,7 @@ export const MapCanvas = memo(function MapCanvas({
     // retained grid directly, and the image layer has no features to query.
     if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
 
-    map.getCanvas().style.cursor = "crosshair";
+    setMapLibreIdentifyCursor(map, true);
 
     let wmsIdentifyAbortController: AbortController | null = null;
     let pixelIdentifyAbortController: AbortController | null = null;
@@ -1881,7 +1890,7 @@ export const MapCanvas = memo(function MapCanvas({
       // Starting a selection gesture turns Identify off, so this cleanup runs
       // after the gesture has already claimed the crosshair — leave its cursor
       // alone rather than resetting it out from under the drawing.
-      if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
     };
   }, [
     identifyAllLabels,

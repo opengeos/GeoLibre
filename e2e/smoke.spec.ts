@@ -33,5 +33,28 @@ test("loads a GeoJSON layer, opens the attribute table, and toggles visibility",
   );
 });
 
+test("Identify owns the MapLibre cursor across the whole interactive surface", async ({ page }) => {
+  await waitForMap(page);
+  await dropGeoJson(page, "smoke", FIXTURE_TEXT);
+  const row = layerRow(page, "smoke");
+  await expect(row).toBeVisible();
+
+  const canvas = page.locator(".maplibregl-canvas");
+  const canvasContainer = page.locator(".maplibregl-canvas-container");
+  await row.getByRole("button", { name: "Identify features", exact: true }).click();
+  await expect(canvas).toHaveCSS("cursor", "crosshair");
+  await expect(canvasContainer).toHaveCSS("cursor", "crosshair");
+
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Select features", exact: true }).hover();
+  await page.getByRole("menuitem", { name: "Select features by rectangle", exact: true }).click();
+  await expect(row.getByRole("button", { name: "Identify features", exact: true })).toBeVisible();
+  await expect(canvas).toHaveCSS("cursor", "crosshair");
+
+  await page.keyboard.press("Escape");
+  await expect(canvas).not.toHaveCSS("cursor", "crosshair");
+  await expect(canvasContainer).toHaveCSS("cursor", "grab");
+});
+
 // The accessibility gate now lives in its own multi-screen suite (a11y.spec.ts,
 // added with the #272 accessibility pass).
