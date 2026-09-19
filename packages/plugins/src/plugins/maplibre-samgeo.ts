@@ -1084,6 +1084,7 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
   id: SAMGEO_PLUGIN_ID,
   name: "SamGeo",
   version: "0.1.0",
+  engines: ["maplibre"],
   activate(app) {
     appRef = app;
     unregisterPanel =

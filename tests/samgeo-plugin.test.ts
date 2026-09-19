@@ -4,9 +4,14 @@ import { test } from "node:test";
 import type { FeatureCollection } from "geojson";
 
 import {
+  maplibreSamGeoPlugin,
   reprojectSamGeoResult,
   sanitizeSamGeoState,
 } from "../packages/plugins/src/plugins/maplibre-samgeo";
+
+test("SamGeo declares its MapLibre-only renderer support", () => {
+  assert.deepEqual(maplibreSamGeoPlugin.engines, ["maplibre"]);
+});
 
 test("sanitizeSamGeoState keeps only well-typed, in-range fields", () => {
   const next = sanitizeSamGeoState({

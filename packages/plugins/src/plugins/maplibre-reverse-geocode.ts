@@ -189,6 +189,7 @@ export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
   id: REVERSE_GEOCODE_PLUGIN_ID,
   name: "Reverse Geocode",
   version: "1.0.0",
+  engines: ["maplibre"],
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };
