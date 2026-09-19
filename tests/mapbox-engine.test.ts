@@ -844,19 +844,17 @@ describe("MapboxEngine.syncLayers", () => {
     map.fire("error", {
       error: new Error("https://api.mapbox.com/x?access_token=pk.secret failed"),
     });
-    assert.deepEqual(engine.getRenderStatus().errors, [
-      "https://api.mapbox.com/x?access_token=[redacted] failed",
-    ]);
+    assert.deepEqual(engine.getRenderStatus().errors, ["https://api.mapbox.com/x failed"]);
   });
 
   it("redacts common credential formats from diagnostic text", () => {
     const redacted = redactMapboxError(
-      'https://user:password@example.com/data?api_key=url-secret Authorization: Bearer bearer-secret Basic basic-secret {"token":"json-secret","apiKey":"key-secret"}',
+      'https://user:password@example.com/data?api_key=url-secret&sig=azure-secret&sv=version&public=ok Authorization: Bearer bearer-secret Basic basic-secret {"token":"json-secret","apiKey":"key-secret"}',
     );
 
     assert.equal(
       redacted,
-      'https://[redacted]@example.com/data?api_key=[redacted] Authorization: Bearer [redacted] Basic [redacted] {"token":"[redacted]","apiKey":"[redacted]"}',
+      'https://example.com/data?public=ok Authorization: Bearer [redacted] Basic [redacted] {"token":"[redacted]","apiKey":"[redacted]"}',
     );
   });
 
@@ -890,10 +888,10 @@ describe("MapboxEngine.syncLayers", () => {
     assert.deepEqual(diagnostics[0], {
       message: "Tile [redacted] failed",
       detail:
-        '{\n  "source": "roads",\n  "status": 404,\n  "url": "https://api.mapbox.com/tiles/2/1/0.png?access_token=[redacted]",\n  "error": "Tile [redacted] failed"\n}',
+        '{\n  "source": "roads",\n  "status": 404,\n  "url": "https://api.mapbox.com/tiles/2/1/0.png",\n  "error": "Tile [redacted] failed"\n}',
       source: "roads",
       status: 404,
-      url: "https://api.mapbox.com/tiles/2/1/0.png?access_token=[redacted]",
+      url: "https://api.mapbox.com/tiles/2/1/0.png",
     });
   });
 

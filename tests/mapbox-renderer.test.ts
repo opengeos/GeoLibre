@@ -75,7 +75,7 @@ describe("Mapbox project and plugin boundaries", () => {
     );
     assert.ok(!result.includes("private"));
     assert.ok(!result.includes("secret"));
-    assert.ok(result.includes("&x=1"));
+    assert.ok(result.includes("?x=1"));
   });
 });
 

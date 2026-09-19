@@ -15,6 +15,7 @@ import {
   DEFAULT_LAYER_STYLE,
   controlRendersLayer,
   geojsonHasZCoordinates,
+  redactUrlCredentials,
   styleValue,
 } from "@geolibre/core";
 import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
@@ -117,8 +118,7 @@ const MAPBOX_HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set(MAPBOX_HO
 
 export function redactMapboxError(message: string): string {
   return message
-    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s@]+@/gi, "$1[redacted]@")
-    .replace(/([?&](?:access_token|api_key|apikey|token)=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, redactUrlCredentials)
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1 [redacted]")
     .replace(
       /(["'](?:access_?token|api_?key|token|authorization)["']\s*:\s*["'])[^"']*(["'])/gi,
