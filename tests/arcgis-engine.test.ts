@@ -462,11 +462,18 @@ const SQUARE = geojsonLayer({
 
 describe("ArcgisEngine camera conventions", () => {
   it("publishes geographic map clicks and removes the listener on cleanup", () => {
-    const { engine, fireViewEvent } = makeEngine();
+    const { engine, fireViewEvent, rawView } = makeEngine();
+    // Screen and geographic coordinates differ, so forwarding event.x/y fails.
+    rawView.toMap = (p: { x: number; y: number }) => ({
+      longitude: p.x / 10,
+      latitude: p.y / 10,
+      x: p.x,
+      y: p.y,
+    });
     const clicks: [number, number][] = [];
     const unsubscribe = engine.onMapClick((lngLat) => clicks.push(lngLat));
 
-    fireViewEvent("click", { x: -76.5, y: 39.25 });
+    fireViewEvent("click", { x: -765, y: 392.5 });
     assert.deepEqual(clicks, [[-76.5, 39.25]]);
 
     unsubscribe();
