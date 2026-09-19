@@ -81,6 +81,11 @@ async function copyText(value: string): Promise<void> {
   }
 }
 
+/** Read the camera zoom only while the engine still owns a render surface. */
+function liveZoom(engine: MapEngine | null | undefined): number | undefined {
+  return engine?.getRenderSurface() ? engine.readView().zoom : undefined;
+}
+
 /**
  * Renders the map's right-click context menu (issue #829).
  *
@@ -173,7 +178,7 @@ export function MapContextMenu({
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
     const engine = mapControllerRef.current;
-    const currentZoom = engine?.getRenderSurface() ? engine.readView().zoom : undefined;
+    const currentZoom = liveZoom(engine);
     engine?.flyTo({
       center: [menu.lng, menu.lat],
       ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
@@ -193,14 +198,14 @@ export function MapContextMenu({
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
     const engine = mapControllerRef.current;
-    const zoom = engine?.getRenderSurface() ? engine.readView().zoom : 12;
+    const zoom = liveZoom(engine) ?? 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
     const engine = mapControllerRef.current;
-    const zoom = engine?.getRenderSurface() ? engine.readView().zoom : 12;
+    const zoom = liveZoom(engine) ?? 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 
