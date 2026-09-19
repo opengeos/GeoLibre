@@ -56,9 +56,16 @@ test("Identify owns the MapLibre cursor across the whole interactive surface", a
   await expect(canvasContainer).toHaveCSS("cursor", "grab");
 });
 
-test("keeps every toolbar menu available on small screens", async ({ page }) => {
-  await page.setViewportSize({ width: 640, height: 720 });
+test("keeps every toolbar menu on one scrollable row on small screens", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 720 });
   await waitForMap(page);
+
+  // The menu bar stays a single row and scrolls horizontally instead of
+  // wrapping onto a second row.
+  const header = page.locator("header").first();
+  const box = await header.boundingBox();
+  expect(box?.height).toBeLessThan(56);
+  expect(await header.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
 
   for (const menu of [
     "Project",
@@ -72,6 +79,7 @@ test("keeps every toolbar menu available on small screens", async ({ page }) => 
   ]) {
     const trigger = page.getByRole("button", { name: menu, exact: true });
     await expect(trigger).toBeVisible();
+    await trigger.scrollIntoViewIfNeeded();
     await expect(trigger).toBeInViewport();
   }
 

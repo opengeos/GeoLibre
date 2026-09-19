@@ -2167,11 +2167,10 @@ export function TopToolbar({
   return (
     <header
       className={cn(
-        "flex min-h-11 min-w-0 shrink-0 items-center gap-1 border-b bg-card py-1",
-        compact
-          ? "flex-nowrap overflow-x-auto px-1.5"
-          : // Wrap below md; scroll a single row at md+ so tablets reach every menu (#871).
-            "flex-wrap px-2 md:flex-nowrap md:overflow-x-auto",
+        // One row at every width: menus that don't fit scroll horizontally
+        // instead of wrapping onto a second row (#871).
+        "flex min-h-11 min-w-0 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b bg-card py-1",
+        compact ? "px-1.5" : "px-2",
       )}
     >
       <span className="me-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:me-2">
