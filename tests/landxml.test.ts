@@ -92,6 +92,26 @@ describe("LandXML parser", () => {
     );
   });
 
+  it("retains a full-circle curve when malformed input omits its rotation", () => {
+    const result = parseLandXml(`
+      <LandXML>
+        <Alignments><Alignment name="Circle"><CoordGeom><Curve>
+          <Start>0 1</Start><Center>0 0</Center><End>0 1</End>
+        </Curve></CoordGeom></Alignment></Alignments>
+      </LandXML>
+    `);
+    const alignment = result.layers[0]?.features.features[0]?.geometry;
+    assert.equal(alignment?.type, "LineString");
+    if (!alignment || alignment.type !== "LineString") return;
+    assert.equal(alignment.coordinates.length, 73);
+    assert.deepEqual(alignment.coordinates[0], [1, 0]);
+    assert.deepEqual(alignment.coordinates.at(-1), [1, 0]);
+    assert.equal(
+      alignment.coordinates.some((position) => position[0] < -0.99),
+      true,
+    );
+  });
+
   it("marks projected coordinates as requiring a CRS", () => {
     const result = parseLandXml(`
       <LandXML><CgPoints><CgPoint name="P1">500000 600000 25</CgPoint></CgPoints></LandXML>

@@ -306,8 +306,15 @@ function sampleCurve(
   } else if (normalizedRotation === "ccw") {
     while (sweep <= 0) sweep += Math.PI * 2;
   } else {
-    while (sweep > Math.PI) sweep -= Math.PI * 2;
-    while (sweep < -Math.PI) sweep += Math.PI * 2;
+    if (Math.abs(sweep) < 1e-12) {
+      // With a usable center, coincident endpoints describe a complete circle.
+      // Default to counterclockwise when malformed input omits the required
+      // rotation direction instead of collapsing the arc to repeated points.
+      sweep = Math.PI * 2;
+    } else {
+      while (sweep > Math.PI) sweep -= Math.PI * 2;
+      while (sweep < -Math.PI) sweep += Math.PI * 2;
+    }
   }
 
   const radius = Math.hypot(start[0] - center[0], start[1] - center[1]);
