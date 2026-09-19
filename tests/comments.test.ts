@@ -7,8 +7,10 @@ import {
   applyProjectToStore,
   normalizeProjectComments,
   useAppStore,
+  type GeoLibreLayer,
   type ProjectComment,
 } from "@geolibre/core";
+import { resolveCommentCoordinates } from "../apps/geolibre-desktop/src/components/comments/CommentMapOverlay";
 
 describe("Anchored, Persistent Comments (#1518)", () => {
   it("initializes empty project with comments array", () => {
@@ -140,6 +142,42 @@ describe("Anchored, Persistent Comments (#1518)", () => {
     useAppStore.getState().addComment(comment);
     useAppStore.getState().addComment(comment); // simulated relay echo
     assert.equal(useAppStore.getState().comments.length, 1);
+  });
+
+  it("resolves a feature anchor from stored GeoJSON without a MapLibre map", () => {
+    const layer: GeoLibreLayer = {
+      id: "cities",
+      name: "Cities",
+      type: "circle",
+      source: {},
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "asheville",
+            properties: {},
+            geometry: { type: "Point", coordinates: [-82.5515, 35.5951] },
+          },
+        ],
+      },
+    };
+    useAppStore.setState({ layers: [layer] });
+    const comment: ProjectComment = {
+      id: "mapbox-feature-comment",
+      anchor: { type: "feature", layerId: "cities", featureId: "asheville" },
+      author: { name: "Tester", color: "#3b82f6" },
+      body: "Renderer-neutral anchor",
+      createdAt: new Date().toISOString(),
+      resolved: false,
+      replies: [],
+    };
+
+    assert.deepEqual(resolveCommentCoordinates(comment, null), [-82.5515, 35.5951]);
   });
 
   afterEach(() => {
