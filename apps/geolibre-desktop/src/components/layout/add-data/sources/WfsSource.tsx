@@ -1,4 +1,5 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -89,6 +90,7 @@ export function WfsSource({
   // See WmsSource: guards a stale in-flight retrieval from overwriting the form.
   const retrieveTokenRef = useRef(0);
   const retrieveAbortRef = useRef<AbortController | null>(null);
+  const submitAbortRef = useRef<AbortController | null>(null);
 
   const cancelRetrieve = () => {
     retrieveAbortRef.current?.abort();
@@ -101,6 +103,7 @@ export function WfsSource({
     () => () => {
       retrieveTokenRef.current += 1;
       retrieveAbortRef.current?.abort();
+      submitAbortRef.current?.abort();
     },
     [],
   );
@@ -200,6 +203,9 @@ export function WfsSource({
     // GeoJSON as "GEOJSON" rather than "application/json"), so it returns the
     // URL and output format that actually worked.
     const endpoint = stripOgcOperationParams(wfsEndpoint.trim(), "WFS");
+    submitAbortRef.current?.abort();
+    const controller = new AbortController();
+    submitAbortRef.current = controller;
     const settled = await settleNamedRequests(
       typeNames.map((typeName) => ({
         key: typeName,
@@ -213,10 +219,12 @@ export function WfsSource({
               srsName: wfsSrsName.trim(),
               maxFeatures: wfsMaxFeatures.trim() || undefined,
             },
-            { useWfsProxy: true },
+            { useWfsProxy: true, signal: controller.signal },
           ),
       })),
     );
+    // A superseded/cancelled request must not add a layer after the fact.
+    if (controller.signal.aborted) return;
     const failures = [...settled.failures];
     const results = settled.successes.flatMap(({ key: typeName, value: result }) => {
       if (result.data.features.length > 0) return [{ typeName, result }];
@@ -262,21 +270,25 @@ export function WfsSource({
       setWfsOutputFormat(commonResolvedFormat);
     }
     const multiple = typeNames.length > 1;
-    const layers = results.map(({ typeName, result }) => {
+    const layers: GeoLibreLayer[] = [];
+    for (const { typeName, result } of results) {
       const option = typeOptions.find((candidate) => candidate.name === typeName);
       const name = multiple
         ? option?.title || typeName
         : source.layerName.trim() || t("addData.wfs.defaultName");
-      return buildWfsGeoJsonLayer({
-        name,
-        featureUrl: result.url,
-        data: result.data,
-        typeName,
-        version: wfsVersion,
-        outputFormat: result.outputFormat,
-        srsName: wfsSrsName.trim(),
-      });
-    });
+      layers.push(
+        buildWfsGeoJsonLayer({
+          name,
+          featureUrl: result.url,
+          data: result.data,
+          typeName,
+          version: wfsVersion,
+          outputFormat: result.outputFormat,
+          srsName: wfsSrsName.trim(),
+          pendingLayers: layers,
+        }),
+      );
+    }
     if (failures.length > 0) {
       source.addMany(layers, { fit: true });
       const failedTypeNames = failures.map(({ key }) => key);

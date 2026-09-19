@@ -373,4 +373,24 @@ describe("buildOgcFeaturesLayer", () => {
     assert.equal(layer.metadata.numberMatched, undefined);
     assert.equal(layer.metadata.truncated, true);
   });
+
+  it("reserves a different palette color for a pending batch sibling", () => {
+    const params = {
+      name: "First",
+      itemsUrl: "https://ex.com/ogcapi/collections/first/items?f=json",
+      data,
+      baseUrl: "https://ex.com/ogcapi",
+      collectionId: "first",
+      maxFeatures: 1000,
+      truncated: false,
+    };
+    const first = buildOgcFeaturesLayer(params);
+    const second = buildOgcFeaturesLayer({
+      ...params,
+      name: "Second",
+      collectionId: "second",
+      pendingLayers: [first],
+    });
+    assert.notEqual(second.style.fillColor, first.style.fillColor);
+  });
 });

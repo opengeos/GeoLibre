@@ -1,4 +1,5 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -201,7 +202,10 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     const collections =
       selectedCollectionIds.length > 0
         ? selectedCollectionIds
-        : [collectionId.trim() || parsed.collectionId].filter(Boolean);
+        : [
+            collectionId.trim() ||
+              (collectionOptions.length === 0 ? (parsed.collectionId ?? "") : ""),
+          ].filter(Boolean);
     if (collections.length === 0) {
       throw new Error(t("addData.ogcFeatures.errorCollection"));
     }
@@ -276,25 +280,29 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     }
 
     const multiple = collections.length > 1;
-    const layers = results.map(({ collection, result }) => {
+    const layers: GeoLibreLayer[] = [];
+    for (const { collection, result } of results) {
       const option = collectionOptions.find((candidate) => candidate.id === collection);
       const name = multiple
         ? option?.title || collection
         : source.layerName.trim() || collection || t("addData.ogcFeatures.defaultName");
-      return buildOgcFeaturesLayer({
-        name,
-        itemsUrl: result.url,
-        data: result.data,
-        baseUrl: parsed.baseUrl,
-        collectionId: collection,
-        maxFeatures: Math.floor(requestedMax),
-        bbox: trimmedBbox || undefined,
-        datetime: datetime.trim() || undefined,
-        extraQuery: parsed.extraQuery || undefined,
-        numberMatched: result.numberMatched,
-        truncated: result.truncated,
-      });
-    });
+      layers.push(
+        buildOgcFeaturesLayer({
+          name,
+          itemsUrl: result.url,
+          data: result.data,
+          baseUrl: parsed.baseUrl,
+          collectionId: collection,
+          maxFeatures: Math.floor(requestedMax),
+          bbox: trimmedBbox || undefined,
+          datetime: datetime.trim() || undefined,
+          extraQuery: parsed.extraQuery || undefined,
+          numberMatched: result.numberMatched,
+          truncated: result.truncated,
+          pendingLayers: layers,
+        }),
+      );
+    }
     if (failures.length > 0) {
       source.addMany(layers, { fit: true });
       const failedCollectionIds = failures.map(({ key }) => key);

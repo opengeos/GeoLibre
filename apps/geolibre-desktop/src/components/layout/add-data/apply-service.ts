@@ -264,6 +264,8 @@ export interface WfsLayerParams {
   /** The output format that worked, which may differ from the requested one. */
   outputFormat: string;
   srsName: string;
+  /** Layers built earlier in the same batch but not added to the store yet. */
+  pendingLayers?: readonly GeoLibreLayer[];
 }
 
 /**
@@ -294,7 +296,7 @@ export function buildWfsGeoJsonLayer(params: WfsLayerParams): GeoLibreLayer {
         sourceKind: "wfs-getfeature",
         typeName: params.typeName,
       },
-      { geojson: params.data },
+      { geojson: params.data, pendingLayers: params.pendingLayers },
     ),
     geojson: params.data,
     sourcePath: params.featureUrl,
@@ -318,6 +320,8 @@ export interface OgcFeaturesLayerParams {
   numberMatched?: number;
   /** True when the collection holds more features than were loaded. */
   truncated: boolean;
+  /** Layers built earlier in the same batch but not added to the store yet. */
+  pendingLayers?: readonly GeoLibreLayer[];
 }
 
 /**
@@ -352,7 +356,7 @@ export function buildOgcFeaturesLayer(params: OgcFeaturesLayerParams): GeoLibreL
         ...(params.numberMatched !== undefined ? { numberMatched: params.numberMatched } : {}),
         truncated: params.truncated,
       },
-      { geojson: params.data },
+      { geojson: params.data, pendingLayers: params.pendingLayers },
     ),
     geojson: params.data,
     sourcePath: params.itemsUrl,
