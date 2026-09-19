@@ -20,6 +20,7 @@ import {
   layerNameFromPath,
   normalizeCrs,
   proxyFeedRequestUrl,
+  readLimitedBody,
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { LandXmlMode } from "../types";
@@ -30,6 +31,12 @@ interface SelectedLandXml {
 }
 
 type SourceCrsOrigin = "explicit" | "sample" | null;
+
+const LANDXML_MAX_BYTES = 100 * 1024 * 1024;
+
+function reportLandXmlWarnings(parsed: LandXmlParseResult): void {
+  for (const warning of parsed.warnings) console.warn(`[LandXML] ${warning}`);
+}
 
 /** Add native LandXML TIN surfaces, alignments, profiles, and survey points. */
 export function LandXmlSource() {
@@ -67,6 +74,7 @@ export function LandXmlSource() {
       if (!result) return;
       if (!result.text) throw new Error(t("addData.landxml.errorFileMissing"));
       const parsed = parseLandXml(result.text);
+      reportLandXmlWarnings(parsed);
       setSelectedFile({ path: result.path, parsed });
       setSourceCrs(parsed.detectedCrs ?? "");
       setSourceCrsOrigin(null);
@@ -102,7 +110,18 @@ export function LandXmlSource() {
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    return { path: normalizedSourcePath, parsed: parseLandXml(await response.text()) };
+    let bytes: Uint8Array;
+    try {
+      bytes = await readLimitedBody(response, LANDXML_MAX_BYTES);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("download limit")) {
+        throw new Error(t("addData.landxml.errorTooLarge"));
+      }
+      throw error;
+    }
+    const parsed = parseLandXml(new TextDecoder().decode(bytes));
+    reportLandXmlWarnings(parsed);
+    return { path: normalizedSourcePath, parsed };
   };
 
   const handleSubmit = source.runSubmit(async () => {

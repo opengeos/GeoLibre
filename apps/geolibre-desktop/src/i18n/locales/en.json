@@ -639,6 +639,7 @@
       "readError": "Could not read this LandXML file.",
       "errorChooseFile": "Choose a LandXML file.",
       "errorUrl": "Enter a LandXML URL.",
+      "errorTooLarge": "The remote LandXML file exceeds the 100 MB download limit.",
       "errorSelectType": "Select at least one LandXML object type.",
       "errorMissingCrs": "This LandXML file uses projected coordinates. Enter its source CRS so GeoLibre can reproject it to WGS84.",
       "errorGeographicCrsBounds": "The coordinates fall outside geographic longitude and latitude bounds. Choose the projected source CRS used by this LandXML file.",

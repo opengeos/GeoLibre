@@ -29,6 +29,9 @@ describe("LandXML parser", () => {
     assert.equal(result.pointCount, 2);
     assert.equal(result.profileCount, 1);
     assert.equal(result.layers.length, 3);
+    assert.deepEqual(result.warnings, [
+      "Existing Ground: skipped 0 invalid surface point(s) and 1 invalid TIN face(s).",
+    ]);
 
     const surface = result.layers.find((layer) => layer.kind === "surface");
     assert.ok(surface);

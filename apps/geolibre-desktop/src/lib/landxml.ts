@@ -28,6 +28,8 @@ export interface LandXmlParseResult {
   coordinateSystem?: string;
   /** True when every parsed XY coordinate fits WGS84 longitude/latitude bounds. */
   coordinatesLookGeographic: boolean;
+  /** Diagnostics for malformed source objects that were skipped during parsing. */
+  warnings: string[];
   surfaceCount: number;
   alignmentCount: number;
   pointCount: number;
@@ -67,9 +69,10 @@ export function parseLandXml(text: string): LandXmlParseResult {
 
   const coordinates: Position[] = [];
   const layers: LandXmlLayer[] = [];
+  const warnings: string[] = [];
   const surfaces = descendants(root, "Surface");
   for (const [surfaceIndex, surface] of surfaces.entries()) {
-    const layer = parseSurface(surface, surfaceIndex, coordinates);
+    const layer = parseSurface(surface, surfaceIndex, coordinates, warnings);
     if (layer) layers.push(layer);
   }
 
@@ -77,7 +80,7 @@ export function parseLandXml(text: string): LandXmlParseResult {
   const alignmentFeatures: Feature<LineString, GeoJsonProperties>[] = [];
   let profileCount = 0;
   for (const [alignmentIndex, alignment] of alignmentElements.entries()) {
-    const parsed = parseAlignment(alignment, alignmentIndex, coordinates);
+    const parsed = parseAlignment(alignment, alignmentIndex, coordinates, warnings);
     profileCount += parsed.profileCount;
     if (parsed.feature) alignmentFeatures.push(parsed.feature);
   }
@@ -89,7 +92,7 @@ export function parseLandXml(text: string): LandXmlParseResult {
     });
   }
 
-  const pointFeatures = parseCgPoints(root, coordinates);
+  const pointFeatures = parseCgPoints(root, coordinates, warnings);
   if (pointFeatures.length > 0) {
     layers.push({
       name: "Survey Points",
@@ -107,6 +110,7 @@ export function parseLandXml(text: string): LandXmlParseResult {
     layers,
     detectedCrs: coordinateInfo.detectedCrs,
     coordinateSystem: coordinateInfo.description,
+    warnings,
     coordinatesLookGeographic:
       coordinates.length > 0 &&
       coordinates.every(
@@ -124,27 +128,39 @@ function parseSurface(
   surface: Element,
   surfaceIndex: number,
   allCoordinates: Position[],
+  warnings: string[],
 ): LandXmlLayer | null {
   const name = surface.getAttribute("name")?.trim() || `Surface ${surfaceIndex + 1}`;
   const definition = firstDescendant(surface, "Definition") ?? surface;
   const pointById = new Map<string, Position>();
+  let skippedPointCount = 0;
 
   for (const point of descendants(definition, "P")) {
     const id = point.getAttribute("id")?.trim();
     const coordinate = landXmlPosition(point.textContent);
-    if (!id || !coordinate) continue;
+    if (!id || !coordinate) {
+      skippedPointCount += 1;
+      continue;
+    }
     pointById.set(id, coordinate);
     allCoordinates.push(coordinate);
   }
 
   const features: Feature<Polygon, GeoJsonProperties>[] = [];
+  let skippedFaceCount = 0;
   for (const [faceIndex, face] of descendants(definition, "F").entries()) {
     const ids = tokens(face.textContent).slice(0, 3);
-    if (ids.length !== 3) continue;
+    if (ids.length !== 3) {
+      skippedFaceCount += 1;
+      continue;
+    }
     // Civil 3D uses a negative point reference to mark the following TIN edge
     // as hidden. The magnitude still identifies the surface point.
     const triangle = ids.map((id) => pointById.get(id.replace(/^-/, "")));
-    if (triangle.some((position) => !position)) continue;
+    if (triangle.some((position) => !position)) {
+      skippedFaceCount += 1;
+      continue;
+    }
     const coordinates = triangle as Position[];
     features.push({
       type: "Feature",
@@ -162,6 +178,15 @@ function parseSurface(
     });
   }
 
+  if (skippedPointCount > 0 || skippedFaceCount > 0) {
+    warnings.push(
+      `${name}: skipped ${skippedPointCount} invalid surface point(s) and ${skippedFaceCount} invalid TIN face(s).`,
+    );
+  }
+  if (features.length === 0 && skippedFaceCount === 0) {
+    warnings.push(`${name}: no usable TIN faces were found.`);
+  }
+
   if (features.length === 0) return null;
   return {
     name,
@@ -174,16 +199,21 @@ function parseAlignment(
   alignment: Element,
   alignmentIndex: number,
   allCoordinates: Position[],
+  warnings: string[],
 ): { feature: Feature<LineString, GeoJsonProperties> | null; profileCount: number } {
   const profiles = parseProfiles(alignment);
   const coordGeom = firstDescendant(alignment, "CoordGeom");
-  if (!coordGeom) return { feature: null, profileCount: profiles.length };
+  if (!coordGeom) {
+    warnings.push(`Alignment ${alignmentIndex + 1}: no horizontal geometry was found.`);
+    return { feature: null, profileCount: profiles.length };
+  }
 
   const coordinates: Position[] = [];
   for (const segment of Array.from(coordGeom.children)) {
     appendCoordinates(coordinates, alignmentSegmentPositions(segment));
   }
   if (coordinates.length < 2) {
+    warnings.push(`Alignment ${alignmentIndex + 1}: no usable horizontal geometry was found.`);
     return { feature: null, profileCount: profiles.length };
   }
   allCoordinates.push(...coordinates);
@@ -315,11 +345,16 @@ function parseProfiles(alignment: Element): VerticalProfile[] {
 function parseCgPoints(
   root: Element,
   allCoordinates: Position[],
+  warnings: string[],
 ): Feature<Point, GeoJsonProperties>[] {
   const features: Feature<Point, GeoJsonProperties>[] = [];
+  let skippedPointCount = 0;
   for (const [index, point] of descendants(root, "CgPoint").entries()) {
     const coordinate = landXmlPosition(point.textContent);
-    if (!coordinate) continue;
+    if (!coordinate) {
+      skippedPointCount += 1;
+      continue;
+    }
     allCoordinates.push(coordinate);
     const properties: NonNullable<GeoJsonProperties> = {
       landxml_kind: "survey_point",
@@ -334,6 +369,9 @@ function parseCgPoints(
       geometry: { type: "Point", coordinates: coordinate },
       properties,
     });
+  }
+  if (skippedPointCount > 0) {
+    warnings.push(`Skipped ${skippedPointCount} invalid survey point(s).`);
   }
   return features;
 }
