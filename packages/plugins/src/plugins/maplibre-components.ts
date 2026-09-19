@@ -3104,6 +3104,15 @@ function waitForPendingLidarRestores(): Promise<void> {
   });
 }
 
+// Nesting guard for withLidarAutoZoomSuppressed: two overlapping callers (e.g.
+// clicking "Add to map" on two different tiles before the first one settles)
+// must not stomp on each other's snapshot of the pre-suppression value. Only
+// the first caller in (depth 0 -> 1) records what autoZoom was, and only the
+// last caller out (depth 1 -> 0) restores it — see that function for the bug
+// this fixes.
+let lidarAutoZoomSuppressionDepth = 0;
+let lidarAutoZoomOriginalValue = true;
+
 /**
  * Runs `fn` with the shared LiDAR control's `autoZoom` temporarily disabled,
  * so a point cloud loaded through `fn` does not fly the camera to it.
@@ -3122,6 +3131,16 @@ function waitForPendingLidarRestores(): Promise<void> {
  * tiles" action, where the earliest ones load before the loop even finishes
  * issuing the rest) fires its `load` event, and hence its fly-to, after
  * autoZoom was already switched back on.
+ *
+ * Calls can overlap (two "Add to map" clicks in quick succession each run
+ * this independently), so a plain snapshot/restore of `options.autoZoom`
+ * would corrupt the shared value: whichever call happened to finish last
+ * would stomp the flag with *its own* snapshot, which — if that snapshot was
+ * taken while another call had already forced it to `false` — could leave
+ * autoZoom stuck disabled for the rest of the session (or, in the opposite
+ * ordering, re-enable it while a sibling call's point cloud is still
+ * loading). The depth counter above fixes this: only the outermost call
+ * captures and restores the real original value.
  */
 export async function withLidarAutoZoomSuppressed<T>(
   app: GeoLibreAppAPI,
@@ -3131,14 +3150,20 @@ export async function withLidarAutoZoomSuppressed<T>(
   const options = (lidarControl as unknown as { _options?: { autoZoom?: boolean } } | null)
     ?._options;
   if (!options || !("autoZoom" in options)) return fn();
-  const previous = options.autoZoom;
+  if (lidarAutoZoomSuppressionDepth === 0) {
+    lidarAutoZoomOriginalValue = options.autoZoom ?? true;
+  }
+  lidarAutoZoomSuppressionDepth++;
   options.autoZoom = false;
   try {
     const result = await fn();
     await waitForPendingLidarRestores();
     return result;
   } finally {
-    options.autoZoom = previous;
+    lidarAutoZoomSuppressionDepth = Math.max(0, lidarAutoZoomSuppressionDepth - 1);
+    if (lidarAutoZoomSuppressionDepth === 0) {
+      options.autoZoom = lidarAutoZoomOriginalValue;
+    }
   }
 }
 
