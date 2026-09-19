@@ -142,6 +142,13 @@ export function useViewportHistory(
     };
 
     const onCameraIdle = () => {
+      // A flight frame is authoritative: its jump cancels any restore ease still
+      // animating, so drop the pending count rather than leaving it to swallow
+      // the next ordinary camera-idle event. `record` skips flight frames too.
+      if (isFlying()) {
+        restoringCountRef.current = 0;
+        return;
+      }
       if (restoringCountRef.current > 0) {
         restoringCountRef.current--;
         return;

@@ -425,7 +425,16 @@ export class MapboxEngine implements MapEngine {
     this.map?.flyTo({ duration: 800, ...camera });
   }
   flyToView(location: StoryChapterLocation): void {
-    this.map?.flyTo(location, { storyCameraToken: this.storyCameraToken });
+    const map = this.map;
+    if (!map) return;
+    // A fresh token, so this preview's moveend can't satisfy a chapter's
+    // pending rotate-on-settle listener, which is detached as superseded.
+    const token = ++this.storyCameraToken;
+    if (this.pendingStoryRotate) {
+      map.off("moveend", this.pendingStoryRotate);
+      this.pendingStoryRotate = null;
+    }
+    map.flyTo(location, { storyCameraToken: token });
   }
   applyStoryChapterCamera(
     location: StoryChapterLocation,
@@ -439,8 +448,10 @@ export class MapboxEngine implements MapEngine {
       map.off("moveend", this.pendingStoryRotate);
       this.pendingStoryRotate = null;
     }
-    map[animation]({ ...location, duration: 800 }, { storyCameraToken: token });
-    if (!rotate) return;
+    if (!rotate) {
+      map[animation]({ ...location, duration: 800 }, { storyCameraToken: token });
+      return;
+    }
     const onMoveEnd = (event: mapboxgl.MapEventOf<"moveend"> & { storyCameraToken?: number }) => {
       if (event.storyCameraToken !== token) return;
       map.off("moveend", onMoveEnd);
@@ -451,8 +462,10 @@ export class MapboxEngine implements MapEngine {
         easing: (time) => time,
       });
     };
+    // Listen before moving: jumpTo fires its moveend synchronously.
     this.pendingStoryRotate = onMoveEnd;
     map.on("moveend", onMoveEnd);
+    map[animation]({ ...location, duration: 800 }, { storyCameraToken: token });
   }
   zoomIn(): void {
     this.map?.zoomIn();
@@ -541,6 +554,11 @@ export class MapboxEngine implements MapEngine {
       if (!ids.has(id)) this.restoreControlLayerPaint(id);
     for (const key of this.errors.keys())
       if (key.startsWith("layer:") && !ids.has(key.slice(6))) this.errors.delete(key);
+    // The app-owned overlays are never touched by this loop, so the anchor that
+    // keeps project layers beneath them is resolved once per sync.
+    const beforeOverlay = map
+      .getStyle()
+      ?.layers?.find((candidate) => isOverlayLayerId(candidate.id))?.id;
     // Store order is topmost first. Add and move in reverse so overlays agree
     // with the layer panel, including after a style swap or drag reorder.
     for (const original of [...layers].reverse()) {
@@ -596,9 +614,6 @@ export class MapboxEngine implements MapEngine {
         const wanted = new Set(plan.layers.map((spec) => spec.id));
         for (const old of oldPlan?.layers ?? [])
           if (!wanted.has(old.id) && map.getLayer(old.id)) map.removeLayer(old.id);
-        const beforeOverlay = map
-          .getStyle()
-          ?.layers?.find((candidate) => isOverlayLayerId(candidate.id))?.id;
         for (const spec of plan.layers) {
           const old = map.getLayer(spec.id);
           if (old && old.type !== spec.type) map.removeLayer(spec.id);

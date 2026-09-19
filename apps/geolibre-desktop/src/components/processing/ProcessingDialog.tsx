@@ -1315,6 +1315,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     drawAbortRef.current = controller;
     setDrawing(true);
     let enginePreview: (() => void) | undefined;
+    // The engine keeps each draw's disposer until teardown, so release it on
+    // every exit (done, cancel, abort), once.
+    let engineDrawDispose: (() => void) | undefined;
+    const disposeEngineDraw = () => {
+      const dispose = engineDrawDispose;
+      engineDrawDispose = undefined;
+      dispose?.();
+    };
     try {
       const extent = map
         ? await drawPrintExtent(map, {
@@ -1351,7 +1359,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               settled = true;
               resolve(value);
             };
-            const dispose = engine.drawExtent({
+            engineDrawDispose = engine.drawExtent({
               onChange: (box) => {
                 enginePreview?.();
                 enginePreview = engine.showExtent(box);
@@ -1362,7 +1370,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             controller.signal.addEventListener(
               "abort",
               () => {
-                dispose();
+                disposeEngineDraw();
                 finish(null);
               },
               { once: true },
@@ -1371,6 +1379,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       if (controller.signal.aborted) return;
       if (extent) applyMapExtent(extent);
     } finally {
+      disposeEngineDraw();
       if (map) clearPrintExtent(map);
       enginePreview?.();
       setDrawPoints(null);
