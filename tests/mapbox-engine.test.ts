@@ -948,6 +948,47 @@ describe("Mapbox shared raster basemaps", () => {
 });
 
 describe("Mapbox plugin-drawn native layers", () => {
+  it("waits for the vector bridge to materialize non-GeoJSON sources", () => {
+    const { engine, map } = makeEngine();
+    const pending = {
+      ...geojsonLayer({ id: "countries" }),
+      geojson: undefined,
+      source: { type: "geojson" as const, url: "https://example.test/countries.parquet" },
+      metadata: {
+        externalNativeLayer: true,
+        sourceKind: "maplibre-gl-vector",
+        nativeLayerIds: ["countries-fill"],
+      },
+    };
+
+    engine.syncLayers([pending]);
+    assert.equal(map.sources.size, 0);
+    assert.equal(map.layers.length, 0);
+    assert.deepEqual(engine.getRenderStatus().errors, []);
+
+    const materialized = geojsonLayer({
+      ...pending,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "Canada" },
+            geometry: { type: "Point", coordinates: [-106, 56] },
+          },
+        ],
+      },
+    });
+    engine.syncLayers([materialized]);
+    assert.deepEqual(map.sources.get("geolibre-mapbox-countries"), {
+      type: "geojson",
+      data: materialized.geojson,
+      generateId: true,
+    });
+    assert.ok(map.layers.length > 0);
+    assert.deepEqual(engine.getRenderStatus().errors, []);
+  });
+
   // The Web Services panels (FEMA NFHL here) add their raster source and layer
   // to the map themselves and mirror them into the store as external native
   // layers. MapLibre's layer-sync rebuilds those under the control's own ids;

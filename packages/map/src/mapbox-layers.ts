@@ -82,6 +82,13 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
   if (layer.type === "deckgl-viz" && layer.metadata.sourceKind === "deckgl-viz") return true;
   if (layer.type === "duckdb-query" && layer.metadata.sourceKind === "duckdb-query") return true;
   if (layer.metadata.externalNativeLayer === true) {
+    // On a renderer switch the Add Vector control first mirrors its persisted
+    // source, then asynchronously materializes it as GeoJSON for Mapbox. Until
+    // that collection arrives, treat the record as control-owned so Mapbox
+    // never tries to parse GeoParquet, GeoPackage, or another source URL as
+    // GeoJSON. A later store sync carries `layer.geojson` and takes the normal
+    // native compiler path below.
+    if (layer.metadata.sourceKind === "maplibre-gl-vector" && !layer.geojson) return true;
     if (layer.type === "lidar" && layer.metadata.sourceKind === "lidar-url") return true;
     // @carbonplan/zarr-layer is a CustomLayerInterface implementation that
     // targets Mapbox GL as well as MapLibre; the Zarr control adds it to
