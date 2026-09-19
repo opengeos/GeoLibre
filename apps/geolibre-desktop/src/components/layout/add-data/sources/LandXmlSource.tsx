@@ -29,6 +29,8 @@ interface SelectedLandXml {
   parsed: LandXmlParseResult;
 }
 
+type SourceCrsOrigin = "explicit" | "sample" | null;
+
 /** Add native LandXML TIN surfaces, alignments, profiles, and survey points. */
 export function LandXmlSource() {
   const { t } = useTranslation();
@@ -38,6 +40,7 @@ export function LandXmlSource() {
   const [landXmlUrl, setLandXmlUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<SelectedLandXml | null>(null);
   const [sourceCrs, setSourceCrs] = useState("");
+  const [sourceCrsOrigin, setSourceCrsOrigin] = useState<SourceCrsOrigin>(null);
   const [selectedKinds, setSelectedKinds] = useState<Record<LandXmlLayerKind, boolean>>({
     alignment: true,
     points: true,
@@ -50,6 +53,7 @@ export function LandXmlSource() {
     setLandXmlMode(mode);
     setSelectedFile(null);
     setSourceCrs("");
+    setSourceCrsOrigin(null);
   };
 
   const handleChooseFile = async () => {
@@ -65,6 +69,7 @@ export function LandXmlSource() {
       const parsed = parseLandXml(result.text);
       setSelectedFile({ path: result.path, parsed });
       setSourceCrs(parsed.detectedCrs ?? "");
+      setSourceCrsOrigin(null);
       source.setLayerName((current) =>
         current.trim() && current !== defaultName
           ? current
@@ -83,11 +88,21 @@ export function LandXmlSource() {
 
     const sourcePath = landXmlUrl.trim();
     if (!sourcePath) throw new Error(t("addData.landxml.errorUrl"));
-    const response = await fetch(proxyFeedRequestUrl(sourcePath));
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(sourcePath);
+    } catch {
+      throw new Error(t("addData.landxml.errorUrl"));
+    }
+    if (sourceUrl.protocol !== "http:" && sourceUrl.protocol !== "https:") {
+      throw new Error(t("addData.landxml.errorUrl"));
+    }
+    const normalizedSourcePath = sourceUrl.toString();
+    const response = await fetch(proxyFeedRequestUrl(normalizedSourcePath));
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    return { path: sourcePath, parsed: parseLandXml(await response.text()) };
+    return { path: normalizedSourcePath, parsed: parseLandXml(await response.text()) };
   };
 
   const handleSubmit = source.runSubmit(async () => {
@@ -206,7 +221,13 @@ export function LandXmlSource() {
               id="landxml-url"
               placeholder={t("addData.landxml.urlPlaceholder")}
               value={landXmlUrl}
-              onChange={(event) => setLandXmlUrl(event.target.value)}
+              onChange={(event) => {
+                setLandXmlUrl(event.target.value);
+                if (sourceCrsOrigin === "sample") {
+                  setSourceCrs("");
+                  setSourceCrsOrigin(null);
+                }
+              }}
             />
           </div>
         )}
@@ -242,13 +263,19 @@ export function LandXmlSource() {
             id="landxml-crs"
             value={sourceCrs}
             placeholder={t("addData.landxml.crsPlaceholder")}
-            onChange={(event) => setSourceCrs(event.target.value)}
+            onChange={(event) => {
+              setSourceCrs(event.target.value);
+              setSourceCrsOrigin("explicit");
+            }}
           />
           <Select
             aria-label={t("addData.landxml.crsPresetLabel")}
             value=""
             onChange={(event) => {
-              if (event.target.value) setSourceCrs(event.target.value);
+              if (event.target.value) {
+                setSourceCrs(event.target.value);
+                setSourceCrsOrigin("explicit");
+              }
             }}
           >
             <option value="">{t("addData.landxml.crsPresetLabel")}</option>
@@ -274,6 +301,7 @@ export function LandXmlSource() {
             setSelectedFile(null);
             setLandXmlUrl(sample.url);
             setSourceCrs(sample.crs);
+            setSourceCrsOrigin("sample");
             source.setLayerName((current) =>
               current.trim() && current !== defaultName
                 ? current
