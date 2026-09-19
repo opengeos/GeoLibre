@@ -270,9 +270,9 @@ export function MapboxCanvas({
                   : null;
               const fit = Boolean(
                 !restoringIdentifySelection &&
-                  next.ui.zoomToSelectedFeature &&
-                  nextKey &&
-                  nextKey !== previousSelectedFeatureKey,
+                next.ui.zoomToSelectedFeature &&
+                nextKey &&
+                nextKey !== previousSelectedFeatureKey,
               );
               previousSelectedFeatureKey = nextKey;
               current.highlightFeature(
