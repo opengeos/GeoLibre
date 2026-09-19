@@ -2700,6 +2700,7 @@ export function DesktopShell({
                 <PrimaryMapboxCanvas
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
+                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />
               ) : primaryRenderer === "arcgis" ? (
                 <PrimaryArcgisCanvas

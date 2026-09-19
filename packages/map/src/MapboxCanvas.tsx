@@ -7,6 +7,7 @@ import {
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
+import type { MapDiagnosticEvent } from "./MapCanvas";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
 import { styleUsesUnsupportedSource } from "./mapbox-layers";
@@ -23,13 +24,22 @@ export interface MapboxCanvasProps {
   viewId?: string;
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
+  onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
 }
 
 /** The namespace and its CSS load only when a Mapbox pane is mounted. */
-export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: MapboxCanvasProps) {
+export function MapboxCanvas({
+  accessToken,
+  viewId,
+  engineRef,
+  onEngineReady,
+  onMapDiagnosticEvent,
+}: MapboxCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   const readyCallback = useRef(onEngineReady);
   readyCallback.current = onEngineReady;
+  const diagnosticCallback = useRef(onMapDiagnosticEvent);
+  diagnosticCallback.current = onMapDiagnosticEvent;
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +104,7 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
           : attachFeatureSelection(map as unknown as FeatureSelectionMap, {
               state: featureSelection,
               featureIdAtPoint: (layer, point) => current.featureIdAtPoint(layer.id, point),
+              onDiagnostic: (event) => diagnosticCallback.current?.(event),
             });
         let applying = false;
         let popup: Popup | undefined;

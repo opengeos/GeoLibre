@@ -1,4 +1,4 @@
-import { MapboxCanvas, type MapEngine } from "@geolibre/map";
+import { MapboxCanvas, type MapDiagnosticEvent, type MapEngine } from "@geolibre/map";
 import type { ComponentType, ReactElement, RefObject } from "react";
 import { Trans } from "react-i18next";
 import { useMapboxAccessToken } from "../../hooks/useMapboxAccessToken";
@@ -16,10 +16,12 @@ const HintTrans = Trans as ComponentType<{
 export function PrimaryMapboxCanvas({
   engineRef,
   onEngineReady,
+  onMapDiagnosticEvent,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
+  onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   viewId?: string;
 }) {
   const token = useMapboxAccessToken();
@@ -30,6 +32,7 @@ export function PrimaryMapboxCanvas({
           accessToken={token}
           engineRef={engineRef}
           onEngineReady={onEngineReady}
+          onMapDiagnosticEvent={onMapDiagnosticEvent}
           viewId={viewId}
         />
       ) : (

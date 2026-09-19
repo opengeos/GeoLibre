@@ -5,7 +5,6 @@ import {
 } from "./feature-popup";
 import {
   applyGroupEffects,
-  applyMatchedSelection,
   createPointerElevationResolver,
   effectiveLayerRenderState,
   formatPixelValue,
@@ -26,7 +25,7 @@ import {
   type PointerElevationResolver,
 } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
-import type { Feature, Polygon } from "geojson";
+import type { Feature } from "geojson";
 import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,
@@ -41,14 +40,10 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import {
-  FEATURE_SELECTION_EVENT,
-  featuresIntersectingPolygon,
-  keepsFeatureSelectionActive,
-  selectionModeFromModifiers,
-  suspendedCameraHandlers,
-  type FeatureSelectionRequest,
-  type FeatureSelectionShape,
-} from "./feature-selection";
+  attachFeatureSelection,
+  FEATURE_SELECTION_BEGIN_EVENT,
+  type FeatureSelectionMap,
+} from "./map-feature-selection";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
@@ -58,14 +53,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
 
-/**
- * Dispatched when a feature-selection gesture arms. `featureSelectionActive` is
- * a ref rather than store state, so the map overlays that must stand down for a
- * gesture (the hover tooltip) have nothing to subscribe to — a gesture armed
- * from a menu produces no pointer event, and a tip already open under a
- * motionless cursor would sit there until the first drag.
- */
-const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const WEB_MERCATOR_EARTH_RADIUS = 6378137;
@@ -74,25 +61,6 @@ const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
 const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
-/**
- * Minimum screen distance, in pixels, between two vertices of a freehand
- * selection ring. Small enough that the traced outline still reads as a smooth
- * curve, large enough that a slow drag cannot grow the ring without bound.
- */
-const FREEHAND_MIN_POINT_DISTANCE = 3;
-/**
- * How close, in screen pixels, the two clicks a browser fires before `dblclick`
- * have to land to count as the same vertex. Small: it only has to absorb the
- * hand tremor within one double-click, never two deliberate vertices.
- */
-const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
-/**
- * Upper bound on the features a drawn selection will test on the main thread.
- * Mirrors MAX_CLIENT_PAIRS in @geolibre/processing's vector tools, which caps
- * the same kind of pairwise Turf loop so a very large layer cannot freeze the
- * tab; Select by expression and Select by location handle the bigger jobs.
- */
-const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapEngine | null>;
@@ -1393,308 +1361,24 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     const map = controller.current?.getMap();
     if (!map) return;
-
-    // Only the drawn shapes scan the layer; `single` goes through
-    // queryRenderedFeatures, which is bounded by what is on screen. Checked
-    // both when the gesture starts — so the user is not left waiting on a scan
-    // that was never going to finish promptly — and again when it completes,
-    // since a connection-backed layer can refresh past the limit while a
-    // polygon or freehand gesture is still open.
-    const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
-      const featureCount = candidate.geojson?.features?.length ?? 0;
-      if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES) return false;
-      onMapDiagnosticEventRef.current?.({
-        message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
-        detail:
-          "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
-        source: candidate.name,
-      });
-      return true;
-    };
-
-    const begin = (request: FeatureSelectionRequest) => {
-      cancelFeatureSelection.current?.();
-      const state = useAppStore.getState();
-      const layer = state.layers.find((item) => item.id === request.layerId);
-      if (!layer?.geojson?.features) return;
-      // A gesture on a hidden layer would match features the user cannot see —
-      // and the `single` shape, which queries rendered features, would match
-      // none at all. Folded through the group chain, so a layer hidden only by
-      // its group counts as hidden. LayerPanel disables the menu items; this is
-      // the guard for a layer hidden between opening the menu and drawing.
-      if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
-      if (tooManyToScan(layer, request.shape)) return;
-
-      const canvas = map.getCanvas();
-      const container = map.getContainer();
-
-      // Every side effect below registers its own rollback as it happens, and
-      // the teardown is armed before the first of them. Arming it at the end
-      // instead would leave a throw part-way through to strand the overlay in
-      // the DOM with the camera handlers disabled and no way back.
-      const cleanups: Array<() => void> = [];
-      cancelFeatureSelection.current = () => {
-        cleanups.forEach((cleanup) => cleanup());
-        featureSelectionActive.current = false;
-        cancelFeatureSelection.current = null;
-      };
-
-      const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      overlay.setAttribute("aria-hidden", "true");
-      Object.assign(overlay.style, {
-        position: "absolute",
-        inset: "0",
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-        zIndex: "5",
-      });
-      const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      shape.setAttribute("fill", "rgba(37, 99, 235, 0.16)");
-      shape.setAttribute("stroke", "#2563eb");
-      shape.setAttribute("stroke-width", "2");
-      shape.setAttribute("stroke-dasharray", "6 4");
-      overlay.append(shape);
-      container.append(overlay);
-      cleanups.push(() => overlay.remove());
-
-      // A drawn shape freezes the camera outright; click selection keeps it
-      // live but still gives up box zoom, which would otherwise swallow every
-      // Shift+click. See suspendedCameraHandlers() for why.
-      for (const name of suspendedCameraHandlers(request.shape)) {
-        const handler = map[name];
-        if (!handler.isEnabled()) continue;
-        handler.disable();
-        cleanups.push(() => handler.enable());
-      }
-      canvas.style.cursor = "crosshair";
-      cleanups.push(() => {
-        canvas.style.cursor = "";
-      });
-      featureSelectionActive.current = true;
-      window.dispatchEvent(new Event(FEATURE_SELECTION_BEGIN_EVENT));
-
-      let points: maplibregl.Point[] = [];
-      let dragging = false;
-      const render = () => {
-        if (points.length === 0) return shape.setAttribute("d", "");
-        if (request.shape === "rectangle" && points.length > 1) {
-          const [a, b] = points;
-          shape.setAttribute(
-            "d",
-            `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`,
-          );
-          return;
-        }
-        if (request.shape === "radius" && points.length > 1) {
-          const [center, edge] = points;
-          const radius = center.dist(edge);
-          shape.setAttribute(
-            "d",
-            `M ${center.x - radius} ${center.y} a ${radius} ${radius} 0 1 0 ${
-              radius * 2
-            } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
-          );
-          return;
-        }
-        const closed = request.shape !== "freehand" || !dragging;
-        shape.setAttribute(
-          "d",
-          `${points
-            .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
-            .join(" ")}${closed && points.length > 2 ? " Z" : ""}`,
+    return attachFeatureSelection(map as unknown as FeatureSelectionMap, {
+      state: {
+        active: featureSelectionActive,
+        cancel: cancelFeatureSelection,
+      },
+      featureIdAtPoint: (layer, point) => {
+        const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+        const rendered = map.queryRenderedFeatures(
+          [
+            [point.x - 4, point.y - 4],
+            [point.x + 4, point.y + 4],
+          ],
+          { layers: queryIds },
         );
-      };
-      const polygonFromPoints = (): Polygon | null => {
-        let ring = points;
-        // A click with no drag leaves the two points coincident, which would
-        // otherwise build a zero-area rectangle or a zero-radius circle. Say
-        // "no shape was drawn" outright rather than leaning on Turf to reject
-        // the degenerate ring.
-        const twoPointShape = request.shape === "rectangle" || request.shape === "radius";
-        if (twoPointShape && (points.length < 2 || points[0].equals(points[1]))) return null;
-        if (request.shape === "rectangle" && points.length >= 2) {
-          const [a, b] = points;
-          ring = [a, new maplibregl.Point(b.x, a.y), b, new maplibregl.Point(a.x, b.y)];
-        } else if (request.shape === "radius" && points.length >= 2) {
-          const [center, edge] = points;
-          const radius = center.dist(edge);
-          ring = Array.from({ length: 64 }, (_, index) => {
-            const angle = (index / 64) * Math.PI * 2;
-            return new maplibregl.Point(
-              center.x + Math.cos(angle) * radius,
-              center.y + Math.sin(angle) * radius,
-            );
-          });
-        }
-        if (ring.length < 3) return null;
-        const coordinates = ring.map((point) => {
-          const lngLat = map.unproject(point);
-          return [lngLat.lng, lngLat.lat] as [number, number];
-        });
-        coordinates.push(coordinates[0]);
-        return { type: "Polygon", coordinates: [coordinates] };
-      };
-
-      const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
-        // Re-read the layer rather than trusting the snapshot taken at gesture
-        // start: a polygon or freehand gesture stays open for as long as the
-        // user keeps drawing, long enough for a connection refresh to replace
-        // the features, for the layer to be hidden, or for it to be removed
-        // outright. Matching a deleted layer would also point selectedLayerId
-        // at something that no longer exists.
-        const store = useAppStore.getState();
-        const live = store.layers.find((item) => item.id === layer.id);
-        if (
-          !live?.geojson?.features ||
-          !effectiveLayerRenderState(live, store.layerGroups).visible ||
-          tooManyToScan(live, request.shape)
-        ) {
-          cancelFeatureSelection.current?.();
-          return;
-        }
-        let matched: string[] = [];
-        if (request.shape === "single" && points[0]) {
-          const point = points[0];
-          const queryIds = identifyStyleLayerIds(live).filter((id) => map.getLayer(id));
-          const rendered = map.queryRenderedFeatures(
-            [
-              [point.x - 4, point.y - 4],
-              [point.x + 4, point.y + 4],
-            ],
-            { layers: queryIds },
-          );
-          const id = rendered[0] ? findFeatureId(live, rendered[0]) : null;
-          if (id != null) matched = [id];
-        } else {
-          const polygon = polygonFromPoints();
-          // Nothing was drawn — a stray click rather than a drag. Leave the
-          // selection as it was instead of letting mode "new" replace it with
-          // the empty match. (Click-to-deselect stays the `single` shape's job,
-          // where an empty click is the deliberate gesture.)
-          if (!polygon) {
-            cancelFeatureSelection.current?.();
-            return;
-          }
-          matched = featuresIntersectingPolygon(live.geojson.features, polygon);
-        }
-        applyMatchedSelection(
-          layer.id,
-          matched,
-          selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
-        );
-        // Click selection is a continuous map tool: keep its handler and
-        // crosshair armed so the next click can add, remove, or intersect via
-        // modifiers. Drawn shapes remain one-shot because their completed
-        // geometry is the whole interaction. Escape and any newly-started map
-        // tool still run the shared teardown.
-        if (!keepsFeatureSelectionActive(request.shape)) cancelFeatureSelection.current?.();
-      };
-      const onMouseDown = (event: maplibregl.MapMouseEvent) => {
-        if (request.shape === "polygon" || request.shape === "single") return;
-        dragging = true;
-        points = [event.point];
-        render();
-      };
-      // The map's own mouse events stop at the canvas, so a drag released over
-      // the layer panel or the browser chrome would never deliver a mouseup and
-      // would leave the gesture armed with pan/zoom still disabled. Window
-      // listeners extend tracking past the canvas edge, the same way
-      // print-extent.ts does for its rubber band. Both sources feed the two
-      // helpers below, which are idempotent so the duplicate events a release
-      // inside the canvas produces cost nothing.
-      const canvasPoint = (clientX: number, clientY: number) => {
-        const rect = canvas.getBoundingClientRect();
-        return new maplibregl.Point(clientX - rect.left, clientY - rect.top);
-      };
-      const moveTo = (point: maplibregl.Point) => {
-        if (!dragging) return;
-        if (request.shape === "freehand") {
-          // Sample rather than take every mousemove: a slow trace would
-          // otherwise accumulate thousands of near-coincident vertices, and
-          // both render() (which rebuilds the whole path string) and the
-          // closing intersection test scale with the ring.
-          const last = points.at(-1);
-          if (last && last.dist(point) < FREEHAND_MIN_POINT_DISTANCE) return;
-          points.push(point);
-        } else {
-          if (points[1]?.equals(point)) return;
-          points = [points[0], point];
-        }
-        render();
-      };
-      const endDrag = (point: maplibregl.Point, modifiers: MouseEvent) => {
-        if (!dragging) return;
-        dragging = false;
-        // `.equals()`, not `!==`: every mouse event carries a freshly built
-        // Point, so a reference check would never skip the duplicate.
-        if (request.shape === "freehand" && !points.at(-1)?.equals(point)) points.push(point);
-        else if (request.shape !== "freehand") points = [points[0], point];
-        finish(modifiers);
-      };
-      const onMouseMove = (event: maplibregl.MapMouseEvent) => moveTo(event.point);
-      const onWindowMouseMove = (event: MouseEvent) =>
-        moveTo(canvasPoint(event.clientX, event.clientY));
-      const onMouseUp = (event: maplibregl.MapMouseEvent) =>
-        endDrag(event.point, event.originalEvent);
-      const onWindowMouseUp = (event: MouseEvent) =>
-        endDrag(canvasPoint(event.clientX, event.clientY), event);
-      const onClick = (event: maplibregl.MapMouseEvent) => {
-        if (request.shape === "single") {
-          points = [event.point];
-          finish(event.originalEvent);
-        } else if (request.shape === "polygon") {
-          points.push(event.point);
-          render();
-        }
-      };
-      const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
-        if (request.shape !== "polygon") return;
-        event.preventDefault();
-        // A double-click fires two clicks first; drop the duplicate tail vertex
-        // they leave behind (same fix as ElevationProfileControl's drawing).
-        const [last, previous] = [points.at(-1), points.at(-2)];
-        if (last && previous && last.dist(previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE) points.pop();
-        if (points.length > 2) finish(event.originalEvent);
-      };
-      const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "Escape") cancelFeatureSelection.current?.();
-      };
-      // Only while a drag is in flight: that is the case where losing focus
-      // (Alt+Tab, a system dialog) means the mouseup never arrives. A polygon
-      // is drawn click by click with no armed state, so blurring away to check
-      // something must not throw away the vertices already placed.
-      const onBlur = () => {
-        if (dragging) cancelFeatureSelection.current?.();
-      };
-      map.on("mousedown", onMouseDown);
-      map.on("mousemove", onMouseMove);
-      map.on("mouseup", onMouseUp);
-      map.on("click", onClick);
-      map.on("dblclick", onDoubleClick);
-      window.addEventListener("mousemove", onWindowMouseMove);
-      window.addEventListener("mouseup", onWindowMouseUp);
-      window.addEventListener("keydown", onKeyDown);
-      window.addEventListener("blur", onBlur);
-      cleanups.push(
-        () => map.off("mousedown", onMouseDown),
-        () => map.off("mousemove", onMouseMove),
-        () => map.off("mouseup", onMouseUp),
-        () => map.off("click", onClick),
-        () => map.off("dblclick", onDoubleClick),
-        () => window.removeEventListener("mousemove", onWindowMouseMove),
-        () => window.removeEventListener("mouseup", onWindowMouseUp),
-        () => window.removeEventListener("keydown", onKeyDown),
-        () => window.removeEventListener("blur", onBlur),
-      );
-    };
-    const onRequest = (event: Event) =>
-      begin((event as CustomEvent<FeatureSelectionRequest>).detail);
-    window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
-    return () => {
-      window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);
-      cancelFeatureSelection.current?.();
-    };
+        return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
+      },
+      onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
+    });
   }, []);
 
   // Stable key over just the geotagged-photo layer ids, so the photo-click
