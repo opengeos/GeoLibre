@@ -858,6 +858,21 @@ describe("MapboxEngine.syncLayers", () => {
     );
   });
 
+  it("ignores aborted renderer requests", () => {
+    const diagnosticMap = makeMap();
+    const diagnostics: Array<{ message: string }> = [];
+    const diagnosticEngine = new MapboxEngine(diagnosticMap as unknown as mapboxgl.Map, gl, "", {
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+    const error = new Error("The operation was aborted");
+    error.name = "AbortError";
+
+    diagnosticMap.fire("error", { error, sourceId: "roads" });
+
+    assert.deepEqual(diagnosticEngine.getRenderStatus().errors, []);
+    assert.deepEqual(diagnostics, []);
+  });
+
   it("reports renderer errors to Diagnostics once with structured context", () => {
     const diagnosticMap = makeMap();
     const diagnostics: Array<{

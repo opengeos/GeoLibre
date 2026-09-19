@@ -341,6 +341,10 @@ export class MapboxEngine implements MapEngine {
     status?: number;
     url?: string;
   }) => {
+    // Cancelled tile/style fetches are already captured as informational
+    // network events. Treating them as renderer failures would double-count
+    // normal panning, style swaps, and layer removal.
+    if (event.error.name === "AbortError") return;
     const source = event.sourceId;
     const status = event.status ?? event.error.status;
     const url = event.url ?? event.error.url ?? event.error.resource;
