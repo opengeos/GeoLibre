@@ -390,6 +390,13 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
                   setCollectionId(ids[0] ?? "");
                 }}
               >
+                {collectionOptions.length === 1 ? (
+                  <option value="" disabled>
+                    {t("addData.ogcFeatures.selectCollection", {
+                      count: collectionOptions.length,
+                    })}
+                  </option>
+                ) : null}
                 {collectionOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.title === option.id ? option.id : `${option.title} (${option.id})`}

@@ -240,7 +240,8 @@ export function WfsSource({
     // format they did not type) and adopt it as the form's output format. That
     // updates wfsFormCache too, so adding another feature type from the same
     // service this session skips straight to the working token instead of
-    // re-paying the retry cost.
+    // re-paying the retry cost. Only cache it when every successful type used
+    // the same token; a mixed result has no safe service-wide default.
     const requestedOutputFormat = wfsOutputFormat.trim();
     for (const { typeName, result } of results) {
       if (
@@ -252,9 +253,13 @@ export function WfsSource({
         );
       }
     }
-    const firstResolvedFormat = results[0].result.outputFormat;
-    if (firstResolvedFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()) {
-      setWfsOutputFormat(firstResolvedFormat);
+    const resolvedFormats = new Set(results.map(({ result }) => result.outputFormat.toLowerCase()));
+    const commonResolvedFormat = results[0].result.outputFormat;
+    if (
+      resolvedFormats.size === 1 &&
+      commonResolvedFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()
+    ) {
+      setWfsOutputFormat(commonResolvedFormat);
     }
     const multiple = typeNames.length > 1;
     const layers = results.map(({ typeName, result }) => {
@@ -367,6 +372,11 @@ export function WfsSource({
                   setWfsTypeName(names[0] ?? "");
                 }}
               >
+                {typeOptions.length === 1 ? (
+                  <option value="" disabled>
+                    {t("addData.wfs.selectType", { count: typeOptions.length })}
+                  </option>
+                ) : null}
                 {typeOptions.map((option) => (
                   <option key={option.name} value={option.name}>
                     {option.title === option.name
