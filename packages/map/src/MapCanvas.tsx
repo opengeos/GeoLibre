@@ -49,6 +49,7 @@ import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import type { MapEngine } from "./map-engine";
 import { createMapResizeScheduler } from "./map-resize";
+import type { MapDiagnosticEvent } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -122,14 +123,6 @@ const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   errorLabel: "Error",
   error: "Could not identify this layer.",
 };
-
-export interface MapDiagnosticEvent {
-  message: string;
-  detail?: string;
-  source?: string;
-  status?: number;
-  url?: string;
-}
 
 interface DuckDBIdentifyBridgeResult {
   coordinate: [number, number] | null;

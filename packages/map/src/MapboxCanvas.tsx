@@ -10,7 +10,7 @@ import {
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
-import type { MapDiagnosticEvent } from "./MapCanvas";
+import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
 import { styleUsesUnsupportedSource } from "./mapbox-layers";
@@ -261,6 +261,8 @@ export function MapboxCanvas({
             emit: (elevation) => useAppStore.getState().setPointerElevation(elevation),
           });
           cleanupTasks.push(() => pointerElevation?.dispose());
+          const point = useAppStore.getState().pointerCoords;
+          if (point) pointerElevation.update(point);
         }
         update(state);
         update(useAppStore.getState(), state);

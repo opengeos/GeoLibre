@@ -863,12 +863,15 @@ describe("MapboxEngine.syncLayers", () => {
     });
     const error = Object.assign(new Error("Tile pk.secret failed"), {
       status: 404,
-      resource: "https://api.mapbox.com/tile?access_token=pk.secret",
+      resource: "https://api.mapbox.com/tiles/2/1/0.png?access_token=pk.secret",
     });
 
     diagnosticMap.fire("error", { error, sourceId: "roads" });
     diagnosticMap.fire("error", {
-      error: Object.assign(new Error("Another tile failed"), { status: 404 }),
+      error: Object.assign(new Error("Another tile failed"), {
+        status: 404,
+        resource: "https://api.mapbox.com/tiles/2/1/1.png?access_token=pk.secret",
+      }),
       sourceId: "roads",
     });
 
@@ -876,11 +879,40 @@ describe("MapboxEngine.syncLayers", () => {
     assert.deepEqual(diagnostics[0], {
       message: "Tile [redacted] failed",
       detail:
-        '{\n  "source": "roads",\n  "status": 404,\n  "url": "https://api.mapbox.com/tile?access_token=[redacted]",\n  "error": "Tile [redacted] failed"\n}',
+        '{\n  "source": "roads",\n  "status": 404,\n  "url": "https://api.mapbox.com/tiles/2/1/0.png?access_token=[redacted]",\n  "error": "Tile [redacted] failed"\n}',
       source: "roads",
       status: 404,
-      url: "https://api.mapbox.com/tile?access_token=[redacted]",
+      url: "https://api.mapbox.com/tiles/2/1/0.png?access_token=[redacted]",
     });
+  });
+
+  it("groups a sourceless tile burst without hiding a later resource failure", () => {
+    const diagnosticMap = makeMap();
+    const diagnostics: Array<{ message: string }> = [];
+    new MapboxEngine(diagnosticMap as unknown as mapboxgl.Map, gl, "", {
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+
+    diagnosticMap.fire("error", {
+      error: Object.assign(new Error("tile zero failed"), {
+        resource: "https://tiles.example.com/4/2/0.png",
+      }),
+    });
+    diagnosticMap.fire("error", {
+      error: Object.assign(new Error("tile one failed"), {
+        resource: "https://tiles.example.com/4/2/1.png",
+      }),
+    });
+    diagnosticMap.fire("error", {
+      error: Object.assign(new Error("sprite failed"), {
+        resource: "https://tiles.example.com/styles/main/sprite.json",
+      }),
+    });
+
+    assert.deepEqual(
+      diagnostics.map((event) => event.message),
+      ["tile zero failed", "sprite failed"],
+    );
   });
 
   it("labels with the font the loaded basemap style uses", () => {

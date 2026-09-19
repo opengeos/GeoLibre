@@ -17,8 +17,8 @@ export {
   type MapCanvasProps,
   type MapCanvasRasterIdentify,
   type MapCanvasRasterIdentifyResult,
-  type MapDiagnosticEvent,
 } from "./MapCanvas";
+export type { MapDiagnosticEvent } from "./map-diagnostic";
 export {
   FEATURE_SELECTION_EVENT,
   featuresIntersectingPolygon,
