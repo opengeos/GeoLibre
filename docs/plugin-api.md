@@ -424,6 +424,7 @@ change. If you also touched pages under `docs/`, build the site — CI runs
 | `maplibre-gl-dimensions`      | Adds Dimension tools (linear/angular CAD-style dimension lines, with optional vertex snapping)                     |
 | `maplibre-gl-geoagent`        | Adds GeoAgent map assistant controls                                                                                |
 | `maplibre-gl-lidar`           | Adds LiDAR controls                                                                                                 |
+| `geolibre-ign-lidar-hd`       | Searches IGN LiDAR HD tile coverage (WFS) and downloads point cloud (COPC LAZ) files                                |
 | `maplibre-gl-streetview`      | Adds street view controls                                                                                           |
 | `maplibre-gl-swipe`           | Adds map swipe controls                                                                                             |
 
