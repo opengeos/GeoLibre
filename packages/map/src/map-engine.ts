@@ -346,7 +346,7 @@ export interface MapRenderSurface {
   getContainer(): HTMLElement;
   getBearing(): number;
   project(location: [number, number]): { x: number; y: number };
-  /** Convert a canvas point to degrees. Throws `RangeError` when the point has no map location. */
+  /** Convert a canvas point to degrees. May throw `RangeError` when the renderer finds no location. */
   unproject(point: [number, number]): { lng: number; lat: number };
   redraw(): void;
 }

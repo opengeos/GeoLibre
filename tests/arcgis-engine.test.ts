@@ -1355,6 +1355,9 @@ it("hosts DOM controls with instant jumps, navigation events and complete cleanu
       (uiAdds.at(-1)!.component as HTMLElement).classList.contains("maplibregl-ctrl-bottom-right"),
     );
     assert.equal(facade.hasControl(control), true);
+    assert.deepEqual(facade.unproject([3, 4]).toArray(), [3, 4]);
+    rawView.toMap = () => null;
+    assert.deepEqual(facade.unproject([3, 4]).toArray(), engine.readView().center);
     facade.jumpTo({ center: { lng: 3, lat: 4 }, zoom: 9 });
     assert.deepEqual(goTo.at(-1), {
       target: { center: [3, 4], zoom: 9, rotation: 0 },
