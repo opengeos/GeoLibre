@@ -718,7 +718,7 @@ export function DesktopShell({
   const handleKnowledgeFlyTo = useCallback((lat: number, lon: number) => {
     mapControllerRef.current?.flyTo({
       center: [lon, lat],
-      zoom: Math.max(mapControllerRef.current?.getMap()?.getZoom() ?? 12, 14),
+      zoom: Math.max(mapControllerRef.current?.readView().zoom ?? 12, 14),
     });
   }, []);
   // The COG/WMS/XYZ layer whose bounding-box subset is being extracted in the
@@ -2739,12 +2739,6 @@ export function DesktopShell({
                     }}
                     showResolved={showResolvedComments}
                   />
-                  <KnowledgeCardPanel
-                    place={knowledgePlace}
-                    lang={wikipediaLang(i18n.language)}
-                    onClose={() => setKnowledgePlace(null)}
-                    onFlyTo={handleKnowledgeFlyTo}
-                  />
                   {/* Isolate the collaboration badge in its own boundary: it renders
                   over the map, so a fault here must never take down the map
                   itself (it shares this subtree's error boundary otherwise). */}
@@ -2786,6 +2780,12 @@ export function DesktopShell({
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
                 onExplorePlace={handleExplorePlace}
+              />
+              <KnowledgeCardPanel
+                place={knowledgePlace}
+                lang={wikipediaLang(i18n.language)}
+                onClose={() => setKnowledgePlace(null)}
+                onFlyTo={handleKnowledgeFlyTo}
               />
               <StoryMapComposeBar
                 mapControllerRef={mapControllerRef}
