@@ -787,6 +787,8 @@ describe("MapboxEngine.identifyFeatures", () => {
       ],
     );
     assert.deepEqual(engine.identifyFeatures([0, 0], "other"), []);
+    assert.equal(engine.featureIdAtPoint("layer-a", { x: 20, y: 30 }), "ca");
+    assert.equal(engine.featureIdAtPoint("other", { x: 20, y: 30 }), null);
   });
 });
 

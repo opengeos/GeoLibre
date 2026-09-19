@@ -12,6 +12,11 @@ import { prepareMapboxStandard } from "./mapbox-standard-style";
 import { styleUsesUnsupportedSource } from "./mapbox-layers";
 import { resolveMapStyle } from "./map-controller";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
+import {
+  attachFeatureSelection,
+  type FeatureSelectionMap,
+  type FeatureSelectionState,
+} from "./map-feature-selection";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -80,6 +85,16 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
           ownsLayerLabels: !viewId,
         });
         const current = engine;
+        const featureSelection: FeatureSelectionState = {
+          active: { current: false },
+          cancel: { current: null },
+        };
+        const detachFeatureSelection = viewId
+          ? () => {}
+          : attachFeatureSelection(map as unknown as FeatureSelectionMap, {
+              state: featureSelection,
+              featureIdAtPoint: (layer, point) => current.featureIdAtPoint(layer.id, point),
+            });
         let applying = false;
         let popup: Popup | undefined;
         const update = (next: typeof state, previous?: typeof state) => {
@@ -136,14 +151,20 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
               !viewId &&
               (!previous ||
                 next.selectedFeatureId !== previous.selectedFeatureId ||
+                next.selectedFeatureIds !== previous.selectedFeatureIds ||
                 next.selectedLayerId !== previous.selectedLayerId)
             ) {
               current.highlightFeature(
                 next.layers.find((l) => l.id === next.selectedLayerId),
-                next.selectedFeatureId,
+                next.selectedFeatureIds.length > 0
+                  ? next.selectedFeatureIds
+                  : next.selectedFeatureId,
               );
             }
-            if (previous && next.identifyLayerId !== previous.identifyLayerId) popup?.remove();
+            if (previous && next.identifyLayerId !== previous.identifyLayerId) {
+              popup?.remove();
+              if (next.identifyLayerId) featureSelection.cancel.current?.();
+            }
           } finally {
             applying = false;
           }
@@ -194,7 +215,7 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
           if (!viewId) useAppStore.getState().setPointerCoords(null);
         });
         map.on("click", (e) => {
-          if (viewId) return;
+          if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
           if (!next.identifyLayerId) return;
           const match = current.identifyFeatures(
@@ -236,6 +257,7 @@ export function MapboxCanvas({ accessToken, viewId, engineRef, onEngineReady }: 
           setError(errors.length ? errors.join("; ") : null);
         }, 1000);
         cleanup = () => {
+          detachFeatureSelection();
           unsubscribe();
           // A DOM listener on the container outlives map.remove(); drop it so a
           // re-run of this effect (token change) does not stack another.
