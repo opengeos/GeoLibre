@@ -514,6 +514,7 @@
       "selectType_one": "{{count}} öğe türünden seç",
       "selectType_other": "{{count}} öğe türünden seç",
       "noTypesFound": "Bu servis için öğe türü bulunamadı.",
+      "errorNoFeatures": "Bu öğe türü hiç öğe döndürmedi.",
       "retrieveError": "Bu servisten öğe türleri alınamadı."
     },
     "wmts": {

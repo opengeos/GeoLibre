@@ -222,7 +222,7 @@ export function WfsSource({
       if (result.data.features.length > 0) return [{ typeName, result }];
       failures.push({
         key: typeName,
-        reason: new Error(t("addData.ogcFeatures.errorNoFeatures")),
+        reason: new Error(t("addData.wfs.errorNoFeatures")),
       });
       return [];
     });

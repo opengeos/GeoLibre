@@ -514,6 +514,7 @@
       "selectType_one": "Aus {{count}} Feature-Typ auswählen",
       "selectType_other": "Aus {{count}} Feature-Typen auswählen",
       "noTypesFound": "Für diesen Dienst wurden keine Feature-Typen gefunden.",
+      "errorNoFeatures": "Dieser Feature-Typ hat keine Objekte zurückgegeben.",
       "retrieveError": "Feature-Typen konnten nicht von diesem Dienst abgerufen werden."
     },
     "wmts": {

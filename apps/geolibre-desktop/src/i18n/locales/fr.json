@@ -514,6 +514,7 @@
       "selectType_one": "Sélectionner parmi {{count}} type d'entité",
       "selectType_other": "Sélectionner parmi {{count}} types d'entités",
       "noTypesFound": "Aucun type d'entité n'a été trouvé pour ce service.",
+      "errorNoFeatures": "Ce type d'entité n'a renvoyé aucune entité.",
       "retrieveError": "Impossible de récupérer les types d'entités de ce service."
     },
     "wmts": {

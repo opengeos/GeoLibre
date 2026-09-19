@@ -518,6 +518,7 @@
       "selectType_one": "Select from {{count}} feature type",
       "selectType_other": "Select from {{count}} feature types",
       "noTypesFound": "No feature types were found for this service.",
+      "errorNoFeatures": "This feature type returned no features.",
       "retrieveError": "Could not retrieve feature types from this service."
     },
     "wmts": {

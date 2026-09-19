@@ -514,6 +514,7 @@
       "selectType_one": "Seleccionar entre {{count}} tipo de entidad",
       "selectType_other": "Seleccionar entre {{count}} tipos de entidad",
       "noTypesFound": "No se encontraron tipos de entidad para este servicio.",
+      "errorNoFeatures": "Este tipo de entidad no devolvió ninguna entidad.",
       "retrieveError": "No se pudieron recuperar los tipos de entidad de este servicio."
     },
     "wmts": {
