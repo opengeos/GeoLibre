@@ -478,7 +478,7 @@ describe("ArcgisEngine camera conventions", () => {
   it("rejects a screen point that has no map location", () => {
     const { engine, rawView } = makeSceneEngine();
     rawView.toMap = () => null;
-    assert.throws(() => engine.getRenderSurface()?.unproject([10, 20]), /outside the map view/);
+    assert.throws(() => engine.getRenderSurface()?.unproject([10, 20]), RangeError);
   });
   it("clamps saved views against the project preferences before the jump", () => {
     const { engine, goTo } = makeEngine();
