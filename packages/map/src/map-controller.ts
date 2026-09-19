@@ -1617,6 +1617,16 @@ export class MapController implements MapEngine {
     return captureEngineImage(this);
   }
 
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void {
+    const map = this.map;
+    const onClick = (event: maplibregl.MapMouseEvent) =>
+      listener([event.lngLat.lng, event.lngLat.lat]);
+    map?.on("click", onClick);
+    return () => {
+      map?.off("click", onClick);
+    };
+  }
+
   isCameraMoving(): boolean {
     return this.map?.isMoving() ?? false;
   }

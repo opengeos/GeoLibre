@@ -828,6 +828,19 @@ export class CesiumEngine implements MapEngine {
     return captureEngineImage(this);
   }
 
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void {
+    const viewer = this.live();
+    if (!viewer) return () => {};
+    const handler = new this.Cesium.ScreenSpaceEventHandler(viewer.canvas);
+    handler.setInputAction((event: { position: { x: number; y: number } }) => {
+      const location = pickDrawingLocation(this.Cesium, viewer, event.position);
+      if (location) listener(location);
+    }, this.Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    return () => {
+      if (!handler.isDestroyed()) handler.destroy();
+    };
+  }
+
   isCameraMoving(): boolean {
     return this.cameraMoving;
   }

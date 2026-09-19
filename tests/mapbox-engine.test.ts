@@ -1082,6 +1082,19 @@ describe("MapboxEngine.identifyFeatures", () => {
 });
 
 describe("MapboxEngine camera and preferences", () => {
+  it("publishes geographic map clicks and removes the listener on cleanup", () => {
+    const { engine, map } = makeEngine();
+    const clicks: [number, number][] = [];
+    const unsubscribe = engine.onMapClick((lngLat) => clicks.push(lngLat));
+
+    map.fire("click", { lngLat: { lng: -76.5, lat: 39.25 } });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+
+    unsubscribe();
+    map.fire("click", { lngLat: { lng: 10, lat: 20 } });
+    assert.deepEqual(clicks, [[-76.5, 39.25]]);
+  });
+
   it("reads the camera and skips a jump that changes nothing", () => {
     const { engine, map } = makeEngine();
     const view = engine.readView();

@@ -166,6 +166,8 @@ export interface MapEngine {
   getRenderSurface(): MapRenderSurface | null;
   getRenderStatus(): { pending: string[]; errors: string[] };
   captureImage(): Promise<Blob>;
+  /** Subscribe to primary-button map clicks in geographic coordinates. */
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void;
   /** Whether the camera is currently moving or animating. */
   isCameraMoving(): boolean;
   /** Subscribe to camera changes while the view is moving. */
