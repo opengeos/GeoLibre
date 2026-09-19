@@ -70,11 +70,15 @@ test("keeps every toolbar menu available on small screens", async ({ page }) => 
     "Plugins",
     "Help",
   ]) {
-    await expect(page.getByRole("button", { name: menu, exact: true })).toBeVisible();
+    const trigger = page.getByRole("button", { name: menu, exact: true });
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toBeInViewport();
   }
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Rendering engine" })).toBeVisible();
+  const renderingEngine = page.getByRole("menuitem", { name: "Rendering engine" });
+  await expect(renderingEngine).toBeVisible();
+  await expect(renderingEngine).toBeInViewport();
 });
 
 // The accessibility gate now lives in its own multi-screen suite (a11y.spec.ts,
