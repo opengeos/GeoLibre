@@ -116,7 +116,12 @@ export function LandXmlSource() {
     if (!normalizedCrs && !selectedSource.parsed.coordinatesLookGeographic) {
       throw new Error(t("addData.landxml.errorMissingCrs"));
     }
-    const geographicCrs = isGeographicCrs(normalizedCrs);
+    // NAD83 is also longitude/latitude, but the shared helper intentionally
+    // identifies only map-ready WGS84 aliases because other importers use its
+    // result to decide whether reprojection is required.
+    const geographicCrs =
+      isGeographicCrs(normalizedCrs) ||
+      normalizedCrs.replace(/\s+/g, "").toUpperCase() === "EPSG:4269";
     if (normalizedCrs && geographicCrs && !selectedSource.parsed.coordinatesLookGeographic) {
       throw new Error(t("addData.landxml.errorGeographicCrsBounds"));
     }

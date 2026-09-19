@@ -19,6 +19,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **File Geodatabase (GDB)** | Opens an Esri file geodatabase and adds one of its feature classes as a layer. |
 | **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
+| **LandXML Layer** | Loads a LandXML file or URL and imports selected TIN surfaces, horizontal alignments, vertical profile metadata, and survey points. Projected coordinates are reprojected from the selected or embedded source CRS. |
 | **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 | **OSM PBF Layer** | Reads an OpenStreetMap `.osm.pbf` extract and adds the features you select from it. |

@@ -32,7 +32,11 @@ describe("LandXML parser", () => {
 
     const surface = result.layers.find((layer) => layer.kind === "surface");
     assert.ok(surface);
-    assert.equal(surface.features.features.length, 2, "invalid face references are skipped");
+    assert.equal(
+      surface.features.features.length,
+      3,
+      "hidden edges are retained and invalid face references are skipped",
+    );
     assert.deepEqual(surface.features.features[0].geometry, {
       type: "Polygon",
       coordinates: [
@@ -63,6 +67,26 @@ describe("LandXML parser", () => {
       type: "Point",
       coordinates: [-71.06, 42.36, 18],
     });
+  });
+
+  it("smoothly approximates spiral alignments without using the PI as a vertex", () => {
+    const result = parseLandXml(`
+      <LandXML>
+        <Alignments><Alignment name="Spiral"><CoordGeom><Spiral>
+          <Start>0 0</Start><PI>0 10</PI><End>10 10</End>
+        </Spiral></CoordGeom></Alignment></Alignments>
+      </LandXML>
+    `);
+    const alignment = result.layers[0]?.features.features[0]?.geometry;
+    assert.equal(alignment?.type, "LineString");
+    if (!alignment || alignment.type !== "LineString") return;
+    assert.equal(alignment.coordinates.length, 17);
+    assert.deepEqual(alignment.coordinates[0], [0, 0]);
+    assert.deepEqual(alignment.coordinates.at(-1), [10, 10]);
+    assert.equal(
+      alignment.coordinates.some((position) => position[0] === 10 && position[1] === 0),
+      false,
+    );
   });
 
   it("marks projected coordinates as requiring a CRS", () => {

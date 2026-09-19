@@ -46,8 +46,9 @@ interface VerticalProfile {
  * uses easting (X), northing (Y), and optional elevation, so every position is
  * reordered while retaining its Z value. TIN faces become triangular polygons,
  * horizontal alignment lines and curves become LineStrings, and CgPoints become
- * points. Spiral segments currently retain their defining Start, PI, and End
- * vertices. Vertical profile PVIs are preserved on alignment properties.
+ * points. Spiral segments use their tangent intersection as a quadratic control
+ * point to produce a smooth approximation. Vertical profile PVIs are preserved
+ * on alignment properties.
  *
  * @param text Raw LandXML text.
  * @returns Parsed layers, coordinate-system hints, and object counts.
@@ -140,7 +141,9 @@ function parseSurface(
   for (const [faceIndex, face] of descendants(definition, "F").entries()) {
     const ids = tokens(face.textContent).slice(0, 3);
     if (ids.length !== 3) continue;
-    const triangle = ids.map((id) => pointById.get(id));
+    // Civil 3D uses a negative point reference to mark the following TIN edge
+    // as hidden. The magnitude still identifies the surface point.
+    const triangle = ids.map((id) => pointById.get(id.replace(/^-/, "")));
     if (triangle.some((position) => !position)) continue;
     const coordinates = triangle as Position[];
     features.push({
@@ -229,7 +232,7 @@ function alignmentSegmentPositions(segment: Element): Position[] {
   }
   if (kind === "spiral") {
     const pi = childPosition(segment, "PI");
-    return pi ? [start, pi, end] : [start, end];
+    return pi ? sampleSpiral(start, pi, end) : [start, end];
   }
   if (kind === "irregularline") {
     const points = descendants(segment, "P")
@@ -238,6 +241,24 @@ function alignmentSegmentPositions(segment: Element): Position[] {
     return points.length >= 2 ? points : [start, end];
   }
   return [start, end];
+}
+
+function sampleSpiral(start: Position, pi: Position, end: Position): Position[] {
+  const steps = 16;
+  const positions: Position[] = [];
+  for (let index = 0; index <= steps; index += 1) {
+    const fraction = index / steps;
+    const inverse = 1 - fraction;
+    const z = interpolatedZ(start, end, fraction);
+    positions.push([
+      inverse * inverse * start[0] + 2 * inverse * fraction * pi[0] + fraction * fraction * end[0],
+      inverse * inverse * start[1] + 2 * inverse * fraction * pi[1] + fraction * fraction * end[1],
+      ...(z === undefined ? [] : [z]),
+    ]);
+  }
+  positions[0] = start;
+  positions[positions.length - 1] = end;
+  return positions;
 }
 
 function sampleCurve(
