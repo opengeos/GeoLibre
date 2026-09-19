@@ -11,11 +11,22 @@ const originalDocument = globalThis.document;
 const originalResizeObserver = globalThis.ResizeObserver;
 
 class TestResizeObserver {
+  static instances = 0;
+  static disconnects = 0;
+
+  constructor() {
+    TestResizeObserver.instances += 1;
+  }
+
   observe(): void {}
-  disconnect(): void {}
+  disconnect(): void {
+    TestResizeObserver.disconnects += 1;
+  }
 }
 
 beforeEach(() => {
+  TestResizeObserver.instances = 0;
+  TestResizeObserver.disconnects = 0;
   const { document } = parseHTML("<html><body><div id='map'></div></body></html>");
   Object.assign(globalThis, { document, ResizeObserver: TestResizeObserver });
 });
@@ -76,5 +87,17 @@ describe("projected map overlays", () => {
     handle.remove();
     assert.equal(svg.parentElement, null);
     assert.equal(listeners.size, 0);
+  });
+
+  it("shares one resize observer across overlays in the same container", () => {
+    const { engine } = engineHarness();
+    const marker = mountProjectedElement(engine, document.createElement("div"), [1, 2], "bottom");
+    const extent = mountProjectedExtent(engine, [1, 2, 3, 4], "#2563eb");
+
+    assert.equal(TestResizeObserver.instances, 1);
+    marker.remove();
+    assert.equal(TestResizeObserver.disconnects, 0);
+    extent.remove();
+    assert.equal(TestResizeObserver.disconnects, 1);
   });
 });

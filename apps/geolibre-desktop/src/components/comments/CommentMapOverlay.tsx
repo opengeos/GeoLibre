@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAppStore, type ProjectComment } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { useShallow } from "zustand/react/shallow";
 import { mountProjectedElement } from "../../lib/projected-map-overlay";
 
 interface CommentMapOverlayProps {
@@ -118,7 +119,26 @@ export function CommentMapOverlay({
   showResolved = false,
 }: CommentMapOverlayProps): null {
   const comments = useAppStore((s) => s.comments);
-  const layers = useAppStore((s) => s.layers);
+  const featureAnchorLayerIds = useMemo(
+    () =>
+      new Set(
+        comments.flatMap((comment) =>
+          comment.anchor.type === "feature" ? [comment.anchor.layerId] : [],
+        ),
+      ),
+    [comments],
+  );
+  // Rebuild pins when an anchored layer's geometry or source mapping changes,
+  // but not for unrelated layer mutations such as opacity slider updates.
+  const featureAnchorLayerInputs = useAppStore(
+    useShallow((s) =>
+      s.layers.flatMap((layer) =>
+        featureAnchorLayerIds.has(layer.id)
+          ? [layer.id, layer.geojson, layer.metadata?.sourceIds]
+          : [],
+      ),
+    ),
+  );
   const markerDisposersRef = useRef<Array<() => void>>([]);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
 
@@ -197,7 +217,7 @@ export function CommentMapOverlay({
     };
   }, [
     comments,
-    layers,
+    featureAnchorLayerInputs,
     showResolved,
     primaryRenderer,
     mapReadyGeneration,

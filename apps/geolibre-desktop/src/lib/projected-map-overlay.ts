@@ -13,6 +13,35 @@ export interface ProjectedExtentHandle {
   remove(): void;
 }
 
+interface SharedResizeObserver {
+  observer: ResizeObserver;
+  callbacks: Set<() => void>;
+}
+
+const resizeObservers = new WeakMap<HTMLElement, SharedResizeObserver>();
+
+function observeContainerResize(container: HTMLElement, callback: () => void): () => void {
+  let shared = resizeObservers.get(container);
+  if (!shared) {
+    const callbacks = new Set<() => void>();
+    const observer = new ResizeObserver(() => {
+      callbacks.forEach((render) => render());
+    });
+    shared = { observer, callbacks };
+    resizeObservers.set(container, shared);
+    observer.observe(container);
+  }
+  shared.callbacks.add(callback);
+
+  return () => {
+    shared.callbacks.delete(callback);
+    if (shared.callbacks.size === 0) {
+      shared.observer.disconnect();
+      resizeObservers.delete(container);
+    }
+  };
+}
+
 /** Mount a DOM element at a geographic coordinate on any rendering engine. */
 export function mountProjectedElement(
   engine: MapEngine,
@@ -42,8 +71,7 @@ export function mountProjectedElement(
   };
   const detachMove = engine.onCameraMove(render);
   const detachIdle = engine.onCameraIdle(render);
-  const resizeObserver = new ResizeObserver(render);
-  resizeObserver.observe(container);
+  const detachResize = observeContainerResize(container, render);
   render();
 
   return {
@@ -54,7 +82,7 @@ export function mountProjectedElement(
     remove() {
       detachMove();
       detachIdle();
-      resizeObserver.disconnect();
+      detachResize();
       element.remove();
     },
   };
@@ -101,8 +129,7 @@ export function mountProjectedExtent(
   };
   const detachMove = engine.onCameraMove(render);
   const detachIdle = engine.onCameraIdle(render);
-  const resizeObserver = new ResizeObserver(render);
-  resizeObserver.observe(container);
+  const detachResize = observeContainerResize(container, render);
   render();
 
   return {
@@ -116,7 +143,7 @@ export function mountProjectedExtent(
     remove() {
       detachMove();
       detachIdle();
-      resizeObserver.disconnect();
+      detachResize();
       svg.remove();
     },
   };
