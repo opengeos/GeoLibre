@@ -60,11 +60,7 @@ import {
   STANDARD_BLANK_COLOR,
 } from "./mapbox-standard-style";
 import { arcgisOpacity } from "./arcgis-vector-style";
-import {
-  LayerControlHost,
-  getLayerMetadataBounds,
-  normalizeLayerBounds,
-} from "./layer-control-host";
+import { LayerControlHost, normalizeLayerBounds } from "./layer-control-host";
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MapboxGlobeControl } from "./mapbox-globe-control";
 
@@ -585,8 +581,11 @@ export class MapboxEngine implements MapEngine {
     );
   }
   fitLayer(layer: GeoLibreLayer): void {
-    const bounds =
-      getLayerBounds(layer) ?? getLayerMetadataBounds(layer) ?? this.getLayerSourceBounds(layer);
+    // getLayerBounds already falls through to layer.source.bounds →
+    // layer.metadata.bounds with the same finite-number check, so the only
+    // addition for Mapbox is the source *plan* bounds (the id of the compiled
+    // native source), which getLayerBounds cannot reach.
+    const bounds = getLayerBounds(layer) ?? this.getLayerSourceBounds(layer);
     if (bounds) {
       this.fitBounds(bounds);
       return;

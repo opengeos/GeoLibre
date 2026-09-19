@@ -1188,19 +1188,20 @@ describe("MapboxEngine camera and preferences", () => {
     const options = JSON.parse(
       map.calls.find((c) => c.startsWith("fitBoundsOptions:"))!.slice("fitBoundsOptions:".length),
     );
-    // The recorded option must NOT be the old hard-coded 14: the ceiling for a
-    // hemisphere-wide extent under a known viewport is well below 14, proving
-    // the dynamic cap replaced the constant.
+    // The recorded option must be a *numeric* ceiling below the old hard-coded
+    // 14: the dynamic cap (globeSafeMaxZoom) replaces the constant, and the
+    // assertion must not be satisfied by `maxZoom` being undefined at all —
+    // require the number to exist and be smaller than the old value.
     assert.ok(
-      options.maxZoom === undefined || options.maxZoom !== 14,
-      `expected a dynamic ceiling, not the hard-coded 14; got ${options.maxZoom}`,
+      typeof options.maxZoom === "number" && options.maxZoom < 14,
+      `expected a dynamic ceiling < 14 (not undefined, not 14); got ${options.maxZoom}`,
     );
   });
 
-  it("resolves fitLayer bounds from metadata and then the native source", () => {
+  it("resolves fitLayer bounds from metadata and then the native source plan", () => {
     const { engine, map } = makeEngine();
-    // With no geojson and no metadata bounds, the source's advertised bounds
-    // are the fallback (the previous code only looked at live GeoJSON).
+    // metadata.bounds (resolved via getLayerBounds) still reaches the
+    // fitBounds call when there is no live GeoJSON.
     const layer = {
       ...geojsonLayer(),
       geojson: undefined,
