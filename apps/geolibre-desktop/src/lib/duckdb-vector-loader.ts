@@ -204,29 +204,10 @@ const spatialExtensionByDb = new WeakMap<duckdb.AsyncDuckDB, Promise<void>>();
 export async function ensureSpatialExtension(
   db: duckdb.AsyncDuckDB,
   connection: duckdb.AsyncDuckDBConnection,
-  beforeLoad?: () => Promise<void>,
 ): Promise<void> {
   let promise = spatialExtensionByDb.get(db);
   if (!promise) {
     promise = (async () => {
-      // duckdb-wasm 1.33.1-dev45 breaks read_parquet on any connection that runs
-      // LOAD spatial itself before it has read a Parquet file. `beforeLoad` lets
-      // the caller warm up that path (a pre-spatial read) before any LOAD,
-      // including the custom-path branch below, which is the only thing that
-      // initialises it. Runs before the branch split so a custom extension path
-      // (VITE_DUCKDB_SPATIAL_EXTENSION_PATH) gets the same warm-up.
-      if (beforeLoad) {
-        try {
-          await beforeLoad();
-        } catch (error) {
-          // Warm-up is best-effort; a failure here must not block spatial
-          // loading. Warn (not debug, which DevTools hides by default) so a
-          // genuinely corrupt/mislabelled file surfaces its real cause here
-          // instead of only as a later "stoi: no conversion" on DESCRIBE.
-          console.warn("[GeoLibre] spatial warm-up failed (ignored)", error);
-        }
-      }
-
       const customPath = getSpatialExtensionPath();
       if (customPath) {
         const normalizedPath = customPath.replace(/\\/g, "/");
@@ -339,11 +320,6 @@ async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-  // Open the database so its runtime/filesystem config is initialised. Without
-  // this, locally registered buffers still read, but remote HTTP reads fail
-  // (e.g. read_parquet over https throws "stoi: no conversion"). This mirrors
-  // how maplibre-gl-duckdb initialises the engine that reads remote files.
-  await db.open({});
   return db;
 }
 
@@ -396,32 +372,6 @@ function sourceSql(fileName: string, extension: string, layer?: string): string 
     return `SELECT * FROM read_parquet(${quotedName})`;
   }
   return `SELECT * FROM ST_Read(${quotedName}${layerArgSql(layer)})`;
-}
-
-/**
- * Build a {@link ensureSpatialExtension} `beforeLoad` warm-up that reads the
- * Parquet file once before the spatial extension is loaded, or `undefined` for
- * non-Parquet inputs.
- *
- * duckdb-wasm 1.33.1-dev45 breaks `read_parquet` on any connection that runs
- * `LOAD spatial` itself unless that connection has already read the file at
- * least once: the read then throws `Invalid Error: stoi: no conversion`. A
- * Parquet dropped as the first vector file is exactly that case, because its
- * connection is the one that triggers the singleton `LOAD spatial`. Reading the
- * file before the load primes the connection so the later `DESCRIBE`/`SELECT`
- * succeed. Later Parquet loads reuse the already-loaded extension, so their
- * connections never run `LOAD` and need no warm-up. This mirrors the remote
- * warm-up in `sql-workspace.ts`.
- */
-function parquetWarmUp(
-  connection: duckdb.AsyncDuckDBConnection,
-  extension: string,
-  fileName: string,
-): (() => Promise<void>) | undefined {
-  if (!isParquetExtension(extension)) return undefined;
-  return async () => {
-    await connection.query(`SELECT 1 FROM read_parquet(${quoteSqlString(fileName)}) LIMIT 0`);
-  };
 }
 
 function crsSql(fileName: string, includeWkt: boolean): string {
@@ -725,11 +675,7 @@ export async function loadDuckDbVectorFile(
     const dxfCodepage = file.extension === "dxf" ? readDxfCodepage(file.data) : null;
 
     await registerVectorFileBuffers(db, file);
-    await ensureSpatialExtension(
-      db,
-      connection,
-      parquetWarmUp(connection, file.extension, file.name),
-    );
+    await ensureSpatialExtension(db, connection);
 
     const sql = sourceSql(file.name, file.extension, options.layer);
     const description = rowsFromResult(await connection.query(`DESCRIBE ${sql}`));
@@ -1137,15 +1083,7 @@ export async function convertDuckDbVectorToGeoParquet(
 
   try {
     await registerVectorFileBuffers(db, file);
-    // Warm up the Parquet read path before LOAD spatial (see `parquetWarmUp`).
-    // CSV input uses `read_csv_auto` and non-Parquet vector files use `ST_Read`,
-    // neither affected by the bug; `parquetWarmUp` returns undefined for both,
-    // and the `options.csv` guard short-circuits the CSV branch before calling it.
-    await ensureSpatialExtension(
-      db,
-      connection,
-      options.csv ? undefined : parquetWarmUp(connection, file.extension, file.name),
-    );
+    await ensureSpatialExtension(db, connection);
 
     let geometryColumn: string;
     let source: string;
