@@ -172,8 +172,9 @@ export function MapContextMenu({
     // Read the live zoom; if the map was torn down between right-click and
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
-    const currentZoom = mapControllerRef.current?.readView().zoom;
-    mapControllerRef.current?.flyTo({
+    const engine = mapControllerRef.current;
+    const currentZoom = engine?.getRenderSurface() ? engine.readView().zoom : undefined;
+    engine?.flyTo({
       center: [menu.lng, menu.lat],
       ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
     });
@@ -191,13 +192,15 @@ export function MapContextMenu({
   // city-level view rather than dropping the action.
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.readView().zoom ?? 12;
+    const engine = mapControllerRef.current;
+    const zoom = engine?.getRenderSurface() ? engine.readView().zoom : 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.readView().zoom ?? 12;
+    const engine = mapControllerRef.current;
+    const zoom = engine?.getRenderSurface() ? engine.readView().zoom : 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 
