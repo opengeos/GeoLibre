@@ -170,7 +170,11 @@ export interface MapEngine {
   isCameraMoving(): boolean;
   /** Subscribe to camera changes while the view is moving. */
   onCameraMove(listener: () => void): () => void;
-  onCameraIdle(listener: () => void): () => void;
+  /**
+   * Subscribe to the camera settling. `storyCamera` marks a settle that ends a
+   * story chapter or chapter-preview move, which is scripted, not navigation.
+   */
+  onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void;
   stopCamera(): void;
   suspendNavigation(): () => void;
 
@@ -330,6 +334,11 @@ export interface ManualPlacementOptions {
  * reports them: `west < east` always, and a span across the antimeridian
  * carries `east > 180` instead of inverting the pair.
  */
+/** Details of a camera-idle notification; engines that can't tell omit it. */
+export interface CameraIdleEvent {
+  storyCamera: boolean;
+}
+
 export type MapExtent = [west: number, south: number, east: number, north: number];
 
 export interface MapRenderSurface {

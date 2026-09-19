@@ -26,6 +26,7 @@ import {
   type MapRenderSurface,
   type FlyToCamera,
   type BuiltInMapControl,
+  type CameraIdleEvent,
   type IdentifiedFeature,
   type ManualPlacementOptions,
   type ExtentDrawingOptions,
@@ -1175,11 +1176,13 @@ export class MapboxEngine implements MapEngine {
       map?.off("move", listener);
     };
   }
-  onCameraIdle(listener: () => void): () => void {
+  onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void {
     const map = this.map;
-    map?.on("moveend", listener);
+    const onMoveEnd = (event: mapboxgl.MapEventOf<"moveend"> & { storyCameraToken?: number }) =>
+      listener({ storyCamera: event?.storyCameraToken !== undefined });
+    map?.on("moveend", onMoveEnd);
     return () => {
-      map?.off("moveend", listener);
+      map?.off("moveend", onMoveEnd);
     };
   }
   stopCamera(): void {

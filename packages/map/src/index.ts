@@ -65,6 +65,7 @@ export {
 export {
   MAPLIBRE_CAPABILITIES,
   type BuiltInMapControl,
+  type CameraIdleEvent,
   type FlyToCamera,
   type IdentifiedFeature,
   type ManualPlacementOptions,

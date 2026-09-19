@@ -66,7 +66,7 @@ import {
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { captureEngineImage } from "./map-capture";
-import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
+import type { CameraIdleEvent, ExtentDrawingOptions, MapExtent } from "./map-engine";
 import {
   blendModeSignature,
   installLayerBlendModes,
@@ -1629,11 +1629,13 @@ export class MapController implements MapEngine {
     };
   }
 
-  onCameraIdle(listener: () => void): () => void {
+  onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void {
     const map = this.map;
-    map?.on("moveend", listener);
+    const onMoveEnd = (event: maplibregl.MapLibreEvent & { storyCameraToken?: number }) =>
+      listener({ storyCamera: event?.storyCameraToken !== undefined });
+    map?.on("moveend", onMoveEnd);
     return () => {
-      map?.off("moveend", listener);
+      map?.off("moveend", onMoveEnd);
     };
   }
   stopCamera(): void {

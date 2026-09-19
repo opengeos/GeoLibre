@@ -1,5 +1,5 @@
 import { useAppStore, type MapViewState } from "@geolibre/core";
-import type { MapEngine } from "@geolibre/map";
+import type { CameraIdleEvent, MapEngine } from "@geolibre/map";
 import { isFlying } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -141,7 +141,17 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onCameraIdle = () => {
+    const onCameraIdle = (event?: CameraIdleEvent) => {
+      // Story presenter and chapter-preview moves are scripted, not user
+      // navigation. Checked before the restore counter so a story move never
+      // consumes a pending restore's slot.
+      if (event?.storyCamera) return;
+      // Presenting owns the camera and supersedes any restore still easing, so
+      // drop the pending count rather than leave it to swallow a later pan.
+      if (useAppStore.getState().ui.storymapPresenting) {
+        restoringCountRef.current = 0;
+        return;
+      }
       // A flight frame is authoritative: its jump cancels any restore ease still
       // animating, so drop the pending count rather than leaving it to swallow
       // the next ordinary camera-idle event. `record` skips flight frames too.
