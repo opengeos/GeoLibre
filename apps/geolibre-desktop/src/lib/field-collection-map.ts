@@ -120,10 +120,10 @@ export function createFieldCollectionPreview(
 export function fieldCollectionEventLngLat(
   surface: MapRenderSurface,
   event: Pick<MouseEvent, "clientX" | "clientY">,
-): Vertex {
+): Vertex | null {
   const rect = surface.getCanvas().getBoundingClientRect();
   const coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-  return [coordinate.lng, coordinate.lat];
+  return coordinate ? [coordinate.lng, coordinate.lat] : null;
 }
 
 /** Listen for map clicks without requiring an engine-specific map instance. */
@@ -171,13 +171,15 @@ export function listenForFieldCollectionClicks(
       dragged = false;
       return;
     }
-    handlers.onClick(fieldCollectionEventLngLat(surface, event));
+    const lngLat = fieldCollectionEventLngLat(surface, event);
+    if (lngLat) handlers.onClick(lngLat);
   };
   const onDoubleClick = (event: MouseEvent) => {
     if (!handlers.onDoubleClick) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    handlers.onDoubleClick(fieldCollectionEventLngLat(surface, event));
+    const lngLat = fieldCollectionEventLngLat(surface, event);
+    if (lngLat) handlers.onDoubleClick(lngLat);
   };
   canvas.addEventListener("pointerdown", onPointerDown, true);
   canvas.addEventListener("pointermove", onPointerMove, true);

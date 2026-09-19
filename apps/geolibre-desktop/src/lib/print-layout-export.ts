@@ -40,7 +40,7 @@ interface MapLike {
   getCanvas(): HTMLCanvasElement;
   getContainer(): HTMLElement;
   getBearing(): number;
-  unproject(point: [number, number]): { lng: number; lat: number };
+  unproject(point: [number, number]): { lng: number; lat: number } | null;
   project(lngLat: [number, number]): { x: number; y: number };
   /** Force a synchronous redraw so the preserved drawing buffer is current. */
   redraw?(): void;
@@ -217,6 +217,9 @@ export function captureMapImage(
   const span = Math.min(100, cssWidth / 2);
   const left = map.unproject([centerX - span / 2, centerY]);
   const right = map.unproject([centerX + span / 2, centerY]);
+  if (!left || !right) {
+    throw new Error("Could not measure the print scale outside the map view");
+  }
   const metersPerCssPx = haversineMeters(left, right) / span;
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 

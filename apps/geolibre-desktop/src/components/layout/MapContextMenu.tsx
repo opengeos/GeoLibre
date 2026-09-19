@@ -125,16 +125,11 @@ export function MapContextMenu({
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      let coordinate: { lng: number; lat: number };
-      try {
-        coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-      } catch (error) {
-        // Globe renderers can return no coordinate when the pointer is over
-        // empty space beyond the planet. In that case there is no point for
-        // the menu actions to operate on.
-        if (error instanceof RangeError) return;
-        throw error;
-      }
+      const coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      // Globe renderers can return no coordinate when the pointer is over
+      // empty space beyond the planet. In that case there is no point for the
+      // menu actions to operate on.
+      if (!coordinate) return;
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,

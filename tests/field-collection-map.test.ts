@@ -77,6 +77,27 @@ describe("Field Collection renderer-neutral map bridge", () => {
     withDom((document) => {
       const { surface } = harness(document);
       assert.deepEqual(fieldCollectionEventLngLat(surface, { clientX: 14, clientY: 26 }), [4, 6]);
+      surface.unproject = () => null;
+      assert.equal(fieldCollectionEventLngLat(surface, { clientX: 14, clientY: 26 }), null);
+    });
+  });
+
+  it("ignores clicks that have no map location", () => {
+    withDom((document, window) => {
+      const { canvas, engine, surface } = harness(document);
+      surface.unproject = () => null;
+      let clicks = 0;
+      const stop = listenForFieldCollectionClicks(engine, {
+        onClick: () => clicks++,
+        onDoubleClick: () => clicks++,
+      });
+      for (const type of ["click", "dblclick"]) {
+        const event = new window.Event(type, { bubbles: true });
+        Object.assign(event, { clientX: 18, clientY: 29 });
+        canvas.dispatchEvent(event);
+      }
+      assert.equal(clicks, 0);
+      stop();
     });
   });
 

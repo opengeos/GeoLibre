@@ -807,8 +807,7 @@ export class CesiumEngine implements MapEngine {
       },
       unproject: ([x, y]) => {
         const location = pickDrawingLocation(C, viewer, { x, y });
-        if (!location) throw new RangeError("The requested point is outside the globe");
-        return { lng: location[0], lat: location[1] };
+        return location ? { lng: location[0], lat: location[1] } : null;
       },
     };
     return this.renderSurface;
