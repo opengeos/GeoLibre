@@ -36,6 +36,7 @@ export type AddDataKind =
 export type FeedMode = "url" | "file";
 export type GpxMode = FeedMode;
 export type GpxLayerKind = "waypoints" | "tracks" | "trackPoints" | "routes" | "routePoints";
+export type LandXmlMode = FeedMode;
 export type GeoRssMode = FeedMode;
 export type DelimitedTextMode = FeedMode;
 export type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";

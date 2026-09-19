@@ -12,15 +12,17 @@ import {
   type LandXmlParseResult,
 } from "../../../../lib/landxml";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
-import { COMMON_CRS_PRESETS } from "../constants";
+import { COMMON_CRS_PRESETS, LANDXML_SAMPLES } from "../constants";
 import {
   createBaseLayer,
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
   normalizeCrs,
+  proxyFeedRequestUrl,
 } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
+import type { LandXmlMode } from "../types";
 
 interface SelectedLandXml {
   path: string;
@@ -32,6 +34,8 @@ export function LandXmlSource() {
   const { t } = useTranslation();
   const [defaultName] = useState(() => t("addData.landxml.defaultName"));
   const source = useAddDataSource(defaultName);
+  const [landXmlMode, setLandXmlMode] = useState<LandXmlMode>("url");
+  const [landXmlUrl, setLandXmlUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<SelectedLandXml | null>(null);
   const [sourceCrs, setSourceCrs] = useState("");
   const [selectedKinds, setSelectedKinds] = useState<Record<LandXmlLayerKind, boolean>>({
@@ -41,6 +45,12 @@ export function LandXmlSource() {
   });
 
   const hasSelectedKind = Object.values(selectedKinds).some(Boolean);
+
+  const handleModeChange = (mode: LandXmlMode) => {
+    setLandXmlMode(mode);
+    setSelectedFile(null);
+    setSourceCrs("");
+  };
 
   const handleChooseFile = async () => {
     source.setError(null);
@@ -65,13 +75,30 @@ export function LandXmlSource() {
     }
   };
 
+  const readLandXmlSource = async (): Promise<SelectedLandXml> => {
+    if (landXmlMode === "file") {
+      if (!selectedFile) throw new Error(t("addData.landxml.errorChooseFile"));
+      return selectedFile;
+    }
+
+    const sourcePath = landXmlUrl.trim();
+    if (!sourcePath) throw new Error(t("addData.landxml.errorUrl"));
+    const response = await fetch(proxyFeedRequestUrl(sourcePath));
+    if (!response.ok) {
+      throw new Error(t("addData.common.requestFailed", { status: response.status }));
+    }
+    return { path: sourcePath, parsed: parseLandXml(await response.text()) };
+  };
+
   const handleSubmit = source.runSubmit(async () => {
-    if (!selectedFile) throw new Error(t("addData.landxml.errorChooseFile"));
-    const selectedLayers = selectedFile.parsed.layers.filter((layer) => selectedKinds[layer.kind]);
+    const selectedSource = await readLandXmlSource();
+    const selectedLayers = selectedSource.parsed.layers.filter(
+      (layer) => selectedKinds[layer.kind],
+    );
     if (selectedLayers.length === 0) throw new Error(t("addData.landxml.errorSelectType"));
 
-    const normalizedCrs = normalizeCrs(sourceCrs);
-    if (!normalizedCrs && !selectedFile.parsed.coordinatesLookGeographic) {
+    const normalizedCrs = normalizeCrs(sourceCrs || selectedSource.parsed.detectedCrs || "");
+    if (!normalizedCrs && !selectedSource.parsed.coordinatesLookGeographic) {
       throw new Error(t("addData.landxml.errorMissingCrs"));
     }
     const reprojectionCrs = normalizedCrs && !isGeographicCrs(normalizedCrs) ? normalizedCrs : null;
@@ -85,17 +112,17 @@ export function LandXmlSource() {
       const baseLayer = createBaseLayer(
         `${baseName} ${parsedLayer.name}`,
         "geojson",
-        { type: "geojson", url: selectedFile.path },
+        { type: "geojson", url: selectedSource.path },
         {
           sourceKind: "landxml",
           landXmlLayerKind: parsedLayer.kind,
           featureCount: geojson.features.length,
           sourceCrs: normalizedCrs || null,
-          coordinateSystem: selectedFile.parsed.coordinateSystem,
-          surfaceCount: selectedFile.parsed.surfaceCount,
-          alignmentCount: selectedFile.parsed.alignmentCount,
-          pointCount: selectedFile.parsed.pointCount,
-          profileCount: selectedFile.parsed.profileCount,
+          coordinateSystem: selectedSource.parsed.coordinateSystem,
+          surfaceCount: selectedSource.parsed.surfaceCount,
+          alignmentCount: selectedSource.parsed.alignmentCount,
+          pointCount: selectedSource.parsed.pointCount,
+          profileCount: selectedSource.parsed.profileCount,
         },
         { geojson, pendingLayers: layers },
       );
@@ -105,7 +132,7 @@ export function LandXmlSource() {
         // Z-coordinate renderer when the selected objects carry elevations.
         style: { ...baseLayer.style, elevation3dEnabled: true },
         geojson,
-        sourcePath: selectedFile.path,
+        sourcePath: selectedSource.path,
       });
     }
 
@@ -141,20 +168,44 @@ export function LandXmlSource() {
       onBeforeLayerIdChange={source.setBeforeLayerId}
       onSubmit={handleSubmit}
       error={source.error}
-      submitDisabled={source.isSubmitting || !selectedFile || !hasSelectedKind}
+      submitDisabled={source.isSubmitting || !hasSelectedKind}
     >
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={handleChooseFile}>
-            <FileUp className="me-2 h-3.5 w-3.5" />
-            {t("addData.common.chooseFile")}
-          </Button>
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {selectedFile
-              ? fileNameFromPath(selectedFile.path)
-              : t("addData.common.noFileSelected")}
-          </span>
+        <div className="space-y-1.5">
+          <Label htmlFor="landxml-mode">{t("addData.common.sourceType")}</Label>
+          <Select
+            id="landxml-mode"
+            value={landXmlMode}
+            onChange={(event) => handleModeChange(event.target.value as LandXmlMode)}
+          >
+            <option value="url">{t("addData.landxml.url")}</option>
+            <option value="file">{t("addData.landxml.file")}</option>
+          </Select>
         </div>
+
+        {landXmlMode === "file" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" onClick={handleChooseFile}>
+              <FileUp className="me-2 h-3.5 w-3.5" />
+              {t("addData.common.chooseFile")}
+            </Button>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {selectedFile
+                ? fileNameFromPath(selectedFile.path)
+                : t("addData.common.noFileSelected")}
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="landxml-url">{t("addData.landxml.url")}</Label>
+            <Input
+              id="landxml-url"
+              placeholder={t("addData.landxml.urlPlaceholder")}
+              value={landXmlUrl}
+              onChange={(event) => setLandXmlUrl(event.target.value)}
+            />
+          </div>
+        )}
 
         {selectedFile ? (
           <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
@@ -211,6 +262,21 @@ export function LandXmlSource() {
               : t("addData.landxml.crsHelp")}
           </p>
         </div>
+
+        <SampleDataSelect
+          samples={LANDXML_SAMPLES.map((sample) => ({ label: sample.label, value: sample }))}
+          onSelect={(sample) => {
+            setLandXmlMode("url");
+            setSelectedFile(null);
+            setLandXmlUrl(sample.url);
+            setSourceCrs(sample.crs);
+            source.setLayerName((current) =>
+              current.trim() && current !== defaultName
+                ? current
+                : layerNameFromPath(new URL(sample.url).pathname, defaultName),
+            );
+          }}
+        />
       </div>
     </AddDataSourceForm>
   );
