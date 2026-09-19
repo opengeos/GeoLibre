@@ -161,7 +161,9 @@ export function MapboxCanvas({
               : null,
           );
         };
-        const removeIdentifyPopup = (options: { restore?: boolean; forceRestore?: boolean } = {}) => {
+        const removeIdentifyPopup = (
+          options: { restore?: boolean; forceRestore?: boolean } = {},
+        ) => {
           const openPopup = popup;
           const popupState = identifyPopupState;
           popup = undefined;
