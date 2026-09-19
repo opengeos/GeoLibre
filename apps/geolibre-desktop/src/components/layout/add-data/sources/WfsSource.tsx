@@ -200,7 +200,7 @@ export function WfsSource({
     // GeoJSON as "GEOJSON" rather than "application/json"), so it returns the
     // URL and output format that actually worked.
     const endpoint = stripOgcOperationParams(wfsEndpoint.trim(), "WFS");
-    const { successes, failures } = await settleNamedRequests(
+    const settled = await settleNamedRequests(
       typeNames.map((typeName) => ({
         key: typeName,
         run: () =>
@@ -217,7 +217,15 @@ export function WfsSource({
           ),
       })),
     );
-    const results = successes.map(({ key: typeName, value: result }) => ({ typeName, result }));
+    const failures = [...settled.failures];
+    const results = settled.successes.flatMap(({ key: typeName, value: result }) => {
+      if (result.data.features.length > 0) return [{ typeName, result }];
+      failures.push({
+        key: typeName,
+        reason: new Error(t("addData.ogcFeatures.errorNoFeatures")),
+      });
+      return [];
+    });
     const failureMessage = failures
       .map(
         ({ key, reason }) =>
@@ -348,11 +356,13 @@ export function WfsSource({
                   Shift range behavior while keeping manual entry available. */}
               <Select
                 id={typeListId}
-                multiple
-                size={Math.min(typeOptions.length, 8)}
-                value={selectedTypeNames}
+                multiple={typeOptions.length > 1}
+                size={typeOptions.length > 1 ? Math.min(typeOptions.length, 8) : undefined}
+                value={typeOptions.length > 1 ? selectedTypeNames : (selectedTypeNames[0] ?? "")}
                 onChange={(event) => {
-                  const names = Array.from(event.target.selectedOptions, (option) => option.value);
+                  const names = event.target.multiple
+                    ? Array.from(event.target.selectedOptions, (option) => option.value)
+                    : [event.target.value].filter(Boolean);
                   setSelectedTypeNames(names);
                   setWfsTypeName(names[0] ?? "");
                 }}

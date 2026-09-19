@@ -373,11 +373,19 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
                   Shift range behavior while keeping manual entry available. */}
               <Select
                 id={collectionListId}
-                multiple
-                size={Math.min(collectionOptions.length, 8)}
-                value={selectedCollectionIds}
+                multiple={collectionOptions.length > 1}
+                size={
+                  collectionOptions.length > 1 ? Math.min(collectionOptions.length, 8) : undefined
+                }
+                value={
+                  collectionOptions.length > 1
+                    ? selectedCollectionIds
+                    : (selectedCollectionIds[0] ?? "")
+                }
                 onChange={(event) => {
-                  const ids = Array.from(event.target.selectedOptions, (option) => option.value);
+                  const ids = event.target.multiple
+                    ? Array.from(event.target.selectedOptions, (option) => option.value)
+                    : [event.target.value].filter(Boolean);
                   setSelectedCollectionIds(ids);
                   setCollectionId(ids[0] ?? "");
                 }}

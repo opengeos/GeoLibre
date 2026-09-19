@@ -17,7 +17,24 @@ export async function settleNamedRequests<T>(requests: readonly NamedRequest<T>[
   successes: { key: string; value: T }[];
   failures: NamedRequestFailure[];
 }> {
-  const settled = await Promise.allSettled(requests.map((request) => request.run()));
+  const settled: PromiseSettledResult<T>[] = new Array(requests.length);
+  let nextIndex = 0;
+
+  const runNext = async (): Promise<void> => {
+    while (nextIndex < requests.length) {
+      const index = nextIndex++;
+      try {
+        settled[index] = { status: "fulfilled", value: await requests[index].run() };
+      } catch (reason) {
+        settled[index] = { status: "rejected", reason };
+      }
+    }
+  };
+
+  // Keep pressure predictable for smaller/self-hosted feature services while
+  // still overlapping the network latency of a normal multi-selection.
+  const concurrency = Math.min(4, requests.length);
+  await Promise.all(Array.from({ length: concurrency }, () => runNext()));
   const successes: { key: string; value: T }[] = [];
   const failures: NamedRequestFailure[] = [];
 

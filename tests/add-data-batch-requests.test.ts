@@ -35,4 +35,30 @@ describe("settleNamedRequests", () => {
       { key: "second", value: "second result" },
     ]);
   });
+
+  it("runs no more than four service requests concurrently", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const releases: (() => void)[] = [];
+    const requests = Array.from({ length: 9 }, (_, index) => ({
+      key: String(index),
+      run: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active -= 1;
+        return index;
+      },
+    }));
+
+    const pending = settleNamedRequests(requests);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(maxActive, 4);
+
+    while (releases.length > 0) {
+      releases.splice(0).forEach((release) => release());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal((await pending).successes.length, 9);
+  });
 });
