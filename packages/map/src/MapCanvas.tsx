@@ -48,6 +48,13 @@ import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import type { MapEngine } from "./map-engine";
+import {
+  createIdentifyPopupState,
+  isRestoringIdentifySelection,
+  removeIdentifyPopup as removeIdentifyPopupLifecycle,
+  restoreIdentifySelection,
+  type IdentifyPopupState,
+} from "./map-identify-lifecycle";
 import { applySelectionHighlight, resolveHighlightIds } from "./map-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
@@ -1393,7 +1400,7 @@ export const MapCanvas = memo(function MapCanvas({
       selectedFeatureIds,
       zoomToSelectedFeature,
       previousKey,
-      false,
+      isRestoringIdentifySelection(),
     );
     const shouldFit = Boolean(zoomToSelectedFeature && nextKey && nextKey !== previousKey);
     previousSelectedFeatureKey.current = nextKey;
@@ -1688,6 +1695,18 @@ export const MapCanvas = memo(function MapCanvas({
 
     let wmsIdentifyAbortController: AbortController | null = null;
     let pixelIdentifyAbortController: AbortController | null = null;
+    let identifyPopupState: IdentifyPopupState | null = null;
+
+    const removeIdentifyPopup = () => {
+      const popup = identifyPopup.current;
+      const popupState = identifyPopupState;
+      identifyPopup.current = null;
+      identifyPopupState = null;
+      // Every removal through this path is programmatic: a follow-up click,
+      // mode/effect cleanup, or an async popup swap. Only the popup's own close
+      // event below represents a user dismissal and may restore the snapshot.
+      removeIdentifyPopupLifecycle(popup, popupState, { restore: false });
+    };
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
       // A selection gesture owns the map clicks while it runs.
@@ -1696,11 +1715,10 @@ export const MapCanvas = memo(function MapCanvas({
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
         selectFeature(null);
-        identifyPopup.current?.remove();
-        identifyPopup.current = null;
+        removeIdentifyPopup();
       };
       const showIdentifyPopup = (content: HTMLElement) => {
-        identifyPopup.current?.remove();
+        removeIdentifyPopup();
         identifyPopup.current = new maplibregl.Popup({
           className: "geolibre-identify-popup",
           closeButton: true,
@@ -1710,6 +1728,36 @@ export const MapCanvas = memo(function MapCanvas({
           .setLngLat(event.lngLat)
           .setDOMContent(content)
           .addTo(map);
+      };
+      const showResolvedHitPopup = (content: HTMLElement, featureId: string | null) => {
+        removeIdentifyPopup();
+        let popupState: IdentifyPopupState;
+        const onClose = () => {
+          if (identifyPopupState !== popupState) return;
+          identifyPopup.current = null;
+          identifyPopupState = null;
+          restoreIdentifySelection(popupState);
+        };
+        popupState = createIdentifyPopupState({
+          layerId: layer.id,
+          featureId,
+          onClose,
+        });
+        const selectionState = useAppStore.getState();
+        if (selectionState.selectedLayerId !== layer.id) selectionState.selectLayer(layer.id);
+        selectionState.selectFeature(featureId);
+        const popup = new maplibregl.Popup({
+          className: "geolibre-identify-popup",
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: "560px",
+        })
+          .setLngLat(event.lngLat)
+          .setDOMContent(content)
+          .addTo(map);
+        identifyPopup.current = popup;
+        identifyPopupState = popupState;
+        popup.once("close", onClose);
       };
 
       if (isPixelIdentifyLayer(layer)) {
@@ -1846,15 +1894,14 @@ export const MapCanvas = memo(function MapCanvas({
       }
 
       const featureId = findFeatureId(layer, feature);
-      selectFeature(featureId);
-
-      showIdentifyPopup(
+      showResolvedHitPopup(
         createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id, {
           popup: layer.popup,
           fieldVisibility: layer.fieldVisibility,
           feature,
           zoom: map.getZoom(),
         }),
+        featureId,
       );
     };
 
@@ -1864,8 +1911,7 @@ export const MapCanvas = memo(function MapCanvas({
       wmsIdentifyAbortController?.abort();
       pixelIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
-      identifyPopup.current?.remove();
-      identifyPopup.current = null;
+      removeIdentifyPopup();
       // Starting a selection gesture turns Identify off, so this cleanup runs
       // after the gesture has already claimed the crosshair — leave its cursor
       // alone rather than resetting it out from under the drawing.

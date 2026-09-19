@@ -48,6 +48,22 @@ function seedMatchingSelection(): void {
   });
 }
 
+function stubIdentifyPopup() {
+  let closeListener: (() => void) | undefined;
+  return {
+    once: (type: "close", listener: () => void) => {
+      assert.equal(type, "close");
+      closeListener = listener;
+    },
+    off: (type: "close", listener: () => void) => {
+      assert.equal(type, "close");
+      if (closeListener === listener) closeListener = undefined;
+    },
+    remove: () => closeListener?.(),
+    userDismiss: () => closeListener?.(),
+  };
+}
+
 describe("identify popup selection lifecycle", () => {
   it("snapshots the current store selection and new Identify selection", () => {
     useAppStore.setState({
@@ -118,6 +134,59 @@ describe("identify popup selection lifecycle", () => {
     assert.equal(next.selectedLayerId, "user-layer");
     assert.equal(next.selectedFeatureId, "user-feature");
     assert.deepEqual(next.selectedFeatureIds, ["user-feature"]);
+  });
+
+  it("owns only a resolved single-layer hit until genuine dismissal", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "identified" }), geojsonLayer({ id: "previous" })],
+      selectedLayerId: "previous",
+      selectedFeatureId: "b",
+      selectedFeatureIds: ["a", "b"],
+      ...originalActions,
+    });
+
+    const openHit = () => {
+      const popup = stubIdentifyPopup();
+      let state: IdentifyPopupState;
+      const onClose = () => restoreIdentifySelection(state);
+      state = createIdentifyPopupState({
+        layerId: "identified",
+        featureId: "hit",
+        onClose,
+      });
+      popup.once("close", onClose);
+      const store = useAppStore.getState();
+      store.selectLayer("identified");
+      store.selectFeature("hit");
+      return { popup, state };
+    };
+
+    const first = openHit();
+    assert.equal(first.state.previousSelectedLayerId, "previous");
+    assert.equal(first.state.previousSelectedFeatureId, "b");
+    assert.deepEqual(first.state.previousSelectedFeatureIds, ["a", "b"]);
+    first.popup.userDismiss();
+    assert.equal(useAppStore.getState().selectedLayerId, "previous");
+    assert.equal(useAppStore.getState().selectedFeatureId, "b");
+    assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["a", "b"]);
+
+    const independentlyChanged = openHit();
+    useAppStore.getState().selectLayer("previous");
+    useAppStore.getState().selectFeature("a");
+    independentlyChanged.popup.userDismiss();
+    assert.equal(useAppStore.getState().selectedLayerId, "previous");
+    assert.equal(useAppStore.getState().selectedFeatureId, "a");
+
+    const missed = openHit();
+    removeIdentifyPopup(missed.popup, missed.state, { restore: false });
+    useAppStore.getState().selectFeature(null);
+    assert.equal(useAppStore.getState().selectedLayerId, "identified");
+    assert.equal(useAppStore.getState().selectedFeatureId, null);
+
+    const aborted = openHit();
+    removeIdentifyPopup(aborted.popup, aborted.state, { restore: false });
+    assert.equal(useAppStore.getState().selectedLayerId, "identified");
+    assert.equal(useAppStore.getState().selectedFeatureId, "hit");
   });
 
   it("falls back to null when the previous layer no longer exists", () => {
