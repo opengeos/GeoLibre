@@ -1386,9 +1386,7 @@ export const MapCanvas = memo(function MapCanvas({
       previousKey,
       false,
     );
-    const shouldFit = Boolean(
-      zoomToSelectedFeature && nextKey && nextKey !== previousKey,
-    );
+    const shouldFit = Boolean(zoomToSelectedFeature && nextKey && nextKey !== previousKey);
     previousSelectedFeatureKey.current = nextKey;
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);

@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "../packages/map/src/map-engine";
-import {
-  applySelectionHighlight,
-  resolveHighlightIds,
-} from "../packages/map/src/map-selection";
+import { applySelectionHighlight, resolveHighlightIds } from "../packages/map/src/map-selection";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("map selection highlight", () => {
@@ -15,14 +12,14 @@ describe("map selection highlight", () => {
         selectedFeatureId: "anchor",
         selectedFeatureIds: ["a", "b"],
       }),
-      ["a", "b"]
+      ["a", "b"],
     );
     assert.deepEqual(
       resolveHighlightIds({
         selectedFeatureId: "anchor",
         selectedFeatureIds: [],
       }),
-      ["anchor"]
+      ["anchor"],
     );
   });
 
@@ -37,7 +34,7 @@ describe("map selection highlight", () => {
       highlightFeature: (
         selectedLayer: GeoLibreLayer | undefined,
         ids: string | string[] | null,
-        options?: { fit?: boolean }
+        options?: { fit?: boolean },
       ) => calls.push({ layer: selectedLayer, ids, fit: options?.fit }),
     } as unknown as MapEngine;
 
@@ -49,21 +46,12 @@ describe("map selection highlight", () => {
       ["a", "b"],
       true,
       null,
-      false
+      false,
     );
     assert.equal(key, `${layer.id}:a\u0000b`);
     assert.deepEqual(calls.at(-1), { layer, ids: ["a", "b"], fit: true });
 
-    applySelectionHighlight(
-      engine,
-      [layer],
-      layer.id,
-      "a",
-      ["a", "b"],
-      true,
-      key,
-      false
-    );
+    applySelectionHighlight(engine, [layer], layer.id, "a", ["a", "b"], true, key, false);
     assert.equal(calls.at(-1)?.fit, false);
   });
 
@@ -74,22 +62,13 @@ describe("map selection highlight", () => {
       highlightFeature: (
         _layer: GeoLibreLayer | undefined,
         _ids: string | string[] | null,
-        options?: { fit?: boolean }
+        options?: { fit?: boolean },
       ) => {
         fit = options?.fit;
       },
     } as unknown as MapEngine;
 
-    applySelectionHighlight(
-      engine,
-      [layer],
-      layer.id,
-      "a",
-      [],
-      true,
-      null,
-      true
-    );
+    applySelectionHighlight(engine, [layer], layer.id, "a", [], true, null, true);
     assert.equal(fit, false);
   });
 
@@ -97,10 +76,7 @@ describe("map selection highlight", () => {
     const layer = geojsonLayer();
     let ids: string | string[] | null = "not-cleared";
     const engine = {
-      highlightFeature: (
-        _layer: GeoLibreLayer | undefined,
-        nextIds: string | string[] | null
-      ) => {
+      highlightFeature: (_layer: GeoLibreLayer | undefined, nextIds: string | string[] | null) => {
         ids = nextIds;
       },
     } as unknown as MapEngine;
@@ -113,7 +89,7 @@ describe("map selection highlight", () => {
       [],
       true,
       `${layer.id}:a`,
-      false
+      false,
     );
     assert.equal(key, null);
     assert.equal(ids, null);

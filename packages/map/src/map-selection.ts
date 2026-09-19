@@ -24,7 +24,7 @@ export function applySelectionHighlight(
   selectedFeatureIds: string[],
   zoomToSelectedFeature: boolean,
   previousKey: string | null,
-  restoring: boolean
+  restoring: boolean,
 ): string | null {
   const layer = layers.find((item) => item.id === selectedLayerId);
   // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
@@ -41,13 +41,7 @@ export function applySelectionHighlight(
     selectedLayerId && highlightIds.length > 0
       ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
       : null;
-  const fit = Boolean(
-    !restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey
-  );
-  engine?.highlightFeature(
-    layer,
-    highlightIds.length > 0 ? highlightIds : null,
-    { fit }
-  );
+  const fit = Boolean(!restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey);
+  engine?.highlightFeature(layer, highlightIds.length > 0 ? highlightIds : null, { fit });
   return nextKey;
 }
