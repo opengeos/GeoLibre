@@ -7,7 +7,11 @@ import {
   type FeatureSelectionMap,
   type FeatureSelectionState,
 } from "../packages/map/src/map-feature-selection";
-import { CAMERA_HANDLERS, FEATURE_SELECTION_EVENT } from "../packages/map/src/feature-selection";
+import {
+  CAMERA_HANDLERS,
+  FEATURE_SELECTION_EVENT,
+  type FeatureSelectionShape,
+} from "../packages/map/src/feature-selection";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 type MapListener = (event: never) => void;
@@ -116,13 +120,56 @@ function seedLayer(): void {
   });
 }
 
-function requestSelection(shape: "single" | "rectangle"): void {
+function requestSelection(shape: FeatureSelectionShape): void {
   window.dispatchEvent(
     new CustomEvent(FEATURE_SELECTION_EVENT, {
       detail: { layerId: "countries", shape },
     }),
   );
 }
+
+type SelectionFire = ReturnType<typeof makeHarness>["fire"];
+
+const completedShapeGestures: Array<{
+  shape: Exclude<FeatureSelectionShape, "single">;
+  draw: (fire: SelectionFire) => void;
+}> = [
+  {
+    shape: "rectangle",
+    draw: (fire) => {
+      fire("mousedown", { x: 0, y: 0 });
+      fire("mousemove", { x: 2, y: 2 });
+      fire("mouseup", { x: 2, y: 2 });
+    },
+  },
+  {
+    shape: "polygon",
+    draw: (fire) => {
+      fire("click", { x: -1, y: -1 });
+      fire("click", { x: 3, y: -1 });
+      fire("click", { x: 3, y: 3 });
+      fire("click", { x: -1, y: 3 });
+      fire("dblclick", { x: -1, y: 3 });
+    },
+  },
+  {
+    shape: "freehand",
+    draw: (fire) => {
+      fire("mousedown", { x: -1, y: -1 });
+      fire("mousemove", { x: 3, y: -1 });
+      fire("mousemove", { x: 3, y: 3 });
+      fire("mousemove", { x: -1, y: 3 });
+      fire("mouseup", { x: -1, y: -1 });
+    },
+  },
+  {
+    shape: "radius",
+    draw: (fire) => {
+      fire("mousedown", { x: 1, y: 1 });
+      fire("mouseup", { x: 3, y: 1 });
+    },
+  },
+];
 
 describe("attachFeatureSelection", () => {
   it("begins click selection, applies a match, and fully detaches", () => {
@@ -158,30 +205,32 @@ describe("attachFeatureSelection", () => {
     });
   });
 
-  it("finishes a rectangle as a one-shot gesture and restores every camera handler", () => {
-    withSelectionHarness(({ map, fire, listeners, cameraEnabled, container }) => {
-      seedLayer();
-      const state: FeatureSelectionState = {
-        active: { current: false },
-        cancel: { current: null },
-      };
-      const detach = attachFeatureSelection(map, {
-        state,
-        featureIdAtPoint: () => null,
+  for (const { shape, draw } of completedShapeGestures) {
+    it(`finishes ${shape} as a one-shot gesture and restores interaction state`, () => {
+      withSelectionHarness(({ map, fire, listeners, cameraEnabled, canvas, container }) => {
+        seedLayer();
+        const state: FeatureSelectionState = {
+          active: { current: false },
+          cancel: { current: null },
+        };
+        const detach = attachFeatureSelection(map, {
+          state,
+          featureIdAtPoint: () => null,
+        });
+
+        requestSelection(shape);
+        assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === false));
+        draw(fire);
+
+        assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["inside"]);
+        assert.equal(state.active.current, false);
+        assert.equal(state.cancel.current, null);
+        assert.equal(canvas.style.cursor, "");
+        assert.equal(container.querySelector("svg"), null);
+        assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === true));
+        assert.ok([...listeners.values()].every((registered) => registered.size === 0));
+        detach();
       });
-
-      requestSelection("rectangle");
-      assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === false));
-      fire("mousedown", { x: 0, y: 0 });
-      fire("mousemove", { x: 2, y: 2 });
-      fire("mouseup", { x: 2, y: 2 });
-
-      assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["inside"]);
-      assert.equal(state.active.current, false);
-      assert.equal(container.querySelector("svg"), null);
-      assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === true));
-      assert.ok([...listeners.values()].every((registered) => registered.size === 0));
-      detach();
     });
-  });
+  }
 });

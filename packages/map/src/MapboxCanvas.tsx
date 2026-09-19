@@ -288,6 +288,9 @@ export function MapboxCanvas({
       .catch((error) => {
         cleanup();
         cleanup = () => {};
+        if (engineRef && engineRef.current === engine) engineRef.current = null;
+        engine?.destroy();
+        engine = undefined;
         if (!cancelled) setError(redactMapboxError(String(error)));
       });
     return () => {
