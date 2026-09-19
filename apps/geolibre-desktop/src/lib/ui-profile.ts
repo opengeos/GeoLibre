@@ -83,6 +83,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
   {
+    id: "landxml",
+    section: "files",
+    labelKey: "toolbar.layerType.landxml",
+    tier: "advanced",
+  },
+  {
     id: "polyline",
     section: "files",
     labelKey: "toolbar.layerType.polyline",
