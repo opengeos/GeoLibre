@@ -851,12 +851,12 @@ describe("MapboxEngine.syncLayers", () => {
 
   it("redacts common credential formats from diagnostic text", () => {
     const redacted = redactMapboxError(
-      'https://example.com/data?api_key=url-secret Authorization: Bearer bearer-secret Basic basic-secret {"token":"json-secret","apiKey":"key-secret"}',
+      'https://user:password@example.com/data?api_key=url-secret Authorization: Bearer bearer-secret Basic basic-secret {"token":"json-secret","apiKey":"key-secret"}',
     );
 
     assert.equal(
       redacted,
-      'https://example.com/data?api_key=[redacted] Authorization: Bearer [redacted] Basic [redacted] {"token":"[redacted]","apiKey":"[redacted]"}',
+      'https://[redacted]@example.com/data?api_key=[redacted] Authorization: Bearer [redacted] Basic [redacted] {"token":"[redacted]","apiKey":"[redacted]"}',
     );
   });
 

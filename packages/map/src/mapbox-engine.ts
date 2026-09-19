@@ -117,6 +117,7 @@ const MAPBOX_HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set(MAPBOX_HO
 
 export function redactMapboxError(message: string): string {
   return message
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s@]+@/gi, "$1[redacted]@")
     .replace(/([?&](?:access_token|api_key|apikey|token)=)[^&\s"']+/gi, "$1[redacted]")
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1 [redacted]")
     .replace(

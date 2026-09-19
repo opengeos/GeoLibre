@@ -22,6 +22,7 @@ import {
   type FeatureSelectionState,
 } from "./map-feature-selection";
 import { createMapResizeScheduler } from "./map-resize";
+import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -269,6 +270,7 @@ export function MapboxCanvas({
         const handleStyleLoad = () => {
           if (viewId || cancelled) return;
           const next = useAppStore.getState();
+          refreshMapboxPointerElevationAfterStyleLoad(pointerElevation, next.pointerCoords);
           const ids =
             next.selectedFeatureIds.length > 0
               ? next.selectedFeatureIds

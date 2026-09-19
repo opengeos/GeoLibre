@@ -16,6 +16,7 @@ import {
   type FetchLike,
   type TerrainMapLike,
 } from "../packages/core/src/elevation";
+import { refreshMapboxPointerElevationAfterStyleLoad } from "../packages/map/src/mapbox-pointer-elevation";
 
 /** A map stub with terrain enabled at a fixed exaggeration. */
 function terrainMap(elevation: number | null, exaggeration = 1): TerrainMapLike {
@@ -48,6 +49,20 @@ describe("sampleMapTerrainPoint", () => {
 });
 
 describe("pointer elevation resolver", () => {
+  it("refreshes a stationary Mapbox pointer after a style loads", () => {
+    const points: Array<[number, number] | null> = [];
+    const resolver = {
+      update: (point: [number, number] | null) => points.push(point),
+      invalidate: () => {},
+      dispose: () => {},
+    };
+
+    refreshMapboxPointerElevationAfterStyleLoad(resolver, [10, 20]);
+    refreshMapboxPointerElevationAfterStyleLoad(resolver, null);
+
+    assert.deepEqual(points, [[10, 20]]);
+  });
+
   it("emits the terrain sample synchronously, without any network call", () => {
     const emitted: (number | null)[] = [];
     const { fetch, calls } = stubFetch(999);
