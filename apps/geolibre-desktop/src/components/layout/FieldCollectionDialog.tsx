@@ -2,7 +2,6 @@ import { readControlPreference, writeControlPreference } from "../../lib/control
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import * as maplibregl from "maplibre-gl";
 import type { MapEngine } from "@geolibre/map";
 import {
   currentEditorIdentity,
@@ -52,7 +51,6 @@ import {
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
-  drawPreview,
   emptyFeatureCollection,
   type FieldType,
   getGeometryType,
@@ -66,6 +64,13 @@ import {
   validateForm,
   type Vertex,
 } from "../../lib/field-collection";
+import {
+  createFieldCollectionMarker,
+  createFieldCollectionPreview,
+  listenForFieldCollectionClicks,
+  type FieldCollectionMarker,
+  type FieldCollectionPreview,
+} from "../../lib/field-collection-map";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
 import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
@@ -82,8 +87,6 @@ interface FieldCollectionDialogProps {
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
 const GEOMETRY_TYPES: GeometryType[] = ["point", "line", "polygon"];
 
-/** Transient map source/layers used to preview an in-progress line/polygon. */
-const DRAW_SOURCE = "__fc_draw__";
 const DRAW_COLOR = "#ef4444";
 
 interface DraftField {
@@ -100,50 +103,6 @@ function newDraftField(id: number): DraftField {
 
 function formatLatLng(lng: number, lat: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-}
-
-/** Add/update the transient drawing preview on the map. */
-function syncDrawPreview(map: maplibregl.Map, geometry: GeometryType, verts: Vertex[]): void {
-  const data = drawPreview(geometry, verts);
-  const src = map.getSource(DRAW_SOURCE) as maplibregl.GeoJSONSource | undefined;
-  if (src) {
-    src.setData(data);
-    return;
-  }
-  map.addSource(DRAW_SOURCE, { type: "geojson", data });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-fill`,
-    type: "fill",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": DRAW_COLOR, "fill-opacity": 0.2 },
-  });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-line`,
-    type: "line",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": DRAW_COLOR, "line-width": 2, "line-dasharray": [2, 1] },
-  });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-pt`,
-    type: "circle",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: {
-      "circle-radius": 4,
-      "circle-color": DRAW_COLOR,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1,
-    },
-  });
-}
-
-function removeDrawPreview(map: maplibregl.Map): void {
-  for (const id of [`${DRAW_SOURCE}-fill`, `${DRAW_SOURCE}-line`, `${DRAW_SOURCE}-pt`]) {
-    if (map.getLayer(id)) map.removeLayer(id);
-  }
-  if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
 }
 
 /**
@@ -203,7 +162,8 @@ export function FieldCollectionDialog({
   // bumping it neither re-renders nor runs a side effect inside a state updater.
   const savedCountRef = useRef(0);
 
-  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const markerRef = useRef<FieldCollectionMarker | null>(null);
+  const previewRef = useRef<FieldCollectionPreview | null>(null);
   // "The next open must keep what is already captured." Set just before the
   // dialog reopens itself after a map capture, and on a dismissal that leaves a
   // capture in hand, so the open-reset effect doesn't wipe the geometry/form.
@@ -267,7 +227,7 @@ export function FieldCollectionDialog({
     return fields.length > 0 ? { fields } : undefined;
   }, [activeLayer, schema]);
 
-  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
+  const getEngine = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
   const clearMarker = useCallback(() => {
     markerRef.current?.remove();
@@ -276,9 +236,9 @@ export function FieldCollectionDialog({
 
   const clearPreview = useCallback(() => {
     clearMarker();
-    const map = getMap();
-    if (map) removeDrawPreview(map);
-  }, [clearMarker, getMap]);
+    previewRef.current?.remove();
+    previewRef.current = null;
+  }, [clearMarker]);
 
   // Portal host for the on-map controls. Resolved into state rather than read
   // at render time, because the controller lives in a plain ref: a map that
@@ -288,8 +248,8 @@ export function FieldCollectionDialog({
   // signal, the same dependency `useMapPanelControl` takes.
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    setPortalHost(getMap()?.getContainer() ?? null);
-  }, [getMap, mapReadyGeneration]);
+    setPortalHost(getEngine()?.getRenderSurface()?.getContainer() ?? null);
+  }, [getEngine, mapReadyGeneration]);
 
   // Supersede both the placement in progress and the capture it belongs to, so
   // no async work survives into a context it wasn't started in.
@@ -430,27 +390,22 @@ export function FieldCollectionDialog({
 
   const showMarker = useCallback(
     (lng: number, lat: number) => {
-      const map = getMap();
-      if (!map) return;
-      if (markerRef.current) {
-        markerRef.current.setLngLat([lng, lat]);
-      } else {
-        markerRef.current = new maplibregl.Marker({ color: DRAW_COLOR })
-          .setLngLat([lng, lat])
-          .addTo(map);
-      }
+      const engine = getEngine();
+      if (!engine) return;
+      markerRef.current ??= createFieldCollectionMarker(engine, DRAW_COLOR);
+      markerRef.current?.setLngLat([lng, lat]);
     },
-    [getMap],
+    [getEngine],
   );
 
   const recenter = useCallback(
     (lng: number, lat: number) => {
       mapControllerRef.current?.flyTo({
         center: [lng, lat],
-        zoom: Math.max(getMap()?.getZoom() ?? 0, 15),
+        zoom: Math.max(mapControllerRef.current.readView().zoom, 15),
       });
     },
-    [mapControllerRef, getMap],
+    [mapControllerRef],
   );
 
   // ---- Point capture (single coordinate) -------------------------------------
@@ -527,13 +482,13 @@ export function FieldCollectionDialog({
   );
 
   const handlePickOnMap = useCallback(() => {
-    if (!getMap()) return;
+    if (!getEngine()?.getRenderSurface()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
     setLastGpsFix(null);
     setPicking(true);
     onOpenChange(false);
-  }, [getMap, onOpenChange]);
+  }, [getEngine, onOpenChange]);
 
   // Cancel an active point-pick from the placement banner. Mirrors the Escape
   // path in the picking effect: stop picking and reopen the dialog without
@@ -547,21 +502,24 @@ export function FieldCollectionDialog({
 
   useEffect(() => {
     if (!picking) return;
-    const map = getMap();
-    if (!map) {
+    const engine = getEngine();
+    if (!engine?.getRenderSurface()) {
       setPicking(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    const handler = (e: maplibregl.MapMouseEvent) => {
-      capturePoint(e.lngLat.lng, e.lngLat.lat, false);
-      setPicking(false);
-      suppressResetRef.current = true;
-      onOpenChange(true);
-    };
+    let captured = false;
+    const stopListening = listenForFieldCollectionClicks(engine, {
+      onClick: ([lng, lat]) => {
+        if (captured) return;
+        captured = true;
+        capturePoint(lng, lat, false);
+        setPicking(false);
+        suppressResetRef.current = true;
+        onOpenChange(true);
+      },
+    });
     // Escape aborts picking and restores the dialog without capturing.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -569,15 +527,13 @@ export function FieldCollectionDialog({
       suppressResetRef.current = true;
       onOpenChange(true);
     };
-    map.once("click", handler);
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", handler);
+      stopListening();
       window.removeEventListener("keydown", onKey);
-      map.getCanvas().style.cursor = prevCursor;
     };
-  }, [picking, getMap, onOpenChange, capturePoint]);
+  }, [picking, getEngine, onOpenChange, capturePoint]);
 
   // ---- Line / polygon drawing (multi-vertex) ---------------------------------
 
@@ -585,10 +541,12 @@ export function FieldCollectionDialog({
     (next: Vertex[]) => {
       verticesRef.current = next;
       setVertices(next);
-      const map = getMap();
-      if (map) syncDrawPreview(map, activeGeometry, next);
+      const engine = getEngine();
+      if (!engine) return;
+      previewRef.current ??= createFieldCollectionPreview(engine, DRAW_COLOR);
+      previewRef.current?.setGeometry(activeGeometry, next);
     },
-    [getMap, activeGeometry],
+    [getEngine, activeGeometry],
   );
 
   const pushVertex = useCallback(
@@ -599,7 +557,7 @@ export function FieldCollectionDialog({
   );
 
   const handleStartDrawing = useCallback(() => {
-    if (!getMap()) return;
+    if (!getEngine()?.getRenderSurface()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
     setLastGpsFix(null);
@@ -608,15 +566,18 @@ export function FieldCollectionDialog({
     setNotice(null);
     setDrawing(true);
     onOpenChange(false);
-  }, [getMap, onOpenChange, setVerticesSynced]);
+  }, [getEngine, onOpenChange, setVerticesSynced]);
 
   // Finish the current geometry: keep the preview visible (so the user sees the
   // finished shape while filling the form) and reopen the dialog.
   const finishDrawing = useCallback(
     (verts: Vertex[]) => {
       if (verts.length < minVertices(activeGeometry)) return;
-      const map = getMap();
-      if (map) syncDrawPreview(map, activeGeometry, verts);
+      const engine = getEngine();
+      if (engine) {
+        previewRef.current ??= createFieldCollectionPreview(engine, DRAW_COLOR);
+        previewRef.current?.setGeometry(activeGeometry, verts);
+      }
       verticesRef.current = verts;
       setVertices(verts);
       setPending(verts);
@@ -626,7 +587,7 @@ export function FieldCollectionDialog({
       suppressResetRef.current = true;
       onOpenChange(true);
     },
-    [activeGeometry, getMap, onOpenChange],
+    [activeGeometry, getEngine, onOpenChange],
   );
 
   const handleCancelDrawing = useCallback(() => {
@@ -634,11 +595,11 @@ export function FieldCollectionDialog({
     setLastGpsFix(null);
     setVerticesSynced([]);
     setNotice(null);
-    const map = getMap();
-    if (map) removeDrawPreview(map);
+    previewRef.current?.remove();
+    previewRef.current = null;
     suppressResetRef.current = true;
     onOpenChange(true);
-  }, [getMap, onOpenChange, setVerticesSynced]);
+  }, [onOpenChange, setVerticesSynced]);
 
   // The target layer deleted out from under a live capture — the dialog open,
   // or hidden behind a placement. Either way the capture has nowhere to land,
@@ -671,42 +632,33 @@ export function FieldCollectionDialog({
 
   useEffect(() => {
     if (!drawing) return;
-    const map = getMap();
-    if (!map) {
+    const engine = getEngine();
+    if (!engine?.getRenderSurface()) {
       setDrawing(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    // Double-click finishes the geometry; disable the default zoom-on-dblclick
-    // and drop the extra vertex the dblclick's second click added.
-    map.doubleClickZoom.disable();
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      setLastGpsFix(null);
-      pushVertex(e.lngLat.lng, e.lngLat.lat);
-    };
-    const onDblClick = (e: maplibregl.MapMouseEvent) => {
-      e.preventDefault();
-      finishDrawing(verticesRef.current.slice(0, -1));
-    };
+    const stopListening = listenForFieldCollectionClicks(engine, {
+      onClick: ([lng, lat]) => {
+        setLastGpsFix(null);
+        pushVertex(lng, lat);
+      },
+      // The browser emits the double-click's second click first, so drop that
+      // extra vertex just as the previous MapLibre event path did.
+      onDoubleClick: () => finishDrawing(verticesRef.current.slice(0, -1)),
+    });
     // Escape aborts drawing (mirrors point-pick mode and the toolbar's Cancel).
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleCancelDrawing();
     };
-    map.on("click", onClick);
-    map.on("dblclick", onDblClick);
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", onClick);
-      map.off("dblclick", onDblClick);
+      stopListening();
       window.removeEventListener("keydown", onKey);
-      map.doubleClickZoom.enable();
-      map.getCanvas().style.cursor = prevCursor;
     };
-  }, [drawing, getMap, pushVertex, finishDrawing, handleCancelDrawing]);
+  }, [drawing, getEngine, pushVertex, finishDrawing, handleCancelDrawing]);
 
   const handleUndoVertex = useCallback(() => {
     setLastGpsFix(null);
