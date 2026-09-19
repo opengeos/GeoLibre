@@ -62,7 +62,7 @@ describe("map selection highlight", () => {
       highlightFeature: (
         _layer: GeoLibreLayer | undefined,
         _ids: string | string[] | null,
-        options?: { fit?: boolean }
+        options?: { fit?: boolean },
       ) => {
         fit = options?.fit;
       },
@@ -76,7 +76,7 @@ describe("map selection highlight", () => {
       ["a\u0000b"],
       true,
       null,
-      false
+      false,
     );
     const nextKey = applySelectionHighlight(
       engine,
@@ -86,7 +86,7 @@ describe("map selection highlight", () => {
       ["a", "b"],
       true,
       key,
-      false
+      false,
     );
     assert.notEqual(nextKey, key);
     assert.equal(fit, true);
