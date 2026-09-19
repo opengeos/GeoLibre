@@ -126,10 +126,18 @@ describe("Field Collection renderer-neutral map bridge", () => {
       ]);
       const svg = container.querySelector("[data-field-collection-preview='true']")!;
       assert.equal(svg.querySelector("polygon")?.getAttribute("points"), "10,10 20,10 20,20");
+      assert.equal(
+        svg.querySelector("polyline")?.getAttribute("points"),
+        "10,10 20,10 20,20 10,10",
+      );
       assert.equal(svg.querySelectorAll("circle").length, 3);
 
       moveCamera(5);
       assert.equal(svg.querySelector("polygon")?.getAttribute("points"), "15,10 25,10 25,20");
+      assert.equal(
+        svg.querySelector("polyline")?.getAttribute("points"),
+        "15,10 25,10 25,20 15,10",
+      );
       preview.remove();
       assert.equal(container.querySelector("[data-field-collection-preview='true']"), null);
       assert.equal(wasStopped(), true);

@@ -106,7 +106,12 @@ export function createFieldCollectionPreview(
     }
     if (points.length >= 2) {
       const line = document.createElementNS(SVG_NS, "polyline");
-      line.setAttribute("points", serialized);
+      const first = points[0];
+      const outline =
+        geometry === "polygon" && points.length >= 3
+          ? `${serialized} ${first.x},${first.y}`
+          : serialized;
+      line.setAttribute("points", outline);
       line.setAttribute("fill", "none");
       line.setAttribute("stroke", color);
       line.setAttribute("stroke-width", "2");

@@ -178,6 +178,9 @@ export function FieldCollectionDialog({
   const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
   // Mirrors `vertices` so the map double-click handler can finish synchronously.
   const verticesRef = useRef<Vertex[]>([]);
+  // The renderer-reinitialization effect needs the capture as it exists at the
+  // instant a new surface arrives without re-running for every form edit.
+  const pendingRef = useRef<Vertex[] | null>(null);
   // Capture generation. Bumped on each GPS request and on anything that
   // supersedes the capture in progress, including actions *within* one capture
   // (repositioning a point, starting a drawing), so a slow GPS fix is dropped
@@ -214,6 +217,9 @@ export function FieldCollectionDialog({
   const activeLayer = layerId ? (layers.find((l) => l.id === layerId) ?? null) : null;
   const schema: CollectionSchema | null = activeLayer ? getSchema(activeLayer) : null;
   const activeGeometry: GeometryType = activeLayer ? getGeometryType(activeLayer) : geometry;
+  const activeGeometryRef = useRef(activeGeometry);
+  activeGeometryRef.current = activeGeometry;
+  pendingRef.current = pending;
   // The layer's Attribute Form designer config, narrowed to the collection
   // schema's own fields: a config for a field this form does not capture must
   // not block a save (its required/constraint rules have nothing to bind to).
@@ -248,7 +254,25 @@ export function FieldCollectionDialog({
   // signal, the same dependency `useMapPanelControl` takes.
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    setPortalHost(getEngine()?.getRenderSurface()?.getContainer() ?? null);
+    const engine = getEngine();
+    setPortalHost(engine?.getRenderSurface()?.getContainer() ?? null);
+    markerRef.current?.remove();
+    markerRef.current = null;
+    previewRef.current?.remove();
+    previewRef.current = null;
+    if (!engine) return;
+    const captured = pendingRef.current;
+    const captureGeometry = activeGeometryRef.current;
+    if (captureGeometry === "point" && captured?.[0]) {
+      markerRef.current = createFieldCollectionMarker(engine, DRAW_COLOR);
+      markerRef.current?.setLngLat(captured[0]);
+      return;
+    }
+    const previewVertices = captured ?? verticesRef.current;
+    if (captureGeometry !== "point" && previewVertices.length > 0) {
+      previewRef.current = createFieldCollectionPreview(engine, DRAW_COLOR);
+      previewRef.current?.setGeometry(captureGeometry, previewVertices);
+    }
   }, [getEngine, mapReadyGeneration]);
 
   // Supersede both the placement in progress and the capture it belongs to, so
@@ -533,7 +557,7 @@ export function FieldCollectionDialog({
       stopListening();
       window.removeEventListener("keydown", onKey);
     };
-  }, [picking, getEngine, onOpenChange, capturePoint]);
+  }, [picking, getEngine, mapReadyGeneration, onOpenChange, capturePoint]);
 
   // ---- Line / polygon drawing (multi-vertex) ---------------------------------
 
@@ -646,7 +670,11 @@ export function FieldCollectionDialog({
       },
       // The browser emits the double-click's second click first, so drop that
       // extra vertex just as the previous MapLibre event path did.
-      onDoubleClick: () => finishDrawing(verticesRef.current.slice(0, -1)),
+      onDoubleClick: () => {
+        const withoutExtraClick = verticesRef.current.slice(0, -1);
+        setVerticesSynced(withoutExtraClick);
+        finishDrawing(withoutExtraClick);
+      },
     });
     // Escape aborts drawing (mirrors point-pick mode and the toolbar's Cancel).
     const onKey = (e: KeyboardEvent) => {
@@ -658,7 +686,15 @@ export function FieldCollectionDialog({
       stopListening();
       window.removeEventListener("keydown", onKey);
     };
-  }, [drawing, getEngine, pushVertex, finishDrawing, handleCancelDrawing]);
+  }, [
+    drawing,
+    getEngine,
+    mapReadyGeneration,
+    pushVertex,
+    setVerticesSynced,
+    finishDrawing,
+    handleCancelDrawing,
+  ]);
 
   const handleUndoVertex = useCallback(() => {
     setLastGpsFix(null);
