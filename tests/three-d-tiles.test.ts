@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { useAppStore, DEFAULT_LAYER_STYLE } from "@geolibre/core";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   googleMapsApiKeyHeaderValue,
   isGooglePhotorealisticTilesetUrl,
@@ -8,7 +10,10 @@ import {
   resolveThreeDTilesRequestHeaders,
   stripGoogleMapsApiKeyHeader,
 } from "../packages/core/src/three-d-tiles";
-import { deferThreeDTilesRestoreUntilMapIdle } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
+import {
+  deferThreeDTilesRestoreUntilMapIdle,
+  restoreThreeDTilesLayers,
+} from "../packages/plugins/src/plugins/maplibre-3d-tiles";
 
 // Shared 3D-Tiles header resolution: Google Photorealistic tiles keep their
 // X-GOOG-API-KEY out of the store and have it re-injected at render time. Both
@@ -164,5 +169,39 @@ describe("nonEmptyRecord", () => {
     assert.equal(nonEmptyRecord(record), record);
     assert.equal(nonEmptyRecord({}), undefined);
     assert.equal(nonEmptyRecord(undefined), undefined);
+  });
+});
+
+describe("restoreThreeDTilesLayers on the globe", () => {
+  it("leaves the 3D Tiles control alone when Cesium is the renderer (issue #2505)", () => {
+    // Cesium draws a 3D Tiles record itself, and the map the control would be
+    // mounted on there is a facade with no style layers: reaching the MapLibre
+    // restore path is what threw `getLayer is not a function`.
+    useAppStore.getState().newProject();
+    useAppStore.getState().addLayer({
+      id: "globe-tiles",
+      name: "Tiles",
+      type: "3d-tiles",
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      source: { url: "https://example.com/tileset.json" },
+      metadata: { sourceKind: "3d-tiles-url", externalNativeLayer: true },
+    });
+
+    const app = {
+      getMapRenderer: () => "cesium" as const,
+      getMap: () => {
+        throw new Error("the globe has no MapLibre map to restore into");
+      },
+      addMapControl: () => {
+        throw new Error("the 3D Tiles control must not be mounted on the globe");
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    restoreThreeDTilesLayers(app);
+
+    // The record stays put for the globe's own layer sync to draw.
+    assert.equal(useAppStore.getState().layers.length, 1);
   });
 });
