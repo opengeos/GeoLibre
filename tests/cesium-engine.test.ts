@@ -895,6 +895,99 @@ describe("CesiumEngine framing", () => {
     assert.equal(fakes.flights.length, 1);
     engine.destroy();
   });
+
+  it("frames a CZML selection at its live entity position instead of its table anchor", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = {
+      id: "satellites",
+      name: "Satellites",
+      type: "czml",
+      visible: true,
+      opacity: 1,
+      source: {},
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "celestrak-25544",
+            properties: {},
+            geometry: { type: "Point", coordinates: [-120, 10, 0] },
+          },
+        ],
+      },
+    } as never;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
+    sync.featurePositions = () => [C.Cartesian3.fromDegrees(12, 34, 850_000)];
+
+    engine.highlightFeature(layer, "celestrak-25544", { fit: true });
+
+    assert.equal(fakes.flights.length, 1);
+    const flight = fakes.flights[0] as { sphere?: { center: { x: number; y: number } } };
+    assert.equal(flight.sphere?.center.x, 12);
+    assert.equal(flight.sphere?.center.y, 34);
+    engine.destroy();
+  });
+
+  it("fits a selection straddling the antimeridian the short way round", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = { id: "satellites", name: "Satellites", type: "czml" } as never;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
+    sync.featurePositions = () => [
+      C.Cartesian3.fromDegrees(179, 10, 850_000),
+      C.Cartesian3.fromDegrees(-179, 20, 850_000),
+    ];
+
+    engine.highlightFeature(layer, ["a", "b"], { fit: true });
+
+    // A plain min/max would hand Cesium a 358-degree box and frame the globe.
+    // `west` greater than `east` is the repo's crossing-rectangle convention.
+    assert.deepEqual(fakes.flights[0].destination, { w: 179, s: 10, e: -179, n: 20 });
+    engine.destroy();
+  });
+
+  it("leaves out the widest empty stretch when a selection is scattered", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = { id: "satellites", name: "Satellites", type: "czml" } as never;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
+    // Three points more than half the globe apart: measuring from any one of
+    // them reports 340 degrees, while the arc that actually encloses all three
+    // runs 190 degrees eastward from 0, leaving out the 170-degree gap.
+    sync.featurePositions = () => [
+      C.Cartesian3.fromDegrees(0, 10, 850_000),
+      C.Cartesian3.fromDegrees(170, 20, 850_000),
+      C.Cartesian3.fromDegrees(-170, 30, 850_000),
+    ];
+
+    engine.highlightFeature(layer, ["a", "b", "c"], { fit: true });
+
+    const box = fakes.flights[0].destination as { w: number; s: number; e: number; n: number };
+    assert.equal(box.w, 0);
+    assert.equal(box.e, -170);
+    // The latitudes round-trip through radians in the fake.
+    assert.ok(Math.abs(box.s - 10) < 1e-9);
+    assert.ok(Math.abs(box.n - 30) < 1e-9);
+    engine.destroy();
+  });
 });
 
 // --- scene-mode morphs -------------------------------------------------------
@@ -1171,6 +1264,7 @@ describe("Cesium feature picking", () => {
     const f = makeViewer();
     const sources: import("@cesium/engine").CustomDataSource[] = [];
     let picks: unknown[] = [];
+    let pickAperture: [number | undefined, number | undefined] = [undefined, undefined];
     let projected: { x: number; y: number } | undefined = { x: 400, y: 300 };
     Object.assign(f.viewer, {
       clock: { currentTime: C.JulianDate.now() },
@@ -1185,7 +1279,10 @@ describe("Cesium feature picking", () => {
       },
     });
     Object.assign((f.viewer as import("@cesium/engine").CesiumWidget).scene, {
-      drillPick: () => picks,
+      drillPick: (_point: unknown, _limit?: number, width?: number, height?: number) => {
+        pickAperture = [width, height];
+        return picks;
+      },
       requestRender: () => {},
     });
     const ns = {
@@ -1265,11 +1362,12 @@ describe("Cesium feature picking", () => {
       project: (value: typeof projected) => {
         projected = value;
       },
+      pickAperture: () => pickAperture,
     };
   }
 
   it("returns original geometry and properties, deduplicates multipart picks and preserves zero/index ids", async () => {
-    const { engine, sources, layer, pick, project } = await setup();
+    const { engine, sources, layer, pick, project, pickAperture } = await setup();
     const entities = sources[0].entities.values;
     pick([
       { id: entities[0] },
@@ -1278,6 +1376,7 @@ describe("Cesium feature picking", () => {
       { id: {} },
     ]);
     const hits = engine.identifyFeatures([0, 0]);
+    assert.deepEqual(pickAperture(), [12, 12], "tiny moving points get a forgiving pick aperture");
     assert.deepEqual(
       hits.map((hit) => hit.featureId),
       ["0", "1"],

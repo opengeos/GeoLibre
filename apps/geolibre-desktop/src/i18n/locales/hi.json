@@ -2360,6 +2360,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "सार्वजनिक डेटा फ़ीड से लाइव, समय-संबंधी पृथ्वी घटनाएँ।",
+      "globeOnly": "लाइव ग्लोब फ़ीड Cesium ग्लोब पर दिखाई देती हैं। इन्हें देखने के लिए 3D ग्लोब पर जाएँ।",
+      "earthquakes": "भूकंप",
+      "satellites": "उपग्रह",
+      "loading": "अपडेट हो रहा है…",
+      "updateFailed": "अपडेट विफल",
+      "never": "कभी नहीं",
+      "lastUpdated": "अंतिम अपडेट: {{time}}",
+      "speed": "गति",
+      "speedRealTime": "वास्तविक समय (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "सघन उपग्रह कैटलॉग",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Starlink कैटलॉग लोड नहीं हो सका: {{error}}। फिर प्रयास करने के लिए चुनें।",
+      "denseDescription": "पूरे Starlink समूह को हल्के बिंदुओं के रूप में दिखाएँ (बिना लेबल या तालिका पंक्तियों के)।"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "प्रोजेक्ट",
@@ -3083,6 +3105,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light बेसमैप",
       "geolibre-flight-simulator": "फ़्लाइट सिम्युलेटर",
+      "gods-eye-view": "ईश्वरीय दृष्टि",
       "geolibre-route-animation": "मार्ग एनिमेशन",
       "geolibre-sun": "सूर्य सिमुलेशन",
       "maplibre-atmosphere-effects": "वायुमंडलीय प्रभाव",

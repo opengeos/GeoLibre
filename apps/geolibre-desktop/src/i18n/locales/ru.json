@@ -2456,6 +2456,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Привязанные ко времени события на Земле в реальном времени из общедоступных источников данных.",
+      "globeOnly": "Данные в реальном времени отображаются на глобусе Cesium. Переключитесь на 3D-глобус, чтобы увидеть их.",
+      "earthquakes": "Землетрясения",
+      "satellites": "Спутники",
+      "loading": "Обновление…",
+      "updateFailed": "Не удалось обновить",
+      "never": "Никогда",
+      "lastUpdated": "Последнее обновление: {{time}}",
+      "speed": "Скорость",
+      "speedRealTime": "Реальное время (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Плотный каталог спутников",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Не удалось загрузить каталог Starlink: {{error}}. Выберите, чтобы повторить попытку.",
+      "denseDescription": "Показать всю группировку Starlink в виде легковесных точек (без подписей и строк таблицы)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Проект",
@@ -3185,6 +3207,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Базовая карта Carto Light",
       "geolibre-flight-simulator": "Авиасимулятор",
+      "gods-eye-view": "Взгляд свыше",
       "geolibre-route-animation": "Анимация маршрута",
       "geolibre-sun": "Симуляция Солнца",
       "maplibre-atmosphere-effects": "Эффекты атмосферы",

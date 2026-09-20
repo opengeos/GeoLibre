@@ -54,7 +54,7 @@ export function installCesiumInteractions(
     Object.assign(box.style, {
       position: "absolute",
       zIndex: "10",
-      maxWidth: "min(520px, 90%)",
+      maxWidth: "min(280px, 80%)",
       maxHeight: "60%",
       overflow: "auto",
       padding: "10px",
@@ -76,8 +76,19 @@ export function installCesiumInteractions(
     }
     box.append(content);
     host.append(box);
-    box.style.left = `${Math.max(0, Math.min(point.x + 12, host.clientWidth - box.offsetWidth))}px`;
-    box.style.top = `${Math.max(0, Math.min(point.y + 12, host.clientHeight - box.offsetHeight))}px`;
+    const gap = 12;
+    const right = point.x + gap;
+    const below = point.y + gap;
+    box.style.left = `${
+      right + box.offsetWidth <= host.clientWidth
+        ? right
+        : Math.max(0, point.x - gap - box.offsetWidth)
+    }px`;
+    box.style.top = `${
+      below + box.offsetHeight <= host.clientHeight
+        ? below
+        : Math.max(0, point.y - gap - box.offsetHeight)
+    }px`;
     return box;
   };
   handler.setInputAction((event: { endPosition: Cartesian2 }) => {
@@ -140,6 +151,7 @@ export function installCesiumInteractions(
       if (target !== IDENTIFY_ALL_LAYERS_ID) break;
     }
     if (content.childElementCount) popup = place(content, event.position, false);
+    else state.selectFeature(null);
   }, C.ScreenSpaceEventType.LEFT_CLICK);
   const selection = () => {
     const state = useAppStore.getState();

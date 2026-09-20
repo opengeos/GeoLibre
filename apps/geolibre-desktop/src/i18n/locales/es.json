@@ -2360,6 +2360,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Eventos terrestres en vivo y con referencia temporal procedentes de fuentes de datos públicas.",
+      "globeOnly": "Las fuentes en vivo se muestran en el globo de Cesium. Cambia al globo 3D para verlas.",
+      "earthquakes": "Terremotos",
+      "satellites": "Satélites",
+      "loading": "Actualizando…",
+      "updateFailed": "Error de actualización",
+      "never": "Nunca",
+      "lastUpdated": "Última actualización: {{time}}",
+      "speed": "Velocidad",
+      "speedRealTime": "Tiempo real (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Catálogo denso de satélites",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "No se pudo cargar el catálogo de Starlink: {{error}}. Selecciónalo para volver a intentarlo.",
+      "denseDescription": "Muestra la constelación completa de Starlink como puntos ligeros (sin etiquetas ni filas en la tabla)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Proyecto",
@@ -3083,6 +3105,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Mapa base Carto Light",
       "geolibre-flight-simulator": "Simulador de vuelo",
+      "gods-eye-view": "Vista de Dios",
       "geolibre-route-animation": "Animación de ruta",
       "geolibre-sun": "Simulación solar",
       "maplibre-atmosphere-effects": "Efectos atmosféricos",

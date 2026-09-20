@@ -2360,6 +2360,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "رویدادهای زنده و زمان‌مند زمین از خوراک‌های داده عمومی.",
+      "globeOnly": "خوراک‌های زنده کره زمین روی کره Cesium نمایش داده می‌شوند. برای دیدن آن‌ها به کره سه‌بعدی بروید.",
+      "earthquakes": "زمین‌لرزه‌ها",
+      "satellites": "ماهواره‌ها",
+      "loading": "در حال به‌روزرسانی…",
+      "updateFailed": "به‌روزرسانی ناموفق بود",
+      "never": "هرگز",
+      "lastUpdated": "آخرین به‌روزرسانی: {{time}}",
+      "speed": "سرعت",
+      "speedRealTime": "زمان واقعی (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "فهرست متراکم ماهواره‌ها",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "فهرست Starlink بارگیری نشد: {{error}}. برای تلاش دوباره آن را انتخاب کنید.",
+      "denseDescription": "مجموعه کامل Starlink را به‌صورت نقاط سبک نمایش دهید (بدون برچسب یا ردیف‌های جدول)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "پروژه",
@@ -3083,6 +3105,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "نقشهٔ پایهٔ Carto Light",
       "geolibre-flight-simulator": "شبیه‌ساز پرواز",
+      "gods-eye-view": "دید خداگونه",
       "geolibre-route-animation": "پویانمایی مسیر",
       "geolibre-sun": "شبیه‌سازی خورشید",
       "maplibre-atmosphere-effects": "جلوه‌های جوّی",

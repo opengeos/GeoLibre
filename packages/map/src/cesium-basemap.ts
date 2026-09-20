@@ -1,4 +1,8 @@
-import { getRuntimeEnvironment, type CesiumBasemapImagery } from "@geolibre/core";
+import {
+  CESIUM_BING_AERIAL_ASSET_ID,
+  getRuntimeEnvironment,
+  type CesiumBasemapImagery,
+} from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
@@ -14,7 +18,16 @@ import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine
 
 type CesiumNs = typeof import("@cesium/engine");
 
-/** Keyless imagery for a basemap with no raster form when no Ion token is set. */
+/**
+ * Keyless satellite imagery for a basemap with no raster form when no Ion token
+ * is set. Esri World Imagery needs no key and shows the Earth, where street
+ * tiles under a 3D globe mostly show an empty ocean; it is what the God's Eye
+ * View reference app defaults to without a key, for the same reason.
+ */
+const ESRI_WORLD_IMAGERY_URL =
+  "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
+
+/** Last resort when even Esri cannot be reached. */
 const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
 
 /** Read the live key so Settings changes do not require a new project. */
@@ -129,15 +142,25 @@ export function applyBasemapImagery(
 
   if (imagery.kind === "default") {
     // No raster equivalent for this basemap (a provider style, a custom URL).
-    // Ion World Imagery when a token is configured — the globe's historical
-    // default, kept so a project that relies on it is unchanged — and keyless
-    // OpenStreetMap otherwise.
-    const layer = ionToken
-      ? Cesium.ImageryLayer.fromWorldImagery({})
-      : Cesium.ImageryLayer.fromProviderAsync(
-          Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL })),
-          {},
-        );
+    // Bing Maps Aerial through Ion when a token is configured, and keyless Esri
+    // World Imagery otherwise. Use the named asset instead of Cesium's implicit
+    // World Imagery default so an upstream default change cannot change ours.
+    // A service that cannot be reached would otherwise leave the globe bare, so
+    // each option falls through to the next: Ion imagery, then keyless Esri,
+    // then street tiles. An expired or revoked token degrades to a drawn globe
+    // rather than an empty one.
+    const keyless = () =>
+      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI_WORLD_IMAGERY_URL, {
+        enablePickFeatures: false,
+      }).catch(() => new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL }));
+    const layer = Cesium.ImageryLayer.fromProviderAsync(
+      ionToken
+        ? Cesium.IonImageryProvider.fromAssetId(CESIUM_BING_AERIAL_ASSET_ID, {
+            accessToken: ionToken,
+          }).catch(keyless)
+        : keyless(),
+      {},
+    );
     viewer.imageryLayers.add(layer, 0);
     return [layer];
   }

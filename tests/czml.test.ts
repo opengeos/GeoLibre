@@ -45,7 +45,9 @@ describe("czml layer builder & parser", () => {
     assert.equal(layer.source.url, "https://example.com/orbit.czml");
     assert.equal(layer.metadata.sourceKind, CZML_SOURCE_KIND);
     assert.equal(layer.metadata.externalNativeLayer, true);
-    assert.equal(layer.metadata.identifiable, false);
+    // CZML entities are pickable and answered by the layer sync's CZML branch
+    // (issue #2504), so the default flipped to identifiable.
+    assert.equal(layer.metadata.identifiable, true);
     assert.deepEqual(layer.metadata.nativeLayerIds, [layer.id]);
     assert.equal(isCzmlLayer(layer), true);
     assert.equal(isCesiumOnlyLayer(layer), true);
@@ -115,6 +117,8 @@ function makeGlobe() {
     czmlLoads: [] as unknown[],
     dataSourcesAdded: [] as unknown[],
     dataSourcesRemoved: [] as unknown[],
+    primitivesAdded: [] as unknown[],
+    primitivesRemoved: [] as unknown[],
   };
 
   const Cesium = {
@@ -156,8 +160,14 @@ function makeGlobe() {
     scene: {
       canvas: { clientWidth: 800, clientHeight: 600, width: 800, height: 600 },
       primitives: {
-        add: () => {},
-        remove: () => {},
+        add: (primitive: unknown) => {
+          calls.primitivesAdded.push(primitive);
+          return primitive;
+        },
+        remove: (primitive: unknown) => {
+          calls.primitivesRemoved.push(primitive);
+          return true;
+        },
       },
       requestRender: () => {},
     },
@@ -332,7 +342,7 @@ describe("CesiumLayerSync with CZML", () => {
   });
 
   it("does not hand the clock to a document that never reached the scene", async () => {
-    const { Cesium, viewer } = makeGlobe();
+    const { calls, Cesium, viewer } = makeGlobe();
     viewer.dataSources.add = async () => {
       throw new Error("scene rejected the data source");
     };
@@ -341,6 +351,397 @@ describe("CesiumLayerSync with CZML", () => {
     for (let i = 0; i < 4; i++) await flush();
     assert.equal(viewer.clock.multiplier, null);
     assert.match(sync.getRenderStatus().errors[0], /scene rejected/);
+    sync.destroy();
+  });
+
+  it("identifies a picked CZML entity, sampling its properties at the current time", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const currentTime = { dayNumber: 2459000, secondsOfDay: 100 };
+    const quake = {
+      id: "quake-1",
+      name: "M 6.1 — 120km SSW of Adak",
+      properties: {
+        getValue: (time: unknown) => ({
+          // Sampled at the viewer's clock, not the document's start.
+          magnitude: time === currentTime ? 6.1 : 0,
+          depthKm: 31.4,
+          // A nested bag has no flat rendering in the popup, so it is dropped.
+          origin: { author: "us" },
+        }),
+      },
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      kind: "czml-data-source",
+      show: true,
+      clock: { startTime: null, stopTime: null, currentTime, clockRange: 1, multiplier: 1 },
+      isLoading: false,
+      entities: { values: [quake], contains: (e: unknown) => e === quake },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-quakes",
+      name: "Earthquakes",
+      url: "https://example.com/quakes.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    const hit = sync.resolveFeature(quake);
+    assert.ok(hit);
+    assert.equal(hit.layerId, "czml-quakes");
+    assert.equal(hit.featureId, "quake-1");
+    // A CZML position is a time-dynamic property, not stored geometry.
+    assert.equal(hit.geometry, null);
+    assert.deepEqual(hit.properties, {
+      name: "M 6.1 — 120km SSW of Adak",
+      magnitude: 6.1,
+      depthKm: 31.4,
+    });
+
+    // An entity no loaded document owns is not this synchronizer's to answer.
+    assert.equal(sync.resolveFeature({ id: "stranger" }), null);
+
+    // A hidden entity is not pickable. The same object stays in the document,
+    // so this tests the `show` guard rather than ownership.
+    (quake as { show?: boolean }).show = false;
+    assert.equal(sync.resolveFeature(quake), null);
+    delete (quake as { show?: boolean }).show;
+
+    // Neither is one whose layer the user hid or faded out.
+    sync.sync([{ ...layer, visible: false }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([{ ...layer, opacity: 0 }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake)?.featureId, "quake-1");
+    sync.destroy();
+  });
+
+  it("replays a highlight made while the document was still loading", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const point = {
+      color: "original",
+      clone() {
+        return { ...this, clone: this.clone };
+      },
+    };
+    const entity = { id: "sat-1", point };
+    let release: (() => void) | null = null;
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    Cesium.CzmlDataSource.load = async () => {
+      await loaded;
+      return {
+        show: true,
+        isLoading: false,
+        entities: {
+          values: [entity],
+          contains: (e: unknown) => e === entity,
+          getById: (id: string) => (id === entity.id ? entity : undefined),
+        },
+      };
+    };
+    // The highlight paints through these two; nothing else of Cesium is needed.
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: (css: string) => ({ css }) },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-sats",
+      name: "Satellites",
+      url: "https://example.com/sats.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    // A feed refresh rebuilds the document under a selected satellite: the
+    // canvas re-applies the selection while the entry still has no handle.
+    sync.highlight("czml-sats", ["sat-1"]);
+    assert.equal(entity.point, point, "nothing to paint until the entities exist");
+
+    release?.();
+    for (let i = 0; i < 6; i++) await flush();
+
+    assert.notEqual(entity.point, point, "the load replays the retained selection");
+    assert.deepEqual((entity.point as { color: { value: unknown } }).color.value, {
+      css: "#facc15",
+    });
+
+    // Clearing the selection puts the document's own styling back.
+    sync.highlight(undefined, []);
+    assert.equal(entity.point, point);
+    sync.destroy();
+  });
+
+  it("names and traces the satellite the user selects, and undoes both", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    const satellite = {
+      id: "celestrak-25545",
+      name: "COSMOS 2251",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 96 },
+        tleLine1: {
+          getValue: () => "1 25545U 93036A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () => "2 25545  74.0400 120.0000 0010000  80.0000 280.0000 15.00000000400000",
+        },
+      },
+      label: undefined as unknown,
+      path: undefined as unknown,
+      polyline: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [satellite],
+        contains: (e: unknown) => e === satellite,
+        getById: (id: string) => (id === satellite.id ? satellite : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: { toDate: () => new Date("2026-09-20T00:00:00.000Z") },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-fleet",
+      name: "Satellites",
+      url: "https://example.com/fleet.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-fleet", ["celestrak-25545"]);
+    // The document names only what deserves a standing label, so a picked
+    // satellite gets its name from the packet.
+    const label = satellite.label as { options: { text: string } };
+    assert.ok(label);
+    assert.equal(label.options.text, "COSMOS 2251");
+    // Selection builds a synchronous primitive with an explicit depth-fail
+    // appearance. Entity polylines can silently lose the behind-Earth material
+    // when Cesium classifies the parent moving entity as dynamic, making a
+    // complete orbit look absent once the dense catalog is enabled.
+    assert.equal(calls.primitivesAdded.length, 1);
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+        depthFailAppearance?: unknown;
+        asynchronous: boolean;
+        allowPicking: boolean;
+      };
+    };
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.ok(orbit.options.depthFailAppearance);
+    assert.equal(orbit.options.asynchronous, false);
+    assert.equal(orbit.options.allowPicking, false);
+    assert.equal(satellite.polyline, undefined);
+    assert.equal(satellite.path, undefined);
+
+    sync.highlight(undefined, []);
+    assert.equal(satellite.label, undefined, "clearing the selection restores the document");
+    assert.equal(satellite.path, undefined);
+    assert.equal(satellite.polyline, undefined);
+    assert.deepEqual(calls.primitivesRemoved, calls.primitivesAdded);
+    sync.destroy();
+  });
+
+  it("traces a complete GEO orbit beyond the document's three-hour sample window", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    // A GEO satellite: a 24-hour period, but only the plugin's three-hour
+    // window is sampled, and the clock sits in the middle of it.
+    const geo = {
+      id: "celestrak-99999",
+      name: "GEOSAT",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 1440 },
+        tleLine1: {
+          getValue: () => "1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () => "2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000",
+        },
+      },
+      availability: { start: "window-start", stop: "window-stop" },
+      label: undefined as unknown,
+      path: undefined as unknown,
+      polyline: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [geo],
+        contains: (e: unknown) => e === geo,
+        getById: (id: string) => (id === geo.id ? geo : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: {
+        toDate: () => new Date("2026-09-20T00:00:00.000Z"),
+        secondsDifference: (left: unknown, right: unknown) =>
+          right === "window-start" || left === "window-stop" ? 5400 : 0,
+      },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    sync.sync([
+      createCzmlLayer({ id: "czml-geo", name: "Satellites", url: "https://example.com/geo.czml" }),
+    ]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-geo", ["celestrak-99999"]);
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+      };
+    };
+    assert.ok(orbit);
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.equal(geo.polyline, undefined);
+    assert.equal(geo.path, undefined);
     sync.destroy();
   });
 

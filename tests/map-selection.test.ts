@@ -55,6 +55,33 @@ describe("map selection highlight", () => {
     assert.equal(calls.at(-1)?.fit, false);
   });
 
+  it("fits an existing selection when zoom-to-selection is enabled", () => {
+    const layer = geojsonLayer();
+    const fits: Array<boolean | undefined> = [];
+    const engine = {
+      highlightFeature: (
+        _layer: GeoLibreLayer | undefined,
+        _ids: string | string[] | null,
+        options?: { fit?: boolean },
+      ) => fits.push(options?.fit),
+    } as unknown as MapEngine;
+
+    const disabledKey = applySelectionHighlight(
+      engine,
+      [layer],
+      layer.id,
+      "a",
+      ["a"],
+      false,
+      null,
+      false,
+    );
+    assert.equal(disabledKey, null, "a disabled fit must not consume the selection key");
+
+    applySelectionHighlight(engine, [layer], layer.id, "a", ["a"], true, disabledKey, false);
+    assert.deepEqual(fits, [false, true]);
+  });
+
   it("refits when ids differ only by where a delimiter falls", () => {
     const layer = geojsonLayer();
     let fit: boolean | undefined;

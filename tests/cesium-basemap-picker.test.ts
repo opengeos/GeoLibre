@@ -8,8 +8,29 @@ import {
   sameCesiumImagery,
 } from "../packages/core/src/cesium-imagery";
 import { createEmptyProject, parseProject, serializeProject } from "../packages/core/src/project";
+import { DEFAULT_PROJECT_PREFERENCES } from "../packages/core/src/types";
 
 describe("Cesium basemap choices", () => {
+  it("gives new projects Bing Aerial and leaves legacy projects on their own basemap", () => {
+    // A new project carries the default and saves it explicitly.
+    assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
+    const fresh = JSON.parse(serializeProject(createEmptyProject()));
+    assert.equal(fresh.preferences.map.cesiumBasemap, "bing-aerial");
+    assert.equal(parseProject(JSON.stringify(fresh)).preferences?.map.cesiumBasemap, "bing-aerial");
+
+    // A project written before the field existed chose nothing, so loading it
+    // must not repaint its globe — the policy `mapboxStyleUrl` documents four
+    // lines above the same fallback.
+    const legacy = JSON.parse(serializeProject(createEmptyProject()));
+    delete legacy.preferences.map.cesiumBasemap;
+    assert.equal(parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap, "project");
+
+    // With no stored choice at all, the render-time gate still prefers Ion
+    // imagery when a token is configured.
+    assert.equal(availableCesiumBasemap(undefined, true), "bing-aerial");
+    assert.equal(availableCesiumBasemap(undefined, false), "project");
+  });
+
   it("keeps stable unique IDs and normalizes unrecognized project values", () => {
     assert.equal(new Set(CESIUM_BASEMAPS.map((entry) => entry.id)).size, CESIUM_BASEMAPS.length);
     for (const value of [undefined, null, {}, "unknown", 3954]) {
@@ -123,6 +144,16 @@ describe("Cesium basemap choices", () => {
     assert.equal(sameCesiumImagery({ kind: "natural-earth" }, { kind: "default" }), false);
   });
 
+  it("hands a new project its own preferences rather than the shared defaults", () => {
+    const project = createEmptyProject();
+    project.preferences!.map.cesiumBasemap = "blue-marble";
+    // The constant must be untouched: `normalizeProjectPreferences` reads it for
+    // the default a project omitting the field gets, so sharing the object let
+    // one edited project redefine the default for every later one.
+    assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
+    assert.notEqual(createEmptyProject().preferences!.map.cesiumBasemap, "blue-marble");
+  });
+
   it("round-trips the imagery and terrain selection through saved projects", () => {
     const project = createEmptyProject();
     project.preferences!.map.cesiumBasemap = "blue-marble";
@@ -134,6 +165,8 @@ describe("Cesium basemap choices", () => {
     invalid.preferences.map.cesiumBasemap = "unrecognized-provider";
     assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
     delete invalid.preferences.map.cesiumBasemap;
+    // No stored choice stays no stored choice, rather than acquiring the
+    // new-project default on load.
     assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
   });
 });

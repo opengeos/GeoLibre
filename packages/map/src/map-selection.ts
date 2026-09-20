@@ -62,5 +62,8 @@ export function applySelectionHighlight(
   const nextKey = selectionFitKey({ selectedLayerId, selectedFeatureIds, selectedFeatureId });
   const fit = Boolean(!restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey);
   engine?.highlightFeature(layer, highlightIds.length > 0 ? highlightIds : null, { fit });
-  return nextKey;
+  // Do not consume the key while fitting is disabled. If the user selects a
+  // row first and then enables "Zoom to selection", that transition must fit
+  // the already-selected feature instead of looking like a duplicate request.
+  return zoomToSelectedFeature ? nextKey : null;
 }

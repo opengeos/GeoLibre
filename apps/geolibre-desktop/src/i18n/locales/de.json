@@ -2360,6 +2360,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Live-Ereignisse auf der Erde mit Zeitbezug aus öffentlichen Datenfeeds.",
+      "globeOnly": "Live-Globusfeeds werden auf dem Cesium-Globus dargestellt. Wechseln Sie zum 3D-Globus, um sie anzuzeigen.",
+      "earthquakes": "Erdbeben",
+      "satellites": "Satelliten",
+      "loading": "Wird aktualisiert…",
+      "updateFailed": "Aktualisierung fehlgeschlagen",
+      "never": "Nie",
+      "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+      "speed": "Geschwindigkeit",
+      "speedRealTime": "Echtzeit (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Dichter Satellitenkatalog",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Der Starlink-Katalog konnte nicht geladen werden: {{error}}. Zum erneuten Versuch auswählen.",
+      "denseDescription": "Die vollständige Starlink-Konstellation als ressourcenschonende Punkte anzeigen (ohne Beschriftungen oder Tabellenzeilen)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Projekt",
@@ -3083,6 +3105,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light Basiskarte",
       "geolibre-flight-simulator": "Flugsimulator",
+      "gods-eye-view": "Gottesansicht",
       "geolibre-route-animation": "Routenanimation",
       "geolibre-sun": "Sonnensimulation",
       "maplibre-atmosphere-effects": "Atmosphärische Effekte",

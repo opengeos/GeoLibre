@@ -11,6 +11,9 @@ export const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 /** Basemap used to seed the empty workspace on the next app launch. */
 export const LAST_BASEMAP_STORAGE_KEY = "geolibre.lastBasemap";
 
+/** Rendering engine used to seed the empty workspace on the next app launch. */
+export const LAST_RENDERER_STORAGE_KEY = "geolibre.lastRenderer";
+
 /**
  * Latest version the user dismissed via "Skip this version" in the automated
  * startup update prompt. Suppresses the prompt for that one version so it does

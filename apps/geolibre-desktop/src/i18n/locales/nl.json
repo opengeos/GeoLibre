@@ -2360,6 +2360,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Live, tijdgebonden gebeurtenissen op aarde uit openbare datafeeds.",
+      "globeOnly": "Live wereldbolfeeds worden op de Cesium-wereldbol weergegeven. Schakel over naar de 3D-wereldbol om ze te bekijken.",
+      "earthquakes": "Aardbevingen",
+      "satellites": "Satellieten",
+      "loading": "Bijwerken…",
+      "updateFailed": "Bijwerken mislukt",
+      "never": "Nooit",
+      "lastUpdated": "Laatst bijgewerkt: {{time}}",
+      "speed": "Snelheid",
+      "speedRealTime": "Realtime (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Dichte satellietcatalogus",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "De Starlink-catalogus kon niet worden geladen: {{error}}. Selecteer om opnieuw te proberen.",
+      "denseDescription": "Toon de volledige Starlink-constellatie als lichte punten (zonder labels of tabelrijen)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Project",
@@ -3083,6 +3105,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light-basiskaart",
       "geolibre-flight-simulator": "Vluchtsimulator",
+      "gods-eye-view": "Alziend overzicht",
       "geolibre-route-animation": "Route-animatie",
       "geolibre-sun": "Zonsimulatie",
       "maplibre-atmosphere-effects": "Atmosferische effecten",

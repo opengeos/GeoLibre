@@ -14,7 +14,9 @@ import { applyBasemapAppearance, applyBasemapImagery, getStadiaApiKey } from "./
 import { isSameView } from "./cesium-camera";
 import { installCesiumInteractions } from "./cesium-interactions";
 import { CesiumEngine } from "./cesium-engine";
+import { consumePendingIdentifyRestore } from "./map-identify-lifecycle";
 import type { BuiltInMapControl, MapEngine } from "./map-engine";
+import { applySelectionHighlight, selectionFitKey } from "./map-selection";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
 import type {
   CesiumWidgetControlHandle,
@@ -163,6 +165,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   const viewerRef = useRef<CesiumWidget | null>(null);
   const cesiumRef = useRef<typeof import("@cesium/engine") | null>(null);
   const engineInstanceRef = useRef<CesiumEngine | null>(null);
+  const previousSelectedFeatureKey = useRef<string | null>(null);
   const interactionCleanup = useRef<(() => void) | null>(null);
   const controlHostRef = useRef<CesiumControlHost | null>(null);
   // The Cesium toolbar widgets mounted on the primary globe, kept so the label
@@ -211,6 +214,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   // Layer sync inputs, mirrored from SecondaryMapCanvas: the shared layers with
   // this pane's per-layer visibility overrides, then group effects folded in.
   const layers = useAppStore((s) => s.layers);
+  const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
+  const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
+  const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const layerVisibility = useAppStore((s) =>
     viewId === undefined
@@ -354,6 +361,13 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           // choice and fail without an Ion token (Ion's default imagery needs
           // one), which is what used to keep the globe off the keyless path.
           baseLayer: false,
+          // Draw at the display's real pixels, as MapLibre's canvas does.
+          // Cesium defaults this to `true`, which pins the drawing buffer to
+          // CSS pixels and lets the browser upscale it — on a HiDPI screen the
+          // whole globe softens, and glyph-atlas text (satellite names, the
+          // scale bar) is where it shows first. The cost is fragment work
+          // proportional to the square of the device pixel ratio.
+          useBrowserRecommendedResolution: false,
           contextOptions: { webgl: { preserveDrawingBuffer: true } },
           // Match the project map in flat modes, including its vertical extent.
           mapProjection: new Cesium.WebMercatorProjection(),
@@ -587,6 +601,33 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     if (!ready) return;
     engineInstanceRef.current?.syncLayers(paneLayers);
   }, [ready, paneLayers]);
+
+  // The primary globe shares the same selection lifecycle as MapLibre. A
+  // secondary pane is display-only and must not compete with the primary
+  // engine for fitting or highlights.
+  useEffect(() => {
+    if (!ready || !isPrimary) return;
+    const key = selectionFitKey({ selectedLayerId, selectedFeatureIds, selectedFeatureId });
+    const restoring = consumePendingIdentifyRestore(key);
+    previousSelectedFeatureKey.current = applySelectionHighlight(
+      engineInstanceRef.current,
+      layers,
+      selectedLayerId,
+      selectedFeatureId,
+      selectedFeatureIds,
+      zoomToSelectedFeature,
+      previousSelectedFeatureKey.current,
+      restoring,
+    );
+  }, [
+    ready,
+    isPrimary,
+    layers,
+    selectedLayerId,
+    selectedFeatureId,
+    selectedFeatureIds,
+    zoomToSelectedFeature,
+  ]);
 
   // Synced: follow the shared global camera. Depend on primitives so an
   // equal-valued mapView object does not re-apply. `ready` re-runs this once the

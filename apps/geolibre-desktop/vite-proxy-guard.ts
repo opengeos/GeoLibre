@@ -21,6 +21,20 @@ export const PROXY_MAX_REDIRECT_HOPS = 5;
 export const PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
 export const PROXY_FETCH_TIMEOUT_MS = 30_000;
 
+const CELESTRAK_TLE_BASE = "https://celestrak.org/NORAD/elements/gp.php";
+const CELESTRAK_STARLINK_TLE_BASE = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+const CELESTRAK_CACHE_TTL_MS = 6 * 60 * 60_000;
+const CELESTRAK_GROUPS = new Set([
+  "stations",
+  "visual",
+  "gps-ops",
+  "glo-ops",
+  "galileo",
+  "geo",
+  "starlink",
+]);
+const celestrakCache = new Map<string, { body: Buffer; expiresAt: number }>();
+
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
@@ -357,6 +371,64 @@ export async function readBodyWithLimit(
     chunks.push(value);
   }
   return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+}
+
+/**
+ * Fixed CelesTrak TLE relay for the development server.
+ *
+ * Unlike the generic proxy, this route identifies GeoLibre to CelesTrak and
+ * caches each allowlisted group for six hours, matching CelesTrak's retrieval
+ * guidance and the upstream God's Eye View server.
+ */
+export async function proxyCelestrakRequestGuarded(
+  req: IncomingMessage,
+  res: ServerResponse,
+  proxyPath: string,
+): Promise<void> {
+  const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
+  const group = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+  if (!CELESTRAK_GROUPS.has(group)) {
+    res.statusCode = 400;
+    res.setHeader("content-type", "text/plain");
+    res.end("Invalid CelesTrak group");
+    return;
+  }
+
+  let entry = celestrakCache.get(group);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const starlink = group === "starlink";
+    const upstream = new URL(starlink ? CELESTRAK_STARLINK_TLE_BASE : CELESTRAK_TLE_BASE);
+    upstream.searchParams.set(starlink ? "FILE" : "GROUP", group);
+    upstream.searchParams.set("FORMAT", "tle");
+    const response = await fetchWithGuard(upstream.toString(), {
+      headers: {
+        accept: "text/plain",
+        "user-agent": "GeoLibre-CelesTrak-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+    if (!response.ok) {
+      res.statusCode = response.status;
+      res.setHeader("content-type", "text/plain");
+      res.end(`CelesTrak returned HTTP ${response.status}`);
+      return;
+    }
+    const body = await readBodyWithLimit(response);
+    if (!/^1 /m.test(body.toString("utf8"))) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end("CelesTrak returned no TLE records");
+      return;
+    }
+    entry = { body, expiresAt: Date.now() + CELESTRAK_CACHE_TTL_MS };
+    celestrakCache.set(group, entry);
+  }
+
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=21600");
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("content-length", String(entry.body.byteLength));
+  res.end(entry.body);
 }
 
 /**

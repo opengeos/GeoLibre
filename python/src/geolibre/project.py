@@ -1744,7 +1744,10 @@ def czml_layer(
     metadata: dict[str, Any] = {
         "sourceKind": CZML_SOURCE_KIND,
         "externalNativeLayer": True,
-        "identifiable": False,
+        # Cesium builds real entities from the document and the globe's layer
+        # sync answers for them, so a click can read a packet's name and custom
+        # properties. Mirrors ``createCzmlLayer`` in ``@geolibre/core``.
+        "identifiable": True,
         "sourceId": source_id,
         "nativeLayerIds": [source_id],
     }

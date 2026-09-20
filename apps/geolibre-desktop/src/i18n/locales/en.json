@@ -2392,6 +2392,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Live, time-aware Earth events from public data feeds.",
+      "globeOnly": "Live globe feeds render on the Cesium globe. Switch to the 3D globe to view them.",
+      "earthquakes": "Earthquakes",
+      "satellites": "Satellites",
+      "loading": "Updating…",
+      "updateFailed": "Update failed",
+      "never": "Never",
+      "lastUpdated": "Last updated: {{time}}",
+      "speed": "Speed",
+      "speedRealTime": "Real time (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Dense satellite catalog",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Could not load the Starlink catalog: {{error}}. Select to retry.",
+      "denseDescription": "Show the full Starlink shell as lightweight points (no labels or table rows)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Project",
@@ -3116,6 +3138,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light Basemap",
       "geolibre-flight-simulator": "Flight Simulator",
+      "gods-eye-view": "God's Eye View",
       "geolibre-route-animation": "Route Animation",
       "geolibre-sun": "Sun Simulation",
       "maplibre-atmosphere-effects": "Atmospheric Effects",

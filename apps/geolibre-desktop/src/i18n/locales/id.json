@@ -2312,6 +2312,28 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Peristiwa Bumi langsung berbasis waktu dari umpan data publik.",
+      "globeOnly": "Umpan globe langsung dirender pada globe Cesium. Beralihlah ke globe 3D untuk melihatnya.",
+      "earthquakes": "Gempa bumi",
+      "satellites": "Satelit",
+      "loading": "Memperbarui…",
+      "updateFailed": "Pembaruan gagal",
+      "never": "Belum pernah",
+      "lastUpdated": "Terakhir diperbarui: {{time}}",
+      "speed": "Kecepatan",
+      "speedRealTime": "Waktu nyata (1×)",
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Katalog satelit padat",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Katalog Starlink tidak dapat dimuat: {{error}}. Pilih untuk mencoba lagi.",
+      "denseDescription": "Tampilkan seluruh konstelasi Starlink sebagai titik ringan (tanpa label atau baris tabel)."
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Proyek",
@@ -3032,6 +3054,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Peta Dasar Carto Light",
       "geolibre-flight-simulator": "Simulator Penerbangan",
+      "gods-eye-view": "Pandangan Mahatahu",
       "geolibre-route-animation": "Animasi Rute",
       "geolibre-sun": "Simulasi Matahari",
       "maplibre-atmosphere-effects": "Efek Atmosfer",
