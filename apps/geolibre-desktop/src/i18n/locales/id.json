@@ -3020,6 +3020,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-osm-downloader": "Pengunduh OSM",
+      "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Katalog STAC",
       "geolibre-planet-open-data": "Data Terbuka Planet",
       "maplibre-gl-source-coop": "Source Cooperative",

@@ -3173,6 +3173,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-osm-downloader": "Загрузчик OSM",
+      "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Каталоги STAC",
       "geolibre-planet-open-data": "Открытые данные Planet",
       "maplibre-gl-source-coop": "Source Cooperative",

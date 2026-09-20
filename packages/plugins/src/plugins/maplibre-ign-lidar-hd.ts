@@ -172,7 +172,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer";
+type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer" | "no-download";
 
 /** Adds a tile's point cloud to the map as a `lidar-url` layer. */
 async function addTileToMap(
@@ -181,7 +181,7 @@ async function addTileToMap(
 ): Promise<AddTileToMapResult> {
   const renderer = app.getMapRenderer?.();
   if (renderer && renderer !== "maplibre" && renderer !== "mapbox") return "unsupported-renderer";
-  if (!tile.downloadUrl) return "unsupported-renderer";
+  if (!tile.downloadUrl) return "no-download";
   const store = useAppStore.getState();
   const alreadyAdded = store.layers.some(
     (layer) =>
@@ -708,6 +708,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
             status.textContent = tr(app, "alreadyOnMap", "{{name}} is already on the map.", {
               name: tileTitle(tile),
             });
+          } else if (result === "no-download") {
+            status.textContent = tr(app, "noDownload", "no point cloud published");
           } else {
             status.textContent = tr(
               app,

@@ -3020,6 +3020,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-osm-downloader": "OSM ダウンローダー",
+      "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC カタログ",
       "geolibre-planet-open-data": "Planet オープンデータ",
       "maplibre-gl-source-coop": "Source Cooperative",
