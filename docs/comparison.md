@@ -151,12 +151,14 @@ Two products share the name, and they are heading in opposite directions:
 - **Google Earth** (the web app, plus the Android and iOS apps) is the one Google
   is investing in. It comes in three plans: **Standard** is free, while
   **Professional** and **Professional Advanced** are paid per seat. Standard
-  covers exploring, drawing, measuring, historical imagery, and Street View, with
-  projects stored in Google Drive and shared like any other Drive file. The paid
-  plans add curated data layers (finer elevation contours, parcel zoning,
-  household income, traffic), larger design quotas and cloud import storage, and
-  more of the Gemini-powered *Ask Google Earth*, which every plan includes at a
-  limited, higher, or highest level of access.
+  covers exploring, drawing, measuring, historical imagery, Street View, and
+  broadly applicable data layers such as administrative areas, postal codes, and
+  household income, with projects stored in Google Drive and shared like any
+  other Drive file. The paid plans add specialized layers (finer elevation
+  contours, slope and aspect, inundation history, parcel zoning, traffic), larger
+  design quotas and cloud import storage, and more of the Gemini-powered *Ask
+  Google Earth*, which every plan includes at a limited, higher, or highest level
+  of access.
 - **Google Earth Pro** (desktop, version 7.3.x) is the free application GIS users
   have leaned on for historical imagery, Shapefile and GeoTIFF import, viewshed,
   elevation profiles, and HD movie export. Google has announced that **desktop
@@ -173,12 +175,12 @@ planetary-scale raster analysis — and is out of scope here.
 | **What it is for** | Analysis, cartography, and data work | Exploring, annotating, and presenting imagery | The same, with a GIS-adjacent import and measurement set |
 | **Runs on** | Browser, Windows, macOS, Linux, Android, iOS, Jupyter | Browser, Android, iOS | Windows, macOS, Linux |
 | **Where your data lives** | Your device, processed client-side | Your Google account and Drive | Your device |
-| **Data in** | Vector, raster, tiles, databases, STAC, OGC and Esri services, and cloud-native formats (COG, GeoParquet, PMTiles, Zarr) | KML/KMZ and Shapefile into projects, plus experimental GLB-only 3D model import on the web; more import storage on paid plans | KML/KMZ, Shapefile, GeoTIFF and image overlays, CSV with address geocoding, GPS/GPX, MapInfo TAB |
+| **Data in** | Vector, raster, tiles, databases, STAC, OGC and Esri services, and cloud-native formats (COG, GeoParquet, PMTiles, Zarr) | KML/KMZ, GeoJSON, and zipped Shapefile into projects, plus experimental GLB-only 3D model import on the web; more import storage on paid plans | KML/KMZ, Shapefile, GeoTIFF and image overlays, CSV with address geocoding, GPS/GPX, MapInfo TAB |
 | **Attribute data** | Attribute table, joins, field calculator, quick filters, spatial SQL | Placemark descriptions | Basic attribute display for imported files |
 | **Projections** | Reprojects on import, searchable EPSG catalog, per-project ellipsoid driving measurements | WGS84 globe only | WGS84 globe only |
-| **Analysis** | 1,000+ geoprocessing tools, spatial SQL, spatial statistics, routing and isochrones | Measurement, elevation profiles, and layer filtering | Measure, elevation profile, viewshed |
+| **Analysis** | 1,000+ geoprocessing tools, spatial SQL, spatial statistics, routing and isochrones | Measurement, elevation profiles on the web, and layer filtering | Measure, elevation profile, viewshed |
 | **Symbology** | Data-driven single, categorized, graduated, rule-based, expression, heatmap, cluster, proportional | KML styles set by hand | KML styles set by hand, plus style templates driven by a data column |
-| **Historical imagery** | Historical Imagery plugin over Esri World Imagery snapshots, plus Timelapse annual basemaps | A timeline of the capture dates available for a place, plus historical Street View | Historical imagery slider |
+| **Historical imagery** | Historical Imagery plugin over Esri World Imagery snapshots, plus Timelapse annual basemaps | A timeline of the capture dates available for a place, plus historical Street View on the web | Historical imagery slider |
 | **Photorealistic 3D and Street View** | Google Photorealistic 3D Tiles and Street View with your own API key; plus 3D Tiles, I3S, LiDAR, COPC, and Gaussian splats | Native, no key, best-in-class | 3D buildings and Street View |
 | **Presentation output** | Story maps, print layout with atlas, camera tour recorded to video, dashboards, one-file offline HTML export | Shareable Drive projects with a slide-style present mode | Movie Maker HD video and high-resolution image export |
 | **Project file** | `.geolibre.json` — open, documented, diffable, local | Hosted project in Drive; KML export | `.kmz` / `.kml` |
