@@ -136,6 +136,30 @@ function formatNumber(value: number): string {
   return Number(value.toFixed(6)).toString();
 }
 
+/** The combined [west, south, east, north] extent of a set of tile footprints, or null when empty. */
+function tilesBounds(tiles: IgnLidarHdTile[]): [number, number, number, number] | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    if (node.length >= 2 && typeof node[0] === "number" && typeof node[1] === "number") {
+      const [lng, lat] = node as [number, number];
+      if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        if (lng < west) west = lng;
+        if (lng > east) east = lng;
+        if (lat < south) south = lat;
+        if (lat > north) north = lat;
+      }
+      return;
+    }
+    for (const child of node) walk(child);
+  };
+  for (const tile of tiles) walk((tile.geometry as { coordinates?: unknown }).coordinates);
+  return Number.isFinite(west) && Number.isFinite(south) ? [west, south, east, north] : null;
+}
+
 /** Returns the best human-readable identifier for a tile. */
 function tileTitle(tile: IgnLidarHdTile): string {
   return tile.tileCoord || tile.missionCode || tile.id || crypto.randomUUID();
@@ -784,6 +808,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       // renderList() calls refreshBulkToolbar() at its end, which draws the
       // footprints for the new results (selection is empty at this point).
       renderList();
+      const bounds = tilesBounds(result.tiles);
+      if (bounds) app.fitBounds?.(bounds);
       if (result.tiles.length === 0) {
         status.textContent = tr(app, "noTiles", "No LiDAR HD tiles were found in this area.");
       } else {
