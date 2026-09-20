@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
+import { useAppStore } from "@geolibre/core";
 import {
   godsEyeViewPlugin,
   reattachGodsEyeView,
@@ -68,6 +69,136 @@ function stubFetch(): { calls: () => number; restore: () => void } {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const TLE_TEXT = `ISS (ZARYA)
+1 25544U 98067A   26262.50000000  .00016717  00000+0  30178-3 0  9991
+2 25544  51.6400 120.0000 0005000  80.0000 280.0000 15.50000000400000
+`;
+
+/** Answer both public feeds with well-formed payloads, and count the calls. */
+function stubFeeds(): { calls: () => string[]; restore: () => void } {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes("earthquake.usgs.gov")) {
+      return new Response(
+        JSON.stringify({
+          features: [
+            {
+              id: "q1",
+              geometry: { type: "Point", coordinates: [10, 20, 5] },
+              properties: { mag: 4, place: "Somewhere", time: Date.now() },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(TLE_TEXT, { status: 200, headers: { "content-type": "text/plain" } });
+  }) as typeof fetch;
+  return {
+    calls: () => calls,
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+describe("God's Eye View feed refresh", () => {
+  it("says so when a feed times out", async () => {
+    const net = stubFetch();
+    const globe = makeGlobe();
+    try {
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 6; i++) await flush();
+      // The timeout watchdog aborts the very request whose generation still
+      // matches, so an `aborted` guard here used to swallow the one failure
+      // worth reporting and leave the panel on its stale timestamp.
+      assert.match(globe.panel.textContent ?? "", /Update failed/);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      net.restore();
+    }
+  });
+
+  it("adopts the loaded project's own feed layer instead of duplicating it", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+      const first = useAppStore.getState().layers;
+      assert.equal(first.length, 2, "one layer per feed");
+
+      // A project switch replaces the store's layers wholesale while the plugin
+      // stays active, so the remembered layer ids now point at nothing.
+      const carried = first.map((layer) => ({ ...layer, id: `${layer.id}-from-project-b` }));
+      useAppStore.setState({ layers: carried });
+      godsEyeViewPlugin.applyProjectState?.(globe.app, { earthquakes: true, satellites: true });
+      for (let i = 0; i < 8; i++) await flush();
+
+      const after = useAppStore.getState().layers;
+      assert.equal(after.length, 2, "the project's own layers are adopted, not duplicated");
+      assert.deepEqual(
+        after.map((layer) => layer.id).sort(),
+        carried.map((layer) => layer.id).sort(),
+      );
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+
+  it("rebuilds a feed toggled off and on, however recently it was fetched", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+      assert.equal(useAppStore.getState().layers.length, 2);
+
+      // Switching off removes the layers, so the interval must not then spare
+      // the fetch that would rebuild them — recent data nobody can see is no
+      // data at all.
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      assert.equal(useAppStore.getState().layers.length, 0);
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+      assert.equal(useAppStore.getState().layers.length, 2);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+
+  it("does not re-read a feed it fetched moments ago", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+      const afterActivate = net.calls().length;
+      assert.ok(afterActivate > 0);
+
+      // Every project load re-applies plugin state; CelesTrak asks not to be
+      // re-read every few minutes, so a re-entry inside the interval is spared.
+      godsEyeViewPlugin.applyProjectState?.(globe.app, { earthquakes: true, satellites: true });
+      for (let i = 0; i < 8; i++) await flush();
+      assert.equal(net.calls().length, afterActivate);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+});
 
 describe("God's Eye View clock speed", () => {
   it("runs at real time by default and persists the chosen speed", async () => {

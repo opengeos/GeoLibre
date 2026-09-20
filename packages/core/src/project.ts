@@ -113,15 +113,17 @@ export function createEmptyProject(
     layers: [],
     layerGroups: [],
     styles: {},
-    preferences: options.ellipsoidId
-      ? {
-          ...DEFAULT_PROJECT_PREFERENCES,
-          map: {
-            ...DEFAULT_PROJECT_PREFERENCES.map,
-            ellipsoidId: getEllipsoid(options.ellipsoidId).id,
-          },
-        }
-      : DEFAULT_PROJECT_PREFERENCES,
+    // A copy, never the shared constant: a caller that edits the new project's
+    // preferences — `project.preferences.map.cesiumBasemap = …` — would
+    // otherwise rewrite the app-wide defaults for the rest of the process, and
+    // every later "what is the default" read would answer with its edit.
+    preferences: {
+      ...DEFAULT_PROJECT_PREFERENCES,
+      map: {
+        ...DEFAULT_PROJECT_PREFERENCES.map,
+        ...(options.ellipsoidId ? { ellipsoidId: getEllipsoid(options.ellipsoidId).id } : {}),
+      },
+    },
     legend: { ...DEFAULT_LEGEND_CONFIG },
     comments: [],
     metadata: {},
@@ -1240,7 +1242,8 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       arcgisBasemap:
         normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
       cesiumBasemap: normalizeCesiumBasemap(
-        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap ?? "bing-aerial",
+        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap ??
+          DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap,
       ),
       // Older projects omit this field and continue to open with terrain off.
       terrainEnabled: normalizeBoolean(

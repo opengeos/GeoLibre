@@ -129,9 +129,13 @@ function ownedLayer(feed: FeedId) {
 
 function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void {
   const store = useAppStore.getState();
-  const existing = feeds[feed].layerId
-    ? store.layers.find((layer) => layer.id === feeds[feed].layerId)
-    : ownedLayer(feed);
+  // Fall through to the flag search when the remembered id misses: a project
+  // switch replaces `store.layers` wholesale while the plugin stays active, and
+  // adopting the new project's own feed layer beats adding a duplicate beside it.
+  const existing =
+    (feeds[feed].layerId
+      ? store.layers.find((layer) => layer.id === feeds[feed].layerId)
+      : undefined) ?? ownedLayer(feed);
   const layer = createCzmlLayer({
     id: existing?.id,
     name: feedName(feed),
@@ -175,7 +179,10 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   if (
     !force &&
     state.lastUpdated &&
-    Date.now() - state.lastUpdated.getTime() < FEED_REFRESH_INTERVAL_MS[feed]
+    Date.now() - state.lastUpdated.getTime() < FEED_REFRESH_INTERVAL_MS[feed] &&
+    // Recent data the user can no longer see is no reason to skip: a feed
+    // toggled off and on has had its layer removed and must rebuild it.
+    ownedLayer(feed)
   ) {
     return;
   }
@@ -203,7 +210,11 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     upsertLayer(feed, packets, updatedAt);
     state.lastUpdated = updatedAt;
   } catch (error) {
-    if (generation === state.generation && !controller.signal.aborted) {
+    // No `signal.aborted` check: the timeout watchdog aborts this very request,
+    // so testing it swallowed exactly the failure worth reporting. Every
+    // deliberate cancellation — a superseding refresh, `removeFeedLayer`,
+    // `deactivate` — bumps the generation instead, which this already excludes.
+    if (generation === state.generation) {
       state.failed = true;
       console.warn(`[God's Eye View] ${feed} refresh failed`, error);
     }
@@ -418,7 +429,12 @@ function startRefreshing(): void {
   for (const feed of FEED_IDS) {
     // A feed the project left off keeps no layer, including one a hand-edited
     // project carried in; `refreshFeed` itself no-ops while disabled.
-    if (feeds[feed].enabled) void refreshFeed(feed);
+    //
+    // Not forced: this runs on every project load for a plugin that stays
+    // active, and CelesTrak asks not to be re-read every few minutes. A feed
+    // with no known `lastUpdated` still fetches at once, so a first activation
+    // is unaffected — only a re-entry inside the interval is spared.
+    if (feeds[feed].enabled) void refreshFeed(feed, false);
     else removeFeedLayer(feed);
   }
   if (refreshTimer) clearInterval(refreshTimer);

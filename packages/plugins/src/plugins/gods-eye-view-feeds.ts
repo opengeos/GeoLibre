@@ -214,12 +214,21 @@ export function parseTle(text: string, classification?: SatelliteClassification)
     .filter((line) => line.trim() !== "");
   const records: TleRecord[] = [];
   for (let index = 0; index < lines.length;) {
-    const hasName = !lines[index].startsWith("1 ");
+    // A line only counts as a name when line 1 really follows it. Deciding on
+    // the current line alone and then stepping past three lines lets one stray
+    // line in a truncated response shift the cursor out of phase and swallow
+    // every record after it, rather than just the damaged one.
+    const hasName = !lines[index].startsWith("1 ") && Boolean(lines[index + 1]?.startsWith("1 "));
     const name = hasName ? lines[index].trim() : "Satellite";
     const line1 = lines[index + (hasName ? 1 : 0)];
     const line2 = lines[index + (hasName ? 2 : 1)];
+    // Resynchronize on the next line after an unusable one, so the scanner can
+    // find the next well-formed triplet instead of striding past it.
+    if (!line1?.startsWith("1 ") || !line2?.startsWith("2 ")) {
+      index += 1;
+      continue;
+    }
     index += hasName ? 3 : 2;
-    if (!line1?.startsWith("1 ") || !line2?.startsWith("2 ")) continue;
     const epoch = parseTleEpoch(line1);
     const catalogNumber = line1.slice(2, 7).trim();
     const inclinationDeg = Number(line2.slice(8, 16));

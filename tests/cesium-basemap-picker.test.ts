@@ -136,6 +136,16 @@ describe("Cesium basemap choices", () => {
     assert.equal(sameCesiumImagery({ kind: "natural-earth" }, { kind: "default" }), false);
   });
 
+  it("hands a new project its own preferences rather than the shared defaults", () => {
+    const project = createEmptyProject();
+    project.preferences!.map.cesiumBasemap = "blue-marble";
+    // The constant must be untouched: `normalizeProjectPreferences` reads it for
+    // the default a project omitting the field gets, so sharing the object let
+    // one edited project redefine the default for every later one.
+    assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
+    assert.notEqual(createEmptyProject().preferences!.map.cesiumBasemap, "blue-marble");
+  });
+
   it("round-trips the imagery and terrain selection through saved projects", () => {
     const project = createEmptyProject();
     project.preferences!.map.cesiumBasemap = "blue-marble";

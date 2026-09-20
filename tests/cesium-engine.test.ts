@@ -958,6 +958,36 @@ describe("CesiumEngine framing", () => {
     assert.deepEqual(fakes.flights[0].destination, { w: 179, s: 10, e: -179, n: 20 });
     engine.destroy();
   });
+
+  it("leaves out the widest empty stretch when a selection is scattered", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = { id: "satellites", name: "Satellites", type: "czml" } as never;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
+    // Three points more than half the globe apart: measuring from any one of
+    // them reports 340 degrees, while the arc that actually encloses all three
+    // runs 190 degrees eastward from 0, leaving out the 170-degree gap.
+    sync.featurePositions = () => [
+      C.Cartesian3.fromDegrees(0, 10, 850_000),
+      C.Cartesian3.fromDegrees(170, 20, 850_000),
+      C.Cartesian3.fromDegrees(-170, 30, 850_000),
+    ];
+
+    engine.highlightFeature(layer, ["a", "b", "c"], { fit: true });
+
+    const box = fakes.flights[0].destination as { w: number; s: number; e: number; n: number };
+    assert.equal(box.w, 0);
+    assert.equal(box.e, -170);
+    // The latitudes round-trip through radians in the fake.
+    assert.ok(Math.abs(box.s - 10) < 1e-9);
+    assert.ok(Math.abs(box.n - 30) < 1e-9);
+    engine.destroy();
+  });
 });
 
 // --- scene-mode morphs -------------------------------------------------------

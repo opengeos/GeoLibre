@@ -146,6 +146,17 @@ describe("God's Eye View feed helpers", () => {
     assert.ok(position.altitude > 300_000 && position.altitude < 600_000);
   });
 
+  it("resynchronizes past a stray line instead of losing every record after it", () => {
+    // A truncated response: an orphan name with no element lines, then a good
+    // record. Striding three lines from the orphan would step over line 1 of
+    // the record that follows and drop it too.
+    const records = parseTle(`ORPHAN NAME WITH NO ELEMENTS
+${ISS_TLE}`);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].catalogNumber, "25544");
+    assert.equal(records[0].name, "ISS (ZARYA)");
+  });
+
   it("pre-samples a whole revolution ahead of the window so the path never breaks", () => {
     const records = parseTle(ISS_TLE);
     const period = orbitalPeriodSeconds(records[0]);
