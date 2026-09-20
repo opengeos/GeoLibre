@@ -8,6 +8,7 @@ import {
   sameCesiumImagery,
 } from "../packages/core/src/cesium-imagery";
 import { createEmptyProject, parseProject, serializeProject } from "../packages/core/src/project";
+import { useAppStore } from "../packages/core/src/store";
 import { DEFAULT_PROJECT_PREFERENCES } from "../packages/core/src/types";
 
 describe("Cesium basemap choices", () => {
@@ -65,6 +66,22 @@ describe("Cesium basemap choices", () => {
       basemapToCesiumImagery(undefined, "project"),
       basemapToCesiumImagery(undefined),
     );
+  });
+
+  it("lets a shared background choice replace the active Cesium override", () => {
+    useAppStore.getState().newProject();
+    useAppStore.getState().setPrimaryRenderer("cesium");
+    useAppStore.getState().setPreferences({
+      ...useAppStore.getState().preferences,
+      map: {
+        ...useAppStore.getState().preferences.map,
+        cesiumBasemap: "blue-marble",
+      },
+    });
+
+    useAppStore.getState().setBasemapStyleUrl("https://tiles.openfreemap.org/styles/liberty");
+
+    assert.equal(useAppStore.getState().preferences.map.cesiumBasemap, "project");
   });
 
   it("includes the eight Other providers without requiring an ion token", () => {

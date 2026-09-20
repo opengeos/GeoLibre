@@ -36,6 +36,72 @@ const MAPBOX_API_HOST = "api.mapbox.com";
 const MAPBOX_STYLE_PATH_PREFIX = "/styles/v1/";
 
 /**
+ * Mapbox-maintained basemap styles offered by the layer panel's quick picker.
+ *
+ * Standard and Standard Satellite are Mapbox's current styles. The remaining
+ * classic styles are still useful, familiar cartographic choices and remain
+ * supported by the Maps SDK. Keeping the canonical `mapbox://` URLs here lets
+ * the native Mapbox renderer resolve them with its access token without ever
+ * persisting that credential in the project.
+ */
+export const MAPBOX_BASEMAP_STYLES: readonly {
+  id: string;
+  name: string;
+  styleUrl: string;
+}[] = [
+  {
+    id: "standard",
+    name: "Mapbox Standard",
+    styleUrl: "mapbox://styles/mapbox/standard",
+  },
+  {
+    id: "standard-satellite",
+    name: "Mapbox Standard Satellite",
+    styleUrl: "mapbox://styles/mapbox/standard-satellite",
+  },
+  {
+    id: "streets-v12",
+    name: "Mapbox Streets",
+    styleUrl: "mapbox://styles/mapbox/streets-v12",
+  },
+  {
+    id: "outdoors-v12",
+    name: "Mapbox Outdoors",
+    styleUrl: "mapbox://styles/mapbox/outdoors-v12",
+  },
+  {
+    id: "light-v11",
+    name: "Mapbox Light",
+    styleUrl: "mapbox://styles/mapbox/light-v11",
+  },
+  {
+    id: "dark-v11",
+    name: "Mapbox Dark",
+    styleUrl: "mapbox://styles/mapbox/dark-v11",
+  },
+  {
+    id: "satellite-v9",
+    name: "Mapbox Satellite",
+    styleUrl: "mapbox://styles/mapbox/satellite-v9",
+  },
+  {
+    id: "satellite-streets-v12",
+    name: "Mapbox Satellite Streets",
+    styleUrl: "mapbox://styles/mapbox/satellite-streets-v12",
+  },
+  {
+    id: "navigation-day-v1",
+    name: "Mapbox Navigation Day",
+    styleUrl: "mapbox://styles/mapbox/navigation-day-v1",
+  },
+  {
+    id: "navigation-night-v1",
+    name: "Mapbox Navigation Night",
+    styleUrl: "mapbox://styles/mapbox/navigation-night-v1",
+  },
+];
+
+/**
  * Whether a basemap style URL points at a Mapbox-hosted style descriptor, and
  * therefore needs {@link loadMapboxStyle} rather than a plain `setStyle(url)`.
  *

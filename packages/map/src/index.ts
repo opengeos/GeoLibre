@@ -140,6 +140,7 @@ export {
 export {
   isMapboxStyleUrl,
   loadMapboxStyle,
+  MAPBOX_BASEMAP_STYLES,
   mapboxAccessTokenFromStyleUrl,
   redactMapboxStyleUrl,
   resolveMapboxInternalUrl,

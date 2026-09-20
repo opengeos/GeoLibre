@@ -1,5 +1,7 @@
 import {
+  availableCesiumBasemap,
   BLANK_BASEMAP,
+  CESIUM_BASEMAPS,
   REGIONAL_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
@@ -32,10 +34,13 @@ import {
   ARCGIS_BASEMAP_STYLES,
   isArcgisBasemapStyle,
   isOfflineBasemapSentinel,
+  MAPBOX_BASEMAP_STYLES,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,
 } from "@geolibre/map";
 import { useArcgisApiKey } from "../../hooks/useArcgisApiKey";
+import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
+import { useMapboxAccessToken } from "../../hooks/useMapboxAccessToken";
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
@@ -115,6 +120,7 @@ interface BasemapPickerDialogProps {
  */
 export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogProps) {
   const { t } = useTranslation();
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const basemapStyleUrl = useAppStore((s) =>
     s.primaryRenderer === "mapbox"
       ? (s.preferences.map.mapboxStyleUrl ?? s.basemapStyleUrl)
@@ -122,11 +128,23 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
   );
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setPreferences = useAppStore((s) => s.setPreferences);
-  const isArcgis = useAppStore((s) => s.primaryRenderer === "arcgis");
+  const isArcgis = primaryRenderer === "arcgis";
+  const isCesium = primaryRenderer === "cesium";
+  const isMapbox = primaryRenderer === "mapbox";
   const arcgisBasemap = useAppStore((s) => s.preferences.map.arcgisBasemap);
+  const cesiumBasemap = useAppStore((s) => s.preferences.map.cesiumBasemap);
+  const mapboxStyleUrl = useAppStore((s) => s.preferences.map.mapboxStyleUrl);
   const arcgisApiKey = useArcgisApiKey();
+  const cesiumIonToken = useCesiumIonToken();
+  const mapboxAccessToken = useMapboxAccessToken();
   const activeArcgisBasemap =
     isArcgis && arcgisApiKey && isArcgisBasemapStyle(arcgisBasemap) ? arcgisBasemap : undefined;
+  const activeCesiumBasemap = isCesium
+    ? availableCesiumBasemap(cesiumBasemap, Boolean(cesiumIonToken))
+    : undefined;
+  const activeMapboxBasemap = isMapbox
+    ? MAPBOX_BASEMAP_STYLES.find((basemap) => basemap.styleUrl === mapboxStyleUrl)?.id
+    : undefined;
   const setMapView = useAppStore((s) => s.setMapView);
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
 
@@ -168,13 +186,15 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
   // wins and only one button highlights.
   const activeChoice = useMemo(() => {
     if (activeArcgisBasemap) return activeArcgisBasemap;
+    if (activeCesiumBasemap && activeCesiumBasemap !== "project") return activeCesiumBasemap;
+    if (activeMapboxBasemap) return activeMapboxBasemap;
     if (basemapStyleUrl === BLANK_BASEMAP) return BLANK_CHOICE;
     // An offline/PMTiles basemap is a runtime sentinel, not a real style URL —
     // don't treat it as a custom URL (its sentinel would fail URL validation).
     if (isOfflineBasemapSentinel(basemapStyleUrl)) return OFFLINE_CHOICE;
     const preset = allPresets.find((p) => p.styleUrl === basemapStyleUrl);
     return preset ? preset.id : CUSTOM_CHOICE;
-  }, [allPresets, basemapStyleUrl, activeArcgisBasemap]);
+  }, [allPresets, basemapStyleUrl, activeArcgisBasemap, activeCesiumBasemap, activeMapboxBasemap]);
 
   // Seed the custom URL field when the dialog opens: prefer the active custom
   // style URL, else fall back to the last custom URL the user applied (a PMTiles
@@ -230,6 +250,18 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
     onOpenChange(false);
   };
 
+  const setEngineBasemapPreference = (
+    preference:
+      | { arcgisBasemap: string }
+      | { cesiumBasemap: (typeof CESIUM_BASEMAPS)[number]["id"] }
+      | { mapboxStyleUrl: string },
+  ) => {
+    // Read live state so a concurrent preference change is preserved.
+    const current = useAppStore.getState().preferences;
+    setPreferences({ ...current, map: { ...current.map, ...preference } });
+    onOpenChange(false);
+  };
+
   const applyCustom = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isCustomUrlValid) return;
@@ -271,15 +303,49 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
                     key={basemap.id}
                     name={basemap.name}
                     selected={activeChoice === basemap.id}
-                    onSelect={() => {
-                      // Read live state so a concurrent preference change is preserved.
-                      const current = useAppStore.getState().preferences;
-                      setPreferences({
-                        ...current,
-                        map: { ...current.map, arcgisBasemap: basemap.id },
-                      });
-                      onOpenChange(false);
-                    }}
+                    onSelect={() => setEngineBasemapPreference({ arcgisBasemap: basemap.id })}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {isCesium ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("toolbar.item.rendererCesium")}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {CESIUM_BASEMAPS.filter(
+                  (basemap) =>
+                    basemap.id !== "project" &&
+                    (!("assetId" in basemap) || Boolean(cesiumIonToken)),
+                ).map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={basemap.name}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() => setEngineBasemapPreference({ cesiumBasemap: basemap.id })}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {isMapbox && mapboxAccessToken ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("toolbar.item.rendererMapbox")}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {MAPBOX_BASEMAP_STYLES.map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={basemap.name}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() =>
+                      setEngineBasemapPreference({
+                        mapboxStyleUrl: basemap.styleUrl,
+                      })
+                    }
                   />
                 ))}
               </div>

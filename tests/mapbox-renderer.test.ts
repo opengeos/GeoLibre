@@ -17,6 +17,7 @@ import { resolveTextFontFromStyleLayers } from "../packages/map/src/text-font";
 import { MAPBOX_CAPABILITIES, redactMapboxError } from "../packages/map/src/mapbox-engine";
 import { MAPLIBRE_CAPABILITIES } from "../packages/map/src/map-engine";
 import { CESIUM_CAPABILITIES } from "../packages/map/src/cesium-engine";
+import { MAPBOX_BASEMAP_STYLES } from "../packages/map/src/mapbox-style";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
 import { maplibreLayerControlPlugin } from "../packages/plugins/src/plugins/layer-control";
 import { maplibreDeckGlVizPlugin } from "../packages/plugins/src/plugins/maplibre-deckgl-viz";
@@ -294,6 +295,20 @@ describe("Mapbox native layer compilation", () => {
 });
 
 describe("Mapbox-specific basemap preference", () => {
+  it("offers the maintained Mapbox basemap catalog with stable unique choices", () => {
+    assert.deepEqual(
+      MAPBOX_BASEMAP_STYLES.slice(0, 2).map((style) => style.styleUrl),
+      ["mapbox://styles/mapbox/standard", "mapbox://styles/mapbox/standard-satellite"],
+    );
+    assert.equal(
+      new Set(MAPBOX_BASEMAP_STYLES.map((style) => style.id)).size,
+      MAPBOX_BASEMAP_STYLES.length,
+    );
+    for (const style of MAPBOX_BASEMAP_STYLES) {
+      assert.match(style.styleUrl, /^mapbox:\/\/styles\/mapbox\/[a-z0-9-]+$/);
+    }
+  });
+
   it("defaults new projects to Mapbox Standard while retaining the shared basemap", () => {
     const project = createEmptyProject();
     assert.equal(project.preferences.map.mapboxStyleUrl, "mapbox://styles/mapbox/standard");

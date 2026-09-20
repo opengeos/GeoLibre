@@ -227,19 +227,27 @@ export interface GpsStatusFix {
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
   const clearMapbox =
     state.primaryRenderer === "mapbox" && state.preferences.map.mapboxStyleUrl !== undefined;
+  const clearCesium =
+    state.primaryRenderer === "cesium" && state.preferences.map.cesiumBasemap !== "project";
   // Any ArcGIS pane, not only a primary one: split panes pick the renderer
   // independently, and a pinned Esri style would otherwise ignore the picker.
   const clearArcgis =
     state.preferences.map.arcgisBasemap !== undefined &&
     (state.primaryRenderer === "arcgis" ||
       state.secondaryMapViews.some((pane) => pane.viewKind === "arcgis"));
-  if (!clearMapbox && !clearArcgis && ellipsoidId === state.preferences.map.ellipsoidId)
+  if (
+    !clearMapbox &&
+    !clearCesium &&
+    !clearArcgis &&
+    ellipsoidId === state.preferences.map.ellipsoidId
+  )
     return state.preferences;
   return {
     ...state.preferences,
     map: {
       ...state.preferences.map,
       ...(clearMapbox ? { mapboxStyleUrl: undefined } : {}),
+      ...(clearCesium ? { cesiumBasemap: "project" as const } : {}),
       ...(clearArcgis ? { arcgisBasemap: undefined } : {}),
       ellipsoidId,
     },
