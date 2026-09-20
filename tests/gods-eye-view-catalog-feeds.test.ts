@@ -80,6 +80,41 @@ describe("God's Eye View catalog feeds", () => {
     assert.ok(!("invalid" in (result.packets[1].properties as Record<string, unknown>)));
   });
 
+  it("places multipart catalog features on their largest polygon", async () => {
+    const mockFetch = (async () =>
+      new Response(
+        `${JSON.stringify({
+          type: "Feature",
+          geometry: {
+            type: "MultiPolygon",
+            coordinates: [
+              [
+                [
+                  [100, 40],
+                  [100.01, 40],
+                  [100.01, 40.01],
+                  [100, 40.01],
+                  [100, 40],
+                ],
+              ],
+              [
+                [
+                  [10, 20],
+                  [12, 20],
+                  [12, 22],
+                  [10, 22],
+                  [10, 20],
+                ],
+              ],
+            ],
+          },
+          properties: { name: "Multipart campus" },
+        })}\n`,
+      )) as typeof fetch;
+    const result = await fetchDatacentersCzml({ fetch: mockFetch });
+    assert.deepEqual(result.packets[1].position, { cartographicDegrees: [11, 21, 0] });
+  });
+
   it("preserves every submarine-cable line and provider color", () => {
     const input: FeatureCollection = {
       type: "FeatureCollection",
@@ -120,6 +155,7 @@ describe("God's Eye View catalog feeds", () => {
   });
 
   it("bounds Overpass infrastructure searches around the current view", () => {
+    assert.throws(() => infrastructureQueryBounds(null), /current map extent is not available yet/);
     assert.deepEqual(
       infrastructureQueryBounds([-122.5, 37.7, -122.4, 37.8]),
       [-122.5, 37.7, -122.4, 37.8],
@@ -167,6 +203,13 @@ describe("God's Eye View catalog feeds", () => {
       cartographicDegrees: [10, 20, 0],
     });
     assert.equal(result.packets[2].name, "Pipeline");
-    assert.equal(result.attributes, collection);
+    assert.deepEqual(
+      result.attributes.features.map((feature) => feature.id),
+      ["osm-infrastructure-node/1", "osm-infrastructure-way/2-0"],
+    );
+    assert.deepEqual(
+      result.attributes.features.map((feature) => feature.geometry.type),
+      ["Point", "LineString"],
+    );
   });
 });

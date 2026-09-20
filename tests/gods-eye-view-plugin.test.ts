@@ -95,6 +95,7 @@ function makeGlobe(startingMultiplier = 0) {
   const panel = document.getElementById("panel") as unknown as HTMLElement;
   const app = {
     getMap: () => null,
+    getViewBounds: () => [-122.5, 37.7, -122.4, 37.8] as [number, number, number, number],
     getCesiumScene: () => {
       handles += 1;
       return {

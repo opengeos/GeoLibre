@@ -90,9 +90,80 @@ function geometryPositions(geometry: Geometry | null): Position[] {
   return [];
 }
 
+interface WeightedCenter {
+  center: Position;
+  weight: number;
+}
+
+function ringCenter(ring: Position[]): WeightedCenter | null {
+  const positions = ring.filter(validPosition);
+  if (positions.length < 3) return null;
+  const origin = positions[0][0];
+  const unwrapped = positions.map(([longitude, latitude]) => {
+    let adjusted = longitude;
+    while (adjusted - origin > 180) adjusted -= 360;
+    while (adjusted - origin < -180) adjusted += 360;
+    return [adjusted, latitude] as Position;
+  });
+  if (unwrapped[0][0] !== unwrapped.at(-1)?.[0] || unwrapped[0][1] !== unwrapped.at(-1)?.[1]) {
+    unwrapped.push(unwrapped[0]);
+  }
+  let twiceArea = 0;
+  let longitudeSum = 0;
+  let latitudeSum = 0;
+  for (let index = 0; index < unwrapped.length - 1; index += 1) {
+    const [x1, y1] = unwrapped[index];
+    const [x2, y2] = unwrapped[index + 1];
+    const cross = x1 * y2 - x2 * y1;
+    twiceArea += cross;
+    longitudeSum += (x1 + x2) * cross;
+    latitudeSum += (y1 + y2) * cross;
+  }
+  if (Math.abs(twiceArea) < Number.EPSILON) return null;
+  let longitude = longitudeSum / (3 * twiceArea);
+  while (longitude > 180) longitude -= 360;
+  while (longitude < -180) longitude += 360;
+  return {
+    center: [longitude, latitudeSum / (3 * twiceArea)],
+    weight: Math.abs(twiceArea),
+  };
+}
+
+function polygonCenter(rings: Position[][]): WeightedCenter | null {
+  const exterior = ringCenter(rings[0] ?? []);
+  if (!exterior) return null;
+  let longitudeSum = exterior.center[0] * exterior.weight;
+  let latitudeSum = exterior.center[1] * exterior.weight;
+  let weight = exterior.weight;
+  for (const ring of rings.slice(1)) {
+    const hole = ringCenter(ring);
+    if (!hole) continue;
+    let longitude = hole.center[0];
+    while (longitude - exterior.center[0] > 180) longitude -= 360;
+    while (longitude - exterior.center[0] < -180) longitude += 360;
+    longitudeSum -= longitude * hole.weight;
+    latitudeSum -= hole.center[1] * hole.weight;
+    weight -= hole.weight;
+  }
+  if (weight <= Number.EPSILON) return exterior;
+  let longitude = longitudeSum / weight;
+  while (longitude > 180) longitude -= 360;
+  while (longitude < -180) longitude += 360;
+  return { center: [longitude, latitudeSum / weight], weight };
+}
+
 function featureCenter(feature: Feature): Position | null {
   if (feature.geometry?.type === "Point" && validPosition(feature.geometry.coordinates)) {
     return feature.geometry.coordinates.slice(0, 2);
+  }
+  if (feature.geometry?.type === "Polygon") {
+    return polygonCenter(feature.geometry.coordinates)?.center ?? null;
+  }
+  if (feature.geometry?.type === "MultiPolygon") {
+    const centers = feature.geometry.coordinates
+      .map((polygon) => polygonCenter(polygon))
+      .filter((item): item is WeightedCenter => item !== null);
+    return centers.sort((left, right) => right.weight - left.weight)[0]?.center ?? null;
   }
   const rawPositions = geometryPositions(feature.geometry);
   const positions =
@@ -320,8 +391,8 @@ export async function fetchSubmarineCablesCzml(
 export function infrastructureQueryBounds(
   bounds: [number, number, number, number] | null,
 ): [number, number, number, number] {
-  const input = bounds ?? [-1, -1, 1, 1];
-  let [west, south, east, north] = input;
+  if (!bounds) throw new Error("The current map extent is not available yet.");
+  let [west, south, east, north] = bounds;
   const centerLongitude = (west + east) / 2;
   const centerLatitude = Math.max(-89, Math.min(89, (south + north) / 2));
   const width = Math.min(2, Math.max(0.01, east - west));
@@ -347,6 +418,7 @@ function geometryLines(geometry: Geometry | null): Position[][] {
 
 export function osmInfrastructureToCzml(collection: FeatureCollection): GodsEyeViewFeedPayload {
   const packets: CzmlPacket[] = [documentPacket("OSM Infrastructure")];
+  const features: Feature[] = [];
   for (const [index, feature] of collection.features.entries()) {
     const properties = cleanProperties(feature.properties);
     const name =
@@ -372,13 +444,20 @@ export function osmInfrastructureToCzml(collection: FeatureCollection): GodsEyeV
           outlineWidth: 1,
         },
       });
+      features.push({
+        type: "Feature",
+        id,
+        geometry: { type: "Point", coordinates: feature.geometry.coordinates.slice(0, 2) },
+        properties,
+      });
       continue;
     }
     for (const [lineIndex, rawLine] of geometryLines(feature.geometry).entries()) {
       const line = rawLine.filter(validPosition);
       if (line.length < 2) continue;
+      const packetId = `${id}-${lineIndex}`;
       packets.push({
-        id: `${id}-${lineIndex}`,
+        id: packetId,
         name,
         properties,
         polyline: {
@@ -390,9 +469,15 @@ export function osmInfrastructureToCzml(collection: FeatureCollection): GodsEyeV
           material: { solidColor: { color: { rgba: [251, 146, 60, 225] } } },
         },
       });
+      features.push({
+        type: "Feature",
+        id: packetId,
+        geometry: { type: "LineString", coordinates: line },
+        properties,
+      });
     }
   }
-  return { packets, attributes: collection };
+  return { packets, attributes: { type: "FeatureCollection", features } };
 }
 
 export async function fetchOsmInfrastructureCzml(
