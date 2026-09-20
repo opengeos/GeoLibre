@@ -46,15 +46,21 @@ function documentPacket(name: string): CzmlPacket {
 function cleanProperties(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const properties: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
+  const entries = Object.entries(value);
+  // Flatten nested `tags` first so a top-level key always wins over a tag of
+  // the same name, whatever order the upstream JSON happened to list them in.
+  for (const [key, item] of entries) {
+    if (key === "tags" && item && typeof item === "object" && !Array.isArray(item)) {
+      Object.assign(properties, cleanProperties(item));
+    }
+  }
+  for (const [key, item] of entries) {
     if (
       typeof item === "string" ||
       typeof item === "boolean" ||
       (typeof item === "number" && Number.isFinite(item))
     ) {
       properties[key] = item;
-    } else if (key === "tags" && item && typeof item === "object" && !Array.isArray(item)) {
-      Object.assign(properties, cleanProperties(item));
     }
   }
   return properties;
@@ -232,7 +238,13 @@ function geoJsonLines(value: string): FeatureCollection {
   for (const line of value.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const parsed = JSON.parse(trimmed) as Feature;
+    // One truncated row in a large mirrored file shouldn't cost the whole feed.
+    let parsed: Feature;
+    try {
+      parsed = JSON.parse(trimmed) as Feature;
+    } catch {
+      continue;
+    }
     if (parsed?.type === "Feature") features.push(parsed);
   }
   return { type: "FeatureCollection", features };
@@ -348,7 +360,9 @@ export function submarineCablesToCzml(collection: FeatureCollection): GodsEyeVie
           : [];
     const properties = cleanProperties(feature.properties);
     const name =
-      typeof properties.name === "string" ? properties.name : `Cable ${featureIndex + 1}`;
+      typeof properties.name === "string" && properties.name.trim()
+        ? properties.name.trim()
+        : `Cable ${featureIndex + 1}`;
     for (const [lineIndex, line] of lines.entries()) {
       const positions = line.filter(validPosition);
       if (positions.length < 2) continue;
@@ -422,10 +436,10 @@ export function osmInfrastructureToCzml(collection: FeatureCollection): GodsEyeV
   for (const [index, feature] of collection.features.entries()) {
     const properties = cleanProperties(feature.properties);
     const name =
-      typeof properties.name === "string"
-        ? properties.name
-        : typeof properties.man_made === "string"
-          ? properties.man_made.replaceAll("_", " ")
+      typeof properties.name === "string" && properties.name.trim()
+        ? properties.name.trim()
+        : typeof properties.man_made === "string" && properties.man_made.trim()
+          ? properties.man_made.trim().replaceAll("_", " ")
           : `Infrastructure ${index + 1}`;
     const id = `osm-infrastructure-${String(feature.id ?? index)}`;
     if (feature.geometry?.type === "Point") {

@@ -212,4 +212,54 @@ describe("God's Eye View catalog feeds", () => {
       ["Point", "LineString"],
     );
   });
+
+  it("skips malformed GeoJSONL rows and lets a top-level key outrank its tag", async () => {
+    const good = JSON.stringify({
+      type: "Feature",
+      id: 1,
+      geometry: { type: "Point", coordinates: [5, 6] },
+      properties: { tags: { name: "Tagged", operator: "Example" }, name: "Top Level" },
+    });
+    const mockFetch = (async () =>
+      new Response(`{"type":"Feature","geometry":\n${good}\n`, {
+        status: 200,
+      })) as typeof fetch;
+    const result = await fetchDatacentersCzml({ fetch: mockFetch });
+    assert.equal(result.attributes.features.length, 1);
+    assert.equal(result.packets[1].name, "Top Level");
+    assert.equal(result.attributes.features[0].properties?.operator, "Example");
+  });
+
+  it("falls back to a label when a feature's name is blank", () => {
+    const cables = submarineCablesToCzml({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "   " },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [1, 2],
+              [3, 4],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(cables.packets[1].name, "Cable 1");
+
+    const infrastructure = osmInfrastructureToCzml({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "node/3",
+          geometry: { type: "Point", coordinates: [10, 20] },
+          properties: { name: " ", man_made: " water_tower " },
+        },
+      ],
+    });
+    assert.equal(infrastructure.packets[1].name, "water tower");
+  });
 });

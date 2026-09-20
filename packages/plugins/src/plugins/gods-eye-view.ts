@@ -41,7 +41,19 @@ const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
   cables: 24 * 60 * 60_000,
   osmInfrastructure: 60 * 60_000,
 };
-const FEED_TIMEOUT_MS = 20_000;
+// Overpass gets the same longer budget as the shared OSM downloader. The
+// whole-file catalogs are a few megabytes from a CDN mirror and only refresh
+// once a day, so a timeout there costs a full day of data; they get a middle
+// budget. Small bounded API responses should fail faster.
+const FEED_TIMEOUT_MS: Record<FeedId, number> = {
+  earthquakes: 20_000,
+  satellites: 20_000,
+  radio: 20_000,
+  datacenters: 60_000,
+  dams: 60_000,
+  cables: 60_000,
+  osmInfrastructure: OVERPASS_REQUEST_TIMEOUT_MS,
+};
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
 const FEED_IDS = [
@@ -426,12 +438,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   state.loading = true;
   state.failed = false;
   renderPanel();
-  // Overpass intentionally gets the same longer budget as the shared OSM
-  // downloader. Public catalog endpoints should fail faster.
-  const timeout = setTimeout(
-    () => controller.abort(),
-    feed === "osmInfrastructure" ? OVERPASS_REQUEST_TIMEOUT_MS : FEED_TIMEOUT_MS,
-  );
+  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS[feed]);
   try {
     const window = timeWindow();
     let payload: GodsEyeViewFeedPayload;
