@@ -492,12 +492,10 @@ describe("CesiumLayerSync with CZML", () => {
       properties: {
         orbitalPeriodMinutes: { getValue: () => 96 },
         tleLine1: {
-          getValue: () =>
-            "1 25545U 93036A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+          getValue: () => "1 25545U 93036A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
         },
         tleLine2: {
-          getValue: () =>
-            "2 25545  74.0400 120.0000 0010000  80.0000 280.0000 15.00000000400000",
+          getValue: () => "2 25545  74.0400 120.0000 0010000  80.0000 280.0000 15.00000000400000",
         },
       },
       label: undefined as unknown,
@@ -601,12 +599,10 @@ describe("CesiumLayerSync with CZML", () => {
       properties: {
         orbitalPeriodMinutes: { getValue: () => 1440 },
         tleLine1: {
-          getValue: () =>
-            "1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+          getValue: () => "1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
         },
         tleLine2: {
-          getValue: () =>
-            "2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000",
+          getValue: () => "2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000",
         },
       },
       availability: { start: "window-start", stop: "window-stop" },

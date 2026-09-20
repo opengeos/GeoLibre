@@ -1196,9 +1196,7 @@ export class CesiumLayerSync {
     // bounded temporal-path fallback for those documents.
     // The packet reports its own period where it knows one (a satellite does),
     // so the ring closes on itself instead of being cut to an arbitrary length.
-    const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(
-      time,
-    ) as number | undefined;
+    const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as number | undefined;
     const halfPeriodSeconds =
       typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
         ? (minutes * 60) / 2
