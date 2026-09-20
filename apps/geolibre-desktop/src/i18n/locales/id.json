@@ -7942,7 +7942,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain."
+      "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain.",
+      "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles memerlukan kunci API Google Maps di Pengaturan agar dapat dimuat di globe."
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",

@@ -7942,7 +7942,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác."
+      "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác.",
+      "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles cần khóa API Google Maps trong Cài đặt để tải trên quả địa cầu."
     },
     "geolibre-osm-downloader": {
       "title": "Trình tải xuống OSM",

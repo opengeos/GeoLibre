@@ -1,6 +1,7 @@
 import { restoreMapboxTiles, isMapboxTilesLayer, flyToDeckTilesLocation } from "./mapbox-3d-tiles";
 import {
   DEFAULT_LAYER_STYLE,
+  getGoogleMapsApiKey,
   GOOGLE_MAPS_API_KEY_HEADER,
   googleMapsApiKeyHeaderValue,
   isGooglePhotorealisticTilesetUrl,
@@ -757,15 +758,11 @@ function installGooglePhotorealisticTilesPanelHandlers(
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
-        if (status) {
-          status.dataset.status = "error";
-          const message =
-            "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.";
-          status.textContent =
-            activeThreeDTilesApp?.translate?.("plugin.3d-tiles.arcgisSourceUnsupported", message) ??
-            message;
-        }
+        setThreeDTilesPanelError(
+          panel,
+          "plugin.3d-tiles.arcgisSourceUnsupported",
+          "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.",
+        );
         return;
       }
       // A blank URL falls through to the library's own submit handler so its
@@ -852,6 +849,21 @@ function threeDTilesItemStateFromPanel(
 }
 
 /**
+ * Shows a message in the panel's own status line, the way the library does for
+ * its load errors.
+ *
+ * @param panel - The panel DOM.
+ * @param key - Translation key for the message.
+ * @param message - English fallback, used when no catalog entry is found.
+ */
+function setThreeDTilesPanelError(panel: HTMLElement, key: string, message: string): void {
+  const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
+  if (!status) return;
+  status.dataset.status = "error";
+  status.textContent = activeThreeDTilesApp?.translate?.(key, message) ?? message;
+}
+
+/**
  * The name to give a tileset whose Layer name field was left blank, matching
  * what each flavour's own panel path would have named it.
  *
@@ -922,6 +934,20 @@ function addThreeDTilesLayerForGlobe(
   panel: HTMLElement,
   url: string,
 ): void {
+  // Google's tiles authenticate with a Maps API key, and the globe can only
+  // read it from runtime env: the key is deliberately stripped from the record,
+  // and the per-layer key the deck.gl path keeps in memory for a manually typed
+  // one is not reachable from `cesium-layer-sync`. Say so instead of adding a
+  // layer whose every tile request would 401.
+  if (isGooglePhotorealisticTilesetUrl(url) && !getGoogleMapsApiKey()) {
+    setThreeDTilesPanelError(
+      panel,
+      "plugin.3d-tiles.globeGoogleKeyRequired",
+      "Google Photorealistic 3D Tiles need a Google Maps API key in Settings to load on the globe.",
+    );
+    return;
+  }
+
   const tileset = threeDTilesItemStateFromPanel(
     control,
     panel,

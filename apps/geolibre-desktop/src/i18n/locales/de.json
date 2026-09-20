@@ -8029,7 +8029,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Verwenden Sie in dieser ArcGIS-Ansicht eine 3D-Tiles-URL für tileset.json. Google Photorealistic- und I3S-Kacheln benötigen eine andere Render-Engine."
+      "arcgisSourceUnsupported": "Verwenden Sie in dieser ArcGIS-Ansicht eine 3D-Tiles-URL für tileset.json. Google Photorealistic- und I3S-Kacheln benötigen eine andere Render-Engine.",
+      "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles benötigen einen Google-Maps-API-Schlüssel in den Einstellungen, um auf dem Globus zu laden."
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",

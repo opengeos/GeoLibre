@@ -7942,7 +7942,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "请在此 ArcGIS 视图中使用 3D Tiles 的 tileset.json URL。Google Photorealistic 和 I3S 瓦片需要其他渲染引擎。"
+      "arcgisSourceUnsupported": "请在此 ArcGIS 视图中使用 3D Tiles 的 tileset.json URL。Google Photorealistic 和 I3S 瓦片需要其他渲染引擎。",
+      "globeGoogleKeyRequired": "在地球视图中加载 Google Photorealistic 3D Tiles 需要在“设置”中配置 Google Maps API 密钥。"
     },
     "geolibre-osm-downloader": {
       "title": "OSM 下载器",

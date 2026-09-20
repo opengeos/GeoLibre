@@ -8029,7 +8029,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა."
+      "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა.",
+      "globeGoogleKeyRequired": "გლობუსზე Google Photorealistic 3D Tiles-ის ჩასატვირთად საჭიროა Google Maps API-ის გასაღები პარამეტრებში."
     },
     "geolibre-osm-downloader": {
       "title": "OSM ჩამოტვირთვა",

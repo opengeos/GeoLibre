@@ -7942,7 +7942,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다."
+      "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다.",
+      "globeGoogleKeyRequired": "지구본에서 Google Photorealistic 3D Tiles를 불러오려면 설정에 Google Maps API 키가 필요합니다."
     },
     "geolibre-osm-downloader": {
       "title": "OSM 다운로더",

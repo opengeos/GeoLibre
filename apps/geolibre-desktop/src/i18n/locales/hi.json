@@ -8029,7 +8029,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।"
+      "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।",
+      "globeGoogleKeyRequired": "ग्लोब पर Google Photorealistic 3D Tiles लोड करने के लिए सेटिंग्स में Google Maps API कुंजी आवश्यक है।"
     },
     "geolibre-osm-downloader": {
       "title": "ओएसएम डाउनलोडर",

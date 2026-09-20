@@ -7942,7 +7942,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。"
+      "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。",
+      "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles を地球儀上で読み込むには、設定で Google Maps API キーを指定する必要があります。"
     },
     "geolibre-osm-downloader": {
       "title": "OSMダウンローダー",
