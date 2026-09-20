@@ -935,6 +935,29 @@ describe("CesiumEngine framing", () => {
     assert.equal(flight.sphere?.center.y, 34);
     engine.destroy();
   });
+
+  it("fits a selection straddling the antimeridian the short way round", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = { id: "satellites", name: "Satellites", type: "czml" } as never;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
+    sync.featurePositions = () => [
+      C.Cartesian3.fromDegrees(179, 10, 850_000),
+      C.Cartesian3.fromDegrees(-179, 20, 850_000),
+    ];
+
+    engine.highlightFeature(layer, ["a", "b"], { fit: true });
+
+    // A plain min/max would hand Cesium a 358-degree box and frame the globe.
+    // `west` greater than `east` is the repo's crossing-rectangle convention.
+    assert.deepEqual(fakes.flights[0].destination, { w: 179, s: 10, e: -179, n: 20 });
+    engine.destroy();
+  });
 });
 
 // --- scene-mode morphs -------------------------------------------------------

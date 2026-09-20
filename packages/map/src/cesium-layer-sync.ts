@@ -2538,6 +2538,12 @@ export class CesiumLayerSync {
       entry.added = true;
       // Only a document that reached the scene may drive the clock.
       this.electCzmlClockOwner();
+      // The entities exist only now. A selection made — or merely re-applied by
+      // the canvas effect — while the document was loading found no handle to
+      // paint, so replay it the way `createGeoJson` does; a ten-minute feed
+      // refresh rebuilds the document under a highlighted satellite.
+      this.restoreHighlight();
+      this.applyHighlight();
       viewer.scene?.requestRender?.();
     } catch (error) {
       if (entry.cancelled) return;

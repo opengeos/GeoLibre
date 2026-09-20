@@ -415,6 +415,67 @@ describe("CesiumLayerSync with CZML", () => {
     sync.destroy();
   });
 
+  it("replays a highlight made while the document was still loading", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const point = {
+      color: "original",
+      clone() {
+        return { ...this, clone: this.clone };
+      },
+    };
+    const entity = { id: "sat-1", point };
+    let release: (() => void) | null = null;
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    Cesium.CzmlDataSource.load = async () => {
+      await loaded;
+      return {
+        show: true,
+        isLoading: false,
+        entities: {
+          values: [entity],
+          contains: (e: unknown) => e === entity,
+          getById: (id: string) => (id === entity.id ? entity : undefined),
+        },
+      };
+    };
+    // The highlight paints through these two; nothing else of Cesium is needed.
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: (css: string) => ({ css }) },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-sats",
+      name: "Satellites",
+      url: "https://example.com/sats.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    // A feed refresh rebuilds the document under a selected satellite: the
+    // canvas re-applies the selection while the entry still has no handle.
+    sync.highlight("czml-sats", ["sat-1"]);
+    assert.equal(entity.point, point, "nothing to paint until the entities exist");
+
+    release?.();
+    for (let i = 0; i < 6; i++) await flush();
+
+    assert.notEqual(entity.point, point, "the load replays the retained selection");
+    assert.deepEqual((entity.point as { color: { value: unknown } }).color.value, {
+      css: "#facc15",
+    });
+
+    // Clearing the selection puts the document's own styling back.
+    sync.highlight(undefined, []);
+    assert.equal(entity.point, point);
+    sync.destroy();
+  });
+
   it("handles load errors gracefully and reports in getRenderStatus", async () => {
     const { Cesium, viewer } = makeGlobe();
     Cesium.CzmlDataSource.load = async () => {

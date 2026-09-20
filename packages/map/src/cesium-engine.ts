@@ -116,6 +116,26 @@ const FLY_SECONDS = 0.8;
 const POINT_FIT_ZOOM = 14;
 
 /**
+ * The shortest longitude interval covering `longitudes`, in the `[west, east]`
+ * form {@link CesiumEngine.fitBounds} reads: `west` greater than `east` means
+ * the interval crosses the antimeridian, the repo-wide convention.
+ *
+ * A plain min/max reads a pair at 179° and −179° as 358° apart and frames
+ * almost the whole globe instead of the two-degree cluster. Unwrapping every
+ * longitude onto the branch nearest the first one keeps the span the short way
+ * round — the same wrap `isSameView` applies to a longitude delta.
+ */
+function shortestLongitudeInterval(longitudes: readonly number[]): [number, number] {
+  const [first] = longitudes;
+  const unwrapped = longitudes.map((longitude) => first + normalizeBearing(longitude - first));
+  const west = Math.min(...unwrapped);
+  const east = Math.max(...unwrapped);
+  // A spread that already wraps the globe has no short way round.
+  if (east - west >= 360) return [-180, 180];
+  return [normalizeBearing(west), normalizeBearing(east)];
+}
+
+/**
  * The globe's native scene, for the handful of plugins that drive Cesium
  * directly (issue #2287): the Sun simulation lights the globe, Atmospheric
  * Effects toggles the sky box and atmosphere, the Flight Simulator places the
@@ -769,14 +789,9 @@ export class CesiumEngine implements MapEngine {
         // globe behind the camera.
         this.animateTo({ center: [...coordinates[0]], zoom: 4, bearing: 0, pitch: 0 }, FLY_SECONDS);
       } else {
-        const longitudes = coordinates.map(([longitude]) => longitude);
         const latitudes = coordinates.map(([, latitude]) => latitude);
-        this.fitBounds([
-          Math.min(...longitudes),
-          Math.min(...latitudes),
-          Math.max(...longitudes),
-          Math.max(...latitudes),
-        ]);
+        const [west, east] = shortestLongitudeInterval(coordinates.map(([longitude]) => longitude));
+        this.fitBounds([west, Math.min(...latitudes), east, Math.max(...latitudes)]);
       }
       return;
     }

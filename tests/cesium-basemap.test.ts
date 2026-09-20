@@ -23,6 +23,7 @@ function makeFakes() {
   const stack: FakeLayer[] = [];
   const arcgisRequests: Array<{ url: string; options: unknown }> = [];
   const ionRequests: Array<{ assetId: number; options: unknown }> = [];
+  const openStreetMapRequests: Array<{ url: string }> = [];
 
   const viewer = {
     imageryLayers: {
@@ -63,6 +64,7 @@ function makeFakes() {
       url: string;
       constructor(options: { url: string }) {
         this.url = options.url;
+        openStreetMapRequests.push({ url: options.url });
       }
     },
     IonImageryProvider: {
@@ -81,6 +83,7 @@ function makeFakes() {
     stack,
     arcgisRequests,
     ionRequests,
+    openStreetMapRequests,
     viewer: viewer as unknown as Parameters<typeof applyBasemapImagery>[1],
     Cesium: Cesium as unknown as Parameters<typeof applyBasemapImagery>[0],
   };
@@ -239,9 +242,14 @@ describe("applyBasemapImagery", () => {
   });
 
   it("falls back to keyless OpenStreetMap without a token", () => {
-    const { Cesium, viewer } = makeFakes();
+    const { Cesium, viewer, ionRequests, openStreetMapRequests } = makeFakes();
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, undefined);
     assert.ok((added[0] as FakeLayer).provider?.provider instanceof Promise);
+    // Which provider, not merely that one was promised: an Ion or ArcGIS
+    // basemap would satisfy the shape above while needing the key this branch
+    // exists to do without.
+    assert.deepEqual(openStreetMapRequests, [{ url: "https://tile.openstreetmap.org/" }]);
+    assert.deepEqual(ionRequests, []);
   });
 });
 
