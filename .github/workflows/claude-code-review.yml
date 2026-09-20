@@ -38,9 +38,10 @@ name: Claude Code Review
 #     where throwaway accounts spam PRs to burn CLAUDE_CODE_OAUTH_TOKEN budget.
 #     A maintainer opts such a PR in either by commenting `/claude-review` on it
 #     (only OWNER / MEMBER / COLLABORATOR comments are honored) or by applying
-#     the `claude-review` label. Labelling is equivalently gated without an
-#     author_association check: GitHub only lets accounts with write or triage
-#     access add a label, so a fork author cannot self-trigger a review.
+#     the `claude-review` label. Labelling needs no author_association check:
+#     GitHub only lets accounts with write or triage access add a label, so a
+#     fork author cannot self-trigger a review. It is still restricted to human
+#     senders, so a future auto-labeler cannot become an indirect opt-in.
 #
 #     Both opt-ins are one-shot: they review the head as it stands. Later pushes
 #     to a first-timer PR are not re-reviewed (that would hand a throwaway
@@ -64,11 +65,15 @@ on:
 #     (shared across pushes, so cancel-in-progress dedupes rapid synchronizes)
 #   - issue_comment on PR N               -> claude-review-issue_comment-N-<comment id>
 #     (unique per comment, so it never cancels — and is never cancelled by — anything)
-#   - `labeled` on PR N                   -> claude-review-pull_request_target-N-label
-#     (its own slot, so applying an unrelated label mid-review does not cancel
-#     the in-flight push review, and vice versa)
+#   - `labeled` on PR N                   -> claude-review-pull_request_target-N-label-<label name>
+#     (keyed on the label NAME, not a shared `label` slot: the GitHub UI fires
+#     one `labeled` event per label, so a shared slot would let adding `bug`
+#     cancel an in-flight `claude-review` run — the second run skips at `if:`,
+#     but cancel-in-progress has already killed the first. Per-name keeps the
+#     review isolated from every other label, while remove-and-re-add of
+#     `claude-review` still supersedes its own older run, which is what we want.)
 concurrency:
-  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || (github.event.action == 'labeled' && 'label') || 'push' }}
+  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || (github.event.action == 'labeled' && format('label-{0}', github.event.label.name)) || 'push' }}
   cancel-in-progress: true
 
 jobs:
@@ -85,6 +90,15 @@ jobs:
     # write or triage access, so the event cannot originate from a fork author.
     # It does check the label NAME, because `labeled` fires for every label —
     # without it, tagging a PR `bug` would spend a review.
+    #
+    # (c) also requires a human sender. GitHub's write/triage restriction covers
+    # people, but an App or workflow with write access can label too, so an
+    # auto-labeler that keys off PR title/paths (i.e. attacker-controlled
+    # content) would become an indirect way for a first-timer to self-trigger a
+    # paid review. Nothing here auto-labels today; the check keeps that from
+    # silently becoming a hole if something ever does. If you later WANT a bot to
+    # apply this label, drop the check deliberately and re-reason about the
+    # economic-DoS guard rather than just deleting it.
     #
     # Branch (a) must exclude `labeled`, or adding any label to a known
     # contributor's PR would re-review it under the automatic path and sidestep
@@ -112,6 +126,7 @@ jobs:
          github.event.comment.author_association == 'COLLABORATOR')) ||
       (github.event_name == 'pull_request_target' &&
         github.event.action == 'labeled' &&
+        github.event.sender.type != 'Bot' &&
         github.event.label.name == 'claude-review')
 
     runs-on: ubuntu-latest
