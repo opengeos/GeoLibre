@@ -2312,6 +2312,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "공개 데이터 피드에서 시간 정보가 포함된 실시간 지구 이벤트를 표시합니다.",
+      "globeOnly": "실시간 지구 피드는 Cesium 지구본에 렌더링됩니다. 보려면 3D 지구본으로 전환하세요.",
+      "earthquakes": "지진",
+      "satellites": "위성",
+      "loading": "업데이트 중…",
+      "updateFailed": "업데이트 실패",
+      "never": "없음",
+      "lastUpdated": "마지막 업데이트: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "프로젝트",
@@ -3031,6 +3043,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light 베이스맵",
       "geolibre-flight-simulator": "비행 시뮬레이터",
+      "gods-eye-view": "전지적 시점",
       "geolibre-route-animation": "경로 애니메이션",
       "geolibre-sun": "태양 시뮬레이션",
       "maplibre-atmosphere-effects": "대기 효과",

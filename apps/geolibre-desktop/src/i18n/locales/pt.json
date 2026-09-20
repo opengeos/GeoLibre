@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Eventos terrestres ao vivo e temporais de feeds de dados públicos.",
+      "globeOnly": "Os feeds ao vivo são renderizados no globo Cesium. Mude para o globo 3D para visualizá-los.",
+      "earthquakes": "Terremotos",
+      "satellites": "Satélites",
+      "loading": "Atualizando…",
+      "updateFailed": "Falha na atualização",
+      "never": "Nunca",
+      "lastUpdated": "Última atualização: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Projeto",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Mapa base Carto Light",
       "geolibre-flight-simulator": "Simulador de voo",
+      "gods-eye-view": "Visão divina",
       "geolibre-route-animation": "Animação de rota",
       "geolibre-sun": "Simulação solar",
       "maplibre-atmosphere-effects": "Efeitos atmosféricos",

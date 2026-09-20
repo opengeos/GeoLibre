@@ -898,6 +898,26 @@ export {
   subscribePrecipitation,
 } from "./plugins/maplibre-precipitation";
 export {
+  godsEyeViewPlugin,
+  GODS_EYE_VIEW_PLUGIN_ID,
+  GODS_EYE_VIEW_EARTHQUAKES_FLAG,
+  GODS_EYE_VIEW_SATELLITES_FLAG,
+} from "./plugins/gods-eye-view";
+export {
+  buildCelestrakTleUrl,
+  buildUsgsFeedUrl,
+  fetchCelestrakSatelliteCzml,
+  fetchUsgsEarthquakeCzml,
+  parseTle,
+  sampleSatellitePosition,
+  tleRecordsToCzml,
+  usgsGeoJsonToCzml,
+  type CzmlTimeWindow,
+  type SatelliteSampleOptions,
+  type TleRecord,
+  type UsgsFeatureCollection,
+} from "./plugins/gods-eye-view-feeds";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   TIME_SLIDER_SOURCE_KIND,

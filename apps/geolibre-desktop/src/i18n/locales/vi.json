@@ -2312,6 +2312,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Các sự kiện Trái Đất trực tiếp, có yếu tố thời gian từ nguồn dữ liệu công khai.",
+      "globeOnly": "Nguồn dữ liệu trực tiếp được hiển thị trên địa cầu Cesium. Hãy chuyển sang địa cầu 3D để xem.",
+      "earthquakes": "Động đất",
+      "satellites": "Vệ tinh",
+      "loading": "Đang cập nhật…",
+      "updateFailed": "Cập nhật thất bại",
+      "never": "Chưa bao giờ",
+      "lastUpdated": "Cập nhật lần cuối: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Dự án",
@@ -3048,6 +3060,7 @@
       "maplibre-gl-huggingface": "ôm mặt",
       "carto-light": "Sơ đồ cơ sở ánh sáng Carto",
       "geolibre-flight-simulator": "Trình mô phỏng chuyến bay",
+      "gods-eye-view": "Góc nhìn toàn tri",
       "geolibre-route-animation": "Hoạt hình tuyến đường",
       "geolibre-sun": "Mô phỏng mặt trời",
       "maplibre-atmosphere-effects": "GeoJSON không có tính năng điểm nào để đặt mô hình.",

@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Live-Ereignisse auf der Erde mit Zeitbezug aus öffentlichen Datenfeeds.",
+      "globeOnly": "Live-Globusfeeds werden auf dem Cesium-Globus dargestellt. Wechseln Sie zum 3D-Globus, um sie anzuzeigen.",
+      "earthquakes": "Erdbeben",
+      "satellites": "Satelliten",
+      "loading": "Wird aktualisiert…",
+      "updateFailed": "Aktualisierung fehlgeschlagen",
+      "never": "Nie",
+      "lastUpdated": "Zuletzt aktualisiert: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Projekt",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light Basiskarte",
       "geolibre-flight-simulator": "Flugsimulator",
+      "gods-eye-view": "Gottesansicht",
       "geolibre-route-animation": "Routenanimation",
       "geolibre-sun": "Sonnensimulation",
       "maplibre-atmosphere-effects": "Atmosphärische Effekte",

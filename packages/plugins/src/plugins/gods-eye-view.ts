@@ -1,0 +1,323 @@
+import { createCzmlLayer, useAppStore, type CzmlPacket } from "@geolibre/core";
+import type { CesiumSceneHandle } from "@geolibre/map";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import {
+  fetchCelestrakSatelliteCzml,
+  fetchUsgsEarthquakeCzml,
+  type CzmlTimeWindow,
+} from "./gods-eye-view-feeds";
+
+export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
+export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
+export const GODS_EYE_VIEW_SATELLITES_FLAG = "godsEyeViewSatellites";
+
+const REFRESH_INTERVAL_MS = 10 * 60_000;
+const FEED_TIMEOUT_MS = 20_000;
+const ARC_DURATION_MS = 3 * 60 * 60_000;
+
+type FeedId = "earthquakes" | "satellites";
+
+interface FeedState {
+  enabled: boolean;
+  loading: boolean;
+  lastUpdated: Date | null;
+  failed: boolean;
+  layerId: string | null;
+  request: AbortController | null;
+  generation: number;
+}
+
+const feeds: Record<FeedId, FeedState> = {
+  earthquakes: {
+    enabled: true,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+  satellites: {
+    enabled: true,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+};
+
+let appRef: GeoLibreAppAPI | null = null;
+let cesiumRef: CesiumSceneHandle | null = null;
+let unregisterPanel: (() => void) | null = null;
+let unsubscribeLocale: (() => void) | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let panelContainer: HTMLElement | null = null;
+let savedClockAnimating: boolean | null = null;
+
+function translate(
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>,
+): string {
+  return appRef?.translate?.(key, fallback, params) ?? fallback;
+}
+
+function feedFlag(feed: FeedId): string {
+  return feed === "earthquakes" ? GODS_EYE_VIEW_EARTHQUAKES_FLAG : GODS_EYE_VIEW_SATELLITES_FLAG;
+}
+
+function feedName(feed: FeedId): string {
+  return feed === "earthquakes"
+    ? translate("panel.godsEyeView.earthquakes", "Earthquakes")
+    : translate("panel.godsEyeView.satellites", "Satellites");
+}
+
+function timeWindow(): CzmlTimeWindow {
+  const start = new Date();
+  return {
+    start,
+    stop: new Date(start.getTime() + ARC_DURATION_MS),
+    current: start,
+    multiplier: 60,
+  };
+}
+
+function ownedLayer(feed: FeedId) {
+  return useAppStore.getState().layers.find((layer) => layer.metadata?.[feedFlag(feed)] === true);
+}
+
+function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void {
+  const store = useAppStore.getState();
+  const existing = feeds[feed].layerId
+    ? store.layers.find((layer) => layer.id === feeds[feed].layerId)
+    : ownedLayer(feed);
+  const layer = createCzmlLayer({
+    id: existing?.id,
+    name: feedName(feed),
+    data: packets,
+  });
+  layer.metadata = {
+    ...layer.metadata,
+    [feedFlag(feed)]: true,
+    godsEyeViewFeed: feed,
+    updatedAt: updatedAt.toISOString(),
+  };
+  if (existing) {
+    store.updateLayer(existing.id, layer);
+    feeds[feed].layerId = existing.id;
+  } else {
+    store.addLayer(layer);
+    feeds[feed].layerId = layer.id;
+  }
+  cesiumRef?.requestRender();
+}
+
+async function refreshFeed(feed: FeedId): Promise<void> {
+  const state = feeds[feed];
+  if (!state.enabled || !cesiumRef) return;
+  state.request?.abort();
+  const controller = new AbortController();
+  state.request = controller;
+  const generation = (state.generation += 1);
+  state.loading = true;
+  state.failed = false;
+  renderPanel();
+  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  try {
+    const window = timeWindow();
+    const packets =
+      feed === "earthquakes"
+        ? await fetchUsgsEarthquakeCzml(window, { signal: controller.signal })
+        : await fetchCelestrakSatelliteCzml({
+            ...window,
+            signal: controller.signal,
+            group: "stations",
+            stepSeconds: 120,
+            maxSatellites: 75,
+          });
+    if (generation !== state.generation || !state.enabled) return;
+    const updatedAt = new Date();
+    upsertLayer(feed, packets, updatedAt);
+    state.lastUpdated = updatedAt;
+  } catch (error) {
+    if (generation === state.generation && !controller.signal.aborted) {
+      state.failed = true;
+      console.warn(`[God's Eye View] ${feed} refresh failed`, error);
+    }
+  } finally {
+    clearTimeout(timeout);
+    if (generation === state.generation) {
+      state.loading = false;
+      state.request = null;
+      renderPanel();
+    }
+  }
+}
+
+function removeFeedLayer(feed: FeedId): void {
+  const state = feeds[feed];
+  state.generation += 1;
+  state.request?.abort();
+  state.request = null;
+  state.loading = false;
+  const layer = state.layerId
+    ? useAppStore.getState().layers.find((candidate) => candidate.id === state.layerId)
+    : ownedLayer(feed);
+  if (layer) useAppStore.getState().removeLayer(layer.id);
+  state.layerId = null;
+  cesiumRef?.requestRender();
+}
+
+function setFeedEnabled(feed: FeedId, enabled: boolean): void {
+  feeds[feed].enabled = enabled;
+  feeds[feed].failed = false;
+  if (enabled) void refreshFeed(feed);
+  else removeFeedLayer(feed);
+  renderPanel();
+}
+
+function statusText(feed: FeedId): string {
+  const state = feeds[feed];
+  if (state.loading) return translate("panel.godsEyeView.loading", "Updating…");
+  if (state.failed) return translate("panel.godsEyeView.updateFailed", "Update failed");
+  const time = state.lastUpdated
+    ? new Intl.DateTimeFormat(appRef?.getLocale?.(), {
+        dateStyle: "short",
+        timeStyle: "medium",
+      }).format(state.lastUpdated)
+    : translate("panel.godsEyeView.never", "Never");
+  return translate("panel.godsEyeView.lastUpdated", "Last updated: {{time}}", { time });
+}
+
+function renderPanel(): void {
+  const container = panelContainer;
+  if (!container) return;
+  container.replaceChildren();
+  const panel = document.createElement("div");
+  panel.style.cssText =
+    "display:flex;flex-direction:column;gap:12px;padding:12px;height:100%;box-sizing:border-box;font-size:12px;color:hsl(var(--foreground))";
+  const description = document.createElement("p");
+  description.textContent = translate(
+    "panel.godsEyeView.description",
+    "Live, time-aware Earth events from public data feeds.",
+  );
+  description.style.cssText = "margin:0;color:hsl(var(--muted-foreground))";
+  panel.append(description);
+
+  if (!cesiumRef) {
+    const note = document.createElement("p");
+    note.textContent = translate(
+      "panel.godsEyeView.globeOnly",
+      "Live globe feeds render on the Cesium globe. Switch to the 3D globe to view them.",
+    );
+    note.style.cssText =
+      "margin:0;padding:10px;border:1px solid hsl(var(--border));border-radius:6px;color:hsl(var(--muted-foreground))";
+    panel.append(note);
+  }
+
+  for (const feed of ["earthquakes", "satellites"] as const) {
+    const row = document.createElement("div");
+    row.style.cssText =
+      "display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid hsl(var(--border));border-radius:6px";
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = feeds[feed].enabled;
+    checkbox.disabled = !cesiumRef;
+    checkbox.addEventListener("change", () => setFeedEnabled(feed, checkbox.checked));
+    const name = document.createElement("span");
+    name.textContent = feedName(feed);
+    label.append(checkbox, name);
+    const status = document.createElement("div");
+    status.textContent = statusText(feed);
+    status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
+    row.append(label, status);
+    panel.append(row);
+  }
+  container.append(panel);
+}
+
+function resetRuntime(): void {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+  unsubscribeLocale?.();
+  unsubscribeLocale = null;
+  unregisterPanel?.();
+  unregisterPanel = null;
+  panelContainer = null;
+}
+
+function activate(app: GeoLibreAppAPI): void {
+  appRef = app;
+  const globe = app.getCesiumScene?.() ?? null;
+  cesiumRef = globe?.primary ? globe : null;
+  for (const feed of ["earthquakes", "satellites"] as const) {
+    const restored = ownedLayer(feed);
+    feeds[feed].layerId = restored?.id ?? null;
+    feeds[feed].enabled = true;
+    const updatedAt = restored?.metadata?.updatedAt;
+    feeds[feed].lastUpdated =
+      typeof updatedAt === "string" && !Number.isNaN(Date.parse(updatedAt))
+        ? new Date(updatedAt)
+        : null;
+  }
+
+  if (cesiumRef) {
+    savedClockAnimating = cesiumRef.clock.shouldAnimate;
+    cesiumRef.clock.shouldAnimate = true;
+  }
+  unregisterPanel =
+    app.registerRightPanel?.({
+      id: GODS_EYE_VIEW_PLUGIN_ID,
+      title: () => translate("toolbar.plugin.gods-eye-view", "God's Eye View"),
+      dock: "replace-style",
+      defaultWidth: 320,
+      render(container) {
+        panelContainer = container;
+        renderPanel();
+        return () => {
+          if (panelContainer === container) panelContainer = null;
+        };
+      },
+    }) ?? null;
+  unsubscribeLocale = app.onLocaleChange?.(() => renderPanel()) ?? null;
+  app.openRightPanel?.(GODS_EYE_VIEW_PLUGIN_ID);
+
+  if (cesiumRef) {
+    void refreshFeed("earthquakes");
+    void refreshFeed("satellites");
+    refreshTimer = setInterval(() => {
+      void refreshFeed("earthquakes");
+      void refreshFeed("satellites");
+    }, REFRESH_INTERVAL_MS);
+  }
+}
+
+function deactivate(): void {
+  resetRuntime();
+  for (const feed of ["earthquakes", "satellites"] as const) {
+    feeds[feed].enabled = false;
+    removeFeedLayer(feed);
+    feeds[feed].lastUpdated = null;
+    feeds[feed].failed = false;
+  }
+  if (cesiumRef && savedClockAnimating !== null) {
+    cesiumRef.clock.shouldAnimate = savedClockAnimating;
+  }
+  savedClockAnimating = null;
+  cesiumRef = null;
+  appRef = null;
+}
+
+export const godsEyeViewPlugin: GeoLibrePlugin = {
+  id: GODS_EYE_VIEW_PLUGIN_ID,
+  name: "God's Eye View",
+  version: "0.1.0",
+  activeByDefault: false,
+  engines: ["cesium", "maplibre"],
+  activate,
+  deactivate,
+};

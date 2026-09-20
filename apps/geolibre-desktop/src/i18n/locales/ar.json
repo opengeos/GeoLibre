@@ -2551,6 +2551,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "أحداث أرضية مباشرة ومراعية للوقت من خلاصات بيانات عامة.",
+      "globeOnly": "تُعرض خلاصات الكرة الأرضية المباشرة على كرة Cesium. انتقل إلى الكرة الأرضية ثلاثية الأبعاد لعرضها.",
+      "earthquakes": "الزلازل",
+      "satellites": "الأقمار الصناعية",
+      "loading": "جارٍ التحديث…",
+      "updateFailed": "فشل التحديث",
+      "never": "أبدًا",
+      "lastUpdated": "آخر تحديث: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "مشروع",
@@ -3285,6 +3297,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "خريطة أساس Carto Light",
       "geolibre-flight-simulator": "محاكي الطيران",
+      "gods-eye-view": "منظور عين الإله",
       "geolibre-route-animation": "تحريك المسار",
       "geolibre-sun": "محاكاة الشمس",
       "maplibre-atmosphere-effects": "التأثيرات الجوية",

@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Événements terrestres en direct et temporels issus de flux de données publics.",
+      "globeOnly": "Les flux en direct s’affichent sur le globe Cesium. Passez au globe 3D pour les voir.",
+      "earthquakes": "Séismes",
+      "satellites": "Satellites",
+      "loading": "Mise à jour…",
+      "updateFailed": "Échec de la mise à jour",
+      "never": "Jamais",
+      "lastUpdated": "Dernière mise à jour : {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Projet",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Fond de carte Carto Light",
       "geolibre-flight-simulator": "Simulateur de vol",
+      "gods-eye-view": "Vue omnisciente",
       "geolibre-route-animation": "Animation d'itinéraire",
       "geolibre-sun": "Simulation solaire",
       "maplibre-atmosphere-effects": "Effets atmosphériques",

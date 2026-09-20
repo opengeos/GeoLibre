@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Herkese açık veri akışlarından canlı, zamana bağlı Dünya olayları.",
+      "globeOnly": "Canlı küre akışları Cesium küresinde görüntülenir. Görmek için 3B küreye geçin.",
+      "earthquakes": "Depremler",
+      "satellites": "Uydular",
+      "loading": "Güncelleniyor…",
+      "updateFailed": "Güncelleme başarısız",
+      "never": "Hiçbir zaman",
+      "lastUpdated": "Son güncelleme: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Proje",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light Temel Harita",
       "geolibre-flight-simulator": "Uçuş Simülatörü",
+      "gods-eye-view": "Tanrısal Bakış",
       "geolibre-route-animation": "Rota Animasyonu",
       "geolibre-sun": "Güneş Simülasyonu",
       "maplibre-atmosphere-effects": "Atmosfer Efektleri",

@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "सार्वजनिक डेटा फ़ीड से लाइव, समय-संबंधी पृथ्वी घटनाएँ।",
+      "globeOnly": "लाइव ग्लोब फ़ीड Cesium ग्लोब पर दिखाई देती हैं। इन्हें देखने के लिए 3D ग्लोब पर जाएँ।",
+      "earthquakes": "भूकंप",
+      "satellites": "उपग्रह",
+      "loading": "अपडेट हो रहा है…",
+      "updateFailed": "अपडेट विफल",
+      "never": "कभी नहीं",
+      "lastUpdated": "अंतिम अपडेट: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "प्रोजेक्ट",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light बेसमैप",
       "geolibre-flight-simulator": "फ़्लाइट सिम्युलेटर",
+      "gods-eye-view": "ईश्वरीय दृष्टि",
       "geolibre-route-animation": "मार्ग एनिमेशन",
       "geolibre-sun": "सूर्य सिमुलेशन",
       "maplibre-atmosphere-effects": "वायुमंडलीय प्रभाव",

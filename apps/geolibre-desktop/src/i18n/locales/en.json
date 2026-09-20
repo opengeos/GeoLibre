@@ -2392,6 +2392,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "Live, time-aware Earth events from public data feeds.",
+      "globeOnly": "Live globe feeds render on the Cesium globe. Switch to the 3D globe to view them.",
+      "earthquakes": "Earthquakes",
+      "satellites": "Satellites",
+      "loading": "Updating…",
+      "updateFailed": "Update failed",
+      "never": "Never",
+      "lastUpdated": "Last updated: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "Project",
@@ -3115,6 +3127,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light Basemap",
       "geolibre-flight-simulator": "Flight Simulator",
+      "gods-eye-view": "God's Eye View",
       "geolibre-route-animation": "Route Animation",
       "geolibre-sun": "Sun Simulation",
       "maplibre-atmosphere-effects": "Atmospheric Effects",

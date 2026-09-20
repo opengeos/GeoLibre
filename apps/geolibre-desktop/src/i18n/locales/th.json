@@ -2312,6 +2312,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "เหตุการณ์บนโลกแบบสดและอิงเวลาจากฟีดข้อมูลสาธารณะ",
+      "globeOnly": "ฟีดโลกแบบสดจะแสดงบนลูกโลก Cesium โปรดสลับไปยังลูกโลก 3 มิติเพื่อดูข้อมูล",
+      "earthquakes": "แผ่นดินไหว",
+      "satellites": "ดาวเทียม",
+      "loading": "กำลังอัปเดต…",
+      "updateFailed": "อัปเดตไม่สำเร็จ",
+      "never": "ไม่เคย",
+      "lastUpdated": "อัปเดตล่าสุด: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "โปรเจกต์",
@@ -3031,6 +3043,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "แผนที่ฐาน Carto Light",
       "geolibre-flight-simulator": "เครื่องจำลองการบิน",
+      "gods-eye-view": "มุมมองรอบรู้",
       "geolibre-route-animation": "แอนิเมชันเส้นทาง",
       "geolibre-sun": "การจำลองดวงอาทิตย์",
       "maplibre-atmosphere-effects": "เอฟเฟกต์ชั้นบรรยากาศ",

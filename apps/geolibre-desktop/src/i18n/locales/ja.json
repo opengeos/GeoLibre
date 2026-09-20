@@ -2312,6 +2312,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "公開データフィードから、時間情報を持つ地球上の事象をライブ表示します。",
+      "globeOnly": "ライブ地球フィードは Cesium 地球儀に描画されます。表示するには 3D 地球儀に切り替えてください。",
+      "earthquakes": "地震",
+      "satellites": "衛星",
+      "loading": "更新中…",
+      "updateFailed": "更新に失敗しました",
+      "never": "未更新",
+      "lastUpdated": "最終更新: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "プロジェクト",
@@ -3031,6 +3043,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light ベースマップ",
       "geolibre-flight-simulator": "フライトシミュレーター",
+      "gods-eye-view": "神の視点",
       "geolibre-route-animation": "ルートアニメーション",
       "geolibre-sun": "太陽シミュレーション",
       "maplibre-atmosphere-effects": "大気エフェクト",

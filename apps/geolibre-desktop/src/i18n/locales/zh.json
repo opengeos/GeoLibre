@@ -2312,6 +2312,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "来自公共数据源、具有时间信息的实时地球事件。",
+      "globeOnly": "实时地球数据会渲染在 Cesium 地球仪上。请切换到 3D 地球仪查看。",
+      "earthquakes": "地震",
+      "satellites": "卫星",
+      "loading": "正在更新…",
+      "updateFailed": "更新失败",
+      "never": "从未",
+      "lastUpdated": "最后更新：{{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "项目",
@@ -3031,6 +3043,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light 底图",
       "geolibre-flight-simulator": "飞行模拟器",
+      "gods-eye-view": "上帝视角",
       "geolibre-route-animation": "路线动画",
       "geolibre-sun": "太阳模拟",
       "maplibre-atmosphere-effects": "大气效果",

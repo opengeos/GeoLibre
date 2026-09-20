@@ -2360,6 +2360,18 @@
       }
     }
   },
+  "panel": {
+    "godsEyeView": {
+      "description": "დროის მქონე ცოცხალი დედამიწის მოვლენები საჯარო მონაცემთა არხებიდან.",
+      "globeOnly": "ცოცხალი მონაცემები Cesium-ის გლობუსზე გამოისახება. სანახავად გადადით 3D გლობუსზე.",
+      "earthquakes": "მიწისძვრები",
+      "satellites": "თანამგზავრები",
+      "loading": "ახლდება…",
+      "updateFailed": "განახლება ვერ მოხერხდა",
+      "never": "არასდროს",
+      "lastUpdated": "ბოლო განახლება: {{time}}"
+    }
+  },
   "toolbar": {
     "menu": {
       "project": "პროექტი",
@@ -3082,6 +3094,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "carto-light": "Carto Light ბაზური რუკა",
       "geolibre-flight-simulator": "ფრენის სიმულატორი",
+      "gods-eye-view": "ღვთის ხედვა",
       "geolibre-route-animation": "მარშრუტის ანიმაცია",
       "geolibre-sun": "მზის სიმულაცია",
       "maplibre-atmosphere-effects": "ატმოსფერული ეფექტები",
