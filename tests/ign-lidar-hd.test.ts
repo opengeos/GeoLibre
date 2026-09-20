@@ -173,7 +173,7 @@ function bboxesIntersect(
 }
 
 describe("fetchIgnLidarHdTiles (live)", () => {
-  it("returns real LiDAR HD tile coverage for central Paris", async (t) => {
+  it("returns real LiDAR HD tile coverage for central Paris", { skip: !process.env.RUN_LIVE_TESTS }, async (t) => {
     const bbox: [number, number, number, number] = [2.25, 48.83, 2.42, 48.9];
     let result: Awaited<ReturnType<typeof fetchIgnLidarHdTiles>>;
     try {
