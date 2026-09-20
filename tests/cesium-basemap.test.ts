@@ -257,6 +257,18 @@ describe("applyBasemapImagery", () => {
     assert.deepEqual(openStreetMapRequests, [], "Esri answered, so nothing stood in for it");
   });
 
+  it("falls through to keyless imagery when an Ion token is refused", async () => {
+    const { Cesium, viewer, arcgisRequests } = makeFakes();
+    Cesium.IonImageryProvider.fromAssetId = () => Promise.reject(new Error("401 token revoked"));
+    const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, "stale.jwt.token");
+    await (added[0] as FakeLayer).provider?.provider;
+    // A revoked or expired token leaves a drawn globe, not a bare one.
+    assert.deepEqual(
+      arcgisRequests.map(({ url }) => url),
+      ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"],
+    );
+  });
+
   it("stands OpenStreetMap in when the keyless imagery service cannot be reached", async () => {
     const { Cesium, viewer, openStreetMapRequests } = makeFakes();
     Cesium.ArcGisMapServerImageryProvider.fromUrl = () => Promise.reject(new Error("offline"));

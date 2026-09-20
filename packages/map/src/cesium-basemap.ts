@@ -145,20 +145,22 @@ export function applyBasemapImagery(
     // Bing Maps Aerial through Ion when a token is configured, and keyless Esri
     // World Imagery otherwise. Use the named asset instead of Cesium's implicit
     // World Imagery default so an upstream default change cannot change ours.
-    const layer = ionToken
-      ? Cesium.ImageryLayer.fromProviderAsync(
-          Cesium.IonImageryProvider.fromAssetId(CESIUM_BING_AERIAL_ASSET_ID, {
+    // A service that cannot be reached would otherwise leave the globe bare, so
+    // each option falls through to the next: Ion imagery, then keyless Esri,
+    // then street tiles. An expired or revoked token degrades to a drawn globe
+    // rather than an empty one.
+    const keyless = () =>
+      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI_WORLD_IMAGERY_URL, {
+        enablePickFeatures: false,
+      }).catch(() => new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL }));
+    const layer = Cesium.ImageryLayer.fromProviderAsync(
+      ionToken
+        ? Cesium.IonImageryProvider.fromAssetId(CESIUM_BING_AERIAL_ASSET_ID, {
             accessToken: ionToken,
-          }),
-        )
-      : Cesium.ImageryLayer.fromProviderAsync(
-          // A service that cannot be reached would otherwise leave the globe
-          // bare, so street tiles stand in for it.
-          Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI_WORLD_IMAGERY_URL, {
-            enablePickFeatures: false,
-          }).catch(() => new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL })),
-          {},
-        );
+          }).catch(keyless)
+        : keyless(),
+      {},
+    );
     viewer.imageryLayers.add(layer, 0);
     return [layer];
   }

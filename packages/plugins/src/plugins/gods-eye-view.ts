@@ -267,6 +267,11 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
     [feedFlag(feed)]: true,
     godsEyeViewFeed: feed,
     updatedAt: updatedAt.toISOString(),
+    // The rows are rebuilt from the feed on activation, as the dense shell's
+    // are. Embedding a whole catalogue's worth in every autosave would persist
+    // positions that are stale by the next refresh and push the snapshot
+    // towards its size ceiling.
+    transientGeojson: true,
   };
   if (existing) {
     // Patch only what the feed owns. `visible`, `opacity` and `style` belong to
@@ -295,8 +300,10 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     state.lastUpdated &&
     Date.now() - state.lastUpdated.getTime() < FEED_REFRESH_INTERVAL_MS[feed] &&
     // Recent data the user can no longer see is no reason to skip: a feed
-    // toggled off and on has had its layer removed and must rebuild it.
-    ownedLayer(feed)
+    // toggled off and on has had its layer removed and must rebuild it, and a
+    // project load brings the layer back without the rows, which are stripped
+    // on save.
+    ownedLayer(feed)?.geojson
   ) {
     return;
   }

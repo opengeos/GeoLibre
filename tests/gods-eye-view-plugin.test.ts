@@ -347,6 +347,39 @@ describe("God's Eye View feed refresh", () => {
     }
   });
 
+  it("keeps the feed's rows out of a saved project, and rebuilds them on load", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+
+      // `prepareLayerForSave` strips a layer's rows only when it says they are
+      // transient; a catalogue's worth in every autosave would persist stale
+      // positions and push the snapshot toward its ceiling.
+      for (const layer of useAppStore.getState().layers) {
+        assert.equal(layer.metadata.transientGeojson, true, layer.name);
+        assert.ok(layer.geojson, "the live layer still carries its table");
+      }
+
+      // Reopening the project brings the layer back without those rows, so the
+      // refresh interval must not spare the fetch that rebuilds them.
+      const calls = net.calls().length;
+      useAppStore.setState({
+        layers: useAppStore.getState().layers.map(({ geojson: _dropped, ...rest }) => rest),
+      });
+      godsEyeViewPlugin.applyProjectState?.(globe.app, { earthquakes: true, satellites: true });
+      for (let i = 0; i < 8; i++) await flush();
+      assert.ok(net.calls().length > calls, "a stripped layer refetches");
+      for (const layer of useAppStore.getState().layers) assert.ok(layer.geojson);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+
   it("does not re-read a feed it fetched moments ago", async () => {
     const net = stubFeeds();
     const globe = makeGlobe();
