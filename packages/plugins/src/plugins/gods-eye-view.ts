@@ -17,6 +17,7 @@ import {
   type GodsEyeViewFeedPayload,
 } from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
+import { OVERPASS_REQUEST_TIMEOUT_MS } from "./osm-downloader-api";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -417,7 +418,12 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   state.loading = true;
   state.failed = false;
   renderPanel();
-  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  // Overpass intentionally gets the same longer budget as the shared OSM
+  // downloader. Public catalog endpoints should fail faster.
+  const timeout = setTimeout(
+    () => controller.abort(),
+    feed === "osmInfrastructure" ? OVERPASS_REQUEST_TIMEOUT_MS : FEED_TIMEOUT_MS,
+  );
   try {
     const window = timeWindow();
     let payload: GodsEyeViewFeedPayload;

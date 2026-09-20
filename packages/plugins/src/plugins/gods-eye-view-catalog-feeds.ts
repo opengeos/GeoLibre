@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection, Geometry, Point, Position } from "geoj
 import { downloadOsmGeoJson } from "./osm-downloader-api";
 
 export const RADIO_BROWSER_STATIONS_URL =
-  "https://de1.api.radio-browser.info/json/stations/search?has_geo_info=true&is_https=true&hidebroken=true&order=clickcount&reverse=true&limit=750";
+  "https://all.api.radio-browser.info/json/stations/search?has_geo_info=true&is_https=true&hidebroken=true&order=clickcount&reverse=true&limit=750";
 export const DATACENTERS_URL =
   "https://data.source.coop/opengeos/geolibre/gods-eye-view-data/datacenters/datacenters.geojsonl";
 export const DAMS_URL =
