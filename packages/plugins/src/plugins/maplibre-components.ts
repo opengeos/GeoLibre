@@ -830,7 +830,10 @@ interface PendingLidarRestore {
   beforeLayerId: string | null;
 }
 const pendingLidarRestores = new Map<string, PendingLidarRestore[]>();
-let lidarRestoreInFlight = false;
+// The currently-running restoreLidarLayers() call, if any — a promise rather
+// than a boolean so a concurrent caller can wait for it and retry instead of
+// bailing out and silently dropping its own layer. See restoreLidarLayers.
+let lidarRestoreInFlightPromise: Promise<void> | null = null;
 
 let pluginActive = false;
 let componentsControlRevision = 0;
@@ -3681,9 +3684,19 @@ function isLidarRestorePending(layer: GeoLibreLayer): boolean {
  * Layers panel but renders nothing. The loaded cloud is reattached to the saved
  * layer in {@link createLidarLoadHandler}, preserving its visibility, opacity,
  * style, name, and position.
+ *
+ * Concurrent callers (e.g. two "Add to map" clicks in quick succession) must
+ * not silently drop each other's layer: if a restore is already running, this
+ * waits for it to finish and then re-runs itself, so a layer added to the
+ * store after the first run's `pending` snapshot was taken still gets picked
+ * up on the retry instead of `addTileToMap` reporting it as added while it
+ * never actually streams.
  */
 export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
-  if (lidarRestoreInFlight) return;
+  if (lidarRestoreInFlightPromise) {
+    await lidarRestoreInFlightPromise.catch(() => {});
+    return restoreLidarLayers(app);
+  }
 
   const pending = useAppStore
     .getState()
@@ -3695,8 +3708,7 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
     );
   if (pending.length === 0) return;
 
-  lidarRestoreInFlight = true;
-  try {
+  const run = (async () => {
     const opened = await openStandaloneLidarControl(app, { reveal: false });
     if (!opened || !lidarControl) return;
     // The deck.gl point-cloud overlay only renders under the Mercator
@@ -3738,8 +3750,13 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
         console.warn("[lidar] failed to restore point cloud", url, error);
       });
     }
+  })();
+
+  lidarRestoreInFlightPromise = run;
+  try {
+    await run;
   } finally {
-    lidarRestoreInFlight = false;
+    if (lidarRestoreInFlightPromise === run) lidarRestoreInFlightPromise = null;
   }
 }
 
@@ -4203,7 +4220,7 @@ function createLidarControl(
     lidarStoreUnsubscribe = null;
     stopLidarThemeSync();
     pendingLidarRestores.clear();
-    lidarRestoreInFlight = false;
+    lidarRestoreInFlightPromise = null;
     // Stopping a renderer emits unload for every streamed cloud. Preserve
     // project records during teardown so the next engine can restore them.
     control.off("unload", onUnload);
@@ -4978,7 +4995,7 @@ function teardownLidarControl(app: GeoLibreAppAPI): void {
   // Clear restore bookkeeping so a teardown mid-restore (project reload, map
   // re-init) cannot strand the in-flight guard and block later restores.
   pendingLidarRestores.clear();
-  lidarRestoreInFlight = false;
+  lidarRestoreInFlightPromise = null;
   lidarStoreUnsubscribe?.();
   lidarStoreUnsubscribe = null;
   lidarLayerAdapter?.destroy();
