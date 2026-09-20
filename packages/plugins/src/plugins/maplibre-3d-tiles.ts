@@ -753,7 +753,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
         return;
       }
       if (
-        activeThreeDTilesApp?.getMapRenderer?.() === "arcgis" &&
+        activeThreeDTilesRenderer() === "arcgis" &&
         (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url))
       ) {
         event.preventDefault();
@@ -770,7 +770,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
       if (
         url &&
         activeThreeDTilesApp &&
-        ["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "") &&
+        ["mapbox", "arcgis"].includes(activeThreeDTilesRenderer()) &&
         !isGooglePhotorealisticTilesetUrl(url) &&
         !isArcgisI3sSceneLayerUrl(url)
       ) {
