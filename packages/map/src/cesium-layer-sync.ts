@@ -65,6 +65,7 @@ import { getPMTilesArchive } from "./layer-sync";
 import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
 import type { Header as PMTilesHeader } from "pmtiles";
+import { eciToEcf, gstime, propagate, twoline2satrec } from "satellite.js";
 import type {
   BoundingSphere,
   Cartesian2,
@@ -102,6 +103,9 @@ const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
 
 /** Most marker sprites baked for one layer (one per distinct classified colour). */
 const MAX_MARKER_SPRITES = 64;
+
+/** One closed selected-satellite ring, matching God's Eye View's orbit renderer. */
+const SELECTED_ORBIT_STEPS = 180;
 
 /** Ground metres one fill-pattern tile spans on a draped polygon. */
 const PATTERN_TILE_METERS = 20;
@@ -997,6 +1001,7 @@ export class CesiumLayerSync {
         | undefined;
       if (custom) {
         for (const [key, value] of Object.entries(custom)) {
+          if (key === "tleLine1" || key === "tleLine2") continue;
           // A nested property bag has no useful flat rendering in the popup.
           if (value !== undefined && (value === null || typeof value !== "object"))
             properties[key] = value;
@@ -1137,12 +1142,62 @@ export class CesiumLayerSync {
         entity.label = undefined;
       });
     }
-    // Only a sampled position has an arc to draw; a fixed one would trace a dot.
-    if (entity.path || !(entity.position instanceof C.SampledPositionProperty)) return;
+    if (entity.path || entity.polyline || !(entity.position instanceof C.SampledPositionProperty))
+      return;
+    const time = this.viewer.clock.currentTime;
+    const tleLine1 = entity.properties?.tleLine1?.getValue(time) as string | undefined;
+    const tleLine2 = entity.properties?.tleLine2?.getValue(time) as string | undefined;
+    if (tleLine1 && tleLine2) {
+      try {
+        const satrec = twoline2satrec(tleLine1, tleLine2);
+        const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as
+          | number
+          | undefined;
+        const periodSeconds =
+          typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
+            ? minutes * 60
+            : (2 * Math.PI * 60) / satrec.no;
+        const referenceDate = C.JulianDate.toDate(time);
+        const fixedGmst = gstime(referenceDate);
+        const positions: Cartesian3[] = [];
+        for (let i = 0; i < SELECTED_ORBIT_STEPS; i++) {
+          const at = new Date(
+            referenceDate.getTime() + (i * periodSeconds * 1000) / SELECTED_ORBIT_STEPS,
+          );
+          const propagated = propagate(satrec, at);
+          const position = propagated?.position;
+          if (!position || typeof position === "boolean") continue;
+          // Fix GMST to the selection epoch. Allowing Earth rotation to advance
+          // while sampling shifts the last point west of the first and produces
+          // the clipped-looking arc the reference implementation avoids.
+          const ecf = eciToEcf(position, fixedGmst);
+          positions.push(new C.Cartesian3(ecf.x * 1000, ecf.y * 1000, ecf.z * 1000));
+        }
+        if (positions.length >= 3) {
+          const first = positions[0];
+          positions.push(new C.Cartesian3(first.x, first.y, first.z));
+          entity.polyline = new C.PolylineGraphics({
+            positions,
+            width: 2,
+            arcType: C.ArcType.NONE,
+            material: new C.ColorMaterialProperty(color.withAlpha(0.6)),
+            depthFailMaterial: new C.ColorMaterialProperty(color.withAlpha(0.35)),
+          });
+          this.highlightRestorers.push(() => {
+            entity.polyline = undefined;
+          });
+          return;
+        }
+      } catch {
+        // Malformed third-party TLE metadata falls through to a sampled trail.
+      }
+    }
+    // Generic CZML has no TLE from which to build a closed ring. Retain the
+    // bounded temporal-path fallback for those documents.
     // The packet reports its own period where it knows one (a satellite does),
     // so the ring closes on itself instead of being cut to an arbitrary length.
     const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(
-      this.viewer.clock.currentTime,
+      time,
     ) as number | undefined;
     const halfPeriodSeconds =
       typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
@@ -1152,7 +1207,7 @@ export class CesiumLayerSync {
     // not extrapolate, so half a period of lead on a 24-hour GEO orbit sampled
     // over three hours draws a line that stops dead rather than a ring; the
     // entity's availability is exactly the span its samples cover.
-    const now = this.viewer.clock.currentTime;
+    const now = time;
     const availability = entity.availability;
     const sampledBack = availability
       ? Math.max(0, C.JulianDate.secondsDifference(now, availability.start))

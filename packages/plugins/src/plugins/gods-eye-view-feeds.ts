@@ -31,6 +31,8 @@ export interface UsgsFeatureCollection {
 
 export interface TleRecord {
   name: string;
+  line1: string;
+  line2: string;
   catalogNumber: string;
   epoch: Date;
   inclinationDeg: number;
@@ -70,7 +72,9 @@ export function czmlPacketsToAttributeGeoJson(packets: readonly CzmlPacket[]): F
       if (typeof packet.name === "string") properties.name = packet.name;
       if (typeof packet.availability === "string") properties.availability = packet.availability;
       if (packet.properties && typeof packet.properties === "object") {
-        Object.assign(properties, packet.properties);
+        for (const [key, value] of Object.entries(packet.properties)) {
+          if (key !== "tleLine1" && key !== "tleLine2") properties[key] = value;
+        }
       }
       const id = typeof packet.id === "string" || typeof packet.id === "number" ? packet.id : index;
       const position = packet.position as
@@ -256,6 +260,8 @@ export function parseTle(text: string, classification?: SatelliteClassification)
     }
     records.push({
       name,
+      line1,
+      line2,
       catalogNumber,
       epoch,
       inclinationDeg,
@@ -407,6 +413,11 @@ export function tleRecordsToCzml(
         catalogNumber: tle.catalogNumber,
         inclinationDeg: tle.inclinationDeg,
         orbitalPeriodMinutes: Number((periodSeconds / 60).toFixed(2)),
+        // Retain the compact source elements so the Cesium selection renderer
+        // can build one complete SGP4 orbit on demand. Serializing a sampled
+        // ring for every catalog entry would add several megabytes to the feed.
+        tleLine1: tle.line1,
+        tleLine2: tle.line2,
         ...(tle.classification ? { group: tle.classification } : {}),
       },
       point: {

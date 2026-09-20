@@ -489,9 +489,20 @@ describe("CesiumLayerSync with CZML", () => {
         },
       },
       position: new SampledPositionProperty(),
-      properties: { orbitalPeriodMinutes: { getValue: () => 96 } },
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 96 },
+        tleLine1: {
+          getValue: () =>
+            "1 25545U 93036A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () =>
+            "2 25545  74.0400 120.0000 0010000  80.0000 280.0000 15.00000000400000",
+        },
+      },
       label: undefined as unknown,
       path: undefined as unknown,
+      polyline: undefined as unknown,
     };
     Cesium.CzmlDataSource.load = async () => ({
       show: true,
@@ -515,10 +526,22 @@ describe("CesiumLayerSync with CZML", () => {
           public y: number,
         ) {}
       },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: { toDate: () => new Date("2026-09-20T00:00:00.000Z") },
       LabelGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
       PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
       ColorMaterialProperty: class {
@@ -542,20 +565,25 @@ describe("CesiumLayerSync with CZML", () => {
     const label = satellite.label as { options: { text: string } };
     assert.ok(label);
     assert.equal(label.options.text, "COSMOS 2251");
-    // Half a period either side, so the ring closes rather than being cut to an
-    // arbitrary length.
-    const path = satellite.path as { options: { leadTime: number; trailTime: number } };
-    assert.ok(path);
-    assert.equal(path.options.leadTime, 2880);
-    assert.equal(path.options.trailTime, 2880);
+    // Selection builds a complete, closed orbit independently of the document's
+    // animation window. A temporal PathGraphics trail clips into a short arc at
+    // the window boundaries, so the selected orbit is a static polyline ring.
+    const polyline = satellite.polyline as {
+      options: { positions: Array<{ x: number; y: number; z: number }> };
+    };
+    assert.ok(polyline);
+    assert.equal(polyline.options.positions.length, 181);
+    assert.deepEqual(polyline.options.positions.at(-1), polyline.options.positions[0]);
+    assert.equal(satellite.path, undefined);
 
     sync.highlight(undefined, []);
     assert.equal(satellite.label, undefined, "clearing the selection restores the document");
     assert.equal(satellite.path, undefined);
+    assert.equal(satellite.polyline, undefined);
     sync.destroy();
   });
 
-  it("never traces more arc than the document sampled", async () => {
+  it("traces a complete GEO orbit beyond the document's three-hour sample window", async () => {
     const { Cesium, viewer } = makeGlobe();
     class SampledPositionProperty {}
     // A GEO satellite: a 24-hour period, but only the plugin's three-hour
@@ -570,10 +598,21 @@ describe("CesiumLayerSync with CZML", () => {
         },
       },
       position: new SampledPositionProperty(),
-      properties: { orbitalPeriodMinutes: { getValue: () => 1440 } },
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 1440 },
+        tleLine1: {
+          getValue: () =>
+            "1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () =>
+            "2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000",
+        },
+      },
       availability: { start: "window-start", stop: "window-stop" },
       label: undefined as unknown,
       path: undefined as unknown,
+      polyline: undefined as unknown,
     };
     Cesium.CzmlDataSource.load = async () => ({
       show: true,
@@ -597,21 +636,32 @@ describe("CesiumLayerSync with CZML", () => {
           public y: number,
         ) {}
       },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: {
+        toDate: () => new Date("2026-09-20T00:00:00.000Z"),
+        secondsDifference: (left: unknown, right: unknown) =>
+          right === "window-start" || left === "window-stop" ? 5400 : 0,
+      },
       LabelGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
       PathGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
+      PolylineGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
       ColorMaterialProperty: class {
         constructor(public color: unknown) {}
       },
       SampledPositionProperty,
-      JulianDate: {
-        // 5400s of samples behind the clock, 5400s ahead.
-        secondsDifference: (left: unknown, right: unknown) =>
-          right === "window-start" || left === "window-stop" ? 5400 : 0,
-      },
     });
 
     const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
@@ -621,12 +671,13 @@ describe("CesiumLayerSync with CZML", () => {
     for (let i = 0; i < 4; i++) await flush();
 
     sync.highlight("czml-geo", ["celestrak-99999"]);
-    const path = geo.path as { options: { leadTime: number; trailTime: number } };
-    assert.ok(path);
-    // Half a period is 12 hours; a sampled position does not extrapolate, so
-    // asking for it would draw a line that stops dead instead of a ring.
-    assert.equal(path.options.leadTime, 5400);
-    assert.equal(path.options.trailTime, 5400);
+    const polyline = geo.polyline as {
+      options: { positions: Array<{ x: number; y: number; z: number }> };
+    };
+    assert.ok(polyline);
+    assert.equal(polyline.options.positions.length, 181);
+    assert.deepEqual(polyline.options.positions.at(-1), polyline.options.positions[0]);
+    assert.equal(geo.path, undefined);
     sync.destroy();
   });
 

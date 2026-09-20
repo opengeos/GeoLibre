@@ -253,6 +253,9 @@ ${ISS_TLE}`);
   it("materializes CZML packet properties as read-only attribute-table rows", () => {
     const records = parseTle(ISS_TLE);
     const packets = tleRecordsToCzml(records, { start, stop, stepSeconds: 120 });
+    const packetProperties = packets[1].properties as Record<string, unknown>;
+    assert.equal(packetProperties.tleLine1, records[0].line1);
+    assert.equal(packetProperties.tleLine2, records[0].line2);
     const table = czmlPacketsToAttributeGeoJson(packets);
     assert.equal(table.type, "FeatureCollection");
     assert.equal(table.features.length, 1, "the CZML document packet is not a data row");
