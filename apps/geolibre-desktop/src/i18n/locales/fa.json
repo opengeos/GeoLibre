@@ -8064,6 +8064,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "پوشش کاشی‌های IGN LiDAR HD را برای محدوده فعلی نقشه جستجو کنید، کاشی‌ها را به‌صورت ابر نقاط به نقشه اضافه کنید یا فایل‌های COPC LAZ آن‌ها را از سرورهای IGN دانلود کنید.",
+      "attribution": "داده‌ها © IGN — LiDAR HD، منتشرشده تحت Licence Ouverte 2.0.",
       "west": "غرب",
       "south": "جنوب",
       "east": "شرق",

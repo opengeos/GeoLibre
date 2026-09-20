@@ -7977,6 +7977,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "現在の地図領域についてIGN LiDAR HDのタイル範囲を検索し、タイルをポイントクラウドとして地図に追加するか、IGNのサーバーからCOPC LAZファイルをダウンロードします。",
+      "attribution": "データ © IGN — LiDAR HD、Licence Ouverte 2.0 の下で公開。",
       "west": "西",
       "south": "南",
       "east": "東",

@@ -7977,6 +7977,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "搜索当前地图区域的 IGN LiDAR HD 瓦片覆盖范围，将瓦片作为点云添加到地图，或从 IGN 的服务器下载其 COPC LAZ 文件。",
+      "attribution": "数据 © IGN — LiDAR HD，依据 Licence Ouverte 2.0 发布。",
       "west": "西",
       "south": "南",
       "east": "东",

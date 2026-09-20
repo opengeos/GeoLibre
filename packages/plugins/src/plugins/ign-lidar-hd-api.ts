@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 
 /**
- * IGN's Géoplateforme WFS. `data.geopf.fr` is the public successor to
+ * IGN's WFS. `data.geopf.fr` is the public successor to
  * `wxs.ign.fr`; the LiDAR HD tile index is published there as the
  * `IGNF_LIDAR-HD_METADONNEE:metadata` feature type, one feature per 1km x 1km
  * survey tile ("dalle").
@@ -76,6 +76,7 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+/** Returns a non-empty string as-is, or null. */
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -101,6 +102,7 @@ function formatDegree(value: number): string {
   return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
 }
 
+/** Validates a bbox's coordinates and area cap, throwing on either failure. */
 function validateBbox(bbox: [number, number, number, number]): [number, number, number, number] {
   const [west, south, east, north] = bbox;
   if (
@@ -129,11 +131,6 @@ function validateBbox(bbox: [number, number, number, number]): [number, number, 
 
 /**
  * Build a bounded WFS 2.0.0 GetFeature URL for the LiDAR HD tile index.
- *
- * The service reports its CRS as EPSG:4326 but, contrary to the WFS 2.0.0
- * axis-order convention, actually honors BBOX in lon,lat order. CRS84 is
- * requested explicitly instead of EPSG:4326 so the axis order is unambiguous
- * regardless of how a given deployment interprets the EPSG code.
  */
 export function buildIgnLidarHdWfsUrl(
   bbox: [number, number, number, number],
@@ -158,6 +155,7 @@ export function buildIgnLidarHdWfsUrl(
   return `${IGN_LIDAR_HD_WFS_ENDPOINT}?${params.toString()}`;
 }
 
+/** Converts one raw WFS feature into a tile, or null if it lacks a geometry. */
 function mapIgnLidarFeature(raw: RawIgnLidarFeature, index: number): IgnLidarHdTile | null {
   if (!raw.geometry) return null;
   const properties = raw.properties ?? {};
@@ -180,7 +178,7 @@ function mapIgnLidarFeature(raw: RawIgnLidarFeature, index: number): IgnLidarHdT
   };
 }
 
-/** Parse a WFS GetFeature JSON response into tiles and a footprint layer. */
+/** Maps a raw WFS GetFeature response into tiles, footprints, and match/truncation info. */
 export function parseIgnLidarHdFeatureCollection(
   payload: RawIgnLidarFeatureCollection,
 ): IgnLidarHdSearchResult {

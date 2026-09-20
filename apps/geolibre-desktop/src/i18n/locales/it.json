@@ -8064,6 +8064,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "Cerca la copertura delle tile IGN LiDAR HD per l'area della mappa corrente, aggiungi tile alla mappa come point cloud oppure scarica i relativi file COPC LAZ dai server dell'IGN.",
+      "attribution": "Dati © IGN — LiDAR HD, pubblicati sotto la Licence Ouverte 2.0.",
       "west": "Ovest",
       "south": "Sud",
       "east": "Est",

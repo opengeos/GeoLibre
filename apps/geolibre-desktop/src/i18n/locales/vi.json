@@ -7977,6 +7977,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "Tìm kiếm phạm vi phủ của các ô IGN LiDAR HD cho khu vực bản đồ hiện tại, thêm các ô vào bản đồ dưới dạng đám mây điểm, hoặc tải xuống tệp COPC LAZ của chúng từ máy chủ của IGN.",
+      "attribution": "Dữ liệu © IGN — LiDAR HD, được công bố theo Licence Ouverte 2.0.",
       "west": "Tây",
       "south": "Nam",
       "east": "Đông",

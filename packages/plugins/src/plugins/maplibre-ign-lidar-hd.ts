@@ -18,13 +18,8 @@ import { getStyleMap } from "./style-map";
 export const IGN_LIDAR_HD_PLUGIN_ID = "geolibre-ign-lidar-hd";
 const PANEL_ID = IGN_LIDAR_HD_PLUGIN_ID;
 
-// Footprints: a plugin-owned native layer (not app.addGeoJsonLayer), so a
-// click can be handled directly — GeoLibre only wires click-to-select through
-// its own Identify tool, which is off by default, so a plain addGeoJsonLayer
-// layer never fires app.onSelectionChange on a stray click. Still registered
-// as a first-class Layers-panel entry via registerExternalNativeLayer
-// (visible, reorderable, restylable, removable, like any other layer), and a
-// new search updates this same map layer instead of piling up another one.
+// A plugin-owned native layer (not app.addGeoJsonLayer) so map clicks can be
+// handled directly, while still appearing as a normal Layers-panel entry.
 const FOOTPRINT_SOURCE_ID = "geolibre-ign-lidar-hd-footprints";
 const FOOTPRINT_FILL_LAYER_ID = "geolibre-ign-lidar-hd-footprints-fill";
 const FOOTPRINT_LINE_LAYER_ID = "geolibre-ign-lidar-hd-footprints-line";
@@ -41,9 +36,7 @@ const HOVER_FILL_LAYER_ID = "geolibre-ign-lidar-hd-hover-fill";
 const HOVER_LINE_LAYER_ID = "geolibre-ign-lidar-hd-hover-line";
 const HOVER_HIGHLIGHT_COLOR = "#f5a623";
 
-// Color a footprint switches to on its own fill/line layer while its tile is
-// checked for bulk Add to map — no separate overlay, so the already-shown
-// tile just restyles in place rather than growing a second shape on top of it.
+// Footprint fill/line color while its tile is checked for bulk Add to map.
 const SELECTED_COLOR = "#22c55e";
 
 let unregisterPanel: (() => void) | null = null;
@@ -65,6 +58,9 @@ const CSS = {
     "display:flex;flex-direction:column;gap:10px;padding:10px;height:100%;" +
     "box-sizing:border-box;overflow-y:auto;color:hsl(var(--foreground));font-size:12px;",
   hint: "margin:0;color:hsl(var(--muted-foreground));line-height:1.45;",
+  attribution:
+    "margin:0;display:block;color:hsl(var(--muted-foreground));line-height:1.45;" +
+    "text-decoration:underline;",
   field: "display:flex;flex-direction:column;gap:4px;",
   label: "display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;",
   grid: "display:grid;grid-template-columns:1fr 1fr;gap:7px;",
@@ -99,6 +95,7 @@ const CSS = {
     "color:hsl(var(--muted-foreground));cursor:pointer;",
 };
 
+/** Resolves a plugin-namespaced translation key, falling back to English text. */
 function tr(
   app: GeoLibreAppAPI,
   key: string,
@@ -108,6 +105,7 @@ function tr(
   return app.translate?.(`plugin.${IGN_LIDAR_HD_PLUGIN_ID}.${key}`, fallback, params) ?? fallback;
 }
 
+/** Creates an HTML element with the given inline CSS applied. */
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   style?: string,
@@ -117,6 +115,7 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** Wraps a control in a labeled form field. */
 function field(labelText: string, control: HTMLElement): HTMLDivElement {
   const wrapper = element("div", CSS.field);
   const label = element("label", CSS.label);
@@ -126,19 +125,23 @@ function field(labelText: string, control: HTMLElement): HTMLDivElement {
   return wrapper;
 }
 
+/** Updates a field's label text without rebuilding it. */
 function setFieldLabel(wrapper: HTMLDivElement, labelText: string): void {
   const text = wrapper.querySelector("label")?.firstChild;
   if (text) text.nodeValue = labelText;
 }
 
+/** Formats a coordinate value for the bbox inputs, trimming trailing zeros. */
 function formatNumber(value: number): string {
   return Number(value.toFixed(6)).toString();
 }
 
+/** Returns the best human-readable identifier for a tile. */
 function tileTitle(tile: IgnLidarHdTile): string {
-  return tile.tileCoord ?? tile.missionCode ?? tile.id;
+  return tile.tileCoord || tile.missionCode || tile.id || crypto.randomUUID();
 }
 
+/** Builds the row subtitle from acquisition date, mission code, and publish status. */
 function tileSubtitle(app: GeoLibreAppAPI, tile: IgnLidarHdTile): string {
   const parts: string[] = [];
   if (tile.acquisitionStart) parts.push(tile.acquisitionStart);
@@ -147,17 +150,13 @@ function tileSubtitle(app: GeoLibreAppAPI, tile: IgnLidarHdTile): string {
   return parts.join(" · ");
 }
 
-/** Trigger a download of a tile's COPC LAZ file via the host's external-URL
- * opener. On the web build that is a plain `window.open`, which the browser's
- * own download handling picks up for a multi-hundred-MB binary; on desktop it
- * routes through the Tauri opener plugin to the system browser, since the
- * Tauri webview does not turn a same-window link into a download the way a
- * regular browser tab does. */
+/** Download a tile's COPC LAZ file */
 function downloadTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile): void {
   if (!tile.downloadUrl) return;
   app.openExternalUrl?.(tile.downloadUrl);
 }
 
+/** Derives the store layer id for a tile's point cloud. */
 function ignLidarLayerId(tile: IgnLidarHdTile): string {
   return `ign-lidar-hd-${tile.id}`;
 }
@@ -168,21 +167,14 @@ function ignLidarLayerId(tile: IgnLidarHdTile): string {
 // gives it room to breathe.
 const ADD_SELECTED_DELAY_MS = 1500;
 
+/** Resolves after the given number of milliseconds. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer";
 
-/**
- * Add a tile's point cloud to the map through the same `lidar-url` layer
- * convention the Components plugin's Add LiDAR Layer panel uses: a store
- * layer carries the URL, and `restoreLidarLayers` streams it into the shared
- * LiDAR control (COPC/LAZ via deck.gl), matching how a saved project or
- * library layer re-attaches its point cloud on load. Does not reveal the
- * shared LiDAR control's panel itself — see callers, which reveal it at most
- * once per user action instead of once per tile.
- */
+/** Adds a tile's point cloud to the map as a `lidar-url` layer. */
 async function addTileToMap(
   app: GeoLibreAppAPI,
   tile: IgnLidarHdTile,
@@ -224,6 +216,7 @@ async function addTileToMap(
 // Map overlays: result footprints (clickable) + the hover highlight
 // ---------------------------------------------------------------------------
 
+/** Returns an empty GeoJSON FeatureCollection. */
 function emptyCollection(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
@@ -233,22 +226,15 @@ function styleReady(map: MapLibreMap): boolean {
   return map.isStyleLoaded() === true;
 }
 
+/** Converts a tile into a GeoJSON feature carrying its map-only properties. */
 function tileFeature(tile: IgnLidarHdTile, selected = false): Feature {
   return {
     type: "Feature",
     id: tile.id,
     geometry: tile.geometry,
     properties: {
-      // MapLibre GeoJSON sources tile features internally (Mapbox Vector Tile
-      // encoding), which only supports integer feature ids: a non-numeric
-      // Feature.id like ours ("metadata.123456") gets coerced through
-      // Number(id) | 0 and collapses to 0 for every tile, so a click event's
-      // features[].id is useless here. Carry the real id as a property
-      // instead, which round-trips arbitrary strings fine.
       tileId: tile.id,
-      // Drives the footprint layer's own fill/line paint (see
-      // ensureFootprintLayers) so a selected tile restyles in place — no
-      // second layer drawn on top of it.
+      // Drives the footprint's fill/line paint (see ensureFootprintLayers).
       selected,
       tileCoord: tile.tileCoord,
       missionCode: tile.missionCode,
@@ -260,24 +246,24 @@ function tileFeature(tile: IgnLidarHdTile, selected = false): Feature {
   };
 }
 
+/** Selects the clicked footprint's tile. */
 function onFootprintClick(event: MapLayerMouseEvent): void {
   const id = event.features?.[0]?.properties?.tileId;
   if (typeof id === "string") onFootprintSelect?.(id);
 }
 
+/** Switches the cursor to a pointer over a footprint. */
 function onFootprintEnter(event: MapLayerMouseEvent): void {
   event.target.getCanvas().style.cursor = "pointer";
 }
 
-// Fires on every move while the cursor is over the layer, so the hover
-// highlight follows the feature under the cursor — including moving
-// straight from one tile's footprint into an adjacent one without a
-// mouseleave in between. Mirrors hovering a row in the list.
+/** Updates the hover highlight to whichever footprint is under the cursor. */
 function onFootprintMove(event: MapLayerMouseEvent): void {
   const id = event.features?.[0]?.properties?.tileId;
   onFootprintHover?.(typeof id === "string" ? id : null);
 }
 
+/** Resets the cursor and clears the hover highlight. */
 function onFootprintLeave(event: MapLayerMouseEvent): void {
   event.target.getCanvas().style.cursor = "";
   onFootprintHover?.(null);
@@ -343,15 +329,7 @@ function ensureFootprintLayers(map: MapLibreMap): void {
   }
 }
 
-/**
- * Registers (or updates) the footprints as a first-class Layers-panel entry.
- * The `geojson` is passed every call so the store layer carries the feature
- * data (read by the attribute table and export) and so a selection change is
- * reflected there too. `paintMode: "plugin"` keeps the host from ever pushing
- * a flat fill-color/opacity over the selected/unselected expressions set in
- * ensureFootprintLayers — the tradeoff is the Style panel's paint editors
- * don't apply to this layer, since the plugin now owns that.
- */
+/** Registers (or updates) the footprints as a Layers-panel entry. */
 function syncFootprintStoreLayer(app: GeoLibreAppAPI, features: Feature[]): void {
   app.registerExternalNativeLayer?.({
     id: FOOTPRINT_STORE_LAYER_ID,
@@ -363,14 +341,8 @@ function syncFootprintStoreLayer(app: GeoLibreAppAPI, features: Feature[]): void
     metadata: { sourceKind: FOOTPRINT_SOURCE_KIND },
     paintMode: "plugin",
   });
-  // registerExternalNativeLayer has no `popup` field of its own, so this
-  // reaches into the store directly (the registration's own update only ever
-  // patches the keys above, so it never clobbers this). Without it, the
-  // host's generic Identify click handler (when the user has Identify mode
-  // on) would open its own raw property-dump popup for a footprint click.
-  // `popup.click: false` only suppresses that auto-popup — unlike
-  // `capabilities.query`, it leaves feature selection, the attribute table,
-  // and export untouched.
+  // Suppresses the host's Identify click popup; registerExternalNativeLayer
+  // has no `popup` field of its own, so this sets it directly on the store.
   useAppStore.getState().updateLayer(FOOTPRINT_STORE_LAYER_ID, { popup: { click: false } });
   footprintsRegistered = true;
 }
@@ -382,10 +354,7 @@ function unregisterFootprintStoreLayer(app: GeoLibreAppAPI): void {
   app.unregisterExternalNativeLayer?.(FOOTPRINT_STORE_LAYER_ID);
 }
 
-/** Renders the footprints for the current result set, replacing any previous
- * search's footprints in place instead of adding another map layer. Also
- * called on every selection change (see refreshBulkToolbar) so each tile's
- * `selected` property — and hence its fill/line style — stays current. */
+/** Updates the footprint source and Layers-panel entry for the current tiles/selection. */
 function setFootprints(
   app: GeoLibreAppAPI,
   tiles: IgnLidarHdTile[],
@@ -402,8 +371,7 @@ function setFootprints(
   else unregisterFootprintStoreLayer(app);
 }
 
-/** Removes the footprint overlay: the Layers-panel entry (and its fill/line +
- * source) and the click/hover handlers. */
+/** Removes the footprint overlay, its Layers-panel entry, and the click/hover handlers. */
 function removeFootprintLayers(app: GeoLibreAppAPI, map: MapLibreMap): void {
   if (footprintClickHandlersBound) {
     footprintClickHandlersBound = false;
@@ -419,8 +387,7 @@ function removeFootprintLayers(app: GeoLibreAppAPI, map: MapLibreMap): void {
   if (map.getSource(FOOTPRINT_SOURCE_ID)) map.removeSource(FOOTPRINT_SOURCE_ID);
 }
 
-/** Adds the hover-highlight source/layers once, lazily (also re-creates them
- * after a basemap swap wipes runtime-added sources/layers). */
+/** Adds the hover-highlight source/layers once, lazily. */
 function ensureHoverLayer(map: MapLibreMap): void {
   if (!styleReady(map)) return;
   if (!map.getSource(HOVER_SOURCE_ID)) {
@@ -444,8 +411,7 @@ function ensureHoverLayer(map: MapLibreMap): void {
   }
 }
 
-/** Highlights one tile's footprint on the map, or clears the highlight when
- * `tile` is null. Plugin-private overlay, not a store layer. */
+/** Highlights one tile's footprint on the map, or clears the highlight when `tile` is null. */
 function setHoveredTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile | null): void {
   const map = getStyleMap(app);
   if (!map) return;
@@ -465,6 +431,7 @@ function removeHoverLayer(map: MapLibreMap): void {
   if (map.getSource(HOVER_SOURCE_ID)) map.removeSource(HOVER_SOURCE_ID);
 }
 
+/** Builds the plugin's right-panel UI and returns its dispose function. */
 function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   container.replaceChildren();
   const root = element("div", CSS.panel);
@@ -473,6 +440,16 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     app,
     "hint",
     "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's servers.",
+  );
+
+  const attribution = element("a", CSS.attribution);
+  attribution.href = "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0";
+  attribution.target = "_blank";
+  attribution.rel = "noopener noreferrer";
+  attribution.textContent = tr(
+    app,
+    "attribution",
+    "Data © IGN — LiDAR HD, published under the Licence Ouverte 2.0.",
   );
 
   const coordGrid = element("div", CSS.grid);
@@ -521,7 +498,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const list = element("div", CSS.list);
 
-  root.append(hint, coordGrid, queryActions, status, listToolbar, list);
+  root.append(hint, attribution, coordGrid, queryActions, status, listToolbar, list);
   container.append(root);
 
   let controller: AbortController | null = null;
@@ -536,6 +513,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   // highlights it exactly like hovering its row does (and vice versa),
   // without redundantly re-drawing the highlight for the tile already shown.
   let hoveredTileId: string | null = null;
+  /** Updates the shared hover state and redraws the highlight. */
   function updateHoveredTile(id: string | null): void {
     if (id === hoveredTileId) return;
     hoveredTileId = id;
@@ -543,10 +521,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     setHoveredTile(app, tile);
   }
 
-  /** Syncs the "select all" checkbox, the bulk Add-to-map button, and each
-   * footprint's own selected/unselected style to the current selection,
-   * without rebuilding the list rows. Call this after any change to
-   * selectedTileIds. */
+  /** Syncs the bulk-selection toolbar and footprint styles to the current selection. */
   function refreshBulkToolbar(): void {
     const eligible = currentTiles.filter((tile) => tile.downloadUrl);
     const selectedEligible = eligible.filter((tile) => selectedTileIds.has(tile.id));
@@ -564,9 +539,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     setFootprints(app, currentTiles, selectedTileIds);
   }
 
-  // A footprint click on the map toggles the tile in the bulk Add-to-map
-  // selection (same set the row checkboxes drive) — the map-click
-  // counterpart to checking/unchecking its row.
+  /** Toggles a footprint's tile in the bulk Add-to-map selection. */
   onFootprintSelect = (id: string) => {
     const tile = currentTiles.find((t) => t.id === id);
     if (!tile || !tile.downloadUrl) return;
@@ -578,14 +551,20 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     refreshBulkToolbar();
   };
 
-  // A footprint hover on the map: same highlight as hovering its row.
+  /** A footprint hover on the map: same highlight as hovering its row. */
   onFootprintHover = (id: string | null) => updateHoveredTile(id);
 
+  /** Re-applies translated text to the panel after a language change. */
   const refreshLabels = () => {
     hint.textContent = tr(
       app,
       "hint",
       "Search IGN LiDAR HD tile coverage for the current map area, add tiles to the map as point clouds, or download their COPC LAZ files from IGN's servers.",
+    );
+    attribution.textContent = tr(
+      app,
+      "attribution",
+      "Data © IGN — LiDAR HD, published under the Licence Ouverte 2.0.",
     );
     const translatedCoords = [
       tr(app, "west", "West"),
@@ -672,6 +651,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     renderList();
   });
 
+  /** Rebuilds the tile list rows from the current search results. */
   function renderList(): void {
     list.replaceChildren();
     rowCheckboxes = new Map();
@@ -758,6 +738,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     refreshBulkToolbar();
   }
 
+  /** Fills the coordinate inputs from the current map extent. */
   const applyViewBounds = () => {
     const bounds = app.getViewBounds?.();
     if (!bounds) {
@@ -833,13 +814,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 }
 
+/** Mounts (or remounts) the plugin panel into its container. */
 function mountPanel(container: HTMLElement, app: GeoLibreAppAPI): void {
   disposePanel?.();
   panelContainer = container;
   disposePanel = buildPanel(container, app);
 }
 
-/** Search the IGN Géoplateforme WFS for LiDAR HD tile coverage, add tiles to
+/** Search the IGN WFS for LiDAR HD tile coverage, add tiles to
  * the map as point clouds, or download their COPC LAZ files directly from IGN. */
 export const maplibreIgnLidarHdPlugin: GeoLibrePlugin = {
   id: IGN_LIDAR_HD_PLUGIN_ID,

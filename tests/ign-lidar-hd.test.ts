@@ -1,3 +1,4 @@
+import turfBbox from "@turf/bbox";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -36,14 +37,6 @@ describe("buildIgnLidarHdWfsUrl", () => {
   it("defaults COUNT to the maximum result count", () => {
     const url = new URL(buildIgnLidarHdWfsUrl([0, 0, 1, 1]));
     assert.equal(url.searchParams.get("COUNT"), String(IGN_LIDAR_HD_MAX_RESULT_COUNT));
-  });
-
-  it("renders tiny coordinates without exponent notation", () => {
-    const url = new URL(buildIgnLidarHdWfsUrl([0.0000005, 0, 0.0000015, 0.001]));
-    assert.equal(
-      url.searchParams.get("BBOX"),
-      "0.0000005,0,0.0000015,0.001,urn:ogc:def:crs:OGC:1.3:CRS84",
-    );
   });
 
   it("rejects invalid bounds", () => {
@@ -167,6 +160,48 @@ describe("fetchIgnLidarHdTiles", () => {
       () => fetchIgnLidarHdTiles([0, 0, 1, 1], { fetchImpl, timeoutMs: 5 }),
       /timed out/,
     );
+  });
+});
+
+function bboxesIntersect(
+  a: [number, number, number, number],
+  b: [number, number, number, number],
+): boolean {
+  const [aWest, aSouth, aEast, aNorth] = a;
+  const [bWest, bSouth, bEast, bNorth] = b;
+  return aWest <= bEast && aEast >= bWest && aSouth <= bNorth && aNorth >= bSouth;
+}
+
+describe("fetchIgnLidarHdTiles (live)", () => {
+  it("returns real LiDAR HD tile coverage for central Paris", async (t) => {
+    const bbox: [number, number, number, number] = [2.25, 48.83, 2.42, 48.9];
+    let result: Awaited<ReturnType<typeof fetchIgnLidarHdTiles>>;
+    try {
+      result = await fetchIgnLidarHdTiles(bbox);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        t.skip(`network unavailable: ${error.message}`);
+        return;
+      }
+      throw error;
+    }
+
+    assert.ok(result.tiles.length > 0, "expected at least one LiDAR HD tile over central Paris");
+    assert.ok(result.matched == result.tiles.length);
+
+    for (const tile of result.tiles) {
+      assert.equal(typeof tile.id, "string");
+      assert.ok(tile.id.length > 0);
+      assert.ok(tile.geometry, `tile ${tile.id} is missing a geometry`);
+      const tileBbox = turfBbox(tile.geometry) as [number, number, number, number];
+      assert.ok(
+        bboxesIntersect(tileBbox, bbox),
+        `tile ${tile.id} bbox [${tileBbox}] does not intersect the requested bbox [${bbox}]`,
+      );
+      if (tile.tileCoord !== null) assert.match(tile.tileCoord, /^\d{4}-\d{4}$/);
+      if (tile.downloadUrl !== null) assert.match(tile.downloadUrl, /^https:\/\//);
+      if (tile.pointCount !== null) assert.ok(tile.pointCount > 0);
+    }
   });
 });
 

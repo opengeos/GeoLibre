@@ -8238,6 +8238,7 @@
     "geolibre-ign-lidar-hd": {
       "title": "IGN LiDAR HD",
       "hint": "Найдите покрытие плитками IGN LiDAR HD для текущей области карты, добавьте плитки на карту в виде облаков точек или скачайте их файлы COPC LAZ с серверов IGN.",
+      "attribution": "Данные © IGN — LiDAR HD, опубликованы по лицензии Licence Ouverte 2.0.",
       "west": "Запад",
       "south": "Юг",
       "east": "Восток",
