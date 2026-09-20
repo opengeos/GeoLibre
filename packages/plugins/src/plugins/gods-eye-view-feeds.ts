@@ -125,7 +125,9 @@ function documentPacket(name: string, window: CzmlTimeWindow): CzmlPacket {
     clock: {
       interval: `${iso(window.start)}/${iso(window.stop)}`,
       currentTime: iso(window.current ?? window.start),
-      multiplier: window.multiplier ?? 60,
+      // Real time unless a caller asks otherwise, matching the plugin's own
+      // default speed: the feeds describe when things actually happen.
+      multiplier: window.multiplier ?? 1,
       range: "LOOP_STOP",
       step: "SYSTEM_CLOCK_MULTIPLIER",
     },

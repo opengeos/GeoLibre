@@ -2560,7 +2560,10 @@
       "loading": "جارٍ التحديث…",
       "updateFailed": "فشل التحديث",
       "never": "أبدًا",
-      "lastUpdated": "آخر تحديث: {{time}}"
+      "lastUpdated": "آخر تحديث: {{time}}",
+      "speed": "السرعة",
+      "speedRealTime": "الزمن الحقيقي (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

@@ -2321,7 +2321,10 @@
       "loading": "更新中…",
       "updateFailed": "更新に失敗しました",
       "never": "未更新",
-      "lastUpdated": "最終更新: {{time}}"
+      "lastUpdated": "最終更新: {{time}}",
+      "speed": "速度",
+      "speedRealTime": "リアルタイム (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

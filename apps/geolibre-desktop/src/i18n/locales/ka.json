@@ -2369,7 +2369,10 @@
       "loading": "ახლდება…",
       "updateFailed": "განახლება ვერ მოხერხდა",
       "never": "არასდროს",
-      "lastUpdated": "ბოლო განახლება: {{time}}"
+      "lastUpdated": "ბოლო განახლება: {{time}}",
+      "speed": "სიჩქარე",
+      "speedRealTime": "რეალური დრო (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

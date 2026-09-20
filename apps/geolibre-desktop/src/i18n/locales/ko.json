@@ -2321,7 +2321,10 @@
       "loading": "업데이트 중…",
       "updateFailed": "업데이트 실패",
       "never": "없음",
-      "lastUpdated": "마지막 업데이트: {{time}}"
+      "lastUpdated": "마지막 업데이트: {{time}}",
+      "speed": "속도",
+      "speedRealTime": "실시간 (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

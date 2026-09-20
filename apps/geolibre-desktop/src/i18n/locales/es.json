@@ -2369,7 +2369,10 @@
       "loading": "Actualizando…",
       "updateFailed": "Error de actualización",
       "never": "Nunca",
-      "lastUpdated": "Última actualización: {{time}}"
+      "lastUpdated": "Última actualización: {{time}}",
+      "speed": "Velocidad",
+      "speedRealTime": "Tiempo real (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

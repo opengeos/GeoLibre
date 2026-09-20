@@ -2369,7 +2369,10 @@
       "loading": "Güncelleniyor…",
       "updateFailed": "Güncelleme başarısız",
       "never": "Hiçbir zaman",
-      "lastUpdated": "Son güncelleme: {{time}}"
+      "lastUpdated": "Son güncelleme: {{time}}",
+      "speed": "Hız",
+      "speedRealTime": "Gerçek zamanlı (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

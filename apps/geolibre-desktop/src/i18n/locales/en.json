@@ -2401,7 +2401,10 @@
       "loading": "Updating…",
       "updateFailed": "Update failed",
       "never": "Never",
-      "lastUpdated": "Last updated: {{time}}"
+      "lastUpdated": "Last updated: {{time}}",
+      "speed": "Speed",
+      "speedRealTime": "Real time (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

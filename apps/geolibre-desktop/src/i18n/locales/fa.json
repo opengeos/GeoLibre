@@ -2369,7 +2369,10 @@
       "loading": "در حال به‌روزرسانی…",
       "updateFailed": "به‌روزرسانی ناموفق بود",
       "never": "هرگز",
-      "lastUpdated": "آخرین به‌روزرسانی: {{time}}"
+      "lastUpdated": "آخرین به‌روزرسانی: {{time}}",
+      "speed": "سرعت",
+      "speedRealTime": "زمان واقعی (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

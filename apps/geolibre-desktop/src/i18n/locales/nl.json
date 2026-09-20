@@ -2369,7 +2369,10 @@
       "loading": "Bijwerken…",
       "updateFailed": "Bijwerken mislukt",
       "never": "Nooit",
-      "lastUpdated": "Laatst bijgewerkt: {{time}}"
+      "lastUpdated": "Laatst bijgewerkt: {{time}}",
+      "speed": "Snelheid",
+      "speedRealTime": "Realtime (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

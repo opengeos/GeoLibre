@@ -2465,7 +2465,10 @@
       "loading": "Обновление…",
       "updateFailed": "Не удалось обновить",
       "never": "Никогда",
-      "lastUpdated": "Последнее обновление: {{time}}"
+      "lastUpdated": "Последнее обновление: {{time}}",
+      "speed": "Скорость",
+      "speedRealTime": "Реальное время (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

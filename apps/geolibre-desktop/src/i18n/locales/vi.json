@@ -2321,7 +2321,10 @@
       "loading": "Đang cập nhật…",
       "updateFailed": "Cập nhật thất bại",
       "never": "Chưa bao giờ",
-      "lastUpdated": "Cập nhật lần cuối: {{time}}"
+      "lastUpdated": "Cập nhật lần cuối: {{time}}",
+      "speed": "Tốc độ",
+      "speedRealTime": "Thời gian thực (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

@@ -2321,7 +2321,10 @@
       "loading": "正在更新…",
       "updateFailed": "更新失败",
       "never": "从未",
-      "lastUpdated": "最后更新：{{time}}"
+      "lastUpdated": "最后更新：{{time}}",
+      "speed": "速度",
+      "speedRealTime": "实时 (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

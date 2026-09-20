@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
+import { parseHTML } from "linkedom";
 import {
   godsEyeViewPlugin,
   reattachGodsEyeView,
@@ -13,10 +14,18 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 // feeds and re-takes the clock. These drive it against a fake that reproduces
 // the fresh-object-per-call shape.
 
+const originalDocument = globalThis.document;
+afterEach(() => {
+  globalThis.document = originalDocument;
+});
+
 /** A Cesium widget reduced to what the plugin reads, behind a fresh handle. */
 function makeGlobe() {
-  const viewer = { id: "viewer", clock: { shouldAnimate: false } };
+  const viewer = { id: "viewer", clock: { shouldAnimate: false, multiplier: 0 } };
   let handles = 0;
+  // The panel is plain DOM, so it renders only when the host calls `render`.
+  const { document } = parseHTML('<html><body><div id="panel"></div></body></html>');
+  const panel = document.getElementById("panel") as unknown as HTMLElement;
   const app = {
     getMap: () => null,
     getCesiumScene: () => {
@@ -28,11 +37,15 @@ function makeGlobe() {
         requestRender: () => {},
       };
     },
-    registerRightPanel: () => () => {},
+    registerRightPanel: (options: { render: (container: HTMLElement) => () => void }) => {
+      globalThis.document = document;
+      options.render(panel);
+      return () => {};
+    },
     openRightPanel: () => {},
     onLocaleChange: () => () => {},
   } as unknown as GeoLibreAppAPI;
-  return { app, viewer, handleCount: () => handles };
+  return { app, viewer, panel, handleCount: () => handles };
 }
 
 /** Count feed requests without touching the network; failures are expected. */
@@ -55,6 +68,64 @@ function stubFetch(): { calls: () => number; restore: () => void } {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("God's Eye View clock speed", () => {
+  it("runs at real time by default and persists the chosen speed", async () => {
+    const net = stubFetch();
+    const globe = makeGlobe();
+    try {
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      assert.deepEqual(godsEyeViewPlugin.getProjectState?.(), {
+        earthquakes: true,
+        satellites: true,
+        // Real time, not the 60x the feeds used to hard-code: at 60x the ISS
+        // laps the planet in ninety seconds, which reads as an animation
+        // rather than as where the satellite is now.
+        speed: 1,
+      });
+
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 4; i++) await flush();
+      assert.equal(globe.viewer.clock.multiplier, 1);
+
+      // The panel's select re-times the live globe without reloading a feed.
+      const select = globe.panel.querySelector("select") as HTMLSelectElement;
+      assert.deepEqual(
+        [...select.options].map((option) => option.value),
+        ["1", "10", "60", "600"],
+      );
+      assert.equal(select.value, "1");
+      const afterActivate = net.calls();
+      // linkedom's `select.value` is read-only, so pick the way a user does:
+      // clear the current choice, then select the new one.
+      for (const option of select.options) if (option.selected) option.selected = false;
+      const sixty = [...select.options].find((option) => option.value === "60");
+      assert.ok(sixty);
+      sixty.selected = true;
+      select.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      // The panel re-renders on a setting change; the fresh select shows it.
+      assert.equal((globe.panel.querySelector("select") as HTMLSelectElement).value, "60");
+      assert.equal(globe.viewer.clock.multiplier, 60);
+      assert.equal(net.calls(), afterActivate, "changing speed refetches nothing");
+      assert.equal(godsEyeViewPlugin.getProjectState?.().speed, 60);
+
+      // A project carrying a speed re-times a globe that is already running;
+      // a hand-edited one carrying nonsense falls back to real time.
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: true,
+        satellites: true,
+        speed: 10,
+      });
+      assert.equal(globe.viewer.clock.multiplier, 10);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, { speed: 7 });
+      assert.equal(globe.viewer.clock.multiplier, 1);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      net.restore();
+    }
+  });
+});
 
 describe("God's Eye View reattach", () => {
   it("re-binds on an engine swap and no-ops on a project load", async () => {

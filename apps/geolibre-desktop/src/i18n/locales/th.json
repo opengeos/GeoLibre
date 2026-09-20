@@ -2321,7 +2321,10 @@
       "loading": "กำลังอัปเดต…",
       "updateFailed": "อัปเดตไม่สำเร็จ",
       "never": "ไม่เคย",
-      "lastUpdated": "อัปเดตล่าสุด: {{time}}"
+      "lastUpdated": "อัปเดตล่าสุด: {{time}}",
+      "speed": "ความเร็ว",
+      "speedRealTime": "เวลาจริง (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

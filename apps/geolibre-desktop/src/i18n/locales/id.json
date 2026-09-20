@@ -2321,7 +2321,10 @@
       "loading": "Memperbarui…",
       "updateFailed": "Pembaruan gagal",
       "never": "Belum pernah",
-      "lastUpdated": "Terakhir diperbarui: {{time}}"
+      "lastUpdated": "Terakhir diperbarui: {{time}}",
+      "speed": "Kecepatan",
+      "speedRealTime": "Waktu nyata (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {

@@ -2369,7 +2369,10 @@
       "loading": "अपडेट हो रहा है…",
       "updateFailed": "अपडेट विफल",
       "never": "कभी नहीं",
-      "lastUpdated": "अंतिम अपडेट: {{time}}"
+      "lastUpdated": "अंतिम अपडेट: {{time}}",
+      "speed": "गति",
+      "speedRealTime": "वास्तविक समय (1×)",
+      "speedMultiple": "{{factor}}×"
     }
   },
   "toolbar": {
