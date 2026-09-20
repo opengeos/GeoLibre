@@ -11,14 +11,22 @@ import { createEmptyProject, parseProject, serializeProject } from "../packages/
 import { DEFAULT_PROJECT_PREFERENCES } from "../packages/core/src/types";
 
 describe("Cesium basemap choices", () => {
-  it("defaults new and legacy projects to Bing Aerial when Ion is available", () => {
+  it("gives new projects Bing Aerial and leaves legacy projects on their own basemap", () => {
+    // A new project carries the default and saves it explicitly.
     assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
+    const fresh = JSON.parse(serializeProject(createEmptyProject()));
+    assert.equal(fresh.preferences.map.cesiumBasemap, "bing-aerial");
+    assert.equal(parseProject(JSON.stringify(fresh)).preferences?.map.cesiumBasemap, "bing-aerial");
+
+    // A project written before the field existed chose nothing, so loading it
+    // must not repaint its globe — the policy `mapboxStyleUrl` documents four
+    // lines above the same fallback.
     const legacy = JSON.parse(serializeProject(createEmptyProject()));
     delete legacy.preferences.map.cesiumBasemap;
-    assert.equal(
-      parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap,
-      "bing-aerial",
-    );
+    assert.equal(parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap, "project");
+
+    // With no stored choice at all, the render-time gate still prefers Ion
+    // imagery when a token is configured.
     assert.equal(availableCesiumBasemap(undefined, true), "bing-aerial");
     assert.equal(availableCesiumBasemap(undefined, false), "project");
   });
@@ -157,9 +165,8 @@ describe("Cesium basemap choices", () => {
     invalid.preferences.map.cesiumBasemap = "unrecognized-provider";
     assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
     delete invalid.preferences.map.cesiumBasemap;
-    assert.equal(
-      parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap,
-      "bing-aerial",
-    );
+    // No stored choice stays no stored choice, rather than acquiring the
+    // new-project default on load.
+    assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
   });
 });

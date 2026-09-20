@@ -1241,9 +1241,13 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         normalizeString((map as Partial<ProjectPreferences["map"]>).mapboxStyleUrl) || undefined,
       arcgisBasemap:
         normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
+      // Missing means follow the saved project basemap, as it does for
+      // `mapboxStyleUrl` above: a project written before this field existed
+      // chose nothing, and reapplying the new-project default would repaint
+      // its globe with Ion imagery the next time it opened. New projects get
+      // the default from `DEFAULT_PROJECT_PREFERENCES` and save it explicitly.
       cesiumBasemap: normalizeCesiumBasemap(
-        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap ??
-          DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap,
+        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap,
       ),
       // Older projects omit this field and continue to open with terrain off.
       terrainEnabled: normalizeBoolean(
