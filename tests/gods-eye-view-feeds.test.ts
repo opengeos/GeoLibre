@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildCelestrakRequestUrls,
+  fetchCelestrakTleText,
   buildCelestrakTleUrl,
   buildUsgsFeedUrl,
   czmlPacketsToAttributeGeoJson,
@@ -156,6 +157,35 @@ describe("God's Eye View feed helpers", () => {
     assert.ok(Number.isFinite(position.latitude));
     assert.ok(Math.abs(position.latitude) <= records[0].inclinationDeg + 0.1);
     assert.ok(position.altitude > 300_000 && position.altitude < 600_000);
+  });
+
+  it("reads CelesTrak directly when the proxy hop throws, not only when it 4xxs", async () => {
+    const urls = buildCelestrakRequestUrls("stations");
+    assert.ok(urls.length > 1, "there is a fallback URL to fall through to");
+    const tried: string[] = [];
+    const mockFetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      tried.push(url);
+      // The edge worker unreachable: a thrown error, not an HTTP status.
+      if (url === urls[0]) throw new TypeError("Failed to fetch");
+      return new Response(ISS_TLE, { status: 200 });
+    }) as typeof fetch;
+
+    const text = await fetchCelestrakTleText("stations", { fetch: mockFetch });
+    assert.match(text, /ISS \(ZARYA\)/);
+    assert.deepEqual(tried, urls.slice(0, 2));
+  });
+
+  it("lets an abort end the CelesTrak read rather than trying the next hop", async () => {
+    const controller = new AbortController();
+    const mockFetch = (async () => {
+      controller.abort();
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }) as typeof fetch;
+    await assert.rejects(
+      fetchCelestrakTleText("stations", { fetch: mockFetch, signal: controller.signal }),
+      /abort/i,
+    );
   });
 
   it("propagates with SGP4, so the orbit plane drifts as the elements imply", () => {

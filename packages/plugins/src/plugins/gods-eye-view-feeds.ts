@@ -150,9 +150,17 @@ export async function fetchCelestrakTleText(
   const fetcher = options.fetch ?? fetch;
   let lastStatus: number | null = null;
   for (const url of buildCelestrakRequestUrls(group)) {
-    const response = await fetcher(url, { signal: options.signal });
-    if (response.ok) return response.text();
-    lastStatus = response.status;
+    try {
+      const response = await fetcher(url, { signal: options.signal });
+      if (response.ok) return response.text();
+      lastStatus = response.status;
+    } catch (error) {
+      // A hop that throws — the edge worker unreachable, DNS, CORS — is the
+      // case the direct read exists to cover, so it must not end the loop.
+      // An abort is the caller's decision and stays fatal.
+      if (options.signal?.aborted) throw error;
+      lastStatus = null;
+    }
   }
   throw new Error(`CelesTrak feed failed (${lastStatus ?? "unavailable"})`);
 }
