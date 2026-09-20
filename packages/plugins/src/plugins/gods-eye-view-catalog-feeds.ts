@@ -357,6 +357,7 @@ export function osmInfrastructureToCzml(collection: FeatureCollection): GodsEyeV
           : `Infrastructure ${index + 1}`;
     const id = `osm-infrastructure-${String(feature.id ?? index)}`;
     if (feature.geometry?.type === "Point") {
+      if (!validPosition(feature.geometry.coordinates)) continue;
       packets.push({
         id,
         name,

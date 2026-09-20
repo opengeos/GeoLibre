@@ -369,6 +369,19 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
 
+/** Treat project attribution as text before handing it to Cesium's HTML credit sink. */
+function escapeCreditHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    return {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[character]!;
+  });
+}
+
 /**
  * Whether credential-bearing request headers may be sent to this URL.
  *
@@ -2844,7 +2857,7 @@ export class CesiumLayerSync {
       entry.added = true;
       const attribution = str(entry.layer.source.attribution);
       if (attribution && Cesium.Credit && viewer.creditDisplay?.addStaticCredit) {
-        entry.credit = new Cesium.Credit(attribution, false);
+        entry.credit = new Cesium.Credit(escapeCreditHtml(attribution), false);
         viewer.creditDisplay.addStaticCredit(entry.credit);
       }
       // Only a document that reached the scene may drive the clock.

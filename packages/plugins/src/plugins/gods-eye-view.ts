@@ -203,29 +203,32 @@ function translate(
   return appRef?.translate?.(key, fallback, params) ?? fallback;
 }
 
+const FEED_FLAGS: Record<FeedId, string> = {
+  earthquakes: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
+  satellites: GODS_EYE_VIEW_SATELLITES_FLAG,
+  radio: GODS_EYE_VIEW_RADIO_FLAG,
+  datacenters: GODS_EYE_VIEW_DATACENTERS_FLAG,
+  dams: GODS_EYE_VIEW_DAMS_FLAG,
+  cables: GODS_EYE_VIEW_CABLES_FLAG,
+  osmInfrastructure: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
+};
+
 function feedFlag(feed: FeedId): string {
-  return {
-    earthquakes: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
-    satellites: GODS_EYE_VIEW_SATELLITES_FLAG,
-    radio: GODS_EYE_VIEW_RADIO_FLAG,
-    datacenters: GODS_EYE_VIEW_DATACENTERS_FLAG,
-    dams: GODS_EYE_VIEW_DAMS_FLAG,
-    cables: GODS_EYE_VIEW_CABLES_FLAG,
-    osmInfrastructure: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
-  }[feed];
+  return FEED_FLAGS[feed];
 }
 
+const FEED_LABELS: Record<FeedId, [string, string]> = {
+  earthquakes: ["panel.godsEyeView.earthquakes", "Earthquakes"],
+  satellites: ["panel.godsEyeView.satellites", "Satellites"],
+  radio: ["panel.godsEyeView.radio", "Radio Stations"],
+  datacenters: ["panel.godsEyeView.datacenters", "Datacenters"],
+  dams: ["panel.godsEyeView.dams", "Dams"],
+  cables: ["panel.godsEyeView.cables", "Submarine Cables"],
+  osmInfrastructure: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
+};
+
 function feedName(feed: FeedId): string {
-  const labels: Record<FeedId, [string, string]> = {
-    earthquakes: ["panel.godsEyeView.earthquakes", "Earthquakes"],
-    satellites: ["panel.godsEyeView.satellites", "Satellites"],
-    radio: ["panel.godsEyeView.radio", "Radio Stations"],
-    datacenters: ["panel.godsEyeView.datacenters", "Datacenters"],
-    dams: ["panel.godsEyeView.dams", "Dams"],
-    cables: ["panel.godsEyeView.cables", "Submarine Cables"],
-    osmInfrastructure: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
-  };
-  return translate(...labels[feed]);
+  return translate(...FEED_LABELS[feed]);
 }
 
 const FEED_ATTRIBUTION: Record<FeedId, string> = {

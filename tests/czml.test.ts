@@ -264,13 +264,16 @@ describe("CesiumLayerSync with CZML", () => {
       id: "czml-credit",
       name: "Attributed",
       data: [{ id: "document", version: "1.0" }],
-      attribution: "© Example contributors",
+      attribution: '© Example contributors <img src=x onerror="alert(1)"> & partners',
     });
     sync.sync([layer]);
     for (let i = 0; i < 4; i++) await flush();
 
     assert.equal(calls.creditsAdded.length, 1);
-    assert.equal((calls.creditsAdded[0] as { html: string }).html, "© Example contributors");
+    assert.equal(
+      (calls.creditsAdded[0] as { html: string }).html,
+      "© Example contributors &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; partners",
+    );
     sync.sync([]);
     assert.deepEqual(calls.creditsRemoved, calls.creditsAdded);
     sync.destroy();

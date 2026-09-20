@@ -153,6 +153,12 @@ describe("God's Eye View catalog feeds", () => {
           },
           properties: { name: "Pipeline", man_made: "pipeline" },
         },
+        {
+          type: "Feature",
+          id: "node/bad",
+          geometry: { type: "Point", coordinates: [999, 20] },
+          properties: { name: "Invalid tower" },
+        },
       ],
     };
     const result = osmInfrastructureToCzml(collection);
