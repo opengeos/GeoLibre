@@ -937,6 +937,22 @@ export {
   type UsgsFeatureCollection,
 } from "./plugins/gods-eye-view-feeds";
 export {
+  DATACENTERS_URL,
+  DAMS_URL,
+  RADIO_BROWSER_STATIONS_URL,
+  SUBMARINE_CABLES_URL,
+  fetchDamsCzml,
+  fetchDatacentersCzml,
+  fetchOsmInfrastructureCzml,
+  fetchRadioBrowserCzml,
+  fetchSubmarineCablesCzml,
+  infrastructureQueryBounds,
+  osmInfrastructureToCzml,
+  radioBrowserStationsToCzml,
+  submarineCablesToCzml,
+  type GodsEyeViewFeedPayload,
+} from "./plugins/gods-eye-view-catalog-feeds";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   TIME_SLIDER_SOURCE_KIND,

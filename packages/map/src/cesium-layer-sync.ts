@@ -73,6 +73,7 @@ import type {
   Cesium3DTileset,
   CesiumWidget,
   Color,
+  Credit,
   DataSource,
   DistanceDisplayCondition,
   Entity,
@@ -259,6 +260,8 @@ interface LayerEntry {
   fieldsListener?: () => void;
   documentCleanup?: () => void;
   overlayContainer?: HTMLElement;
+  /** Static attribution registered for this layer while it is in the scene. */
+  credit?: Credit;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
   /**
@@ -866,6 +869,7 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         // The raw store value, not `czmlSource().data`: that wraps a bare
         // packet in a fresh array per call, which would read as a change.
         prev.source.czmlData !== next.source.czmlData ||
+        str(prev.source.attribution) !== str(next.source.attribution) ||
         str(prev.sourcePath) !== str(next.sourcePath)
       );
   }
@@ -2838,6 +2842,11 @@ export class CesiumLayerSync {
         return;
       }
       entry.added = true;
+      const attribution = str(entry.layer.source.attribution);
+      if (attribution && Cesium.Credit && viewer.creditDisplay?.addStaticCredit) {
+        entry.credit = new Cesium.Credit(attribution, false);
+        viewer.creditDisplay.addStaticCredit(entry.credit);
+      }
       // Only a document that reached the scene may drive the clock.
       this.electCzmlClockOwner();
       // The entities exist only now. A selection made — or merely re-applied by
@@ -3536,6 +3545,10 @@ export class CesiumLayerSync {
     entry.documentCleanup = undefined;
     entry.overlayContainer?.remove();
     entry.overlayContainer = undefined;
+    if (entry.credit) {
+      this.viewer.creditDisplay?.removeStaticCredit?.(entry.credit);
+      entry.credit = undefined;
+    }
     entry.fieldsListener?.();
     entry.fieldsListener = undefined;
     this.storyOpacities.delete(entry.layer.id);

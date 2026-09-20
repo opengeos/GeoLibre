@@ -29,9 +29,20 @@ The built-in plugins are:
 | **Layer Swipe** | A swipe bar comparing two layers. |
 | **DGGS** | A submenu of discrete global grid overlays — H3, S2, A5, DGGRID, DGGAL, OLC, Geohash, and Tilecode — each rendering its grid over the current view, identifying a cell, and exporting the grid or selection. |
 | **Flight Simulator** | Fly over terrain and 3D layers with keyboard controls. |
+| **God's Eye View** | Explore live earthquakes, satellite orbits, radio stations, datacenters, dams, submarine cables, and current-view OpenStreetMap infrastructure on the Cesium globe. Feed toggles and clock speed are saved with the project. |
 | **SamGeo** | Segment imagery into vector features. See [AI Segmentation](segmentation.md). |
 
 Most entries open a submenu that **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. A few behave differently: **Flight Simulator** and **SamGeo** toggle directly with no submenu, and **Web Services** and **DGGS** open a list of their sub-plugins instead.
+
+God's Eye View is inspired by the MIT-licensed
+[bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view),
+including its public-feed selection and normalization approach. Each enabled
+layer adds its provider credit to Cesium's **Data attribution** control. The
+datacenter, dam, and current-view infrastructure feeds use OpenStreetMap data
+under ODbL; Radio Browser is public domain; USGS earthquake data is U.S. public
+domain; CelesTrak requests citation; and the live TeleGeography cable feed is
+read from GeoLibre's Source Cooperative mirror under CC BY-NC-SA 3.0,
+including its NonCommercial restriction.
 
 ![A plugin submenu, with Activate above the four map-corner positions](https://assets.geolibre.app/images/geolibre-plugin-position-menu.webp)
 

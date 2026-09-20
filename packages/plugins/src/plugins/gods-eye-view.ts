@@ -1,4 +1,4 @@
-import { createCzmlLayer, useAppStore, type CzmlPacket } from "@geolibre/core";
+import { createCzmlLayer, useAppStore } from "@geolibre/core";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
@@ -8,6 +8,14 @@ import {
   fetchUsgsEarthquakeCzml,
   type CzmlTimeWindow,
 } from "./gods-eye-view-feeds";
+import {
+  fetchDamsCzml,
+  fetchDatacentersCzml,
+  fetchOsmInfrastructureCzml,
+  fetchRadioBrowserCzml,
+  fetchSubmarineCablesCzml,
+  type GodsEyeViewFeedPayload,
+} from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
@@ -21,11 +29,24 @@ const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
   // CelesTrak asks clients not to retrieve the same data more often than every
   // two hours. Six catalog requests every ten minutes would be needlessly rude.
   satellites: 2 * 60 * 60_000,
+  radio: 60 * 60_000,
+  datacenters: 24 * 60 * 60_000,
+  dams: 24 * 60 * 60_000,
+  cables: 24 * 60 * 60_000,
+  osmInfrastructure: 60 * 60_000,
 };
 const FEED_TIMEOUT_MS = 20_000;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
-const FEED_IDS = ["earthquakes", "satellites"] as const;
+const FEED_IDS = [
+  "earthquakes",
+  "satellites",
+  "radio",
+  "datacenters",
+  "dams",
+  "cables",
+  "osmInfrastructure",
+] as const;
 
 type FeedId = (typeof FEED_IDS)[number];
 
@@ -44,6 +65,11 @@ const DEFAULT_SPEED = 1;
 interface GodsEyeViewProjectState {
   earthquakes: boolean;
   satellites: boolean;
+  radio: boolean;
+  datacenters: boolean;
+  dams: boolean;
+  cables: boolean;
+  osmInfrastructure: boolean;
   /** Add the current Starlink shell as lightweight points. */
   dense: boolean;
   /** One of {@link SPEED_OPTIONS}. */
@@ -79,6 +105,51 @@ const feeds: Record<FeedId, FeedState> = {
     request: null,
     generation: 0,
   },
+  radio: {
+    enabled: false,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+  datacenters: {
+    enabled: false,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+  dams: {
+    enabled: false,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+  cables: {
+    enabled: false,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
+  osmInfrastructure: {
+    enabled: false,
+    loading: false,
+    lastUpdated: null,
+    failed: false,
+    layerId: null,
+    request: null,
+    generation: 0,
+  },
 };
 
 /**
@@ -89,6 +160,11 @@ const feeds: Record<FeedId, FeedState> = {
 let savedState: GodsEyeViewProjectState = {
   earthquakes: true,
   satellites: true,
+  radio: false,
+  datacenters: false,
+  dams: false,
+  cables: false,
+  osmInfrastructure: false,
   dense: false,
   speed: DEFAULT_SPEED,
 };
@@ -122,14 +198,39 @@ function translate(
 }
 
 function feedFlag(feed: FeedId): string {
-  return feed === "earthquakes" ? GODS_EYE_VIEW_EARTHQUAKES_FLAG : GODS_EYE_VIEW_SATELLITES_FLAG;
+  return {
+    earthquakes: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
+    satellites: GODS_EYE_VIEW_SATELLITES_FLAG,
+    radio: "godsEyeViewRadio",
+    datacenters: "godsEyeViewDatacenters",
+    dams: "godsEyeViewDams",
+    cables: "godsEyeViewCables",
+    osmInfrastructure: "godsEyeViewOsmInfrastructure",
+  }[feed];
 }
 
 function feedName(feed: FeedId): string {
-  return feed === "earthquakes"
-    ? translate("panel.godsEyeView.earthquakes", "Earthquakes")
-    : translate("panel.godsEyeView.satellites", "Satellites");
+  const labels: Record<FeedId, [string, string]> = {
+    earthquakes: ["panel.godsEyeView.earthquakes", "Earthquakes"],
+    satellites: ["panel.godsEyeView.satellites", "Satellites"],
+    radio: ["panel.godsEyeView.radio", "Radio Stations"],
+    datacenters: ["panel.godsEyeView.datacenters", "Datacenters"],
+    dams: ["panel.godsEyeView.dams", "Dams"],
+    cables: ["panel.godsEyeView.cables", "Submarine Cables"],
+    osmInfrastructure: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
+  };
+  return translate(...labels[feed]);
 }
+
+const FEED_ATTRIBUTION: Record<FeedId, string> = {
+  earthquakes: "Earthquakes: Data courtesy of the U.S. Geological Survey",
+  satellites: "Satellites: CelesTrak (celestrak.org), Dr. T.S. Kelso",
+  radio: "Radio stations: Radio Browser (radio-browser.info), public domain",
+  datacenters: "Datacenters: © OpenStreetMap contributors, ODbL 1.0",
+  dams: "Dams: © OpenStreetMap contributors, ODbL 1.0; Open Infrastructure Map",
+  cables: "Submarine cables: © TeleGeography, submarinecablemap.com, CC BY-NC-SA 3.0",
+  osmInfrastructure: "OSM infrastructure: © OpenStreetMap contributors, ODbL 1.0",
+};
 
 function timeWindow(): CzmlTimeWindow {
   const start = new Date();
@@ -241,7 +342,7 @@ function syncDenseCatalog(): void {
   void denseCatalog.enable(cesiumRef, coreSatelliteCatalogNumbers(), layer.id);
 }
 
-function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void {
+function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: Date): void {
   const store = useAppStore.getState();
   // Fall through to the flag search when the remembered id misses: a project
   // switch replaces `store.layers` wholesale while the plugin stays active, and
@@ -253,12 +354,13 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
   const layer = createCzmlLayer({
     id: existing?.id,
     name: feedName(feed),
-    data: packets,
+    data: payload.packets,
+    attribution: FEED_ATTRIBUTION[feed],
   });
   // The renderer consumes CZML, while the existing Attribute Table consumes a
   // complete GeoJSON row model. Moving entities have no single geometry, but
   // their packet ids and properties still form a useful, queryable table.
-  layer.geojson = czmlPacketsToAttributeGeoJson(packets);
+  layer.geojson = payload.attributes;
   // Only the ISS carries a standing label, so hovering is how every other
   // satellite (and every quake) says what it is without a click.
   layer.popup = { ...layer.popup, hover: true };
@@ -272,6 +374,7 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
     // positions that are stale by the next refresh and push the snapshot
     // towards its size ceiling.
     transientGeojson: true,
+    transientCzml: true,
   };
   if (existing) {
     // Patch only what the feed owns. `visible`, `opacity` and `style` belong to
@@ -317,22 +420,40 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
   try {
     const window = timeWindow();
-    const packets =
-      feed === "earthquakes"
-        ? await fetchUsgsEarthquakeCzml(window, { signal: controller.signal })
-        : await fetchCelestrakSatelliteCatalogCzml({
-            ...window,
-            signal: controller.signal,
-            // Five-minute samples interpolate smoothly while keeping the core
-            // CZML layer below autosave's 10 MiB snapshot limit. A selected
-            // orbit still uses the full TLE with SGP4, independent of this.
-            stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
-            maxSatellites: 2_000,
-          });
+    let payload: GodsEyeViewFeedPayload;
+    if (feed === "earthquakes") {
+      const packets = await fetchUsgsEarthquakeCzml(window, {
+        signal: controller.signal,
+      });
+      payload = { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
+    } else if (feed === "satellites") {
+      const packets = await fetchCelestrakSatelliteCatalogCzml({
+        ...window,
+        signal: controller.signal,
+        // Five-minute samples interpolate smoothly while keeping the core
+        // CZML layer below autosave's 10 MiB snapshot limit. A selected
+        // orbit still uses the full TLE with SGP4, independent of this.
+        stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
+        maxSatellites: 2_000,
+      });
+      payload = { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
+    } else if (feed === "radio") {
+      payload = await fetchRadioBrowserCzml({ signal: controller.signal });
+    } else if (feed === "datacenters") {
+      payload = await fetchDatacentersCzml({ signal: controller.signal });
+    } else if (feed === "dams") {
+      payload = await fetchDamsCzml({ signal: controller.signal });
+    } else if (feed === "cables") {
+      payload = await fetchSubmarineCablesCzml({ signal: controller.signal });
+    } else {
+      payload = await fetchOsmInfrastructureCzml(appRef?.getViewBounds?.() ?? null, {
+        signal: controller.signal,
+      });
+    }
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
-    upsertLayer(feed, packets, updatedAt);
-    applyFeedClockWindow(window);
+    upsertLayer(feed, payload, updatedAt);
+    if (feed === "earthquakes" || feed === "satellites") applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
     if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
@@ -411,6 +532,12 @@ function normalizeProjectState(value: unknown): GodsEyeViewProjectState {
   return {
     earthquakes: typeof record.earthquakes === "boolean" ? record.earthquakes : true,
     satellites: typeof record.satellites === "boolean" ? record.satellites : true,
+    radio: typeof record.radio === "boolean" ? record.radio : false,
+    datacenters: typeof record.datacenters === "boolean" ? record.datacenters : false,
+    dams: typeof record.dams === "boolean" ? record.dams : false,
+    cables: typeof record.cables === "boolean" ? record.cables : false,
+    osmInfrastructure:
+      typeof record.osmInfrastructure === "boolean" ? record.osmInfrastructure : false,
     dense: typeof record.dense === "boolean" ? record.dense : false,
     // A hand-edited project can carry anything; only an offered step is honoured.
     speed: SPEED_OPTIONS.find((option) => option === record.speed) ?? DEFAULT_SPEED,
@@ -687,7 +814,7 @@ function deactivate(): void {
 export const godsEyeViewPlugin: GeoLibrePlugin = {
   id: GODS_EYE_VIEW_PLUGIN_ID,
   name: "God's Eye View",
-  version: "0.1.0",
+  version: "0.2.0",
   activeByDefault: false,
   // Every 2D engine, not just MapLibre: `engines` decides whether the Plugins
   // menu entry can be toggled at all, so leaving Mapbox and ArcGIS out greyed

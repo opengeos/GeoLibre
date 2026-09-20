@@ -388,7 +388,17 @@ describe("project parsing", () => {
   it("strips feed-rebuilt attribute rows marked as transient", () => {
     const layer = {
       ...geojsonLayer({ id: "moving-feed" }),
-      metadata: { transientGeojson: true, feed: "satellites" },
+      type: "czml" as const,
+      source: {
+        type: "czml" as const,
+        czmlData: [{ id: "document", version: "1.0" }, { id: "satellite-1" }],
+        attribution: "Example provider",
+      },
+      metadata: {
+        transientGeojson: true,
+        transientCzml: true,
+        feed: "satellites",
+      },
     } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
     const project = projectFromStore({
       projectName: "Moving feed",
@@ -402,6 +412,8 @@ describe("project parsing", () => {
     });
 
     assert.equal(project.layers[0].geojson, undefined);
+    assert.equal(project.layers[0].source.czmlData, undefined);
+    assert.equal(project.layers[0].source.attribution, "Example provider");
     assert.equal(project.layers[0].metadata.feed, "satellites");
   });
 

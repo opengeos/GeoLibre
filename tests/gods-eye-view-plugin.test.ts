@@ -371,6 +371,7 @@ describe("God's Eye View feed refresh", () => {
       // positions and push the snapshot toward its ceiling.
       for (const layer of useAppStore.getState().layers) {
         assert.equal(layer.metadata.transientGeojson, true, layer.name);
+        assert.equal(layer.metadata.transientCzml, true, layer.name);
         assert.ok(layer.geojson, "the live layer still carries its table");
       }
 
@@ -423,6 +424,11 @@ describe("God's Eye View clock speed", () => {
       assert.deepEqual(godsEyeViewPlugin.getProjectState?.(), {
         earthquakes: true,
         satellites: true,
+        radio: false,
+        datacenters: false,
+        dams: false,
+        cables: false,
+        osmInfrastructure: false,
         dense: false,
         // Real time, not the 60x the feeds used to hard-code: at 60x the ISS
         // laps the planet in ninety seconds, which reads as an animation

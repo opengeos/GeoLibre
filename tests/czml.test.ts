@@ -84,6 +84,15 @@ describe("czml layer builder & parser", () => {
     assert.deepEqual(source.data, packets);
   });
 
+  it("keeps source attribution on a CZML layer", () => {
+    const layer = createCzmlLayer({
+      name: "Attributed feed",
+      data: [{ id: "document", version: "1.0" }],
+      attribution: "© Example contributors",
+    });
+    assert.equal(layer.source.attribution, "© Example contributors");
+  });
+
   it("provides valid quick picks with document packets and timestamps", () => {
     assert.ok(CZML_QUICK_PICKS.length >= 2);
     for (const pick of CZML_QUICK_PICKS) {
@@ -119,6 +128,8 @@ function makeGlobe() {
     dataSourcesRemoved: [] as unknown[],
     primitivesAdded: [] as unknown[],
     primitivesRemoved: [] as unknown[],
+    creditsAdded: [] as unknown[],
+    creditsRemoved: [] as unknown[],
   };
 
   const Cesium = {
@@ -145,6 +156,12 @@ function makeGlobe() {
       addEventListener() {
         return () => {};
       }
+    },
+    Credit: class {
+      constructor(
+        public html: string,
+        public showOnScreen: boolean,
+      ) {}
     },
   };
 
@@ -184,6 +201,10 @@ function makeGlobe() {
       remove: (ds: unknown) => {
         calls.dataSourcesRemoved.push(ds);
       },
+    },
+    creditDisplay: {
+      addStaticCredit: (credit: unknown) => calls.creditsAdded.push(credit),
+      removeStaticCredit: (credit: unknown) => calls.creditsRemoved.push(credit),
     },
   };
 
@@ -233,6 +254,25 @@ describe("CesiumLayerSync with CZML", () => {
     for (let i = 0; i < 4; i++) await flush();
     assert.equal(calls.dataSourcesRemoved.length, 1);
     assert.equal(calls.dataSourcesRemoved[0], ds);
+    sync.destroy();
+  });
+
+  it("shows and removes a CZML source attribution with the layer", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-credit",
+      name: "Attributed",
+      data: [{ id: "document", version: "1.0" }],
+      attribution: "© Example contributors",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    assert.equal(calls.creditsAdded.length, 1);
+    assert.equal((calls.creditsAdded[0] as { html: string }).html, "© Example contributors");
+    sync.sync([]);
+    assert.deepEqual(calls.creditsRemoved, calls.creditsAdded);
     sync.destroy();
   });
 

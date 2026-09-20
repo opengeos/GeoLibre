@@ -1750,6 +1750,14 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  // Live CZML feeds likewise rebuild their renderer payload on activation.
+  // Persisting thousands of packets in every autosave duplicates the feed,
+  // stores stale positions, and can exceed the history snapshot limit.
+  if (layer.source.czmlData !== undefined && layer.metadata.transientCzml === true) {
+    const { czmlData: _czmlData, ...source } = layer.source;
+    layer = { ...layer, source };
+  }
+
   // External native layers that restore their features from a source URL keep
   // a `geojson` copy on the map only for the attribute table; it is redundant
   // in a saved project and would only bloat it, so strip it. Layers without a

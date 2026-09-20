@@ -182,6 +182,8 @@ export interface CzmlLayerOptions {
   url?: string;
   /** Local path when loaded from disk. */
   sourcePath?: string;
+  /** Credit shown in the globe's attribution control while the layer is present. */
+  attribution?: string;
 }
 
 /**
@@ -204,6 +206,7 @@ export function createCzmlLayer(options: CzmlLayerOptions): GeoLibreLayer {
       ...(data !== undefined ? { czmlData: data } : {}),
       ...(url ? { url } : {}),
       ...(sourcePath ? { sourcePath } : {}),
+      ...(options.attribution?.trim() ? { attribution: options.attribution.trim() } : {}),
     },
     visible: true,
     opacity: 1,
