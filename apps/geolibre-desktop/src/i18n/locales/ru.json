@@ -8204,7 +8204,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "В этом виде ArcGIS используйте URL tileset.json для 3D Tiles. Для тайлов Google Photorealistic и I3S нужен другой движок отрисовки."
+      "arcgisSourceUnsupported": "В этом виде ArcGIS используйте URL tileset.json для 3D Tiles. Для тайлов Google Photorealistic и I3S нужен другой движок отрисовки.",
+      "globeGoogleKeyRequired": "Для загрузки Google Photorealistic 3D Tiles на глобусе нужен ключ API Google Maps в настройках."
     },
     "geolibre-osm-downloader": {
       "title": "Загрузчик OSM",

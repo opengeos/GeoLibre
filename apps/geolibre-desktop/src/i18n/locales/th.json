@@ -7943,7 +7943,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น"
+      "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น",
+      "globeGoogleKeyRequired": "การโหลด Google Photorealistic 3D Tiles บนลูกโลกต้องใช้คีย์ API ของ Google Maps ในการตั้งค่า"
     },
     "geolibre-osm-downloader": {
       "title": "ตัวดาวน์โหลด OSM",

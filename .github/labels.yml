@@ -45,6 +45,14 @@
 - name: wontfix
   color: "ffffff"
   description: This will not be worked on
+# The two names below are load-bearing: a workflow `if:` matches on the literal
+# string, so renaming one here without updating its workflow silently disables
+# the trigger — the condition just stops matching, with no error.
+#   full-e2e       -> .github/workflows/e2e-full.yml
+#   claude-review  -> .github/workflows/claude-code-review.yml
 - name: full-e2e
   color: "1d76db"
   description: Run the full Playwright feature suite on this pull request
+- name: claude-review
+  color: "5319e7"
+  description: Trigger a Claude code review on this pull request (opt-in for first-time contributors)

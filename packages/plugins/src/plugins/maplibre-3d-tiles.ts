@@ -1,6 +1,7 @@
 import { restoreMapboxTiles, isMapboxTilesLayer, flyToDeckTilesLocation } from "./mapbox-3d-tiles";
 import {
   DEFAULT_LAYER_STYLE,
+  getGoogleMapsApiKey,
   GOOGLE_MAPS_API_KEY_HEADER,
   googleMapsApiKeyHeaderValue,
   isGooglePhotorealisticTilesetUrl,
@@ -31,6 +32,7 @@ import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-over
 import {
   addArcgisI3sTilesLayer,
   arcgisI3sSceneLayerName,
+  createArcgisI3sStoreLayer,
   isArcgisI3sSceneLayerUrl,
   restoreArcgisI3sTilesLayers,
   THREE_D_TILES_DECK_LOAD_OPTIONS,
@@ -171,6 +173,11 @@ export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   const renderer = app.getMapRenderer?.() ?? "";
+  // The globe loads every 3D Tiles record from the store on its own, tileset,
+  // Google and I3S alike, so there is nothing to bind to a renderer here, and
+  // the control's facade map has neither the style layers the MapLibre restore
+  // queries nor the deck overlay the Google/I3S restores need (issue #2505).
+  if (renderer === "cesium") return;
   if (renderer === "arcgis") {
     if (useAppStore.getState().layers.some(isMapboxTilesLayer))
       void restoreMapboxTiles(app).catch(console.error);
@@ -298,6 +305,12 @@ function createThreeDTilesControl(): ThreeDTilesControl {
       updateDeckTilesPanelList(control);
     }
 
+    // On the globe the control owns no tilesets: the store records are drawn by
+    // Cesium and its own layer sync applies their visibility and opacity, so
+    // forwarding those here would only rewrite the panel's form fields from a
+    // tileset the control never loaded (issue #2505).
+    if (isGlobeThreeDTilesRenderer()) return;
+
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
     for (const layer of previous.layers) {
@@ -327,7 +340,10 @@ function createThreeDTilesControl(): ThreeDTilesControl {
 }
 
 function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
-  if (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "")) return;
+  // On a store-driven renderer the control holds no tilesets of its own, so
+  // mirroring its state onto the store would remove the records that renderer
+  // is drawing from.
+  if (isStoreDrivenThreeDTilesRenderer()) return;
   const store = useAppStore.getState();
   const state = control.getState();
   const tilesetIds = new Set(state.tilesets.map((tileset) => tileset.id));
@@ -359,7 +375,7 @@ function hydrateThreeDTilesControlFromStore(
   control: ThreeDTilesControl,
   options: { replaceExisting?: boolean } = {},
 ): void {
-  if (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "")) return;
+  if (isStoreDrivenThreeDTilesRenderer()) return;
   const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
 
@@ -389,7 +405,7 @@ function restoreThreeDTilesMapLayer(
 ): void {
   const map = control.getMap();
   const controlLayers = getThreeDTilesControlLayers(control);
-  if (!map || !controlLayers) return;
+  if (!map || !controlLayers || !hasStyleLayerApi(map)) return;
 
   const id = layer.id;
   const layerId = restoredThreeDTilesLayerId(layer);
@@ -609,6 +625,35 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
   threeDTilesStoreSyncSuspended = 0;
 }
 
+/** The renderer the panel is currently attached to, `""` when unknown. */
+function activeThreeDTilesRenderer(): string {
+  return activeThreeDTilesApp?.getMapRenderer?.() ?? "";
+}
+
+/**
+ * Whether the globe is the active renderer.
+ *
+ * Cesium draws a 3D Tiles store record itself (`Cesium3DTileset` /
+ * `I3SDataProvider` in `cesium-layer-sync`), and the map the control is mounted
+ * on there is `CesiumMapFacade`, an object that answers the camera and
+ * container parts of the MapLibre API but has no style layers at all, so
+ * `getLayer` is missing outright and `addLayer` throws. Every path that would
+ * create, query or restore the control's own custom layer therefore has to stay
+ * out of the way and let the store record reach the globe (issue #2505).
+ */
+function isGlobeThreeDTilesRenderer(): boolean {
+  return activeThreeDTilesRenderer() === "cesium";
+}
+
+/**
+ * Renderers whose 3D Tiles layers live in the store rather than as a custom
+ * layer the `maplibre-gl-3d-tiles` control owns: Mapbox and ArcGIS draw them
+ * through deck.gl, Cesium through its own tileset primitives.
+ */
+function isStoreDrivenThreeDTilesRenderer(): boolean {
+  return ["mapbox", "arcgis", "cesium"].includes(activeThreeDTilesRenderer());
+}
+
 function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "3d-tiles" &&
@@ -695,21 +740,29 @@ function installGooglePhotorealisticTilesPanelHandlers(
       }
       applyDefaults();
       const url = urlInput?.value.trim() ?? "";
+      // The globe renders tileset.json, Google Photorealistic and I3S sources
+      // natively from the store record, so add it here rather than letting the
+      // library build a MapLibre custom layer: `loadTileset` calls `getLayer`
+      // and `addLayer` on the Cesium facade and throws before any of its state
+      // (and so any store record) exists (issue #2505). A blank URL still falls
+      // through to the library's own "Tileset URL is required." error.
+      if (url && isGlobeThreeDTilesRenderer()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        addThreeDTilesLayerForGlobe(control, panel, url);
+        return;
+      }
       if (
-        activeThreeDTilesApp?.getMapRenderer?.() === "arcgis" &&
+        activeThreeDTilesRenderer() === "arcgis" &&
         (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url))
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
-        if (status) {
-          status.dataset.status = "error";
-          const message =
-            "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.";
-          status.textContent =
-            activeThreeDTilesApp?.translate?.("plugin.3d-tiles.arcgisSourceUnsupported", message) ??
-            message;
-        }
+        setThreeDTilesPanelError(
+          panel,
+          "plugin.3d-tiles.arcgisSourceUnsupported",
+          "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.",
+        );
         return;
       }
       // A blank URL falls through to the library's own submit handler so its
@@ -717,38 +770,15 @@ function installGooglePhotorealisticTilesPanelHandlers(
       if (
         url &&
         activeThreeDTilesApp &&
-        ["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "") &&
+        ["mapbox", "arcgis"].includes(activeThreeDTilesRenderer()) &&
         !isGooglePhotorealisticTilesetUrl(url) &&
         !isArcgisI3sSceneLayerUrl(url)
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        const id = `tiles-${crypto.randomUUID()}`;
-        const layer = createThreeDTilesStoreLayer(
-          {
-            id,
-            layerId: `${id}-tiles`,
-            tilesetUrl: url,
-            layerName:
-              panel
-                .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
-                ?.value.trim() || "3D Tiles",
-            altitudeOffset: numberInputValue(
-              panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
-              0,
-            ),
-            opacity: control.getState().opacity,
-            visible:
-              panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
-                ?.checked ?? true,
-            requestHeaders: parseThreeDTilesRequestHeaders(
-              panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Request headers"]')
-                ?.value ?? "",
-            ),
-            status: "loading",
-          },
-          control.getState().opacity,
-        );
+        const tileset = threeDTilesItemStateFromPanel(control, panel, url, "loading");
+        const id = tileset.id;
+        const layer = createThreeDTilesStoreLayer(tileset, control.getState().opacity);
         useAppStore.getState().addLayer(layer);
         const flyTo =
           panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
@@ -774,6 +804,159 @@ function installGooglePhotorealisticTilesPanelHandlers(
   });
 
   applyDefaults();
+}
+
+/**
+ * One tileset entry built from what the user typed in the panel, for the
+ * renderers that add the store record themselves instead of letting the
+ * library's `loadTileset` do it.
+ *
+ * @param control - The panel's control, read for the opacity slider.
+ * @param panel - The panel DOM holding the form fields.
+ * @param url - The tileset URL, already trimmed and known non-empty.
+ * @param status - The status to record on the new entry.
+ * @param defaultName - Name to use when the Layer name field is blank.
+ * @returns The tileset entry, with a fresh id.
+ */
+function threeDTilesItemStateFromPanel(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+  url: string,
+  status: ThreeDTilesItemState["status"],
+  defaultName = "3D Tiles",
+): ThreeDTilesItemState {
+  const id = `tiles-${crypto.randomUUID()}`;
+  return {
+    id,
+    layerId: `${id}-tiles`,
+    tilesetUrl: url,
+    layerName:
+      panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]')?.value.trim() ||
+      defaultName,
+    altitudeOffset: numberInputValue(
+      panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
+      0,
+    ),
+    opacity: control.getState().opacity,
+    visible:
+      panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')?.checked ?? true,
+    requestHeaders: parseThreeDTilesRequestHeaders(
+      panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Request headers"]')?.value ??
+        "",
+    ),
+    status,
+  };
+}
+
+/**
+ * Shows a message in the panel's own status line, the way the library does for
+ * its load errors.
+ *
+ * @param panel - The panel DOM.
+ * @param key - Translation key for the message.
+ * @param message - English fallback, used when no catalog entry is found.
+ */
+function setThreeDTilesPanelError(panel: HTMLElement, key: string, message: string): void {
+  const status = panel.querySelector<HTMLElement>(".three-d-tiles-status");
+  if (!status) return;
+  status.dataset.status = "error";
+  status.textContent = activeThreeDTilesApp?.translate?.(key, message) ?? message;
+}
+
+/**
+ * The name to give a tileset whose Layer name field was left blank, matching
+ * what each flavour's own panel path would have named it.
+ *
+ * @param url - The tileset URL.
+ * @returns The default display name.
+ */
+function threeDTilesDefaultLayerName(url: string): string {
+  if (isArcgisI3sSceneLayerUrl(url))
+    return arcgisI3sSceneLayerName(url) || layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
+  if (isGooglePhotorealisticTilesetUrl(url)) return GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  return "3D Tiles";
+}
+
+/**
+ * The store record the globe should draw for a tileset added from the panel
+ * (issue #2505).
+ *
+ * The globe loads all three flavours natively, but each has to keep its own
+ * `sourceKind`: `cesium-layer-sync` routes a scene service to
+ * `I3SDataProvider` on `arcgis-i3s` alone, and the two 2D restore paths find a
+ * Google tileset by its Google kind, so a record filed under the generic kind
+ * would fail to render here or be skipped after a switch to a 2D renderer.
+ *
+ * @param tileset - The panel's fields, already read into a tileset entry.
+ * @returns The store layer for that URL's flavour.
+ */
+export function createThreeDTilesGlobeStoreLayer(tileset: ThreeDTilesItemState): GeoLibreLayer {
+  const url = tileset.tilesetUrl;
+  if (isArcgisI3sSceneLayerUrl(url)) {
+    return createArcgisI3sStoreLayer({
+      url,
+      name: tileset.layerName,
+      opacity: tileset.opacity,
+      visible: tileset.visible,
+    });
+  }
+  if (isGooglePhotorealisticTilesetUrl(url)) {
+    return createGooglePhotorealisticStoreLayer({
+      name: tileset.layerName,
+      altitudeOffset: tileset.altitudeOffset,
+      opacity: tileset.opacity,
+      visible: tileset.visible,
+      requestHeaders: tileset.requestHeaders,
+    });
+  }
+  return createThreeDTilesStoreLayer(tileset, tileset.opacity);
+}
+
+/**
+ * Adds a tileset to the store for the globe to draw (issue #2505).
+ *
+ * Cesium owns the tileset from here: `cesium-layer-sync` creates the
+ * `Cesium3DTileset` (or `I3SDataProvider`) for the record, applies the altitude
+ * offset and resolves the same request headers the 2D path resolves, and
+ * reports a load failure through the engine's readiness channel rather than
+ * back onto the record, so the entry is recorded as loaded rather than left
+ * reading "loading" forever. The panel's "Fly to tileset after load" has no
+ * effect here for the same reason the Cesium Ion source does not fit either:
+ * the extent is only known once the globe has the tileset, and the Layers
+ * panel's zoom-to reaches it from there.
+ *
+ * @param control - The panel's control, collapsed once the layer is added.
+ * @param panel - The panel DOM holding the form fields.
+ * @param url - The tileset URL, already trimmed and known non-empty.
+ */
+function addThreeDTilesLayerForGlobe(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+  url: string,
+): void {
+  // Google's tiles authenticate with a Maps API key, and the globe can only
+  // read it from runtime env: the key is deliberately stripped from the record,
+  // and the per-layer key the deck.gl path keeps in memory for a manually typed
+  // one is not reachable from `cesium-layer-sync`. Say so instead of adding a
+  // layer whose every tile request would 401.
+  if (isGooglePhotorealisticTilesetUrl(url) && !getGoogleMapsApiKey()) {
+    setThreeDTilesPanelError(
+      panel,
+      "plugin.3d-tiles.globeGoogleKeyRequired",
+      "Google Photorealistic 3D Tiles need a Google Maps API key in Settings to load on the globe.",
+    );
+    return;
+  }
+
+  const tileset = threeDTilesItemStateFromPanel(
+    control,
+    panel,
+    url,
+    "loaded",
+    threeDTilesDefaultLayerName(url),
+  );
+  useAppStore.getState().addLayer(createThreeDTilesGlobeStoreLayer(tileset));
+  control.collapse();
 }
 
 function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl): void {
@@ -1030,26 +1213,30 @@ function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
   }
 }
 
-function addGooglePhotorealisticTilesLayer(
-  app: GeoLibreAppAPI,
-  options: {
-    name: string;
-    altitudeOffset: number;
-    opacity: number;
-    visible: boolean;
-    requestHeaders?: Record<string, string>;
-    googleMapsApiKey?: string;
-    flyTo: boolean;
-    map?: ReturnType<ThreeDTilesControl["getMap"]>;
-  },
-): string {
+/**
+ * The store record for a Google Photorealistic 3D Tiles layer.
+ *
+ * Split from {@link addGooglePhotorealisticTilesLayer} so the globe, which
+ * loads the tileset itself and needs no deck.gl overlay, records the same
+ * shape. The `sourceKind` matters beyond the render in progress: it is what
+ * `isGooglePhotorealisticTilesLayer` looks for, so a Google tileset filed as a
+ * plain `3d-tiles-url` record would be skipped by both restore paths if the
+ * user later switched to a 2D renderer (issue #2505).
+ *
+ * @param options Display name, altitude offset, opacity, visibility, headers.
+ * @returns The store layer, with a fresh id.
+ */
+function createGooglePhotorealisticStoreLayer(options: {
+  name: string;
+  altitudeOffset: number;
+  opacity: number;
+  visible: boolean;
+  requestHeaders?: Record<string, string>;
+}): GeoLibreLayer {
   const id = `${GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
   const deckLayerId = `${id}-deck`;
-  if (options.googleMapsApiKey) {
-    googleTilesApiKeysByLayerId.set(id, options.googleMapsApiKey);
-  }
 
-  useAppStore.getState().addLayer({
+  return {
     id,
     name: options.name,
     type: "3d-tiles",
@@ -1079,7 +1266,29 @@ function addGooglePhotorealisticTilesLayer(
       altitudeOffset: options.altitudeOffset,
     },
     sourcePath: GOOGLE_PHOTOREALISTIC_TILES_URL,
-  });
+  };
+}
+
+function addGooglePhotorealisticTilesLayer(
+  app: GeoLibreAppAPI,
+  options: {
+    name: string;
+    altitudeOffset: number;
+    opacity: number;
+    visible: boolean;
+    requestHeaders?: Record<string, string>;
+    googleMapsApiKey?: string;
+    flyTo: boolean;
+    map?: ReturnType<ThreeDTilesControl["getMap"]>;
+  },
+): string {
+  const layer = createGooglePhotorealisticStoreLayer(options);
+  const id = layer.id;
+  if (options.googleMapsApiKey) {
+    googleTilesApiKeysByLayerId.set(id, options.googleMapsApiKey);
+  }
+
+  useAppStore.getState().addLayer(layer);
 
   void ensureGooglePhotorealisticTilesOverlay(app);
   if (options.flyTo) flyToGooglePhotorealisticTiles(app, options.map);
@@ -1096,8 +1305,7 @@ function updateDeckTilesPanelList(control: ThreeDTilesControl | null): void {
     .layers.filter(
       (layer) =>
         isGooglePhotorealisticTilesLayer(layer) ||
-        (["mapbox", "arcgis"].includes(activeThreeDTilesApp?.getMapRenderer?.() ?? "") &&
-          isMapboxTilesLayer(layer)),
+        (isStoreDrivenThreeDTilesRenderer() && isMapboxTilesLayer(layer)),
     );
   const nativeStatus = panel.querySelector<HTMLElement>(".three-d-tiles-status");
   if (nativeStatus) {
@@ -1114,7 +1322,12 @@ function updateDeckTilesPanelList(control: ThreeDTilesControl | null): void {
   // and visibility checkbox already reflect their own live state, and the map
   // is updated by renderGooglePhotorealisticTilesLayers, so skipping the
   // rebuild when the ids are unchanged is safe.
-  const idSignature = googleLayers.map((layer) => layer.id).join("|");
+  // The fly target is part of the signature, not just the id: a tileset on the
+  // 2D renderers learns its centre when it finishes loading, and the row has to
+  // be rebuilt then so its Fly control appears.
+  const idSignature = googleLayers
+    .map((layer) => `${layer.id}:${hasThreeDTilesFlyTarget(layer) ? 1 : 0}`)
+    .join("|");
   if (googleList.dataset.geolibreGoogleListIds === idSignature) {
     for (const layer of googleLayers) {
       const item = Array.from(googleList.children).find(
@@ -1160,6 +1373,25 @@ function ensureDeckTilesPanelList(panel: HTMLElement): HTMLElement {
   return googleList;
 }
 
+/**
+ * Whether this list entry has somewhere to fly to.
+ *
+ * The Google tiles always do (a fixed initial view). A tileset entry flies to
+ * the centre recorded when it loaded, which the 2D renderers write onto the
+ * record and the globe never does: Cesium owns the tileset there and reports no
+ * centre back, so the control offers no Fly button rather than one that would
+ * do nothing (issue #2505).
+ *
+ * @param layer - The store layer behind the list entry.
+ * @returns True when a Fly control would move the camera.
+ */
+function hasThreeDTilesFlyTarget(layer: GeoLibreLayer): boolean {
+  if (!isMapboxTilesLayer(layer)) return true;
+  return Array.isArray(
+    useAppStore.getState().layers.find(({ id }) => id === layer.id)?.metadata.center,
+  );
+}
+
 function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const item = document.createElement("div");
   item.className = "geolibre-google-tiles-list-item three-d-tiles-list-item active";
@@ -1184,7 +1416,9 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
         );
     } else if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
   };
-  title.addEventListener("click", flyToLayer);
+  const canFly = hasThreeDTilesFlyTarget(layer);
+  if (canFly) title.addEventListener("click", flyToLayer);
+  else title.disabled = true;
 
   const url = document.createElement("span");
   url.className = "three-d-tiles-list-url";
@@ -1238,7 +1472,7 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
 
   actions.appendChild(visible);
   actions.appendChild(opacity);
-  actions.appendChild(flyTo);
+  if (canFly) actions.appendChild(flyTo);
   actions.appendChild(remove);
 
   item.appendChild(meta);
@@ -1592,7 +1826,24 @@ function validThreeDTilesBeforeId(
   beforeId: string | undefined,
 ): string | undefined {
   if (!beforeId) return undefined;
-  return control.getMap()?.getLayer(beforeId) ? beforeId : undefined;
+  const map = control.getMap();
+  if (!map || !hasStyleLayerApi(map)) return undefined;
+  return map.getLayer(beforeId) ? beforeId : undefined;
+}
+
+/**
+ * Whether the map behind the control is a real MapLibre style map rather than a
+ * facade.
+ *
+ * A control mounted on the Cesium globe is handed `CesiumMapFacade`, which
+ * implements the camera and container API but no style layers: `getLayer` is
+ * absent outright (calling it is a `TypeError`) and `addLayer` throws by
+ * design. The renderer guards above keep the custom-layer paths off the globe;
+ * this is the last line of defence for any caller that reaches them anyway
+ * (issue #2505).
+ */
+function hasStyleLayerApi(map: MapLibreMap): boolean {
+  return typeof map.getLayer === "function" && typeof map.addLayer === "function";
 }
 
 function restoredThreeDTilesLayerId(layer: GeoLibreLayer): string {

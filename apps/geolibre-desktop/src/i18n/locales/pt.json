@@ -8030,7 +8030,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Use uma URL tileset.json de 3D Tiles nesta visualização do ArcGIS. Os blocos Google Photorealistic e I3S exigem outro renderizador."
+      "arcgisSourceUnsupported": "Use uma URL tileset.json de 3D Tiles nesta visualização do ArcGIS. Os blocos Google Photorealistic e I3S exigem outro renderizador.",
+      "globeGoogleKeyRequired": "Os blocos Google Photorealistic 3D Tiles precisam de uma chave de API do Google Maps nas Configurações para carregar no globo."
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",

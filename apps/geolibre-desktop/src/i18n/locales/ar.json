@@ -8377,7 +8377,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر."
+      "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر.",
+      "globeGoogleKeyRequired": "تحتاج بلاطات Google Photorealistic 3D Tiles إلى مفتاح Google Maps API في الإعدادات كي تُحمَّل على الكرة الأرضية."
     },
     "geolibre-osm-downloader": {
       "title": "مُنزِّل OSM",

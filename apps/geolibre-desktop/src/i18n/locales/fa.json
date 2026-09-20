@@ -8030,7 +8030,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "در این نمای ArcGIS از نشانی tileset.json مربوط به 3D Tiles استفاده کنید. کاشی‌های Google Photorealistic و I3S به موتور نمایش دیگری نیاز دارند."
+      "arcgisSourceUnsupported": "در این نمای ArcGIS از نشانی tileset.json مربوط به 3D Tiles استفاده کنید. کاشی‌های Google Photorealistic و I3S به موتور نمایش دیگری نیاز دارند.",
+      "globeGoogleKeyRequired": "برای بارگذاری کاشی‌های Google Photorealistic 3D Tiles روی کره، به کلید API گوگل مپس در تنظیمات نیاز است."
     },
     "geolibre-osm-downloader": {
       "title": "بارگیر OSM",

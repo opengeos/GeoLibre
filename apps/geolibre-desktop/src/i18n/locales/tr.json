@@ -8030,7 +8030,8 @@
   },
   "plugin": {
     "3d-tiles": {
-      "arcgisSourceUnsupported": "Bu ArcGIS görünümünde bir 3D Tiles tileset.json URL’si kullanın. Google Photorealistic ve I3S karoları başka bir işleme motoru gerektirir."
+      "arcgisSourceUnsupported": "Bu ArcGIS görünümünde bir 3D Tiles tileset.json URL’si kullanın. Google Photorealistic ve I3S karoları başka bir işleme motoru gerektirir.",
+      "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles’in küre üzerinde yüklenmesi için Ayarlar’da bir Google Maps API anahtarı gerekir."
     },
     "geolibre-osm-downloader": {
       "title": "OSM İndirici",
