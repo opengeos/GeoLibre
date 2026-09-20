@@ -313,11 +313,6 @@ function gmstRadians(date: Date): number {
 }
 
 /**
- * Lightweight two-body propagation suitable for a short CZML preview arc.
- * TLE perturbation terms are intentionally omitted; Phase 1 needs a dependency-free
- * moving globe entity, not precision orbit determination.
- */
-/**
  * One SGP4 record per parsed TLE, built on first use.
  *
  * `twoline2satrec` does real work and a three-hour arc asks for ninety-odd

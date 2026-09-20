@@ -71,5 +71,14 @@ describe("attribute table sources", () => {
     };
     assert.equal(canOpenLayerAttributeTable(layer), true);
     assert.equal(canOpenLayerAttributeTable({ ...layer, geojson: undefined }), false);
+    // The branch is CZML's, not "anything carrying a geojson": a layer that
+    // keeps one for its own reasons must not quietly acquire the table.
+    assert.equal(
+      canOpenLayerAttributeTable({
+        ...layer,
+        metadata: { ...layer.metadata, sourceKind: "3d-tiles-url" },
+      }),
+      false,
+    );
   });
 });
