@@ -7,13 +7,24 @@ export const CELESTRAK_TLE_BASE = "https://celestrak.org/NORAD/elements/gp.php";
 const EARTH_RADIUS_METERS = 6_378_137;
 const EARTH_GRAVITATIONAL_PARAMETER = 3.986004418e14;
 const TWO_PI = Math.PI * 2;
+const SECONDS_PER_DAY = 86_400;
+
+/**
+ * Longest arc sampled before the requested window start, in seconds.
+ *
+ * The pre-roll exists so a satellite's path already has a trail at the clock's
+ * opening `currentTime` (see {@link tleRecordsToCzml}); one revolution is
+ * enough for anything in low Earth orbit. Capping it keeps a high-altitude
+ * object — a ~24 h geosynchronous period — from pre-sampling a whole day.
+ */
+const MAX_ORBIT_PRE_ROLL_SECONDS = 2 * 3_600;
 
 export interface UsgsFeatureCollection {
   features?: Array<{
     id?: unknown;
     geometry?: { type?: unknown; coordinates?: unknown } | null;
     properties?: { mag?: unknown; place?: unknown; time?: unknown } | null;
-  }>;
+  } | null> | null;
 }
 
 export interface TleRecord {
@@ -72,11 +83,15 @@ function documentPacket(name: string, window: CzmlTimeWindow): CzmlPacket {
 
 /** Convert the USGS GeoJSON response to an inline, time-aware CZML document. */
 export function usgsGeoJsonToCzml(
-  value: UsgsFeatureCollection,
+  value: UsgsFeatureCollection | null | undefined,
   window: CzmlTimeWindow,
 ): CzmlPacket[] {
   const packets: CzmlPacket[] = [documentPacket("USGS Earthquakes", window)];
-  for (const [index, feature] of (value.features ?? []).entries()) {
+  // The feed is public JSON parsed straight off the wire, so neither the
+  // collection nor its entries are guaranteed to have the documented shape.
+  const features = Array.isArray(value?.features) ? value.features : [];
+  for (const [index, feature] of features.entries()) {
+    if (!feature || typeof feature !== "object") continue;
     const coordinates = feature.geometry?.coordinates;
     const magnitude = feature.properties?.mag;
     const eventTime = feature.properties?.time;
@@ -106,7 +121,17 @@ export function usgsGeoJsonToCzml(
       id: `usgs-${typeof feature.id === "string" ? feature.id : index}`,
       name: place,
       availability: `${iso(availableFrom)}/${iso(availableUntil)}`,
-      position: { cartographicDegrees: [longitude, latitude, Math.max(0, -depthKm * 1000)] },
+      // Altitude is pinned to the surface. USGS reports depth in kilometres
+      // *below* ground, so the honest position is underground, where the globe
+      // would hide the marker behind terrain; the depth is carried in
+      // `properties` instead, where Identify can read it.
+      position: { cartographicDegrees: [longitude, latitude, 0] },
+      properties: {
+        magnitude: mag,
+        depthKm,
+        place,
+        time: event.toISOString(),
+      },
       point: {
         pixelSize: Math.min(24, Math.max(6, 6 + mag * 2)),
         color: { rgba: [255, Math.max(32, 190 - Math.round(mag * 22)), 32, 230] },
@@ -253,7 +278,25 @@ export function sampleSatellitePosition(
   };
 }
 
-/** Pre-sample parsed TLEs into Cesium-interpolated CZML moving entities. */
+/** Seconds for one revolution, derived from the TLE's mean motion. */
+export function orbitalPeriodSeconds(tle: TleRecord): number {
+  return SECONDS_PER_DAY / tle.meanMotionRevolutionsPerDay;
+}
+
+/**
+ * Pre-sample parsed TLEs into Cesium-interpolated CZML moving entities.
+ *
+ * Cesium draws a `path` only over `currentTime - trailTime … currentTime +
+ * leadTime`, clamped to the entity's availability. Both halves therefore have
+ * to cover a whole revolution, and the samples have to start before the window
+ * does, or the track renders as a broken arc: a fixed half hour of lead and
+ * trail spans barely two thirds of a ~93 minute low Earth orbit, and at the
+ * clock's opening `currentTime` — which a `LOOP_STOP` clock returns to on every
+ * wrap — availability clips the trail away entirely, leaving a stub. So each
+ * satellite is sampled one (capped) revolution ahead of `options.start` and
+ * given lead/trail of half its own period, which closes the ring and keeps it
+ * closed as the clock runs.
+ */
 export function tleRecordsToCzml(
   records: readonly TleRecord[],
   options: SatelliteSampleOptions,
@@ -262,30 +305,38 @@ export function tleRecordsToCzml(
   const maxSatellites = Math.max(1, options.maxSatellites ?? 75);
   const packets: CzmlPacket[] = [documentPacket("CelesTrak Satellites", options)];
   for (const tle of records.slice(0, maxSatellites)) {
+    const periodSeconds = orbitalPeriodSeconds(tle);
+    // Whole steps, so a sample still lands exactly on `options.start`.
+    const preRollSeconds =
+      Math.ceil(Math.min(periodSeconds, MAX_ORBIT_PRE_ROLL_SECONDS) / stepSeconds) * stepSeconds;
+    const epoch = new Date(options.start.getTime() - preRollSeconds * 1000);
     const samples: number[] = [];
-    for (
-      let time = options.start.getTime();
-      time <= options.stop.getTime();
-      time += stepSeconds * 1000
-    ) {
+    for (let time = epoch.getTime(); time <= options.stop.getTime(); time += stepSeconds * 1000) {
       const at = new Date(time);
       const position = sampleSatellitePosition(tle, at);
       samples.push(
-        (time - options.start.getTime()) / 1000,
+        (time - epoch.getTime()) / 1000,
         position.longitude,
         position.latitude,
         position.altitude,
       );
     }
+    // Rounded up so lead + trail is never a hair short of a full revolution.
+    const halfOrbitSeconds = Math.ceil(periodSeconds / 2);
     packets.push({
       id: `celestrak-${tle.catalogNumber}`,
       name: tle.name,
-      availability: `${iso(options.start)}/${iso(options.stop)}`,
+      availability: `${iso(epoch)}/${iso(options.stop)}`,
       position: {
-        epoch: iso(options.start),
+        epoch: iso(epoch),
         interpolationAlgorithm: "LAGRANGE",
         interpolationDegree: 5,
         cartographicDegrees: samples,
+      },
+      properties: {
+        catalogNumber: tle.catalogNumber,
+        inclinationDeg: tle.inclinationDeg,
+        orbitalPeriodMinutes: Number((periodSeconds / 60).toFixed(2)),
       },
       point: {
         pixelSize: 7,
@@ -296,8 +347,8 @@ export function tleRecordsToCzml(
       path: {
         show: true,
         width: 1,
-        leadTime: 1800,
-        trailTime: 1800,
+        leadTime: halfOrbitSeconds,
+        trailTime: halfOrbitSeconds,
         material: { solidColor: { color: { rgba: [0, 180, 255, 150] } } },
       },
     });

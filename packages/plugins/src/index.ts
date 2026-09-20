@@ -899,6 +899,7 @@ export {
 } from "./plugins/maplibre-precipitation";
 export {
   godsEyeViewPlugin,
+  reattachGodsEyeView,
   GODS_EYE_VIEW_PLUGIN_ID,
   GODS_EYE_VIEW_EARTHQUAKES_FLAG,
   GODS_EYE_VIEW_SATELLITES_FLAG,
@@ -908,6 +909,7 @@ export {
   buildUsgsFeedUrl,
   fetchCelestrakSatelliteCzml,
   fetchUsgsEarthquakeCzml,
+  orbitalPeriodSeconds,
   parseTle,
   sampleSatellitePosition,
   tleRecordsToCzml,

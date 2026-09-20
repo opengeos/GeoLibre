@@ -45,7 +45,9 @@ describe("czml layer builder & parser", () => {
     assert.equal(layer.source.url, "https://example.com/orbit.czml");
     assert.equal(layer.metadata.sourceKind, CZML_SOURCE_KIND);
     assert.equal(layer.metadata.externalNativeLayer, true);
-    assert.equal(layer.metadata.identifiable, false);
+    // CZML entities are pickable and answered by the layer sync's CZML branch
+    // (issue #2504), so the default flipped to identifiable.
+    assert.equal(layer.metadata.identifiable, true);
     assert.deepEqual(layer.metadata.nativeLayerIds, [layer.id]);
     assert.equal(isCzmlLayer(layer), true);
     assert.equal(isCesiumOnlyLayer(layer), true);

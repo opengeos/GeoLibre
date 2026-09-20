@@ -15,7 +15,12 @@ const REFRESH_INTERVAL_MS = 10 * 60_000;
 const FEED_TIMEOUT_MS = 20_000;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
-type FeedId = "earthquakes" | "satellites";
+const FEED_IDS = ["earthquakes", "satellites"] as const;
+
+type FeedId = (typeof FEED_IDS)[number];
+
+/** Which feeds a project turns on, the only state worth persisting. */
+type GodsEyeViewProjectState = Record<FeedId, boolean>;
 
 interface FeedState {
   enabled: boolean;
@@ -47,6 +52,13 @@ const feeds: Record<FeedId, FeedState> = {
     generation: 0,
   },
 };
+
+/**
+ * The feed toggles as the project holds them, kept separately from
+ * `feeds[*].enabled` so `deactivate` (which switches every feed off to stop its
+ * refresh) cannot overwrite what a later save should persist.
+ */
+let savedState: GodsEyeViewProjectState = { earthquakes: true, satellites: true };
 
 let appRef: GeoLibreAppAPI | null = null;
 let cesiumRef: CesiumSceneHandle | null = null;
@@ -105,7 +117,15 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
     updatedAt: updatedAt.toISOString(),
   };
   if (existing) {
-    store.updateLayer(existing.id, layer);
+    // Patch only what the feed owns. `visible`, `opacity` and `style` belong to
+    // the user once the layer exists, so a ten-minute refresh must not un-hide a
+    // layer they turned off or undo a restyle — same contract as the Esri
+    // Wayback plugin's store upsert.
+    store.updateLayer(existing.id, {
+      name: layer.name,
+      source: layer.source,
+      metadata: layer.metadata,
+    });
     feeds[feed].layerId = existing.id;
   } else {
     store.addLayer(layer);
@@ -173,9 +193,19 @@ function removeFeedLayer(feed: FeedId): void {
 function setFeedEnabled(feed: FeedId, enabled: boolean): void {
   feeds[feed].enabled = enabled;
   feeds[feed].failed = false;
+  savedState = { ...savedState, [feed]: enabled };
   if (enabled) void refreshFeed(feed);
   else removeFeedLayer(feed);
   renderPanel();
+}
+
+/** Coerce an untrusted project settings blob into a full toggle record. */
+function normalizeProjectState(value: unknown): GodsEyeViewProjectState {
+  const record = (value ?? {}) as Record<string, unknown>;
+  return {
+    earthquakes: typeof record.earthquakes === "boolean" ? record.earthquakes : true,
+    satellites: typeof record.satellites === "boolean" ? record.satellites : true,
+  };
 }
 
 function statusText(feed: FeedId): string {
@@ -217,7 +247,7 @@ function renderPanel(): void {
     panel.append(note);
   }
 
-  for (const feed of ["earthquakes", "satellites"] as const) {
+  for (const feed of FEED_IDS) {
     const row = document.createElement("div");
     row.style.cssText =
       "display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid hsl(var(--border));border-radius:6px";
@@ -254,10 +284,13 @@ function activate(app: GeoLibreAppAPI): void {
   appRef = app;
   const globe = app.getCesiumScene?.() ?? null;
   cesiumRef = globe?.primary ? globe : null;
-  for (const feed of ["earthquakes", "satellites"] as const) {
+  for (const feed of FEED_IDS) {
     const restored = ownedLayer(feed);
     feeds[feed].layerId = restored?.id ?? null;
-    feeds[feed].enabled = true;
+    // The project's toggles, not an unconditional `true`: activating after a
+    // project load (or re-activating in the same session) used to switch a feed
+    // the user had unchecked back on.
+    feeds[feed].enabled = savedState[feed];
     const updatedAt = restored?.metadata?.updatedAt;
     feeds[feed].lastUpdated =
       typeof updatedAt === "string" && !Number.isNaN(Date.parse(updatedAt))
@@ -286,19 +319,50 @@ function activate(app: GeoLibreAppAPI): void {
   unsubscribeLocale = app.onLocaleChange?.(() => renderPanel()) ?? null;
   app.openRightPanel?.(GODS_EYE_VIEW_PLUGIN_ID);
 
-  if (cesiumRef) {
-    void refreshFeed("earthquakes");
-    void refreshFeed("satellites");
-    refreshTimer = setInterval(() => {
-      void refreshFeed("earthquakes");
-      void refreshFeed("satellites");
-    }, REFRESH_INTERVAL_MS);
+  if (cesiumRef) startRefreshing();
+}
+
+/** Load every enabled feed now and keep them refreshing on the interval. */
+function startRefreshing(): void {
+  for (const feed of FEED_IDS) {
+    // A feed the project left off keeps no layer, including one a hand-edited
+    // project carried in; `refreshFeed` itself no-ops while disabled.
+    if (feeds[feed].enabled) void refreshFeed(feed);
+    else removeFeedLayer(feed);
   }
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    for (const feed of FEED_IDS) void refreshFeed(feed);
+  }, REFRESH_INTERVAL_MS);
+}
+
+/**
+ * Re-bind the panel to the current Cesium handle after a renderer swap or map
+ * re-init, the way `reattachFlightSimulator` does. `activate` captures the
+ * handle once, so without this the feeds keep pushing at a viewer that is gone
+ * and the panel's checkboxes stay disabled. A reattach is not a state change:
+ * `enabled` and the per-feed `layerId` are left exactly as they were.
+ */
+export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
+  if (!unregisterPanel) return;
+  appRef = app;
+  const globe = app.getCesiumScene?.() ?? null;
+  const next = globe?.primary ? globe : null;
+  if (next === cesiumRef) return;
+  cesiumRef = next;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+  if (cesiumRef) {
+    savedClockAnimating = cesiumRef.clock.shouldAnimate;
+    cesiumRef.clock.shouldAnimate = true;
+    startRefreshing();
+  }
+  renderPanel();
 }
 
 function deactivate(): void {
   resetRuntime();
-  for (const feed of ["earthquakes", "satellites"] as const) {
+  for (const feed of FEED_IDS) {
     feeds[feed].enabled = false;
     removeFeedLayer(feed);
     feeds[feed].lastUpdated = null;
@@ -320,4 +384,20 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
   engines: ["cesium", "maplibre"],
   activate,
   deactivate,
+  // The host drops plugin settings that are not strictly JSON-compatible, so
+  // round-trip the record the way the Time Slider does before persisting it.
+  getProjectState: () => JSON.parse(JSON.stringify(savedState)) as GodsEyeViewProjectState,
+  applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
+    savedState = normalizeProjectState(state);
+    for (const feed of FEED_IDS) {
+      feeds[feed].enabled = savedState[feed];
+      feeds[feed].failed = false;
+    }
+    // Only a live panel acts on it now; otherwise `activate` reads `savedState`.
+    if (!unregisterPanel) return true;
+    if (cesiumRef) startRefreshing();
+    else for (const feed of FEED_IDS) if (!feeds[feed].enabled) removeFeedLayer(feed);
+    renderPanel();
+    return true;
+  },
 };

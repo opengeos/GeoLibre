@@ -211,7 +211,12 @@ export function createCzmlLayer(options: CzmlLayerOptions): GeoLibreLayer {
     metadata: {
       sourceKind: CZML_SOURCE_KIND,
       externalNativeLayer: true,
-      identifiable: false,
+      // Cesium builds real entities from the document and
+      // `CesiumLayerSync.resolveFeature` answers for them, so a click can read a
+      // packet's name and custom `properties` (issue #2504). Positions are
+      // time-dynamic properties rather than stored geometry, so the answer
+      // carries no geometry.
+      identifiable: true,
       sourceId: id,
       nativeLayerIds: [id],
     },

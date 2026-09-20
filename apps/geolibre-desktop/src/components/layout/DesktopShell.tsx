@@ -29,6 +29,7 @@ import {
   reattachSun,
   reattachRouteAnimation,
   reattachFlightSimulator,
+  reattachGodsEyeView,
   restoreArcGISViewportLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
@@ -1331,6 +1332,11 @@ export function DesktopShell({
     // native-map gate like the deck.gl overlay; on Cesium the plugin manager
     // has already deactivated it and this only detaches the engine.
     reattachRouteAnimation(appAPI);
+    // God's Eye View holds the Cesium handle it pushes its CZML feeds at, so it
+    // has to rebind after a renderer swap too. It sits above the native-map gate
+    // because the handle it wants is the globe's, which that gate excludes.
+    // Reattach only — the per-feed toggles come from its applyProjectState.
+    reattachGodsEyeView(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
       if (engine.kind === "mapbox" || engine.kind === "arcgis") restoreRasterLayers(appAPI);
       if (engine.kind === "arcgis") restoreArcgisZarrLayers();

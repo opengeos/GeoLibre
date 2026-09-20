@@ -936,6 +936,10 @@ export class CesiumLayerSync {
           }
         : null;
     }
+    // Cesium builds CZML entities from the document itself, so they never pass
+    // through `featureRefs` and have to be traced back to their data source.
+    const czml = this.resolveCzmlFeature(entity);
+    if (czml) return czml;
     const ref = this.featureRefs.get(entity);
     if (!ref) return null;
     const entry = this.entries.get(ref.layerId);
@@ -958,6 +962,53 @@ export class CesiumLayerSync {
           geometry: feature.geometry,
         }
       : null;
+  }
+
+  /**
+   * Identify a picked CZML entity (issue #2504), or null when no loaded CZML
+   * document owns it.
+   *
+   * A CZML entity's position is a time-dynamic property, not stored geometry,
+   * so `geometry` is null — that is the whole answer, not a gap in it. What a
+   * click can read is the packet's `name` plus whatever custom `properties` the
+   * document carries, sampled at the viewer's current time (an earthquake's
+   * magnitude and depth, a satellite's catalogue number). Ownership is found by
+   * asking each loaded document whether it holds the entity: there are only
+   * ever a handful of CZML layers and this runs on a pick, not per frame.
+   */
+  private resolveCzmlFeature(entity: object): {
+    layerId: string;
+    featureId: string;
+    properties: Record<string, unknown>;
+    geometry: null;
+  } | null {
+    if ((entity as { show?: boolean }).show === false) return null;
+    for (const entry of this.entries.values()) {
+      if (entry.kind !== "czml" || entry.cancelled || !entry.added) continue;
+      if (!entry.layer.visible || entry.layer.opacity <= 0) continue;
+      const entities = (entry.handle as DataSource | null)?.entities;
+      if (!entities?.contains(entity as Entity)) continue;
+      const target = entity as Entity;
+      const properties: Record<string, unknown> = {};
+      if (target.name) properties.name = target.name;
+      const custom = target.properties?.getValue(this.viewer.clock.currentTime) as
+        | Record<string, unknown>
+        | undefined;
+      if (custom) {
+        for (const [key, value] of Object.entries(custom)) {
+          // A nested property bag has no useful flat rendering in the popup.
+          if (value !== undefined && (value === null || typeof value !== "object"))
+            properties[key] = value;
+        }
+      }
+      return {
+        layerId: entry.layer.id,
+        featureId: String(target.id),
+        properties,
+        geometry: null,
+      };
+    }
+    return null;
   }
 
   /**

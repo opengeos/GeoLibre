@@ -5,6 +5,7 @@ import {
   buildUsgsFeedUrl,
   fetchCelestrakSatelliteCzml,
   fetchUsgsEarthquakeCzml,
+  orbitalPeriodSeconds,
   parseTle,
   sampleSatellitePosition,
   tleRecordsToCzml,
@@ -63,8 +64,42 @@ describe("God's Eye View feed helpers", () => {
     });
     assert.equal(packets[1].id, "usgs-abc123");
     assert.equal(packets[1].availability, "2026-09-19T11:00:00.000Z/2026-09-21T11:30:00.000Z");
+    // Pinned to the surface; the depth travels in `properties` for Identify.
     assert.deepEqual(packets[1].position, { cartographicDegrees: [-122.5, 38.1, 0] });
+    assert.deepEqual(packets[1].properties, {
+      magnitude: 4.5,
+      depthKm: 7.2,
+      place: "Test Ridge",
+      time: "2026-09-19T11:30:00.000Z",
+    });
     assert.equal((packets[1].point as { pixelSize: number }).pixelSize, 15);
+  });
+
+  it("skips a malformed USGS payload instead of throwing", () => {
+    const window = { start, stop, current: start, multiplier: 60 };
+    // A null collection, a null `features`, and a null entry all degrade to a
+    // document packet with nothing in it.
+    for (const value of [null, undefined, {}, { features: null }, { features: [null] }]) {
+      const packets = usgsGeoJsonToCzml(value, window);
+      assert.equal(packets.length, 1);
+      assert.equal(packets[0].id, "document");
+    }
+    // A good feature still survives alongside a broken sibling.
+    const mixed = usgsGeoJsonToCzml(
+      {
+        features: [
+          null,
+          {
+            id: "ok",
+            geometry: { type: "Point", coordinates: [1, 2, 3] },
+            properties: { mag: 3, time: start.getTime() },
+          },
+        ],
+      },
+      window,
+    );
+    assert.equal(mixed.length, 2);
+    assert.equal(mixed[1].id, "usgs-ok");
   });
 
   it("fetches USGS JSON through an injected fetch and returns inline CZML", async () => {
@@ -108,25 +143,64 @@ describe("God's Eye View feed helpers", () => {
     assert.ok(position.altitude > 300_000 && position.altitude < 600_000);
   });
 
-  it("pre-samples a short orbital arc into epoch-relative CZML positions", () => {
+  it("pre-samples a whole revolution ahead of the window so the path never breaks", () => {
     const records = parseTle(ISS_TLE);
-    const packets = tleRecordsToCzml(records, {
-      start,
-      stop: new Date(start.getTime() + 10 * 60_000),
-      stepSeconds: 120,
-    });
+    const period = orbitalPeriodSeconds(records[0]);
+    assert.ok(Math.abs(period - 86_400 / 15.5) < 1e-6);
+    const stopAt = new Date(start.getTime() + 10 * 60_000);
+    const packets = tleRecordsToCzml(records, { start, stop: stopAt, stepSeconds: 120 });
     assert.equal(packets.length, 2);
     const position = packets[1].position as {
       epoch: string;
       interpolationAlgorithm: string;
       cartographicDegrees: number[];
     };
-    assert.equal(position.epoch, start.toISOString());
+    // One revolution of pre-roll, rounded up to a whole number of steps, so a
+    // sample still lands exactly on the window start.
+    const preRoll = Math.ceil(period / 120) * 120;
+    assert.equal(preRoll, 5640);
+    const epoch = new Date(start.getTime() - preRoll * 1000);
+    assert.equal(position.epoch, epoch.toISOString());
+    assert.equal(packets[1].availability, `${epoch.toISOString()}/${stopAt.toISOString()}`);
     assert.equal(position.interpolationAlgorithm, "LAGRANGE");
-    assert.equal(position.cartographicDegrees.length, 6 * 4);
-    assert.deepEqual(
-      position.cartographicDegrees.filter((_, index) => index % 4 === 0),
-      [0, 120, 240, 360, 480, 600],
+
+    const offsets = position.cartographicDegrees.filter((_, index) => index % 4 === 0);
+    assert.equal(offsets.length, (preRoll + 600) / 120 + 1);
+    assert.equal(position.cartographicDegrees.length, offsets.length * 4);
+    assert.deepEqual(offsets.slice(0, 3), [0, 120, 240]);
+    assert.equal(offsets.at(-1), preRoll + 600);
+    // The window start must be sampled exactly, not straddled.
+    assert.ok(offsets.includes(preRoll));
+
+    // Cesium draws the path over `currentTime ± lead/trail`, clamped to
+    // availability. Lead + trail has to span a full revolution or the orbit
+    // renders as a broken arc, and the trail has to be backed by samples that
+    // start before the window, or it is clipped away at the clock's opening
+    // time — and again on every LOOP_STOP wrap.
+    const path = packets[1].path as { leadTime: number; trailTime: number };
+    assert.equal(path.leadTime, path.trailTime);
+    assert.ok(path.leadTime + path.trailTime >= period);
+    assert.ok(path.trailTime <= preRoll);
+  });
+
+  it("caps the pre-roll for a long-period orbit", () => {
+    // A geosynchronous mean motion: a full revolution of pre-roll would sample
+    // a whole day, so the cap keeps it to two hours.
+    const geo = parseTle(`GEOSAT
+1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990
+2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000
+`);
+    assert.equal(geo.length, 1);
+    const packets = tleRecordsToCzml(geo, {
+      start,
+      stop: new Date(start.getTime() + 60 * 60_000),
+      stepSeconds: 120,
+    });
+    const position = packets[1].position as { epoch: string };
+    assert.equal(
+      position.epoch,
+      new Date(start.getTime() - 2 * 60 * 60_000).toISOString(),
+      "pre-roll is capped at two hours",
     );
   });
 
