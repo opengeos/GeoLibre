@@ -476,6 +476,85 @@ describe("CesiumLayerSync with CZML", () => {
     sync.destroy();
   });
 
+  it("names and traces the satellite the user selects, and undoes both", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    const satellite = {
+      id: "celestrak-25545",
+      name: "COSMOS 2251",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: { orbitalPeriodMinutes: { getValue: () => 96 } },
+      label: undefined as unknown,
+      path: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [satellite],
+        contains: (e: unknown) => e === satellite,
+        getById: (id: string) => (id === satellite.id ? satellite : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-fleet",
+      name: "Satellites",
+      url: "https://example.com/fleet.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-fleet", ["celestrak-25545"]);
+    // The document names only what deserves a standing label, so a picked
+    // satellite gets its name from the packet.
+    const label = satellite.label as { options: { text: string } };
+    assert.ok(label);
+    assert.equal(label.options.text, "COSMOS 2251");
+    // Half a period either side, so the ring closes rather than being cut to an
+    // arbitrary length.
+    const path = satellite.path as { options: { leadTime: number; trailTime: number } };
+    assert.ok(path);
+    assert.equal(path.options.leadTime, 2880);
+    assert.equal(path.options.trailTime, 2880);
+
+    sync.highlight(undefined, []);
+    assert.equal(satellite.label, undefined, "clearing the selection restores the document");
+    assert.equal(satellite.path, undefined);
+    sync.destroy();
+  });
+
   it("handles load errors gracefully and reports in getRenderStatus", async () => {
     const { Cesium, viewer } = makeGlobe();
     Cesium.CzmlDataSource.load = async () => {

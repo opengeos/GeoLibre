@@ -1079,6 +1079,7 @@ export class CesiumLayerSync {
         this.highlightRestorers.push(() => {
           entity.point = original;
         });
+        if (entry.kind === "czml") this.describeSelectedCzmlEntity(entity, color);
       }
       this.viewer.scene.requestRender();
       return;
@@ -1105,6 +1106,58 @@ export class CesiumLayerSync {
       }
     }
     this.viewer.scene.requestRender();
+  }
+
+  /**
+   * Name and trace the one CZML entity the user picked.
+   *
+   * A time-dynamic document is a crowd: naming every entity buries the globe
+   * under labels Cesium will not declutter, so the document itself labels only
+   * what is worth a standing name. Selecting one is the user asking *which is
+   * that* — so it gets its name and, when its position is sampled over time,
+   * the arc it is flying, both taken off as part of the highlight so clearing
+   * the selection leaves the document exactly as its author wrote it.
+   */
+  private describeSelectedCzmlEntity(entity: Entity, color: Color): void {
+    const C = this.Cesium;
+    if (!entity.label && entity.name) {
+      entity.label = new C.LabelGraphics({
+        text: entity.name,
+        font: "600 13px sans-serif",
+        style: C.LabelStyle.FILL_AND_OUTLINE,
+        fillColor: C.Color.WHITE,
+        outlineColor: C.Color.BLACK,
+        outlineWidth: 3,
+        showBackground: true,
+        backgroundColor: C.Color.BLACK.withAlpha(0.82),
+        backgroundPadding: new C.Cartesian2(6, 4),
+        pixelOffset: new C.Cartesian2(0, -19),
+      });
+      this.highlightRestorers.push(() => {
+        entity.label = undefined;
+      });
+    }
+    // Only a sampled position has an arc to draw; a fixed one would trace a dot.
+    if (entity.path || !(entity.position instanceof C.SampledPositionProperty)) return;
+    // The packet reports its own period where it knows one (a satellite does),
+    // so the ring closes on itself instead of being cut to an arbitrary length.
+    const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(
+      this.viewer.clock.currentTime,
+    ) as number | undefined;
+    const halfPeriodSeconds =
+      typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
+        ? (minutes * 60) / 2
+        : 45 * 60;
+    entity.path = new C.PathGraphics({
+      show: true,
+      width: 1,
+      leadTime: halfPeriodSeconds,
+      trailTime: halfPeriodSeconds,
+      material: new C.ColorMaterialProperty(color.withAlpha(0.6)),
+    });
+    this.highlightRestorers.push(() => {
+      entity.path = undefined;
+    });
   }
 
   private readonly entries = new Map<string, LayerEntry>();
