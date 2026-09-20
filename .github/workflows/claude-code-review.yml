@@ -92,13 +92,29 @@ jobs:
     # without it, tagging a PR `bug` would spend a review.
     #
     # (c) also requires a human sender. GitHub's write/triage restriction covers
-    # people, but an App or workflow with write access can label too, so an
-    # auto-labeler that keys off PR title/paths (i.e. attacker-controlled
-    # content) would become an indirect way for a first-timer to self-trigger a
-    # paid review. Nothing here auto-labels today; the check keeps that from
-    # silently becoming a hole if something ever does. If you later WANT a bot to
-    # apply this label, drop the check deliberately and re-reason about the
-    # economic-DoS guard rather than just deleting it.
+    # people, but automation with write access can label too, so an auto-labeler
+    # that keys off PR title/paths (i.e. attacker-controlled content) would
+    # become an indirect way for a first-timer to self-trigger a paid review.
+    # Nothing here auto-labels today; the check keeps that from silently becoming
+    # a hole if something ever does. If you later WANT a bot to apply this label,
+    # drop the check deliberately and re-reason about the economic-DoS guard
+    # rather than just deleting it.
+    #
+    # Note the limit of that check: it tests the actor TYPE, so it stops a
+    # GitHub App or `GITHUB_TOKEN` workflow, but automation driven by a PAT acts
+    # as a real user and is indistinguishable from a human click. GitHub exposes
+    # nothing that would separate them, so this narrows the gap rather than
+    # closing it; a PAT-driven labeler would need its own review of this gate.
+    #
+    # (c) also requires the PR to still be OPEN. `labeled` fires on closed and
+    # merged PRs too, and reviewing one spends the budget this whole gate exists
+    # to protect on a diff nobody can act on. Branch (a) needs no such check —
+    # `synchronize`/`reopened` imply an open PR.
+    #
+    # Draft PRs are deliberately NOT excluded. The repo has no draft gate at all
+    # (a draft PR fires `opened`, so branch (a) already reviews drafts), and
+    # asking for a review ON a draft is a normal thing to want — that is the
+    # point of an explicit opt-in.
     #
     # Branch (a) must exclude `labeled`, or adding any label to a known
     # contributor's PR would re-review it under the automatic path and sidestep
@@ -127,6 +143,7 @@ jobs:
       (github.event_name == 'pull_request_target' &&
         github.event.action == 'labeled' &&
         github.event.sender.type != 'Bot' &&
+        github.event.pull_request.state == 'open' &&
         github.event.label.name == 'claude-review')
 
     runs-on: ubuntu-latest
