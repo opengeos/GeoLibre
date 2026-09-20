@@ -7,6 +7,7 @@ import {
   fetchUsgsEarthquakeCzml,
   type CzmlTimeWindow,
 } from "./gods-eye-view-feeds";
+import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -41,6 +42,8 @@ const DEFAULT_SPEED = 1;
 interface GodsEyeViewProjectState {
   earthquakes: boolean;
   satellites: boolean;
+  /** Add the current Starlink shell as lightweight points. */
+  dense: boolean;
   /** One of {@link SPEED_OPTIONS}. */
   speed: number;
 }
@@ -84,6 +87,7 @@ const feeds: Record<FeedId, FeedState> = {
 let savedState: GodsEyeViewProjectState = {
   earthquakes: true,
   satellites: true,
+  dense: false,
   speed: DEFAULT_SPEED,
 };
 
@@ -95,6 +99,14 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let panelContainer: HTMLElement | null = null;
 let savedClockAnimating: boolean | null = null;
 let savedClockMultiplier: number | null = null;
+const denseCatalog = new GodsEyeViewDenseCatalog(() => {
+  // Match upstream: a failed load falls back to core mode, so selecting the
+  // error chip means retry rather than first having to switch it off.
+  if (denseCatalog.snapshot().status === "failed") {
+    savedState = { ...savedState, dense: false };
+  }
+  renderPanel();
+});
 
 function translate(
   key: string,
@@ -154,6 +166,27 @@ function applyFeedClockWindow(window: CzmlTimeWindow): void {
 
 function ownedLayer(feed: FeedId) {
   return useAppStore.getState().layers.find((layer) => layer.metadata?.[feedFlag(feed)] === true);
+}
+
+function coreSatelliteCatalogNumbers(): Set<string> {
+  const layer = ownedLayer("satellites");
+  return new Set(
+    (layer?.geojson?.features ?? []).flatMap((feature) => {
+      const id = String(feature.id ?? "");
+      return id.startsWith("celestrak-") ? [id.slice("celestrak-".length)] : [];
+    }),
+  );
+}
+
+function syncDenseCatalog(): void {
+  if (!savedState.dense || !feeds.satellites.enabled || !cesiumRef) {
+    denseCatalog.disable();
+    return;
+  }
+  // Wait for the core catalog so its entries keep their richer CZML entities
+  // and are not duplicated by points from the Starlink group.
+  if (!ownedLayer("satellites")) return;
+  void denseCatalog.enable(cesiumRef, coreSatelliteCatalogNumbers());
 }
 
 function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void {
@@ -239,6 +272,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     upsertLayer(feed, packets, updatedAt);
     applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
+    if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
     // No `signal.aborted` check: the timeout watchdog aborts this very request,
     // so testing it swallowed exactly the failure worth reporting. Every
@@ -277,7 +311,19 @@ function setFeedEnabled(feed: FeedId, enabled: boolean): void {
   feeds[feed].failed = false;
   savedState = { ...savedState, [feed]: enabled };
   if (enabled) void refreshFeed(feed);
-  else removeFeedLayer(feed);
+  else {
+    removeFeedLayer(feed);
+    if (feed === "satellites") denseCatalog.disable();
+  }
+  renderPanel();
+}
+
+function setDenseEnabled(enabled: boolean): void {
+  savedState = { ...savedState, dense: enabled };
+  if (enabled) {
+    if (ownedLayer("satellites")) syncDenseCatalog();
+    else if (feeds.satellites.enabled) void refreshFeed("satellites");
+  } else denseCatalog.disable();
   renderPanel();
 }
 
@@ -303,6 +349,7 @@ function normalizeProjectState(value: unknown): GodsEyeViewProjectState {
   return {
     earthquakes: typeof record.earthquakes === "boolean" ? record.earthquakes : true,
     satellites: typeof record.satellites === "boolean" ? record.satellites : true,
+    dense: typeof record.dense === "boolean" ? record.dense : false,
     // A hand-edited project can carry anything; only an offered step is honoured.
     speed: SPEED_OPTIONS.find((option) => option === record.speed) ?? DEFAULT_SPEED,
   };
@@ -395,6 +442,48 @@ function renderPanel(): void {
     status.textContent = statusText(feed);
     status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
     row.append(label, status);
+    if (feed === "satellites") {
+      const dense = denseCatalog.snapshot();
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(savedState.dense));
+      button.setAttribute(
+        "aria-label",
+        translate("panel.godsEyeView.denseSatellites", "Dense satellite catalog"),
+      );
+      button.disabled = !cesiumRef || !feeds.satellites.enabled;
+      button.textContent =
+        dense.status === "loading"
+          ? translate("panel.godsEyeView.denseLoading", "DENSE ···")
+          : dense.status === "failed"
+            ? translate("panel.godsEyeView.denseFailed", "DENSE !")
+            : dense.status === "ready"
+              ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
+                  count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
+                    appRef?.getLocale?.(),
+                  ),
+                })
+              : translate("panel.godsEyeView.dense", "DENSE");
+      button.title =
+        dense.status === "failed"
+          ? translate(
+              "panel.godsEyeView.denseError",
+              "Could not load the Starlink catalog: {{error}}. Select to retry.",
+              { error: dense.error ?? "unknown error" },
+            )
+          : translate(
+              "panel.godsEyeView.denseDescription",
+              "Show the full Starlink shell as lightweight points (no labels or table rows).",
+            );
+      button.style.cssText =
+        "align-self:flex-start;margin-top:4px;padding:3px 8px;border:1px solid hsl(var(--border));border-radius:999px;background:" +
+        (savedState.dense
+          ? "hsl(var(--primary));color:hsl(var(--primary-foreground))"
+          : "transparent") +
+        ";font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer";
+      button.addEventListener("click", () => setDenseEnabled(!savedState.dense));
+      row.append(button);
+    }
     panel.append(row);
   }
   panel.append(speedRow());
@@ -472,6 +561,7 @@ function startRefreshing(): void {
   refreshTimer = setInterval(() => {
     for (const feed of FEED_IDS) void refreshFeed(feed, false);
   }, REFRESH_TICK_MS);
+  syncDenseCatalog();
 }
 
 /**
@@ -494,6 +584,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
     cesiumRef = next;
     return;
   }
+  denseCatalog.disable();
   cesiumRef = next;
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
@@ -509,6 +600,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
 
 function deactivate(): void {
   resetRuntime();
+  denseCatalog.disable();
   for (const feed of FEED_IDS) {
     feeds[feed].enabled = false;
     removeFeedLayer(feed);
@@ -547,6 +639,7 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
       feeds[feed].enabled = savedState[feed];
       feeds[feed].failed = false;
     }
+    if (!savedState.dense) denseCatalog.disable();
     // Only a live panel acts on it now; otherwise `activate` reads `savedState`.
     if (!unregisterPanel) return true;
     // A loaded document only writes the clock when the owner changes, so a

@@ -2324,7 +2324,14 @@
       "lastUpdated": "Cập nhật lần cuối: {{time}}",
       "speed": "Tốc độ",
       "speedRealTime": "Thời gian thực (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Danh mục vệ tinh dày đặc",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Không thể tải danh mục Starlink: {{error}}. Chọn để thử lại.",
+      "denseDescription": "Hiển thị toàn bộ chòm vệ tinh Starlink dưới dạng các điểm nhẹ (không có nhãn hoặc hàng bảng)."
     }
   },
   "toolbar": {

@@ -2372,7 +2372,14 @@
       "lastUpdated": "अंतिम अपडेट: {{time}}",
       "speed": "गति",
       "speedRealTime": "वास्तविक समय (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "सघन उपग्रह कैटलॉग",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Starlink कैटलॉग लोड नहीं हो सका: {{error}}। फिर प्रयास करने के लिए चुनें।",
+      "denseDescription": "पूरे Starlink समूह को हल्के बिंदुओं के रूप में दिखाएँ (बिना लेबल या तालिका पंक्तियों के)।"
     }
   },
   "toolbar": {

@@ -285,6 +285,7 @@ describe("God's Eye View clock speed", () => {
       assert.deepEqual(godsEyeViewPlugin.getProjectState?.(), {
         earthquakes: true,
         satellites: true,
+        dense: false,
         // Real time, not the 60x the feeds used to hard-code: at 60x the ISS
         // laps the planet in ninety seconds, which reads as an animation
         // rather than as where the satellite is now.
@@ -294,6 +295,10 @@ describe("God's Eye View clock speed", () => {
       godsEyeViewPlugin.activate?.(globe.app);
       for (let i = 0; i < 4; i++) await flush();
       assert.equal(globe.viewer.clock.multiplier, 1);
+      assert.equal(
+        globe.panel.querySelector('button[aria-label="Dense satellite catalog"]')?.textContent,
+        "DENSE",
+      );
 
       // The panel's select re-times the live globe without reloading a feed.
       const select = globe.panel.querySelector("select") as HTMLSelectElement;

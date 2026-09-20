@@ -2404,7 +2404,14 @@
       "lastUpdated": "Last updated: {{time}}",
       "speed": "Speed",
       "speedRealTime": "Real time (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Dense satellite catalog",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Could not load the Starlink catalog: {{error}}. Select to retry.",
+      "denseDescription": "Show the full Starlink shell as lightweight points (no labels or table rows)."
     }
   },
   "toolbar": {

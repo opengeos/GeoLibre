@@ -2324,7 +2324,14 @@
       "lastUpdated": "最終更新: {{time}}",
       "speed": "速度",
       "speedRealTime": "リアルタイム (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "高密度衛星カタログ",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Starlink カタログを読み込めませんでした: {{error}}。選択して再試行してください。",
+      "denseDescription": "Starlink コンステレーション全体を軽量な点として表示します（ラベルやテーブル行はありません）。"
     }
   },
   "toolbar": {

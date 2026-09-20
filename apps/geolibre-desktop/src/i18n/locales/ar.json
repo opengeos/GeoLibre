@@ -2563,7 +2563,14 @@
       "lastUpdated": "آخر تحديث: {{time}}",
       "speed": "السرعة",
       "speedRealTime": "الزمن الحقيقي (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "كتالوج الأقمار الصناعية الكثيف",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "تعذر تحميل كتالوج Starlink: {{error}}. حدده لإعادة المحاولة.",
+      "denseDescription": "اعرض مجموعة Starlink الكاملة كنقاط خفيفة (من دون تسميات أو صفوف في جدول السمات)."
     }
   },
   "toolbar": {

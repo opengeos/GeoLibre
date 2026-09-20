@@ -2324,7 +2324,14 @@
       "lastUpdated": "อัปเดตล่าสุด: {{time}}",
       "speed": "ความเร็ว",
       "speedRealTime": "เวลาจริง (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "แค็ตตาล็อกดาวเทียมแบบหนาแน่น",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "ไม่สามารถโหลดแค็ตตาล็อก Starlink ได้: {{error}} เลือกเพื่อลองอีกครั้ง",
+      "denseDescription": "แสดงกลุ่มดาวเทียม Starlink ทั้งหมดเป็นจุดแบบน้ำหนักเบา (ไม่มีป้ายกำกับหรือแถวตาราง)"
     }
   },
   "toolbar": {

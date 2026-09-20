@@ -2324,7 +2324,14 @@
       "lastUpdated": "最后更新：{{time}}",
       "speed": "速度",
       "speedRealTime": "实时 (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "密集卫星目录",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "无法加载 Starlink 目录：{{error}}。选择以重试。",
+      "denseDescription": "将完整的 Starlink 星座显示为轻量点（无标签或表格行）。"
     }
   },
   "toolbar": {

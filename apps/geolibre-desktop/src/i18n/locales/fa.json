@@ -2372,7 +2372,14 @@
       "lastUpdated": "آخرین به‌روزرسانی: {{time}}",
       "speed": "سرعت",
       "speedRealTime": "زمان واقعی (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "فهرست متراکم ماهواره‌ها",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "فهرست Starlink بارگیری نشد: {{error}}. برای تلاش دوباره آن را انتخاب کنید.",
+      "denseDescription": "مجموعه کامل Starlink را به‌صورت نقاط سبک نمایش دهید (بدون برچسب یا ردیف‌های جدول)."
     }
   },
   "toolbar": {

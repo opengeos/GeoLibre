@@ -2372,7 +2372,14 @@
       "lastUpdated": "Son güncelleme: {{time}}",
       "speed": "Hız",
       "speedRealTime": "Gerçek zamanlı (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Yoğun uydu kataloğu",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Starlink kataloğu yüklenemedi: {{error}}. Yeniden denemek için seçin.",
+      "denseDescription": "Starlink uydu ağının tamamını hafif noktalar olarak gösterin (etiket veya tablo satırı olmadan)."
     }
   },
   "toolbar": {

@@ -2324,7 +2324,14 @@
       "lastUpdated": "Terakhir diperbarui: {{time}}",
       "speed": "Kecepatan",
       "speedRealTime": "Waktu nyata (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Katalog satelit padat",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Katalog Starlink tidak dapat dimuat: {{error}}. Pilih untuk mencoba lagi.",
+      "denseDescription": "Tampilkan seluruh konstelasi Starlink sebagai titik ringan (tanpa label atau baris tabel)."
     }
   },
   "toolbar": {

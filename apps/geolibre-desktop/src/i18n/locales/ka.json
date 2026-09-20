@@ -2372,7 +2372,14 @@
       "lastUpdated": "ბოლო განახლება: {{time}}",
       "speed": "სიჩქარე",
       "speedRealTime": "რეალური დრო (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "თანამგზავრების მკვრივი კატალოგი",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Starlink-ის კატალოგი ვერ ჩაიტვირთა: {{error}}. ხელახლა საცდელად აირჩიეთ.",
+      "denseDescription": "აჩვენეთ Starlink-ის სრული თანავარსკვლავედი მსუბუქი წერტილების სახით (წარწერებისა და ცხრილის მწკრივების გარეშე)."
     }
   },
   "toolbar": {

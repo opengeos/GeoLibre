@@ -2468,7 +2468,14 @@
       "lastUpdated": "Последнее обновление: {{time}}",
       "speed": "Скорость",
       "speedRealTime": "Реальное время (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Плотный каталог спутников",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Не удалось загрузить каталог Starlink: {{error}}. Выберите, чтобы повторить попытку.",
+      "denseDescription": "Показать всю группировку Starlink в виде легковесных точек (без подписей и строк таблицы)."
     }
   },
   "toolbar": {

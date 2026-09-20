@@ -2372,7 +2372,14 @@
       "lastUpdated": "Ultimo aggiornamento: {{time}}",
       "speed": "Velocità",
       "speedRealTime": "Tempo reale (1×)",
-      "speedMultiple": "{{factor}}×"
+      "speedMultiple": "{{factor}}×",
+      "denseSatellites": "Catalogo satellitare denso",
+      "denseLoading": "DENSE ···",
+      "denseFailed": "DENSE !",
+      "denseCount": "DENSE · {{count}}",
+      "dense": "DENSE",
+      "denseError": "Impossibile caricare il catalogo Starlink: {{error}}. Seleziona per riprovare.",
+      "denseDescription": "Mostra l'intera costellazione Starlink come punti leggeri (senza etichette o righe della tabella)."
     }
   },
   "toolbar": {
