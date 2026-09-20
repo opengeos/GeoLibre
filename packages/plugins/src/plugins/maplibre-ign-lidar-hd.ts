@@ -611,20 +611,28 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     let added = 0;
     let duplicate = 0;
     let failed = 0;
-    await withLidarAutoZoomSuppressed(app, async () => {
-      for (const [index, tile] of tiles.entries()) {
-        if (index > 0) await sleep(ADD_SELECTED_DELAY_MS);
-        if (disposed) return;
-        try {
-          const result = await addTileToMap(app, tile);
-          if (result === "added") added++;
-          else if (result === "duplicate") duplicate++;
-          else failed++;
-        } catch {
-          failed++;
+    try {
+      await withLidarAutoZoomSuppressed(app, async () => {
+        for (const [index, tile] of tiles.entries()) {
+          if (index > 0) await sleep(ADD_SELECTED_DELAY_MS);
+          if (disposed) return;
+          try {
+            const result = await addTileToMap(app, tile);
+            if (result === "added") added++;
+            else if (result === "duplicate") duplicate++;
+            else failed++;
+          } catch {
+            failed++;
+          }
         }
-      }
-    });
+      });
+    } catch {
+      // openStandaloneLidarControl (inside withLidarAutoZoomSuppressed) can
+      // reject before the per-tile loop above ever runs, e.g. if the LiDAR
+      // control chunk fails to load — treat every tile as failed so the
+      // status/buttons below still recover instead of getting stuck.
+      failed = tiles.length;
+    }
     if (disposed) return;
     selectedTileIds.clear();
     const parts: string[] = [];
