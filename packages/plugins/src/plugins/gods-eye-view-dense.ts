@@ -170,7 +170,11 @@ export class GodsEyeViewDenseCatalog {
 
   private position(globe: CesiumSceneHandle, satrec: SatRec, at: Date): unknown | null {
     const state = propagate(satrec, at);
-    if (!state) return null;
+    // satellite.js 6 returns null when SGP4 gives up on a decayed orbit, which
+    // the falsy check catches on its own; its types still describe the older
+    // `position: false` shape, so test that too rather than ever handing
+    // `eciToEcf` something that is not a vector.
+    if (!state?.position || typeof state.position === "boolean") return null;
     const position = eciToEcf(state.position, gstime(at));
     // satellite.js uses kilometres; Cesium fixed-frame Cartesian coordinates
     // use metres.

@@ -146,6 +146,31 @@ describe("God's Eye View feed helpers", () => {
     assert.ok(position.altitude > 300_000 && position.altitude < 600_000);
   });
 
+  it("propagates with SGP4, so the orbit plane drifts as the elements imply", () => {
+    const [sgp4] = parseTle(ISS_TLE);
+    // The same elements with the raw lines withheld: SGP4 has nothing to build
+    // a record from, so this one takes the two-body fallback.
+    const keplerian = { ...sgp4, line1: "", line2: "" };
+    const aDayOn = new Date(sgp4.epoch.getTime() + 24 * 60 * 60_000);
+
+    const withSgp4 = sampleSatellitePosition(sgp4, aDayOn);
+    const withTwoBody = sampleSatellitePosition(keplerian, aDayOn);
+    for (const sample of [withSgp4, withTwoBody]) {
+      assert.ok(Number.isFinite(sample.longitude));
+      assert.ok(sample.altitude > 300_000 && sample.altitude < 600_000);
+    }
+
+    // A low orbit's node regresses about five degrees a day under J2 — hundreds
+    // of kilometres of cross-track — which mean elements encode but do not
+    // state, and which a plain Keplerian reading freezes.
+    const separation = Math.hypot(
+      withSgp4.cartesian[0] - withTwoBody.cartesian[0],
+      withSgp4.cartesian[1] - withTwoBody.cartesian[1],
+      withSgp4.cartesian[2] - withTwoBody.cartesian[2],
+    );
+    assert.ok(separation > 100_000, `expected a day of drift, got ${Math.round(separation)} m`);
+  });
+
   it("resynchronizes past a stray line instead of losing every record after it", () => {
     // A truncated response: an orphan name with no element lines, then a good
     // record. Striding three lines from the orphan would step over line 1 of

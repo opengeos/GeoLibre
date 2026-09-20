@@ -1,4 +1,5 @@
 import type { CzmlPacket } from "@geolibre/core";
+import { eciToEcf, gstime, propagate, twoline2satrec, type SatRec } from "satellite.js";
 import type { FeatureCollection } from "geojson";
 
 export const USGS_EARTHQUAKE_FEED_BASE =
@@ -316,6 +317,43 @@ function gmstRadians(date: Date): number {
  * TLE perturbation terms are intentionally omitted; Phase 1 needs a dependency-free
  * moving globe entity, not precision orbit determination.
  */
+/**
+ * One SGP4 record per parsed TLE, built on first use.
+ *
+ * `twoline2satrec` does real work and a three-hour arc asks for ninety-odd
+ * samples of the same satellite, so the record outlives the sample loop. A
+ * WeakMap keyed on the record means a catalogue that falls out of scope takes
+ * its satrecs with it. `null` marks an element set SGP4 rejected, so a bad TLE
+ * is parsed once rather than on every sample.
+ */
+const satrecs = new WeakMap<TleRecord, SatRec | null>();
+
+function satrecFor(tle: TleRecord): SatRec | null {
+  const cached = satrecs.get(tle);
+  if (cached !== undefined) return cached;
+  let satrec: SatRec | null = null;
+  if (tle.line1 && tle.line2) {
+    const parsed = twoline2satrec(tle.line1, tle.line2);
+    satrec = parsed.error === 0 ? parsed : null;
+  }
+  satrecs.set(tle, satrec);
+  return satrec;
+}
+
+/**
+ * Where a satellite is at `at`, in Earth-fixed metres and degrees.
+ *
+ * SGP4, because that is the model TLE elements are *for*: CelesTrak publishes
+ * mean elements fitted to it, carrying the secular drift (J2 nodal regression
+ * of roughly 5 degrees a day for a low orbit, drag) that the elements encode
+ * but do not state. Reading them as plain Keplerian elements freezes that
+ * drift, so the ground track slides visibly within hours of an epoch that is
+ * already hours old by the time the feed is fetched.
+ *
+ * The two-body solution stays as the fallback for an element set SGP4 will not
+ * propagate — a decayed or malformed record — where it is better to draw an
+ * approximate orbit than to drop the satellite from the sky.
+ */
 export function sampleSatellitePosition(
   tle: TleRecord,
   at: Date,
@@ -325,6 +363,28 @@ export function sampleSatellitePosition(
   altitude: number;
   cartesian: [number, number, number];
 } {
+  const satrec = satrecFor(tle);
+  if (satrec) {
+    const propagated = propagate(satrec, at);
+    const eci = propagated?.position;
+    if (eci && typeof eci !== "boolean") {
+      // satellite.js works in kilometres, and TEME-of-date needs the Greenwich
+      // sidereal angle to become the Earth-fixed frame CZML's FIXED expects.
+      const ecf = eciToEcf(eci, gstime(at));
+      const xEcef = ecf.x * 1000;
+      const yEcef = ecf.y * 1000;
+      const zEcef = ecf.z * 1000;
+      const radius = Math.hypot(xEcef, yEcef, zEcef);
+      if (Number.isFinite(radius) && radius > 0) {
+        return {
+          longitude: degrees(Math.atan2(yEcef, xEcef)),
+          latitude: degrees(Math.atan2(zEcef, Math.hypot(xEcef, yEcef))),
+          altitude: Math.max(0, radius - EARTH_RADIUS_METERS),
+          cartesian: [xEcef, yEcef, zEcef],
+        };
+      }
+    }
+  }
   const meanMotion = (tle.meanMotionRevolutionsPerDay * TWO_PI) / 86_400;
   const semiMajorAxis = Math.cbrt(EARTH_GRAVITATIONAL_PARAMETER / meanMotion ** 2);
   const elapsedSeconds = (at.getTime() - tle.epoch.getTime()) / 1000;

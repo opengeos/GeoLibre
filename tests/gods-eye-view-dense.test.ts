@@ -16,7 +16,7 @@ STARLINK TEST
 2 44713  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000
 `;
 
-function makeGlobe() {
+function makeGlobe(at = new Date("2026-09-20T12:00:00Z")) {
   const points: Array<Record<string, unknown>> = [];
   const added: unknown[] = [];
   const removed: unknown[] = [];
@@ -79,7 +79,7 @@ function makeGlobe() {
         },
       },
     },
-    clock: { currentTime: new Date("2026-09-20T12:00:00Z") },
+    clock: { currentTime: at },
     requestRender: () => {},
   } as unknown as CesiumSceneHandle;
   return { globe, points, added, removed, render: () => preRender?.() };
@@ -120,5 +120,32 @@ describe("God's Eye View dense catalog", () => {
       count: 0,
       error: null,
     });
+  });
+
+  it("drops a satellite SGP4 will not propagate rather than placing a NaN point", async () => {
+    globalThis.fetch = (async () =>
+      new Response(TLE_TEXT, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      })) as typeof fetch;
+    // Far enough past the elements' epoch that SGP4 reports the orbit decayed
+    // (error 6) and returns no state — what a real catalogue's decaying
+    // Starlinks do at the current time.
+    const fake = makeGlobe(new Date("2086-09-20T12:00:00Z"));
+    const catalog = new GodsEyeViewDenseCatalog();
+
+    await catalog.enable(fake.globe, new Set(["25544"]));
+
+    // Left out rather than parked at a NaN coordinate, and reported as a clean
+    // failure rather than an exception out of the load.
+    assert.equal(fake.points.length, 0);
+    assert.deepEqual(catalog.snapshot(), {
+      status: "failed",
+      count: 0,
+      error: "feed returned no usable satellites",
+    });
+    // The pre-render slice has to survive the same satellites.
+    fake.render();
+    assert.equal(fake.points.length, 0);
   });
 });
