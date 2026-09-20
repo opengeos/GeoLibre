@@ -472,18 +472,14 @@ describe("CesiumLayerSync point rendering", () => {
     const unregister = sync.registerMovingPointLayer(layer.id, collection as never, [
       {
         name: "STARLINK TEST",
-        tleLine1:
-          "1 44713U 19074A   26262.50000000  .00001200  00000+0  90000-4 0  9991",
-        tleLine2:
-          "2 44713  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000",
+        tleLine1: "1 44713U 19074A   26262.50000000  .00001200  00000+0  90000-4 0  9991",
+        tleLine2: "2 44713  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000",
         orbitalPeriodMinutes: 95.62,
       },
       {
         name: "STARLINK TEST 2",
-        tleLine1:
-          "1 44714U 19074B   26262.50000000  .00001200  00000+0  90000-4 0  9992",
-        tleLine2:
-          "2 44714  53.0500 211.0000 0001500  85.0000 275.0000 15.06000000300001",
+        tleLine1: "1 44714U 19074B   26262.50000000  .00001200  00000+0  90000-4 0  9992",
+        tleLine2: "2 44714  53.0500 211.0000 0001500  85.0000 275.0000 15.06000000300001",
         orbitalPeriodMinutes: 95.62,
       },
     ]);
@@ -506,7 +502,11 @@ describe("CesiumLayerSync point rendering", () => {
       originalColor,
       "selecting another point restores the first point's real pre-highlight color",
     );
-    assert.equal(f.primitives.length, 2, "the selected moving satellite receives an orbit and label");
+    assert.equal(
+      f.primitives.length,
+      2,
+      "the selected moving satellite receives an orbit and label",
+    );
     const orbit = f.primitives.find((candidate) => candidate instanceof f.Cesium.Primitive) as {
       options: {
         geometryInstances: {

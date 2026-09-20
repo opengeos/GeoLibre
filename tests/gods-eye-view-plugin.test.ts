@@ -203,9 +203,7 @@ describe("God's Eye View feed refresh", () => {
 
       const dense = useAppStore
         .getState()
-        .layers.find(
-          (layer) => layer.metadata?.[GODS_EYE_VIEW_DENSE_SATELLITES_FLAG] === true,
-        );
+        .layers.find((layer) => layer.metadata?.[GODS_EYE_VIEW_DENSE_SATELLITES_FLAG] === true);
       assert.ok(dense, "dense satellites have their own layer-panel entry");
       assert.equal(dense.geojson?.features.length, 1, "its Attribute Table has one row per point");
       assert.equal(dense.geojson?.features[0].properties?.catalogNumber, "44713");

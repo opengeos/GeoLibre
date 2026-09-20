@@ -90,11 +90,9 @@ const CKAN_MAX_ROWS = 50;
 // CelesTrak rejects browser-origin bulk TLE reads and requests that automated
 // clients identify themselves. This named, allowlisted relay is shared by the
 // hosted web and desktop builds; Vite provides the same route locally.
-const CELESTRAK_PATH =
-  /^\/celestrak\/(stations|visual|gps-ops|glo-ops|galileo|geo|starlink)$/;
+const CELESTRAK_PATH = /^\/celestrak\/(stations|visual|gps-ops|glo-ops|galileo|geo|starlink)$/;
 const CELESTRAK_UPSTREAM = "https://celestrak.org/NORAD/elements/gp.php";
-const CELESTRAK_STARLINK_UPSTREAM =
-  "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+const CELESTRAK_STARLINK_UPSTREAM = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
 const CELESTRAK_CACHE_CONTROL = "public, max-age=21600";
 
 // The public Overpass endpoint rejects some browser origins (notably Pages

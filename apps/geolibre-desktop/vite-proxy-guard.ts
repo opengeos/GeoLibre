@@ -22,8 +22,7 @@ export const PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
 export const PROXY_FETCH_TIMEOUT_MS = 30_000;
 
 const CELESTRAK_TLE_BASE = "https://celestrak.org/NORAD/elements/gp.php";
-const CELESTRAK_STARLINK_TLE_BASE =
-  "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+const CELESTRAK_STARLINK_TLE_BASE = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
 const CELESTRAK_CACHE_TTL_MS = 6 * 60 * 60_000;
 const CELESTRAK_GROUPS = new Set([
   "stations",

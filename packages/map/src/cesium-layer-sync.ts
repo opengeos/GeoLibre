@@ -1226,8 +1226,7 @@ export class CesiumLayerSync {
       const positions: Cartesian3[] = [];
       for (let index = 0; index < SELECTED_ORBIT_STEPS; index += 1) {
         const at = new Date(
-          referenceDate.getTime() +
-            (index * periodSeconds * 1000) / SELECTED_ORBIT_STEPS,
+          referenceDate.getTime() + (index * periodSeconds * 1000) / SELECTED_ORBIT_STEPS,
         );
         const propagated = propagate(satrec, at);
         const position = propagated?.position;
@@ -1315,23 +1314,15 @@ export class CesiumLayerSync {
     });
     const followPoint = () => {
       label.position = point.position;
-      const screen = C.SceneTransforms.worldToWindowCoordinates(
-        this.viewer.scene,
-        point.position,
-      );
+      const screen = C.SceneTransforms.worldToWindowCoordinates(this.viewer.scene, point.position);
       // Dense popups are about 300 px wide. They flip to the left when the
       // right side is tight; keep the label on the other side of the point.
       const canvas = this.viewer.scene.canvas;
       const canvasBounds = canvas.getBoundingClientRect?.();
-      const screenX =
-        screen && canvasBounds ? screen.x - canvasBounds.left : screen?.x;
+      const screenX = screen && canvasBounds ? screen.x - canvasBounds.left : screen?.x;
       const popupFitsRight = screenX === undefined || screenX <= canvas.clientWidth / 2;
-      label.horizontalOrigin = popupFitsRight
-        ? C.HorizontalOrigin.RIGHT
-        : C.HorizontalOrigin.LEFT;
-      label.pixelOffset = popupFitsRight
-        ? new C.Cartesian2(-16, -19)
-        : new C.Cartesian2(16, -19);
+      label.horizontalOrigin = popupFitsRight ? C.HorizontalOrigin.RIGHT : C.HorizontalOrigin.LEFT;
+      label.pixelOffset = popupFitsRight ? new C.Cartesian2(-16, -19) : new C.Cartesian2(16, -19);
     };
     followPoint();
     this.viewer.scene.preRender.addEventListener(followPoint);
@@ -1377,9 +1368,7 @@ export class CesiumLayerSync {
     const tleLine1 = entity.properties?.tleLine1?.getValue(time) as string | undefined;
     const tleLine2 = entity.properties?.tleLine2?.getValue(time) as string | undefined;
     if (tleLine1 && tleLine2) {
-      const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as
-        | number
-        | undefined;
+      const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as number | undefined;
       const positions = this.selectedTleOrbitPositions(tleLine1, tleLine2, minutes);
       if (positions) {
         this.showSelectedOrbit(positions, color);

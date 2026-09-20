@@ -24,11 +24,7 @@ describe("CelesTrak edge proxy", () => {
       });
     }) as typeof fetch;
 
-    const response = await tilesWorker.fetch(
-      request("starlink"),
-      {},
-      {} as ExecutionContext,
-    );
+    const response = await tilesWorker.fetch(request("starlink"), {}, {} as ExecutionContext);
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("access-control-allow-origin"), "*");
