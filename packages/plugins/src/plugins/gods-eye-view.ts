@@ -689,7 +689,13 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
   name: "God's Eye View",
   version: "0.1.0",
   activeByDefault: false,
-  engines: ["cesium", "maplibre"],
+  // Every 2D engine, not just MapLibre: `engines` decides whether the Plugins
+  // menu entry can be toggled at all, so leaving Mapbox and ArcGIS out greyed
+  // the panel out on those renderers and put the "switch to the 3D globe" note
+  // behind the very door it was written to open. The feeds still render only on
+  // the globe — `activate` handles having no primary Cesium scene — which is
+  // the same split `flight-simulator.ts` declares.
+  engines: ["cesium", "maplibre", "mapbox", "arcgis"],
   activate,
   deactivate,
   // The host drops plugin settings that are not strictly JSON-compatible, so

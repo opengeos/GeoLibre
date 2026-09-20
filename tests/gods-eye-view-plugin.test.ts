@@ -7,7 +7,7 @@ import {
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
-import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import { isPluginEngineSupported, type GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 // The plugin's reattach path (issue #2462). `CesiumEngine.getCesiumScene()`
 // mints a brand-new handle object on every call, and the host re-runs the
@@ -177,6 +177,17 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
     },
   };
 }
+
+describe("God's Eye View availability", () => {
+  it("can be opened on every renderer, so the globe-only note is reachable", () => {
+    // `engines` gates whether the Plugins menu entry can be toggled at all. The
+    // feeds draw on the globe alone, but a user on a 2D renderer has to be able
+    // to open the panel to be told that.
+    for (const engine of ["cesium", "maplibre", "mapbox", "arcgis"] as const) {
+      assert.equal(isPluginEngineSupported(godsEyeViewPlugin, engine), true, engine);
+    }
+  });
+});
 
 describe("God's Eye View feed refresh", () => {
   it("publishes the dense shell as a separate queryable layer", async () => {
