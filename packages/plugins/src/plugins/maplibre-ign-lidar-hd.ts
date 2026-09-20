@@ -452,11 +452,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     "Data © IGN — LiDAR HD, published under the Licence Ouverte 2.0.",
   );
 
+  const DEFAULT_BBOX = { west: 2.279788, south: 48.849532, east: 2.31515, north: 48.86712 };
   const coordGrid = element("div", CSS.grid);
-  const coordInputs = ["west", "south", "east", "north"].map(() => {
+  const coordInputs = (["west", "south", "east", "north"] as const).map((key) => {
     const input = element("input", CSS.input);
     input.type = "number";
     input.step = "any";
+    input.value = String(DEFAULT_BBOX[key]);
     return input;
   });
   const coordLabels = [
@@ -762,7 +764,6 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   useView.addEventListener("click", applyViewBounds);
-  applyViewBounds();
 
   searchButton.addEventListener("click", async () => {
     const bbox = coordInputs.map((input) =>
