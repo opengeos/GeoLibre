@@ -227,10 +227,13 @@ export interface GpsStatusFix {
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
   const clearMapbox =
     state.primaryRenderer === "mapbox" && state.preferences.map.mapboxStyleUrl !== undefined;
+  // Any Cesium or ArcGIS pane, not only a primary one: split panes pick the
+  // renderer independently, and a pinned globe imagery or Esri style would
+  // otherwise ignore the picker.
   const clearCesium =
-    state.primaryRenderer === "cesium" && state.preferences.map.cesiumBasemap !== "project";
-  // Any ArcGIS pane, not only a primary one: split panes pick the renderer
-  // independently, and a pinned Esri style would otherwise ignore the picker.
+    state.preferences.map.cesiumBasemap !== "project" &&
+    (state.primaryRenderer === "cesium" ||
+      state.secondaryMapViews.some((pane) => pane.viewKind === "cesium"));
   const clearArcgis =
     state.preferences.map.arcgisBasemap !== undefined &&
     (state.primaryRenderer === "arcgis" ||

@@ -82,6 +82,28 @@ describe("Cesium basemap choices", () => {
     useAppStore.getState().setBasemapStyleUrl("https://tiles.openfreemap.org/styles/liberty");
 
     assert.equal(useAppStore.getState().preferences.map.cesiumBasemap, "project");
+
+    // A split pane on the globe clears it too, whatever the primary renderer.
+    useAppStore.getState().newProject();
+    useAppStore.getState().setPrimaryRenderer("maplibre");
+    useAppStore.setState((s) => ({
+      preferences: {
+        ...s.preferences,
+        map: { ...s.preferences.map, cesiumBasemap: "blue-marble" as const },
+      },
+      secondaryMapViews: [
+        {
+          id: "pane",
+          view: createEmptyProject().mapView,
+          viewKind: "cesium",
+          layerVisibility: {},
+        },
+      ],
+    }));
+
+    useAppStore.getState().setBasemapStyleUrl("https://tiles.openfreemap.org/styles/bright");
+
+    assert.equal(useAppStore.getState().preferences.map.cesiumBasemap, "project");
   });
 
   it("includes the four keyless Other providers without requiring an ion token", () => {
