@@ -241,15 +241,28 @@ describe("applyBasemapImagery", () => {
     assert.equal(stack[0], added[0]);
   });
 
-  it("falls back to keyless OpenStreetMap without a token", () => {
-    const { Cesium, viewer, ionRequests, openStreetMapRequests } = makeFakes();
+  it("falls back to keyless Esri World Imagery without a token", async () => {
+    const { Cesium, viewer, ionRequests, arcgisRequests, openStreetMapRequests } = makeFakes();
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, undefined);
     assert.ok((added[0] as FakeLayer).provider?.provider instanceof Promise);
-    // Which provider, not merely that one was promised: an Ion or ArcGIS
-    // basemap would satisfy the shape above while needing the key this branch
-    // exists to do without.
-    assert.deepEqual(openStreetMapRequests, [{ url: "https://tile.openstreetmap.org/" }]);
+    // Which provider, not merely that one was promised: an Ion basemap would
+    // satisfy the shape above while needing the key this branch exists to do
+    // without, and street tiles under a globe mostly show empty ocean.
+    assert.deepEqual(
+      arcgisRequests.map(({ url }) => url),
+      ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"],
+    );
     assert.deepEqual(ionRequests, []);
+    await (added[0] as FakeLayer).provider?.provider;
+    assert.deepEqual(openStreetMapRequests, [], "Esri answered, so nothing stood in for it");
+  });
+
+  it("stands OpenStreetMap in when the keyless imagery service cannot be reached", async () => {
+    const { Cesium, viewer, openStreetMapRequests } = makeFakes();
+    Cesium.ArcGisMapServerImageryProvider.fromUrl = () => Promise.reject(new Error("offline"));
+    const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, undefined);
+    await (added[0] as FakeLayer).provider?.provider;
+    assert.deepEqual(openStreetMapRequests, [{ url: "https://tile.openstreetmap.org/" }]);
   });
 });
 
