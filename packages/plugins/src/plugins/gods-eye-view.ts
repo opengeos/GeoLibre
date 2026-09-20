@@ -94,6 +94,7 @@ let unsubscribeLocale: (() => void) | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let panelContainer: HTMLElement | null = null;
 let savedClockAnimating: boolean | null = null;
+let savedClockMultiplier: number | null = null;
 
 function translate(
   key: string,
@@ -121,6 +122,34 @@ function timeWindow(): CzmlTimeWindow {
     current: start,
     multiplier: savedState.speed,
   };
+}
+
+/**
+ * Keep the globe's clock on the window the feeds just fetched.
+ *
+ * `electCzmlClockOwner` writes a document's clock only when the *owning layer*
+ * changes, which is right for a static document but leaves a refreshing feed on
+ * the first window it ever fetched: `upsertLayer` reuses the layer id, so no
+ * later document is ever read. With `LOOP_STOP` the clock then rewinds to a
+ * three-hour-old start and loops there, while each refresh anchors its
+ * entities to the real now — at 600x that happens every eighteen seconds. The
+ * refresh owns the window, so the refresh moves it.
+ */
+function applyFeedClockWindow(window: CzmlTimeWindow): void {
+  if (!cesiumRef) return;
+  const { Cesium: C, clock } = cesiumRef;
+  const start = C.JulianDate.fromDate(window.start);
+  const stop = C.JulianDate.fromDate(window.stop);
+  clock.startTime = start;
+  clock.stopTime = stop;
+  // Reclaim the instant only when the old one fell outside the new window.
+  // Inside it, the user or the Time Slider may have put it there on purpose.
+  if (
+    C.JulianDate.lessThan(clock.currentTime, start) ||
+    C.JulianDate.greaterThan(clock.currentTime, stop)
+  ) {
+    clock.currentTime = C.JulianDate.fromDate(window.current ?? window.start);
+  }
 }
 
 function ownedLayer(feed: FeedId) {
@@ -208,6 +237,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
     upsertLayer(feed, packets, updatedAt);
+    applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
   } catch (error) {
     // No `signal.aborted` check: the timeout watchdog aborts this very request,
@@ -401,6 +431,7 @@ function activate(app: GeoLibreAppAPI): void {
 
   if (cesiumRef) {
     savedClockAnimating = cesiumRef.clock.shouldAnimate;
+    savedClockMultiplier = cesiumRef.clock.multiplier;
     cesiumRef.clock.shouldAnimate = true;
     cesiumRef.clock.multiplier = savedState.speed;
   }
@@ -468,6 +499,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
   refreshTimer = null;
   if (cesiumRef) {
     savedClockAnimating = cesiumRef.clock.shouldAnimate;
+    savedClockMultiplier = cesiumRef.clock.multiplier;
     cesiumRef.clock.shouldAnimate = true;
     cesiumRef.clock.multiplier = savedState.speed;
     startRefreshing();
@@ -486,7 +518,14 @@ function deactivate(): void {
   if (cesiumRef && savedClockAnimating !== null) {
     cesiumRef.clock.shouldAnimate = savedClockAnimating;
   }
+  // The speed goes back too: leaving the globe at 600x would keep every other
+  // clock-driven plugin — the Sun's day/night cycle, the Time Slider — racing
+  // long after this panel is gone.
+  if (cesiumRef && savedClockMultiplier !== null) {
+    cesiumRef.clock.multiplier = savedClockMultiplier;
+  }
   savedClockAnimating = null;
+  savedClockMultiplier = null;
   cesiumRef = null;
   appRef = null;
 }

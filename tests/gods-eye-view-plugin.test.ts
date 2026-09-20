@@ -21,8 +21,26 @@ afterEach(() => {
 });
 
 /** A Cesium widget reduced to what the plugin reads, behind a fresh handle. */
-function makeGlobe() {
-  const viewer = { id: "viewer", clock: { shouldAnimate: false, multiplier: 0 } };
+function makeGlobe(startingMultiplier = 0) {
+  const viewer = {
+    id: "viewer",
+    clock: {
+      shouldAnimate: false,
+      multiplier: startingMultiplier,
+      startTime: null as number | null,
+      stopTime: null as number | null,
+      currentTime: null as number | null,
+    },
+  };
+  // Julian dates reduced to epoch milliseconds: the plugin only sets the
+  // window and compares the instant against its ends.
+  const Cesium = {
+    JulianDate: {
+      fromDate: (date: Date) => date.getTime(),
+      lessThan: (a: number, b: number) => a < b,
+      greaterThan: (a: number, b: number) => a > b,
+    },
+  };
   let handles = 0;
   // The panel is plain DOM, so it renders only when the host calls `render`.
   const { document } = parseHTML('<html><body><div id="panel"></div></body></html>');
@@ -32,6 +50,7 @@ function makeGlobe() {
     getCesiumScene: () => {
       handles += 1;
       return {
+        Cesium,
         viewer,
         clock: viewer.clock,
         primary: true,
@@ -172,6 +191,63 @@ describe("God's Eye View feed refresh", () => {
       assert.equal(useAppStore.getState().layers.length, 2);
     } finally {
       godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+
+  it("moves the clock window forward with each refresh", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      const before = Date.now();
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 8; i++) await flush();
+
+      // The globe's own clock election only ever reads the first document for a
+      // given layer id, so without this the feed would loop a stale window —
+      // at 600x, back to a three-hour-old start every eighteen seconds.
+      const { startTime, stopTime, currentTime } = globe.viewer.clock;
+      assert.ok(typeof startTime === "number" && startTime >= before);
+      assert.ok(typeof stopTime === "number" && stopTime > startTime);
+      assert.ok(typeof currentTime === "number" && currentTime >= startTime);
+
+      // An instant that ran off the end of the old window is reclaimed.
+      globe.viewer.clock.currentTime = (stopTime as number) + 60_000;
+      const checkbox = globe.panel.querySelector("input[type=checkbox]") as HTMLInputElement;
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      const back = globe.panel.querySelector("input[type=checkbox]") as HTMLInputElement;
+      back.checked = true;
+      back.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      for (let i = 0; i < 8; i++) await flush();
+      const clock = globe.viewer.clock;
+      assert.ok((clock.currentTime as number) <= (clock.stopTime as number));
+      assert.ok((clock.currentTime as number) >= (clock.startTime as number));
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      useAppStore.setState({ layers: [] });
+      net.restore();
+    }
+  });
+
+  it("gives the globe back the clock speed it had", async () => {
+    const net = stubFeeds();
+    const globe = makeGlobe(1);
+    try {
+      godsEyeViewPlugin.applyProjectState?.(globe.app, { speed: 600 });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 6; i++) await flush();
+      assert.equal(globe.viewer.clock.multiplier, 600);
+
+      // Leaving the globe at 600x would keep the Sun and the Time Slider racing
+      // long after this panel is gone.
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      assert.equal(globe.viewer.clock.multiplier, 1);
+      assert.equal(globe.viewer.clock.shouldAnimate, false);
+    } finally {
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
       useAppStore.setState({ layers: [] });
       net.restore();
     }
