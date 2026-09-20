@@ -235,7 +235,8 @@ describe("God's Eye View feed helpers", () => {
       undefined,
       "visible labels must not shrink below legible size",
     );
-    assert.deepEqual(label.distanceDisplayCondition.distanceDisplayCondition, [0, 8_000_000]);
+    // The zoom-3 camera distance times √2, so fleet names appear from zoom 2.5.
+    assert.deepEqual(label.distanceDisplayCondition.distanceDisplayCondition, [0, 11_300_000]);
   });
 
   it("materializes CZML packet properties as read-only attribute-table rows", () => {

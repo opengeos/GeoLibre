@@ -18,7 +18,9 @@ def test_czml_layer_url_shape():
     md = layer["metadata"]
     assert md["sourceKind"] == "czml"
     assert md["externalNativeLayer"] is True
-    assert md["identifiable"] is False
+    # Matches createCzmlLayer: the globe's layer sync answers Identify for the
+    # entities Cesium builds from the document.
+    assert md["identifiable"] is True
     # No customLayerType, like createCzmlLayer: the globe sync renders it, so
     # the Layer Library needs no restore pass to re-add it.
     assert "customLayerType" not in md

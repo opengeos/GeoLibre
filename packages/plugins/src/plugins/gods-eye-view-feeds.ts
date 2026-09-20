@@ -427,8 +427,11 @@ export function tleRecordsToCzml(
       // label, matching the reference app's uncluttered presentation. Do not
       // scale visible labels by distance: shrinking a 13px label at the display
       // cutoff makes it technically present but unreadable over aerial imagery.
+      // Camera distance halves per zoom level, so the fleet cutoff is the zoom-3
+      // distance times √2 — the names come in from zoom 2.5, a whole-hemisphere
+      // view, rather than only once the globe fills the pane.
       distanceDisplayCondition: {
-        distanceDisplayCondition: [0, isIss ? 30_000_000 : 8_000_000],
+        distanceDisplayCondition: [0, isIss ? 30_000_000 : 11_300_000],
       },
     };
     if (isIss) {

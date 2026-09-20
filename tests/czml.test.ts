@@ -346,6 +346,75 @@ describe("CesiumLayerSync with CZML", () => {
     sync.destroy();
   });
 
+  it("identifies a picked CZML entity, sampling its properties at the current time", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const currentTime = { dayNumber: 2459000, secondsOfDay: 100 };
+    const quake = {
+      id: "quake-1",
+      name: "M 6.1 — 120km SSW of Adak",
+      properties: {
+        getValue: (time: unknown) => ({
+          // Sampled at the viewer's clock, not the document's start.
+          magnitude: time === currentTime ? 6.1 : 0,
+          depthKm: 31.4,
+          // A nested bag has no flat rendering in the popup, so it is dropped.
+          origin: { author: "us" },
+        }),
+      },
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      kind: "czml-data-source",
+      show: true,
+      clock: { startTime: null, stopTime: null, currentTime, clockRange: 1, multiplier: 1 },
+      isLoading: false,
+      entities: { values: [quake], contains: (e: unknown) => e === quake },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-quakes",
+      name: "Earthquakes",
+      url: "https://example.com/quakes.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    const hit = sync.resolveFeature(quake);
+    assert.ok(hit);
+    assert.equal(hit.layerId, "czml-quakes");
+    assert.equal(hit.featureId, "quake-1");
+    // A CZML position is a time-dynamic property, not stored geometry.
+    assert.equal(hit.geometry, null);
+    assert.deepEqual(hit.properties, {
+      name: "M 6.1 — 120km SSW of Adak",
+      magnitude: 6.1,
+      depthKm: 31.4,
+    });
+
+    // An entity no loaded document owns is not this synchronizer's to answer.
+    assert.equal(sync.resolveFeature({ id: "stranger" }), null);
+
+    // A hidden entity is not pickable. The same object stays in the document,
+    // so this tests the `show` guard rather than ownership.
+    (quake as { show?: boolean }).show = false;
+    assert.equal(sync.resolveFeature(quake), null);
+    delete (quake as { show?: boolean }).show;
+
+    // Neither is one whose layer the user hid or faded out.
+    sync.sync([{ ...layer, visible: false }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([{ ...layer, opacity: 0 }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake)?.featureId, "quake-1");
+    sync.destroy();
+  });
+
   it("handles load errors gracefully and reports in getRenderStatus", async () => {
     const { Cesium, viewer } = makeGlobe();
     Cesium.CzmlDataSource.load = async () => {

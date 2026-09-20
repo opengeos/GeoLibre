@@ -366,7 +366,14 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
   appRef = app;
   const globe = app.getCesiumScene?.() ?? null;
   const next = globe?.primary ? globe : null;
-  if (next === cesiumRef) return;
+  // `getCesiumScene()` mints a fresh handle object on every call, so compare the
+  // underlying viewer the way `reattachFlightSimulator` does. The host re-runs
+  // this on every project load; only an actual engine swap should restart the
+  // timer, re-fetch the feeds, and re-take the clock.
+  if (next?.viewer === cesiumRef?.viewer) {
+    cesiumRef = next;
+    return;
+  }
   cesiumRef = next;
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
