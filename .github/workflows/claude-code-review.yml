@@ -36,11 +36,19 @@ name: Claude Code Review
 #   - First-time contributors (FIRST_TIME_CONTRIBUTOR / FIRST_TIMER / NONE) are
 #     NOT reviewed automatically. This blocks the low-effort economic-DoS vector
 #     where throwaway accounts spam PRs to burn CLAUDE_CODE_OAUTH_TOKEN budget.
-#     A maintainer opts such a PR in by commenting `/claude-review` on it; only
-#     comments from OWNER / MEMBER / COLLABORATOR accounts are honored.
+#     A maintainer opts such a PR in either by commenting `/claude-review` on it
+#     (only OWNER / MEMBER / COLLABORATOR comments are honored) or by applying
+#     the `claude-review` label. Labelling is equivalently gated without an
+#     author_association check: GitHub only lets accounts with write or triage
+#     access add a label, so a fork author cannot self-trigger a review.
+#
+#     Both opt-ins are one-shot: they review the head as it stands. Later pushes
+#     to a first-timer PR are not re-reviewed (that would hand a throwaway
+#     account an unbounded budget drain once opted in) — re-trigger by
+#     commenting again, or by removing and re-adding the label.
 on:
   pull_request_target:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: [opened, synchronize, ready_for_review, reopened, labeled]
   issue_comment:
     types: [created]
 
@@ -56,18 +64,31 @@ on:
 #     (shared across pushes, so cancel-in-progress dedupes rapid synchronizes)
 #   - issue_comment on PR N               -> claude-review-issue_comment-N-<comment id>
 #     (unique per comment, so it never cancels — and is never cancelled by — anything)
+#   - `labeled` on PR N                   -> claude-review-pull_request_target-N-label
+#     (its own slot, so applying an unrelated label mid-review does not cancel
+#     the in-flight push review, and vice versa)
 concurrency:
-  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || 'push' }}
+  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || (github.event.action == 'labeled' && 'label') || 'push' }}
   cancel-in-progress: true
 
 jobs:
   claude-review:
-    # Run when EITHER:
-    #  (a) a known author (not a first-timer) opens/updates a PR, OR
-    #  (b) a maintainer comments `/claude-review` on a PR (this is the opt-in
-    #      path for first-time-contributor PRs).
+    # Run when ANY of:
+    #  (a) a known author (not a first-timer) opens/updates a PR,
+    #  (b) a maintainer comments `/claude-review` on a PR, OR
+    #  (c) a maintainer applies the `claude-review` label to a PR.
+    # (b) and (c) are the opt-in paths for first-time-contributor PRs.
+    #
     # author_association on the comment gates (b): only OWNER/MEMBER/COLLABORATOR
     # accounts — i.e. people with write/admin on the repo — can trigger a review.
+    # (c) needs no such check: GitHub itself restricts labelling to accounts with
+    # write or triage access, so the event cannot originate from a fork author.
+    # It does check the label NAME, because `labeled` fires for every label —
+    # without it, tagging a PR `bug` would spend a review.
+    #
+    # Branch (a) must exclude `labeled`, or adding any label to a known
+    # contributor's PR would re-review it under the automatic path and sidestep
+    # the name check in (c).
     #
     # sender.type gates out bot-initiated events (e.g. a pre-commit.ci autofix
     # push firing `synchronize`): claude-code-action hard-fails on non-human
@@ -76,6 +97,7 @@ jobs:
     # skipped instead of failed; a maintainer can still `/claude-review`.
     if: >
       (github.event_name == 'pull_request_target' &&
+        github.event.action != 'labeled' &&
         github.event.sender.type != 'Bot' &&
         (github.event.pull_request.author_association == 'OWNER' ||
          github.event.pull_request.author_association == 'MEMBER' ||
@@ -87,7 +109,10 @@ jobs:
          startsWith(github.event.comment.body, '/claude-review ')) &&
         (github.event.comment.author_association == 'OWNER' ||
          github.event.comment.author_association == 'MEMBER' ||
-         github.event.comment.author_association == 'COLLABORATOR'))
+         github.event.comment.author_association == 'COLLABORATOR')) ||
+      (github.event_name == 'pull_request_target' &&
+        github.event.action == 'labeled' &&
+        github.event.label.name == 'claude-review')
 
     runs-on: ubuntu-latest
     permissions:

@@ -48,3 +48,6 @@
 - name: full-e2e
   color: "1d76db"
   description: Run the full Playwright feature suite on this pull request
+- name: claude-review
+  color: "5319e7"
+  description: Trigger a Claude code review on this pull request (opt-in for first-time contributors)
