@@ -91,8 +91,7 @@ interface ViewMenuProps {
 /**
  * The View menu: step backward/forward through the map's viewport history (the
  * way a browser's back/forward buttons walk page history) and reset the
- * camera's rotation/tilt. Hidden on narrow screens (via
- * `chrome.secondaryButtonClass`) so the menu bar stays one row.
+ * camera's rotation/tilt.
  */
 export function ViewMenu({
   chrome,
@@ -183,7 +182,7 @@ export function ViewMenu({
     >
       <DropdownMenuTrigger asChild>
         <Button
-          className={chrome.secondaryButtonClass}
+          className={chrome.buttonClass}
           variant="ghost"
           size={chrome.buttonSize}
           aria-label={t("toolbar.menu.view")}

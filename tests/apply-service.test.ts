@@ -198,6 +198,30 @@ describe("buildWfsGeoJsonLayer", () => {
     });
     assert.equal((layer.source as Record<string, unknown>).srsName, undefined);
   });
+
+  it("reserves a different palette color for a pending batch sibling", () => {
+    const data: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: null, properties: {} }],
+    };
+    const params = {
+      name: "First",
+      featureUrl: "https://example.com/wfs",
+      data,
+      typeName: "first",
+      version: "2.0.0",
+      outputFormat: "application/json",
+      srsName: "EPSG:4326",
+    };
+    const first = buildWfsGeoJsonLayer(params);
+    const second = buildWfsGeoJsonLayer({
+      ...params,
+      name: "Second",
+      typeName: "second",
+      pendingLayers: [first],
+    });
+    assert.notEqual(second.style.fillColor, first.style.fillColor);
+  });
 });
 
 describe("field mappers", () => {

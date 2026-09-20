@@ -1,4 +1,5 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import {
   type OgcFeaturesCollectionOption,
 } from "../../../../lib/ogc-api-features";
 import { buildOgcFeaturesLayer } from "../apply-service";
+import { settleNamedRequests, type NamedRequestFailure } from "../batch-requests";
 import { DEFAULT_OGC_FEATURES_COLLECTION, DEFAULT_OGC_FEATURES_ENDPOINT } from "../constants";
 import { serviceRequestErrorMessage } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -26,6 +28,7 @@ interface OgcFeaturesFormCache {
   bbox: string;
   datetime: string;
   options: OgcFeaturesCollectionOption[];
+  selectedCollectionIds: string[];
 }
 let ogcFeaturesFormCache: OgcFeaturesFormCache | null = null;
 
@@ -39,9 +42,9 @@ interface OgcFeaturesSample {
  *
  * The user points at a service (its landing page, or any `/collections/…` URL
  * copied from the service's own HTML browser), retrieves its collections, and
- * picks one. The fetch follows the service's `next` links until the requested
- * feature count is reached, because a single `/items` request returns only one
- * server-sized page.
+ * picks one or more. Each fetch follows the service's `next` links until the
+ * requested feature count is reached, because a single `/items` request
+ * returns only one server-sized page.
  */
 export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
@@ -60,6 +63,9 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
   const [collectionOptions, setCollectionOptions] = useState<OgcFeaturesCollectionOption[]>(
     serviceCache?.options ?? [],
   );
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>(
+    serviceCache?.selectedCollectionIds ?? [],
+  );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const collectionListId = useId();
@@ -74,8 +80,17 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       bbox,
       datetime,
       options: collectionOptions,
+      selectedCollectionIds,
     };
-  }, [endpoint, collectionId, maxFeatures, bbox, datetime, collectionOptions]);
+  }, [
+    endpoint,
+    collectionId,
+    maxFeatures,
+    bbox,
+    datetime,
+    collectionOptions,
+    selectedCollectionIds,
+  ]);
 
   // See WfsSource: guards a stale in-flight retrieval from overwriting the form.
   const retrieveTokenRef = useRef(0);
@@ -105,6 +120,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     if (collectionOptions.length > 0 || isRetrieving) {
       cancelRetrieve();
       setCollectionOptions([]);
+      setSelectedCollectionIds([]);
       setIsRetrieving(false);
     }
     if (retrieveError) setRetrieveError(null);
@@ -126,6 +142,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       if (isStale()) return;
       if (options.length === 0) {
         setCollectionOptions([]);
+        setSelectedCollectionIds([]);
         setRetrieveError(t("addData.ogcFeatures.noCollectionsFound"));
         return;
       }
@@ -133,14 +150,28 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       // A URL pasted from the service's own browser already names a collection;
       // otherwise preselect the first so a single click leaves the form ready.
       const pasted = parsed.collectionId;
-      if (pasted && options.some((option) => option.id === pasted)) {
+      const availableIds = new Set(options.map((option) => option.id));
+      const retainedSelection = selectedCollectionIds.filter((id) => availableIds.has(id));
+      const typedId = collectionId.trim();
+      const preferredId = pasted && availableIds.has(pasted) ? pasted : typedId;
+      const nextSelection =
+        retainedSelection.length > 0
+          ? retainedSelection
+          : preferredId && availableIds.has(preferredId)
+            ? [preferredId]
+            : preferredId
+              ? []
+              : [options[0].id];
+      setSelectedCollectionIds(nextSelection);
+      if (pasted && availableIds.has(pasted)) {
         setCollectionId(pasted);
-      } else if (!collectionId.trim()) {
+      } else if (!typedId) {
         setCollectionId(options[0].id);
       }
     } catch (error) {
       if (isStale()) return;
       setCollectionOptions([]);
+      setSelectedCollectionIds([]);
       setRetrieveError(
         serviceRequestErrorMessage(error, t, t("addData.ogcFeatures.retrieveError")),
       );
@@ -158,6 +189,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     // The new service's collections must be re-retrieved.
     cancelRetrieve();
     setCollectionOptions([]);
+    setSelectedCollectionIds([]);
     setIsRetrieving(false);
     setRetrieveError(null);
   };
@@ -167,8 +199,14 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     const parsed = parseOgcFeaturesUrl(endpoint);
     // A URL pasted straight from the service's HTML browser already names the
     // collection, so an empty field is only an error when neither carries one.
-    const collection = collectionId.trim() || parsed.collectionId;
-    if (!collection) {
+    const collections =
+      selectedCollectionIds.length > 0
+        ? selectedCollectionIds
+        : [
+            collectionId.trim() ||
+              (collectionOptions.length === 0 ? (parsed.collectionId ?? "") : ""),
+          ].filter(Boolean);
+    if (collections.length === 0) {
       throw new Error(t("addData.ogcFeatures.errorCollection"));
     }
     const requestedMax = Number(maxFeatures.trim());
@@ -190,23 +228,47 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
     submitAbortRef.current?.abort();
     const controller = new AbortController();
     submitAbortRef.current = controller;
-    const result = await fetchOgcFeatureItems(
-      {
-        baseUrl: parsed.baseUrl,
-        collectionId: collection,
-        extraQuery: parsed.extraQuery,
-        maxFeatures: Math.floor(requestedMax),
-        bbox: trimmedBbox || undefined,
-        datetime: datetime.trim() || undefined,
-      },
-      { signal: controller.signal },
+    const settled = await settleNamedRequests(
+      collections.map((collection) => ({
+        key: collection,
+        run: () =>
+          fetchOgcFeatureItems(
+            {
+              baseUrl: parsed.baseUrl,
+              collectionId: collection,
+              extraQuery: parsed.extraQuery,
+              maxFeatures: Math.floor(requestedMax),
+              bbox: trimmedBbox || undefined,
+              datetime: datetime.trim() || undefined,
+            },
+            { signal: controller.signal },
+          ),
+      })),
     );
     // A superseded/cancelled request must not add a layer after the fact.
     if (controller.signal.aborted) return;
-    if (result.data.features.length === 0) {
-      throw new Error(t("addData.ogcFeatures.errorNoFeatures"));
-    }
-    if (result.truncated) {
+    const failures: NamedRequestFailure[] = [...settled.failures];
+    const results = settled.successes.flatMap(({ key: collection, value: result }) => {
+      if (result.data.features.length > 0) return [{ collection, result }];
+      failures.push({
+        key: collection,
+        reason: new Error(t("addData.ogcFeatures.errorNoFeatures")),
+      });
+      return [];
+    });
+    const failureMessage = failures
+      .map(({ key, reason }) => {
+        const message = serviceRequestErrorMessage(
+          reason,
+          t,
+          t("addData.ogcFeatures.retrieveError"),
+        );
+        return collections.length > 1 ? `${key}: ${message}` : message;
+      })
+      .join("\n");
+    if (results.length === 0) throw new Error(failureMessage);
+    for (const { collection, result } of results) {
+      if (!result.truncated) continue;
       // Not an error: the layer holds the requested slice of a larger
       // collection. Note it so a user comparing counts against the service is
       // not left wondering where the rest went.
@@ -217,23 +279,45 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       );
     }
 
-    const name = source.layerName.trim() || collection || t("addData.ogcFeatures.defaultName");
-    source.addAndClose(
-      buildOgcFeaturesLayer({
-        name,
-        itemsUrl: result.url,
-        data: result.data,
-        baseUrl: parsed.baseUrl,
-        collectionId: collection,
-        maxFeatures: Math.floor(requestedMax),
-        bbox: trimmedBbox || undefined,
-        datetime: datetime.trim() || undefined,
-        extraQuery: parsed.extraQuery || undefined,
-        numberMatched: result.numberMatched,
-        truncated: result.truncated,
-      }),
-      { fit: true },
-    );
+    const multiple = collections.length > 1;
+    const layers: GeoLibreLayer[] = [];
+    for (const { collection, result } of results) {
+      const option = collectionOptions.find((candidate) => candidate.id === collection);
+      const name = multiple
+        ? option?.title || collection
+        : source.layerName.trim() || collection || t("addData.ogcFeatures.defaultName");
+      layers.push(
+        buildOgcFeaturesLayer({
+          name,
+          itemsUrl: result.url,
+          data: result.data,
+          baseUrl: parsed.baseUrl,
+          collectionId: collection,
+          maxFeatures: Math.floor(requestedMax),
+          bbox: trimmedBbox || undefined,
+          datetime: datetime.trim() || undefined,
+          extraQuery: parsed.extraQuery || undefined,
+          numberMatched: result.numberMatched,
+          truncated: result.truncated,
+          pendingLayers: layers,
+        }),
+      );
+    }
+    if (failures.length > 0) {
+      source.addMany(layers, { fit: true });
+      const failedCollectionIds = failures.map(({ key }) => key);
+      setSelectedCollectionIds(failedCollectionIds);
+      setCollectionId(failedCollectionIds[0] ?? "");
+      if (failedCollectionIds.length === 1) {
+        const failedOption = collectionOptions.find(
+          (option) => option.id === failedCollectionIds[0],
+        );
+        source.setLayerName(failedOption?.title || failedCollectionIds[0]);
+      }
+      source.setError(failureMessage);
+      return;
+    }
+    source.addManyAndClose(layers, { fit: true });
   });
 
   return (
@@ -246,6 +330,7 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
       error={source.error}
       submitDisabled={source.isSubmitting}
       useServiceIcon
+      hideLayerName={selectedCollectionIds.length > 1}
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
@@ -287,21 +372,39 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
               <Label htmlFor={collectionListId}>
                 {t("addData.ogcFeatures.retrievedCollections")}
               </Label>
-              {/* Picker listing every retrieved collection; fills the field
-                  below on select. Value stays empty (action menu), so it always
-                  shows the full list and can never mismatch the free-text field. */}
+              <p className="text-xs text-muted-foreground">
+                {t("addData.ogcFeatures.selectCollection", {
+                  count: collectionOptions.length,
+                })}
+              </p>
+              {/* Native multi-select preserves familiar Ctrl/Cmd toggle and
+                  Shift range behavior while keeping manual entry available. */}
               <Select
                 id={collectionListId}
-                value=""
+                multiple={collectionOptions.length > 1}
+                size={
+                  collectionOptions.length > 1 ? Math.min(collectionOptions.length, 8) : undefined
+                }
+                value={
+                  collectionOptions.length > 1
+                    ? selectedCollectionIds
+                    : (selectedCollectionIds[0] ?? "")
+                }
                 onChange={(event) => {
-                  if (event.target.value) setCollectionId(event.target.value);
+                  const ids = event.target.multiple
+                    ? Array.from(event.target.selectedOptions, (option) => option.value)
+                    : [event.target.value].filter(Boolean);
+                  setSelectedCollectionIds(ids);
+                  setCollectionId(ids[0] ?? "");
                 }}
               >
-                <option value="" disabled>
-                  {t("addData.ogcFeatures.selectCollection", {
-                    count: collectionOptions.length,
-                  })}
-                </option>
+                {collectionOptions.length === 1 ? (
+                  <option value="" disabled>
+                    {t("addData.ogcFeatures.selectCollection", {
+                      count: collectionOptions.length,
+                    })}
+                  </option>
+                ) : null}
                 {collectionOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.title === option.id ? option.id : `${option.title} (${option.id})`}
@@ -320,7 +423,10 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
               id="ogc-features-collection"
               placeholder={t("addData.ogcFeatures.collectionPlaceholder")}
               value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
+              onChange={(event) => {
+                setCollectionId(event.target.value);
+                setSelectedCollectionIds([]);
+              }}
             />
           </div>
           <div className="space-y-1.5">

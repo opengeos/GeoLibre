@@ -514,6 +514,7 @@
       "selectType_one": "Selecionar entre {{count}} tipo de feição",
       "selectType_other": "Selecionar entre {{count}} tipos de feição",
       "noTypesFound": "Nenhum tipo de feição foi encontrado para este serviço.",
+      "errorNoFeatures": "Este tipo de feição não retornou nenhuma feição.",
       "retrieveError": "Não foi possível recuperar os tipos de feição deste serviço."
     },
     "wmts": {

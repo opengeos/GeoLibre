@@ -124,6 +124,7 @@ function setup() {
 
 it("selects the first eligible hit, even when a disabled popup is topmost", () => {
   const f = setup();
+  assert.equal(f.document.querySelector("canvas")!.style.cursor, "crosshair");
   f.click();
   assert.equal(useAppStore.getState().selectedLayerId, "1");
   assert.equal(useAppStore.getState().selectedFeatureId, "0");
@@ -133,6 +134,19 @@ it("selects the first eligible hit, even when a disabled popup is topmost", () =
   assert.equal(button.getAttribute("type"), "button");
   button.click();
   assert.equal(f.document.querySelector(".geolibre-identify-popup"), null);
+});
+
+it("keeps the Identify cursor in sync with the active tool", () => {
+  const f = setup();
+  const canvas = f.document.querySelector("canvas")!;
+  assert.equal(canvas.style.cursor, "crosshair");
+  useAppStore.setState({ identifyLayerId: null });
+  assert.equal(canvas.style.cursor, "");
+  useAppStore.setState({ identifyLayerId: IDENTIFY_ALL_LAYERS_ID });
+  assert.equal(canvas.style.cursor, "crosshair");
+  cleanup!();
+  cleanup = undefined;
+  assert.equal(canvas.style.cursor, "");
 });
 
 it("publishes cursor coordinates even with Identify active and honours elevation preferences", () => {

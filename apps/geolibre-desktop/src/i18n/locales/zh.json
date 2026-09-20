@@ -508,6 +508,7 @@
       "retrievedTypes": "已获取要素类型",
       "selectType_other": "从 {{count}} 个要素类型中选择",
       "noTypesFound": "未在该服务中找到任何要素类型。",
+      "errorNoFeatures": "此要素类型未返回任何要素。",
       "retrieveError": "无法从该服务获取要素类型。"
     },
     "wmts": {

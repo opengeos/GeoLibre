@@ -166,7 +166,7 @@ export function layerControlPaintToStyle(
   }
 }
 
-function normalizeLayerBounds(bounds: unknown): [number, number, number, number] | null {
+export function normalizeLayerBounds(bounds: unknown): [number, number, number, number] | null {
   if (
     Array.isArray(bounds) &&
     bounds.length === 4 &&

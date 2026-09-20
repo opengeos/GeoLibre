@@ -48,6 +48,14 @@ import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import { createMapController, type MapController } from "./map-controller";
 import type { MapEngine } from "./map-engine";
+import {
+  createIdentifyPopupState,
+  consumePendingIdentifyRestore,
+  removeIdentifyPopup as removeIdentifyPopupLifecycle,
+  restoreIdentifySelection,
+  type IdentifyPopupState,
+} from "./map-identify-lifecycle";
+import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -82,6 +90,14 @@ export interface MapCanvasProps {
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
   /** Reads app-owned raster layers for the grouped, all-layer Identify popup. */
   identifyRasterLayerAt?: MapCanvasRasterIdentify;
+}
+
+function setMapLibreIdentifyCursor(map: maplibregl.Map, active: boolean): void {
+  // MapLibre's grab cursor belongs to the interactive canvas container. Its
+  // native crosshair mode covers that container and active/drag states, while
+  // the inline value keeps the canvas itself explicit for other cursor owners.
+  map.getContainer().classList.toggle("maplibregl-crosshair", active);
+  map.getCanvas().style.cursor = active ? "crosshair" : "";
 }
 
 /** Text formatters used by the grouped, all-layer Identify popup. */
@@ -681,20 +697,6 @@ function findFeatureId(layer: GeoLibreLayer, feature: maplibregl.MapGeoJSONFeatu
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
-}
-
-/**
- * The features to highlight for the current selection: the full multi-select
- * set when present, otherwise the single anchor (or none). Shared by the
- * selection effect and the map/basemap style-load handlers so a style reload
- * never collapses a multi-selection down to its anchor.
- */
-function resolveHighlightIds(state: {
-  selectedFeatureIds: string[];
-  selectedFeatureId: string | null;
-}): string[] {
-  if (state.selectedFeatureIds.length > 0) return state.selectedFeatureIds;
-  return state.selectedFeatureId ? [state.selectedFeatureId] : [];
 }
 
 function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
@@ -1371,6 +1373,7 @@ export const MapCanvas = memo(function MapCanvas({
         return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
       },
       onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
+      onEnd: () => setMapLibreIdentifyCursor(map, Boolean(useAppStore.getState().identifyLayerId)),
     });
   }, []);
 
@@ -1388,27 +1391,26 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
-    // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
-    const highlightIds = resolveHighlightIds({
-      selectedFeatureIds,
+    const previousKey = previousSelectedFeatureKey.current;
+    // This effect runs after an Identify restore has returned, so it reads
+    // the restore's read-once marker rather than a synchronous flag.
+    const restoring = consumePendingIdentifyRestore(
+      selectionFitKey({ selectedLayerId, selectedFeatureIds, selectedFeatureId }),
+    );
+    const nextKey = applySelectionHighlight(
+      controller.current,
+      layers,
+      selectedLayerId,
       selectedFeatureId,
-    });
-    // Key on the whole selection set, not just the anchor: a Shift-range pick
-    // keeps the anchor fixed while adding features, so an anchor-only key would
-    // never re-fit. Any change to the set re-triggers the fit to frame them all.
-    // Join on NUL — a byte that can't appear in a feature id — so ids containing
-    // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
-    const nextKey =
-      selectedLayerId && highlightIds.length > 0
-        ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
-        : null;
+      selectedFeatureIds,
+      zoomToSelectedFeature,
+      previousKey,
+      restoring,
+    );
     const shouldFit = Boolean(
-      zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey.current,
+      !restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey,
     );
     previousSelectedFeatureKey.current = nextKey;
-    controller.current?.highlightFeature(layer, highlightIds, {
-      fit: shouldFit,
-    });
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);
       if (shouldFit && selectedFeatureId) {
@@ -1433,7 +1435,7 @@ export const MapCanvas = memo(function MapCanvas({
       identifyPopup.current = null;
       // Same guard as the cleanup below: picking a gesture turns Identify off,
       // and begin() has already claimed the crosshair by the time this runs.
-      if (map && !featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      if (map && !featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
       return;
     }
 
@@ -1443,7 +1445,7 @@ export const MapCanvas = memo(function MapCanvas({
     cancelFeatureSelection.current?.();
 
     if (identifyAllLayers) {
-      map.getCanvas().style.cursor = "crosshair";
+      setMapLibreIdentifyCursor(map, true);
       let globalIdentifyAbortController: AbortController | null = null;
       const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
         if (featureSelectionActive.current) return;
@@ -1671,7 +1673,7 @@ export const MapCanvas = memo(function MapCanvas({
         identifyPopup.current?.remove();
         identifyPopup.current = null;
         globalIdentifyActivatedLayerId.current = null;
-        if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+        if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
       };
     }
 
@@ -1696,10 +1698,22 @@ export const MapCanvas = memo(function MapCanvas({
     // retained grid directly, and the image layer has no features to query.
     if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
 
-    map.getCanvas().style.cursor = "crosshair";
+    setMapLibreIdentifyCursor(map, true);
 
     let wmsIdentifyAbortController: AbortController | null = null;
     let pixelIdentifyAbortController: AbortController | null = null;
+    let identifyPopupState: IdentifyPopupState | null = null;
+
+    const removeIdentifyPopup = () => {
+      const popup = identifyPopup.current;
+      const popupState = identifyPopupState;
+      identifyPopup.current = null;
+      identifyPopupState = null;
+      // Every removal through this path is programmatic: a follow-up click,
+      // mode/effect cleanup, or an async popup swap. Only the popup's own close
+      // event below represents a user dismissal and may restore the snapshot.
+      removeIdentifyPopupLifecycle(popup, popupState, { restore: false });
+    };
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
       // A selection gesture owns the map clicks while it runs.
@@ -1708,12 +1722,10 @@ export const MapCanvas = memo(function MapCanvas({
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
         selectFeature(null);
-        identifyPopup.current?.remove();
-        identifyPopup.current = null;
+        removeIdentifyPopup();
       };
-      const showIdentifyPopup = (content: HTMLElement) => {
-        identifyPopup.current?.remove();
-        identifyPopup.current = new maplibregl.Popup({
+      const createAndAddIdentifyPopup = (content: HTMLElement) =>
+        new maplibregl.Popup({
           className: "geolibre-identify-popup",
           closeButton: true,
           closeOnClick: false,
@@ -1722,6 +1734,31 @@ export const MapCanvas = memo(function MapCanvas({
           .setLngLat(event.lngLat)
           .setDOMContent(content)
           .addTo(map);
+      const showIdentifyPopup = (content: HTMLElement) => {
+        removeIdentifyPopup();
+        identifyPopup.current = createAndAddIdentifyPopup(content);
+      };
+      const showResolvedHitPopup = (content: HTMLElement, featureId: string | null) => {
+        removeIdentifyPopup();
+        let popupState: IdentifyPopupState;
+        const onClose = () => {
+          if (identifyPopupState !== popupState) return;
+          identifyPopup.current = null;
+          identifyPopupState = null;
+          restoreIdentifySelection(popupState);
+        };
+        popupState = createIdentifyPopupState({
+          layerId: layer.id,
+          featureId,
+          onClose,
+        });
+        const selectionState = useAppStore.getState();
+        if (selectionState.selectedLayerId !== layer.id) selectionState.selectLayer(layer.id);
+        selectionState.selectFeature(featureId);
+        const popup = createAndAddIdentifyPopup(content);
+        identifyPopup.current = popup;
+        identifyPopupState = popupState;
+        popup.once("close", onClose);
       };
 
       if (isPixelIdentifyLayer(layer)) {
@@ -1858,15 +1895,14 @@ export const MapCanvas = memo(function MapCanvas({
       }
 
       const featureId = findFeatureId(layer, feature);
-      selectFeature(featureId);
-
-      showIdentifyPopup(
+      showResolvedHitPopup(
         createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id, {
           popup: layer.popup,
           fieldVisibility: layer.fieldVisibility,
           feature,
           zoom: map.getZoom(),
         }),
+        featureId,
       );
     };
 
@@ -1876,12 +1912,11 @@ export const MapCanvas = memo(function MapCanvas({
       wmsIdentifyAbortController?.abort();
       pixelIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
-      identifyPopup.current?.remove();
-      identifyPopup.current = null;
+      removeIdentifyPopup();
       // Starting a selection gesture turns Identify off, so this cleanup runs
       // after the gesture has already claimed the crosshair — leave its cursor
       // alone rather than resetting it out from under the drawing.
-      if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
+      if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
     };
   }, [
     identifyAllLabels,

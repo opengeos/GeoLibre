@@ -228,6 +228,15 @@ export function ArcgisCanvas({
           popupDispose?.();
           popupDispose = null;
         };
+        const setIdentifyCursor = (active: boolean) => {
+          const cursor = active ? "crosshair" : "";
+          element.style.cursor = cursor;
+          // The SDK inserts its pointer target below the supplied container.
+          // Set it explicitly because ArcGIS themes may give the surface its
+          // own cursor instead of inheriting ours.
+          const surface = element.querySelector<HTMLElement>(".esri-view-surface");
+          if (surface) surface.style.cursor = cursor;
+        };
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
           const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
@@ -294,7 +303,7 @@ export function ArcgisCanvas({
               // the same selection only redraws the highlight.
               const key =
                 next.selectedLayerId && ids !== null && (Array.isArray(ids) ? ids.length : true)
-                  ? `${next.selectedLayerId}:${Array.isArray(ids) ? ids.join("\u0000") : ids}`
+                  ? JSON.stringify([next.selectedLayerId, Array.isArray(ids) ? ids : [ids]])
                   : null;
               const fit = Boolean(
                 next.ui.zoomToSelectedFeature && key && key !== selectionKey && previous,
@@ -306,7 +315,10 @@ export function ArcgisCanvas({
                 { fit },
               );
             }
-            if (previous && next.identifyLayerId !== previous.identifyLayerId) removePopup();
+            if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
+              if (previous) removePopup();
+              setIdentifyCursor(Boolean(next.identifyLayerId));
+            }
           } finally {
             applying = false;
           }
@@ -404,6 +416,7 @@ export function ArcgisCanvas({
           .when()
           .then(() => {
             if (cancelled) return;
+            if (!viewId) setIdentifyCursor(Boolean(useAppStore.getState().identifyLayerId));
             restoreTerrain();
             const latest = useAppStore.getState();
             const pane = latest.secondaryMapViews.find((p) => p.id === viewId);

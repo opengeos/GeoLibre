@@ -503,6 +503,7 @@
       "retrievedTypes": "API OGC - Lớp tính năng",
       "selectType_other": "Chọn từ các loại tính năng {{count}}",
       "noTypesFound": "Không tìm thấy loại tính năng nào cho dịch vụ này.",
+      "errorNoFeatures": "Loại tính năng này không trả về tính năng nào.",
       "retrieveError": "Không thể truy xuất các loại tính năng từ dịch vụ này.",
       "defaultName": "Lớp WFS",
       "sampleLabel": "Các tiểu bang của Hoa Kỳ (GeoServer)",

@@ -508,6 +508,7 @@
       "retrievedTypes": "Tipe fitur yang diambil",
       "selectType_other": "Pilih dari {{count}} tipe fitur",
       "noTypesFound": "Tidak ada tipe fitur yang ditemukan untuk layanan ini.",
+      "errorNoFeatures": "Tipe fitur ini tidak mengembalikan fitur apa pun.",
       "retrieveError": "Tidak dapat mengambil tipe fitur dari layanan ini."
     },
     "wmts": {

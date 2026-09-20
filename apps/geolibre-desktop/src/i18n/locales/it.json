@@ -514,6 +514,7 @@
       "selectType_one": "Seleziona tra {{count}} tipo di elemento",
       "selectType_other": "Seleziona tra {{count}} tipi di elemento",
       "noTypesFound": "Nessun tipo di elemento trovato per questo servizio.",
+      "errorNoFeatures": "Questo tipo di elemento non ha restituito alcun elemento.",
       "retrieveError": "Impossibile recuperare i tipi di elemento da questo servizio."
     },
     "wmts": {

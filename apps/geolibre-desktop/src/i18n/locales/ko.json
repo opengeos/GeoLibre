@@ -508,6 +508,7 @@
       "retrievedTypes": "조회된 피처 유형",
       "selectType_other": "{{count}}개 피처 유형 중에서 선택",
       "noTypesFound": "이 서비스에서 피처 유형을 찾을 수 없습니다.",
+      "errorNoFeatures": "이 피처 유형은 피처를 반환하지 않았습니다.",
       "retrieveError": "이 서비스에서 피처 유형을 조회할 수 없습니다."
     },
     "wmts": {

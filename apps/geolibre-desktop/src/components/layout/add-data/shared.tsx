@@ -34,6 +34,29 @@ export function useAddDataSource(defaultLayerName: string) {
     shell.closeDialog();
   };
 
+  /** Adds a retrieved service selection as separate layers in visible list order. */
+  const addMany = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
+    // The layer panel renders the store in reverse, so insert the batch in
+    // reverse to keep the picker's top-to-bottom order visible to the user.
+    for (const layer of [...layers].reverse()) shell.addLayer(layer, beforeLayer);
+    // Fit one transient layer carrying every batch feature so geographically
+    // separated selections are all visible without animating through them.
+    const fitLayer = layers.at(-1);
+    if (options.fit && fitLayer) {
+      const features = layers.flatMap((layer) => layer.geojson?.features ?? []);
+      shell.mapControllerRef.current?.fitLayer(
+        features.length > 0
+          ? { ...fitLayer, geojson: { type: "FeatureCollection", features } }
+          : fitLayer,
+      );
+    }
+  };
+
+  const addManyAndClose = (layers: GeoLibreLayer[], options: { fit?: boolean } = {}) => {
+    addMany(layers, options);
+    shell.closeDialog();
+  };
+
   /**
    * Wraps a submit action with the shared error handling and the
    * submit-in-progress flag, returning a form `onSubmit` handler.
@@ -62,6 +85,8 @@ export function useAddDataSource(defaultLayerName: string) {
     error,
     setError,
     addAndClose,
+    addMany,
+    addManyAndClose,
     runSubmit,
     isSubmitting: shell.isSubmitting,
   };
@@ -294,6 +319,7 @@ export function AddDataSourceForm({
   submitDisabled,
   useServiceIcon,
   hideLayerFields = false,
+  hideLayerName = false,
   children,
 }: {
   layerName: string;
@@ -309,11 +335,15 @@ export function AddDataSourceForm({
    * are named and placed by an importer (e.g. a KML document's folders).
    */
   hideLayerFields?: boolean;
+  /** Hides only the single-layer name field when a source is adding a batch. */
+  hideLayerName?: boolean;
   children: ReactNode;
 }) {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
-      {!hideLayerFields && <LayerNameField value={layerName} onChange={onLayerNameChange} />}
+      {!hideLayerFields && !hideLayerName && (
+        <LayerNameField value={layerName} onChange={onLayerNameChange} />
+      )}
       {!hideLayerFields && (
         <InsertBeforeField value={beforeLayerId} onChange={onBeforeLayerIdChange} />
       )}

@@ -940,7 +940,7 @@ export function DesktopShell({
   // Live-collaboration session. Owned here (rather than in TopToolbar) so both
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
-  const collaboration = useCollaboration(mapControllerRef);
+  const collaboration = useCollaboration(mapControllerRef, mapReadyGeneration);
   const commentTool = useCommentTool({
     mapControllerRef,
     collaboration,
@@ -2731,24 +2731,6 @@ export function DesktopShell({
                     onMapDiagnosticEvent={handleMapDiagnosticEvent}
                     onControllerReady={handleMapControllerReady}
                   />
-                  <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
-                  <CommentMapOverlay
-                    mapControllerRef={mapControllerRef}
-                    onSelectComment={(commentId) => {
-                      setSelectedCommentId(commentId);
-                      openRightPanel(COMMENTS_PANEL_ID);
-                    }}
-                    showResolved={showResolvedComments}
-                  />
-                  {/* Isolate the collaboration badge in its own boundary: it renders
-                  over the map, so a fault here must never take down the map
-                  itself (it shares this subtree's error boundary otherwise). */}
-                  <SilentErrorBoundary label="Collaboration status">
-                    <CollaborationStatusBadge
-                      api={collaboration}
-                      mapControllerRef={mapControllerRef}
-                    />
-                  </SilentErrorBoundary>
                   <MapModeBanner mapControllerRef={mapControllerRef} />
                   <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
                   <NetcdfSampleMarkers
@@ -2773,6 +2755,24 @@ export function DesktopShell({
               )}
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
+              <RemoteCursorsOverlay
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
+              <CommentMapOverlay
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+                onSelectComment={(commentId) => {
+                  setSelectedCommentId(commentId);
+                  openRightPanel(COMMENTS_PANEL_ID);
+                }}
+                showResolved={showResolvedComments}
+              />
+              {/* Isolate the collaboration badge in its own boundary: it renders
+                  over the map, so a fault here must never take down the map. */}
+              <SilentErrorBoundary label="Collaboration status">
+                <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
+              </SilentErrorBoundary>
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

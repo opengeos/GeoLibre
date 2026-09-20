@@ -1862,6 +1862,19 @@ export class ArcgisEngine implements MapEngine {
     const response = await fetch(shot.dataUrl);
     return response.blob();
   }
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void {
+    const view = this.view;
+    if (!view) return () => {};
+    const handle = view.on("click", (event) => {
+      const point = view.toMap({ x: event.x, y: event.y });
+      if (point) listener([point.longitude, point.latitude]);
+    });
+    this.handles.add(handle);
+    return () => {
+      handle.remove();
+      this.handles.delete(handle);
+    };
+  }
   isCameraMoving(): boolean {
     return this.view ? !this.view.stationary : false;
   }

@@ -11,6 +11,7 @@ import { CadSource } from "./add-data/sources/CadSource";
 import { CesiumIonSource } from "./add-data/sources/CesiumIonSource";
 import { CzmlSource } from "./add-data/sources/CzmlSource";
 import { KmlSource } from "./add-data/sources/KmlSource";
+import { LandXmlSource } from "./add-data/sources/LandXmlSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
@@ -116,6 +117,8 @@ function renderSource(
       );
     case "gpx":
       return <GpxSource />;
+    case "landxml":
+      return <LandXmlSource />;
     case "georss":
       return <GeoRssSource />;
     case "delimited-text":

@@ -514,6 +514,7 @@
       "selectType_one": "Kies uit {{count}} featuretype",
       "selectType_other": "Kies uit {{count}} featuretypen",
       "noTypesFound": "Er zijn geen featuretypen gevonden voor deze service.",
+      "errorNoFeatures": "Dit featuretype heeft geen features geretourneerd.",
       "retrieveError": "Kan geen featuretypen ophalen van deze service."
     },
     "wmts": {

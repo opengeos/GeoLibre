@@ -9,6 +9,9 @@ import {
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  isPluginEngineSupported,
+  maplibreDirectionsPlugin,
+  maplibreReverseGeocodePlugin,
   setCloudsFrame,
   setPrecipitationFrame,
   subscribeClouds,
@@ -119,6 +122,14 @@ export function ControlsMenu({
 }: ControlsMenuProps) {
   const { t } = useTranslation();
   const capabilities = useMapCapabilities();
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const directionsSupported = isPluginEngineSupported(maplibreDirectionsPlugin, primaryRenderer);
+  const reverseGeocodeSupported = isPluginEngineSupported(
+    maplibreReverseGeocodePlugin,
+    primaryRenderer,
+  );
+  const directionsDisabled = !directionsSupported && !directionsActive;
+  const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) =>
     viewer && AUTHORING_CONTROL_ITEMS.includes(id) ? false : isMenuItemVisible(uiProfile, id);
@@ -292,7 +303,12 @@ export function ControlsMenu({
           )}
           {show("controls.directions") && (
             <DropdownMenuItem
-              title={t("toolbar.item.directionsTooltip")}
+              disabled={directionsDisabled}
+              title={
+                directionsDisabled
+                  ? t("renderer.pluginUnsupported")
+                  : t("toolbar.item.directionsTooltip")
+              }
               onClick={onToggleDirections}
             >
               {t("toolbar.item.directions")}
@@ -301,7 +317,12 @@ export function ControlsMenu({
           )}
           {show("controls.reverseGeocode") && (
             <DropdownMenuItem
-              title={t("toolbar.item.reverseGeocodeTooltip")}
+              disabled={reverseGeocodeDisabled}
+              title={
+                reverseGeocodeDisabled
+                  ? t("renderer.pluginUnsupported")
+                  : t("toolbar.item.reverseGeocodeTooltip")
+              }
               onClick={onToggleReverseGeocode}
             >
               {t("toolbar.item.reverseGeocode")}

@@ -508,6 +508,7 @@
       "retrievedTypes": "取得したフィーチャタイプ",
       "selectType_other": "{{count}}件のフィーチャタイプから選択",
       "noTypesFound": "このサービスにはフィーチャタイプが見つかりませんでした。",
+      "errorNoFeatures": "このフィーチャタイプはフィーチャを返しませんでした。",
       "retrieveError": "このサービスからフィーチャタイプを取得できませんでした。"
     },
     "wmts": {

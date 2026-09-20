@@ -4,12 +4,23 @@ import {
   createPointerElevationResolver,
   DEFAULT_BASEMAP,
   getActiveEllipsoid,
+  IDENTIFY_ALL_LAYERS_ID,
+  isPopupClickEnabled,
   redactUrlCredentials,
   useAppStore,
   type PointerElevationResolver,
 } from "@geolibre/core";
-import type { MapEventOf, StyleSpecification, Popup } from "mapbox-gl";
+import type { MapEventOf, StyleSpecification } from "mapbox-gl";
 import type { MapEngine } from "./map-engine";
+import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
+import {
+  createIdentifyPopupState,
+  consumePendingIdentifyRestore,
+  removeIdentifyPopup as removeIdentifyPopupLifecycle,
+  restoreIdentifySelection,
+  type IdentifyPopupState,
+  type PopupLike,
+} from "./map-identify-lifecycle";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
@@ -23,6 +34,7 @@ import {
 } from "./map-feature-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
+import { createIdentifyPopupElement } from "./feature-popup";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -117,6 +129,13 @@ export function MapboxCanvas({
           onDiagnostic: (event) => diagnosticCallback.current?.(event),
         });
         const current = engine;
+        const setIdentifyCursor = (active: boolean) => {
+          // Mapbox's grab cursor belongs to the interactive canvas container,
+          // not the canvas itself. Use its supported crosshair mode so every
+          // map surface agrees while Identify owns pointer clicks.
+          map.getContainer().classList.toggle("mapboxgl-crosshair", active);
+          map.getCanvas().style.cursor = active ? "crosshair" : "";
+        };
         const featureSelection: FeatureSelectionState = {
           active: { current: false },
           cancel: { current: null },
@@ -128,8 +147,7 @@ export function MapboxCanvas({
               featureIdAtPoint: (layer, point) => current.featureIdAtPoint(layer.id, point),
               onDiagnostic: (event) => diagnosticCallback.current?.(event),
               onEnd: () => {
-                if (!cancelled && useAppStore.getState().identifyLayerId)
-                  map.getCanvas().style.cursor = "crosshair";
+                if (!cancelled) setIdentifyCursor(Boolean(useAppStore.getState().identifyLayerId));
               },
             });
         // Arm the global-listener cleanup before any engine/store setup that
@@ -137,9 +155,19 @@ export function MapboxCanvas({
         // request listener until this effect happens to run again.
         cleanupTasks.push(detachFeatureSelection);
         let applying = false;
-        let popup: Popup | undefined;
+        let popup: PopupLike | undefined;
+        let identifyPopupState: IdentifyPopupState | undefined;
         let pointerElevation: PointerElevationResolver | undefined;
         let previousSelectedFeatureKey: string | null = null;
+        const removeIdentifyPopup = (
+          options: { restore?: boolean; forceRestore?: boolean } = {},
+        ) => {
+          const openPopup = popup;
+          const popupState = identifyPopupState;
+          popup = undefined;
+          identifyPopupState = undefined;
+          removeIdentifyPopupLifecycle(openPopup, popupState, options);
+        };
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
           const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
@@ -199,31 +227,41 @@ export function MapboxCanvas({
                 next.selectedLayerId !== previous.selectedLayerId ||
                 next.ui.zoomToSelectedFeature !== previous.ui.zoomToSelectedFeature)
             ) {
-              const ids =
-                next.selectedFeatureIds.length > 0
-                  ? next.selectedFeatureIds
-                  : next.selectedFeatureId
-                    ? [next.selectedFeatureId]
-                    : [];
-              const nextKey =
-                next.selectedLayerId && ids.length > 0
-                  ? `${next.selectedLayerId}:${ids.join("\u0000")}`
-                  : null;
-              const fit = Boolean(
-                next.ui.zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey,
-              );
-              previousSelectedFeatureKey = nextKey;
-              current.highlightFeature(
-                next.layers.find((l) => l.id === next.selectedLayerId),
-                ids.length > 0 ? ids : null,
-                { fit },
+              previousSelectedFeatureKey = applySelectionHighlight(
+                current,
+                next.layers,
+                next.selectedLayerId,
+                next.selectedFeatureId,
+                next.selectedFeatureIds,
+                next.ui.zoomToSelectedFeature,
+                previousSelectedFeatureKey,
+                // Read-once Identify restore marker; primary canvas only
+                // (see map-identify-lifecycle.ts).
+                consumePendingIdentifyRestore(selectionFitKey(next)),
               );
             }
+            if (!viewId && previous && next.projectGeneration !== previous.projectGeneration) {
+              // The new project owns its own selection. Drop the old popup and
+              // its ownership record without restoring a layer from the project
+              // that was just replaced.
+              removeIdentifyPopup({ restore: false });
+            } else if (!viewId && identifyPopupState && next.layers !== previous?.layers) {
+              const identifiedLayer = next.layers.find(
+                (layer) => layer.id === identifyPopupState?.identifiedLayerId,
+              );
+              if (!identifiedLayer || !isPopupClickEnabled(identifiedLayer.popup)) {
+                // removeLayer chooses a fallback selected layer before
+                // subscribers run. Force the earlier user selection back when
+                // it still exists instead of leaving that arbitrary fallback.
+                // Restoring also drops the popup's feature selection.
+                removeIdentifyPopup({ forceRestore: !identifiedLayer });
+              }
+            }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
-              popup?.remove();
+              removeIdentifyPopup();
               if (next.identifyLayerId) featureSelection.cancel.current?.();
               if (!featureSelection.active.current)
-                map.getCanvas().style.cursor = next.identifyLayerId ? "crosshair" : "";
+                setIdentifyCursor(Boolean(next.identifyLayerId));
             }
             if (
               !viewId &&
@@ -275,12 +313,7 @@ export function MapboxCanvas({
           if (viewId || cancelled) return;
           const next = useAppStore.getState();
           refreshMapboxPointerElevationAfterStyleLoad(pointerElevation, next.pointerCoords);
-          const ids =
-            next.selectedFeatureIds.length > 0
-              ? next.selectedFeatureIds
-              : next.selectedFeatureId
-                ? [next.selectedFeatureId]
-                : [];
+          const ids = resolveHighlightIds(next);
           current.highlightFeature(
             next.layers.find((layer) => layer.id === next.selectedLayerId),
             ids.length > 0 ? ids : null,
@@ -358,34 +391,77 @@ export function MapboxCanvas({
           if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
           if (!next.identifyLayerId) return;
-          const match = current.identifyFeatures(
-            e.lngLat.toArray(),
-            next.layers.some((l) => l.id === next.identifyLayerId)
-              ? next.identifyLayerId
-              : undefined,
-          )[0];
-          popup?.remove();
-          if (!match) {
+          const identifyAll = next.identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+          const targetLayer = identifyAll
+            ? undefined
+            : next.layers.find((layer) => layer.id === next.identifyLayerId);
+          if (!identifyAll && (!targetLayer || !isPopupClickEnabled(targetLayer.popup))) {
+            removeIdentifyPopup();
             next.selectFeature(null);
             return;
           }
-          next.selectLayer(match.layerId);
-          next.selectFeature(match.featureId);
-          const content = document.createElement("div");
-          const title = document.createElement("strong");
-          title.textContent = next.layers.find((l) => l.id === match.layerId)?.name ?? "";
-          content.append(title);
-          for (const [key, value] of Object.entries(match.properties)) {
-            const row = document.createElement("div");
-            row.textContent = `${key}: ${
-              typeof value === "object" ? JSON.stringify(value) : String(value)
-            }`;
-            content.append(row);
+          const match = current
+            .identifyFeatures(e.lngLat.toArray(), targetLayer?.id)
+            .find((hit) => {
+              const layer = next.layers.find((candidate) => candidate.id === hit.layerId);
+              return layer && isPopupClickEnabled(layer.popup);
+            });
+          if (!match) {
+            removeIdentifyPopup();
+            next.selectFeature(null);
+            return;
           }
-          popup = new gl.Popup({ maxWidth: "360px" })
+          const layer = next.layers.find((candidate) => candidate.id === match.layerId);
+          if (!layer) return;
+
+          removeIdentifyPopup();
+          const selectionState = useAppStore.getState();
+          let popupState: IdentifyPopupState;
+          const onClose = () => {
+            if (identifyPopupState !== popupState) return;
+            popup = undefined;
+            identifyPopupState = undefined;
+            restoreIdentifySelection(popupState);
+          };
+          popupState = createIdentifyPopupState({
+            layerId: match.layerId,
+            featureId: match.featureId,
+            onClose,
+          });
+          if (selectionState.selectedLayerId !== match.layerId)
+            selectionState.selectLayer(match.layerId);
+          selectionState.selectFeature(match.featureId);
+          const feature = match.geometry
+            ? {
+                type: "Feature" as const,
+                properties: match.properties,
+                geometry: match.geometry,
+                ...(match.featureId === null ? {} : { id: match.featureId }),
+              }
+            : undefined;
+          const content = createIdentifyPopupElement(
+            layer.name,
+            match.properties,
+            match.featureId ?? undefined,
+            {
+              popup: layer.popup,
+              fieldVisibility: layer.fieldVisibility,
+              feature,
+              zoom: map.getZoom(),
+            },
+          );
+          const nextPopup = new gl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: "560px",
+          })
             .setLngLat(e.lngLat)
             .setDOMContent(content)
             .addTo(map);
+          popup = nextPopup;
+          identifyPopupState = popupState;
+          nextPopup.once("close", onClose);
         };
         map.on("mousemove", handleMouseMove);
         map.on("mouseout", handleMouseOut);
@@ -417,7 +493,7 @@ export function MapboxCanvas({
         });
         cleanupTasks.push(() => themeObserver.disconnect());
         cleanupTasks.push(() => {
-          popup?.remove();
+          removeIdentifyPopup();
         });
       })
       .catch((error) => {

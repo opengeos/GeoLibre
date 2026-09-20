@@ -52,6 +52,7 @@ import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
 import { captureEngineImage } from "./map-capture";
 import { drawExtentOnCanvas } from "./extent-drawing";
+import { globeSafeMaxZoom } from "./globe-fit-bounds";
 import {
   prepareMapboxStandard,
   isMapboxStandard,
@@ -59,7 +60,7 @@ import {
   STANDARD_BLANK_COLOR,
 } from "./mapbox-standard-style";
 import { arcgisOpacity } from "./arcgis-vector-style";
-import { LayerControlHost } from "./layer-control-host";
+import { LayerControlHost, normalizeLayerBounds } from "./layer-control-host";
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MapboxGlobeControl } from "./mapbox-globe-control";
 
@@ -78,6 +79,9 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
 });
 
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";
+
+/** Identical to the MapLibre engine's fit padding, so the two settle alike. */
+const FIT_BOUNDS_PADDING = 40;
 
 const HIGHLIGHT_SOURCE_ID = "geolibre-mapbox-highlight";
 const HIGHLIGHT_LAYER_IDS = [
@@ -550,32 +554,79 @@ export class MapboxEngine implements MapEngine {
     this.map?.easeTo({ pitch: 0, duration: 1000 });
   }
   fitBounds(bounds: MapExtent): void {
-    this.map?.fitBounds(
+    const map = this.map;
+    if (!map) return;
+    if (bounds.some((value) => !Number.isFinite(value))) return;
+    // A degenerate point-sized box cannot be fit; fly to the point instead.
+    if (bounds[0] === bounds[2] && bounds[1] === bounds[3]) {
+      map.flyTo({
+        center: [bounds[0], bounds[1]],
+        zoom: Math.max(map.getZoom(), 14),
+        duration: 800,
+      });
+      return;
+    }
+    // An extent wider than the hemisphere a globe can show has no camera that
+    // contains it, and mapbox-gl's globe fit answers one of those by zooming
+    // *in*, leaving the data behind the horizon. Cap those at the flat-map
+    // zoom so they settle on a whole-globe view instead; narrower fits are
+    // untouched. (Same rule the MapLibre engine applies.)
+    const maxZoom = globeSafeMaxZoom(bounds, this.getViewportSize(), FIT_BOUNDS_PADDING);
+    map.fitBounds(
       [
         [bounds[0], bounds[1]],
         [bounds[2], bounds[3]],
       ],
-      { padding: 40, maxZoom: 14, duration: 800 },
+      { padding: FIT_BOUNDS_PADDING, duration: 800, ...(maxZoom === null ? {} : { maxZoom }) },
     );
   }
   fitLayer(layer: GeoLibreLayer): void {
-    const bounds = getLayerBounds(layer);
-    if (bounds) this.fitBounds(bounds);
-    else {
-      const center = layer.metadata.center;
-      if (
-        Array.isArray(center) &&
-        center.length >= 2 &&
-        center.slice(0, 2).every((v) => typeof v === "number" && Number.isFinite(v))
-      ) {
-        this.map?.flyTo({
-          center: [center[0] as number, center[1] as number],
-          zoom: typeof layer.metadata.zoom === "number" ? layer.metadata.zoom : 16,
-          // Match MapController.fitLayer: a tileset is looked at in perspective.
-          ...(layer.type === "3d-tiles" ? { pitch: Math.max(this.map.getPitch(), 60) } : {}),
-        });
-      }
+    // getLayerBounds already falls through to layer.source.bounds →
+    // layer.metadata.bounds with the same finite-number check, so the only
+    // addition for Mapbox is the source *plan* bounds (the id of the compiled
+    // native source), which getLayerBounds cannot reach.
+    const bounds = getLayerBounds(layer) ?? this.getLayerSourceBounds(layer);
+    if (bounds) {
+      this.fitBounds(bounds);
+      return;
     }
+    const map = this.map;
+    if (!map) return;
+    const center = layer.metadata.center;
+    if (
+      Array.isArray(center) &&
+      center.length >= 2 &&
+      center.slice(0, 2).every((v) => typeof v === "number" && Number.isFinite(v))
+    ) {
+      map.flyTo({
+        center: [center[0] as number, center[1] as number],
+        zoom: typeof layer.metadata.zoom === "number" ? layer.metadata.zoom : 16,
+        // Match MapController.fitLayer: a tileset is looked at in perspective.
+        ...(layer.type === "3d-tiles" ? { pitch: Math.max(map.getPitch(), 60) } : {}),
+      });
+    }
+  }
+  /** The map viewport in CSS pixels, or null when the canvas has not been
+   * laid out yet — a zero size would make any derived ceiling nonsense. */
+  private getViewportSize(): { width: number; height: number } | null {
+    const canvas = this.map?.getCanvas();
+    const width = canvas?.clientWidth ?? 0;
+    const height = canvas?.clientHeight ?? 0;
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+  /** Bounds a layer advertises about itself from its source, if any. */
+  private getLayerSourceBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
+    const map = this.map;
+    const plan = this.plans.get(layer.id);
+    const ids = plan ? [plan.sourceId, ...Object.keys(plan.additionalSources ?? {})] : [];
+    for (const id of ids) {
+      const source = map?.getSource(id) as
+        | { bounds?: [number, number, number, number] }
+        | undefined;
+      const bounds = normalizeLayerBounds(source?.bounds);
+      if (bounds) return bounds;
+    }
+    return null;
   }
   readProjection(): MapProjection {
     return this.map?.getProjection().name === "globe" ? "globe" : "mercator";
@@ -1235,6 +1286,15 @@ export class MapboxEngine implements MapEngine {
   }
   captureImage(): Promise<Blob> {
     return captureEngineImage(this);
+  }
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void {
+    const map = this.map;
+    const onClick = (event: mapboxgl.MapMouseEvent) =>
+      listener([event.lngLat.lng, event.lngLat.lat]);
+    map?.on("click", onClick);
+    return () => {
+      map?.off("click", onClick);
+    };
   }
   isCameraMoving(): boolean {
     return this.map?.isMoving() ?? false;

@@ -18,7 +18,6 @@ import {
   type EmbedEventType,
 } from "../lib/embed-api";
 import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
-import { shouldAwaitNativeMap } from "../lib/native-map-attach";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
 import { loadDataUrl } from "./useDataUrlLoader";
@@ -383,9 +382,10 @@ export function useEmbedApi(
       }
     });
 
-    // Camera events. The controller and its map appear asynchronously, so poll
-    // animation frames until the map exists (same pattern as useCommandBridge).
-    let viewMap: ReturnType<MapEngine["getMap"]> | null = null;
+    // Camera events. The engine appears asynchronously after its canvas mounts,
+    // so poll only until the renderer-neutral event surface is published.
+    let unsubscribeMove: (() => void) | null = null;
+    let unsubscribeIdle: (() => void) | null = null;
     let lastViewAt = 0;
     let trailingTimer: number | null = null;
     const postView = () => {
@@ -421,16 +421,12 @@ export function useEmbedApi(
     let rafId: number | null = null;
     const attach = () => {
       const engine = controller();
-      // Stops the poll once a map can no longer arrive; see the helper.
-      if (!shouldAwaitNativeMap(engine)) return;
-      const map = engine?.getMap();
-      if (!map) {
+      if (!engine) {
         rafId = requestAnimationFrame(attach);
         return;
       }
-      viewMap = map;
-      map.on("move", onMapMove);
-      map.on("moveend", onMapMove);
+      unsubscribeMove = engine.onCameraMove(onMapMove);
+      unsubscribeIdle = engine.onCameraIdle(onMapMove);
     };
     rafId = requestAnimationFrame(attach);
 
@@ -453,8 +449,8 @@ export function useEmbedApi(
       dataLoadAborts.clear();
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (trailingTimer !== null) window.clearTimeout(trailingTimer);
-      viewMap?.off("move", onMapMove);
-      viewMap?.off("moveend", onMapMove);
+      unsubscribeMove?.();
+      unsubscribeIdle?.();
     };
   }, [mapControllerRef, mapAppAPI, mapReadyGeneration]);
 }

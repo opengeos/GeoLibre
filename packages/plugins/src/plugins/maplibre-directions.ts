@@ -376,6 +376,7 @@ export const maplibreDirectionsPlugin: GeoLibrePlugin = {
   id: DIRECTIONS_PLUGIN_ID,
   name: "Directions",
   version: "1.0.0",
+  engines: ["maplibre"],
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };

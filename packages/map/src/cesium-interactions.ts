@@ -25,6 +25,9 @@ export function installCesiumInteractions(
   let lastPointer: Cartesian2 | null = null;
   let frame = 0;
   let moving = false;
+  const setIdentifyCursor = (active: boolean) => {
+    viewer.canvas.style.cursor = active ? "crosshair" : "";
+  };
   const publishPointer = (point: Cartesian2 | null) => {
     const state = useAppStore.getState();
     const pointer = point ? engine.readPointerAtScreen(point) : null;
@@ -167,6 +170,9 @@ export function installCesiumInteractions(
       clearHover();
       clearPopup();
     }
+    if (state.identifyLayerId !== prev.identifyLayerId) {
+      setIdentifyCursor(Boolean(state.identifyLayerId));
+    }
   });
   const escape = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
@@ -198,11 +204,13 @@ export function installCesiumInteractions(
   viewer.camera.moveEnd.addEventListener(moveEnd);
 
   selection();
+  setIdentifyCursor(Boolean(useAppStore.getState().identifyLayerId));
   return () => {
     unsubscribe();
     handler.destroy();
     leave();
     clearPopup();
+    setIdentifyCursor(false);
     viewer.canvas.removeEventListener("mouseleave", leave);
     window.removeEventListener("keydown", escape);
     viewer.camera.moveStart.removeEventListener(moveStart);

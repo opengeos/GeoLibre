@@ -1,10 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAppStore, type ProjectComment } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import * as maplibreGl from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import { useShallow } from "zustand/react/shallow";
+import { mountProjectedElement } from "../../lib/projected-map-overlay";
 
 interface CommentMapOverlayProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
   onSelectComment?: (commentId: string) => void;
   showResolved?: boolean;
 }
@@ -41,17 +44,15 @@ function extractGeometryCoords(geometry: any): [number, number] | null {
 
 export function resolveCommentCoordinates(
   comment: ProjectComment,
-  map: maplibreGl.Map | null,
+  map: MapLibreMap | null,
 ): [number, number] | null {
   // 1. Direct lngLat on point or feature anchor
   if (comment.anchor.lngLat) {
     return comment.anchor.lngLat;
   }
 
-  if (!map) return null;
-
   // 2. Query rendered features on active layer
-  if (comment.anchor.type === "feature") {
+  if (comment.anchor.type === "feature" && map) {
     const { layerId, featureId } = comment.anchor;
     const storeLayer = useAppStore.getState().layers.find((l) => l.id === layerId);
     const sourceIds = new Set(
@@ -91,8 +92,13 @@ export function resolveCommentCoordinates(
         // Ignore query errors
       }
     }
+  }
 
-    // 3. Fallback to GeoJSON features in store layers
+  // 3. Fallback to GeoJSON features in store layers. This path is renderer
+  // neutral and also covers Mapbox, whose engine deliberately exposes no
+  // MapLibre map instance.
+  if (comment.anchor.type === "feature") {
+    const { layerId, featureId } = comment.anchor;
     const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (layer?.geojson?.features) {
       const feat = layer.geojson.features.find((f) => String(f.id) === String(featureId));
@@ -108,20 +114,43 @@ export function resolveCommentCoordinates(
 
 export function CommentMapOverlay({
   mapControllerRef,
+  mapReadyGeneration,
   onSelectComment,
   showResolved = false,
 }: CommentMapOverlayProps): null {
   const comments = useAppStore((s) => s.comments);
-  const markersRef = useRef<maplibreGl.Marker[]>([]);
+  const featureAnchorLayerIds = useMemo(
+    () =>
+      new Set(
+        comments.flatMap((comment) =>
+          comment.anchor.type === "feature" ? [comment.anchor.layerId] : [],
+        ),
+      ),
+    [comments],
+  );
+  // Rebuild pins when an anchored layer's geometry or source mapping changes,
+  // but not for unrelated layer mutations such as opacity slider updates.
+  const featureAnchorLayerInputs = useAppStore(
+    useShallow((s) =>
+      s.layers.flatMap((layer) =>
+        featureAnchorLayerIds.has(layer.id)
+          ? [layer.id, layer.geojson, layer.metadata?.sourceIds]
+          : [],
+      ),
+    ),
+  );
+  const markerDisposersRef = useRef<Array<() => void>>([]);
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    const map = engine.getMap();
 
     const renderMarkers = () => {
       // Clear existing markers
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+      markerDisposersRef.current.forEach((dispose) => dispose());
+      markerDisposersRef.current = [];
 
       comments.forEach((comment, idx) => {
         if (comment.resolved && !showResolved) return;
@@ -136,7 +165,7 @@ export function CommentMapOverlay({
         // child instead; a hover transform on `container` would replace
         // MapLibre's translate and make the marker jump across the viewport.
         const container = document.createElement("div");
-        container.className = "relative cursor-pointer select-none";
+        container.className = "geolibre-comment-marker relative cursor-pointer select-none";
         container.style.zIndex = comment.resolved ? "9" : "10";
 
         const hoverTarget = document.createElement("div");
@@ -174,30 +203,27 @@ export function CommentMapOverlay({
           onSelectComment?.(comment.id);
         });
 
-        const marker = new maplibreGl.Marker({
-          element: container,
-          anchor: "bottom",
-        })
-          .setLngLat(coords)
-          .addTo(map);
-
-        markersRef.current.push(marker);
+        markerDisposersRef.current.push(
+          mountProjectedElement(engine, container, coords, "bottom").remove,
+        );
       });
     };
 
     renderMarkers();
 
-    // Re-render when the style reloads (basemap switch wipes all markers).
-    // No moveend listener needed: MapLibre Marker objects are positioned in
-    // geographic space and track the map viewport automatically.
-    map.on("styledata", renderMarkers);
-
     return () => {
-      map.off("styledata", renderMarkers);
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+      markerDisposersRef.current.forEach((dispose) => dispose());
+      markerDisposersRef.current = [];
     };
-  }, [comments, showResolved, mapControllerRef, onSelectComment]);
+  }, [
+    comments,
+    featureAnchorLayerInputs,
+    showResolved,
+    primaryRenderer,
+    mapReadyGeneration,
+    mapControllerRef,
+    onSelectComment,
+  ]);
 
   return null;
 }
