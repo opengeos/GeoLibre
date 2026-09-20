@@ -941,12 +941,13 @@ export class CesiumLayerSync {
           }
         : null;
     }
+    // The WeakMap first: it answers in constant time for every GeoJSON entity,
+    // and this runs per hovered entity on every mouse move, not only on click.
     // Cesium builds CZML entities from the document itself, so they never pass
-    // through `featureRefs` and have to be traced back to their data source.
-    const czml = this.resolveCzmlFeature(entity);
-    if (czml) return czml;
+    // through `featureRefs` and are traced back to their data source only once
+    // that has come up empty.
     const ref = this.featureRefs.get(entity);
-    if (!ref) return null;
+    if (!ref) return this.resolveCzmlFeature(entity);
     const entry = this.entries.get(ref.layerId);
     if (
       !entry ||
@@ -979,7 +980,10 @@ export class CesiumLayerSync {
    * document carries, sampled at the viewer's current time (an earthquake's
    * magnitude and depth, a satellite's catalogue number). Ownership is found by
    * asking each loaded document whether it holds the entity: there are only
-   * ever a handful of CZML layers and this runs on a pick, not per frame.
+   * ever a handful of CZML layers, and an entity the `featureRefs` WeakMap
+   * already claims never reaches this. It does run per hovered entity on a
+   * mouse move, though — `identifyAtScreen` drives the hover tooltip — so the
+   * scan stays a short walk over loaded documents rather than over entities.
    */
   private resolveCzmlFeature(entity: object): {
     layerId: string;

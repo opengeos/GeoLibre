@@ -538,6 +538,39 @@ export async function fetchUsgsEarthquakeCzml(
   return usgsGeoJsonToCzml((await response.json()) as UsgsFeatureCollection, window);
 }
 
+/**
+ * How many satellites to sample before handing the thread back.
+ *
+ * A three-hour arc is ninety-odd SGP4 propagations per satellite, so a full
+ * core catalogue is tens of thousands of them — around a tenth of a second in
+ * one task on a quick machine, and several dropped frames on a slow one.
+ * `gods-eye-view-dense.ts` chunks its own build for the same reason.
+ */
+const SAMPLE_CHUNK_SATELLITES = 150;
+
+/**
+ * {@link tleRecordsToCzml}, in slices, yielding between them so a refresh does
+ * not freeze the pointer while it samples.
+ */
+async function sampleFleetInChunks(
+  records: readonly TleRecord[],
+  options: SatelliteSampleOptions,
+): Promise<CzmlPacket[]> {
+  const capped = records.slice(0, Math.max(1, options.maxSatellites ?? 75));
+  if (capped.length <= SAMPLE_CHUNK_SATELLITES) return tleRecordsToCzml(capped, options);
+  const packets: CzmlPacket[] = [];
+  for (let start = 0; start < capped.length; start += SAMPLE_CHUNK_SATELLITES) {
+    const slice = capped.slice(start, start + SAMPLE_CHUNK_SATELLITES);
+    const built = tleRecordsToCzml(slice, { ...options, maxSatellites: slice.length });
+    // One document packet for the whole fleet: every slice builds its own.
+    packets.push(...(start === 0 ? built : built.slice(1)));
+    if (start + SAMPLE_CHUNK_SATELLITES < capped.length) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return packets;
+}
+
 export async function fetchCelestrakSatelliteCzml(
   options: SatelliteSampleOptions & { fetch?: typeof fetch; signal?: AbortSignal; group?: string },
 ): Promise<CzmlPacket[]> {
@@ -551,7 +584,7 @@ export async function fetchCelestrakSatelliteCzml(
   )?.classification;
   const records = parseTle(await response.text(), classification);
   if (records.length === 0) throw new Error("CelesTrak feed contained no valid TLE records");
-  return tleRecordsToCzml(records, options);
+  return sampleFleetInChunks(records, options);
 }
 
 /** Load and de-duplicate the same six core CelesTrak groups as God's Eye View. */
@@ -579,5 +612,5 @@ export async function fetchCelestrakSatelliteCatalogCzml(
   if (byCatalogNumber.size === 0) {
     throw new Error("CelesTrak core catalog contained no valid TLE records");
   }
-  return tleRecordsToCzml([...byCatalogNumber.values()], options);
+  return sampleFleetInChunks([...byCatalogNumber.values()], options);
 }

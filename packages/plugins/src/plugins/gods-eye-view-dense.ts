@@ -35,8 +35,17 @@ interface DenseSatellite {
  * Table enormous; a single Cesium PointPrimitiveCollection is the cheap path
  * the upstream God's Eye View uses for its DENSE Starlink shell.
  */
+/** Whether two catalogue-number sets hold the same satellites. */
+function sameCatalog(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) if (!b.has(value)) return false;
+  return true;
+}
+
 export class GodsEyeViewDenseCatalog {
   private globe: CesiumSceneHandle | null = null;
+  /** The core catalogue this shell was filtered against, to spot a change. */
+  private excluded: ReadonlySet<string> = new Set();
   private collection: DensePointCollection | null = null;
   private satellites: DenseSatellite[] = [];
   private cursor = 0;
@@ -58,6 +67,10 @@ export class GodsEyeViewDenseCatalog {
   async enable(globe: CesiumSceneHandle, coreCatalogNumbers: ReadonlySet<string>): Promise<void> {
     if (
       this.globe?.viewer === globe.viewer &&
+      // A refresh recomputes the core catalogue; when a satellite has entered
+      // or left one of those groups the shell has to be filtered again, or it
+      // doubles a core entity or drops one it should now be drawing.
+      sameCatalog(this.excluded, coreCatalogNumbers) &&
       (this.state.status === "loading" || this.state.status === "ready")
     ) {
       this.globe = globe;
@@ -66,6 +79,7 @@ export class GodsEyeViewDenseCatalog {
 
     this.clearRuntime();
     this.globe = globe;
+    this.excluded = new Set(coreCatalogNumbers);
     const generation = ++this.generation;
     const request = new AbortController();
     this.request = request;
@@ -138,6 +152,7 @@ export class GodsEyeViewDenseCatalog {
   disable(): void {
     this.generation += 1;
     this.clearRuntime();
+    this.excluded = new Set();
     this.setState({ status: "idle", count: 0, error: null });
   }
 

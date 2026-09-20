@@ -122,6 +122,34 @@ describe("God's Eye View dense catalog", () => {
     });
   });
 
+  it("re-filters the shell when the core catalog's membership changes", async () => {
+    globalThis.fetch = (async () =>
+      new Response(TLE_TEXT, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      })) as typeof fetch;
+    const fake = makeGlobe();
+    const catalog = new GodsEyeViewDenseCatalog();
+
+    await catalog.enable(fake.globe, new Set(["25544"]));
+    assert.equal(catalog.snapshot().count, 1, "the ISS is left to the core feed");
+
+    // Re-enabling with the same exclusions is the every-refresh case and must
+    // not rebuild.
+    const collections = fake.added.length;
+    await catalog.enable(fake.globe, new Set(["25544"]));
+    assert.equal(fake.added.length, collections, "an unchanged core catalog rebuilds nothing");
+
+    // The ISS leaving the core groups has to bring it back into the shell,
+    // rather than leaving it drawn by neither.
+    await catalog.enable(fake.globe, new Set());
+    assert.equal(catalog.snapshot().count, 2);
+    assert.deepEqual(
+      fake.points.slice(-2).map((point) => (point.id as { catalogNumber: string }).catalogNumber),
+      ["25544", "44713"],
+    );
+  });
+
   it("drops a satellite SGP4 will not propagate rather than placing a NaN point", async () => {
     globalThis.fetch = (async () =>
       new Response(TLE_TEXT, {

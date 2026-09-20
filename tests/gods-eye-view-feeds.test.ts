@@ -314,6 +314,38 @@ ${ISS_TLE}`);
     assert.equal(packets[1].id, "celestrak-25544");
   });
 
+  it("samples a large fleet in slices without losing or duplicating packets", async () => {
+    // Bigger than one slice, so the chunked path runs: every satellite must
+    // still arrive exactly once, under a single document packet.
+    const fleet: string[] = [];
+    for (let i = 0; i < 400; i += 1) {
+      const catalogNumber = String(30000 + i).padStart(5, "0");
+      fleet.push(`SAT ${i}`);
+      fleet.push(
+        `1 ${catalogNumber}U 19074A   26262.50000000  .00001200  00000+0  90000-4 0  9991`,
+      );
+      fleet.push(
+        `2 ${catalogNumber}  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000`,
+      );
+    }
+    const mockFetch = (async () => new Response(fleet.join("\n"), { status: 200 })) as typeof fetch;
+
+    const packets = await fetchCelestrakSatelliteCzml({
+      start,
+      stop,
+      stepSeconds: 120,
+      maxSatellites: 400,
+      fetch: mockFetch,
+    });
+
+    assert.equal(packets.filter((packet) => packet.id === "document").length, 1);
+    const ids = packets.slice(1).map((packet) => packet.id);
+    assert.equal(ids.length, 400);
+    assert.equal(new Set(ids).size, 400, "no satellite is sampled twice across slice boundaries");
+    assert.equal(ids[0], "celestrak-30000");
+    assert.equal(ids.at(-1), "celestrak-30399");
+  });
+
   it("loads the six reference catalog groups, tolerates a failed group, and deduplicates", async () => {
     const secondTle = ISS_TLE.replace("ISS (ZARYA)", "TEST SAT").replaceAll("25544", "40967");
     const requested: string[] = [];
