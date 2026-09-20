@@ -375,7 +375,13 @@ export function submarineCablesToCzml(collection: FeatureCollection): GodsEyeVie
           positions: {
             cartographicDegrees: positions.flatMap(([lon, lat]) => [lon, lat, 0]),
           },
-          clampToGround: true,
+          // Not `clampToGround`: draping every segment onto terrain sends the
+          // whole feed (1,913 segments, 13,902 vertices) through Cesium's
+          // ground-primitive pipeline, which measured ~14x the per-frame cost
+          // of the same geometry drawn geodesically at sea level. Cables are
+          // submarine, so there is no terrain to drape onto, and the globe
+          // leaves `depthTestAgainstTerrain` off, so height 0 draws cleanly.
+          arcType: "GEODESIC",
           width: 2,
           material: {
             solidColor: { color: { rgba: cssHexColor(properties.color) } },

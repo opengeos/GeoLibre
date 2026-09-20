@@ -141,6 +141,12 @@ describe("God's Eye View catalog feeds", () => {
     const result = submarineCablesToCzml(input);
     assert.equal(result.packets.length, 3);
     assert.equal(result.attributes.features.length, 2);
+    // Ground-clamping the whole global network costs ~14x the per-frame time of
+    // the same geometry drawn geodesically, and submarine cables have no
+    // terrain to drape onto.
+    const polyline = result.packets[1].polyline as Record<string, unknown>;
+    assert.ok(!("clampToGround" in polyline));
+    assert.equal(polyline.arcType, "GEODESIC");
     assert.deepEqual(
       (
         (
