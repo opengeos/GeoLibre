@@ -1322,7 +1322,12 @@ function updateDeckTilesPanelList(control: ThreeDTilesControl | null): void {
   // and visibility checkbox already reflect their own live state, and the map
   // is updated by renderGooglePhotorealisticTilesLayers, so skipping the
   // rebuild when the ids are unchanged is safe.
-  const idSignature = googleLayers.map((layer) => layer.id).join("|");
+  // The fly target is part of the signature, not just the id: a tileset on the
+  // 2D renderers learns its centre when it finishes loading, and the row has to
+  // be rebuilt then so its Fly control appears.
+  const idSignature = googleLayers
+    .map((layer) => `${layer.id}:${hasThreeDTilesFlyTarget(layer) ? 1 : 0}`)
+    .join("|");
   if (googleList.dataset.geolibreGoogleListIds === idSignature) {
     for (const layer of googleLayers) {
       const item = Array.from(googleList.children).find(
@@ -1368,6 +1373,25 @@ function ensureDeckTilesPanelList(panel: HTMLElement): HTMLElement {
   return googleList;
 }
 
+/**
+ * Whether this list entry has somewhere to fly to.
+ *
+ * The Google tiles always do (a fixed initial view). A tileset entry flies to
+ * the centre recorded when it loaded, which the 2D renderers write onto the
+ * record and the globe never does: Cesium owns the tileset there and reports no
+ * centre back, so the control offers no Fly button rather than one that would
+ * do nothing (issue #2505).
+ *
+ * @param layer - The store layer behind the list entry.
+ * @returns True when a Fly control would move the camera.
+ */
+function hasThreeDTilesFlyTarget(layer: GeoLibreLayer): boolean {
+  if (!isMapboxTilesLayer(layer)) return true;
+  return Array.isArray(
+    useAppStore.getState().layers.find(({ id }) => id === layer.id)?.metadata.center,
+  );
+}
+
 function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const item = document.createElement("div");
   item.className = "geolibre-google-tiles-list-item three-d-tiles-list-item active";
@@ -1392,7 +1416,9 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
         );
     } else if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
   };
-  title.addEventListener("click", flyToLayer);
+  const canFly = hasThreeDTilesFlyTarget(layer);
+  if (canFly) title.addEventListener("click", flyToLayer);
+  else title.disabled = true;
 
   const url = document.createElement("span");
   url.className = "three-d-tiles-list-url";
@@ -1446,7 +1472,7 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
 
   actions.appendChild(visible);
   actions.appendChild(opacity);
-  actions.appendChild(flyTo);
+  if (canFly) actions.appendChild(flyTo);
   actions.appendChild(remove);
 
   item.appendChild(meta);
