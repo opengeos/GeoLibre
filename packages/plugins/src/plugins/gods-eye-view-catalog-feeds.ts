@@ -167,25 +167,29 @@ function geoJsonLines(value: string): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
-async function readJson(
+async function readFeed(
   url: string,
   options: { fetch?: typeof fetch; signal?: AbortSignal },
-): Promise<unknown> {
+): Promise<Response> {
   const response = await (options.fetch ?? fetch)(url, {
     signal: options.signal,
   });
   if (!response.ok) throw new Error(`${new URL(url).hostname} feed failed (${response.status})`);
-  return response.json();
+  return response;
+}
+
+async function readJson(
+  url: string,
+  options: { fetch?: typeof fetch; signal?: AbortSignal },
+): Promise<unknown> {
+  return (await readFeed(url, options)).json();
 }
 
 export async function fetchDatacentersCzml(
   options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<GodsEyeViewFeedPayload> {
-  const response = await (options.fetch ?? fetch)(DATACENTERS_URL, {
-    signal: options.signal,
-  });
-  if (!response.ok) throw new Error(`Datacenter feed failed (${response.status})`);
-  return pointCatalogToCzml("Datacenters", geoJsonLines(await response.text()), {
+  const text = await (await readFeed(DATACENTERS_URL, options)).text();
+  return pointCatalogToCzml("Datacenters", geoJsonLines(text), {
     prefix: "datacenter",
     color: [96, 165, 250, 235],
     pixelSize: 6,

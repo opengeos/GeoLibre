@@ -23,6 +23,11 @@ export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
 export const GODS_EYE_VIEW_SATELLITES_FLAG = "godsEyeViewSatellites";
 export const GODS_EYE_VIEW_DENSE_SATELLITES_FLAG = "godsEyeViewDenseSatellites";
+export const GODS_EYE_VIEW_RADIO_FLAG = "godsEyeViewRadio";
+export const GODS_EYE_VIEW_DATACENTERS_FLAG = "godsEyeViewDatacenters";
+export const GODS_EYE_VIEW_DAMS_FLAG = "godsEyeViewDams";
+export const GODS_EYE_VIEW_CABLES_FLAG = "godsEyeViewCables";
+export const GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG = "godsEyeViewOsmInfrastructure";
 
 const REFRESH_TICK_MS = 10 * 60_000;
 const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
@@ -202,11 +207,11 @@ function feedFlag(feed: FeedId): string {
   return {
     earthquakes: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
     satellites: GODS_EYE_VIEW_SATELLITES_FLAG,
-    radio: "godsEyeViewRadio",
-    datacenters: "godsEyeViewDatacenters",
-    dams: "godsEyeViewDams",
-    cables: "godsEyeViewCables",
-    osmInfrastructure: "godsEyeViewOsmInfrastructure",
+    radio: GODS_EYE_VIEW_RADIO_FLAG,
+    datacenters: GODS_EYE_VIEW_DATACENTERS_FLAG,
+    dams: GODS_EYE_VIEW_DAMS_FLAG,
+    cables: GODS_EYE_VIEW_CABLES_FLAG,
+    osmInfrastructure: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   }[feed];
 }
 
