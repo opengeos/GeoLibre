@@ -78,10 +78,8 @@ export function planArcgisBasemap(
     case "arcgis":
       return { kind: "tile-service", url: imagery.url };
     case "xyz": {
-      // Keyed providers resolve their key at render time on the globe; the
-      // SDK's WebTileLayer has no hook for that, and a TMS template has no SDK
-      // form, so both fall back to the keyless streets tone.
-      if (imagery.apiKeyProvider || imagery.scheme === "tms") break;
+      // A TMS template has no SDK form, so it falls back to the keyless streets tone.
+      if (imagery.scheme === "tms") break;
       try {
         const template = webTileTemplate(imagery.template);
         return {

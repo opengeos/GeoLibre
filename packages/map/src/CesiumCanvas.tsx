@@ -10,7 +10,7 @@ import {
 } from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer } from "@cesium/engine";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { applyBasemapAppearance, applyBasemapImagery, getStadiaApiKey } from "./cesium-basemap";
+import { applyBasemapAppearance, applyBasemapImagery } from "./cesium-basemap";
 import { isSameView } from "./cesium-camera";
 import { installCesiumInteractions } from "./cesium-interactions";
 import { CesiumEngine } from "./cesium-engine";
@@ -549,25 +549,6 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     applyBasemap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapImagery]);
-
-  // Stadia can authenticate through a registered domain or a runtime API key.
-  // Rebuild only its active provider when that key changes in Settings.
-  useEffect(() => {
-    if (!ready) return;
-    let key = getStadiaApiKey();
-    const refresh = () => {
-      const next = getStadiaApiKey();
-      if (next === key) return;
-      key = next;
-      const imagery = basemapImageryRef.current;
-      if (imagery.kind !== "xyz" || imagery.apiKeyProvider !== "stadia") return;
-      appliedImageryRef.current = null;
-      applyBasemap();
-    };
-    window.addEventListener("geolibre:runtime-env-change", refresh);
-    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
 
   // Terrain selection uses the same saved preference as Controls → Terrain,
   // including globe panes that do not host a toolbar.

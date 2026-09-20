@@ -1,6 +1,5 @@
 import {
   CESIUM_BING_AERIAL_ASSET_ID,
-  getRuntimeEnvironment,
   type CesiumBasemapImagery,
 } from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
@@ -30,11 +29,6 @@ const ESRI_WORLD_IMAGERY_URL =
 /** Last resort when even Esri cannot be reached. */
 const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
 
-/** Read the live key so Settings changes do not require a new project. */
-export function getStadiaApiKey(env = getRuntimeEnvironment()): string | undefined {
-  return env.VITE_STADIA_API_KEY?.trim() || env.STADIA_API_KEY?.trim() || undefined;
-}
-
 /**
  * An imagery provider for one tile template. TMS row ordering is expressed by
  * swapping `{y}` for Cesium's `{reverseY}` placeholder: Cesium has no `scheme`
@@ -48,12 +42,9 @@ function templateProvider(
     attribution?: string;
     maximumLevel?: number;
     scheme?: "tms";
-    apiKeyProvider?: "stadia";
   },
 ): ImageryProvider {
-  let url = options.scheme === "tms" ? template.replace("{y}", "{reverseY}") : template;
-  const key = options.apiKeyProvider === "stadia" ? getStadiaApiKey() : undefined;
-  if (key) url += `?api_key=${encodeURIComponent(key)}`;
+  const url = options.scheme === "tms" ? template.replace("{y}", "{reverseY}") : template;
   return new Cesium.UrlTemplateImageryProvider({
     url,
     maximumLevel: options.maximumLevel,
@@ -165,10 +156,10 @@ export function applyBasemapImagery(
     return [layer];
   }
 
-  const { template, attribution, maximumLevel, scheme, overlayTemplate, apiKeyProvider } = imagery;
+  const { template, attribution, maximumLevel, scheme, overlayTemplate } = imagery;
   const added = [
     viewer.imageryLayers.addImageryProvider(
-      templateProvider(Cesium, template, { attribution, maximumLevel, scheme, apiKeyProvider }),
+      templateProvider(Cesium, template, { attribution, maximumLevel, scheme }),
       0,
     ),
   ];

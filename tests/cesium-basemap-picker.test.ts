@@ -84,22 +84,13 @@ describe("Cesium basemap choices", () => {
     assert.equal(useAppStore.getState().preferences.map.cesiumBasemap, "project");
   });
 
-  it("includes the eight Other providers without requiring an ion token", () => {
+  it("includes the four keyless Other providers without requiring an ion token", () => {
     const other = CESIUM_BASEMAPS.filter(
       (entry) => "category" in entry && entry.category === "Other",
     );
     assert.deepEqual(
       other.map((entry) => entry.id),
-      [
-        "esri-imagery",
-        "esri-hillshade",
-        "esri-ocean",
-        "osm",
-        "stadia-watercolor",
-        "stadia-toner",
-        "stadia-smooth",
-        "stadia-dark",
-      ],
+      ["esri-imagery", "esri-hillshade", "esri-ocean", "osm"],
     );
     for (const entry of other) {
       assert.equal(availableCesiumBasemap(entry.id, false), entry.id);
@@ -124,32 +115,6 @@ describe("Cesium basemap choices", () => {
       sameCesiumImagery(imagery, basemapToCesiumImagery(undefined, "esri-imagery")),
       true,
     );
-  });
-
-  it("uses the correct Stadia image formats, zoom limits and attribution", () => {
-    for (const id of [
-      "stadia-watercolor",
-      "stadia-toner",
-      "stadia-smooth",
-      "stadia-dark",
-    ] as const) {
-      const imagery = basemapToCesiumImagery(undefined, id);
-      assert.equal(imagery.kind, "xyz");
-      if (imagery.kind !== "xyz") continue;
-      assert.equal(imagery.apiKeyProvider, "stadia");
-      assert.ok(imagery.template.endsWith(id === "stadia-watercolor" ? ".jpg" : ".png"));
-      assert.equal(imagery.maximumLevel, id === "stadia-watercolor" ? 16 : 20);
-      assert.match(imagery.attribution, /Stadia Maps.*OpenMapTiles.*OpenStreetMap/);
-      assert.equal(
-        imagery.attribution.includes("Stamen Design"),
-        id === "stadia-watercolor" || id === "stadia-toner",
-      );
-      assert.ok(
-        !imagery.template.includes("api_key"),
-        "credentials are supplied only at render time",
-      );
-      assert.equal(sameCesiumImagery(imagery, { ...imagery, apiKeyProvider: undefined }), false);
-    }
   });
 
   it("does not treat different ion assets as the same background", () => {
