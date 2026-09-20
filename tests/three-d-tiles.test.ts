@@ -11,6 +11,7 @@ import {
   stripGoogleMapsApiKeyHeader,
 } from "../packages/core/src/three-d-tiles";
 import {
+  createThreeDTilesGlobeStoreLayer,
   deferThreeDTilesRestoreUntilMapIdle,
   restoreThreeDTilesLayers,
 } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
@@ -203,5 +204,50 @@ describe("restoreThreeDTilesLayers on the globe", () => {
 
     // The record stays put for the globe's own layer sync to draw.
     assert.equal(useAppStore.getState().layers.length, 1);
+  });
+});
+
+describe("createThreeDTilesGlobeStoreLayer", () => {
+  // Every flavour the panel accepts renders on the globe, but only if its own
+  // sourceKind survives: cesium-layer-sync routes a scene service to
+  // I3SDataProvider on "arcgis-i3s" alone, and the 2D restore paths find a
+  // Google tileset by its Google kind (issue #2505).
+  const panelFields = (url: string) => ({
+    id: "tiles-1",
+    layerId: "tiles-1-tiles",
+    layerName: "Scene",
+    tilesetUrl: url,
+    altitudeOffset: -300,
+    opacity: 0.5,
+    visible: true,
+    status: "loaded" as const,
+  });
+
+  it("files a scene service under the I3S kind so the globe uses I3SDataProvider", () => {
+    const layer = createThreeDTilesGlobeStoreLayer(
+      panelFields(
+        "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0",
+      ),
+    );
+    assert.equal(layer.type, "3d-tiles");
+    assert.equal(layer.metadata.sourceKind, "arcgis-i3s");
+    assert.equal(layer.opacity, 0.5);
+    assert.equal(layer.name, "Scene");
+  });
+
+  it("files Google Photorealistic tiles under the Google kind", () => {
+    const layer = createThreeDTilesGlobeStoreLayer(panelFields(GOOGLE));
+    assert.equal(layer.metadata.sourceKind, "google-photorealistic-3d-tiles");
+    // The API key header is never persisted on the record, on any renderer.
+    assert.equal(layer.source.requestHeaders, undefined);
+  });
+
+  it("keeps a plain tileset.json on the generic 3D Tiles kind", () => {
+    const layer = createThreeDTilesGlobeStoreLayer(
+      panelFields("https://example.com/3dtiles/tileset.json"),
+    );
+    assert.equal(layer.metadata.sourceKind, "3d-tiles-url");
+    assert.equal(layer.source.url, "https://example.com/3dtiles/tileset.json");
+    assert.equal(layer.source.altitudeOffset, -300);
   });
 });

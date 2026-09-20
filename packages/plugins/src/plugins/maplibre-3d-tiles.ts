@@ -31,6 +31,7 @@ import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-over
 import {
   addArcgisI3sTilesLayer,
   arcgisI3sSceneLayerName,
+  createArcgisI3sStoreLayer,
   isArcgisI3sSceneLayerUrl,
   restoreArcgisI3sTilesLayers,
   THREE_D_TILES_DECK_LOAD_OPTIONS,
@@ -817,6 +818,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
  * @param panel - The panel DOM holding the form fields.
  * @param url - The tileset URL, already trimmed and known non-empty.
  * @param status - The status to record on the new entry.
+ * @param defaultName - Name to use when the Layer name field is blank.
  * @returns The tileset entry, with a fresh id.
  */
 function threeDTilesItemStateFromPanel(
@@ -824,6 +826,7 @@ function threeDTilesItemStateFromPanel(
   panel: HTMLElement,
   url: string,
   status: ThreeDTilesItemState["status"],
+  defaultName = "3D Tiles",
 ): ThreeDTilesItemState {
   const id = `tiles-${crypto.randomUUID()}`;
   return {
@@ -832,7 +835,7 @@ function threeDTilesItemStateFromPanel(
     tilesetUrl: url,
     layerName:
       panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]')?.value.trim() ||
-      "3D Tiles",
+      defaultName,
     altitudeOffset: numberInputValue(
       panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
       0,
@@ -846,6 +849,55 @@ function threeDTilesItemStateFromPanel(
     ),
     status,
   };
+}
+
+/**
+ * The name to give a tileset whose Layer name field was left blank, matching
+ * what each flavour's own panel path would have named it.
+ *
+ * @param url - The tileset URL.
+ * @returns The default display name.
+ */
+function threeDTilesDefaultLayerName(url: string): string {
+  if (isArcgisI3sSceneLayerUrl(url))
+    return arcgisI3sSceneLayerName(url) || layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
+  if (isGooglePhotorealisticTilesetUrl(url)) return GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  return "3D Tiles";
+}
+
+/**
+ * The store record the globe should draw for a tileset added from the panel
+ * (issue #2505).
+ *
+ * The globe loads all three flavours natively, but each has to keep its own
+ * `sourceKind`: `cesium-layer-sync` routes a scene service to
+ * `I3SDataProvider` on `arcgis-i3s` alone, and the two 2D restore paths find a
+ * Google tileset by its Google kind, so a record filed under the generic kind
+ * would fail to render here or be skipped after a switch to a 2D renderer.
+ *
+ * @param tileset - The panel's fields, already read into a tileset entry.
+ * @returns The store layer for that URL's flavour.
+ */
+export function createThreeDTilesGlobeStoreLayer(tileset: ThreeDTilesItemState): GeoLibreLayer {
+  const url = tileset.tilesetUrl;
+  if (isArcgisI3sSceneLayerUrl(url)) {
+    return createArcgisI3sStoreLayer({
+      url,
+      name: tileset.layerName,
+      opacity: tileset.opacity,
+      visible: tileset.visible,
+    });
+  }
+  if (isGooglePhotorealisticTilesetUrl(url)) {
+    return createGooglePhotorealisticStoreLayer({
+      name: tileset.layerName,
+      altitudeOffset: tileset.altitudeOffset,
+      opacity: tileset.opacity,
+      visible: tileset.visible,
+      requestHeaders: tileset.requestHeaders,
+    });
+  }
+  return createThreeDTilesStoreLayer(tileset, tileset.opacity);
 }
 
 /**
@@ -870,8 +922,14 @@ function addThreeDTilesLayerForGlobe(
   panel: HTMLElement,
   url: string,
 ): void {
-  const tileset = threeDTilesItemStateFromPanel(control, panel, url, "loaded");
-  useAppStore.getState().addLayer(createThreeDTilesStoreLayer(tileset, tileset.opacity));
+  const tileset = threeDTilesItemStateFromPanel(
+    control,
+    panel,
+    url,
+    "loaded",
+    threeDTilesDefaultLayerName(url),
+  );
+  useAppStore.getState().addLayer(createThreeDTilesGlobeStoreLayer(tileset));
   control.collapse();
 }
 
@@ -1129,26 +1187,30 @@ function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
   }
 }
 
-function addGooglePhotorealisticTilesLayer(
-  app: GeoLibreAppAPI,
-  options: {
-    name: string;
-    altitudeOffset: number;
-    opacity: number;
-    visible: boolean;
-    requestHeaders?: Record<string, string>;
-    googleMapsApiKey?: string;
-    flyTo: boolean;
-    map?: ReturnType<ThreeDTilesControl["getMap"]>;
-  },
-): string {
+/**
+ * The store record for a Google Photorealistic 3D Tiles layer.
+ *
+ * Split from {@link addGooglePhotorealisticTilesLayer} so the globe, which
+ * loads the tileset itself and needs no deck.gl overlay, records the same
+ * shape. The `sourceKind` matters beyond the render in progress: it is what
+ * `isGooglePhotorealisticTilesLayer` looks for, so a Google tileset filed as a
+ * plain `3d-tiles-url` record would be skipped by both restore paths if the
+ * user later switched to a 2D renderer (issue #2505).
+ *
+ * @param options Display name, altitude offset, opacity, visibility, headers.
+ * @returns The store layer, with a fresh id.
+ */
+function createGooglePhotorealisticStoreLayer(options: {
+  name: string;
+  altitudeOffset: number;
+  opacity: number;
+  visible: boolean;
+  requestHeaders?: Record<string, string>;
+}): GeoLibreLayer {
   const id = `${GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
   const deckLayerId = `${id}-deck`;
-  if (options.googleMapsApiKey) {
-    googleTilesApiKeysByLayerId.set(id, options.googleMapsApiKey);
-  }
 
-  useAppStore.getState().addLayer({
+  return {
     id,
     name: options.name,
     type: "3d-tiles",
@@ -1178,7 +1240,29 @@ function addGooglePhotorealisticTilesLayer(
       altitudeOffset: options.altitudeOffset,
     },
     sourcePath: GOOGLE_PHOTOREALISTIC_TILES_URL,
-  });
+  };
+}
+
+function addGooglePhotorealisticTilesLayer(
+  app: GeoLibreAppAPI,
+  options: {
+    name: string;
+    altitudeOffset: number;
+    opacity: number;
+    visible: boolean;
+    requestHeaders?: Record<string, string>;
+    googleMapsApiKey?: string;
+    flyTo: boolean;
+    map?: ReturnType<ThreeDTilesControl["getMap"]>;
+  },
+): string {
+  const layer = createGooglePhotorealisticStoreLayer(options);
+  const id = layer.id;
+  if (options.googleMapsApiKey) {
+    googleTilesApiKeysByLayerId.set(id, options.googleMapsApiKey);
+  }
+
+  useAppStore.getState().addLayer(layer);
 
   void ensureGooglePhotorealisticTilesOverlay(app);
   if (options.flyTo) flyToGooglePhotorealisticTiles(app, options.map);
