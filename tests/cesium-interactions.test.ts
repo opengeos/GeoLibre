@@ -22,6 +22,15 @@ afterEach(() => {
 
 function setup() {
   const { window, document } = parseHTML("<html><body><div><canvas></canvas></div></body></html>");
+  const host = document.querySelector("div")!;
+  Object.defineProperties(host, {
+    clientWidth: { configurable: true, value: 500 },
+    clientHeight: { configurable: true, value: 500 },
+  });
+  Object.defineProperties(window.HTMLElement.prototype, {
+    offsetWidth: { configurable: true, get: () => 280 },
+    offsetHeight: { configurable: true, get: () => 100 },
+  });
   const frames = new Map<number, FrameRequestCallback>();
   Object.assign(globalThis, {
     window,
@@ -36,6 +45,7 @@ function setup() {
   let destroyed = false;
   let queries = 0;
   let highlights = 0;
+  let identifyFeatureId: string | null = "0";
   let pointer: { coordinates: [number, number]; elevation: number | null } | null = {
     coordinates: [-83.9, 35.9],
     elevation: -12,
@@ -79,9 +89,10 @@ function setup() {
     {
       identifyAtScreen: () => {
         queries++;
+        if (identifyFeatureId === null) return [];
         return layers.map((layer) => ({
           layerId: layer.id,
-          featureId: "0",
+          featureId: identifyFeatureId,
           properties: { name: layer.name },
           geometry: null,
         }));
@@ -101,6 +112,12 @@ function setup() {
     setPointer: (value: typeof pointer) => {
       pointer = value;
     },
+    setIdentifyHits: (value: boolean) => {
+      identifyFeatureId = value ? "0" : null;
+    },
+    setIdentifyFeatureId: (value: string) => {
+      identifyFeatureId = value;
+    },
     flush: () => {
       const callbacks = [...frames.values()];
       frames.clear();
@@ -108,6 +125,8 @@ function setup() {
     },
     click: () =>
       actions.get(ScreenSpaceEventType.LEFT_CLICK)?.({ position: new Cartesian2(10, 10) }),
+    clickAt: (x: number, y: number) =>
+      actions.get(ScreenSpaceEventType.LEFT_CLICK)?.({ position: new Cartesian2(x, y) }),
     hover: () =>
       actions.get(ScreenSpaceEventType.MOUSE_MOVE)?.({ endPosition: new Cartesian2(10, 10) }),
     get queries() {
@@ -134,6 +153,40 @@ it("selects the first eligible hit, even when a disabled popup is topmost", () =
   assert.equal(button.getAttribute("type"), "button");
   button.click();
   assert.equal(f.document.querySelector(".geolibre-identify-popup"), null);
+});
+
+it("clears the previous highlight when a later Identify click misses", () => {
+  const f = setup();
+  f.click();
+  assert.equal(useAppStore.getState().selectedFeatureId, "0");
+  assert.ok(f.document.querySelector(".geolibre-identify-popup"));
+
+  f.setIdentifyHits(false);
+  f.click();
+
+  assert.equal(useAppStore.getState().selectedFeatureId, null);
+  assert.deepEqual(useAppStore.getState().selectedFeatureIds, []);
+  assert.equal(f.document.querySelector(".geolibre-identify-popup"), null);
+});
+
+it("replaces the selection and popup on a second successful Identify click", () => {
+  const f = setup();
+  f.click();
+  f.setIdentifyFeatureId("next");
+  f.click();
+
+  assert.equal(useAppStore.getState().selectedFeatureId, "next");
+  assert.equal(f.document.querySelectorAll(".geolibre-identify-popup").length, 1);
+  assert.equal(f.document.querySelectorAll(".geolibre-identify-popup-root").length, 2);
+});
+
+it("flips a wide identify popup away from a point near the canvas edge", () => {
+  const f = setup();
+  f.clickAt(450, 250);
+  const popup = f.document.querySelector<HTMLElement>(".geolibre-identify-popup")!;
+  assert.equal(popup.style.maxWidth, "min(280px, 80%)");
+  assert.equal(popup.style.left, "158px");
+  assert.equal(popup.style.top, "262px");
 });
 
 it("keeps the Identify cursor in sync with the active tool", () => {

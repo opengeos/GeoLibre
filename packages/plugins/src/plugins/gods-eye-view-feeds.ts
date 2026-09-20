@@ -5,11 +5,16 @@ import type { FeatureCollection } from "geojson";
 export const USGS_EARTHQUAKE_FEED_BASE =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
 export const CELESTRAK_TLE_BASE = "https://celestrak.org/NORAD/elements/gp.php";
+export const CELESTRAK_STARLINK_TLE_BASE =
+  "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+export const CELESTRAK_EDGE_PROXY_BASE = "https://tiles.geolibre.app/celestrak";
+const CELESTRAK_DEV_PROXY_BASE = "/__geolibre_celestrak";
 
 const EARTH_RADIUS_METERS = 6_378_137;
 const EARTH_GRAVITATIONAL_PARAMETER = 3.986004418e14;
 const TWO_PI = Math.PI * 2;
 const SECONDS_PER_DAY = 86_400;
+export const CELESTRAK_CORE_SAMPLE_STEP_SECONDS = 300;
 
 export const CELESTRAK_CORE_GROUPS = [
   { group: "stations", classification: "stations" },
@@ -112,10 +117,44 @@ export function buildUsgsFeedUrl(period = "day", magnitude = "all"): string {
 }
 
 export function buildCelestrakTleUrl(group = "stations"): string {
-  const url = new URL(CELESTRAK_TLE_BASE);
-  url.searchParams.set("GROUP", group);
+  const starlink = group === "starlink";
+  const url = new URL(starlink ? CELESTRAK_STARLINK_TLE_BASE : CELESTRAK_TLE_BASE);
+  url.searchParams.set(starlink ? "FILE" : "GROUP", group);
   url.searchParams.set("FORMAT", "tle");
   return url.toString();
+}
+
+function isViteDevServer(): boolean {
+  return Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+}
+
+/** Browser-safe CelesTrak endpoints followed by a last-resort direct read. */
+export function buildCelestrakRequestUrls(group = "stations"): string[] {
+  const proxy = isViteDevServer()
+    ? `${CELESTRAK_DEV_PROXY_BASE}/${encodeURIComponent(group)}`
+    : `${CELESTRAK_EDGE_PROXY_BASE}/${encodeURIComponent(group)}`;
+  return [proxy, buildCelestrakTleUrl(group)];
+}
+
+/**
+ * Read one TLE group through a server-side proxy first.
+ *
+ * CelesTrak rejects browser-origin bulk requests with HTTP 403 and asks bulk
+ * clients to identify themselves. Both proxies use a descriptive User-Agent
+ * and a six-hour cache; the direct URL is retained only as a fallback.
+ */
+export async function fetchCelestrakTleText(
+  group: string,
+  options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<string> {
+  const fetcher = options.fetch ?? fetch;
+  let lastStatus: number | null = null;
+  for (const url of buildCelestrakRequestUrls(group)) {
+    const response = await fetcher(url, { signal: options.signal });
+    if (response.ok) return response.text();
+    lastStatus = response.status;
+  }
+  throw new Error(`CelesTrak feed failed (${lastStatus ?? "unavailable"})`);
 }
 
 function iso(value: Date): string {
@@ -574,15 +613,11 @@ async function sampleFleetInChunks(
 export async function fetchCelestrakSatelliteCzml(
   options: SatelliteSampleOptions & { fetch?: typeof fetch; signal?: AbortSignal; group?: string },
 ): Promise<CzmlPacket[]> {
-  const response = await (options.fetch ?? fetch)(buildCelestrakTleUrl(options.group), {
-    signal: options.signal,
-  });
-  if (!response.ok) throw new Error(`CelesTrak feed failed (${response.status})`);
   const group = options.group ?? "stations";
   const classification = CELESTRAK_CORE_GROUPS.find(
     (entry) => entry.group === group,
   )?.classification;
-  const records = parseTle(await response.text(), classification);
+  const records = parseTle(await fetchCelestrakTleText(group, options), classification);
   if (records.length === 0) throw new Error("CelesTrak feed contained no valid TLE records");
   return sampleFleetInChunks(records, options);
 }
@@ -594,9 +629,10 @@ export async function fetchCelestrakSatelliteCatalogCzml(
   const fetcher = options.fetch ?? fetch;
   const results = await Promise.allSettled(
     CELESTRAK_CORE_GROUPS.map(async ({ group, classification }) => {
-      const response = await fetcher(buildCelestrakTleUrl(group), { signal: options.signal });
-      if (!response.ok) throw new Error(`${group} failed (${response.status})`);
-      return parseTle(await response.text(), classification);
+      return parseTle(
+        await fetchCelestrakTleText(group, { fetch: fetcher, signal: options.signal }),
+        classification,
+      );
     }),
   );
   options.signal?.throwIfAborted();

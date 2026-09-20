@@ -87,6 +87,16 @@ const OAM_MAX_LIMIT = 100;
 const CKAN_SEARCH_PATH = "/ckan/search";
 const CKAN_MAX_ROWS = 50;
 
+// CelesTrak rejects browser-origin bulk TLE reads and requests that automated
+// clients identify themselves. This named, allowlisted relay is shared by the
+// hosted web and desktop builds; Vite provides the same route locally.
+const CELESTRAK_PATH =
+  /^\/celestrak\/(stations|visual|gps-ops|glo-ops|galileo|geo|starlink)$/;
+const CELESTRAK_UPSTREAM = "https://celestrak.org/NORAD/elements/gp.php";
+const CELESTRAK_STARLINK_UPSTREAM =
+  "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+const CELESTRAK_CACHE_CONTROL = "public, max-age=21600";
+
 // The public Overpass endpoint rejects some browser origins (notably Pages
 // previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
 // with a small request-body ceiling and the same origin gate as other service
@@ -720,6 +730,7 @@ export const tilesWorker = {
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
+          "  CelesTrak TLE groups: /celestrak/<group>\n" +
           "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
@@ -818,6 +829,34 @@ export const tilesWorker = {
       const headers = new Headers(CORS_HEADERS);
       headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
       headers.set("cache-control", originResponse.ok ? "public, max-age=120" : "no-store");
+      return new Response(originResponse.body, { status: originResponse.status, headers });
+    }
+
+    const celestrakMatch = CELESTRAK_PATH.exec(url.pathname);
+    if (celestrakMatch) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
+      const group = celestrakMatch[1];
+      const starlink = group === "starlink";
+      const upstream = new URL(starlink ? CELESTRAK_STARLINK_UPSTREAM : CELESTRAK_UPSTREAM);
+      upstream.searchParams.set(starlink ? "FILE" : "GROUP", group);
+      upstream.searchParams.set("FORMAT", "tle");
+      let originResponse: Response;
+      try {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
+          headers: {
+            accept: "text/plain",
+            "user-agent": "GeoLibre-CelesTrak-Proxy/1.0 (+https://geolibre.org)",
+          },
+          cf: { cacheEverything: true, cacheTtl: 21_600 },
+        });
+      } catch {
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set("content-type", "text/plain; charset=utf-8");
+      headers.set("cache-control", originResponse.ok ? CELESTRAK_CACHE_CONTROL : "no-store");
       return new Response(originResponse.body, { status: originResponse.status, headers });
     }
 

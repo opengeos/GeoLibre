@@ -128,19 +128,70 @@ function makeCesium() {
       return this.points[index];
     }
   }
+  class LabelCollection {
+    labels: Array<Record<string, unknown>> = [];
+    constructor(public options?: { scene?: unknown }) {}
+    add(options: Record<string, unknown>) {
+      const label = { ...options };
+      this.labels.push(label);
+      return label;
+    }
+  }
+  class Primitive {
+    constructor(public options: Record<string, unknown>) {}
+  }
+  class GeometryInstance {
+    constructor(public options: Record<string, unknown>) {}
+  }
+  class PolylineGeometry {
+    constructor(public options: Record<string, unknown>) {}
+  }
+  class PolylineColorAppearance {
+    static VERTEX_FORMAT = "polyline-color";
+    constructor(public options: Record<string, unknown>) {}
+  }
+  class Cartesian3 {
+    constructor(
+      public x: number,
+      public y: number,
+      public z: number,
+    ) {}
+    static fromDegrees(lng: number, lat: number, z: number) {
+      return { lng, lat, z };
+    }
+  }
+  class Cartesian2 {
+    constructor(
+      public x: number,
+      public y: number,
+    ) {}
+  }
+  const color = (css: string, alpha = 1) => ({
+    css,
+    alpha,
+    withAlpha: (nextAlpha: number) => ({ css, alpha: nextAlpha }),
+  });
   return {
     PointPrimitiveCollection,
-    Cartesian3: { fromDegrees: (lng: number, lat: number, z: number) => ({ lng, lat, z }) },
-    Color: {
-      fromCssColorString: (css: string) => ({
-        css,
-        alpha: 1,
-        withAlpha: (alpha: number) => ({ css, alpha }),
-      }),
-      WHITE: { withAlpha: (alpha: number) => ({ css: "WHITE", alpha }) },
+    LabelCollection,
+    Primitive,
+    GeometryInstance,
+    PolylineGeometry,
+    PolylineColorAppearance,
+    ColorGeometryInstanceAttribute: {
+      fromColor: (value: unknown) => ({ value }),
     },
-    LabelStyle: { FILL: 0 },
-    HorizontalOrigin: { CENTER: 0 },
+    Cartesian3,
+    Cartesian2,
+    Color: {
+      fromCssColorString: (css: string) => color(css),
+      clone: (value: { css: string; alpha: number }) => color(value.css, value.alpha),
+      WHITE: color("WHITE"),
+      BLACK: color("BLACK"),
+    },
+    Material: { fromType: (type: string, uniforms: unknown) => ({ type, uniforms }) },
+    LabelStyle: { FILL: 0, FILL_AND_OUTLINE: 2 },
+    HorizontalOrigin: { CENTER: 0, RIGHT: 1, LEFT: -1 },
     VerticalOrigin: { CENTER: 0 },
     HeightReference: { NONE: 0, CLAMP_TO_GROUND: 1, RELATIVE_TO_GROUND: 2 },
     ColorMaterialProperty: class {
@@ -150,7 +201,16 @@ function makeCesium() {
       constructor(public value: unknown) {}
     },
     Rectangle: { fromDegrees: () => ({}) },
-    JulianDate: { fromDate: (d: Date) => d },
+    JulianDate: {
+      fromDate: (d: Date) => d,
+      toDate: () => new Date("2026-09-20T00:00:00.000Z"),
+    },
+    SceneTransforms: {
+      worldToWindowCoordinates: (_scene: unknown, position: { x: number; y: number }) => ({
+        x: position.x,
+        y: position.y,
+      }),
+    },
   };
 }
 
@@ -288,6 +348,7 @@ describe("configureClustering", () => {
 function makeViewer() {
   const primitives: unknown[] = [];
   const cameraListeners = new Set<() => void>();
+  const preRenderListeners = new Set<() => void>();
   const dataSources: Array<{ clustering: Record<string, unknown> & { enabled: boolean } }> = [];
   const viewer = {
     clock: { currentTime: { dayNumber: 0, secondsOfDay: 0 } },
@@ -302,11 +363,21 @@ function makeViewer() {
       },
     },
     scene: {
-      canvas: { clientWidth: 800, clientHeight: 600, width: 800, height: 600 },
+      canvas: {
+        clientWidth: 800,
+        clientHeight: 600,
+        width: 800,
+        height: 600,
+        getBoundingClientRect: () => ({ left: 0 }),
+      },
       mode: 3,
       primitives: {
         add: (p: unknown) => primitives.push(p),
         remove: (p: unknown) => primitives.splice(primitives.indexOf(p), 1),
+      },
+      preRender: {
+        addEventListener: (listener: () => void) => preRenderListeners.add(listener),
+        removeEventListener: (listener: () => void) => preRenderListeners.delete(listener),
       },
       requestRender: () => {},
     },
@@ -345,10 +416,153 @@ function makeViewer() {
     },
   };
   const flush = () => new Promise((r) => setTimeout(r, 0));
-  return { viewer, Cesium, primitives, dataSources, flush, cameraListeners };
+  return {
+    viewer,
+    Cesium,
+    primitives,
+    dataSources,
+    flush,
+    cameraListeners,
+    preRenderListeners,
+  };
 }
 
 describe("CesiumLayerSync point rendering", () => {
+  it("connects a plugin-owned moving point batch to table identify and selection", async () => {
+    const f = makeViewer();
+    const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 10);
+    const layer = pointLayer(2);
+    const [feature, secondFeature] = layer.geojson?.features ?? [];
+    assert.ok(feature && secondFeature);
+    feature.id = "moving-1";
+    feature.properties = { name: "STARLINK TEST", catalogNumber: "44713" };
+    secondFeature.id = "moving-2";
+    secondFeature.properties = { name: "STARLINK TEST 2", catalogNumber: "44714" };
+    sync.sync([layer]);
+    await f.flush();
+
+    const collection = new f.Cesium.PointPrimitiveCollection();
+    const ref: { geolibreLayerId: string; index: number; primitive?: unknown } = {
+      geolibreLayerId: layer.id,
+      index: 0,
+    };
+    const position = { x: 1, y: 2, z: 3 };
+    const originalColor = { css: "#54697f", alpha: 0.9 };
+    const primitive = collection.add({ position, color: originalColor, id: ref });
+    // Cesium's real PointPrimitive setter clones into its existing internal
+    // Color object. Holding the getter result as the "original" therefore
+    // aliases the value the yellow assignment mutates.
+    const storedColor = { ...originalColor };
+    Object.defineProperty(primitive, "color", {
+      get: () => storedColor,
+      set: (value: { css: string; alpha?: number }) => Object.assign(storedColor, value),
+      configurable: true,
+    });
+    ref.primitive = primitive;
+    const secondRef: { geolibreLayerId: string; index: number; primitive?: unknown } = {
+      geolibreLayerId: layer.id,
+      index: 1,
+    };
+    const secondPrimitive = collection.add({
+      position: { x: 4, y: 5, z: 6 },
+      color: { ...originalColor },
+      id: secondRef,
+    });
+    secondRef.primitive = secondPrimitive;
+    const unregister = sync.registerMovingPointLayer(layer.id, collection as never, [
+      {
+        name: "STARLINK TEST",
+        tleLine1:
+          "1 44713U 19074A   26262.50000000  .00001200  00000+0  90000-4 0  9991",
+        tleLine2:
+          "2 44713  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000",
+        orbitalPeriodMinutes: 95.62,
+      },
+      {
+        name: "STARLINK TEST 2",
+        tleLine1:
+          "1 44714U 19074B   26262.50000000  .00001200  00000+0  90000-4 0  9992",
+        tleLine2:
+          "2 44714  53.0500 211.0000 0001500  85.0000 275.0000 15.06000000300001",
+        orbitalPeriodMinutes: 95.62,
+      },
+    ]);
+
+    assert.deepEqual(sync.resolveFeature(ref), {
+      layerId: "pts",
+      featureId: "moving-1",
+      properties: { name: "STARLINK TEST", catalogNumber: "44713" },
+      geometry: feature.geometry,
+    });
+    assert.deepEqual(sync.featurePositions(layer.id, ["moving-1"]), [position]);
+    sync.highlight(layer.id, ["moving-1"]);
+    assert.equal((primitive.color as { css: string }).css, "#facc15");
+    sync.highlight(layer.id, ["moving-2"]);
+    assert.deepEqual(
+      {
+        css: (primitive.color as { css: string }).css,
+        alpha: (primitive.color as { alpha: number }).alpha,
+      },
+      originalColor,
+      "selecting another point restores the first point's real pre-highlight color",
+    );
+    assert.equal(f.primitives.length, 2, "the selected moving satellite receives an orbit and label");
+    const orbit = f.primitives.find((candidate) => candidate instanceof f.Cesium.Primitive) as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+        depthFailAppearance?: unknown;
+      };
+    };
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.ok(orbit.options.depthFailAppearance);
+    const labels = f.primitives.find(
+      (candidate) => candidate instanceof f.Cesium.LabelCollection,
+    ) as { labels: Array<Record<string, unknown>> };
+    assert.ok(labels, "dense selection adds a label collection");
+    assert.equal(labels.labels.length, 1);
+    assert.equal(labels.labels[0].text, "STARLINK TEST 2");
+    assert.equal(labels.labels[0].horizontalOrigin, f.Cesium.HorizontalOrigin.RIGHT);
+    assert.deepEqual(
+      {
+        x: (labels.labels[0].pixelOffset as { x: number; y: number }).x,
+        y: (labels.labels[0].pixelOffset as { x: number; y: number }).y,
+      },
+      { x: -16, y: -19 },
+    );
+    assert.deepEqual(labels.labels[0].position, secondPrimitive.position);
+    secondPrimitive.position = { x: 7, y: 8, z: 9 };
+    for (const listener of f.preRenderListeners) listener();
+    assert.deepEqual(
+      labels.labels[0].position,
+      secondPrimitive.position,
+      "the selected label follows the moving satellite",
+    );
+    secondPrimitive.position = { x: 700, y: 8, z: 9 };
+    for (const listener of f.preRenderListeners) listener();
+    assert.equal(labels.labels[0].horizontalOrigin, f.Cesium.HorizontalOrigin.LEFT);
+    assert.deepEqual(
+      {
+        x: (labels.labels[0].pixelOffset as { x: number; y: number }).x,
+        y: (labels.labels[0].pixelOffset as { x: number; y: number }).y,
+      },
+      { x: 16, y: -19 },
+    );
+    sync.highlight(undefined, []);
+    assert.equal(f.primitives.length, 0, "clearing selection removes the selected orbit");
+    assert.equal(f.preRenderListeners.size, 0, "clearing selection removes the label updater");
+
+    unregister();
+    assert.equal(sync.resolveFeature(ref), null);
+  });
+
   it("renders a large point layer as one primitive batch that picks and filters", async () => {
     const f = makeViewer();
     const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 10);

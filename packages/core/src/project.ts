@@ -1736,6 +1736,16 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  // Some live plugin layers publish a large in-memory row model solely for
+  // the Attribute Table and rebuild it from their feed on activation. Keeping
+  // those rows in the store makes them queryable; embedding them in every
+  // project/autosave would persist stale positions and can cross the history
+  // snapshot ceiling.
+  if (layer.geojson && layer.metadata.transientGeojson === true) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
   // External native layers that restore their features from a source URL keep
   // a `geojson` copy on the map only for the attribute table; it is redundant
   // in a saved project and would only bloat it, so strip it. Layers without a

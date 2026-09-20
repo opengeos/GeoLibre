@@ -1,6 +1,7 @@
 import type { CesiumSceneHandle } from "@geolibre/map";
+import type { Feature, Point } from "geojson";
 import { eciToEcf, gstime, propagate, twoline2satrec, type SatRec } from "satellite.js";
-import { buildCelestrakTleUrl, parseTle } from "./gods-eye-view-feeds";
+import { fetchCelestrakTleText, parseTle } from "./gods-eye-view-feeds";
 
 const DENSE_GROUP = "starlink";
 const DENSE_CREATE_CHUNK = 1_500;
@@ -27,6 +28,23 @@ interface DenseSatellite {
   point: DensePoint;
 }
 
+interface DensePickRef {
+  geolibreLayerId: string;
+  index: number;
+  primitive?: DensePoint;
+}
+
+type DenseAttributeFeature = Feature<
+  Point,
+  {
+    name: string;
+    catalogNumber: string;
+    group: "starlink";
+    inclinationDeg: number;
+    orbitalPeriodMinutes: number;
+  }
+>;
+
 /**
  * The optional 10K+ catalog from the reference app.
  *
@@ -48,8 +66,16 @@ export class GodsEyeViewDenseCatalog {
   private excluded: ReadonlySet<string> = new Set();
   private collection: DensePointCollection | null = null;
   private satellites: DenseSatellite[] = [];
+  private features: DenseAttributeFeature[] = [];
+  private descriptions: Array<{
+    name: string;
+    tleLine1: string;
+    tleLine2: string;
+    orbitalPeriodMinutes: number;
+  }> = [];
   private cursor = 0;
   private removePreRender: (() => void) | null = null;
+  private unregisterLayer: (() => void) | null = null;
   private request: AbortController | null = null;
   private generation = 0;
   private state: DenseCatalogSnapshot = {
@@ -64,7 +90,16 @@ export class GodsEyeViewDenseCatalog {
     return { ...this.state };
   }
 
-  async enable(globe: CesiumSceneHandle, coreCatalogNumbers: ReadonlySet<string>): Promise<void> {
+  /** Lightweight, one-row-per-point model consumed by the Attribute Table. */
+  attributeFeatures(): DenseAttributeFeature[] {
+    return [...this.features];
+  }
+
+  async enable(
+    globe: CesiumSceneHandle,
+    coreCatalogNumbers: ReadonlySet<string>,
+    layerId = "gods-eye-view-dense-satellites",
+  ): Promise<void> {
     if (
       this.globe?.viewer === globe.viewer &&
       // A refresh recomputes the core catalogue; when a satellite has entered
@@ -86,11 +121,9 @@ export class GodsEyeViewDenseCatalog {
     this.setState({ status: "loading", count: 0, error: null });
 
     try {
-      const response = await fetch(buildCelestrakTleUrl(DENSE_GROUP), {
-        signal: request.signal,
-      });
-      if (!response.ok) throw new Error(`CelesTrak returned HTTP ${response.status}`);
-      const records = parseTle(await response.text());
+      const records = parseTle(
+        await fetchCelestrakTleText(DENSE_GROUP, { signal: request.signal }),
+      );
       if (generation !== this.generation || request.signal.aborted) return;
 
       const C = globe.Cesium;
@@ -110,17 +143,49 @@ export class GodsEyeViewDenseCatalog {
           if (satrec.error !== 0) continue;
           const position = this.position(globe, satrec, at);
           if (!position) continue;
+          const featureIndex = this.features.length;
+          const pickRef: DensePickRef = { geolibreLayerId: layerId, index: featureIndex };
           const point = collection.add({
             position,
-            pixelSize: 3,
+            // Six visible pixels plus an outline are still cheap in a single
+            // batch, but much easier to acquire while the clock is running.
+            pixelSize: 6,
             color,
-            outlineWidth: 0,
+            outlineColor: C.Color.fromCssColorString("#d9e8f5").withAlpha(0.7),
+            outlineWidth: 1,
             scaleByDistance: new C.NearFarScalar(1e6, 1.5, 2e7, 0.6),
-            id: {
-              godsEyeViewDenseSatellite: true,
-              catalogNumber: record.catalogNumber,
-              name: record.name,
+            id: pickRef,
+          });
+          pickRef.primitive = point;
+          const xyz = position as { x: number; y: number; z: number };
+          const radius = Math.hypot(xyz.x, xyz.y, xyz.z);
+          const orbitalPeriodMinutes = Number(
+            (1_440 / record.meanMotionRevolutionsPerDay).toFixed(2),
+          );
+          this.features.push({
+            type: "Feature",
+            id: `celestrak-${record.catalogNumber}`,
+            geometry: {
+              type: "Point",
+              coordinates: [
+                (Math.atan2(xyz.y, xyz.x) * 180) / Math.PI,
+                (Math.atan2(xyz.z, Math.hypot(xyz.x, xyz.y)) * 180) / Math.PI,
+                Math.max(0, radius - 6_378_137),
+              ],
             },
+            properties: {
+              name: record.name,
+              catalogNumber: record.catalogNumber,
+              group: "starlink",
+              inclinationDeg: record.inclinationDeg,
+              orbitalPeriodMinutes,
+            },
+          });
+          this.descriptions.push({
+            name: record.name,
+            tleLine1: record.line1,
+            tleLine2: record.line2,
+            orbitalPeriodMinutes,
           });
           this.satellites.push({ satrec, point });
         }
@@ -131,6 +196,11 @@ export class GodsEyeViewDenseCatalog {
 
       if (generation !== this.generation || request.signal.aborted) return;
       if (this.satellites.length === 0) throw new Error("feed returned no usable satellites");
+      this.unregisterLayer = globe.registerMovingPointLayer(
+        layerId,
+        collection as never,
+        this.descriptions,
+      );
       this.removePreRender = globe.scene.preRender.addEventListener(() => this.updateChunk());
       this.setState({
         status: "ready",
@@ -166,11 +236,15 @@ export class GodsEyeViewDenseCatalog {
     this.request = null;
     this.removePreRender?.();
     this.removePreRender = null;
+    this.unregisterLayer?.();
+    this.unregisterLayer = null;
     if (this.collection && this.globe) {
       this.globe.scene.primitives.remove(this.collection as never);
     }
     this.collection = null;
     this.satellites = [];
+    this.features = [];
+    this.descriptions = [];
     this.cursor = 0;
     this.globe = null;
   }

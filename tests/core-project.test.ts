@@ -385,6 +385,26 @@ describe("project parsing", () => {
     assert.ok(!("embedFilter" in reparsed));
   });
 
+  it("strips feed-rebuilt attribute rows marked as transient", () => {
+    const layer = {
+      ...geojsonLayer({ id: "moving-feed" }),
+      metadata: { transientGeojson: true, feed: "satellites" },
+    } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
+    const project = projectFromStore({
+      projectName: "Moving feed",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(project.layers[0].geojson, undefined);
+    assert.equal(project.layers[0].metadata.feed, "satellites");
+  });
+
   it("keeps quick filters, which are project state rather than session state", () => {
     // The contrast with the test above is the point: `timeFilter`/`embedFilter`
     // are set at runtime by the Time Slider and the host page, but a quick

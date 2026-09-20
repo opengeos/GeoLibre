@@ -80,6 +80,7 @@ import type {
   ImageryLayer,
   ImageryProvider,
   PointPrimitiveCollection,
+  PointPrimitive,
   Resource,
   TilingScheme,
 } from "@cesium/engine";
@@ -293,6 +294,14 @@ interface LayerEntry {
   cluster?: ReturnType<typeof configureClustering>;
   /** Whether clustering must switch on/off as the camera crosses `clusterMaxZoom`. */
   zoomCluster?: boolean;
+}
+
+/** Orbit metadata aligned by feature index with a plugin-owned moving point batch. */
+export interface MovingPointFeatureDescription {
+  name: string;
+  tleLine1: string;
+  tleLine2: string;
+  orbitalPeriodMinutes: number;
 }
 
 /**
@@ -910,6 +919,14 @@ async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader
 export class CesiumLayerSync {
   private readonly featureRefs = new WeakMap<object, { layerId: string; index: number }>();
   private readonly imageryRefs = new WeakMap<object, string>();
+  private readonly movingPointLayers = new Map<
+    string,
+    {
+      collection: PointPrimitiveCollection;
+      primitives: WeakSet<object>;
+      descriptions: readonly MovingPointFeatureDescription[];
+    }
+  >();
   private selection: { layerId: string; ids: Set<string> } | null = null;
   private highlightRestorers: Array<() => void> = [];
 
@@ -919,10 +936,13 @@ export class CesiumLayerSync {
     // being an Entity the WeakMap knows.
     if (isBatchedPointRef(entity)) {
       const entry = this.entries.get(entity.geolibreLayerId);
+      const moving = this.movingPointLayers.get(entity.geolibreLayerId);
+      const movingPoint =
+        entity.primitive && moving?.primitives.has(entity.primitive as unknown as object);
       if (
         !entry ||
         entry.cancelled ||
-        entry.kind !== "points" ||
+        (entry.kind !== "points" && !movingPoint) ||
         !entry.layer.visible ||
         entry.layer.opacity <= 0
       )
@@ -1029,9 +1049,51 @@ export class CesiumLayerSync {
     return this.imageryRefs.get(imagery);
   }
 
+  /**
+   * Attach a plugin-owned moving point collection to a store layer.
+   *
+   * The plugin remains responsible for propagation and collection lifetime;
+   * the synchronizer owns identification, selection highlighting, visibility,
+   * and camera fitting. Keeping that integration behind one interface avoids
+   * every moving-overlay plugin growing its own competing click handler.
+   */
+  registerMovingPointLayer(
+    layerId: string,
+    collection: PointPrimitiveCollection,
+    descriptions: readonly MovingPointFeatureDescription[] = [],
+  ): () => void {
+    const primitives = new WeakSet<object>();
+    for (let index = 0; index < collection.length; index += 1) {
+      const point = collection.get(index);
+      if (point) primitives.add(point as unknown as object);
+    }
+    this.movingPointLayers.set(layerId, { collection, primitives, descriptions });
+    const entry = this.entries.get(layerId);
+    if (entry) collection.show = entry.layer.visible;
+    return () => {
+      if (this.movingPointLayers.get(layerId)?.collection === collection)
+        this.movingPointLayers.delete(layerId);
+    };
+  }
+
   /** Current world positions for selected document entities, used for camera fitting. */
   featurePositions(layerId: string, ids: readonly string[]): Cartesian3[] {
     const entry = this.entries.get(layerId);
+    const moving = this.movingPointLayers.get(layerId);
+    if (entry && moving) {
+      const selected = new Set(ids);
+      const features = entry.layer.geojson?.features ?? [];
+      const positions: Cartesian3[] = [];
+      for (let index = 0; index < moving.collection.length; index += 1) {
+        const point = moving.collection.get(index);
+        const ref = point?.id;
+        if (!isBatchedPointRef(ref)) continue;
+        const feature = features[ref.index];
+        if (feature && selected.has(String(feature.id ?? ref.index)) && point.position)
+          positions.push(point.position);
+      }
+      return positions;
+    }
     if (!entry?.handle || (entry.kind !== "czml" && entry.kind !== "kml")) return [];
     const entities = (entry.handle as DataSource).entities;
     const time = this.viewer.clock.currentTime;
@@ -1055,9 +1117,36 @@ export class CesiumLayerSync {
   private applyHighlight(): void {
     const selected = this.selection;
     const entry = selected && this.entries.get(selected.layerId);
-    if (!selected || !entry || !entry.handle) return;
+    if (!selected || !entry) return;
     const C = this.Cesium;
     const color = C.Color.fromCssColorString("#facc15");
+    const moving = this.movingPointLayers.get(selected.layerId);
+    if (moving) {
+      const features = entry.layer.geojson?.features ?? [];
+      for (let index = 0; index < moving.collection.length; index += 1) {
+        const point = moving.collection.get(index);
+        const ref = point?.id;
+        if (!isBatchedPointRef(ref)) continue;
+        const feature = features[ref.index];
+        if (!feature || !selected.ids.has(String(feature.id ?? ref.index))) continue;
+        // PointPrimitive's setter clones into its existing internal Color.
+        // Keeping the getter result would alias that object, so painting it
+        // yellow would also overwrite the value meant to restore it later.
+        const original = C.Color.clone(point.color);
+        point.color = color;
+        this.highlightRestorers.push(() => {
+          point.color = original;
+        });
+        const description = moving.descriptions[ref.index];
+        if (description) {
+          this.describeSelectedMovingPoint(description, color);
+          this.labelSelectedMovingPoint(point, description.name);
+        }
+      }
+      this.viewer.scene.requestRender();
+      return;
+    }
+    if (!entry.handle) return;
     if (entry.kind === "points") {
       const collection = entry.handle as PointPrimitiveCollection;
       const features = entry.layer.geojson?.features ?? [];
@@ -1067,7 +1156,7 @@ export class CesiumLayerSync {
         if (!isBatchedPointRef(ref)) continue;
         const feature = features[ref.index];
         if (!feature || !selected.ids.has(String(feature.id ?? ref.index))) continue;
-        const original = point.color;
+        const original = C.Color.clone(point.color);
         point.color = color;
         this.highlightRestorers.push(() => {
           point.color = original;
@@ -1117,6 +1206,142 @@ export class CesiumLayerSync {
     this.viewer.scene.requestRender();
   }
 
+  /** Build the closed, inertially fixed ring shared by core and dense satellites. */
+  private selectedTleOrbitPositions(
+    tleLine1: string,
+    tleLine2: string,
+    orbitalPeriodMinutes?: number,
+  ): Cartesian3[] | null {
+    const C = this.Cesium;
+    try {
+      const satrec = twoline2satrec(tleLine1, tleLine2);
+      const periodSeconds =
+        typeof orbitalPeriodMinutes === "number" &&
+        Number.isFinite(orbitalPeriodMinutes) &&
+        orbitalPeriodMinutes > 0
+          ? orbitalPeriodMinutes * 60
+          : (2 * Math.PI * 60) / satrec.no;
+      const referenceDate = C.JulianDate.toDate(this.viewer.clock.currentTime);
+      const fixedGmst = gstime(referenceDate);
+      const positions: Cartesian3[] = [];
+      for (let index = 0; index < SELECTED_ORBIT_STEPS; index += 1) {
+        const at = new Date(
+          referenceDate.getTime() +
+            (index * periodSeconds * 1000) / SELECTED_ORBIT_STEPS,
+        );
+        const propagated = propagate(satrec, at);
+        const position = propagated?.position;
+        if (!position || typeof position === "boolean") continue;
+        // Fix GMST to the selection epoch. Advancing Earth rotation while
+        // sampling leaves the final point west of the first and looks clipped.
+        const ecf = eciToEcf(position, fixedGmst);
+        positions.push(new C.Cartesian3(ecf.x * 1000, ecf.y * 1000, ecf.z * 1000));
+      }
+      if (positions.length < 3) return null;
+      const first = positions[0];
+      positions.push(new C.Cartesian3(first.x, first.y, first.z));
+      return positions;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Draw a selection-only orbit as one synchronous scene primitive.
+   *
+   * A polyline attached to a moving Entity can be routed through Cesium's
+   * dynamic updater, where depthFailMaterial is not preserved. The explicit
+   * primitive mirrors the upstream God's Eye View renderer: it stays bright in
+   * front of Earth, keeps a dim behind-Earth segment, and is added after the
+   * dense point cloud so the selected orbit remains legible.
+   */
+  private showSelectedOrbit(positions: readonly Cartesian3[], color: Color): void {
+    const C = this.Cesium;
+    const primitive = new C.Primitive({
+      geometryInstances: new C.GeometryInstance({
+        geometry: new C.PolylineGeometry({
+          positions: [...positions],
+          width: 2,
+          vertexFormat: C.PolylineColorAppearance.VERTEX_FORMAT,
+        }),
+        attributes: {
+          color: C.ColorGeometryInstanceAttribute.fromColor(color.withAlpha(0.6)),
+          depthFailColor: C.ColorGeometryInstanceAttribute.fromColor(color.withAlpha(0.35)),
+        },
+      }),
+      appearance: new C.PolylineColorAppearance({ translucent: true }),
+      depthFailAppearance: new C.PolylineColorAppearance({ translucent: true }),
+      asynchronous: false,
+      allowPicking: false,
+    });
+    this.viewer.scene.primitives.add(primitive);
+    this.highlightRestorers.push(() => {
+      this.viewer.scene.primitives.remove(primitive);
+    });
+  }
+
+  /** Add selection-only orbit chrome for a plugin-owned moving point. */
+  private describeSelectedMovingPoint(
+    description: MovingPointFeatureDescription,
+    color: Color,
+  ): void {
+    const positions = this.selectedTleOrbitPositions(
+      description.tleLine1,
+      description.tleLine2,
+      description.orbitalPeriodMinutes,
+    );
+    if (positions) this.showSelectedOrbit(positions, color);
+  }
+
+  /** Label only the selected moving point and keep the label attached as it propagates. */
+  private labelSelectedMovingPoint(point: PointPrimitive, name: string): void {
+    const text = name.trim();
+    if (!text) return;
+    const C = this.Cesium;
+    const collection = new C.LabelCollection({ scene: this.viewer.scene });
+    const label = collection.add({
+      position: point.position,
+      text,
+      font: "600 13px sans-serif",
+      style: C.LabelStyle.FILL_AND_OUTLINE,
+      fillColor: C.Color.WHITE,
+      outlineColor: C.Color.BLACK,
+      outlineWidth: 3,
+      showBackground: true,
+      backgroundColor: C.Color.BLACK.withAlpha(0.82),
+      backgroundPadding: new C.Cartesian2(6, 4),
+      horizontalOrigin: C.HorizontalOrigin.RIGHT,
+      pixelOffset: new C.Cartesian2(-16, -19),
+    });
+    const followPoint = () => {
+      label.position = point.position;
+      const screen = C.SceneTransforms.worldToWindowCoordinates(
+        this.viewer.scene,
+        point.position,
+      );
+      // Dense popups are about 300 px wide. They flip to the left when the
+      // right side is tight; keep the label on the other side of the point.
+      const canvas = this.viewer.scene.canvas;
+      const canvasBounds = canvas.getBoundingClientRect?.();
+      const screenX =
+        screen && canvasBounds ? screen.x - canvasBounds.left : screen?.x;
+      const popupFitsRight = screenX === undefined || screenX <= canvas.clientWidth / 2;
+      label.horizontalOrigin = popupFitsRight
+        ? C.HorizontalOrigin.RIGHT
+        : C.HorizontalOrigin.LEFT;
+      label.pixelOffset = popupFitsRight
+        ? new C.Cartesian2(-16, -19)
+        : new C.Cartesian2(16, -19);
+    };
+    followPoint();
+    this.viewer.scene.preRender.addEventListener(followPoint);
+    this.viewer.scene.primitives.add(collection);
+    this.highlightRestorers.push(() => {
+      this.viewer.scene.preRender.removeEventListener(followPoint);
+      this.viewer.scene.primitives.remove(collection);
+    });
+  }
+
   /**
    * Name and trace the one CZML entity the user picked.
    *
@@ -1152,48 +1377,13 @@ export class CesiumLayerSync {
     const tleLine1 = entity.properties?.tleLine1?.getValue(time) as string | undefined;
     const tleLine2 = entity.properties?.tleLine2?.getValue(time) as string | undefined;
     if (tleLine1 && tleLine2) {
-      try {
-        const satrec = twoline2satrec(tleLine1, tleLine2);
-        const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as
-          | number
-          | undefined;
-        const periodSeconds =
-          typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
-            ? minutes * 60
-            : (2 * Math.PI * 60) / satrec.no;
-        const referenceDate = C.JulianDate.toDate(time);
-        const fixedGmst = gstime(referenceDate);
-        const positions: Cartesian3[] = [];
-        for (let i = 0; i < SELECTED_ORBIT_STEPS; i++) {
-          const at = new Date(
-            referenceDate.getTime() + (i * periodSeconds * 1000) / SELECTED_ORBIT_STEPS,
-          );
-          const propagated = propagate(satrec, at);
-          const position = propagated?.position;
-          if (!position || typeof position === "boolean") continue;
-          // Fix GMST to the selection epoch. Allowing Earth rotation to advance
-          // while sampling shifts the last point west of the first and produces
-          // the clipped-looking arc the reference implementation avoids.
-          const ecf = eciToEcf(position, fixedGmst);
-          positions.push(new C.Cartesian3(ecf.x * 1000, ecf.y * 1000, ecf.z * 1000));
-        }
-        if (positions.length >= 3) {
-          const first = positions[0];
-          positions.push(new C.Cartesian3(first.x, first.y, first.z));
-          entity.polyline = new C.PolylineGraphics({
-            positions,
-            width: 2,
-            arcType: C.ArcType.NONE,
-            material: new C.ColorMaterialProperty(color.withAlpha(0.6)),
-            depthFailMaterial: new C.ColorMaterialProperty(color.withAlpha(0.35)),
-          });
-          this.highlightRestorers.push(() => {
-            entity.polyline = undefined;
-          });
-          return;
-        }
-      } catch {
-        // Malformed third-party TLE metadata falls through to a sampled trail.
+      const minutes = entity.properties?.orbitalPeriodMinutes?.getValue(time) as
+        | number
+        | undefined;
+      const positions = this.selectedTleOrbitPositions(tleLine1, tleLine2, minutes);
+      if (positions) {
+        this.showSelectedOrbit(positions, color);
+        return;
       }
     }
     // Generic CZML has no TLE from which to build a closed ring. Retain the
@@ -1501,6 +1691,7 @@ export class CesiumLayerSync {
   destroy(): void {
     this.restoreHighlight();
     this.selection = null;
+    this.movingPointLayers.clear();
     // Nothing to hand the clock to while everything is torn down.
     this.czmlClockOwner = undefined;
     for (const entry of this.entries.values()) this.destroyEntry(entry);
@@ -2807,6 +2998,8 @@ export class CesiumLayerSync {
   private applyAppearance(entry: LayerEntry): void {
     const { handle, layer } = entry;
     if (!handle) return;
+    const moving = this.movingPointLayers.get(layer.id);
+    if (moving) moving.collection.show = layer.visible;
     if (entry.kind === "imagery") {
       const imagery = handle as ImageryLayer;
       imagery.show = layer.visible;

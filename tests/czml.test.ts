@@ -117,6 +117,8 @@ function makeGlobe() {
     czmlLoads: [] as unknown[],
     dataSourcesAdded: [] as unknown[],
     dataSourcesRemoved: [] as unknown[],
+    primitivesAdded: [] as unknown[],
+    primitivesRemoved: [] as unknown[],
   };
 
   const Cesium = {
@@ -158,8 +160,14 @@ function makeGlobe() {
     scene: {
       canvas: { clientWidth: 800, clientHeight: 600, width: 800, height: 600 },
       primitives: {
-        add: () => {},
-        remove: () => {},
+        add: (primitive: unknown) => {
+          calls.primitivesAdded.push(primitive);
+          return primitive;
+        },
+        remove: (primitive: unknown) => {
+          calls.primitivesRemoved.push(primitive);
+          return true;
+        },
       },
       requestRender: () => {},
     },
@@ -334,7 +342,7 @@ describe("CesiumLayerSync with CZML", () => {
   });
 
   it("does not hand the clock to a document that never reached the scene", async () => {
-    const { Cesium, viewer } = makeGlobe();
+    const { calls, Cesium, viewer } = makeGlobe();
     viewer.dataSources.add = async () => {
       throw new Error("scene rejected the data source");
     };
@@ -477,7 +485,7 @@ describe("CesiumLayerSync with CZML", () => {
   });
 
   it("names and traces the satellite the user selects, and undoes both", async () => {
-    const { Cesium, viewer } = makeGlobe();
+    const { calls, Cesium, viewer } = makeGlobe();
     class SampledPositionProperty {}
     const satellite = {
       id: "celestrak-25545",
@@ -542,6 +550,22 @@ describe("CesiumLayerSync with CZML", () => {
       PolylineGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
       ColorMaterialProperty: class {
         constructor(public color: unknown) {}
       },
@@ -563,26 +587,44 @@ describe("CesiumLayerSync with CZML", () => {
     const label = satellite.label as { options: { text: string } };
     assert.ok(label);
     assert.equal(label.options.text, "COSMOS 2251");
-    // Selection builds a complete, closed orbit independently of the document's
-    // animation window. A temporal PathGraphics trail clips into a short arc at
-    // the window boundaries, so the selected orbit is a static polyline ring.
-    const polyline = satellite.polyline as {
-      options: { positions: Array<{ x: number; y: number; z: number }> };
+    // Selection builds a synchronous primitive with an explicit depth-fail
+    // appearance. Entity polylines can silently lose the behind-Earth material
+    // when Cesium classifies the parent moving entity as dynamic, making a
+    // complete orbit look absent once the dense catalog is enabled.
+    assert.equal(calls.primitivesAdded.length, 1);
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+        depthFailAppearance?: unknown;
+        asynchronous: boolean;
+        allowPicking: boolean;
+      };
     };
-    assert.ok(polyline);
-    assert.equal(polyline.options.positions.length, 181);
-    assert.deepEqual(polyline.options.positions.at(-1), polyline.options.positions[0]);
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.ok(orbit.options.depthFailAppearance);
+    assert.equal(orbit.options.asynchronous, false);
+    assert.equal(orbit.options.allowPicking, false);
+    assert.equal(satellite.polyline, undefined);
     assert.equal(satellite.path, undefined);
 
     sync.highlight(undefined, []);
     assert.equal(satellite.label, undefined, "clearing the selection restores the document");
     assert.equal(satellite.path, undefined);
     assert.equal(satellite.polyline, undefined);
+    assert.deepEqual(calls.primitivesRemoved, calls.primitivesAdded);
     sync.destroy();
   });
 
   it("traces a complete GEO orbit beyond the document's three-hour sample window", async () => {
-    const { Cesium, viewer } = makeGlobe();
+    const { calls, Cesium, viewer } = makeGlobe();
     class SampledPositionProperty {}
     // A GEO satellite: a 24-hour period, but only the plugin's three-hour
     // window is sampled, and the clock sits in the middle of it.
@@ -654,6 +696,22 @@ describe("CesiumLayerSync with CZML", () => {
       PolylineGraphics: class {
         constructor(public options: Record<string, unknown>) {}
       },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
       ColorMaterialProperty: class {
         constructor(public color: unknown) {}
       },
@@ -667,12 +725,22 @@ describe("CesiumLayerSync with CZML", () => {
     for (let i = 0; i < 4; i++) await flush();
 
     sync.highlight("czml-geo", ["celestrak-99999"]);
-    const polyline = geo.polyline as {
-      options: { positions: Array<{ x: number; y: number; z: number }> };
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+      };
     };
-    assert.ok(polyline);
-    assert.equal(polyline.options.positions.length, 181);
-    assert.deepEqual(polyline.options.positions.at(-1), polyline.options.positions[0]);
+    assert.ok(orbit);
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.equal(geo.polyline, undefined);
     assert.equal(geo.path, undefined);
     sync.destroy();
   });

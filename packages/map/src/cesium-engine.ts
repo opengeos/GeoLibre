@@ -8,7 +8,7 @@ import {
   type StoryChapterAnimation,
   type StoryChapterLocation,
 } from "@geolibre/core";
-import type { Cartesian2, CesiumWidget } from "@cesium/engine";
+import type { Cartesian2, CesiumWidget, PointPrimitiveCollection } from "@cesium/engine";
 import type { FeatureCollection, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import {
@@ -32,7 +32,7 @@ import { TerrariumTerrainProvider } from "./cesium-terrarium";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import type { MapRenderSurface } from "./map-engine";
 import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
-import { CesiumLayerSync } from "./cesium-layer-sync";
+import { CesiumLayerSync, type MovingPointFeatureDescription } from "./cesium-layer-sync";
 import { getLayerBounds } from "./geojson-loader";
 import type {
   BuiltInMapControl,
@@ -112,6 +112,8 @@ const EASE_SECONDS = 0.5;
 const RESET_SECONDS = 1;
 /** `MapController.flyTo` and `MapController.fitBounds` both use 800 ms. */
 const FLY_SECONDS = 0.8;
+/** Cursor aperture for tiny/moving Cesium primitives, in CSS pixels. */
+const FEATURE_PICK_APERTURE_PX = 12;
 /** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
 const POINT_FIT_ZOOM = 14;
 
@@ -180,6 +182,12 @@ export interface CesiumSceneHandle {
   readonly primary: boolean;
   /** Ask the scene to draw a frame (a no-op outside request-render mode). */
   requestRender(): void;
+  /** Connect a plugin-owned moving point batch to layer identify/selection. */
+  registerMovingPointLayer(
+    layerId: string,
+    collection: PointPrimitiveCollection,
+    descriptions?: readonly MovingPointFeatureDescription[],
+  ): () => void;
   /**
    * The camera in the store's engine-neutral shape (`MapEngine.readView`), so
    * a plugin can seed from the current view without the camera maths.
@@ -757,7 +765,12 @@ export class CesiumEngine implements MapEngine {
       return [];
     const results: IdentifiedFeature[] = [];
     const seen = new Set<string>();
-    for (const picked of viewer.scene.drillPick(point)) {
+    for (const picked of viewer.scene.drillPick(
+      point,
+      undefined,
+      FEATURE_PICK_APERTURE_PX,
+      FEATURE_PICK_APERTURE_PX,
+    )) {
       const entity = picked?.id ?? picked?.primitive?.id;
       if (!entity || typeof entity !== "object") continue;
       const feature = this.layerSync.resolveFeature(entity);
@@ -1282,6 +1295,8 @@ export class CesiumEngine implements MapEngine {
       requestRender: () => {
         if (!viewer.isDestroyed()) viewer.scene.requestRender();
       },
+      registerMovingPointLayer: (layerId, collection, descriptions) =>
+        this.layerSync.registerMovingPointLayer(layerId, collection, descriptions),
       readView: () => this.readView(),
     };
   }

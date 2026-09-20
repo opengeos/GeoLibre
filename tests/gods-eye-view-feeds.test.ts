@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildCelestrakRequestUrls,
   buildCelestrakTleUrl,
   buildUsgsFeedUrl,
   czmlPacketsToAttributeGeoJson,
+  CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
   CELESTRAK_CORE_GROUPS,
   fetchCelestrakSatelliteCatalogCzml,
   fetchCelestrakSatelliteCzml,
@@ -36,6 +38,16 @@ describe("God's Eye View feed helpers", () => {
     );
     assert.equal(celestrak.searchParams.get("GROUP"), "stations");
     assert.equal(celestrak.searchParams.get("FORMAT"), "tle");
+    const starlink = new URL(buildCelestrakTleUrl("starlink"));
+    assert.equal(
+      starlink.origin + starlink.pathname,
+      "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php",
+    );
+    assert.equal(starlink.searchParams.get("FILE"), "starlink");
+    assert.equal(
+      buildCelestrakRequestUrls("starlink")[0],
+      "https://tiles.geolibre.app/celestrak/starlink",
+    );
   });
 
   it("maps valid USGS points to magnitude-scaled, time-windowed CZML", () => {
@@ -309,8 +321,7 @@ ${ISS_TLE}`);
       fetch: mockFetch,
       group: "stations",
     });
-    assert.match(requested, /GROUP=stations/);
-    assert.match(requested, /FORMAT=tle/);
+    assert.equal(requested, "https://tiles.geolibre.app/celestrak/stations");
     assert.equal(packets[1].id, "celestrak-25544");
   });
 
@@ -346,12 +357,39 @@ ${ISS_TLE}`);
     assert.equal(ids.at(-1), "celestrak-30399");
   });
 
+  it("keeps an 831-satellite core layer below the autosave snapshot ceiling", () => {
+    const template = parseTle(ISS_TLE)[0];
+    const records = Array.from({ length: 831 }, (_, index) => ({
+      ...template,
+      name: `SATELLITE ${index}`,
+      catalogNumber: String(30_000 + index),
+    }));
+    const packets = tleRecordsToCzml(records, {
+      start,
+      stop,
+      stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
+      maxSatellites: records.length,
+    });
+    const serialized = JSON.stringify({
+      source: { type: "czml", data: packets },
+      geojson: czmlPacketsToAttributeGeoJson(packets),
+    });
+
+    assert.ok(
+      Buffer.byteLength(serialized) < 10 * 1024 * 1024,
+      "the live core feed must not disable project autosave",
+    );
+  });
+
   it("loads the six reference catalog groups, tolerates a failed group, and deduplicates", async () => {
     const secondTle = ISS_TLE.replace("ISS (ZARYA)", "TEST SAT").replaceAll("25544", "40967");
     const requested: string[] = [];
     const mockFetch = (async (input: string | URL | Request) => {
       const url = new URL(String(input));
-      const group = url.searchParams.get("GROUP");
+      const group =
+        url.searchParams.get("GROUP") ??
+        url.searchParams.get("FILE") ??
+        url.pathname.split("/").at(-1);
       requested.push(group ?? "");
       if (group === "geo") return new Response("unavailable", { status: 503 });
       if (group === "stations") return new Response(ISS_TLE, { status: 200 });
@@ -368,7 +406,7 @@ ${ISS_TLE}`);
     });
 
     assert.deepEqual(
-      requested,
+      [...new Set(requested)],
       CELESTRAK_CORE_GROUPS.map(({ group }) => group),
     );
     assert.deepEqual(

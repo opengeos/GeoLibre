@@ -3,6 +3,7 @@ import type { CesiumSceneHandle } from "@geolibre/map";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   czmlPacketsToAttributeGeoJson,
+  CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
   fetchCelestrakSatelliteCatalogCzml,
   fetchUsgsEarthquakeCzml,
   type CzmlTimeWindow,
@@ -12,6 +13,7 @@ import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
 export const GODS_EYE_VIEW_SATELLITES_FLAG = "godsEyeViewSatellites";
+export const GODS_EYE_VIEW_DENSE_SATELLITES_FLAG = "godsEyeViewDenseSatellites";
 
 const REFRESH_TICK_MS = 10 * 60_000;
 const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
@@ -104,6 +106,9 @@ const denseCatalog = new GodsEyeViewDenseCatalog(() => {
   // error chip means retry rather than first having to switch it off.
   if (denseCatalog.snapshot().status === "failed") {
     savedState = { ...savedState, dense: false };
+    removeDenseLayer();
+  } else if (denseCatalog.snapshot().status === "ready") {
+    syncDenseLayerRows();
   }
   renderPanel();
 });
@@ -178,15 +183,62 @@ function coreSatelliteCatalogNumbers(): Set<string> {
   );
 }
 
+function ownedDenseLayer() {
+  return useAppStore
+    .getState()
+    .layers.find((layer) => layer.metadata?.[GODS_EYE_VIEW_DENSE_SATELLITES_FLAG] === true);
+}
+
+/** Keep the 10K+ table rows separate from the sampled core-satellite layer. */
+function ensureDenseLayer() {
+  const existing = ownedDenseLayer();
+  if (existing) return existing;
+  const layer = createCzmlLayer({
+    name: translate("panel.godsEyeView.denseSatellites", "Dense Satellites (Starlink)"),
+    data: [{ id: "document", version: "1.0" }],
+  });
+  layer.geojson = { type: "FeatureCollection", features: [] };
+  layer.popup = { ...layer.popup, hover: true };
+  layer.metadata = {
+    ...layer.metadata,
+    [GODS_EYE_VIEW_DENSE_SATELLITES_FLAG]: true,
+    godsEyeViewFeed: "dense-satellites",
+    // These rows are rebuilt from CelesTrak whenever the plugin starts. They
+    // belong in the live table, not in every autosave snapshot.
+    transientGeojson: true,
+  };
+  useAppStore.getState().addLayer(layer);
+  return layer;
+}
+
+function syncDenseLayerRows(): void {
+  const layer = ownedDenseLayer();
+  if (!layer) return;
+  useAppStore.getState().updateLayer(layer.id, {
+    geojson: { type: "FeatureCollection", features: denseCatalog.attributeFeatures() },
+  });
+}
+
+function removeDenseLayer(): void {
+  const layer = ownedDenseLayer();
+  if (layer) useAppStore.getState().removeLayer(layer.id);
+}
+
+function disableDenseCatalog(): void {
+  denseCatalog.disable();
+  removeDenseLayer();
+}
+
 function syncDenseCatalog(): void {
   if (!savedState.dense || !feeds.satellites.enabled || !cesiumRef) {
-    denseCatalog.disable();
+    disableDenseCatalog();
     return;
   }
   // Wait for the core catalog so its entries keep their richer CZML entities
   // and are not duplicated by points from the Starlink group.
   if (!ownedLayer("satellites")) return;
-  void denseCatalog.enable(cesiumRef, coreSatelliteCatalogNumbers());
+  const layer = ensureDenseLayer();
+  void denseCatalog.enable(cesiumRef, coreSatelliteCatalogNumbers(), layer.id);
 }
 
 function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void {
@@ -264,7 +316,10 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
         : await fetchCelestrakSatelliteCatalogCzml({
             ...window,
             signal: controller.signal,
-            stepSeconds: 120,
+            // Five-minute samples interpolate smoothly while keeping the core
+            // CZML layer below autosave's 10 MiB snapshot limit. A selected
+            // orbit still uses the full TLE with SGP4, independent of this.
+            stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
             maxSatellites: 2_000,
           });
     if (generation !== state.generation || !state.enabled) return;
@@ -313,7 +368,7 @@ function setFeedEnabled(feed: FeedId, enabled: boolean): void {
   if (enabled) void refreshFeed(feed);
   else {
     removeFeedLayer(feed);
-    if (feed === "satellites") denseCatalog.disable();
+    if (feed === "satellites") disableDenseCatalog();
   }
   renderPanel();
 }
@@ -323,7 +378,7 @@ function setDenseEnabled(enabled: boolean): void {
   if (enabled) {
     if (ownedLayer("satellites")) syncDenseCatalog();
     else if (feeds.satellites.enabled) void refreshFeed("satellites");
-  } else denseCatalog.disable();
+  } else disableDenseCatalog();
   renderPanel();
 }
 
@@ -584,7 +639,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
     cesiumRef = next;
     return;
   }
-  denseCatalog.disable();
+  disableDenseCatalog();
   cesiumRef = next;
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
@@ -600,7 +655,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
 
 function deactivate(): void {
   resetRuntime();
-  denseCatalog.disable();
+  disableDenseCatalog();
   for (const feed of FEED_IDS) {
     feeds[feed].enabled = false;
     removeFeedLayer(feed);
@@ -639,7 +694,7 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
       feeds[feed].enabled = savedState[feed];
       feeds[feed].failed = false;
     }
-    if (!savedState.dense) denseCatalog.disable();
+    if (!savedState.dense) disableDenseCatalog();
     // Only a live panel acts on it now; otherwise `activate` reads `savedState`.
     if (!unregisterPanel) return true;
     // A loaded document only writes the clock when the owner changes, so a

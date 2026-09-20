@@ -1264,6 +1264,7 @@ describe("Cesium feature picking", () => {
     const f = makeViewer();
     const sources: import("@cesium/engine").CustomDataSource[] = [];
     let picks: unknown[] = [];
+    let pickAperture: [number | undefined, number | undefined] = [undefined, undefined];
     let projected: { x: number; y: number } | undefined = { x: 400, y: 300 };
     Object.assign(f.viewer, {
       clock: { currentTime: C.JulianDate.now() },
@@ -1278,7 +1279,10 @@ describe("Cesium feature picking", () => {
       },
     });
     Object.assign((f.viewer as import("@cesium/engine").CesiumWidget).scene, {
-      drillPick: () => picks,
+      drillPick: (_point: unknown, _limit?: number, width?: number, height?: number) => {
+        pickAperture = [width, height];
+        return picks;
+      },
       requestRender: () => {},
     });
     const ns = {
@@ -1358,11 +1362,12 @@ describe("Cesium feature picking", () => {
       project: (value: typeof projected) => {
         projected = value;
       },
+      pickAperture: () => pickAperture,
     };
   }
 
   it("returns original geometry and properties, deduplicates multipart picks and preserves zero/index ids", async () => {
-    const { engine, sources, layer, pick, project } = await setup();
+    const { engine, sources, layer, pick, project, pickAperture } = await setup();
     const entities = sources[0].entities.values;
     pick([
       { id: entities[0] },
@@ -1371,6 +1376,7 @@ describe("Cesium feature picking", () => {
       { id: {} },
     ]);
     const hits = engine.identifyFeatures([0, 0]);
+    assert.deepEqual(pickAperture(), [12, 12], "tiny moving points get a forgiving pick aperture");
     assert.deepEqual(
       hits.map((hit) => hit.featureId),
       ["0", "1"],

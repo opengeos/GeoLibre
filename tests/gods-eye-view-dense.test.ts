@@ -81,6 +81,7 @@ function makeGlobe(at = new Date("2026-09-20T12:00:00Z")) {
     },
     clock: { currentTime: at },
     requestRender: () => {},
+    registerMovingPointLayer: () => () => {},
   } as unknown as CesiumSceneHandle;
   return { globe, points, added, removed, render: () => preRender?.() };
 }
@@ -104,11 +105,10 @@ describe("God's Eye View dense catalog", () => {
     });
     assert.equal(fake.added.length, 1, "all dense points share one Cesium collection");
     assert.equal(fake.points.length, 1, "the core ISS is deduplicated");
-    assert.deepEqual(fake.points[0].id, {
-      godsEyeViewDenseSatellite: true,
-      catalogNumber: "44713",
-      name: "STARLINK TEST",
-    });
+    assert.equal(
+      (fake.points[0].id as { geolibreLayerId: string }).geolibreLayerId,
+      "gods-eye-view-dense-satellites",
+    );
     const before = fake.points[0].position;
     fake.render();
     assert.notEqual(fake.points[0].position, before, "a pre-render slice re-propagates the shell");
@@ -120,6 +120,41 @@ describe("God's Eye View dense catalog", () => {
       count: 0,
       error: null,
     });
+  });
+
+  it("publishes attribute rows and layer-owned pick references for every moving point", async () => {
+    globalThis.fetch = (async () =>
+      new Response(TLE_TEXT, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      })) as typeof fetch;
+    const fake = makeGlobe();
+    const catalog = new GodsEyeViewDenseCatalog();
+
+    await catalog.enable(fake.globe, new Set(["25544"]), "dense-satellites");
+
+    const rows = catalog.attributeFeatures();
+    assert.equal(rows.length, 1, "the table receives one row per rendered dense satellite");
+    assert.equal(rows[0].id, "celestrak-44713");
+    assert.deepEqual(rows[0].properties, {
+      name: "STARLINK TEST",
+      catalogNumber: "44713",
+      group: "starlink",
+      inclinationDeg: 53.05,
+      orbitalPeriodMinutes: 95.62,
+    });
+    const point = fake.points[0];
+    assert.equal(
+      (point.id as { geolibreLayerId?: string }).geolibreLayerId,
+      "dense-satellites",
+      "Cesium identify can trace the moving primitive to the table layer",
+    );
+    assert.equal((point.id as { index?: number }).index, 0);
+    assert.equal(
+      (point.id as { primitive?: unknown }).primitive,
+      point,
+      "the pick reference follows the point as it moves",
+    );
   });
 
   it("re-filters the shell when the core catalog's membership changes", async () => {
@@ -145,7 +180,7 @@ describe("God's Eye View dense catalog", () => {
     await catalog.enable(fake.globe, new Set());
     assert.equal(catalog.snapshot().count, 2);
     assert.deepEqual(
-      fake.points.slice(-2).map((point) => (point.id as { catalogNumber: string }).catalogNumber),
+      catalog.attributeFeatures().map((feature) => feature.properties.catalogNumber),
       ["25544", "44713"],
     );
   });
@@ -175,5 +210,27 @@ describe("God's Eye View dense catalog", () => {
     // The pre-render slice has to survive the same satellites.
     fake.render();
     assert.equal(fake.points.length, 0);
+  });
+
+  it("uses the browser-safe CelesTrak proxy instead of the rejected direct request", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      urls.push(String(input));
+      if (String(input).startsWith("https://celestrak.org/")) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      return new Response(TLE_TEXT, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      });
+    }) as typeof fetch;
+    const fake = makeGlobe();
+    const catalog = new GodsEyeViewDenseCatalog();
+
+    await catalog.enable(fake.globe, new Set(["25544"]));
+
+    assert.equal(catalog.snapshot().status, "ready");
+    assert.deepEqual(urls, ["https://tiles.geolibre.app/celestrak/starlink"]);
+    catalog.disable();
   });
 });

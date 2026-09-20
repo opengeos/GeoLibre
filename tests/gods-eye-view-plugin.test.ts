@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { useAppStore } from "@geolibre/core";
 import {
+  GODS_EYE_VIEW_DENSE_SATELLITES_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -22,6 +23,38 @@ afterEach(() => {
 
 /** A Cesium widget reduced to what the plugin reads, behind a fresh handle. */
 function makeGlobe(startingMultiplier = 0) {
+  const points: Array<Record<string, unknown>> = [];
+  class PointPrimitiveCollection {
+    show = true;
+    private readonly values: Array<Record<string, unknown>> = [];
+    get length() {
+      return this.values.length;
+    }
+    add(options: Record<string, unknown>) {
+      const point = { ...options };
+      this.values.push(point);
+      points.push(point);
+      return point;
+    }
+    get(index: number) {
+      return this.values[index];
+    }
+  }
+  class Cartesian3 {
+    constructor(
+      public x: number,
+      public y: number,
+      public z: number,
+    ) {}
+  }
+  class NearFarScalar {
+    constructor(
+      public near: number,
+      public nearValue: number,
+      public far: number,
+      public farValue: number,
+    ) {}
+  }
   const viewer = {
     id: "viewer",
     clock: {
@@ -35,8 +68,18 @@ function makeGlobe(startingMultiplier = 0) {
   // Julian dates reduced to epoch milliseconds: the plugin only sets the
   // window and compares the instant against its ends.
   const Cesium = {
+    PointPrimitiveCollection,
+    Cartesian3,
+    NearFarScalar,
+    Color: {
+      fromCssColorString: (value: string) => ({
+        value,
+        withAlpha: (alpha: number) => ({ value, alpha }),
+      }),
+    },
     JulianDate: {
       fromDate: (date: Date) => date.getTime(),
+      toDate: (value: number | Date) => (value instanceof Date ? value : new Date(value)),
       lessThan: (a: number, b: number) => a < b,
       greaterThan: (a: number, b: number) => a > b,
     },
@@ -54,7 +97,12 @@ function makeGlobe(startingMultiplier = 0) {
         viewer,
         clock: viewer.clock,
         primary: true,
+        scene: {
+          primitives: { add: (value: unknown) => value, remove: () => true },
+          preRender: { addEventListener: () => () => {} },
+        },
         requestRender: () => {},
+        registerMovingPointLayer: () => () => {},
       };
     },
     registerRightPanel: (options: { render: (container: HTMLElement) => () => void }) => {
@@ -65,7 +113,7 @@ function makeGlobe(startingMultiplier = 0) {
     openRightPanel: () => {},
     onLocaleChange: () => () => {},
   } as unknown as GeoLibreAppAPI;
-  return { app, viewer, panel, handleCount: () => handles };
+  return { app, viewer, panel, points, handleCount: () => handles };
 }
 
 /** Count feed requests without touching the network; failures are expected. */
@@ -92,6 +140,11 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const TLE_TEXT = `ISS (ZARYA)
 1 25544U 98067A   26262.50000000  .00016717  00000+0  30178-3 0  9991
 2 25544  51.6400 120.0000 0005000  80.0000 280.0000 15.50000000400000
+`;
+
+const DENSE_TLE_TEXT = `STARLINK TEST
+1 44713U 19074A   26262.50000000  .00001200  00000+0  90000-4 0  9991
+2 44713  53.0500 210.0000 0001500  85.0000 275.0000 15.06000000300000
 `;
 
 /** Answer both public feeds with well-formed payloads, and count the calls. */
@@ -126,6 +179,49 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
 }
 
 describe("God's Eye View feed refresh", () => {
+  it("publishes the dense shell as a separate queryable layer", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("earthquake.usgs.gov"))
+        return new Response(JSON.stringify({ features: [] }), { status: 200 });
+      return new Response(url.endsWith("/starlink") ? DENSE_TLE_TEXT : TLE_TEXT, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      });
+    }) as typeof fetch;
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: true,
+        satellites: true,
+        dense: true,
+      });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 20; i++) await flush();
+
+      const dense = useAppStore
+        .getState()
+        .layers.find(
+          (layer) => layer.metadata?.[GODS_EYE_VIEW_DENSE_SATELLITES_FLAG] === true,
+        );
+      assert.ok(dense, "dense satellites have their own layer-panel entry");
+      assert.equal(dense.geojson?.features.length, 1, "its Attribute Table has one row per point");
+      assert.equal(dense.geojson?.features[0].properties?.catalogNumber, "44713");
+      assert.equal(
+        (globe.points[0]?.id as { geolibreLayerId?: string }).geolibreLayerId,
+        dense.id,
+        "the moving primitive picks back to the queryable layer",
+      );
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      useAppStore.setState({ layers: [] });
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("says so when a feed times out", async () => {
     const net = stubFetch();
     const globe = makeGlobe();
