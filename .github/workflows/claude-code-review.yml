@@ -116,6 +116,14 @@ jobs:
     # asking for a review ON a draft is a normal thing to want — that is the
     # point of an explicit opt-in.
     #
+    # Unlike e2e-full.yml, branch (c) needs no `opened` + `contains(labels.*)`
+    # fallback for a PR created with the label already attached (which fires no
+    # `labeled` event). Attaching a label at creation requires triage or write
+    # access, and those accounts are OWNER/MEMBER/COLLABORATOR — already covered
+    # by branch (a). The case this gate exists for, a first-time contributor,
+    # cannot self-attach the label in the first place, so the gap is unreachable.
+    # Adding the fallback would widen the trigger surface for no gain.
+    #
     # Branch (a) must exclude `labeled`, or adding any label to a known
     # contributor's PR would re-review it under the automatic path and sidestep
     # the name check in (c).
