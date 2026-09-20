@@ -361,6 +361,13 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           // choice and fail without an Ion token (Ion's default imagery needs
           // one), which is what used to keep the globe off the keyless path.
           baseLayer: false,
+          // Draw at the display's real pixels, as MapLibre's canvas does.
+          // Cesium defaults this to `true`, which pins the drawing buffer to
+          // CSS pixels and lets the browser upscale it — on a HiDPI screen the
+          // whole globe softens, and glyph-atlas text (satellite names, the
+          // scale bar) is where it shows first. The cost is fragment work
+          // proportional to the square of the device pixel ratio.
+          useBrowserRecommendedResolution: false,
           contextOptions: { webgl: { preserveDrawingBuffer: true } },
           // Match the project map in flat modes, including its vertical extent.
           mapProjection: new Cesium.WebMercatorProjection(),

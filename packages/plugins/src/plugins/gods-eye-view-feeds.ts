@@ -413,29 +413,30 @@ export function tleRecordsToCzml(
         outlineWidth: isIss ? 2 : 0,
       },
     };
-    packet.label = {
-      text: isIss ? "ISS" : tle.name,
-      font: `600 ${isIss ? 14 : 13}px sans-serif`,
-      style: "FILL_AND_OUTLINE",
-      fillColor: { rgba: [255, 255, 255, 255] },
-      outlineColor: { rgba: [0, 0, 0, 255] },
-      outlineWidth: 3,
-      showBackground: true,
-      backgroundColor: { rgba: [0, 0, 0, 210] },
-      backgroundPadding: { cartesian2: [6, 4] },
-      pixelOffset: { cartesian2: [0, isIss ? -21 : -19] },
-      // Cesium labels do not perform collision avoidance. Keep the fleet names
-      // for useful close views while the ISS remains the one ambient world-view
-      // label, matching the reference app's uncluttered presentation. Do not
-      // scale visible labels by distance: shrinking a 13px label at the display
-      // cutoff makes it technically present but unreadable over aerial imagery.
-      // Camera distance halves per zoom level, so the fleet cutoff is the zoom-3
-      // distance times √2 — the names come in from zoom 2.5, a whole-hemisphere
-      // view, rather than only once the globe fills the pane.
-      distanceDisplayCondition: {
-        distanceDisplayCondition: [0, isIss ? 30_000_000 : 11_300_000],
-      },
-    };
+    // The ISS is the one satellite with a standing name, as in the reference
+    // app. Cesium labels perform no collision avoidance whatsoever, so labelling
+    // the fleet piled hundreds of names on top of each other — and on top of the
+    // ISS's — the moment the camera came in close. Every other satellite names
+    // itself on hover and on Identify instead, which is also where its
+    // catalogue number, inclination and period already live.
+    if (isIss) {
+      packet.label = {
+        text: "ISS",
+        font: "600 14px sans-serif",
+        style: "FILL_AND_OUTLINE",
+        fillColor: { rgba: [255, 255, 255, 255] },
+        outlineColor: { rgba: [0, 0, 0, 255] },
+        outlineWidth: 3,
+        showBackground: true,
+        backgroundColor: { rgba: [0, 0, 0, 210] },
+        backgroundPadding: { cartesian2: [6, 4] },
+        pixelOffset: { cartesian2: [0, -21] },
+        // Do not scale the label by distance: shrinking a 14px label at the
+        // display cutoff makes it technically present but unreadable over
+        // aerial imagery.
+        distanceDisplayCondition: { distanceDisplayCondition: [0, 30_000_000] },
+      };
+    }
     if (isIss) {
       packet.path = {
         show: true,

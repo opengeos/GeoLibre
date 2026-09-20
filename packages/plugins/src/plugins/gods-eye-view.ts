@@ -141,6 +141,9 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
   // complete GeoJSON row model. Moving entities have no single geometry, but
   // their packet ids and properties still form a useful, queryable table.
   layer.geojson = czmlPacketsToAttributeGeoJson(packets);
+  // Only the ISS carries a standing label, so hovering is how every other
+  // satellite (and every quake) says what it is without a click.
+  layer.popup = { ...layer.popup, hover: true };
   layer.metadata = {
     ...layer.metadata,
     [feedFlag(feed)]: true,

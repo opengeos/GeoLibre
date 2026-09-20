@@ -193,7 +193,23 @@ describe("God's Eye View feed helpers", () => {
     assert.equal(path.leadTime, path.trailTime);
     assert.ok(path.leadTime + path.trailTime >= period);
     assert.ok(path.trailTime <= padding);
-    assert.equal((packets[1].label as { text: string }).text, "ISS");
+    const label = packets[1].label as {
+      text: string;
+      font: string;
+      showBackground: boolean;
+      scaleByDistance?: unknown;
+      distanceDisplayCondition: { distanceDisplayCondition: number[] };
+    };
+    // The ISS keeps the one standing label on the globe.
+    assert.equal(label.text, "ISS");
+    assert.match(label.font, /bold|[6-9]00/);
+    assert.equal(label.showBackground, true);
+    assert.equal(
+      label.scaleByDistance,
+      undefined,
+      "visible labels must not shrink below legible size",
+    );
+    assert.deepEqual(label.distanceDisplayCondition.distanceDisplayCondition, [0, 30_000_000]);
     assert.deepEqual(
       (packets[1].point as { color: { rgba: number[] } }).color.rgba,
       [255, 68, 68, 255],
@@ -216,27 +232,11 @@ describe("God's Eye View feed helpers", () => {
     assert.equal(position.epoch, start.toISOString());
     assert.equal(packets[1].availability, `${start.toISOString()}/${stopAt.toISOString()}`);
     assert.equal(packets[1].path, undefined);
-    const label = packets[1].label as {
-      text: string;
-      font: string;
-      showBackground: boolean;
-      backgroundColor: { rgba: number[] };
-      backgroundPadding: { cartesian2: number[] };
-      scaleByDistance?: unknown;
-      distanceDisplayCondition: { distanceDisplayCondition: number[] };
-    };
-    assert.equal(label.text, "GEOSAT");
-    assert.match(label.font, /bold|[6-9]00/);
-    assert.equal(label.showBackground, true);
-    assert.deepEqual(label.backgroundColor.rgba, [0, 0, 0, 210]);
-    assert.deepEqual(label.backgroundPadding.cartesian2, [6, 4]);
-    assert.equal(
-      label.scaleByDistance,
-      undefined,
-      "visible labels must not shrink below legible size",
-    );
-    // The zoom-3 camera distance times √2, so fleet names appear from zoom 2.5.
-    assert.deepEqual(label.distanceDisplayCondition.distanceDisplayCondition, [0, 11_300_000]);
+    // Cesium labels never declutter, so naming the fleet buried the globe (and
+    // the ISS's own label) under hundreds of overlapping names up close. The
+    // name lives in `properties`, which hover and Identify read.
+    assert.equal(packets[1].label, undefined);
+    assert.equal(packets[1].name, "GEOSAT");
   });
 
   it("materializes CZML packet properties as read-only attribute-table rows", () => {
