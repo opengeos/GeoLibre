@@ -32,7 +32,7 @@ app as a desktop install, an Android app, an iOS app, and a Jupyter widget.
     make the comparison harder to read and harder to keep honest.
 
     Google Earth sits in [its own section](#google-earth-and-google-earth-pro)
-    with a short three-column table, because it is a viewer rather than a GIS and
+    with a short table of its own, because it is a viewer rather than a GIS and
     most of the matrix rows would simply read "—" for it. That is a one-off, not
     an opening.
 
@@ -212,7 +212,7 @@ other direction.
   your API key, but the archive and the historical slider belong to Earth.
 - **Street View.** Native, complete, and free of credential setup.
 - **Effortlessness.** Earth opens and flies. There is no layer model, no CRS, no
-  project file, and nothing to learn, and for simply showing someone a place that
+  project file, and nothing to learn — for simply showing someone a place, that
   is exactly right.
 
 ### Where GeoLibre is better
