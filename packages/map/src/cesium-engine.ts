@@ -748,7 +748,42 @@ export class CesiumEngine implements MapEngine {
     if (!this.live()) return;
     const ids = featureId === null ? [] : Array.isArray(featureId) ? featureId : [featureId];
     this.layerSync.highlight(layer?.id, ids);
-    if (!options.fit || !layer?.geojson || !ids.length) return;
+    if (!options.fit || !layer || !ids.length) return;
+    // CZML/KML entities are time-dynamic. Their materialized GeoJSON table row
+    // is only a stable attribute anchor, so fitting that point would dive to an
+    // obsolete ground location while the satellite remains hundreds of
+    // kilometres away. Frame the live Cesium entity positions instead.
+    const livePositions = this.layerSync.featurePositions(layer.id, ids);
+    if (livePositions.length > 0) {
+      const coordinates = livePositions.map((position) => {
+        const cartographic = this.Cesium.Cartographic.fromCartesian(position);
+        return [
+          this.Cesium.Math.toDegrees(cartographic.longitude),
+          this.Cesium.Math.toDegrees(cartographic.latitude),
+        ] as const;
+      });
+      if (coordinates.length === 1) {
+        // Frame the sub-satellite point at a regional scale. This keeps the
+        // moving object, its close-range label, and the Earth beneath it in the
+        // same view; targeting the elevated Cartesian directly can put the
+        // globe behind the camera.
+        this.animateTo(
+          { center: [...coordinates[0]], zoom: 4, bearing: 0, pitch: 0 },
+          FLY_SECONDS,
+        );
+      } else {
+        const longitudes = coordinates.map(([longitude]) => longitude);
+        const latitudes = coordinates.map(([, latitude]) => latitude);
+        this.fitBounds([
+          Math.min(...longitudes),
+          Math.min(...latitudes),
+          Math.max(...longitudes),
+          Math.max(...latitudes),
+        ]);
+      }
+      return;
+    }
+    if (!layer.geojson) return;
     const selected = new Set(ids);
     const features = layer.geojson.features.filter((feature, index) =>
       selected.has(String(feature.id ?? index)),

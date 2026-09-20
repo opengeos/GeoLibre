@@ -129,7 +129,8 @@ export function normalizeCesiumBasemap(value: unknown): CesiumBasemapId {
 
 /** Missing credentials fall back to the project background without changing the saved choice. */
 export function availableCesiumBasemap(value: unknown, hasIonToken: boolean): CesiumBasemapId {
-  const entry = CESIUM_BASEMAPS.find((entry) => entry.id === value);
+  const requested = value ?? (hasIonToken ? "bing-aerial" : "project");
+  const entry = CESIUM_BASEMAPS.find((entry) => entry.id === requested);
   return entry && (!("assetId" in entry) || hasIonToken) ? entry.id : "project";
 }
 

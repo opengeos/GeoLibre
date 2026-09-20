@@ -2,7 +2,8 @@ import { createCzmlLayer, useAppStore, type CzmlPacket } from "@geolibre/core";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
-  fetchCelestrakSatelliteCzml,
+  czmlPacketsToAttributeGeoJson,
+  fetchCelestrakSatelliteCatalogCzml,
   fetchUsgsEarthquakeCzml,
   type CzmlTimeWindow,
 } from "./gods-eye-view-feeds";
@@ -11,7 +12,13 @@ export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
 export const GODS_EYE_VIEW_SATELLITES_FLAG = "godsEyeViewSatellites";
 
-const REFRESH_INTERVAL_MS = 10 * 60_000;
+const REFRESH_TICK_MS = 10 * 60_000;
+const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
+  earthquakes: 10 * 60_000,
+  // CelesTrak asks clients not to retrieve the same data more often than every
+  // two hours. Six catalog requests every ten minutes would be needlessly rude.
+  satellites: 2 * 60 * 60_000,
+};
 const FEED_TIMEOUT_MS = 20_000;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
@@ -110,6 +117,10 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
     name: feedName(feed),
     data: packets,
   });
+  // The renderer consumes CZML, while the existing Attribute Table consumes a
+  // complete GeoJSON row model. Moving entities have no single geometry, but
+  // their packet ids and properties still form a useful, queryable table.
+  layer.geojson = czmlPacketsToAttributeGeoJson(packets);
   layer.metadata = {
     ...layer.metadata,
     [feedFlag(feed)]: true,
@@ -125,6 +136,7 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
       name: layer.name,
       source: layer.source,
       metadata: layer.metadata,
+      geojson: layer.geojson,
     });
     feeds[feed].layerId = existing.id;
   } else {
@@ -134,9 +146,16 @@ function upsertLayer(feed: FeedId, packets: CzmlPacket[], updatedAt: Date): void
   cesiumRef?.requestRender();
 }
 
-async function refreshFeed(feed: FeedId): Promise<void> {
+async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   const state = feeds[feed];
   if (!state.enabled || !cesiumRef) return;
+  if (
+    !force &&
+    state.lastUpdated &&
+    Date.now() - state.lastUpdated.getTime() < FEED_REFRESH_INTERVAL_MS[feed]
+  ) {
+    return;
+  }
   state.request?.abort();
   const controller = new AbortController();
   state.request = controller;
@@ -150,12 +169,11 @@ async function refreshFeed(feed: FeedId): Promise<void> {
     const packets =
       feed === "earthquakes"
         ? await fetchUsgsEarthquakeCzml(window, { signal: controller.signal })
-        : await fetchCelestrakSatelliteCzml({
+        : await fetchCelestrakSatelliteCatalogCzml({
             ...window,
             signal: controller.signal,
-            group: "stations",
             stepSeconds: 120,
-            maxSatellites: 75,
+            maxSatellites: 2_000,
           });
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
@@ -332,8 +350,8 @@ function startRefreshing(): void {
   }
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
-    for (const feed of FEED_IDS) void refreshFeed(feed);
-  }, REFRESH_INTERVAL_MS);
+    for (const feed of FEED_IDS) void refreshFeed(feed, false);
+  }, REFRESH_TICK_MS);
 }
 
 /**

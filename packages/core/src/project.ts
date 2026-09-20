@@ -1240,7 +1240,8 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       arcgisBasemap:
         normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
       cesiumBasemap: normalizeCesiumBasemap(
-        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap,
+        (map as Partial<ProjectPreferences["map"]>).cesiumBasemap ??
+          "bing-aerial",
       ),
       // Older projects omit this field and continue to open with terrain off.
       terrainEnabled: normalizeBoolean(

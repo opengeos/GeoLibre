@@ -8,8 +8,18 @@ import {
   sameCesiumImagery,
 } from "../packages/core/src/cesium-imagery";
 import { createEmptyProject, parseProject, serializeProject } from "../packages/core/src/project";
+import { DEFAULT_PROJECT_PREFERENCES } from "../packages/core/src/types";
 
 describe("Cesium basemap choices", () => {
+  it("defaults new and legacy projects to Bing Aerial when Ion is available", () => {
+    assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
+    const legacy = JSON.parse(serializeProject(createEmptyProject()));
+    delete legacy.preferences.map.cesiumBasemap;
+    assert.equal(parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap, "bing-aerial");
+    assert.equal(availableCesiumBasemap(undefined, true), "bing-aerial");
+    assert.equal(availableCesiumBasemap(undefined, false), "project");
+  });
+
   it("keeps stable unique IDs and normalizes unrecognized project values", () => {
     assert.equal(new Set(CESIUM_BASEMAPS.map((entry) => entry.id)).size, CESIUM_BASEMAPS.length);
     for (const value of [undefined, null, {}, "unknown", 3954]) {
@@ -134,6 +144,6 @@ describe("Cesium basemap choices", () => {
     invalid.preferences.map.cesiumBasemap = "unrecognized-provider";
     assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
     delete invalid.preferences.map.cesiumBasemap;
-    assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
+    assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "bing-aerial");
   });
 });

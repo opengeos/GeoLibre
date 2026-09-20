@@ -1,4 +1,8 @@
-import { getRuntimeEnvironment, type CesiumBasemapImagery } from "@geolibre/core";
+import {
+  CESIUM_BING_AERIAL_ASSET_ID,
+  getRuntimeEnvironment,
+  type CesiumBasemapImagery,
+} from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
@@ -129,11 +133,15 @@ export function applyBasemapImagery(
 
   if (imagery.kind === "default") {
     // No raster equivalent for this basemap (a provider style, a custom URL).
-    // Ion World Imagery when a token is configured — the globe's historical
-    // default, kept so a project that relies on it is unchanged — and keyless
-    // OpenStreetMap otherwise.
+    // Bing Maps Aerial through Ion when a token is configured, and keyless
+    // OpenStreetMap otherwise. Use the named asset instead of Cesium's implicit
+    // World Imagery default so an upstream default change cannot change ours.
     const layer = ionToken
-      ? Cesium.ImageryLayer.fromWorldImagery({})
+      ? Cesium.ImageryLayer.fromProviderAsync(
+          Cesium.IonImageryProvider.fromAssetId(CESIUM_BING_AERIAL_ASSET_ID, {
+            accessToken: ionToken,
+          }),
+        )
       : Cesium.ImageryLayer.fromProviderAsync(
           Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL })),
           {},

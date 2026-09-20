@@ -22,6 +22,7 @@ function makeFakes() {
   // The imagery stack, bottom (index 0) to top, as Cesium models it.
   const stack: FakeLayer[] = [];
   const arcgisRequests: Array<{ url: string; options: unknown }> = [];
+  const ionRequests: Array<{ assetId: number; options: unknown }> = [];
 
   const viewer = {
     imageryLayers: {
@@ -64,9 +65,14 @@ function makeFakes() {
         this.url = options.url;
       }
     },
+    IonImageryProvider: {
+      fromAssetId(assetId: number, options: unknown) {
+        ionRequests.push({ assetId, options });
+        return Promise.resolve({});
+      },
+    },
     ImageryLayer: {
-      fromWorldImagery: (): FakeLayer => ({ source: "ion-world-imagery" }),
-      fromProviderAsync: (): FakeLayer => ({ source: "osm" }),
+      fromProviderAsync: (provider: unknown): FakeLayer => ({ provider: { provider } }),
     },
   };
 
@@ -74,6 +80,7 @@ function makeFakes() {
   return {
     stack,
     arcgisRequests,
+    ionRequests,
     viewer: viewer as unknown as Parameters<typeof applyBasemapImagery>[1],
     Cesium: Cesium as unknown as Parameters<typeof applyBasemapImagery>[0],
   };
@@ -224,17 +231,17 @@ describe("applyBasemapImagery", () => {
     assert.equal(getStadiaApiKey({ STADIA_API_KEY: " second " }), "second");
   });
 
-  it("falls back to Ion World Imagery when a token is configured", () => {
-    const { Cesium, viewer, stack } = makeFakes();
+  it("uses Bing Maps Aerial through Ion when a token is configured", () => {
+    const { Cesium, viewer, stack, ionRequests } = makeFakes();
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, "ion.jwt.token");
-    assert.equal((added[0] as FakeLayer).source, "ion-world-imagery");
+    assert.deepEqual(ionRequests, [{ assetId: 2, options: { accessToken: "ion.jwt.token" } }]);
     assert.equal(stack[0], added[0]);
   });
 
   it("falls back to keyless OpenStreetMap without a token", () => {
     const { Cesium, viewer } = makeFakes();
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "default" }, undefined);
-    assert.equal((added[0] as FakeLayer).source, "osm");
+    assert.ok((added[0] as FakeLayer).provider?.provider instanceof Promise);
   });
 });
 

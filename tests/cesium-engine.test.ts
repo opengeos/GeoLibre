@@ -895,6 +895,44 @@ describe("CesiumEngine framing", () => {
     assert.equal(fakes.flights.length, 1);
     engine.destroy();
   });
+
+  it("frames a CZML selection at its live entity position instead of its table anchor", () => {
+    const C = makeCesium();
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(C, fakes.viewer);
+    const layer = {
+      id: "satellites",
+      name: "Satellites",
+      type: "czml",
+      visible: true,
+      opacity: 1,
+      source: {},
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "celestrak-25544",
+            properties: {},
+            geometry: { type: "Point", coordinates: [-120, 10, 0] },
+          },
+        ],
+      },
+    } as never;
+    const sync = (engine as unknown as {
+      layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+    }).layerSync;
+    sync.featurePositions = () => [C.Cartesian3.fromDegrees(12, 34, 850_000)];
+
+    engine.highlightFeature(layer, "celestrak-25544", { fit: true });
+
+    assert.equal(fakes.flights.length, 1);
+    const flight = fakes.flights[0] as { sphere?: { center: { x: number; y: number } } };
+    assert.equal(flight.sphere?.center.x, 12);
+    assert.equal(flight.sphere?.center.y, 34);
+    engine.destroy();
+  });
 });
 
 // --- scene-mode morphs -------------------------------------------------------

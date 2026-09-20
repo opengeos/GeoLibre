@@ -907,6 +907,9 @@ export {
 export {
   buildCelestrakTleUrl,
   buildUsgsFeedUrl,
+  czmlPacketsToAttributeGeoJson,
+  CELESTRAK_CORE_GROUPS,
+  fetchCelestrakSatelliteCatalogCzml,
   fetchCelestrakSatelliteCzml,
   fetchUsgsEarthquakeCzml,
   orbitalPeriodSeconds,
@@ -916,6 +919,7 @@ export {
   usgsGeoJsonToCzml,
   type CzmlTimeWindow,
   type SatelliteSampleOptions,
+  type SatelliteClassification,
   type TleRecord,
   type UsgsFeatureCollection,
 } from "./plugins/gods-eye-view-feeds";

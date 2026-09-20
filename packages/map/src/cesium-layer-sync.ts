@@ -68,6 +68,7 @@ import type { Header as PMTilesHeader } from "pmtiles";
 import type {
   BoundingSphere,
   Cartesian2,
+  Cartesian3,
   Cesium3DTileset,
   CesiumWidget,
   Color,
@@ -1019,6 +1020,18 @@ export class CesiumLayerSync {
     return this.imageryRefs.get(imagery);
   }
 
+  /** Current world positions for selected document entities, used for camera fitting. */
+  featurePositions(layerId: string, ids: readonly string[]): Cartesian3[] {
+    const entry = this.entries.get(layerId);
+    if (!entry?.handle || (entry.kind !== "czml" && entry.kind !== "kml")) return [];
+    const entities = (entry.handle as DataSource).entities;
+    const time = this.viewer.clock.currentTime;
+    return ids.flatMap((id) => {
+      const position = entities.getById(id)?.position?.getValue(time);
+      return position ? [position] : [];
+    });
+  }
+
   highlight(layerId: string | undefined, ids: string[]): void {
     this.restoreHighlight();
     this.selection = layerId && ids.length ? { layerId, ids: new Set(ids) } : null;
@@ -1049,6 +1062,22 @@ export class CesiumLayerSync {
         point.color = color;
         this.highlightRestorers.push(() => {
           point.color = original;
+        });
+      }
+      this.viewer.scene.requestRender();
+      return;
+    }
+    if (entry.kind === "czml" || entry.kind === "kml") {
+      const entities = (entry.handle as DataSource).entities;
+      for (const id of selected.ids) {
+        const entity = entities.getById(id);
+        if (!entity?.point) continue;
+        const original = entity.point;
+        const highlighted = original.clone();
+        highlighted.color = new C.ConstantProperty(color);
+        entity.point = highlighted;
+        this.highlightRestorers.push(() => {
+          entity.point = original;
         });
       }
       this.viewer.scene.requestRender();

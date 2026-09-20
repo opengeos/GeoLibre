@@ -1705,6 +1705,10 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     coordinateFormat: "dd",
     mapboxStyleUrl: "mapbox://styles/mapbox/standard",
     arcgisBasemap: "arcgis/streets",
+    // With an Ion token this is the globe's photographic default. The
+    // availability gate transparently falls back to the project basemap when
+    // no token is configured.
+    cesiumBasemap: "bing-aerial",
   },
   environmentVariables: [],
   geocoding: {

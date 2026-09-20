@@ -18,6 +18,10 @@ export function canOpenLayerAttributeTable(layer: GeoLibreLayer | undefined): bo
     layer &&
     resolveLayerCapabilities(layer).query &&
     (layer.type === "geojson" ||
+      // Some native renderers carry a complete, materialized GeoJSON row model
+      // solely for the table. CZML feeds use this for dynamic entities whose
+      // attributes are queryable even though their position changes over time.
+      Boolean(layer.geojson) ||
       isDuckDBQueryLayer(layer) ||
       isVectorControlAttributeSource(layer)),
   );
