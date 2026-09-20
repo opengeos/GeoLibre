@@ -15,7 +15,10 @@ describe("Cesium basemap choices", () => {
     assert.equal(DEFAULT_PROJECT_PREFERENCES.map.cesiumBasemap, "bing-aerial");
     const legacy = JSON.parse(serializeProject(createEmptyProject()));
     delete legacy.preferences.map.cesiumBasemap;
-    assert.equal(parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap, "bing-aerial");
+    assert.equal(
+      parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap,
+      "bing-aerial",
+    );
     assert.equal(availableCesiumBasemap(undefined, true), "bing-aerial");
     assert.equal(availableCesiumBasemap(undefined, false), "project");
   });
@@ -144,6 +147,9 @@ describe("Cesium basemap choices", () => {
     invalid.preferences.map.cesiumBasemap = "unrecognized-provider";
     assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "project");
     delete invalid.preferences.map.cesiumBasemap;
-    assert.equal(parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap, "bing-aerial");
+    assert.equal(
+      parseProject(JSON.stringify(invalid)).preferences?.map.cesiumBasemap,
+      "bing-aerial",
+    );
   });
 });

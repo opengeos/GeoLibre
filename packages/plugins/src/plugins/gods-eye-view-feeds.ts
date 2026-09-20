@@ -19,8 +19,7 @@ export const CELESTRAK_CORE_GROUPS = [
   { group: "geo", classification: "geo" },
 ] as const;
 
-export type SatelliteClassification =
-  (typeof CELESTRAK_CORE_GROUPS)[number]["classification"];
+export type SatelliteClassification = (typeof CELESTRAK_CORE_GROUPS)[number]["classification"];
 
 export interface UsgsFeatureCollection {
   features?: Array<{
@@ -62,9 +61,7 @@ export interface SatelliteSampleOptions extends CzmlTimeWindow {
  * sampled position as a stable table/selection anchor. The packet id remains
  * the feature id, matching the Cesium entity id used by Identify and selection.
  */
-export function czmlPacketsToAttributeGeoJson(
-  packets: readonly CzmlPacket[],
-): FeatureCollection {
+export function czmlPacketsToAttributeGeoJson(packets: readonly CzmlPacket[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: packets.flatMap((packet, index) => {
@@ -75,8 +72,7 @@ export function czmlPacketsToAttributeGeoJson(
       if (packet.properties && typeof packet.properties === "object") {
         Object.assign(properties, packet.properties);
       }
-      const id =
-        typeof packet.id === "string" || typeof packet.id === "number" ? packet.id : index;
+      const id = typeof packet.id === "string" || typeof packet.id === "number" ? packet.id : index;
       const position = packet.position as
         | { epoch?: unknown; cartesian?: unknown; cartographicDegrees?: unknown }
         | undefined;
@@ -365,19 +361,14 @@ export function tleRecordsToCzml(
     const isIss = tle.catalogNumber === "25544";
     const halfOrbitSeconds = Math.ceil(periodSeconds / 2);
     // Whole steps, so samples still land exactly on both clock boundaries.
-    const paddingSeconds = isIss
-      ? Math.ceil(halfOrbitSeconds / stepSeconds) * stepSeconds
-      : 0;
+    const paddingSeconds = isIss ? Math.ceil(halfOrbitSeconds / stepSeconds) * stepSeconds : 0;
     const epoch = new Date(options.start.getTime() - paddingSeconds * 1000);
     const sampledUntil = new Date(options.stop.getTime() + paddingSeconds * 1000);
     const samples: number[] = [];
     for (let time = epoch.getTime(); time <= sampledUntil.getTime(); time += stepSeconds * 1000) {
       const at = new Date(time);
       const position = sampleSatellitePosition(tle, at);
-      samples.push(
-        (time - epoch.getTime()) / 1000,
-        ...position.cartesian,
-      );
+      samples.push((time - epoch.getTime()) / 1000, ...position.cartesian);
     }
     const colors: Record<SatelliteClassification, [number, number, number, number]> = {
       stations: [255, 246, 229, 255],
@@ -408,7 +399,13 @@ export function tleRecordsToCzml(
         ...(tle.classification ? { group: tle.classification } : {}),
       },
       point: {
-        pixelSize: isIss ? 12 : classification === "stations" ? 8 : classification === "geo" ? 5 : 6,
+        pixelSize: isIss
+          ? 12
+          : classification === "stations"
+            ? 8
+            : classification === "geo"
+              ? 5
+              : 6,
         color: { rgba: isIss ? [255, 68, 68, 255] : colors[classification] },
         outlineColor: { rgba: [255, 255, 255, 77] },
         outlineWidth: isIss ? 2 : 0,
@@ -468,7 +465,9 @@ export async function fetchCelestrakSatelliteCzml(
   });
   if (!response.ok) throw new Error(`CelesTrak feed failed (${response.status})`);
   const group = options.group ?? "stations";
-  const classification = CELESTRAK_CORE_GROUPS.find((entry) => entry.group === group)?.classification;
+  const classification = CELESTRAK_CORE_GROUPS.find(
+    (entry) => entry.group === group,
+  )?.classification;
   const records = parseTle(await response.text(), classification);
   if (records.length === 0) throw new Error("CelesTrak feed contained no valid TLE records");
   return tleRecordsToCzml(records, options);

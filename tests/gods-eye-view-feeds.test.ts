@@ -194,9 +194,10 @@ describe("God's Eye View feed helpers", () => {
     assert.ok(path.leadTime + path.trailTime >= period);
     assert.ok(path.trailTime <= padding);
     assert.equal((packets[1].label as { text: string }).text, "ISS");
-    assert.deepEqual((packets[1].point as { color: { rgba: number[] } }).color.rgba, [
-      255, 68, 68, 255,
-    ]);
+    assert.deepEqual(
+      (packets[1].point as { color: { rgba: number[] } }).color.rgba,
+      [255, 68, 68, 255],
+    );
   });
 
   it("renders non-ISS catalog entries as points without costly orbit padding", () => {
@@ -229,11 +230,12 @@ describe("God's Eye View feed helpers", () => {
     assert.equal(label.showBackground, true);
     assert.deepEqual(label.backgroundColor.rgba, [0, 0, 0, 210]);
     assert.deepEqual(label.backgroundPadding.cartesian2, [6, 4]);
-    assert.equal(label.scaleByDistance, undefined, "visible labels must not shrink below legible size");
-    assert.deepEqual(
-      label.distanceDisplayCondition.distanceDisplayCondition,
-      [0, 8_000_000],
+    assert.equal(
+      label.scaleByDistance,
+      undefined,
+      "visible labels must not shrink below legible size",
     );
+    assert.deepEqual(label.distanceDisplayCondition.distanceDisplayCondition, [0, 8_000_000]);
   });
 
   it("materializes CZML packet properties as read-only attribute-table rows", () => {
@@ -244,10 +246,7 @@ describe("God's Eye View feed helpers", () => {
     assert.equal(table.features.length, 1, "the CZML document packet is not a data row");
     assert.equal(table.features[0].id, "celestrak-25544");
     assert.equal(table.features[0].geometry.type, "Point");
-    assert.equal(
-      (table.features[0].geometry as { coordinates: number[] }).coordinates.length,
-      3,
-    );
+    assert.equal((table.features[0].geometry as { coordinates: number[] }).coordinates.length, 3);
     assert.deepEqual(table.features[0].properties, {
       name: "ISS (ZARYA)",
       availability: packets[1].availability,
@@ -296,7 +295,10 @@ describe("God's Eye View feed helpers", () => {
       fetch: mockFetch,
     });
 
-    assert.deepEqual(requested, CELESTRAK_CORE_GROUPS.map(({ group }) => group));
+    assert.deepEqual(
+      requested,
+      CELESTRAK_CORE_GROUPS.map(({ group }) => group),
+    );
     assert.deepEqual(
       packets.slice(1).map(({ id }) => id),
       ["celestrak-25544", "celestrak-40967"],
@@ -304,8 +306,9 @@ describe("God's Eye View feed helpers", () => {
     assert.equal((packets[1].properties as { group: string }).group, "stations");
     assert.equal((packets[2].properties as { group: string }).group, "visual");
     assert.equal(packets[2].path, undefined);
-    assert.deepEqual((packets[2].point as { color: { rgba: number[] } }).color.rgba, [
-      159, 179, 196, 255,
-    ]);
+    assert.deepEqual(
+      (packets[2].point as { color: { rgba: number[] } }).color.rgba,
+      [159, 179, 196, 255],
+    );
   });
 });

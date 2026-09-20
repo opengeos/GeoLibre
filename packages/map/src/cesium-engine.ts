@@ -767,10 +767,7 @@ export class CesiumEngine implements MapEngine {
         // moving object, its close-range label, and the Earth beneath it in the
         // same view; targeting the elevated Cartesian directly can put the
         // globe behind the camera.
-        this.animateTo(
-          { center: [...coordinates[0]], zoom: 4, bearing: 0, pitch: 0 },
-          FLY_SECONDS,
-        );
+        this.animateTo({ center: [...coordinates[0]], zoom: 4, bearing: 0, pitch: 0 }, FLY_SECONDS);
       } else {
         const longitudes = coordinates.map(([longitude]) => longitude);
         const latitudes = coordinates.map(([, latitude]) => latitude);

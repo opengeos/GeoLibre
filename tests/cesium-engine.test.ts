@@ -920,9 +920,11 @@ describe("CesiumEngine framing", () => {
         ],
       },
     } as never;
-    const sync = (engine as unknown as {
-      layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
-    }).layerSync;
+    const sync = (
+      engine as unknown as {
+        layerSync: { featurePositions: () => Array<{ x: number; y: number; z: number }> };
+      }
+    ).layerSync;
     sync.featurePositions = () => [C.Cartesian3.fromDegrees(12, 34, 850_000)];
 
     engine.highlightFeature(layer, "celestrak-25544", { fit: true });

@@ -78,16 +78,7 @@ describe("map selection highlight", () => {
     );
     assert.equal(disabledKey, null, "a disabled fit must not consume the selection key");
 
-    applySelectionHighlight(
-      engine,
-      [layer],
-      layer.id,
-      "a",
-      ["a"],
-      true,
-      disabledKey,
-      false,
-    );
+    applySelectionHighlight(engine, [layer], layer.id, "a", ["a"], true, disabledKey, false);
     assert.deepEqual(fits, [false, true]);
   });
 
