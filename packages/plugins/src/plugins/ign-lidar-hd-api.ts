@@ -137,10 +137,13 @@ export function buildIgnLidarHdWfsUrl(
   options: { count?: number } = {},
 ): string {
   const [west, south, east, north] = validateBbox(bbox);
-  const count = Math.min(
-    options.count ?? IGN_LIDAR_HD_MAX_RESULT_COUNT,
-    IGN_LIDAR_HD_MAX_RESULT_COUNT,
-  );
+  
+  const requestedCount = options.count ?? IGN_LIDAR_HD_MAX_RESULT_COUNT;
+  if (!Number.isInteger(requestedCount) || requestedCount < 0) {
+    throw new Error("IGN LiDAR HD result count must be a non-negative integer");
+  }
+  const count = Math.min(requestedCount, IGN_LIDAR_HD_MAX_RESULT_COUNT);
+
   const crs = "urn:ogc:def:crs:OGC:1.3:CRS84";
   const params = new URLSearchParams({
     SERVICE: "WFS",
