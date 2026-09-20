@@ -555,6 +555,81 @@ describe("CesiumLayerSync with CZML", () => {
     sync.destroy();
   });
 
+  it("never traces more arc than the document sampled", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    // A GEO satellite: a 24-hour period, but only the plugin's three-hour
+    // window is sampled, and the clock sits in the middle of it.
+    const geo = {
+      id: "celestrak-99999",
+      name: "GEOSAT",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: { orbitalPeriodMinutes: { getValue: () => 1440 } },
+      availability: { start: "window-start", stop: "window-stop" },
+      label: undefined as unknown,
+      path: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [geo],
+        contains: (e: unknown) => e === geo,
+        getById: (id: string) => (id === geo.id ? geo : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+      JulianDate: {
+        // 5400s of samples behind the clock, 5400s ahead.
+        secondsDifference: (left: unknown, right: unknown) =>
+          right === "window-start" || left === "window-stop" ? 5400 : 0,
+      },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    sync.sync([
+      createCzmlLayer({ id: "czml-geo", name: "Satellites", url: "https://example.com/geo.czml" }),
+    ]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-geo", ["celestrak-99999"]);
+    const path = geo.path as { options: { leadTime: number; trailTime: number } };
+    assert.ok(path);
+    // Half a period is 12 hours; a sampled position does not extrapolate, so
+    // asking for it would draw a line that stops dead instead of a ring.
+    assert.equal(path.options.leadTime, 5400);
+    assert.equal(path.options.trailTime, 5400);
+    sync.destroy();
+  });
+
   it("handles load errors gracefully and reports in getRenderStatus", async () => {
     const { Cesium, viewer } = makeGlobe();
     Cesium.CzmlDataSource.load = async () => {

@@ -1148,11 +1148,23 @@ export class CesiumLayerSync {
       typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0
         ? (minutes * 60) / 2
         : 45 * 60;
+    // Never ask for more arc than the document sampled. A sampled position does
+    // not extrapolate, so half a period of lead on a 24-hour GEO orbit sampled
+    // over three hours draws a line that stops dead rather than a ring; the
+    // entity's availability is exactly the span its samples cover.
+    const now = this.viewer.clock.currentTime;
+    const availability = entity.availability;
+    const sampledBack = availability
+      ? Math.max(0, C.JulianDate.secondsDifference(now, availability.start))
+      : halfPeriodSeconds;
+    const sampledAhead = availability
+      ? Math.max(0, C.JulianDate.secondsDifference(availability.stop, now))
+      : halfPeriodSeconds;
     entity.path = new C.PathGraphics({
       show: true,
       width: 1,
-      leadTime: halfPeriodSeconds,
-      trailTime: halfPeriodSeconds,
+      leadTime: Math.min(halfPeriodSeconds, sampledAhead),
+      trailTime: Math.min(halfPeriodSeconds, sampledBack),
       material: new C.ColorMaterialProperty(color.withAlpha(0.6)),
     });
     this.highlightRestorers.push(() => {
