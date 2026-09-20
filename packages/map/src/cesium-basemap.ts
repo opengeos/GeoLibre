@@ -1,7 +1,4 @@
-import {
-  CESIUM_BING_AERIAL_ASSET_ID,
-  type CesiumBasemapImagery,
-} from "@geolibre/core";
+import { CESIUM_BING_AERIAL_ASSET_ID, type CesiumBasemapImagery } from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
