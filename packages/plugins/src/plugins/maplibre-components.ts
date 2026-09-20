@@ -3094,7 +3094,10 @@ function waitForPendingLidarRestores(): Promise<void> {
   return new Promise((resolve) => {
     const start = Date.now();
     const check = () => {
-      if (pendingLidarRestores.size === 0 || Date.now() - start > PENDING_LIDAR_RESTORE_TIMEOUT_MS) {
+      if (
+        pendingLidarRestores.size === 0 ||
+        Date.now() - start > PENDING_LIDAR_RESTORE_TIMEOUT_MS
+      ) {
         resolve();
         return;
       }
