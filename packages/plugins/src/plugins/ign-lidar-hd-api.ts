@@ -211,7 +211,7 @@ export function parseIgnLidarHdFeatureCollection(
     tiles,
     footprints: { type: "FeatureCollection", features: footprintFeatures },
     matched,
-    truncated: matched > tiles.length,
+    truncated: matched > rawFeatures.length
   };
 }
 
