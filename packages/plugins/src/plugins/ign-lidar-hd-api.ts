@@ -137,7 +137,7 @@ export function buildIgnLidarHdWfsUrl(
   options: { count?: number } = {},
 ): string {
   const [west, south, east, north] = validateBbox(bbox);
-  
+
   const requestedCount = options.count ?? IGN_LIDAR_HD_MAX_RESULT_COUNT;
   if (!Number.isInteger(requestedCount) || requestedCount < 0) {
     throw new Error("IGN LiDAR HD result count must be a non-negative integer");
@@ -211,7 +211,7 @@ export function parseIgnLidarHdFeatureCollection(
     tiles,
     footprints: { type: "FeatureCollection", features: footprintFeatures },
     matched,
-    truncated: matched > rawFeatures.length
+    truncated: matched > rawFeatures.length,
   };
 }
 

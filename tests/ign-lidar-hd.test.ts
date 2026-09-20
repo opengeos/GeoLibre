@@ -173,36 +173,40 @@ function bboxesIntersect(
 }
 
 describe("fetchIgnLidarHdTiles (live)", () => {
-  it("returns real LiDAR HD tile coverage for central Paris", { skip: !process.env.RUN_LIVE_TESTS }, async (t) => {
-    const bbox: [number, number, number, number] = [2.25, 48.83, 2.42, 48.9];
-    let result: Awaited<ReturnType<typeof fetchIgnLidarHdTiles>>;
-    try {
-      result = await fetchIgnLidarHdTiles(bbox);
-    } catch (error) {
-      if (error instanceof TypeError) {
-        t.skip(`network unavailable: ${error.message}`);
-        return;
+  it(
+    "returns real LiDAR HD tile coverage for central Paris",
+    { skip: !process.env.RUN_LIVE_TESTS },
+    async (t) => {
+      const bbox: [number, number, number, number] = [2.25, 48.83, 2.42, 48.9];
+      let result: Awaited<ReturnType<typeof fetchIgnLidarHdTiles>>;
+      try {
+        result = await fetchIgnLidarHdTiles(bbox);
+      } catch (error) {
+        if (error instanceof TypeError) {
+          t.skip(`network unavailable: ${error.message}`);
+          return;
+        }
+        throw error;
       }
-      throw error;
-    }
 
-    assert.ok(result.tiles.length > 0, "expected at least one LiDAR HD tile over central Paris");
-    assert.ok(result.matched == result.tiles.length);
+      assert.ok(result.tiles.length > 0, "expected at least one LiDAR HD tile over central Paris");
+      assert.ok(result.matched == result.tiles.length);
 
-    for (const tile of result.tiles) {
-      assert.equal(typeof tile.id, "string");
-      assert.ok(tile.id.length > 0);
-      assert.ok(tile.geometry, `tile ${tile.id} is missing a geometry`);
-      const tileBbox = turfBbox(tile.geometry) as [number, number, number, number];
-      assert.ok(
-        bboxesIntersect(tileBbox, bbox),
-        `tile ${tile.id} bbox [${tileBbox}] does not intersect the requested bbox [${bbox}]`,
-      );
-      if (tile.tileCoord !== null) assert.match(tile.tileCoord, /^\d{4}-\d{4}$/);
-      if (tile.downloadUrl !== null) assert.match(tile.downloadUrl, /^https:\/\//);
-      if (tile.pointCount !== null) assert.ok(tile.pointCount > 0);
-    }
-  });
+      for (const tile of result.tiles) {
+        assert.equal(typeof tile.id, "string");
+        assert.ok(tile.id.length > 0);
+        assert.ok(tile.geometry, `tile ${tile.id} is missing a geometry`);
+        const tileBbox = turfBbox(tile.geometry) as [number, number, number, number];
+        assert.ok(
+          bboxesIntersect(tileBbox, bbox),
+          `tile ${tile.id} bbox [${tileBbox}] does not intersect the requested bbox [${bbox}]`,
+        );
+        if (tile.tileCoord !== null) assert.match(tile.tileCoord, /^\d{4}-\d{4}$/);
+        if (tile.downloadUrl !== null) assert.match(tile.downloadUrl, /^https:\/\//);
+        if (tile.pointCount !== null) assert.ok(tile.pointCount > 0);
+      }
+    },
+  );
 });
 
 describe("IGN LiDAR HD downloader registration", () => {
