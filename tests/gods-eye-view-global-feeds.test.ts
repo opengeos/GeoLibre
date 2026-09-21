@@ -44,7 +44,13 @@ describe("God's Eye View global feeds", () => {
   });
 
   it("normalizes launch sites and ignores records without coordinates", () => {
-    const result = launchLibraryToCzml({ results: [launch, { id: "missing-pad" }] });
+    const result = launchLibraryToCzml({
+      results: [
+        launch,
+        { id: "missing-pad" },
+        { id: "null-island", pad: { latitude: null, longitude: null } },
+      ],
+    });
     assert.equal(result.packets.length, 2);
     assert.equal(result.packets[1].id, "space-mission-mission-1");
     assert.deepEqual(result.packets[1].position, { cartographicDegrees: [-80.6, 28.5, 0] });
@@ -92,7 +98,11 @@ describe("God's Eye View global feeds", () => {
     const result = gbfsSystemToCzml(
       GBFS_SYSTEMS[0],
       { data: { stations: [{ station_id: "s1", name: "Central", lat: 40.7, lon: -74 }] } },
-      { data: { stations: [{ station_id: "s1" }] } },
+      {
+        data: {
+          stations: [{ station_id: "s1", num_bikes_available: null, num_docks_available: null }],
+        },
+      },
     );
     assert.deepEqual(result.packets[1].properties, {
       name: "Central",

@@ -33,8 +33,10 @@ describe("Launch Library edge cache", () => {
     );
     assert.equal(upstream.searchParams.get("limit"), "100");
     assert.equal(upstream.searchParams.get("mode"), "detailed");
-    assert.ok(Date.parse(upstream.searchParams.get("net__gte") ?? ""));
-    assert.ok(Date.parse(upstream.searchParams.get("net__lte") ?? ""));
+    const lower = Date.parse(upstream.searchParams.get("net__gte") ?? "");
+    const upper = Date.parse(upstream.searchParams.get("net__lte") ?? "");
+    assert.equal(upper % 900_000, 0);
+    assert.equal(upper - lower, 30 * 86_400_000);
     const headers = new Headers(calls[0].init?.headers);
     assert.match(headers.get("user-agent") ?? "", /GeoLibre/);
   });

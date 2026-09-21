@@ -870,7 +870,7 @@ export const tilesWorker = {
       if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
         return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
       }
-      const now = new Date();
+      const now = new Date(Math.floor(Date.now() / 900_000) * 900_000);
       const upstream = new URL(LAUNCH_LIBRARY_UPSTREAM);
       upstream.searchParams.set(
         "net__gte",
