@@ -2372,7 +2372,9 @@
         "utilities": "Dienstprogramme"
       },
       "earthquakes": "Erdbeben",
+      "spaceMissions": "Weltraummissionen (30 Tage)",
       "satellites": "Satelliten",
+      "bikeShare": "Bikesharing",
       "radio": "Radiosender",
       "datacenters": "Rechenzentren",
       "dams": "Staudämme",

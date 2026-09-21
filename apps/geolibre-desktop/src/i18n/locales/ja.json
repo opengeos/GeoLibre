@@ -2324,7 +2324,9 @@
         "utilities": "ユーティリティ"
       },
       "earthquakes": "地震",
+      "spaceMissions": "宇宙ミッション（30日）",
       "satellites": "衛星",
+      "bikeShare": "シェアサイクル",
       "radio": "ラジオ局",
       "datacenters": "データセンター",
       "dams": "ダム",

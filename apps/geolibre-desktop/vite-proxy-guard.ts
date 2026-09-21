@@ -24,6 +24,8 @@ export const PROXY_FETCH_TIMEOUT_MS = 30_000;
 const CELESTRAK_TLE_BASE = "https://celestrak.org/NORAD/elements/gp.php";
 const CELESTRAK_STARLINK_TLE_BASE = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
 const CELESTRAK_CACHE_TTL_MS = 6 * 60 * 60_000;
+const LAUNCH_LIBRARY_API_URL = "https://ll.thespacedevs.com/2.3.0/launches/";
+const LAUNCH_LIBRARY_CACHE_TTL_MS = 15 * 60_000;
 const CELESTRAK_GROUPS = new Set([
   "stations",
   "visual",
@@ -34,6 +36,7 @@ const CELESTRAK_GROUPS = new Set([
   "starlink",
 ]);
 const celestrakCache = new Map<string, { body: Buffer; expiresAt: number }>();
+let launchLibraryCache: { body: Buffer; expiresAt: number } | null = null;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -427,6 +430,48 @@ export async function proxyCelestrakRequestGuarded(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=21600");
   res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("content-length", String(entry.body.byteLength));
+  res.end(entry.body);
+}
+
+/** Fixed, cached Launch Library 2 relay for local development. */
+export async function proxyLaunchLibraryRequestGuarded(res: ServerResponse): Promise<void> {
+  let entry = launchLibraryCache;
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const now = new Date();
+    const upstream = new URL(LAUNCH_LIBRARY_API_URL);
+    upstream.searchParams.set("net__gte", new Date(now.getTime() - 30 * 86_400_000).toISOString());
+    upstream.searchParams.set("net__lte", now.toISOString());
+    upstream.searchParams.set("limit", "100");
+    upstream.searchParams.set("mode", "detailed");
+    const response = await fetchWithGuard(upstream.toString(), {
+      headers: {
+        accept: "application/json",
+        "user-agent": "GeoLibre-Launch-Library-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+    if (!response.ok) {
+      res.statusCode = response.status;
+      res.setHeader("content-type", "text/plain");
+      res.end(`Launch Library 2 returned HTTP ${response.status}`);
+      return;
+    }
+    const body = await readBodyWithLimit(response, 12 * 1024 * 1024);
+    const parsed = JSON.parse(body.toString("utf8")) as { results?: unknown };
+    if (!Array.isArray(parsed.results)) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end("Launch Library 2 returned a malformed response");
+      return;
+    }
+    entry = { body, expiresAt: Date.now() + LAUNCH_LIBRARY_CACHE_TTL_MS };
+    launchLibraryCache = entry;
+  }
+
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=900");
+  res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("content-length", String(entry.body.byteLength));
   res.end(entry.body);
 }

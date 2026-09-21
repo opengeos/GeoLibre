@@ -26,6 +26,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   "https://planetarymaps.usgs.gov/",
   "https://celestrak.org/NORAD/elements/gp.php",
   "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php",
+  "https://ll.thespacedevs.com/2.3.0/launches/",
   "https://raw.githubusercontent.com/",
 ] as const;
 

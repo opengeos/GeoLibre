@@ -278,9 +278,9 @@ describe("God's Eye View availability", () => {
           ),
         ]),
         [
-          ["Movement", ["satellites"]],
+          ["Movement", ["satellites", "bikeShare"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
-          ["Events", ["earthquakes"]],
+          ["Events", ["earthquakes", "spaceMissions"]],
           ["Utilities", ["radio"]],
         ],
       );
@@ -584,7 +584,9 @@ describe("God's Eye View clock speed", () => {
       godsEyeViewPlugin.applyProjectState?.(globe.app, {});
       assert.deepEqual(godsEyeViewPlugin.getProjectState?.(), {
         earthquakes: true,
+        spaceMissions: false,
         satellites: true,
+        bikeShare: false,
         radio: false,
         datacenters: false,
         dams: false,

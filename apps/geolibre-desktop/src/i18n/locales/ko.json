@@ -2324,7 +2324,9 @@
         "utilities": "유틸리티"
       },
       "earthquakes": "지진",
+      "spaceMissions": "우주 임무(30일)",
       "satellites": "위성",
+      "bikeShare": "자전거 공유",
       "radio": "라디오 방송국",
       "datacenters": "데이터 센터",
       "dams": "댐",

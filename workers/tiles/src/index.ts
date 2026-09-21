@@ -95,6 +95,13 @@ const CELESTRAK_UPSTREAM = "https://celestrak.org/NORAD/elements/gp.php";
 const CELESTRAK_STARLINK_UPSTREAM = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
 const CELESTRAK_CACHE_CONTROL = "public, max-age=21600";
 
+// Launch Library 2 permits only 15 anonymous requests per hour. Keep its
+// rolling 30-day query behind one fixed, edge-cached route so clients share a
+// single upstream request instead of spending that allowance independently.
+const LAUNCH_LIBRARY_PATH = "/launch-library/recent";
+const LAUNCH_LIBRARY_UPSTREAM = "https://ll.thespacedevs.com/2.3.0/launches/";
+const LAUNCH_LIBRARY_CACHE_CONTROL = "public, max-age=900";
+
 // The public Overpass endpoint rejects some browser origins (notably Pages
 // previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
 // with a small request-body ceiling and the same origin gate as other service
@@ -729,6 +736,7 @@ export const tilesWorker = {
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
           "  CelesTrak TLE groups: /celestrak/<group>\n" +
+          "  Launch Library 2 recent missions: /launch-library/recent\n" +
           "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
@@ -855,6 +863,37 @@ export const tilesWorker = {
       const headers = new Headers(CORS_HEADERS);
       headers.set("content-type", "text/plain; charset=utf-8");
       headers.set("cache-control", originResponse.ok ? CELESTRAK_CACHE_CONTROL : "no-store");
+      return new Response(originResponse.body, { status: originResponse.status, headers });
+    }
+
+    if (url.pathname === LAUNCH_LIBRARY_PATH) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
+      const now = new Date();
+      const upstream = new URL(LAUNCH_LIBRARY_UPSTREAM);
+      upstream.searchParams.set(
+        "net__gte",
+        new Date(now.getTime() - 30 * 86_400_000).toISOString(),
+      );
+      upstream.searchParams.set("net__lte", now.toISOString());
+      upstream.searchParams.set("limit", "100");
+      upstream.searchParams.set("mode", "detailed");
+      let originResponse: Response;
+      try {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
+          headers: {
+            accept: "application/json",
+            "user-agent": "GeoLibre-Launch-Library-Proxy/1.0 (+https://geolibre.org)",
+          },
+          cf: { cacheEverything: true, cacheTtl: 900 },
+        });
+      } catch {
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set("content-type", "application/json; charset=utf-8");
+      headers.set("cache-control", originResponse.ok ? LAUNCH_LIBRARY_CACHE_CONTROL : "no-store");
       return new Response(originResponse.body, { status: originResponse.status, headers });
     }
 

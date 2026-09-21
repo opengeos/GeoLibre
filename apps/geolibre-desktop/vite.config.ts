@@ -11,7 +11,11 @@ import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
-import { proxyBinaryRequestGuarded, proxyCelestrakRequestGuarded } from "./vite-proxy-guard";
+import {
+  proxyBinaryRequestGuarded,
+  proxyCelestrakRequestGuarded,
+  proxyLaunchLibraryRequestGuarded,
+} from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 import { ARCGIS_SDK_HOST, ARCGIS_SDK_VERSION } from "../../packages/map/src/arcgis-sdk";
@@ -506,6 +510,7 @@ const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const CELESTRAK_PROXY_PATH = "/__geolibre_celestrak";
+const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
 const DUCKDB_WORKER_SOURCE_MAP_RE =
@@ -672,6 +677,15 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("CelesTrak proxy request failed");
+        }
+      });
+      server.middlewares.use(LAUNCH_LIBRARY_PROXY_PATH, async (_req, res) => {
+        try {
+          await proxyLaunchLibraryRequestGuarded(res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Launch Library 2 proxy request failed");
         }
       });
       server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {

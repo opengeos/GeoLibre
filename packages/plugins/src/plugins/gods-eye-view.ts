@@ -17,6 +17,7 @@ import {
   type GodsEyeViewFeedPayload,
 } from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
+import { fetchBikeShareCzml, fetchSpaceMissionsCzml } from "./gods-eye-view-global-feeds";
 import { OVERPASS_REQUEST_TIMEOUT_MS } from "./osm-downloader-api";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
@@ -28,6 +29,8 @@ export const GODS_EYE_VIEW_DATACENTERS_FLAG = "godsEyeViewDatacenters";
 export const GODS_EYE_VIEW_DAMS_FLAG = "godsEyeViewDams";
 export const GODS_EYE_VIEW_CABLES_FLAG = "godsEyeViewCables";
 export const GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG = "godsEyeViewOsmInfrastructure";
+export const GODS_EYE_VIEW_BIKE_SHARE_FLAG = "godsEyeViewBikeShare";
+export const GODS_EYE_VIEW_SPACE_MISSIONS_FLAG = "godsEyeViewSpaceMissions";
 
 const REFRESH_TICK_MS = 10 * 60_000;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
@@ -86,6 +89,16 @@ const FEED_DESCRIPTORS = {
       return { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
     },
   },
+  bikeShare: {
+    group: "movement",
+    label: ["panel.godsEyeView.bikeShare", "Bike Share"],
+    attribution: "Bike share: GBFS feeds from participating public systems",
+    refreshIntervalMs: 5 * 60_000,
+    timeoutMs: 60_000,
+    flag: GODS_EYE_VIEW_BIKE_SHARE_FLAG,
+    defaultEnabled: false,
+    fetch: ({ signal }) => fetchBikeShareCzml({ signal }),
+  },
   osmInfrastructure: {
     group: "infrastructure",
     label: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
@@ -140,6 +153,16 @@ const FEED_DESCRIPTORS = {
       const packets = await fetchUsgsEarthquakeCzml(window, { signal });
       return { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
     },
+  },
+  spaceMissions: {
+    group: "events",
+    label: ["panel.godsEyeView.spaceMissions", "Space Missions (30d)"],
+    attribution: "Space missions: Launch Library 2, The Space Devs",
+    refreshIntervalMs: 15 * 60_000,
+    timeoutMs: 30_000,
+    flag: GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+    defaultEnabled: false,
+    fetch: ({ signal }) => fetchSpaceMissionsCzml({ signal }),
   },
   radio: {
     group: "utilities",

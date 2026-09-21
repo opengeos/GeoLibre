@@ -921,6 +921,8 @@ export {
   GODS_EYE_VIEW_DAMS_FLAG,
   GODS_EYE_VIEW_CABLES_FLAG,
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
+  GODS_EYE_VIEW_BIKE_SHARE_FLAG,
+  GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
 } from "./plugins/gods-eye-view";
 export {
   buildCelestrakTleUrl,
@@ -957,6 +959,18 @@ export {
   submarineCablesToCzml,
   type GodsEyeViewFeedPayload,
 } from "./plugins/gods-eye-view-catalog-feeds";
+export {
+  buildLaunchLibraryUrl,
+  buildLaunchLibraryRequestUrls,
+  fetchBikeShareCzml,
+  fetchSpaceMissionsCzml,
+  gbfsSystemToCzml,
+  launchLibraryToCzml,
+  GBFS_SYSTEMS,
+  LAUNCH_LIBRARY_API_URL,
+  LAUNCH_LIBRARY_DEV_URL,
+  LAUNCH_LIBRARY_EDGE_URL,
+} from "./plugins/gods-eye-view-global-feeds";
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,

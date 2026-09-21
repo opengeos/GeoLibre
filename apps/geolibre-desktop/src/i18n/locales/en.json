@@ -2404,7 +2404,9 @@
         "utilities": "Utilities"
       },
       "earthquakes": "Earthquakes",
+      "spaceMissions": "Space Missions (30d)",
       "satellites": "Satellites",
+      "bikeShare": "Bike Share",
       "radio": "Radio Stations",
       "datacenters": "Datacenters",
       "dams": "Dams",
