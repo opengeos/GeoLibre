@@ -332,6 +332,8 @@ export async function fetchCctvCzml(
   );
   if (!queryBounds) return cctvCamerasToCzml([], options.nowMs);
   const fetcher = options.fetch ?? fetch;
+  // These providers expose only bounded global/city catalogs, not bbox APIs.
+  // Cache each normalized catalog, then apply the snapped viewport locally.
   const results = await Promise.allSettled([
     fetchCatalog(TFL_CATALOG_URL, fetcher, options.signal, normalizeTflCameras),
     fetchCatalog(CALGARY_CATALOG_URL, fetcher, options.signal, normalizeCalgaryCameras),

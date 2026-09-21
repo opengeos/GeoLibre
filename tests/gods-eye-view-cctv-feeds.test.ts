@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  CCTV_CATALOG_FAILURE_CACHE_MS,
   cctvCamerasToCzml,
   fetchCctvCzml,
   normalizeCalgaryCameras,
@@ -146,6 +147,9 @@ describe("God's Eye View CCTV feeds", () => {
 
   it("fetches providers independently and keeps cameras inside the viewport", async () => {
     const requested: string[] = [];
+    const realDateNow = Date.now;
+    let currentTime = 1_000_000;
+    Date.now = () => currentTime;
     const fetcher = (async (input: RequestInfo | URL) => {
       const url = String(input);
       requested.push(url);
@@ -153,21 +157,28 @@ describe("God's Eye View CCTV feeds", () => {
       if (url.includes("calgary.ca")) return new Response("upstream down", { status: 503 });
       return new Response(JSON.stringify(fintraffic), { status: 200 });
     }) as typeof fetch;
-    const result = await fetchCctvCzml([-0.2, 51.45, 0, 51.65], {
-      fetch: fetcher,
-      nowMs: 0,
-    });
-    const refreshed = await fetchCctvCzml([-0.2, 51.45, 0, 51.65], {
-      fetch: fetcher,
-      nowMs: 60_000,
-    });
-    assert.equal(requested.length, 3, "successful and failed catalogs honor their cache TTLs");
-    assert.equal(result.attributes.features.length, 1);
-    assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
-    assert.notEqual(
-      refreshed.attributes.features[0].properties?.snapshot,
-      result.attributes.features[0].properties?.snapshot,
-    );
+    try {
+      const result = await fetchCctvCzml([-0.2, 51.45, 0, 51.65], {
+        fetch: fetcher,
+        nowMs: 0,
+      });
+      const refreshed = await fetchCctvCzml([-0.2, 51.45, 0, 51.65], {
+        fetch: fetcher,
+        nowMs: 60_000,
+      });
+      assert.equal(requested.length, 3, "immediate repeats use both catalog caches");
+      currentTime += CCTV_CATALOG_FAILURE_CACHE_MS + 1;
+      await fetchCctvCzml([-0.2, 51.45, 0, 51.65], { fetch: fetcher, nowMs: 120_000 });
+      assert.equal(requested.length, 4, "failed catalogs retry after the shorter failure TTL");
+      assert.equal(result.attributes.features.length, 1);
+      assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
+      assert.notEqual(
+        refreshed.attributes.features[0].properties?.snapshot,
+        result.attributes.features[0].properties?.snapshot,
+      );
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 
   it("does not download global catalogs while the globe is zoomed out", async () => {
