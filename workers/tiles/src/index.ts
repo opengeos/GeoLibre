@@ -38,6 +38,7 @@ import * as UPNG from "upng-js";
 import {
   ADSB_LOL_MILITARY_UPSTREAM,
   ADSBDB_AIRCRAFT_UPSTREAM,
+  AUSTIN_CCTV_FRAME_UPSTREAM,
   CALGARY_CCTV_FRAME_UPSTREAM,
   DRIVEBC_CCTV_CATALOG_UPSTREAM,
   fetchAllowlistedUpstream,
@@ -121,6 +122,7 @@ const OPEN_SKY_CACHE_SECONDS = 30;
 const ADSB_LOL_CACHE_SECONDS = 15;
 const AIRCRAFT_FEED_MAX_BODY_BYTES = 25 * 1024 * 1024;
 const CALGARY_CCTV_PATH = /^\/cctv\/calgary\/(\d{1,4})\.jpg$/;
+const AUSTIN_CCTV_PATH = /^\/cctv\/austin\/(\d{1,6})\.jpg$/;
 const ONTARIO_CCTV_PATH = /^\/cctv\/ontario\/([A-Za-z0-9_.-]{1,64})$/;
 const NSW_CCTV_PATH = /^\/cctv\/nsw\/((?:[A-Za-z0-9_.-]|%[0-9A-Fa-f]{2}){1,300})$/;
 const CCTV_CATALOG_PATH = /^\/cctv\/catalog\/(ontario|drivebc|nsw)\.json$/;
@@ -1266,6 +1268,15 @@ export const tilesWorker = {
         request,
         ctx,
         `${CALGARY_CCTV_FRAME_UPSTREAM}loc${calgaryCctvMatch[1]}.jpg`,
+      );
+    }
+
+    const austinCctvMatch = AUSTIN_CCTV_PATH.exec(url.pathname);
+    if (austinCctvMatch) {
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${AUSTIN_CCTV_FRAME_UPSTREAM}${austinCctvMatch[1]}.jpg`,
       );
     }
 

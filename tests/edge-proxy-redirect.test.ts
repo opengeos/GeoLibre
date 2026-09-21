@@ -125,6 +125,11 @@ describe("viewer redirect policy", () => {
 });
 
 describe("tiles allowlisted fetch", () => {
+  it("accepts only Austin's fixed CCTV frame prefix", () => {
+    assert.equal(isAllowedTilesUpstreamUrl("https://cctv.austinmobility.io/image/86.jpg"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://cctv.austinmobility.io/admin"), false);
+  });
+
   it("accepts only the fixed Ontario CCTV catalog and frame prefixes", () => {
     assert.equal(
       isAllowedTilesUpstreamUrl("https://511on.ca/api/v2/get/cameras?format=json&lang=en"),

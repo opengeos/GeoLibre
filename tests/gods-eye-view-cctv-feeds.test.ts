@@ -4,6 +4,7 @@ import {
   CCTV_CATALOG_FAILURE_CACHE_MS,
   cctvCamerasToCzml,
   fetchCctvCzml,
+  normalizeAustinCameras,
   normalizeCalgaryCameras,
   normalizeDriveBcCameras,
   normalizeFintrafficCameras,
@@ -35,6 +36,20 @@ const calgary = [
     point: { coordinates: [-114.07, 51.05] },
   },
 ];
+
+const austin = {
+  meta: {
+    view: {
+      columns: [
+        { fieldName: "camera_id" },
+        { fieldName: "location_name" },
+        { fieldName: "camera_status" },
+        { fieldName: "location" },
+      ],
+    },
+  },
+  data: [["86", "Congress Ave / 6th St", "TURNED_ON", "POINT (-97.7431 30.2672)"]],
+};
 
 const fintraffic = {
   features: [
@@ -93,8 +108,16 @@ const nsw = {
 };
 
 describe("God's Eye View CCTV feeds", () => {
-  it("normalizes pinned TfL, Calgary, and Fintraffic frame sources", () => {
+  it("normalizes pinned TfL, Austin, Calgary, and Fintraffic frame sources", () => {
     assert.equal(normalizeTflCameras(tfl)[0].id, "tfl-00001.00001");
+    assert.equal(
+      normalizeAustinCameras(austin, false)[0].snapshotUrl,
+      "https://tiles.geolibre.app/cctv/austin/86.jpg",
+    );
+    assert.equal(
+      normalizeAustinCameras(austin, true)[0].snapshotUrl,
+      "http://localhost/cctv/austin/86.jpg",
+    );
     assert.equal(
       normalizeCalgaryCameras(calgary, true)[0].snapshotUrl,
       "http://localhost/cctv/calgary/86.jpg",
@@ -157,6 +180,16 @@ describe("God's Eye View CCTV feeds", () => {
           ],
         },
       ]),
+      [],
+    );
+    assert.deepEqual(
+      normalizeAustinCameras({
+        ...austin,
+        data: [
+          ["86", "Congress Ave / 6th St", "REMOVED", "POINT (-97.7431 30.2672)"],
+          ["87", "Outside", "TURNED_ON", "POINT (-80 25)"],
+        ],
+      }),
       [],
     );
     assert.deepEqual(
@@ -266,10 +299,10 @@ describe("God's Eye View CCTV feeds", () => {
         fetch: fetcher,
         nowMs: 60_000,
       });
-      assert.equal(requested.length, 6, "immediate repeats use every catalog cache");
+      assert.equal(requested.length, 7, "immediate repeats use every catalog cache");
       currentTime += CCTV_CATALOG_FAILURE_CACHE_MS + 1;
       await fetchCctvCzml([-0.2, 51.45, 0, 51.65], { fetch: fetcher, nowMs: 120_000 });
-      assert.equal(requested.length, 7, "failed catalogs retry after the shorter failure TTL");
+      assert.equal(requested.length, 8, "failed catalogs retry after the shorter failure TTL");
       assert.equal(result.attributes.features.length, 1);
       assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
       assert.notEqual(

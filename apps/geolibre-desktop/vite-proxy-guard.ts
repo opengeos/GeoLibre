@@ -39,6 +39,7 @@ const AIRCRAFT_UPSTREAMS = {
   },
 } as const;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
+const AUSTIN_CCTV_FRAME_BASE = "https://cctv.austinmobility.io/image/";
 const CALGARY_CCTV_FRAME_BASE = "https://trafficcam.calgary.ca/loc";
 const ONTARIO_CCTV_FRAME_BASE = "https://511on.ca/map/Cctv/";
 const NSW_CCTV_FRAME_BASE = "https://webcams.transport.nsw.gov.au/livetraffic-webcams/cameras/";
@@ -578,6 +579,19 @@ export async function proxyAdsbdbAircraftRequestGuarded(
   res.setHeader("cache-control", response.ok ? "public, max-age=86400" : "no-store");
   res.setHeader("content-length", String(body.byteLength));
   res.end(body);
+}
+
+/** Fixed, bounded image relay for Austin's public traffic-camera snapshots. */
+export async function proxyAustinCctvFrameRequestGuarded(
+  frameId: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!/^\d{1,6}$/.test(frameId)) {
+    res.statusCode = 400;
+    res.end("Invalid Austin camera id");
+    return;
+  }
+  await proxyCctvFrameRequestGuarded(`${AUSTIN_CCTV_FRAME_BASE}${frameId}.jpg`, res);
 }
 
 /** Fixed, bounded image relay for Calgary's public traffic-camera snapshots. */

@@ -17,6 +17,7 @@ export const OVERPASS_API_FALLBACK_UPSTREAM = "https://overpass.private.coffee/a
 export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/all";
 export const ADSB_LOL_MILITARY_UPSTREAM = "https://api.adsb.lol/v2/mil";
 export const ADSBDB_AIRCRAFT_UPSTREAM = "https://api.adsbdb.com/v0/aircraft/";
+export const AUSTIN_CCTV_FRAME_UPSTREAM = "https://cctv.austinmobility.io/image/";
 export const CALGARY_CCTV_FRAME_UPSTREAM = "https://trafficcam.calgary.ca/";
 export const ONTARIO_CCTV_CATALOG_UPSTREAM = "https://511on.ca/api/v2/get/cameras";
 export const ONTARIO_CCTV_FRAME_UPSTREAM = "https://511on.ca/map/Cctv/";
@@ -36,6 +37,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   OPEN_SKY_STATES_UPSTREAM,
   ADSB_LOL_MILITARY_UPSTREAM,
   ADSBDB_AIRCRAFT_UPSTREAM,
+  AUSTIN_CCTV_FRAME_UPSTREAM,
   CALGARY_CCTV_FRAME_UPSTREAM,
   ONTARIO_CCTV_CATALOG_UPSTREAM,
   ONTARIO_CCTV_FRAME_UPSTREAM,

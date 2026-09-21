@@ -151,6 +151,47 @@ describe("Calgary CCTV edge proxy", () => {
   });
 });
 
+describe("Austin CCTV edge proxy", () => {
+  it("relays one fixed, bounded public frame with CORS", async () => {
+    let requested = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      });
+    }) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/austin/86.jpg", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(requested, "https://cctv.austinmobility.io/image/86.jpg");
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/jpeg");
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  });
+
+  it("rejects malformed ids before fetching upstream", async () => {
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response();
+    }) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/austin/not-an-id.jpg", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 404);
+    assert.equal(fetched, false);
+  });
+});
+
 describe("CCTV catalog edge proxy", () => {
   it("relays only the fixed provider JSON catalogs", async () => {
     const requested: string[] = [];

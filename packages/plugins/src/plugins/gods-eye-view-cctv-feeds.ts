@@ -11,12 +11,16 @@ export const CCTV_CATALOG_CACHE_MS = 15 * 60_000;
 export const CCTV_CATALOG_FAILURE_CACHE_MS = 60_000;
 
 export const TFL_CATALOG_URL = "https://api.tfl.gov.uk/Place/Type/JamCam";
+export const AUSTIN_CATALOG_URL =
+  "https://data.austintexas.gov/api/views/b4k4-adkb/rows.json?accessType=DOWNLOAD";
 export const CALGARY_CATALOG_URL = "https://data.calgary.ca/resource/k7p9-kppz.json?$limit=500";
 export const FINTRAFFIC_CATALOG_URL = "https://tie.digitraffic.fi/api/weathercam/v1/stations";
 export const CCTV_CATALOG_EDGE_BASE = "https://tiles.geolibre.app/cctv/catalog";
 export const CCTV_CATALOG_DEV_BASE = "/cctv/catalog";
 export const CALGARY_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/calgary";
 export const CALGARY_FRAME_DEV_BASE = "/cctv/calgary";
+export const AUSTIN_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/austin";
+export const AUSTIN_FRAME_DEV_BASE = "/cctv/austin";
 export const ONTARIO_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/ontario";
 export const ONTARIO_FRAME_DEV_BASE = "/cctv/ontario";
 export const NSW_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/nsw";
@@ -110,6 +114,67 @@ export function normalizeTflCameras(payload: unknown): CctvCamera[] {
       latitude: latitude as number,
       snapshotUrl: image,
       attribution: "Powered by TfL Open Data",
+      refreshMs: 60_000,
+    });
+  }
+  return cameras;
+}
+
+export function normalizeAustinCameras(payload: unknown, dev = isViteDevServer()): CctvCamera[] {
+  if (!payload || typeof payload !== "object") return [];
+  const catalog = payload as {
+    meta?: { view?: { columns?: unknown } };
+    data?: unknown;
+  };
+  const columns = Array.isArray(catalog.meta?.view?.columns) ? catalog.meta.view.columns : [];
+  const rows = Array.isArray(catalog.data) ? catalog.data : [];
+  const fieldIndexes = new Map<string, number>();
+  columns.slice(0, 200).forEach((value, index) => {
+    if (!value || typeof value !== "object") return;
+    const fieldName = text((value as Record<string, unknown>).fieldName);
+    if (fieldName) fieldIndexes.set(fieldName, index);
+  });
+  const valueAt = (row: unknown[], field: string): unknown => {
+    const index = fieldIndexes.get(field);
+    return index === undefined ? undefined : row[index];
+  };
+  const cameras: CctvCamera[] = [];
+  for (const value of rows.slice(0, 5_000)) {
+    if (!Array.isArray(value)) continue;
+    const rawId = text(valueAt(value, "camera_id"));
+    const status = text(valueAt(value, "camera_status"));
+    const point = text(valueAt(value, "location"));
+    const pointMatch = point?.match(/^POINT \((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\)$/);
+    const longitude = finite(pointMatch?.[1]);
+    const latitude = finite(pointMatch?.[2]);
+    if (
+      !rawId ||
+      !/^\d{1,6}$/.test(rawId) ||
+      status?.toUpperCase() !== "TURNED_ON" ||
+      !validCoordinate(longitude, latitude) ||
+      (latitude as number) < 30.02 ||
+      (latitude as number) > 30.58 ||
+      (longitude as number) < -98.12 ||
+      (longitude as number) > -97.4
+    ) {
+      continue;
+    }
+    const rawName = text(valueAt(value, "location_name"));
+    const name =
+      rawName && rawName.length <= 140 && !/[\r\n]/.test(rawName)
+        ? rawName
+        : `Austin Camera ${rawId}`;
+    const base = dev
+      ? `${globalThis.location?.origin ?? "http://localhost"}${AUSTIN_FRAME_DEV_BASE}`
+      : AUSTIN_FRAME_EDGE_BASE;
+    cameras.push({
+      id: `austin-${rawId}`,
+      name,
+      provider: "Austin Transportation & Public Works",
+      longitude: longitude as number,
+      latitude: latitude as number,
+      snapshotUrl: `${base}/${rawId}.jpg`,
+      attribution: "City of Austin Open Data",
       refreshMs: 60_000,
     });
   }
@@ -530,6 +595,7 @@ export async function fetchCctvCzml(
   // Cache each normalized catalog, then apply the snapped viewport locally.
   const results = await Promise.allSettled([
     fetchCatalog(TFL_CATALOG_URL, fetcher, options.signal, normalizeTflCameras),
+    fetchCatalog(AUSTIN_CATALOG_URL, fetcher, options.signal, normalizeAustinCameras),
     fetchCatalog(CALGARY_CATALOG_URL, fetcher, options.signal, normalizeCalgaryCameras),
     fetchCatalog(FINTRAFFIC_CATALOG_URL, fetcher, options.signal, normalizeFintrafficCameras, {
       Accept: "application/json",
