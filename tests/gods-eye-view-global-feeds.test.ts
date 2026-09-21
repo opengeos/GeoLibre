@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  buildLaunchLibraryUrl,
   buildLaunchLibraryRequestUrls,
   fetchBikeShareCzml,
   fetchSpaceMissionsCzml,
@@ -28,15 +27,6 @@ const launch = {
 };
 
 describe("God's Eye View global feeds", () => {
-  it("builds the bounded Launch Library 2 detailed query", () => {
-    const now = new Date("2026-09-20T00:00:00Z");
-    const url = new URL(buildLaunchLibraryUrl(now));
-    assert.equal(url.searchParams.get("net__gte"), "2026-08-21T00:00:00.000Z");
-    assert.equal(url.searchParams.get("net__lte"), "2026-09-20T00:00:00.000Z");
-    assert.equal(url.searchParams.get("limit"), "100");
-    assert.equal(url.searchParams.get("mode"), "detailed");
-  });
-
   it("uses the local fixed proxy before the edge cache during development", () => {
     const urls = buildLaunchLibraryRequestUrls(true);
     assert.equal(urls[0], LAUNCH_LIBRARY_DEV_URL);
@@ -135,6 +125,29 @@ describe("God's Eye View global feeds", () => {
       );
     }) as typeof fetch;
     const result = await fetchBikeShareCzml({ fetch: mockFetch });
+    assert.equal(result.attributes.features.length, 1);
+  });
+
+  it("returns successful GBFS systems when the remaining providers time out", async () => {
+    const good = GBFS_SYSTEMS[0];
+    const goodUrls = new Set([good.informationUrl, good.statusUrl]);
+    const controller = new AbortController();
+    const mockFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (goodUrls.has(url)) {
+        const stations = url.includes("station_information")
+          ? [{ station_id: "s1", name: "Central", lat: 40.7, lon: -74 }]
+          : [{ station_id: "s1", num_bikes_available: 2 }];
+        return new Response(JSON.stringify({ data: { stations } }), { status: 200 });
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+    }) as typeof fetch;
+    const pending = fetchBikeShareCzml({ fetch: mockFetch, signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    const result = await pending;
     assert.equal(result.attributes.features.length, 1);
   });
 });

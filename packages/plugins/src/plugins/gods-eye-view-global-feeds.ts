@@ -4,7 +4,6 @@ import type { GodsEyeViewFeedPayload } from "./gods-eye-view-catalog-feeds";
 import { isViteDevServer } from "./gods-eye-view-feeds";
 
 export const LAUNCH_LIBRARY_EDGE_URL = "https://tiles.geolibre.app/launch-library/recent";
-export const LAUNCH_LIBRARY_API_URL = "https://ll.thespacedevs.com/2.3.0/launches/";
 export const LAUNCH_LIBRARY_DEV_URL = "/launch-library/recent";
 
 interface GbfsSystem {
@@ -135,15 +134,6 @@ function stations(value: unknown): Record<string, unknown>[] {
   const data = objectRecord(objectRecord(value).data);
   const list = Array.isArray(data.stations) ? data.stations : [];
   return list.map(objectRecord);
-}
-
-export function buildLaunchLibraryUrl(now = new Date()): string {
-  const url = new URL(LAUNCH_LIBRARY_API_URL);
-  url.searchParams.set("net__gte", new Date(now.getTime() - 30 * 86_400_000).toISOString());
-  url.searchParams.set("net__lte", now.toISOString());
-  url.searchParams.set("limit", "100");
-  url.searchParams.set("mode", "detailed");
-  return url.toString();
 }
 
 export function buildLaunchLibraryRequestUrls(isDevServer = isViteDevServer()): string[] {
@@ -308,8 +298,8 @@ export async function fetchBikeShareCzml(
       if (!system) return;
       try {
         payloads.push(await fetchGbfsSystem(system, request, options.signal));
-      } catch (error) {
-        if (options.signal?.aborted) throw error;
+      } catch {
+        if (options.signal?.aborted) return;
       }
     }
   });
