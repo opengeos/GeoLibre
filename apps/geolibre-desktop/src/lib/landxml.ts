@@ -213,9 +213,14 @@ export async function reprojectLandXmlCollection(
   if (distinct.length === 0) return collection;
 
   const reprojected = await reprojectByDimension(distinct, reprojectPositions);
+  // Hand every occurrence its own array. Deduplicating means one transformed
+  // position stands in for the ~6 faces that share the vertex, and returning
+  // that single instance would leave the output geometry aliasing itself, so
+  // anything that later edited a coordinate in place would silently move every
+  // face sharing it.
   const replace = (position: Position): Position => {
     const index = indexByKey.get(positionKey(position));
-    return index === undefined ? position : reprojected[index];
+    return index === undefined ? [...position] : [...reprojected[index]];
   };
 
   return {
@@ -334,8 +339,11 @@ function parseSurface(
       skippedFaceCount += 1;
       continue;
     }
+    // Copy each vertex: the point table hands back one array per TIN point, so
+    // pushing it directly would make every face that shares the point alias the
+    // same coordinate array.
     const coordinates = triangle as Position[];
-    triangles.push([[...coordinates, coordinates[0]]]);
+    triangles.push([[...coordinates, coordinates[0]].map((position) => [...position])]);
   }
 
   if (skippedPointCount > 0 || skippedFaceCount > 0) {

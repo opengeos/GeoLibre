@@ -293,6 +293,26 @@ describe("LandXML reprojection", () => {
     assert.deepEqual(point.type === "Point" && point.coordinates, [20, 20, 5]);
   });
 
+  it("gives every occurrence of a shared vertex its own coordinate array", async () => {
+    const parsed = parseLandXml(TIN).layers[0].features;
+    const collect = (collection: FeatureCollection): Position[] => {
+      const geometry = collection.features[0].geometry;
+      if (geometry.type !== "MultiPolygon") return [];
+      return geometry.coordinates.flatMap((part) => part[0]);
+    };
+
+    // Two triangles share two vertices, and each ring repeats its first point.
+    const parsedSlots = collect(parsed);
+    assert.equal(new Set(parsedSlots).size, parsedSlots.length, "parsed geometry does not alias");
+
+    const out = await reprojectLandXmlCollection(parsed, async (positions) =>
+      positions.map((position) => [...position]),
+    );
+    const slots = collect(out);
+    assert.equal(slots.length, 8);
+    assert.equal(new Set(slots).size, slots.length, "reprojected geometry does not alias");
+  });
+
   it("rejects a projector that drops or fabricates an ordinate", async () => {
     const collection = parseLandXml(TIN).layers[0].features;
     await assert.rejects(
