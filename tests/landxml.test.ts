@@ -293,6 +293,25 @@ describe("LandXML reprojection", () => {
     assert.deepEqual(point.type === "Point" && point.coordinates, [20, 20, 5]);
   });
 
+  it("rejects a projector that drops or fabricates an ordinate", async () => {
+    const collection = parseLandXml(TIN).layers[0].features;
+    await assert.rejects(
+      // Z silently dropped: the exact shape the dimension grouping guards against.
+      () =>
+        reprojectLandXmlCollection(collection, async (positions) =>
+          positions.map(([x, y]) => [x, y]),
+        ),
+      /invalid coordinate/,
+    );
+    await assert.rejects(
+      () =>
+        reprojectLandXmlCollection(collection, async (positions) =>
+          positions.map(([x, , z]) => [x, Number.NaN, z as number]),
+        ),
+      /invalid coordinate/,
+    );
+  });
+
   it("rejects a projector that does not return one position per input", async () => {
     const collection = parseLandXml(TIN).layers[0].features;
     await assert.rejects(

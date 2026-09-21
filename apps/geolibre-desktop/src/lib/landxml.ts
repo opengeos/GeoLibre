@@ -256,7 +256,19 @@ async function reprojectByDimension(
       throw new Error("Reprojection returned a different number of coordinates than it was given.");
     }
     for (const [batchIndex, sourceIndex] of indices.entries()) {
-      reprojected[sourceIndex] = batch[batchIndex];
+      const projected = batch[batchIndex];
+      // Assert the dimension survived rather than trusting it. An engine that
+      // quietly drops or pads Z is the failure this grouping exists to prevent,
+      // and a fabricated elevation is far harder to notice downstream than a
+      // failed import.
+      if (
+        !Array.isArray(projected) ||
+        projected.length !== positions[sourceIndex].length ||
+        !projected.every((ordinate) => Number.isFinite(ordinate))
+      ) {
+        throw new Error("Reprojection returned an invalid coordinate.");
+      }
+      reprojected[sourceIndex] = projected;
     }
   }
   return reprojected;
