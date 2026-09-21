@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildOsmDownloadQuery,
+  defaultOverpassEndpoint,
   downloadOsmGeoJson,
   OVERPASS_DEFAULT_ENDPOINT,
+  OVERPASS_DEV_ENDPOINT,
   overpassJsonToGeoJson,
   type OverpassFetch,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
@@ -84,7 +86,7 @@ describe("OSM download query", () => {
       key: 'name"] ; node(0,0,9,9)',
       value: 'A"B\nC',
     });
-    assert.ok(query.includes('nwr["name\\\"] ; node(0,0,9,9)"="A\\\"B C"]'));
+    assert.ok(query.includes('nwr["name\\"] ; node(0,0,9,9)"="A\\"B C"]'));
   });
 
   it("rejects custom tags too long for a useful OSM value", () => {
@@ -263,6 +265,11 @@ describe("Overpass JSON conversion", () => {
 });
 
 describe("downloadOsmGeoJson", () => {
+  it("uses the same-origin relay in Vite development", () => {
+    assert.equal(defaultOverpassEndpoint(true), OVERPASS_DEV_ENDPOINT);
+    assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT);
+  });
+
   it("uses GeoLibre's CORS-enabled Overpass relay by default", async () => {
     const calls: string[] = [];
     const fetchImpl: OverpassFetch = async (url) => {

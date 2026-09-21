@@ -39,6 +39,8 @@ const AIRCRAFT_UPSTREAMS = {
   },
 } as const;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
+const OVERPASS_EDGE_URL = "https://tiles.geolibre.app/overpass";
+const OVERPASS_MAX_REQUEST_BYTES = 20_000;
 const CELESTRAK_GROUPS = new Set([
   "stations",
   "visual",
@@ -566,6 +568,58 @@ export async function proxyAdsbdbAircraftRequestGuarded(
   res.setHeader("cache-control", response.ok ? "public, max-age=86400" : "no-store");
   res.setHeader("content-length", String(body.byteLength));
   res.end(body);
+}
+
+/**
+ * Same-origin Overpass relay for Vite development.
+ *
+ * A dev server may be opened through a LAN or Tailscale hostname that the
+ * public edge relay deliberately does not trust as a browser Origin. Relay the
+ * unchanged, bounded body server-side to that fixed endpoint; the edge worker
+ * remains the authority that validates the restricted Overpass grammar.
+ */
+export async function proxyOverpassRequestGuarded(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (req.method !== "POST") {
+    res.statusCode = 405;
+    res.setHeader("allow", "POST");
+    res.end("Method Not Allowed");
+    return;
+  }
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.byteLength;
+    if (size > OVERPASS_MAX_REQUEST_BYTES) {
+      res.statusCode = 413;
+      res.end("Payload Too Large");
+      return;
+    }
+    chunks.push(bytes);
+  }
+  const body = Buffer.concat(chunks);
+  const response = await fetchWithGuard(
+    OVERPASS_EDGE_URL,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        // Do not forward a private-network Origin to the public edge gate.
+        origin: "https://web.geolibre.app",
+      },
+      body,
+    },
+    { timeoutMs: 70_000 },
+  );
+  const responseBody = await readBodyWithLimit(response);
+  res.statusCode = response.status;
+  res.setHeader("content-type", response.headers.get("content-type") ?? "application/json");
+  res.setHeader("cache-control", "no-store");
+  res.setHeader("content-length", String(responseBody.byteLength));
+  res.end(responseBody);
 }
 
 /**

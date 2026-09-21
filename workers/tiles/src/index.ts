@@ -42,6 +42,7 @@ import {
   HDX_CKAN_SEARCH_UPSTREAM,
   OPEN_SKY_STATES_UPSTREAM,
   OVERPASS_API_UPSTREAM,
+  OVERPASS_API_FALLBACK_UPSTREAM,
 } from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
@@ -604,38 +605,46 @@ async function handleOverpass(request: Request): Promise<Response> {
       headers: OVERPASS_CORS_HEADERS,
     });
   }
-  let originResponse: Response;
-  const upstreamController = new AbortController();
-  const upstreamTimeout = setTimeout(
-    () => upstreamController.abort(),
-    OVERPASS_UPSTREAM_TIMEOUT_MS,
-  );
-  try {
-    originResponse = await fetchAllowlistedUpstream(OVERPASS_API_UPSTREAM, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-        referer: "https://geolibre.app/",
-      },
-      body,
-      signal: upstreamController.signal,
-    });
-  } catch {
+  let originResponse: Response | null = null;
+  let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
+  for (const upstream of [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM]) {
+    const upstreamController = new AbortController();
+    upstreamTimeout = setTimeout(
+      () => upstreamController.abort(),
+      OVERPASS_UPSTREAM_TIMEOUT_MS / 2,
+    );
+    try {
+      originResponse = await fetchAllowlistedUpstream(upstream, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+          referer: "https://geolibre.app/",
+        },
+        body,
+        signal: upstreamController.signal,
+      });
+    } catch {
+      originResponse = null;
+    }
+    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) break;
     clearTimeout(upstreamTimeout);
+    upstreamTimeout = null;
+    await originResponse?.body?.cancel().catch(() => undefined);
+    originResponse = null;
+  }
+  if (!originResponse) {
     return new Response("Bad Gateway", {
       status: 502,
       headers: OVERPASS_CORS_HEADERS,
     });
   }
-  if (!originResponse.body) {
-    clearTimeout(upstreamTimeout);
-  }
+  if (!originResponse.body && upstreamTimeout) clearTimeout(upstreamTimeout);
   const headers = new Headers(OVERPASS_CORS_HEADERS);
   headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
   headers.set("cache-control", "no-store");
   const responseBody = originResponse.body
-    ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout)
+    ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout!)
     : null;
   return new Response(responseBody, { status: originResponse.status, headers });
 }

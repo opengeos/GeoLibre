@@ -519,10 +519,12 @@ export {
 } from "./plugins/maplibre-osm-downloader";
 export {
   buildOsmDownloadQuery,
+  defaultOverpassEndpoint,
   downloadOsmGeoJson,
   escapeOverpassString,
   overpassJsonToGeoJson,
   OVERPASS_DEFAULT_ENDPOINT,
+  OVERPASS_DEV_ENDPOINT,
   type OsmDownloadFilter,
   type OsmDownloadPreset,
   type OverpassElement,

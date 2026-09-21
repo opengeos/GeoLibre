@@ -75,6 +75,29 @@ describe("Overpass edge proxy", () => {
     await response.text();
   });
 
+  it("retries a transient primary failure on the fallback instance", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(String(input));
+      if (calls.length === 1) return new Response("Gateway Timeout", { status: 504 });
+      return new Response('{"elements":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const body =
+      "data=" + encodeURIComponent(buildOsmDownloadQuery([0, 0, 1, 1], { preset: "roads" }));
+
+    const response = await tilesWorker.fetch(request(body), {}, {} as ExecutionContext);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [
+      "https://z.overpass-api.de/api/interpreter",
+      "https://overpass.private.coffee/api/interpreter",
+    ]);
+    await response.text();
+  });
+
   it("accepts a bounded antimeridian split and rejects injected selector text", async () => {
     globalThis.fetch = async () =>
       new Response('{"elements":[]}', {

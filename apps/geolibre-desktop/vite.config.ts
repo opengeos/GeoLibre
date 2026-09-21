@@ -17,6 +17,7 @@ import {
   proxyBinaryRequestGuarded,
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
+  proxyOverpassRequestGuarded,
 } from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
@@ -516,6 +517,7 @@ const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
 const OPEN_SKY_PROXY_PATH = "/opensky/states";
 const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
+const OVERPASS_PROXY_PATH = "/overpass";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
 const DUCKDB_WORKER_SOURCE_MAP_RE =
@@ -723,6 +725,15 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("ADSBDB proxy request failed");
+        }
+      });
+      server.middlewares.use(OVERPASS_PROXY_PATH, async (req, res) => {
+        try {
+          await proxyOverpassRequestGuarded(req, res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Overpass proxy request failed");
         }
       });
       server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {
