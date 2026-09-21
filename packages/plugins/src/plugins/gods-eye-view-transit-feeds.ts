@@ -22,7 +22,6 @@ const TRANSIT_COAST_SECONDS = 45;
 interface GtfsTripDescriptor {
   tripId?: string | null;
   routeId?: string | null;
-  directionId?: number;
   oversize?: boolean;
 }
 
@@ -104,7 +103,6 @@ function readFeedHeader(tag: number, header: GtfsFeedHeader, pbf: PbfReader): vo
 function readTripDescriptor(tag: number, trip: GtfsTripDescriptor, pbf: PbfReader): void {
   if (tag === 1) trip.tripId = readBoundedString(pbf, trip);
   else if (tag === 5) trip.routeId = readBoundedString(pbf, trip);
-  else if (tag === 6) trip.directionId = pbf.readVarint();
 }
 
 function readPosition(tag: number, position: GtfsPosition, pbf: PbfReader): void {
@@ -312,7 +310,9 @@ export function transitVehiclesToCzml(
       properties,
       point: {
         pixelSize: vehicle.mode === "rail" ? 8 : 7,
-        color: { rgba: vehicle.mode === "rail" ? [217, 166, 255, 255] : [83, 226, 167, 255] },
+        color: {
+          rgba: vehicle.mode === "rail" ? [217, 166, 255, 255] : [83, 226, 167, 255],
+        },
         outlineColor: { rgba: [0, 0, 0, 190] },
         outlineWidth: 1,
       },
@@ -324,7 +324,10 @@ export function transitVehiclesToCzml(
       properties,
     });
   }
-  return { packets, attributes: { type: "FeatureCollection", features } as FeatureCollection };
+  return {
+    packets,
+    attributes: { type: "FeatureCollection", features } as FeatureCollection,
+  };
 }
 
 async function readBoundedResponse(response: Response): Promise<Uint8Array> {
