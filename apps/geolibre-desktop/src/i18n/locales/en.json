@@ -2412,6 +2412,12 @@
       "streetTraffic": "Simulated Street Traffic",
       "mappedAlpr": "Mapped ALPR Cameras",
       "cctv": "Public CCTV Cameras",
+      "cctvPopup": {
+        "liveSnapshot": "Live snapshot",
+        "provider": "Provider",
+        "attribution": "Attribution",
+        "privacy": "Privacy"
+      },
       "radio": "Radio Stations",
       "datacenters": "Datacenters",
       "dams": "Dams",

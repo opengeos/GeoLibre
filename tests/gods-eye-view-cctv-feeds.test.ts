@@ -144,7 +144,7 @@ describe("God's Eye View CCTV feeds", () => {
       fetch: fetcher,
       nowMs: 60_000,
     });
-    assert.equal(requested.length, 4, "successful catalogs are cached; a failed provider retries");
+    assert.equal(requested.length, 3, "successful and failed catalogs honor their cache TTLs");
     assert.equal(result.attributes.features.length, 1);
     assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
     assert.notEqual(

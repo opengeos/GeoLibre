@@ -2380,6 +2380,12 @@
       "streetTraffic": "सिम्युलेटेड सड़क यातायात",
       "mappedAlpr": "मानचित्रित नंबर प्लेट कैमरे",
       "cctv": "सार्वजनिक सीसीटीवी कैमरे",
+      "cctvPopup": {
+        "liveSnapshot": "लाइव छवि",
+        "provider": "प्रदाता",
+        "attribution": "श्रेय",
+        "privacy": "गोपनीयता"
+      },
       "radio": "रेडियो स्टेशन",
       "datacenters": "डेटा केंद्र",
       "dams": "बाँध",

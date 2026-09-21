@@ -2380,6 +2380,12 @@
       "streetTraffic": "Tráfego viário simulado",
       "mappedAlpr": "Câmeras ALPR mapeadas",
       "cctv": "Câmeras CCTV públicas",
+      "cctvPopup": {
+        "liveSnapshot": "Imagem ao vivo",
+        "provider": "Provedor",
+        "attribution": "Atribuição",
+        "privacy": "Privacidade"
+      },
       "radio": "Estações de rádio",
       "datacenters": "Centros de dados",
       "dams": "Barragens",

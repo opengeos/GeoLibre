@@ -2332,6 +2332,12 @@
       "streetTraffic": "模拟道路交通",
       "mappedAlpr": "已标绘车牌识别摄像头",
       "cctv": "公共闭路电视摄像头",
+      "cctvPopup": {
+        "liveSnapshot": "实时图像",
+        "provider": "提供商",
+        "attribution": "署名",
+        "privacy": "隐私"
+      },
       "radio": "广播电台",
       "datacenters": "数据中心",
       "dams": "水坝",

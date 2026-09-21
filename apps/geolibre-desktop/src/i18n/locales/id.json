@@ -2332,6 +2332,12 @@
       "streetTraffic": "Lalu Lintas Jalan Simulasi",
       "mappedAlpr": "Kamera ALPR Terpetakan",
       "cctv": "Kamera CCTV Publik",
+      "cctvPopup": {
+        "liveSnapshot": "Gambar langsung",
+        "provider": "Penyedia",
+        "attribution": "Atribusi",
+        "privacy": "Privasi"
+      },
       "radio": "Stasiun Radio",
       "datacenters": "Pusat Data",
       "dams": "Bendungan",

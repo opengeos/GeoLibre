@@ -503,10 +503,23 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
           titleField: "name",
           showFeatureId: false,
           fields: [
-            { field: "snapshot", label: "Live snapshot", kind: "image" },
-            { field: "provider", label: "Provider" },
-            { field: "attribution", label: "Attribution" },
-            { field: "privacy", label: "Privacy" },
+            {
+              field: "snapshot",
+              label: translate("panel.godsEyeView.cctvPopup.liveSnapshot", "Live snapshot"),
+              kind: "image",
+            },
+            {
+              field: "provider",
+              label: translate("panel.godsEyeView.cctvPopup.provider", "Provider"),
+            },
+            {
+              field: "attribution",
+              label: translate("panel.godsEyeView.cctvPopup.attribution", "Attribution"),
+            },
+            {
+              field: "privacy",
+              label: translate("panel.godsEyeView.cctvPopup.privacy", "Privacy"),
+            },
           ],
         }
       : { ...layer.popup, hover: true };

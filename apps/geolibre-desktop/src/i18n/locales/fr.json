@@ -2380,6 +2380,12 @@
       "streetTraffic": "Circulation routière simulée",
       "mappedAlpr": "Caméras LAPI cartographiées",
       "cctv": "Caméras de vidéosurveillance publiques",
+      "cctvPopup": {
+        "liveSnapshot": "Image en direct",
+        "provider": "Fournisseur",
+        "attribution": "Attribution",
+        "privacy": "Confidentialité"
+      },
       "radio": "Stations de radio",
       "datacenters": "Centres de données",
       "dams": "Barrages",

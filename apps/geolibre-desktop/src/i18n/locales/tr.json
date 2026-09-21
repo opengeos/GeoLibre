@@ -2380,6 +2380,12 @@
       "streetTraffic": "Simüle Edilmiş Sokak Trafiği",
       "mappedAlpr": "Haritalanmış Plaka Okuma Kameraları",
       "cctv": "Halka Açık CCTV Kameraları",
+      "cctvPopup": {
+        "liveSnapshot": "Canlı görüntü",
+        "provider": "Sağlayıcı",
+        "attribution": "Atıf",
+        "privacy": "Gizlilik"
+      },
       "radio": "Radyo İstasyonları",
       "datacenters": "Veri Merkezleri",
       "dams": "Barajlar",
