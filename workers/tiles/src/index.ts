@@ -608,12 +608,12 @@ async function handleOverpass(request: Request): Promise<Response> {
   }
   let originResponse: Response | null = null;
   let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
+  const upstreamDeadline = Date.now() + OVERPASS_UPSTREAM_TIMEOUT_MS;
   for (const upstream of [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM]) {
+    const remainingMs = upstreamDeadline - Date.now();
+    if (remainingMs <= 0) break;
     const upstreamController = new AbortController();
-    upstreamTimeout = setTimeout(
-      () => upstreamController.abort(),
-      OVERPASS_UPSTREAM_TIMEOUT_MS / 2,
-    );
+    upstreamTimeout = setTimeout(() => upstreamController.abort(), remainingMs);
     try {
       originResponse = await fetchAllowlistedUpstream(upstream, {
         method: "POST",
@@ -626,7 +626,9 @@ async function handleOverpass(request: Request): Promise<Response> {
         signal: upstreamController.signal,
       });
     } catch {
-      originResponse = null;
+      clearTimeout(upstreamTimeout);
+      upstreamTimeout = null;
+      break;
     }
     if (originResponse && originResponse.status !== 429 && originResponse.status < 500) break;
     clearTimeout(upstreamTimeout);
@@ -760,32 +762,8 @@ async function handleAircraftFeed(
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }
-  const declaredLength = Number(originResponse.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > AIRCRAFT_FEED_MAX_BODY_BYTES) {
-    await originResponse.body?.cancel().catch(() => undefined);
-    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
-  }
-  const reader = originResponse.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  if (reader) {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      byteLength += value.byteLength;
-      if (byteLength > AIRCRAFT_FEED_MAX_BODY_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
-      }
-      chunks.push(value);
-    }
-  }
-  const body = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const body = await readResponseBytesWithLimit(originResponse, AIRCRAFT_FEED_MAX_BODY_BYTES);
+  if (!body) return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   if (originResponse.ok) {
     try {
       const payload = JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown>;
@@ -802,6 +780,45 @@ async function handleAircraftFeed(
   return new Response(body, { status: originResponse.status, headers });
 }
 
+/** Read an upstream response defensively without letting stream errors escape. */
+async function readResponseBytesWithLimit(
+  response: Response,
+  limit: number,
+): Promise<Uint8Array | null> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const stream = response.body;
+  if (!stream) return new Uint8Array();
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > limit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return null;
+  }
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
 async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
@@ -812,10 +829,6 @@ async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Res
       `${ADSBDB_AIRCRAFT_UPSTREAM}${icao.toLowerCase()}`,
       {
         headers: { accept: "application/json" },
-        cf: {
-          cacheEverything: true,
-          cacheTtlByStatus: { "200-299": 86_400, "404": 3_600, "300-599": -1 },
-        },
       },
     );
   } catch {
@@ -824,17 +837,30 @@ async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Res
   const headers = new Headers(CORS_HEADERS);
   headers.set("content-type", "application/json; charset=utf-8");
   if (originResponse.status === 404) {
+    await originResponse.body?.cancel().catch(() => undefined);
     headers.set("cache-control", "public, max-age=3600");
     return new Response('{"response":{"aircraft":null}}', {
       status: 200,
       headers,
     });
   }
+  const body = await readResponseBytesWithLimit(originResponse, 1024 * 1024);
+  if (!body) return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  if (originResponse.ok) {
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(body)) as {
+        response?: { aircraft?: unknown };
+      };
+      const aircraft = payload.response?.aircraft;
+      if (!aircraft || typeof aircraft !== "object" || Array.isArray(aircraft)) {
+        throw new Error("Malformed ADSBDB response");
+      }
+    } catch {
+      return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+    }
+  }
   headers.set("cache-control", originResponse.ok ? "public, max-age=86400" : "no-store");
-  return new Response(originResponse.body, {
-    status: originResponse.status,
-    headers,
-  });
+  return new Response(body, { status: originResponse.status, headers });
 }
 
 export const tilesWorker = {

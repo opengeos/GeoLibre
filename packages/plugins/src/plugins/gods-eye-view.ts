@@ -50,6 +50,7 @@ export const GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG = "godsEyeViewMilitaryFlights";
 // decide whether they are due, so this inexpensive scheduler does not increase
 // the cadence of the slower catalogs.
 const REFRESH_TICK_MS = 5_000;
+const FAILURE_RETRY_COOLDOWN_MS = 60_000;
 const VIEWPORT_REFRESH_DEBOUNCE_MS = 400;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
@@ -266,6 +267,7 @@ interface FeedState {
   loading: boolean;
   lastUpdated: Date | null;
   failed: boolean;
+  retryAfter: number;
   layerId: string | null;
   request: AbortController | null;
   generation: number;
@@ -281,6 +283,7 @@ const feeds = Object.fromEntries(
       loading: false,
       lastUpdated: null,
       failed: false,
+      retryAfter: 0,
       layerId: null,
       request: null,
       generation: 0,
@@ -513,6 +516,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   // actions still call with `force=true`, so explicit refresh/toggle behavior
   // retains the existing supersession semantics.
   if (!force && state.loading) return;
+  if (!force && state.retryAfter > Date.now()) return;
   const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
   const bounds = appRef?.getViewBounds?.() ?? null;
   const viewportKey = descriptor.viewportKey?.(bounds) ?? null;
@@ -549,6 +553,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     upsertLayer(feed, payload, updatedAt);
     if (descriptor.ownsClockWindow) applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
+    state.retryAfter = 0;
     state.lastViewportKey = viewportKey;
     if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
@@ -558,6 +563,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     // `deactivate` — bumps the generation instead, which this already excludes.
     if (generation === state.generation) {
       state.failed = true;
+      state.retryAfter = Date.now() + FAILURE_RETRY_COOLDOWN_MS;
       console.warn(`[God's Eye View] ${feed} refresh failed`, error);
     }
   } finally {
@@ -579,6 +585,7 @@ function removeFeedLayer(feed: FeedId): void {
   state.requestedViewportKey = null;
   state.lastViewportKey = null;
   state.loading = false;
+  state.retryAfter = 0;
   const layer = state.layerId
     ? useAppStore.getState().layers.find((candidate) => candidate.id === state.layerId)
     : ownedLayer(feed);
@@ -590,6 +597,7 @@ function removeFeedLayer(feed: FeedId): void {
 function setFeedEnabled(feed: FeedId, enabled: boolean): void {
   feeds[feed].enabled = enabled;
   feeds[feed].failed = false;
+  feeds[feed].retryAfter = 0;
   savedState = { ...savedState, [feed]: enabled };
   if (enabled) void refreshFeed(feed);
   else {
@@ -797,14 +805,14 @@ function renderPanel(): void {
           dense.status === "loading"
             ? translate("panel.godsEyeView.denseLoading", "DENSE ···")
             : dense.status === "failed"
-              ? translate("panel.godsEyeView.denseFailed", "DENSE !")
-              : dense.status === "ready"
-                ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
-                    count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
-                      appRef?.getLocale?.(),
-                    ),
-                  })
-                : translate("panel.godsEyeView.dense", "DENSE");
+            ? translate("panel.godsEyeView.denseFailed", "DENSE !")
+            : dense.status === "ready"
+            ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
+                count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
+                  appRef?.getLocale?.(),
+                ),
+              })
+            : translate("panel.godsEyeView.dense", "DENSE");
         button.title =
           dense.status === "failed"
             ? translate(
@@ -840,6 +848,7 @@ function resetRuntime(): void {
   viewportRefreshTimer = null;
   removeViewportListener?.();
   removeViewportListener = null;
+  for (const feed of FEED_IDS) feeds[feed].retryAfter = 0;
   unsubscribeLocale?.();
   unsubscribeLocale = null;
   unregisterPanel?.();
@@ -940,6 +949,7 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
   viewportRefreshTimer = null;
   removeViewportListener?.();
   removeViewportListener = null;
+  for (const feed of FEED_IDS) feeds[feed].retryAfter = 0;
   if (cesiumRef) {
     savedClockAnimating = cesiumRef.clock.shouldAnimate;
     savedClockMultiplier = cesiumRef.clock.multiplier;
@@ -958,6 +968,7 @@ function deactivate(): void {
     removeFeedLayer(feed);
     feeds[feed].lastUpdated = null;
     feeds[feed].failed = false;
+    feeds[feed].retryAfter = 0;
   }
   if (cesiumRef && savedClockAnimating !== null) {
     cesiumRef.clock.shouldAnimate = savedClockAnimating;

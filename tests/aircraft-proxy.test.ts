@@ -96,6 +96,27 @@ describe("aircraft edge proxies", () => {
     assert.equal(cancelled, true);
   });
 
+  it("turns an aircraft response stream failure into a controlled 502", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.error(new Error("upstream stream failed"));
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opensky/states", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), null);
+  });
+
   it("normalizes an unknown ADSBDB aircraft into a cacheable empty result", async () => {
     let requested = "";
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -113,5 +134,46 @@ describe("aircraft edge proxies", () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "public, max-age=3600");
     assert.deepEqual(await response.json(), { response: { aircraft: null } });
+  });
+
+  it("rejects malformed successful ADSBDB responses without caching them", async () => {
+    let init: RequestInit | undefined;
+    globalThis.fetch = (async (_input: RequestInfo | URL, requestInit?: RequestInit) => {
+      init = requestInit;
+      return new Response('{"response":{"aircraft":null}}', { status: 200 });
+    }) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/adsbdb/aircraft/abc123", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), null);
+    assert.equal((init as RequestInit & { cf?: unknown }).cf, undefined);
+  });
+
+  it("rejects oversized ADSBDB responses before reading their body", async () => {
+    let cancelled = false;
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 200, headers: { "content-length": String(1024 * 1024 + 1) } },
+      )) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/adsbdb/aircraft/abc123", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), null);
+    assert.equal(cancelled, true);
   });
 });
