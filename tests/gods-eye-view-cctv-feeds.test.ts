@@ -52,7 +52,10 @@ const fintraffic = {
 describe("God's Eye View CCTV feeds", () => {
   it("normalizes pinned TfL, Calgary, and Fintraffic frame sources", () => {
     assert.equal(normalizeTflCameras(tfl)[0].id, "tfl-00001.00001");
-    assert.equal(normalizeCalgaryCameras(calgary, true)[0].snapshotUrl, "/cctv/calgary/86.jpg");
+    assert.equal(
+      normalizeCalgaryCameras(calgary, true)[0].snapshotUrl,
+      "http://localhost/cctv/calgary/86.jpg",
+    );
     assert.equal(
       normalizeCalgaryCameras(calgary, false)[0].snapshotUrl,
       "https://tiles.geolibre.app/cctv/calgary/86.jpg",

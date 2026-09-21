@@ -47,6 +47,29 @@ describe("Calgary CCTV edge proxy", () => {
     assert.equal(response.status, 200);
   });
 
+  it("accepts a referrer-stripped browser image request, but not a generic headerless fetch", async () => {
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      })) as typeof fetch;
+    const imageResponse = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg", {
+        headers: { "sec-fetch-dest": "image", "sec-fetch-mode": "no-cors" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(imageResponse.status, 200);
+
+    const headerlessResponse = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg"),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(headerlessResponse.status, 403);
+  });
+
   it("rejects untrusted origins, malformed ids, non-images, and oversized frames", async () => {
     let fetched = false;
     globalThis.fetch = (async () => {

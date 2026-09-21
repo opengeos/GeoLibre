@@ -125,7 +125,9 @@ export function normalizeCalgaryCameras(payload: unknown, dev = isViteDevServer(
       frameId = null;
     }
     if (!validCoordinate(longitude, latitude) || !frameId) continue;
-    const base = dev ? CALGARY_FRAME_DEV_BASE : CALGARY_FRAME_EDGE_BASE;
+    const base = dev
+      ? `${globalThis.location?.origin ?? "http://localhost"}${CALGARY_FRAME_DEV_BASE}`
+      : CALGARY_FRAME_EDGE_BASE;
     cameras.push({
       id: `calgary-${frameId}`,
       name:
