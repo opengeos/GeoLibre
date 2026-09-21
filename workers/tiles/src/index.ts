@@ -132,9 +132,27 @@ const AUSTIN_CCTV_PATH = /^\/cctv\/austin\/(\d{1,4})\.jpg$/;
 const ONTARIO_CCTV_PATH = /^\/cctv\/ontario\/([A-Za-z0-9_.-]{1,64})$/;
 const NSW_CCTV_PATH = /^\/cctv\/nsw\/((?:[A-Za-z0-9_.-]|%[0-9A-Fa-f]{2}){1,300})$/;
 const CALTRANS_CCTV_PATH = /^\/cctv\/caltrans\/(3|4|7|11)\/([a-z0-9-]{1,100})\.jpg$/i;
-const CCTV_CATALOG_PATH = /^\/cctv\/catalog\/(ontario|drivebc|nsw|caltrans-(?:3|4|7|11))\.json$/;
-/** The catalogs this worker proxies. Kept in step with {@link CCTV_CATALOG_PATH}. */
-type CctvCatalogProvider = "ontario" | "drivebc" | "nsw" | `caltrans-${3 | 4 | 7 | 11}`;
+/**
+ * The catalogs this worker proxies. The one authoritative list: the route
+ * matcher and the provider type are both derived from it, so a new provider
+ * cannot reach {@link handleCctvCatalog} without an upstream declared for it.
+ */
+const CCTV_CATALOG_PROVIDERS = [
+  "ontario",
+  "drivebc",
+  "nsw",
+  "caltrans-3",
+  "caltrans-4",
+  "caltrans-7",
+  "caltrans-11",
+] as const;
+type CctvCatalogProvider = (typeof CCTV_CATALOG_PROVIDERS)[number];
+// Built rather than written out, so it cannot drift from the list above. Every
+// entry is a literal slug with no regex metacharacters, so no escaping is
+// needed, and each alternative is anchored by the `\.json$` that follows.
+const CCTV_CATALOG_PATH = new RegExp(
+  `^/cctv/catalog/(${CCTV_CATALOG_PROVIDERS.join("|")})\\.json$`,
+);
 const CCTV_FRAME_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const CCTV_UPSTREAM_TIMEOUT_MS = 30_000;
 const CCTV_CATALOG_MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -1375,6 +1393,8 @@ export const tilesWorker = {
 
     const cctvCatalogMatch = CCTV_CATALOG_PATH.exec(url.pathname);
     if (cctvCatalogMatch) {
+      // Sound because the matcher's alternatives *are* CCTV_CATALOG_PROVIDERS;
+      // a RegExp match is just opaque to the type system.
       return handleCctvCatalog(request, ctx, cctvCatalogMatch[1] as CctvCatalogProvider);
     }
 
