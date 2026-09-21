@@ -131,6 +131,19 @@ describe("God's Eye View CCTV feeds", () => {
       normalizeNswCameras(nsw, true)[0].snapshotUrl,
       "http://localhost/cctv/nsw/5_ways_%26_miranda.jpeg",
     );
+    const fallback = normalizeNswCameras({
+      features: [
+        {
+          ...nsw.features[0],
+          properties: {
+            ...nsw.features[0].properties,
+            view: "x".repeat(141),
+            title: "malformed\ntitle",
+          },
+        },
+      ],
+    })[0];
+    assert.match(fallback.name, /^Live Traffic NSW Camera /);
   });
 
   it("rejects off-host and inactive camera records", () => {

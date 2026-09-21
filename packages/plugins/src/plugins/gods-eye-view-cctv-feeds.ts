@@ -364,7 +364,12 @@ export function normalizeNswCameras(payload: unknown, dev = isViteDevServer()): 
     if (!frameId) continue;
     const view = text(properties.view);
     const title = text(properties.title);
-    const name = view && view.length <= 140 && !/[\r\n]/.test(view) ? view : title;
+    const name =
+      view && view.length <= 140 && !/[\r\n]/.test(view)
+        ? view
+        : title && title.length <= 140 && !/[\r\n]/.test(title)
+          ? title
+          : null;
     const frameBase = dev
       ? `${globalThis.location?.origin ?? "http://localhost"}${NSW_FRAME_DEV_BASE}`
       : NSW_FRAME_EDGE_BASE;
