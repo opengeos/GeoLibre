@@ -150,11 +150,13 @@ function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** Entur operator codes known to run rail. Best effort — extend as needed. */
+const ENTUR_RAIL_OPERATOR_CODES = new Set(["VYG", "GJB", "SJN", "FLT", "GOA", "NSB", "VYT", "FLB"]);
+
 function enturMode(routeId: string | null): TransitVehicle["mode"] {
   // GTFS-Realtime carries no route type. Entur codes identify these known rail
   // operators, but metro, tram, ferry, and unknown operators use bus styling.
-  const railCodes = new Set(["VYG", "GJB", "SJN", "FLT", "GOA", "NSB", "VYT", "FLB"]);
-  return routeId && railCodes.has(routeId.split(":")[0]) ? "rail" : "bus";
+  return routeId && ENTUR_RAIL_OPERATOR_CODES.has(routeId.split(":")[0]) ? "rail" : "bus";
 }
 
 function normalizeVehicleEntity(entity: GtfsFeedEntity): TransitVehicle | null {
