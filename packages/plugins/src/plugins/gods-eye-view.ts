@@ -43,7 +43,6 @@ interface FeedFetchContext {
 }
 
 interface FeedDescriptor {
-  id: string;
   group: FeedGroup;
   label: readonly [key: string, fallback: string];
   attribution: string;
@@ -66,7 +65,6 @@ interface FeedDescriptor {
  */
 const FEED_DESCRIPTORS = {
   satellites: {
-    id: "satellites",
     group: "movement",
     label: ["panel.godsEyeView.satellites", "Satellites"],
     attribution: "Satellites: CelesTrak (celestrak.org), Dr. T.S. Kelso",
@@ -92,7 +90,6 @@ const FEED_DESCRIPTORS = {
     },
   },
   osmInfrastructure: {
-    id: "osmInfrastructure",
     group: "infrastructure",
     label: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
     attribution: "OSM infrastructure: © OpenStreetMap contributors, ODbL 1.0",
@@ -105,7 +102,6 @@ const FEED_DESCRIPTORS = {
     fetch: ({ bounds, signal }) => fetchOsmInfrastructureCzml(bounds, { signal }),
   },
   datacenters: {
-    id: "datacenters",
     group: "infrastructure",
     label: ["panel.godsEyeView.datacenters", "Datacenters"],
     attribution: "Datacenters: © OpenStreetMap contributors, ODbL 1.0",
@@ -117,7 +113,6 @@ const FEED_DESCRIPTORS = {
     fetch: ({ signal }) => fetchDatacentersCzml({ signal }),
   },
   cables: {
-    id: "cables",
     group: "infrastructure",
     label: ["panel.godsEyeView.cables", "Submarine Cables"],
     attribution: "Submarine cables: © TeleGeography, submarinecablemap.com, CC BY-NC-SA 3.0",
@@ -129,7 +124,6 @@ const FEED_DESCRIPTORS = {
     fetch: ({ signal }) => fetchSubmarineCablesCzml({ signal }),
   },
   dams: {
-    id: "dams",
     group: "infrastructure",
     label: ["panel.godsEyeView.dams", "Dams"],
     attribution: "Dams: © OpenStreetMap contributors, ODbL 1.0; Open Infrastructure Map",
@@ -141,7 +135,6 @@ const FEED_DESCRIPTORS = {
     fetch: ({ signal }) => fetchDamsCzml({ signal }),
   },
   earthquakes: {
-    id: "earthquakes",
     group: "events",
     label: ["panel.godsEyeView.earthquakes", "Earthquakes"],
     attribution: "Earthquakes: Data courtesy of the U.S. Geological Survey",
@@ -157,7 +150,6 @@ const FEED_DESCRIPTORS = {
     },
   },
   radio: {
-    id: "radio",
     group: "utilities",
     label: ["panel.godsEyeView.radio", "Radio Stations"],
     attribution: "Radio stations: Radio Browser (radio-browser.info), public domain",
