@@ -59,7 +59,9 @@ describe("Calgary CCTV edge proxy", () => {
         new ReadableStream({
           pull(controller) {
             startedReading();
-            signal?.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+            signal?.addEventListener("abort", () => controller.error(signal.reason), {
+              once: true,
+            });
           },
         }),
         { status: 200, headers: { "content-type": "image/jpeg" } },
