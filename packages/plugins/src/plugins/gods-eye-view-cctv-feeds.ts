@@ -237,7 +237,7 @@ export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer(
         const description = text(view.Description ?? view.description) ?? "";
         try {
           const parsed = new URL(source ?? "");
-          const match = parsed.pathname.match(/^\/map\/Cctv\/([A-Za-z0-9_.-]+)$/);
+          const match = parsed.pathname.match(/^\/map\/Cctv\/([A-Za-z0-9_.-]{1,64})$/);
           const host = parsed.hostname.toLowerCase();
           if (parsed.protocol !== "https:" || host !== "511on.ca" || !match) {
             return null;
