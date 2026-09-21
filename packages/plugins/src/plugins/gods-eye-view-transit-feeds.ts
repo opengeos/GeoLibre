@@ -578,10 +578,12 @@ export async function fetchTransitCzml(
     );
     throw firstFailure?.reason ?? new Error("Every transit provider failed");
   }
-  // Take whole providers, in registry order, while the merged budget lasts. The
-  // first provider is always kept: a single feed cannot exceed the per-feed cap,
-  // so it always fits, and an empty result here would look like a healthy feed
-  // with no vehicles.
+  // Take whole providers, never a partial one, and first-fit rather than
+  // stopping at the first that does not fit: scanning on lets a small provider
+  // still make it in behind a skipped large one, which spends more of the
+  // budget on live vehicles. The first provider is always kept — a single feed
+  // cannot exceed the per-feed cap, so it always fits, and an empty result here
+  // would be indistinguishable from a healthy feed with no vehicles.
   const merged: GodsEyeViewFeedPayload[] = [];
   let vehicles = 0;
   for (const result of successes) {
