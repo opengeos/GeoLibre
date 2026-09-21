@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { DECK_CANVAS_CLASS } from "maplibre-gl-lidar";
 import {
   DEFAULT_EFFECTS_SETTINGS,
   HALO_EXTENT_MAX,
@@ -101,8 +102,10 @@ describe("effectsOverlayCss", () => {
     // The deck.gl canvas the LiDAR plugin parks after the map canvas shares the
     // canvas's z-index, so DOM order puts it above the basemap; markers (and
     // the control container, which matches them) stay above the points. See
-    // opengeos/GeoLibre#2530.
-    const lidarCanvas = zIndexFor("maplibre-gl-lidar-canvas");
+    // opengeos/GeoLibre#2530. The selector is read from the class the package
+    // itself exports, so a rename upstream fails here instead of silently
+    // un-fixing the stacking.
+    const lidarCanvas = zIndexFor(DECK_CANVAS_CLASS);
     const marker = zIndexFor("maplibregl-marker");
     assert.ok(lidarCanvas < marker, `${lidarCanvas} should be below ${marker}`);
   });
