@@ -178,6 +178,9 @@ describe("God's Eye View transit feed", () => {
     const now = new Date("2026-09-20T12:00:10Z");
     const payload = transitVehiclesToCzml([bus], now);
     assert.equal(payload.packets.length, 2);
+    // The feed must not win CZML clock election: a refresh reuses the layer id,
+    // so a document clock here would clamp the globe to one coast window.
+    assert.equal(payload.packets[0].clock, undefined);
     assert.equal(payload.attributes.features.length, 1);
     assert.equal(payload.attributes.features[0].properties?.operator, "Entur");
     const samples = (payload.packets[1].position as { cartographicDegrees: number[] })

@@ -162,6 +162,9 @@ function normalizeVehicleEntity(entity: GtfsFeedEntity): TransitVehicle | null {
   const vehicle = entity.vehicle;
   const position = vehicle?.position;
   if (!vehicle || !position) return null;
+  // One oversize string drops the whole record rather than just that field: a
+  // 256-character id or label means the payload is malformed or hostile, and
+  // the rest of it has not earned any more trust than the part that failed.
   if (entity.oversize || vehicle.oversize || vehicle.trip?.oversize || vehicle.vehicle?.oversize) {
     return null;
   }
@@ -263,20 +266,12 @@ export function transitVehiclesToCzml(
   now: Date,
 ): GodsEyeViewFeedPayload {
   const stop = new Date(now.getTime() + TRANSIT_COAST_SECONDS * 1000);
-  const packets: CzmlPacket[] = [
-    {
-      id: "document",
-      name: "Live Transit",
-      version: "1.0",
-      clock: {
-        interval: `${now.toISOString()}/${stop.toISOString()}`,
-        currentTime: now.toISOString(),
-        multiplier: 1,
-        range: "CLAMPED",
-        step: "SYSTEM_CLOCK_MULTIPLIER",
-      },
-    },
-  ];
+  // No document `clock`: the feed does not set `ownsClockWindow`, and the CZML
+  // synchronizer elects the first loaded document that carries one. A refresh
+  // reuses this layer id, so the elected owner never changes and the clock
+  // would stay clamped to the first 45-second coast window while later
+  // snapshots — whose entities only become available after it — went unseen.
+  const packets: CzmlPacket[] = [{ id: "document", name: "Live Transit", version: "1.0" }];
   const features: Feature[] = [];
   for (const vehicle of vehicles) {
     const ageSeconds = vehicle.observedAtMs
