@@ -1955,6 +1955,12 @@ PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
     # shared Time Slider layers impossible to reconstruct. The retained value
     # is still recursively credential-scrubbed by the caller.
     "maplibre-gl-time-slider": None,
+    # Feed toggles (one boolean per feed) plus a numeric clock speed — no URLs,
+    # no keys, nothing user-authored. Listed as a whole blob rather than by key
+    # because the feed set grows with every new feed; an enumerated list would
+    # silently start counting each new toggle as a credential. The retained
+    # value is still recursively credential-scrubbed by the caller.
+    "gods-eye-view": None,
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in

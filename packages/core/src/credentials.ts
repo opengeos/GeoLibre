@@ -57,6 +57,12 @@ export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly strin
   // the COG/mosaic/tiles for a recipient. The retained blob is still passed
   // through redactConfigurationValue below, including every source URL.
   "maplibre-gl-time-slider": null,
+  // Feed toggles (one boolean per feed) plus a numeric clock speed — no URLs,
+  // no keys, nothing user-authored. Listed as a whole blob rather than by key
+  // because the feed set grows with every new feed; an enumerated list would
+  // silently start counting each new toggle as a credential, which is the bug
+  // this entry fixes. Still swept by redactConfigurationValue below.
+  "gods-eye-view": null,
 };
 
 export interface CredentialRedactionResult {

@@ -165,6 +165,36 @@ describe("project credential redaction", () => {
     assert.ok(!redactedPaths.includes("plugins.settings"));
   });
 
+  it("does not count God's Eye View feed toggles as credentials", () => {
+    // Regression: the plugin's blob is booleans plus a numeric speed, but it was
+    // absent from the allowlist, so every toggle was counted as a credential and
+    // the "Strip credentials?" prompt fired on saving any project, blank ones
+    // included. The count is what drives that prompt, so assert on it directly.
+    const plugins = {
+      manifestUrls: [],
+      activePluginIds: ["gods-eye-view"],
+      settings: {
+        "gods-eye-view": { earthquakes: true, satellites: true, cctv: false, speed: 1 },
+      },
+    };
+    // Measured as a delta against the same project without the blob: the count
+    // is what the prompt shows, and adding feed toggles must not move it.
+    const before = redactProjectCredentials(createEmptyProject("Feed toggles")).redactedCount;
+    const original = createEmptyProject("Feed toggles");
+    original.plugins = plugins;
+    const { project, redactedCount, redactedPaths } = redactProjectCredentials(original);
+
+    assert.equal(redactedCount, before);
+    assert.ok(!redactedPaths.includes("plugins.settings"));
+    // The toggles survive, so a shared project reopens with the same feeds on.
+    assert.deepEqual(project.plugins!.settings["gods-eye-view"], {
+      earthquakes: true,
+      satellites: true,
+      cctv: false,
+      speed: 1,
+    });
+  });
+
   it("provides a stable schema-level credential decision registry", () => {
     assert.deepEqual(PROJECT_CREDENTIAL_FIELDS.preferences, [
       "environmentVariables",
