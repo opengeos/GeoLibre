@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COPC_FIXTURE_URL, serveCopcFixture, waitForMap } from "./helpers";
+import { COPC_URL, waitForMap } from "./helpers";
 
 /**
  * Loading a point cloud flies the camera to its extent (maplibre-gl-lidar's
@@ -14,7 +14,6 @@ import { COPC_FIXTURE_URL, serveCopcFixture, waitForMap } from "./helpers";
  * camera one.
  */
 test("flies to the point cloud on the first load of a session", async ({ page }) => {
-  await serveCopcFixture(page);
   await waitForMap(page);
 
   const status = page.locator("footer");
@@ -24,7 +23,7 @@ test("flies to the point cloud on the first load of a session", async ({ page })
   await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
   await page
     .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
-    .fill(COPC_FIXTURE_URL);
+    .fill(COPC_URL);
   await page.getByRole("button", { name: "Load", exact: true }).click();
   await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });
 
