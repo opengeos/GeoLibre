@@ -5,6 +5,8 @@ import {
   resolvePopupTitle,
   resolvePopupBody,
   resolvePopupRows,
+  resolvePopupImageHeight,
+  resolvePopupMaxWidth,
   resolveConfiguredPopupTitle,
   type FieldVisibility,
   type LayerPopupConfig,
@@ -189,13 +191,62 @@ function renderPopupValue(cell: HTMLElement, row: PopupRow): void {
       image.src = row.value;
       image.alt = row.field;
       image.loading = "lazy";
-      image.className = "max-h-40 max-w-full rounded";
+      image.className = "geolibre-popup-inline-image rounded";
       cell.appendChild(image);
       return;
     }
   }
 
   cell.textContent = row.text;
+}
+
+/**
+ * MapLibre's own `maxWidth` for an Identify popup, which caps the shell the
+ * root element sits in. It has to clear the author's width or the shell would
+ * clip what the root was just told it may use; the 40px is the popup content's
+ * padding plus its border, the same slack the 560px default leaves over the
+ * root's 520px cap.
+ */
+export const IDENTIFY_POPUP_SHELL_PADDING = 40;
+
+/** The `maxWidth` option for a MapLibre Identify popup showing this config. */
+export function identifyPopupShellMaxWidth(popup: LayerPopupConfig | undefined): string {
+  const maxWidth = resolvePopupMaxWidth(popup);
+  return maxWidth === undefined ? "560px" : `${maxWidth + IDENTIFY_POPUP_SHELL_PADDING}px`;
+}
+
+/**
+ * Apply an author's {@link LayerPopupConfig.maxWidth} to a popup root.
+ *
+ * Written as an inline style so it beats both the Tailwind cap on the element
+ * and the wider `:has(.geolibre-popup-image)` rule in the app stylesheet, and
+ * kept inside `min()` with the viewport so an oversized setting still leaves
+ * the map visible on a phone. `width` rides along because the image rule
+ * otherwise pins the popup to 420px and the new cap would never be reached.
+ */
+export function applyPopupWidth(root: HTMLElement, popup: LayerPopupConfig | undefined): void {
+  const maxWidth = resolvePopupMaxWidth(popup);
+  if (maxWidth === undefined) return;
+  const cap = `min(${maxWidth}px, calc(100vw - 48px))`;
+  root.style.maxWidth = cap;
+  root.style.width = cap;
+}
+
+/**
+ * Publish an author's {@link LayerPopupConfig.imageHeight} to the stylesheet.
+ *
+ * The cap belongs to `.geolibre-popup-image`, which the rows element does not
+ * own, so this sets the custom property the rule reads rather than styling the
+ * images directly — the fullscreen-image popup variant can then still drop the
+ * cap entirely, as it always has.
+ */
+export function applyPopupImageHeight(
+  rows: HTMLElement,
+  popup: LayerPopupConfig | undefined,
+): void {
+  const height = resolvePopupImageHeight(popup);
+  if (height === undefined) return;
+  rows.style.setProperty("--geolibre-popup-image-height", `${height}px`);
 }
 
 export function createIdentifyPopupElement(
@@ -209,6 +260,7 @@ export function createIdentifyPopupElement(
   const root = document.createElement("div");
   root.className =
     "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
+  applyPopupWidth(root, popup);
 
   const title = document.createElement("div");
   // Leave room for MapLibre's close button, which sits in the same corner the
@@ -238,6 +290,7 @@ export function createIdentifyPopupRows(
 
   const rows = document.createElement("div");
   rows.className = scrollable ? "geolibre-identify-popup-rows pe-2" : "pe-2";
+  applyPopupImageHeight(rows, popup);
 
   // An author-supplied body expression replaces the whole body outright — the
   // field table AND the synthetic id row. The point of it is a sentence

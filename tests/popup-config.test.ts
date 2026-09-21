@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
+  POPUP_IMAGE_HEIGHT_RANGE,
+  POPUP_MAX_WIDTH_RANGE,
   createEmptyProject,
   formatPopupValue,
   isPopupClickEnabled,
@@ -11,6 +13,8 @@ import {
   popupFieldLabel,
   resolveConfiguredPopupTitle,
   resolvePopupBody,
+  resolvePopupImageHeight,
+  resolvePopupMaxWidth,
   resolvePopupRows,
   resolvePopupTitle,
   parseProject,
@@ -513,6 +517,46 @@ describe("untrusted configuration", () => {
       rows.map((row) => [row.field, row.label]),
       [["name", "name"]],
     );
+  });
+});
+
+describe("popup sizing", () => {
+  it("keeps the renderer's default when nothing is configured", () => {
+    assert.equal(resolvePopupMaxWidth(undefined), undefined);
+    assert.equal(resolvePopupMaxWidth({}), undefined);
+    assert.equal(resolvePopupImageHeight(undefined), undefined);
+    assert.equal(resolvePopupImageHeight({}), undefined);
+  });
+
+  it("passes a size inside the range through", () => {
+    assert.equal(resolvePopupMaxWidth({ maxWidth: 480 }), 480);
+    assert.equal(resolvePopupImageHeight({ imageHeight: 320 }), 320);
+  });
+
+  it("clamps rather than dropping a size outside the range", () => {
+    assert.equal(resolvePopupMaxWidth({ maxWidth: 4000 }), POPUP_MAX_WIDTH_RANGE.max);
+    assert.equal(resolvePopupMaxWidth({ maxWidth: 10 }), POPUP_MAX_WIDTH_RANGE.min);
+    assert.equal(resolvePopupImageHeight({ imageHeight: 9000 }), POPUP_IMAGE_HEIGHT_RANGE.max);
+    assert.equal(resolvePopupImageHeight({ imageHeight: 1 }), POPUP_IMAGE_HEIGHT_RANGE.min);
+  });
+
+  it("rounds a fractional size to a whole pixel", () => {
+    assert.equal(resolvePopupMaxWidth({ maxWidth: 480.6 }), 481);
+    assert.equal(resolvePopupImageHeight({ imageHeight: 320.4 }), 320);
+  });
+
+  it("reads a size a hand-edited project wrote as a string", () => {
+    const popup = { maxWidth: "480", imageHeight: " 320 " } as unknown as LayerPopupConfig;
+    assert.equal(resolvePopupMaxWidth(popup), 480);
+    assert.equal(resolvePopupImageHeight(popup), 320);
+  });
+
+  it("treats an unusable size as unset rather than throwing", () => {
+    for (const value of [null, undefined, "", "wide", NaN, Infinity, 0, -10, {}, []]) {
+      const popup = { maxWidth: value, imageHeight: value } as unknown as LayerPopupConfig;
+      assert.equal(resolvePopupMaxWidth(popup), undefined, `maxWidth ${String(value)}`);
+      assert.equal(resolvePopupImageHeight(popup), undefined, `imageHeight ${String(value)}`);
+    }
   });
 });
 

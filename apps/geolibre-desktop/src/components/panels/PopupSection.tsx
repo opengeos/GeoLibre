@@ -1,4 +1,6 @@
 import {
+  POPUP_IMAGE_HEIGHT_RANGE,
+  POPUP_MAX_WIDTH_RANGE,
   popupFieldLabel,
   useAppStore,
   validateMapExpression,
@@ -71,6 +73,68 @@ function decimalsFromInput(raw: string): number | undefined {
   const parsed = Number(raw.trim());
   if (raw.trim() === "" || !Number.isFinite(parsed)) return undefined;
   return Math.max(0, Math.min(20, Math.round(parsed)));
+}
+
+/**
+ * Coerce a pixel-size entry to what the renderer will honor, for the same
+ * reason as {@link decimalsFromInput}: `resolvePopupMaxWidth` /
+ * `resolvePopupImageHeight` clamp and round, so storing the raw entry would
+ * let the control read 2000 while the popup drew 1200. An empty or unusable
+ * entry clears the setting back to the default.
+ */
+function pixelSizeFromInput(
+  raw: string,
+  range: { readonly min: number; readonly max: number },
+): number | undefined {
+  const parsed = Number(raw.trim());
+  if (raw.trim() === "" || !Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.round(Math.max(range.min, Math.min(range.max, parsed)));
+}
+
+/**
+ * A pixel-size entry that only clamps once the author is done typing.
+ *
+ * Both sizes have a floor well above one digit (a 288px minimum width), so
+ * clamping on every keystroke the way the decimals control does would rewrite
+ * "4" to "288" mid-entry and the next digit would land on the clamp rather
+ * than on what was typed. The draft holds the raw text until blur or Enter.
+ */
+function PixelSizeInput({
+  id,
+  value,
+  range,
+  placeholder,
+  onCommit,
+}: {
+  id: string;
+  value: number | undefined;
+  range: { readonly min: number; readonly max: number };
+  placeholder: string;
+  onCommit: (size: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const size = pixelSizeFromInput(draft, range);
+    setDraft(null);
+    if (size !== value) onCommit(size);
+  };
+  return (
+    <Input
+      id={id}
+      type="number"
+      min={range.min}
+      max={range.max}
+      step={10}
+      placeholder={placeholder}
+      value={draft ?? value ?? ""}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
+  );
 }
 
 /**
@@ -356,6 +420,32 @@ export function PopupSection({ layer }: PopupSectionProps) {
           {t("style.popup.bodyReplacesRows")}
         </p>
       ) : null}
+
+      {/* Size. Both are plain caps on the rendered popup, so an empty entry is
+          the default rather than a mode: clearing either restores it. */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`popup-max-width-${layer.id}`}>{t("style.popup.maxWidth")}</Label>
+          <PixelSizeInput
+            id={`popup-max-width-${layer.id}`}
+            value={popup?.maxWidth}
+            range={POPUP_MAX_WIDTH_RANGE}
+            placeholder={t("style.popup.maxWidthPlaceholder")}
+            onCommit={(maxWidth) => patchPopup({ maxWidth })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`popup-image-height-${layer.id}`}>{t("style.popup.imageHeight")}</Label>
+          <PixelSizeInput
+            id={`popup-image-height-${layer.id}`}
+            value={popup?.imageHeight}
+            range={POPUP_IMAGE_HEIGHT_RANGE}
+            placeholder={t("style.popup.imageHeightPlaceholder")}
+            onCommit={(imageHeight) => patchPopup({ imageHeight })}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("style.popup.sizeHint")}</p>
 
       <div className="space-y-2">
         <Label>{t("style.popup.fields")}</Label>

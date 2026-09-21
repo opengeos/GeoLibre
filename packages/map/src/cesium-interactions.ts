@@ -2,6 +2,7 @@ import {
   IDENTIFY_ALL_LAYERS_ID,
   isPopupClickEnabled,
   isPopupHoverEnabled,
+  resolvePopupMaxWidth,
   useAppStore,
 } from "@geolibre/core";
 import type { Cartesian2, CesiumWidget } from "@cesium/engine";
@@ -51,16 +52,28 @@ export function installCesiumInteractions(
     popup?.remove();
     popup = null;
   };
-  const place = (content: HTMLElement, point: Cartesian2, isHover: boolean) => {
+  const place = (
+    content: HTMLElement,
+    point: Cartesian2,
+    isHover: boolean,
+    configuredMaxWidth?: number,
+  ) => {
     const hasImage = !isHover && content.querySelector(".geolibre-popup-image") !== null;
     const box = document.createElement("div");
     box.className = isHover ? "geolibre-hover-tooltip" : "geolibre-identify-popup";
     if (hasImage) box.classList.add("geolibre-identify-image-popup");
+    // The globe's popup is this box, not a MapLibre shell, so an author's
+    // `maxWidth` has to widen it here too — the root inside it can only ever
+    // use the width the box gives it.
+    const configuredWidth =
+      configuredMaxWidth === undefined
+        ? undefined
+        : `min(${configuredMaxWidth}px, calc(100% - 24px))`;
     Object.assign(box.style, {
       position: "absolute",
       zIndex: "10",
-      width: hasImage ? "min(420px, calc(100% - 24px))" : "auto",
-      maxWidth: hasImage ? "min(900px, calc(100% - 24px))" : "min(280px, 80%)",
+      width: configuredWidth ?? (hasImage ? "min(420px, calc(100% - 24px))" : "auto"),
+      maxWidth: configuredWidth ?? (hasImage ? "min(900px, calc(100% - 24px))" : "min(280px, 80%)"),
       maxHeight: hasImage ? "calc(100% - 24px)" : "60%",
       overflow: "auto",
       resize: hasImage ? "both" : "none",
@@ -162,9 +175,14 @@ export function installCesiumInteractions(
     );
     const content = document.createElement("div");
     let selected = false;
+    // Several layers can answer one click on the globe, so the box takes the
+    // widest width any of them asked for.
+    let widest: number | undefined;
     for (const hit of hits) {
       const layer = state.layers.find((item) => item.id === hit.layerId);
       if (!layer || !isPopupClickEnabled(layer.popup)) continue;
+      const configured = resolvePopupMaxWidth(layer.popup);
+      if (configured !== undefined) widest = Math.max(widest ?? configured, configured);
       content.append(
         createIdentifyPopupElement(layer.name, hit.properties, hit.featureId ?? undefined, {
           popup: layer.popup,
@@ -182,7 +200,7 @@ export function installCesiumInteractions(
       }
       if (target !== IDENTIFY_ALL_LAYERS_ID) break;
     }
-    if (content.childElementCount) popup = place(content, event.position, false);
+    if (content.childElementCount) popup = place(content, event.position, false, widest);
     else state.selectFeature(null);
   }, C.ScreenSpaceEventType.LEFT_CLICK);
   const selection = () => {

@@ -2407,11 +2407,15 @@ body,
 /* Cesium supplies its own absolutely positioned popup shell. Make that the
    sole resize surface and let its contents track both dimensions, avoiding a
    second nested handle that only resizes the child. */
+/* `!important` because the popup root may carry an inline width from an
+   author's `LayerPopupConfig.maxWidth`; here the resizable shell owns the
+   width and the root has to fill it, or the drag handle would resize a box
+   whose contents stayed pinned. */
 .geolibre-identify-image-popup > div,
 .geolibre-identify-image-popup .geolibre-identify-popup-root {
-  width: 100%;
+  width: 100% !important;
   height: 100%;
-  max-width: none;
+  max-width: none !important;
   max-height: none;
 }
 
@@ -2448,13 +2452,24 @@ body,
   cursor: zoom-in;
 }
 
+/* `--geolibre-popup-image-height` is the per-layer override a popup config can
+   publish (LayerPopupConfig.imageHeight, applied by applyPopupImageHeight in
+   @geolibre/map); with none set the thumbnail keeps the height it always had. */
 .geolibre-popup-image {
   display: block;
   width: 100%;
   height: 100%;
-  max-height: min(50vh, 420px);
+  max-height: var(--geolibre-popup-image-height, min(50vh, 420px));
   object-fit: contain;
   background: hsl(var(--muted));
+}
+
+/* The thumbnail an `auto` field draws for an inline base64 image. Its own
+   default is smaller than a configured `image` field's, because it shows up
+   unasked for in geotagged-photo and field-collection layers. */
+.geolibre-popup-inline-image {
+  max-height: var(--geolibre-popup-image-height, 10rem);
+  max-width: 100%;
 }
 
 .geolibre-identify-image-popup .geolibre-popup-image {

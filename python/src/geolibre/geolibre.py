@@ -1111,6 +1111,8 @@ class Map(anywidget.AnyWidget):
         title_expression: str | None = None,
         body_expression: str | None = None,
         show_feature_id: bool | None = None,
+        max_width: int | None = None,
+        image_height: int | None = None,
         tooltip: Any = None,
         merge: bool = False,
     ) -> dict[str, Any]:
@@ -1132,6 +1134,12 @@ class Map(anywidget.AnyWidget):
             title_expression: MapLibre expression source producing the title.
             body_expression: MapLibre expression source producing the body text.
             show_feature_id: ``False`` drops the synthetic ``id`` row.
+            max_width: Widest the click popup may draw, in CSS pixels (288 to
+                1200). The viewport still caps it.
+            image_height: Tallest an ``"image"`` field's thumbnail may draw
+                inside the popup, in CSS pixels (40 to 1200). A thumbnail keeps
+                its aspect ratio, so raise ``max_width`` too for a landscape
+                photo to use the extra height.
             tooltip: Hover shorthand -- a property name, a sequence of names,
                 ``True`` to flag every configured field, or ``False`` to turn
                 the tooltip off. The tooltip and the click popup share one
@@ -1155,6 +1163,8 @@ class Map(anywidget.AnyWidget):
             ...     ],
             ...     title="name",
             ...     tooltip="name",
+            ...     max_width=480,
+            ...     image_height=320,
             ... )
         """
         handle = self._resolve_layer(layer)
@@ -1171,6 +1181,8 @@ class Map(anywidget.AnyWidget):
                 title_expression=title_expression,
                 body_expression=body_expression,
                 show_feature_id=show_feature_id,
+                max_width=max_width,
+                image_height=image_height,
                 tooltip=tooltip,
                 merge=merge,
             )
@@ -1500,8 +1512,9 @@ class Map(anywidget.AnyWidget):
             shape: Marker shape; switches to sprite rendering.
             size: Sprite size in pixels; switches to sprite rendering.
             icon: SVG markup or data URL for a custom sprite.
-            **style: Further style overrides, plus ``popup=``/``tooltip=``
-                (see :meth:`add_markers`).
+            **style: Further style overrides, plus ``popup=``/``tooltip=`` and
+                the ``popup_max_width=``/``popup_image_height=`` size
+                shorthands (see :meth:`add_markers`).
 
         Returns:
             The id of the added layer.
@@ -1569,7 +1582,9 @@ class Map(anywidget.AnyWidget):
             **style: Further style overrides, plus ``popup=`` and ``tooltip=``
                 to configure what a click and a hover show. ``popup`` takes a
                 property name, a list of names or field mappings, or a config
-                mapping; see :meth:`set_popup`.
+                mapping; see :meth:`set_popup`. ``popup_max_width=`` and
+                ``popup_image_height=`` size the popup and its pictures, in CSS
+                pixels, without spelling out the rest of a config mapping.
 
         Returns:
             The id of the added layer.
@@ -1582,6 +1597,8 @@ class Map(anywidget.AnyWidget):
             ...     size=32,
             ...     popup=["name", {"field": "photo", "kind": "image"}],
             ...     tooltip="name",
+            ...     popup_max_width=480,
+            ...     popup_image_height=320,
             ... )
         """
         # setdefault, not update: a raw style key passed alongside the named

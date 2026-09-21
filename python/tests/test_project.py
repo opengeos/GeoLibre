@@ -501,6 +501,47 @@ def test_normalize_popup_accepts_camel_and_snake_config_keys():
     assert snake == camel == {"titleField": "name", "showFeatureId": False}
 
 
+def test_popup_config_records_the_size_settings():
+    config = project.popup_config("name", max_width=480, image_height=320)
+    assert config["maxWidth"] == 480
+    assert config["imageHeight"] == 320
+
+
+def test_normalize_popup_accepts_the_sizes_inside_a_mapping():
+    snake = project.normalize_popup({"max_width": 480, "image_height": 320})
+    camel = project.normalize_popup({"maxWidth": 480, "imageHeight": 320})
+    assert snake == camel == {"maxWidth": 480, "imageHeight": 320}
+
+
+def test_normalize_popup_size_shorthands_configure_a_popup_on_their_own():
+    # `popup_max_width=480` with no `popup=` still has to widen the default
+    # popup -- that is the whole point of the shorthand.
+    assert project.normalize_popup(max_width=480) == {"maxWidth": 480}
+    assert project.normalize_popup(image_height=320) == {"imageHeight": 320}
+
+
+def test_normalize_popup_size_shorthand_wins_over_the_mapping_key():
+    config = project.normalize_popup({"max_width": 300}, max_width=480)
+    assert config["maxWidth"] == 480
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"max_width": 100}, "max_width must be between 288 and 1200 pixels"),
+        ({"max_width": 5000}, "max_width must be between 288 and 1200 pixels"),
+        ({"image_height": 10}, "image_height must be between 40 and 1200 pixels"),
+        ({"max_width": 480.5}, "max_width must be a whole number of pixels"),
+        ({"image_height": "big"}, "image_height must be a whole number of pixels"),
+    ],
+)
+def test_popup_config_rejects_a_size_the_app_would_not_render(kwargs, message):
+    # The app clamps instead of failing, so an accepted out-of-range size would
+    # read one way in the notebook and draw another on the map.
+    with pytest.raises(ValueError, match=message):
+        project.popup_config(**kwargs)
+
+
 def test_normalize_popup_rejects_an_unknown_config_key():
     with pytest.raises(ValueError, match="unknown popup key 'titel'"):
         project.normalize_popup({"titel": "name"})

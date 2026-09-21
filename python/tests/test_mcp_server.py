@@ -557,6 +557,21 @@ def test_set_layer_popup_writes_fields_labels_and_kinds(server, project_path):
     }
 
 
+def test_set_layer_popup_records_the_popup_and_image_sizes(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(
+        server,
+        "set_layer_popup",
+        path=project_path,
+        layer="Cities",
+        fields=[{"field": "photo", "kind": "image"}],
+        max_width=480,
+        image_height=320,
+    )
+    assert result["popup"]["maxWidth"] == 480
+    assert result["popup"]["imageHeight"] == 320
+
+
 def test_set_layer_popup_tooltip_flags_the_named_fields(server, project_path):
     call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
     result = call(

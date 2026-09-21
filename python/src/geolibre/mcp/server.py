@@ -844,6 +844,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         title_expression: str | None = None,
         body_expression: str | None = None,
         show_feature_id: bool | None = None,
+        max_width: int | None = None,
+        image_height: int | None = None,
         tooltip: list[str] | None = None,
         merge: bool = False,
     ) -> dict[str, Any]:
@@ -870,6 +872,12 @@ def build_server(workspace: Workspace) -> MCPServer:
             body_expression: MapLibre expression source producing the body as
                 one block of text instead of the field rows.
             show_feature_id: False drops the synthetic `id` row.
+            max_width: Widest the click popup may draw, in CSS pixels (288 to
+                1200). The viewport still caps it.
+            image_height: Tallest an `image` field's thumbnail may draw inside
+                the popup, in CSS pixels (40 to 1200). Thumbnails keep their
+                aspect ratio, so raise `max_width` too for a landscape photo to
+                use the extra height.
             tooltip: Property names to show in a hover tooltip. An empty list
                 turns the tooltip off.
             merge: Merge into the layer's existing popup config instead of
@@ -888,6 +896,8 @@ def build_server(workspace: Workspace) -> MCPServer:
                 title_expression=title_expression,
                 body_expression=body_expression,
                 show_feature_id=show_feature_id,
+                max_width=max_width,
+                image_height=image_height,
                 tooltip=tooltip,
                 merge=merge,
             )

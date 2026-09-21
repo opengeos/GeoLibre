@@ -34,7 +34,7 @@ import {
 } from "./map-feature-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
-import { createIdentifyPopupElement } from "./feature-popup";
+import { createIdentifyPopupElement, identifyPopupShellMaxWidth } from "./feature-popup";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -454,7 +454,7 @@ export function MapboxCanvas({
             className: "geolibre-identify-popup",
             closeButton: true,
             closeOnClick: false,
-            maxWidth: "560px",
+            maxWidth: identifyPopupShellMaxWidth(layer.popup),
           })
             .setLngLat(e.lngLat)
             .setDOMContent(content)

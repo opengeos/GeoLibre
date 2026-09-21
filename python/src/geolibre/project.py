@@ -425,6 +425,15 @@ POPUP_FIELD_KINDS = frozenset({"auto", "text", "number", "date", "link", "image"
 #: Rendering choices for a ``"date"`` field.
 POPUP_DATE_FORMATS = frozenset({"date", "datetime", "time", "iso", "year"})
 
+#: Inclusive bounds for a popup's ``max_width``, in CSS pixels. Mirrors
+#: ``POPUP_MAX_WIDTH_RANGE`` in ``packages/core/src/popup.ts``: the floor is the
+#: popup's own minimum width, the ceiling stops a popup blanketing the map.
+POPUP_MAX_WIDTH_RANGE = (288, 1200)
+
+#: Inclusive bounds for a popup's ``image_height``, in CSS pixels. Mirrors
+#: ``POPUP_IMAGE_HEIGHT_RANGE`` in ``packages/core/src/popup.ts``.
+POPUP_IMAGE_HEIGHT_RANGE = (40, 1200)
+
 #: Built-in marker shapes, plus ``"custom"`` for a caller-supplied SVG.
 MARKER_SHAPES = frozenset(
     {"circle", "square", "triangle", "diamond", "star", "cross", "pin", "custom"}
@@ -442,6 +451,8 @@ _POPUP_CONFIG_KEYS = {
     "titleexpression": "titleExpression",
     "bodyexpression": "bodyExpression",
     "showfeatureid": "showFeatureId",
+    "maxwidth": "maxWidth",
+    "imageheight": "imageHeight",
     "tooltip": "tooltip",
 }
 
@@ -471,6 +482,8 @@ _POPUP_CONFIG_ARGUMENTS = sorted(
         "titleExpression": "title_expression",
         "bodyExpression": "body_expression",
         "showFeatureId": "show_feature_id",
+        "maxWidth": "max_width",
+        "imageHeight": "image_height",
     }.get(value, value)
     for value in set(_POPUP_CONFIG_KEYS.values())
 )
@@ -502,6 +515,38 @@ def normalize_hex_color(value: str) -> str | None:
     if re.fullmatch(r"#[0-9a-f]{3}", token):
         token = "#" + "".join(channel * 2 for channel in token[1:])
     return token if re.fullmatch(r"#[0-9a-f]{6}", token) else None
+
+
+def _popup_pixel_size(name: str, value: Any, bounds: tuple[int, int]) -> int:
+    """Validate a popup pixel size against the range the app renders.
+
+    The app clamps an out-of-range size rather than failing, so an accepted
+    ``max_width=4000`` would be written to the project and drawn at 1200 --
+    a setting that reads one way in the notebook and another on the map.
+    Raising here keeps the two the same.
+
+    Args:
+        name: The argument name, for the error message.
+        value: The caller's size in CSS pixels.
+        bounds: The inclusive ``(minimum, maximum)`` the app honors.
+
+    Returns:
+        The size as a whole number of pixels.
+
+    Raises:
+        ValueError: If the value is not a whole number inside ``bounds``.
+    """
+    low, high = bounds
+    try:
+        size = int(value)
+        exact = size == value
+    except (TypeError, ValueError):
+        exact = False
+    if not exact:
+        raise ValueError(f"{name} must be a whole number of pixels, got {value!r}")
+    if not low <= size <= high:
+        raise ValueError(f"{name} must be between {low} and {high} pixels, got {value!r}")
+    return size
 
 
 def popup_field(
@@ -643,6 +688,8 @@ def popup_config(
     title_expression: str | None = None,
     body_expression: str | None = None,
     show_feature_id: bool | None = None,
+    max_width: int | None = None,
+    image_height: int | None = None,
 ) -> dict[str, Any]:
     """Build a layer's ``LayerPopupConfig``.
 
@@ -660,12 +707,20 @@ def popup_config(
         body_expression: MapLibre expression source producing the whole popup
             body as one block of text instead of the field rows.
         show_feature_id: ``False`` drops the synthetic ``id`` row.
+        max_width: Widest the click popup may draw, in CSS pixels
+            (:data:`POPUP_MAX_WIDTH_RANGE`). The viewport still caps it, so a
+            popup never covers the whole map on a small screen.
+        image_height: Tallest an ``"image"`` field's thumbnail may draw inside
+            the popup, in CSS pixels (:data:`POPUP_IMAGE_HEIGHT_RANGE`). A
+            thumbnail keeps its aspect ratio, so raise ``max_width`` too for a
+            landscape photo to use the extra height.
 
     Returns:
         A ``LayerPopupConfig`` dict, empty when nothing was configured.
 
     Raises:
-        ValueError: If a field entry is not a name or a valid field mapping.
+        ValueError: If a field entry is not a name or a valid field mapping, or
+            a size falls outside the range the app renders.
     """
     config: dict[str, Any] = {}
     if click is not None:
@@ -680,6 +735,12 @@ def popup_config(
         config["bodyExpression"] = str(body_expression)
     if show_feature_id is not None:
         config["showFeatureId"] = bool(show_feature_id)
+    if max_width is not None:
+        config["maxWidth"] = _popup_pixel_size("max_width", max_width, POPUP_MAX_WIDTH_RANGE)
+    if image_height is not None:
+        config["imageHeight"] = _popup_pixel_size(
+            "image_height", image_height, POPUP_IMAGE_HEIGHT_RANGE
+        )
     if fields is not None:
         if isinstance(fields, (str, dict)):
             entries = [fields]
@@ -809,7 +870,13 @@ def apply_tooltip(config: dict[str, Any], tooltip: Any) -> dict[str, Any]:
     return config
 
 
-def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | None:
+def normalize_popup(
+    popup: Any = None,
+    tooltip: Any = None,
+    *,
+    max_width: Any = None,
+    image_height: Any = None,
+) -> dict[str, Any] | None:
     """Coerce the ``popup=``/``tooltip=`` arguments to a ``LayerPopupConfig``.
 
     ``popup`` accepts, in rising order of control: ``True``/``False`` to turn
@@ -817,12 +884,19 @@ def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | 
     and/or :func:`popup_field` mappings, or a full config mapping whose keys
     are the arguments of :func:`popup_config` (``fields``, ``click``,
     ``hover``, ``title``, ``title_expression``, ``body_expression``,
-    ``show_feature_id``, ``tooltip``) in either snake_case or camelCase.
+    ``show_feature_id``, ``max_width``, ``image_height``, ``tooltip``) in
+    either snake_case or camelCase.
 
     Args:
         popup: The popup specification, or ``None`` for no popup config.
         tooltip: Hover-tooltip shorthand; see :func:`apply_tooltip`. Wins over
             a ``tooltip`` key inside ``popup``.
+        max_width: ``popup_max_width=`` shorthand, in CSS pixels. Wins over a
+            ``max_width`` key inside ``popup``, and configures a popup on its
+            own -- ``popup_max_width=480`` alone still widens the default
+            popup, which is the point of the shorthand.
+        image_height: ``popup_image_height=`` shorthand, in CSS pixels; the
+            same precedence as ``max_width``.
 
     Returns:
         A ``LayerPopupConfig`` dict, or ``None`` when neither argument
@@ -832,7 +906,7 @@ def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | 
         ValueError: If the specification carries an unknown key or an
             unusable field entry.
     """
-    if popup is None and tooltip is None:
+    if popup is None and tooltip is None and max_width is None and image_height is None:
         return None
 
     inline_tooltip: Any = None
@@ -860,11 +934,24 @@ def normalize_popup(popup: Any = None, tooltip: Any = None) -> dict[str, Any] | 
                 kwargs["body_expression"] = value
             elif mapped == "showFeatureId":
                 kwargs["show_feature_id"] = value
+            elif mapped == "maxWidth":
+                kwargs["max_width"] = value
+            elif mapped == "imageHeight":
+                kwargs["image_height"] = value
             else:
                 kwargs[mapped] = value
         config = popup_config(**kwargs)
     else:
         config = popup_config(popup)
+
+    # After the mapping form, so the dedicated argument wins over the key of
+    # the same name inside `popup=` -- the same precedence `tooltip` has.
+    if max_width is not None:
+        config["maxWidth"] = _popup_pixel_size("max_width", max_width, POPUP_MAX_WIDTH_RANGE)
+    if image_height is not None:
+        config["imageHeight"] = _popup_pixel_size(
+            "image_height", image_height, POPUP_IMAGE_HEIGHT_RANGE
+        )
 
     return apply_tooltip(config, tooltip if tooltip is not None else inline_tooltip)
 
@@ -994,11 +1081,17 @@ def marker_style(
 
 
 def _layer_base(name: str, layer_type: str, **style: Any) -> dict[str, Any]:
-    # `popup` and `tooltip` ride in with the style overrides so every add_*
-    # builder accepts them without threading two more arguments through each
-    # signature, but the popup config is a top-level layer key -- left in
-    # `style` it would land somewhere the app never reads.
-    popup = normalize_popup(style.pop("popup", None), style.pop("tooltip", None))
+    # `popup`, `tooltip` and the `popup_*` size shorthands ride in with the
+    # style overrides so every add_* builder accepts them without threading
+    # four more arguments through each signature, but the popup config is a
+    # top-level layer key -- left in `style` they would land somewhere the app
+    # never reads.
+    popup = normalize_popup(
+        style.pop("popup", None),
+        style.pop("tooltip", None),
+        max_width=style.pop("popup_max_width", None),
+        image_height=style.pop("popup_image_height", None),
+    )
     # Deep-copy the defaults so nested values (e.g. the vectorStyleStops list)
     # are not shared with the module constant; a caller mutating a returned
     # layer's style must not corrupt DEFAULT_LAYER_STYLE for later layers.

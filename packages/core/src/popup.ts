@@ -74,6 +74,56 @@ export function isPopupHoverEnabled(popup: LayerPopupConfig | undefined): boolea
   return popup?.hover === true;
 }
 
+/**
+ * Bounds for {@link LayerPopupConfig.maxWidth}, in CSS pixels. The floor is
+ * the popup's own minimum width (`min-w-[18rem]`), below which the setting
+ * would be overruled by the layout and read as broken; the ceiling keeps a
+ * hand-edited project from authoring a popup that blankets the map.
+ */
+export const POPUP_MAX_WIDTH_RANGE = { min: 288, max: 1200 } as const;
+
+/**
+ * Bounds for {@link LayerPopupConfig.imageHeight}, in CSS pixels. Below the
+ * floor a thumbnail carries no information; the ceiling matches
+ * {@link POPUP_MAX_WIDTH_RANGE}, since a taller picture than that is what the
+ * lightbox is for.
+ */
+export const POPUP_IMAGE_HEIGHT_RANGE = { min: 40, max: 1200 } as const;
+
+/**
+ * Coerce an author-supplied pixel size to a usable number, or `undefined`.
+ *
+ * Popup configs arrive from untrusted JSON, so the value may be a string, null
+ * or NaN. Anything that is not a finite positive number means "unset" (keep
+ * the default) rather than an error that would take the popup render down,
+ * and a number outside `range` is clamped rather than dropped — a project
+ * asking for a 4000px popup wants the widest one it can have.
+ */
+function pixelSize(
+  value: unknown,
+  range: { readonly min: number; readonly max: number },
+): number | undefined {
+  const size = typeof value === "number" ? value : Number(trimmedString(value) ?? NaN);
+  if (!Number.isFinite(size) || size <= 0) return undefined;
+  return Math.round(Math.max(range.min, Math.min(range.max, size)));
+}
+
+/**
+ * The widest the click popup may draw for a layer, in CSS pixels, or
+ * `undefined` to keep the renderer's default.
+ */
+export function resolvePopupMaxWidth(popup: LayerPopupConfig | undefined): number | undefined {
+  return pixelSize(popup?.maxWidth, POPUP_MAX_WIDTH_RANGE);
+}
+
+/**
+ * The tallest an `"image"` field may draw inside the popup, in CSS pixels, or
+ * `undefined` to keep the stylesheet's default.
+ */
+export function resolvePopupImageHeight(popup: LayerPopupConfig | undefined): number | undefined {
+  return pixelSize(popup?.imageHeight, POPUP_IMAGE_HEIGHT_RANGE);
+}
+
 /** The label a popup shows for a configured field. */
 export function popupFieldLabel(config: PopupFieldConfig): string {
   return trimmedString(config.label) ?? config.field;

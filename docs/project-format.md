@@ -455,6 +455,8 @@ popup, and whether a hover tooltip follows the pointer:
     "hover": true,
     "titleField": "name",
     "showFeatureId": false,
+    "maxWidth": 640,
+    "imageHeight": 420,
     "fields": [
       {
         "field": "pop_max",
@@ -483,6 +485,14 @@ inline `data:image/*;base64` values as thumbnails), `text`, `number`, `date`,
 `linkLabel`. `hover: true` on a field puts it in the tooltip's short subset; a
 tooltip with no flagged field shows the title alone, or nothing when the title
 is just the layer name.
+
+`maxWidth` (288-1200) is how wide the click popup may draw and `imageHeight`
+(40-1200) how tall an `image` field's thumbnail may draw inside it, both in CSS
+pixels; each is clamped to its range and `maxWidth` is capped by the viewport
+besides, so neither can produce a popup that blankets the map. Absent, the
+popup keeps its default width and image height. A thumbnail keeps its aspect
+ratio, so `imageHeight` alone does little for a landscape photo without
+`maxWidth` to match.
 
 `titleField` leads the popup with a feature's own value instead of the layer
 name; `titleExpression` (a MapLibre expression source) wins over it, and both

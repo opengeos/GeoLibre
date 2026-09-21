@@ -123,9 +123,20 @@ m.set_popup(layer, click=False)                        # no popup on click
 ```
 
 A field `kind` is `auto`, `text`, `number`, `date`, `link`, or `image`. Raw HTML
-in a property is **not** rendered as markup (an untrusted GeoJSON must not be
-able to inject it); use `kind="image"`/`"link"` for pictures and links, or
-`body_expression` for composed text.
+in a property is **not** rendered as markup, and neither is Markdown (an
+untrusted GeoJSON must not be able to inject it); use `kind="image"`/`"link"`
+for pictures and links, or `body_expression` for composed text.
+
+`popup_max_width=` (288-1200) and `popup_image_height=` (40-1200), both in CSS
+pixels, size the click popup and the pictures inside it. They work as top-level
+arguments on any `add_*`, as `max_width`/`image_height` inside a `popup=`
+mapping, and as arguments to `set_popup`. A thumbnail keeps its aspect ratio,
+so raise the width alongside the height for a landscape photo:
+
+```python
+m.add_markers(points, popup=["name", "photo"], popup_max_width=640, popup_image_height=420)
+m.set_popup(layer, max_width=640, image_height=420, merge=True)
+```
 
 The tooltip and the click popup share one field list, and the click popup only
 falls back to "all properties" while that list is empty — so `tooltip="name"`

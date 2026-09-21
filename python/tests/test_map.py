@@ -1393,6 +1393,36 @@ def test_add_geojson_also_accepts_a_popup(m):
     assert _last_layer(m)["popup"] == {"fields": [{"field": "name"}]}
 
 
+def test_add_markers_accepts_the_popup_size_shorthands(m):
+    m.add_markers(
+        [{"lng": -122.9, "lat": 47.0, "name": "Olympia", "photo": "https://x.test/a.jpg"}],
+        popup=["name", {"field": "photo", "kind": "image"}],
+        popup_max_width=480,
+        popup_image_height=320,
+    )
+    layer = _last_layer(m)
+    assert layer["popup"]["maxWidth"] == 480
+    assert layer["popup"]["imageHeight"] == 320
+    # The sizes are popup keys, not style keys; left in the style the app would
+    # never read them.
+    assert "popup_max_width" not in layer["style"]
+    assert "popup_image_height" not in layer["style"]
+
+
+def test_popup_size_shorthand_works_without_a_popup_argument(m):
+    m.add_markers([(-100, 40)], popup_max_width=480)
+    assert _last_layer(m)["popup"] == {"maxWidth": 480}
+
+
+def test_set_popup_records_the_sizes(m):
+    layer_id = m.add_markers([(-100, 40)], popup=["a"])
+    m.set_popup(layer_id, max_width=600, image_height=400, merge=True)
+    popup = m.get_layer(layer_id).popup
+    assert popup["maxWidth"] == 600
+    assert popup["imageHeight"] == 400
+    assert popup["fields"] == [{"field": "a"}]
+
+
 def test_set_popup_replaces_the_config(m):
     layer_id = m.add_markers([(-100, 40)], popup=["a", "b"])
     m.set_popup(layer_id, ["c"], title="c")

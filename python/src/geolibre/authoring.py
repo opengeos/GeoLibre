@@ -562,6 +562,8 @@ def set_popup(
     title_expression: str | None = None,
     body_expression: str | None = None,
     show_feature_id: bool | None = None,
+    max_width: int | None = None,
+    image_height: int | None = None,
     tooltip: Any = None,
     merge: bool = False,
 ) -> dict[str, Any]:
@@ -583,6 +585,8 @@ def set_popup(
         title_expression: MapLibre expression source producing the title.
         body_expression: MapLibre expression source producing the popup body.
         show_feature_id: ``False`` drops the synthetic ``id`` row.
+        max_width: Widest the click popup may draw, in CSS pixels.
+        image_height: Tallest an ``"image"`` field may draw, in CSS pixels.
         tooltip: Hover shorthand -- a property name, a sequence of names,
             ``True`` to flag every configured field, or ``False`` to turn the
             tooltip off.
@@ -606,6 +610,8 @@ def set_popup(
         title_expression=title_expression,
         body_expression=body_expression,
         show_feature_id=show_feature_id,
+        max_width=max_width,
+        image_height=image_height,
     )
     if merge:
         current = layer.get("popup")

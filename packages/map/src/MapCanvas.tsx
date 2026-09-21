@@ -1,7 +1,9 @@
 import {
+  applyPopupWidth,
   createHoverTooltipElement,
   createIdentifyPopupElement,
   createIdentifyPopupRows,
+  identifyPopupShellMaxWidth,
 } from "./feature-popup";
 import {
   applyGroupEffects,
@@ -19,6 +21,7 @@ import {
   PHOTO_PROPERTY,
   resolveConfiguredPopupTitle,
   resolveLayerCapabilities,
+  resolvePopupMaxWidth,
   stringifyPopupValue,
   useAppStore,
   type GeoLibreLayer,
@@ -195,6 +198,9 @@ interface GlobalIdentifyHit {
  * @param hits Rendered feature hits in topmost-first map order.
  * @param zoom Current map zoom for expression-backed popup formatting.
  * @param onActivate Selects the owning layer and feature in the application.
+ * @param labels Translated headings and counters for the grouped result.
+ * @param maxWidth Widest width any hit layer's popup config asked for, in CSS
+ *   pixels, or `undefined` to keep the default cap.
  * @returns Popup DOM containing every grouped hit and its visible attributes.
  */
 function createGlobalIdentifyPopupElement(
@@ -202,10 +208,12 @@ function createGlobalIdentifyPopupElement(
   zoom: number,
   onActivate: (hit: GlobalIdentifyHit) => void,
   labels: MapCanvasIdentifyAllLabels,
+  maxWidth?: number,
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
     "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
+  applyPopupWidth(root, maxWidth === undefined ? undefined : { maxWidth });
 
   const title = document.createElement("div");
   title.className = "font-semibold text-foreground";
@@ -1513,13 +1521,13 @@ export const MapCanvas = memo(function MapCanvas({
           selectFeature(hit.featureId);
           globalIdentifyActivatedLayerId.current = hit.layer.id;
         };
-        const showPopup = (content: HTMLElement) => {
+        const showPopup = (content: HTMLElement, shellMaxWidth = "560px") => {
           identifyPopup.current?.remove();
           identifyPopup.current = new maplibregl.Popup({
             className: "geolibre-identify-popup",
             closeButton: true,
             closeOnClick: false,
-            maxWidth: "560px",
+            maxWidth: shellMaxWidth,
           })
             .setLngLat(event.lngLat)
             .setDOMContent(content)
@@ -1547,9 +1555,22 @@ export const MapCanvas = memo(function MapCanvas({
             return;
           }
           activate(allHits[0]);
-          showPopup(
-            createGlobalIdentifyPopupElement(allHits, map.getZoom(), activate, identifyAllLabels),
+          // The grouped popup holds several layers at once, so it takes the
+          // widest width any of them asked for rather than picking one layer's
+          // setting over the others'.
+          const widest = allHits.reduce<number | undefined>((widestSoFar, hit) => {
+            const configured = resolvePopupMaxWidth(hit.layer.popup);
+            if (configured === undefined) return widestSoFar;
+            return widestSoFar === undefined ? configured : Math.max(widestSoFar, configured);
+          }, undefined);
+          const content = createGlobalIdentifyPopupElement(
+            allHits,
+            map.getZoom(),
+            activate,
+            identifyAllLabels,
+            widest,
           );
+          showPopup(content, identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined));
         };
 
         const asyncLayers = eligibleLayers.filter(
@@ -1729,7 +1750,7 @@ export const MapCanvas = memo(function MapCanvas({
           className: "geolibre-identify-popup",
           closeButton: true,
           closeOnClick: false,
-          maxWidth: "560px",
+          maxWidth: identifyPopupShellMaxWidth(layer.popup),
         })
           .setLngLat(event.lngLat)
           .setDOMContent(content)

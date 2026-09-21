@@ -977,6 +977,21 @@ export interface LayerPopupConfig {
   /** `false` drops the synthetic `id` row. Defaults to `true`. */
   showFeatureId?: boolean;
   /**
+   * Widest the click popup may grow, in CSS pixels. Unset keeps the default
+   * (520px, or 420px for a popup carrying an image). Clamped to the range
+   * `resolvePopupMaxWidth` enforces and always capped by the viewport, so a
+   * value wider than the window still leaves the map usable.
+   */
+  maxWidth?: number;
+  /**
+   * Tallest an `"image"` field's thumbnail may draw inside the popup, in CSS
+   * pixels. Unset keeps the default (`min(50vh, 420px)`). Clamped by
+   * `resolvePopupImageHeight`. Pair it with {@link maxWidth} for a
+   * bigger picture: the thumbnail keeps its aspect ratio, so widening the
+   * popup is what lets a landscape photo use the extra height.
+   */
+  imageHeight?: number;
+  /**
    * The fields to show and their order. An empty or absent list keeps today's
    * behavior: every visible property, in the feature's own key order.
    */
