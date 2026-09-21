@@ -40,7 +40,12 @@ const KEYLESS_FALLBACK_URL = "https://tile.openstreetmap.org/";
 function keylessImagery(Cesium: CesiumNs): Promise<ImageryProvider> {
   return Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI_WORLD_IMAGERY_URL, {
     enablePickFeatures: false,
-  }).catch(() => new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL }));
+  }).catch(() => lastResortImagery(Cesium));
+}
+
+/** The end of every fallback chain: constructed, not fetched, so it cannot reject. */
+function lastResortImagery(Cesium: CesiumNs): ImageryProvider {
+  return new Cesium.OpenStreetMapImageryProvider({ url: KEYLESS_FALLBACK_URL });
 }
 
 /**
@@ -129,7 +134,12 @@ export function applyBasemapImagery(
     const layer = Cesium.ImageryLayer.fromProviderAsync(
       Cesium.ArcGisMapServerImageryProvider.fromUrl(imagery.url, {
         enablePickFeatures: false,
-      }).catch(() => keylessImagery(Cesium)),
+      }).catch(() =>
+        // World Imagery *is* the keyless fallback, and it is the default
+        // without an Ion token, so retrying it here would only double the wait
+        // before the globe draws anything on the most common failing path.
+        imagery.url === ESRI_WORLD_IMAGERY_URL ? lastResortImagery(Cesium) : keylessImagery(Cesium),
+      ),
     );
     viewer.imageryLayers.add(layer, 0);
     return [layer];

@@ -246,11 +246,18 @@ describe("applyBasemapImagery", () => {
 
   it("keeps an unreachable ArcGIS basemap from blanking the globe", async () => {
     const { Cesium, viewer, openStreetMapRequests } = makeFakes();
-    Cesium.ArcGisMapServerImageryProvider.fromUrl = () => Promise.reject(new Error("offline"));
+    const attempted: string[] = [];
+    Cesium.ArcGisMapServerImageryProvider.fromUrl = (url: string) => {
+      attempted.push(url);
+      return Promise.reject(new Error("offline"));
+    };
     const url = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
     const added = applyBasemapImagery(Cesium, viewer, [], { kind: "arcgis", url }, undefined);
     const provider = await (added[0] as FakeLayer).provider?.provider;
     assert.ok(provider, "the layer resolved to a provider instead of rejecting");
+    // World Imagery is itself the keyless fallback, so it is tried once, not
+    // twice: a retry would double the wait before the globe draws anything.
+    assert.deepEqual(attempted, [url]);
     assert.deepEqual(openStreetMapRequests, [{ url: "https://tile.openstreetmap.org/" }]);
   });
 
