@@ -27,6 +27,7 @@ describe("God's Eye View viewport feeds", () => {
       viewportBoundsKey([-122.42, 37.77, -122.39, 37.79], 1.5, 0.05),
       "-122.4500,37.7500,-122.3500,37.8000",
     );
+    assert.equal(viewportQueryBounds([181, 10, 182, 11], 1.5, 0.05), null);
   });
 
   it("normalizes only community-mapped ALPR point records", () => {
@@ -112,6 +113,8 @@ describe("God's Eye View viewport feeds", () => {
     assert.equal(result.attributes.features.length, 1);
     assert.equal(position.epoch, window.start.toISOString());
     assert.ok(position.cartographicDegrees.length > 12);
+    const timestamps = position.cartographicDegrees.filter((_, index) => index % 4 === 0);
+    assert.equal(new Set(timestamps).size, timestamps.length);
     assert.equal(
       result.packets[1].properties?.mode,
       "Simulated positions on OpenStreetMap road geometry",

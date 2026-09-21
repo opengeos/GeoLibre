@@ -72,6 +72,7 @@ export function viewportQueryBounds(
   const height = north - south;
   if (
     west < -180 ||
+    west > 180 ||
     east > west + 360 ||
     south < -90 ||
     north > 90 ||
@@ -215,7 +216,8 @@ export function streetTrafficToCzml(
     }));
   });
 
-  for (const candidate of candidates.slice(0, MAX_TRAFFIC_ENTITIES)) {
+  for (const candidate of candidates) {
+    if (features.length >= MAX_TRAFFIC_ENTITIES) break;
     if (candidate.line.length < 2) continue;
     const distances = cumulativeDistances(candidate.line);
     const totalDistance = distances.at(-1) ?? 0;
@@ -223,7 +225,7 @@ export function streetTrafficToCzml(
     const naturalCycleSeconds = totalDistance / (TRAFFIC_SPEED_MPS[candidate.roadClass] ?? 5);
     const cycleSeconds = Math.max(naturalCycleSeconds, windowSeconds / MAX_TRAFFIC_CYCLES);
     const samples: number[] = [];
-    for (let cycle = 0; cycle * cycleSeconds <= windowSeconds; cycle += 1) {
+    for (let cycle = 0; cycle * cycleSeconds < windowSeconds; cycle += 1) {
       const route = cycle % 2 === 0 ? candidate.line : [...candidate.line].reverse();
       const routeDistances = cycle % 2 === 0 ? distances : cumulativeDistances(route);
       // Adjacent cycles share their boundary point; omit the duplicate timestamp

@@ -572,7 +572,11 @@ function refreshViewportFeeds(): void {
     const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
     if (!feeds[feed].enabled || !descriptor.viewportKey) continue;
     const key = descriptor.viewportKey(bounds);
-    if (key === feeds[feed].lastViewportKey || key === feeds[feed].requestedViewportKey) continue;
+    const { lastViewportKey, requestedViewportKey } = feeds[feed];
+    // A completed result is reusable only when no request for another viewport
+    // is in flight. This makes a quick A → B → A move abort B and restore A.
+    if (key === requestedViewportKey || (!requestedViewportKey && key === lastViewportKey))
+      continue;
     void refreshFeed(feed);
   }
 }

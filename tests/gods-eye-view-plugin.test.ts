@@ -683,6 +683,53 @@ describe("God's Eye View feed refresh", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("restores the current viewport when an intervening request is still in flight", async () => {
+    const originalFetch = globalThis.fetch;
+    let overpassCalls = 0;
+    let resolveSecond: ((response: Response) => void) | null = null;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (!String(input).includes("tiles.geolibre.app/overpass")) {
+        return new Response(JSON.stringify({ elements: [] }), { status: 200 });
+      }
+      overpassCalls += 1;
+      if (overpassCalls === 2) {
+        return new Promise<Response>((resolve) => {
+          resolveSecond = resolve;
+        });
+      }
+      return new Response(JSON.stringify({ elements: [] }), { status: 200 });
+    }) as typeof fetch;
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: false,
+        satellites: false,
+        mappedAlpr: true,
+      });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let index = 0; index < 6; index += 1) await flush();
+      assert.equal(overpassCalls, 1);
+
+      globe.setViewBounds([-122.3, 37.7, -122.2, 37.8]);
+      globe.fireMoveEnd();
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      assert.equal(overpassCalls, 2);
+
+      globe.setViewBounds([-122.5, 37.7, -122.4, 37.8]);
+      globe.fireMoveEnd();
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      assert.equal(overpassCalls, 3, "returning to A supersedes the pending B request");
+      resolveSecond?.(new Response(JSON.stringify({ elements: [] }), { status: 200 }));
+      await flush();
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      useAppStore.setState({ layers: [] });
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("God's Eye View clock speed", () => {
