@@ -899,8 +899,8 @@ function duckdbWasmBundlesPlugin(): Plugin {
   const variant = IS_TAURI_BUILD
     ? "src/lib/duckdb-wasm-bundles.tauri.ts"
     : DUCKDB_WASM_CDN
-    ? "src/lib/duckdb-wasm-bundles.cdn.ts"
-    : "src/lib/duckdb-wasm-bundles.ts";
+      ? "src/lib/duckdb-wasm-bundles.cdn.ts"
+      : "src/lib/duckdb-wasm-bundles.ts";
   const modulePath = path.resolve(__dirname, variant);
   return {
     name: "geolibre-duckdb-wasm-bundles",

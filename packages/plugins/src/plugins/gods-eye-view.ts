@@ -797,14 +797,14 @@ function renderPanel(): void {
           dense.status === "loading"
             ? translate("panel.godsEyeView.denseLoading", "DENSE ···")
             : dense.status === "failed"
-            ? translate("panel.godsEyeView.denseFailed", "DENSE !")
-            : dense.status === "ready"
-            ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
-                count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
-                  appRef?.getLocale?.(),
-                ),
-              })
-            : translate("panel.godsEyeView.dense", "DENSE");
+              ? translate("panel.godsEyeView.denseFailed", "DENSE !")
+              : dense.status === "ready"
+                ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
+                    count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
+                      appRef?.getLocale?.(),
+                    ),
+                  })
+                : translate("panel.godsEyeView.dense", "DENSE");
         button.title =
           dense.status === "failed"
             ? translate(

@@ -52,7 +52,11 @@ function makeGlobe(startingMultiplier = 0) {
     }
   }
   class Cartesian3 {
-    constructor(public x: number, public y: number, public z: number) {}
+    constructor(
+      public x: number,
+      public y: number,
+      public z: number,
+    ) {}
   }
   class NearFarScalar {
     constructor(
