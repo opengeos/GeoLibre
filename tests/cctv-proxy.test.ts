@@ -181,7 +181,7 @@ describe("Austin CCTV edge proxy", () => {
       return new Response();
     }) as typeof fetch;
     const response = await tilesWorker.fetch(
-      new Request("https://tiles.geolibre.app/cctv/austin/not-an-id.jpg", {
+      new Request("https://tiles.geolibre.app/cctv/austin/12345.jpg", {
         headers: { origin: "http://localhost:5173" },
       }),
       {},

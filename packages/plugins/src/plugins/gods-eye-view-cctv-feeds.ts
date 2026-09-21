@@ -134,7 +134,7 @@ export function normalizeAustinCameras(payload: unknown, dev = isViteDevServer()
     const latitude = finite(coordinates[1]);
     if (
       !rawId ||
-      !/^\d{1,6}$/.test(rawId) ||
+      !/^\d{1,4}$/.test(rawId) ||
       status?.toUpperCase() !== "TURNED_ON" ||
       location?.type !== "Point" ||
       !validCoordinate(longitude, latitude) ||

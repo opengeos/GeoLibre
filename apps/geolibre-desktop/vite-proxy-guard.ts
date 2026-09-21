@@ -586,7 +586,7 @@ export async function proxyAustinCctvFrameRequestGuarded(
   frameId: string,
   res: ServerResponse,
 ): Promise<void> {
-  if (!/^\d{1,6}$/.test(frameId)) {
+  if (!/^\d{1,4}$/.test(frameId)) {
     res.statusCode = 400;
     res.end("Invalid Austin camera id");
     return;

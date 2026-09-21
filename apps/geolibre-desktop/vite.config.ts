@@ -757,7 +757,7 @@ function wmsProxyPlugin(): Plugin {
             req.url ?? "",
             `http://localhost${AUSTIN_CCTV_FRAME_PROXY_PATH}`,
           );
-          const frameId = decodeURIComponent(requestUrl.pathname).match(/^\/(\d{1,6})\.jpg$/)?.[1];
+          const frameId = decodeURIComponent(requestUrl.pathname).match(/^\/(\d{1,4})\.jpg$/)?.[1];
           await proxyAustinCctvFrameRequestGuarded(frameId ?? "", res);
         } catch {
           res.statusCode = 502;
