@@ -64,7 +64,10 @@ export function installCesiumInteractions(
     if (hasImage) box.classList.add("geolibre-identify-image-popup");
     // The globe's popup is this box, not a MapLibre shell, so an author's
     // `maxWidth` has to widen it here too — the root inside it can only ever
-    // use the width the box gives it.
+    // use the width the box gives it. It reaches `width` only for a box
+    // carrying a picture, the same split `applyPopupWidth` makes in 2D: a
+    // text-only popup keeps shrinking to its content with the author's value
+    // as its ceiling, rather than padding every short feature out to it.
     const configuredWidth =
       configuredMaxWidth === undefined
         ? undefined
@@ -72,7 +75,7 @@ export function installCesiumInteractions(
     Object.assign(box.style, {
       position: "absolute",
       zIndex: "10",
-      width: configuredWidth ?? (hasImage ? "min(420px, calc(100% - 24px))" : "auto"),
+      width: hasImage ? (configuredWidth ?? "min(420px, calc(100% - 24px))") : "auto",
       maxWidth: configuredWidth ?? (hasImage ? "min(900px, calc(100% - 24px))" : "min(280px, 80%)"),
       maxHeight: hasImage ? "calc(100% - 24px)" : "60%",
       overflow: "auto",
