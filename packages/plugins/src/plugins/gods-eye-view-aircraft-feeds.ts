@@ -368,10 +368,10 @@ export async function fetchMilitaryFlightsCzml(
   const nowValue = finite(payload.now);
   const snapshotTimeMs =
     nowValue === null
-      ? window.current?.getTime() ?? Date.now()
+      ? (window.current?.getTime() ?? Date.now())
       : nowValue > 1e12
-      ? nowValue
-      : nowValue * 1000;
+        ? nowValue
+        : nowValue * 1000;
   const observations = payload.ac.flatMap((row) => {
     const value = normalizeAdsbLolAircraft(row, snapshotTimeMs);
     return value ? [value] : [];
