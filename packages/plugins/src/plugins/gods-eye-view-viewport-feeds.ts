@@ -225,7 +225,8 @@ export function streetTrafficToCzml(
     const naturalCycleSeconds = totalDistance / (TRAFFIC_SPEED_MPS[candidate.roadClass] ?? 5);
     const cycleSeconds = Math.max(naturalCycleSeconds, windowSeconds / MAX_TRAFFIC_CYCLES);
     const samples: number[] = [];
-    for (let cycle = 0; cycle * cycleSeconds < windowSeconds; cycle += 1) {
+    let lastElapsed = -1;
+    cycles: for (let cycle = 0; cycle * cycleSeconds < windowSeconds; cycle += 1) {
       const route = cycle % 2 === 0 ? candidate.line : [...candidate.line].reverse();
       const routeDistances = cycle % 2 === 0 ? distances : cumulativeDistances(route);
       // Adjacent cycles share their boundary point; omit the duplicate timestamp
@@ -235,7 +236,10 @@ export function streetTrafficToCzml(
           windowSeconds,
           cycle * cycleSeconds + (routeDistances[index] / totalDistance) * cycleSeconds,
         );
+        if (elapsed <= lastElapsed) continue;
         samples.push(elapsed, route[index][0], route[index][1], 3);
+        lastElapsed = elapsed;
+        if (elapsed === windowSeconds) break cycles;
       }
     }
     const id = `street-traffic-${String(candidate.feature.id ?? features.length)}-${candidate.lineIndex}`;

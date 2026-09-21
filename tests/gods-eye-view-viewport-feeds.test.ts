@@ -121,6 +121,30 @@ describe("God's Eye View viewport feeds", () => {
     );
   });
 
+  it("keeps timestamps unique when a long road extends past the time window", () => {
+    const result = streetTrafficToCzml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "way/long",
+            geometry: {
+              type: "LineString",
+              coordinates: Array.from({ length: 9 }, (_, index) => [index * 0.5, 0]),
+            },
+            properties: { highway: "motorway" },
+          },
+        ],
+      },
+      window,
+    );
+    const position = result.packets[1].position as { cartographicDegrees: number[] };
+    const timestamps = position.cartographicDegrees.filter((_, index) => index % 4 === 0);
+    assert.equal(new Set(timestamps).size, timestamps.length);
+    assert.equal(timestamps.at(-1), 3 * 60 * 60);
+  });
+
   it("does not query Overpass for traffic while zoomed out", async () => {
     let calls = 0;
     const result = await fetchStreetTrafficCzml([-130, 30, -120, 40], window, {
