@@ -34,7 +34,6 @@ const ARC_DURATION_MS = 3 * 60 * 60_000;
 
 const FEED_GROUPS = ["movement", "cameras", "infrastructure", "events", "utilities"] as const;
 type FeedGroup = (typeof FEED_GROUPS)[number];
-type FeedOption = "dense";
 
 interface FeedFetchContext {
   signal: AbortSignal;
@@ -50,7 +49,6 @@ interface FeedDescriptor {
   timeoutMs: number;
   flag: string;
   defaultEnabled: boolean;
-  options: readonly FeedOption[];
   ownsClockWindow?: boolean;
   fetch: (context: FeedFetchContext) => Promise<GodsEyeViewFeedPayload>;
 }
@@ -74,7 +72,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 20_000,
     flag: GODS_EYE_VIEW_SATELLITES_FLAG,
     defaultEnabled: true,
-    options: ["dense"],
     ownsClockWindow: true,
     async fetch({ signal, window }) {
       const packets = await fetchCelestrakSatelliteCatalogCzml({
@@ -98,7 +95,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
     flag: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
     defaultEnabled: false,
-    options: [],
     fetch: ({ bounds, signal }) => fetchOsmInfrastructureCzml(bounds, { signal }),
   },
   datacenters: {
@@ -109,7 +105,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 60_000,
     flag: GODS_EYE_VIEW_DATACENTERS_FLAG,
     defaultEnabled: false,
-    options: [],
     fetch: ({ signal }) => fetchDatacentersCzml({ signal }),
   },
   cables: {
@@ -120,7 +115,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 60_000,
     flag: GODS_EYE_VIEW_CABLES_FLAG,
     defaultEnabled: false,
-    options: [],
     fetch: ({ signal }) => fetchSubmarineCablesCzml({ signal }),
   },
   dams: {
@@ -131,7 +125,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 60_000,
     flag: GODS_EYE_VIEW_DAMS_FLAG,
     defaultEnabled: false,
-    options: [],
     fetch: ({ signal }) => fetchDamsCzml({ signal }),
   },
   earthquakes: {
@@ -142,7 +135,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 20_000,
     flag: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
     defaultEnabled: true,
-    options: [],
     ownsClockWindow: true,
     async fetch({ signal, window }) {
       const packets = await fetchUsgsEarthquakeCzml(window, { signal });
@@ -157,7 +149,6 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 20_000,
     flag: GODS_EYE_VIEW_RADIO_FLAG,
     defaultEnabled: false,
-    options: [],
     fetch: ({ signal }) => fetchRadioBrowserCzml({ signal }),
   },
 } as const satisfies Record<string, FeedDescriptor>;
@@ -650,7 +641,7 @@ function renderPanel(): void {
       status.textContent = statusText(feed);
       status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
       row.append(label, status);
-      if (descriptor.options.includes("dense")) {
+      if (feed === "satellites") {
         const dense = denseCatalog.snapshot();
         const button = document.createElement("button");
         button.type = "button";
