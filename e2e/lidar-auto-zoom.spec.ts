@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForMap } from "./helpers";
-
-// A 1,065-point COPC from PDAL's test data, near -117.24, 46.28.
-const COPC =
-  "https://raw.githubusercontent.com/PDAL/PDAL/master/test/data/copc/1.2-with-color.copc.laz";
+import { COPC_FIXTURE_URL, serveCopcFixture, waitForMap } from "./helpers";
 
 /**
  * Loading a point cloud flies the camera to its extent (maplibre-gl-lidar's
@@ -18,6 +14,7 @@ const COPC =
  * camera one.
  */
 test("flies to the point cloud on the first load of a session", async ({ page }) => {
+  await serveCopcFixture(page);
   await waitForMap(page);
 
   const status = page.locator("footer");
@@ -27,7 +24,7 @@ test("flies to the point cloud on the first load of a session", async ({ page })
   await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
   await page
     .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
-    .fill(COPC);
+    .fill(COPC_FIXTURE_URL);
   await page.getByRole("button", { name: "Load", exact: true }).click();
   await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });
 

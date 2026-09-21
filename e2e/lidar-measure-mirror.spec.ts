@@ -1,9 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { waitForMap } from "./helpers";
-
-// A 1,065-point COPC from PDAL's test data: small enough to stream in seconds.
-const COPC =
-  "https://raw.githubusercontent.com/PDAL/PDAL/master/test/data/copc/1.2-with-color.copc.laz";
+import { COPC_FIXTURE_URL, serveCopcFixture, waitForMap } from "./helpers";
 
 /**
  * maplibre-gl-lidar draws point clouds into its own overlaid deck.gl canvas,
@@ -45,13 +41,14 @@ async function measureLinePixels(page: Page): Promise<{ blue: number; drawn: num
 
 test.describe("measured geometry over a LiDAR point cloud", () => {
   test("redraws the measure line inside the point cloud's own canvas", async ({ page }) => {
+    await serveCopcFixture(page);
     await waitForMap(page);
 
     await page.getByRole("button", { name: "Add Data", exact: true }).click();
     await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
     await page
       .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
-      .fill(COPC);
+      .fill(COPC_FIXTURE_URL);
     await page.getByRole("button", { name: "Load", exact: true }).click();
     // The panel lists the loaded cloud once the points are in the overlay.
     await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });

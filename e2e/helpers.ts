@@ -9,6 +9,54 @@ export function readFixture(name: string): string {
   return readFileSync(join(__dirname, "fixtures", name), "utf8");
 }
 
+/**
+ * A 1,065-point COPC from PDAL's test data, vendored as
+ * `e2e/fixtures/1.2-with-color.copc.laz` (33 KB) so the LiDAR specs neither
+ * depend on `raw.githubusercontent.com` nor on what PDAL's `master` happens to
+ * hold — they assert the exact point count.
+ *
+ * The URL is never fetched: {@link serveCopcFixture} answers it from disk.
+ */
+export const COPC_FIXTURE_URL = "https://geolibre.test/fixtures/1.2-with-color.copc.laz";
+
+/**
+ * Answers {@link COPC_FIXTURE_URL} from the vendored file, honouring the byte
+ * ranges a COPC reader asks for — the format is built around range requests, so
+ * serving the whole file for every one of them would not exercise the same
+ * path. Call before the app requests the URL.
+ */
+export async function serveCopcFixture(page: Page): Promise<void> {
+  const body = readFileSync(join(__dirname, "fixtures", "1.2-with-color.copc.laz"));
+  const headers = {
+    "access-control-allow-origin": "*",
+    "accept-ranges": "bytes",
+    "content-type": "application/octet-stream",
+  };
+  await page.route(COPC_FIXTURE_URL, async (route) => {
+    const request = route.request();
+    if (request.method() === "HEAD") {
+      await route.fulfill({
+        status: 200,
+        headers: { ...headers, "content-length": String(body.length) },
+        body: "",
+      });
+      return;
+    }
+    const range = /bytes=(\d+)-(\d*)/.exec(request.headers().range ?? "");
+    if (!range) {
+      await route.fulfill({ status: 200, headers, body });
+      return;
+    }
+    const start = Number(range[1]);
+    const end = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+    await route.fulfill({
+      status: 206,
+      headers: { ...headers, "content-range": `bytes ${start}-${end}/${body.length}` },
+      body: body.subarray(start, end + 1),
+    });
+  });
+}
+
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
 export async function waitForMap(page: Page, path = "/"): Promise<void> {
   await page.goto(path);

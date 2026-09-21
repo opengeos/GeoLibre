@@ -58,7 +58,20 @@ function makeOverlay(): {
   };
 }
 
-function makeMap(data: GeoJSON.FeatureCollection | null): {
+/**
+ * How the two engines store what was last `setData`'d: mapbox-gl keeps the
+ * value itself, maplibre-gl v6 wraps it. The mirror has to read both — reading
+ * only one leaves it silently dead on the other engine.
+ */
+const SOURCE_SHAPES = {
+  "mapbox-gl": (data: GeoJSON.FeatureCollection) => ({ _data: data }),
+  "maplibre-gl": (data: GeoJSON.FeatureCollection) => ({ _data: { geojson: data } }),
+} as const;
+
+function makeMap(
+  data: GeoJSON.FeatureCollection | null,
+  shape: keyof typeof SOURCE_SHAPES = "maplibre-gl",
+): {
   map: MeasureMirrorMap;
   emit: (event: "sourcedata" | "render", payload?: { sourceId?: string }) => void;
   emitSourceData: (sourceId: string) => void;
@@ -74,8 +87,7 @@ function makeMap(data: GeoJSON.FeatureCollection | null): {
     map: {
       // Mirrors a MapLibre/Mapbox geojson source: the data is only readable
       // through the internal `_data` field the mirror reads.
-      getSource: (id) =>
-        id === SOURCE_ID && current ? { _data: { geojson: current } } : undefined,
+      getSource: (id) => (id === SOURCE_ID && current ? SOURCE_SHAPES[shape](current) : undefined),
       on: (event, listener) => {
         const existing = listeners.get(event) ?? new Set();
         existing.add(listener);
@@ -187,6 +199,17 @@ describe("LiDAR measure mirror", () => {
       "add:geolibre-measure-above-points",
     ]);
   });
+
+  for (const shape of Object.keys(SOURCE_SHAPES) as (keyof typeof SOURCE_SHAPES)[]) {
+    it(`reads the geometry back from a ${shape} source`, () => {
+      const { overlay, calls } = makeOverlay();
+      const { map } = makeMap(collection([lineFeature()]), shape);
+      const { control } = makeControl();
+
+      syncLidarMeasureMirror({ map, overlay, control });
+      assert.deepEqual(calls, ["add:geolibre-measure-above-points"]);
+    });
+  }
 
   it("ignores data events from other sources", () => {
     const { overlay, calls } = makeOverlay();

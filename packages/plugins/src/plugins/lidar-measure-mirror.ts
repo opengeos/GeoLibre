@@ -76,6 +76,8 @@ interface Attachment {
   sourceId: string;
   /** The layer currently in the overlay, kept so it can be re-appended. */
   layer: Layer | null;
+  /** Whether the unreadable-source warning has already been issued. */
+  warnedShape: boolean;
   detach: () => void;
 }
 
@@ -120,7 +122,15 @@ function attach(
   control: MeasureControl,
   sourceId: string,
 ): Attachment {
-  const self: Attachment = { map, overlay, control, sourceId, layer: null, detach: () => {} };
+  const self: Attachment = {
+    map,
+    overlay,
+    control,
+    sourceId,
+    layer: null,
+    warnedShape: false,
+    detach: () => {},
+  };
   const onGeometry = () => redraw(self);
   // The rubber-band segment that follows the cursor while drawing is pushed
   // straight into the source without a control event, so the source's own data
@@ -180,7 +190,7 @@ function place(current: Attachment, layer: Layer): void {
 }
 
 function redraw(current: Attachment): void {
-  const data = readMeasureGeometry(current.map, current.sourceId);
+  const data = readMeasureGeometry(current);
   if (!data || data.features.length === 0) {
     removeMirror(current.overlay);
     current.layer = null;
@@ -209,22 +219,56 @@ export function measureMirrorLayer(data: GeoJSON.FeatureCollection): Layer {
   });
 }
 
+/** A `geojson` source as far as reading back what was last set on it goes. */
+interface GeoJsonSourceInternals {
+  /** mapbox-gl holds the value itself; maplibre-gl v6 wraps it. */
+  _data?: GeoJSON.GeoJSON | string | { geojson?: GeoJSON.GeoJSON };
+}
+
+/**
+ * The value behind either shape. `geojson` is optional on maplibre's wrapper,
+ * so an `in` check cannot narrow the raw shape out of the union for the
+ * compiler; the casts say what the runtime check has already established.
+ */
+function unwrapSourceData(
+  held: GeoJsonSourceInternals["_data"],
+): GeoJSON.GeoJSON | string | undefined {
+  if (held && typeof held === "object" && "geojson" in held) {
+    return (held as { geojson?: GeoJSON.GeoJSON }).geojson;
+  }
+  return held as GeoJSON.GeoJSON | string | undefined;
+}
+
 /**
  * The geometry the Measure control last pushed to its GeoJSON source.
  *
- * MapLibre has no public reader for a `geojson` source's data, so this reads
- * the `_data` field its own type declarations expose. A MapLibre release that
- * drops it costs the mirror (the measure line goes back to being hidden inside
- * a point cloud) and nothing else.
+ * Neither library exposes a public reader for a `geojson` source's data, so
+ * this reads the `_data` field both declare — and they declare it
+ * *differently*: mapbox-gl stores the value handed to `setData` directly,
+ * maplibre-gl v6 stores `{ geojson }`. Reading only one shape would leave the
+ * mirror silently dead on the other engine, which is indistinguishable from
+ * "nothing has been measured yet", so both are accepted and anything else
+ * warns (once per attachment) the way `measureSourceId` does for its own
+ * private field.
  */
-function readMeasureGeometry(
-  map: MeasureMirrorMap,
-  sourceId: string,
-): GeoJSON.FeatureCollection | null {
-  const source = map.getSource(sourceId) as { _data?: { geojson?: GeoJSON.GeoJSON } } | undefined;
-  const data = source?._data?.geojson;
-  if (!data || typeof data !== "object" || data.type !== "FeatureCollection") return null;
-  return data;
+function readMeasureGeometry(current: Attachment): GeoJSON.FeatureCollection | null {
+  const source = current.map.getSource(current.sourceId) as GeoJsonSourceInternals | undefined;
+  // Before the control's own `_setupMapSources` has run there is no source to
+  // read, which is ordinary rather than a broken assumption.
+  if (!source) return null;
+
+  const data = unwrapSourceData(source._data);
+  if (data && typeof data === "object" && data.type === "FeatureCollection") return data;
+
+  if (!current.warnedShape) {
+    current.warnedShape = true;
+    console.warn(
+      "MeasureControl: could not read its geojson source; measured geometry " +
+        "will stay hidden inside LiDAR point clouds. Check the map library's " +
+        "GeoJSONSource._data shape.",
+    );
+  }
+  return null;
 }
 
 function removeMirror(overlay: MeasureMirrorOverlay): void {
