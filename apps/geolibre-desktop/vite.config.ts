@@ -16,9 +16,11 @@ import {
   proxyAdsbdbAircraftRequestGuarded,
   proxyBinaryRequestGuarded,
   proxyCalgaryCctvFrameRequestGuarded,
+  proxyCctvCatalogRequestGuarded,
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
   proxyOverpassRequestGuarded,
+  proxyOntarioCctvFrameRequestGuarded,
 } from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
@@ -519,6 +521,8 @@ const OPEN_SKY_PROXY_PATH = "/opensky/states";
 const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
 const CALGARY_CCTV_FRAME_PROXY_PATH = "/cctv/calgary";
+const CCTV_CATALOG_PROXY_PATH = "/cctv/catalog";
+const ONTARIO_CCTV_FRAME_PROXY_PATH = "/cctv/ontario";
 const OVERPASS_PROXY_PATH = "/overpass";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
@@ -741,6 +745,35 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("Calgary CCTV frame request failed");
+        }
+      });
+      server.middlewares.use(CCTV_CATALOG_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(req.url ?? "", `http://localhost${CCTV_CATALOG_PROXY_PATH}`);
+          const provider = decodeURIComponent(requestUrl.pathname).match(
+            /^\/(ontario|drivebc)\.json$/,
+          )?.[1];
+          await proxyCctvCatalogRequestGuarded(provider ?? "", res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("CCTV catalog request failed");
+        }
+      });
+      server.middlewares.use(ONTARIO_CCTV_FRAME_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(
+            req.url ?? "",
+            `http://localhost${ONTARIO_CCTV_FRAME_PROXY_PATH}`,
+          );
+          const frameId = decodeURIComponent(requestUrl.pathname).match(
+            /^\/([A-Za-z0-9_.-]{1,64})$/,
+          )?.[1];
+          await proxyOntarioCctvFrameRequestGuarded(frameId ?? "", res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Ontario CCTV frame request failed");
         }
       });
       server.middlewares.use(OVERPASS_PROXY_PATH, async (req, res) => {

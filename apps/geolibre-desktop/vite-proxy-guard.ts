@@ -40,6 +40,11 @@ const AIRCRAFT_UPSTREAMS = {
 } as const;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
 const CALGARY_CCTV_FRAME_BASE = "https://trafficcam.calgary.ca/loc";
+const ONTARIO_CCTV_FRAME_BASE = "https://511on.ca/map/Cctv/";
+const CCTV_CATALOG_URLS = {
+  ontario: "https://511on.ca/api/v2/get/cameras?format=json&lang=en",
+  drivebc: "https://www.drivebc.ca/api/webcams/",
+} as const;
 const OVERPASS_EDGE_URL = "https://tiles.geolibre.app/overpass";
 const OVERPASS_MAX_REQUEST_BYTES = 20_000;
 const CELESTRAK_GROUPS = new Set([
@@ -581,14 +586,34 @@ export async function proxyCalgaryCctvFrameRequestGuarded(
     res.end("Invalid Calgary camera id");
     return;
   }
-  const response = await fetchWithGuard(`${CALGARY_CCTV_FRAME_BASE}${frameId}.jpg`, {
+  await proxyCctvFrameRequestGuarded(`${CALGARY_CCTV_FRAME_BASE}${frameId}.jpg`, res);
+}
+
+/** Fixed, bounded image relay for Ontario 511's public traffic snapshots. */
+export async function proxyOntarioCctvFrameRequestGuarded(
+  frameId: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(frameId)) {
+    res.statusCode = 400;
+    res.end("Invalid Ontario camera id");
+    return;
+  }
+  await proxyCctvFrameRequestGuarded(
+    `${ONTARIO_CCTV_FRAME_BASE}${encodeURIComponent(frameId)}`,
+    res,
+  );
+}
+
+async function proxyCctvFrameRequestGuarded(upstream: string, res: ServerResponse): Promise<void> {
+  const response = await fetchWithGuard(upstream, {
     headers: { accept: "image/jpeg,image/*" },
   });
   const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
   if (!response.ok || !["image/jpeg", "image/png"].includes(contentType)) {
     await response.body?.cancel().catch(() => undefined);
     res.statusCode = 502;
-    res.end("Calgary CCTV frame request failed");
+    res.end("CCTV frame request failed");
     return;
   }
   const body = await readBodyWithLimit(response, 5 * 1024 * 1024);
@@ -596,6 +621,40 @@ export async function proxyCalgaryCctvFrameRequestGuarded(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=30");
   res.setHeader("content-type", contentType);
+  res.setHeader("content-length", String(body.byteLength));
+  res.end(body);
+}
+
+/** Fixed, bounded JSON relay for public camera catalogs without browser CORS. */
+export async function proxyCctvCatalogRequestGuarded(
+  provider: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!(provider in CCTV_CATALOG_URLS)) {
+    res.statusCode = 400;
+    res.end("Invalid CCTV catalog provider");
+    return;
+  }
+  const url = CCTV_CATALOG_URLS[provider as keyof typeof CCTV_CATALOG_URLS];
+  const response = await fetchWithGuard(url, { headers: { accept: "application/json" } });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    res.statusCode = 502;
+    res.end("CCTV catalog request failed");
+    return;
+  }
+  const body = await readBodyWithLimit(response, 4 * 1024 * 1024);
+  try {
+    if (!Array.isArray(JSON.parse(body.toString("utf8")))) throw new Error();
+  } catch {
+    res.statusCode = 502;
+    res.end("CCTV catalog returned malformed JSON");
+    return;
+  }
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=900");
+  res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("content-length", String(body.byteLength));
   res.end(body);
 }

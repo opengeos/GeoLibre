@@ -18,6 +18,9 @@ export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/
 export const ADSB_LOL_MILITARY_UPSTREAM = "https://api.adsb.lol/v2/mil";
 export const ADSBDB_AIRCRAFT_UPSTREAM = "https://api.adsbdb.com/v0/aircraft/";
 export const CALGARY_CCTV_FRAME_UPSTREAM = "https://trafficcam.calgary.ca/";
+export const ONTARIO_CCTV_CATALOG_UPSTREAM = "https://511on.ca/api/v2/get/cameras";
+export const ONTARIO_CCTV_FRAME_UPSTREAM = "https://511on.ca/map/Cctv/";
+export const DRIVEBC_CCTV_CATALOG_UPSTREAM = "https://www.drivebc.ca/api/webcams/";
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
@@ -31,6 +34,9 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   ADSB_LOL_MILITARY_UPSTREAM,
   ADSBDB_AIRCRAFT_UPSTREAM,
   CALGARY_CCTV_FRAME_UPSTREAM,
+  ONTARIO_CCTV_CATALOG_UPSTREAM,
+  ONTARIO_CCTV_FRAME_UPSTREAM,
+  DRIVEBC_CCTV_CATALOG_UPSTREAM,
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

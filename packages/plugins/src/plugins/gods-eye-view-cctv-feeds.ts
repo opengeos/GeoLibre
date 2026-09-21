@@ -13,11 +13,17 @@ export const CCTV_CATALOG_FAILURE_CACHE_MS = 60_000;
 export const TFL_CATALOG_URL = "https://api.tfl.gov.uk/Place/Type/JamCam";
 export const CALGARY_CATALOG_URL = "https://data.calgary.ca/resource/k7p9-kppz.json?$limit=500";
 export const FINTRAFFIC_CATALOG_URL = "https://tie.digitraffic.fi/api/weathercam/v1/stations";
+export const CCTV_CATALOG_EDGE_BASE = "https://tiles.geolibre.app/cctv/catalog";
+export const CCTV_CATALOG_DEV_BASE = "/cctv/catalog";
 export const CALGARY_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/calgary";
 export const CALGARY_FRAME_DEV_BASE = "/cctv/calgary";
+export const ONTARIO_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/ontario";
+export const ONTARIO_FRAME_DEV_BASE = "/cctv/ontario";
 
 const TFL_IMAGE_ORIGIN = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/";
 const FINTRAFFIC_IMAGE_ORIGIN = "https://weathercam.digitraffic.fi/";
+const ONTARIO_IMAGE_ORIGIN = "https://511on.ca/map/Cctv/";
+const DRIVEBC_IMAGE_ORIGIN = "https://www.drivebc.ca/images/";
 const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
 type CatalogCacheEntry =
   | { expiresAt: number; status: "fulfilled"; payload: unknown }
@@ -58,6 +64,13 @@ function validCoordinate(longitude: number | null, latitude: number | null): boo
     latitude >= -90 &&
     latitude <= 90
   );
+}
+
+function catalogProxyUrl(provider: "ontario" | "drivebc", dev = isViteDevServer()): string {
+  const base = dev
+    ? `${globalThis.location?.origin ?? "http://localhost"}${CCTV_CATALOG_DEV_BASE}`
+    : CCTV_CATALOG_EDGE_BASE;
+  return `${base}/${provider}.json`;
 }
 
 function refreshedUrl(url: string, refreshMs: number, nowMs: number): string {
@@ -189,6 +202,120 @@ export function normalizeFintrafficCameras(payload: unknown): CctvCamera[] {
         refreshMs: 10 * 60_000,
       });
     }
+  }
+  return cameras;
+}
+
+export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer()): CctvCamera[] {
+  if (!Array.isArray(payload)) return [];
+  const cameras: CctvCamera[] = [];
+  for (const value of payload.slice(0, 2_000)) {
+    if (!value || typeof value !== "object") continue;
+    const row = value as Record<string, unknown>;
+    const rawIdValue = row.Id ?? row.id;
+    const rawId =
+      typeof rawIdValue === "string" || typeof rawIdValue === "number"
+        ? String(rawIdValue).trim()
+        : "";
+    const longitude = finite(row.Longitude ?? row.longitude);
+    const latitude = finite(row.Latitude ?? row.latitude);
+    if (
+      !/^\d+$/.test(rawId) ||
+      !validCoordinate(longitude, latitude) ||
+      (latitude as number) < 41 ||
+      (latitude as number) > 57.5 ||
+      (longitude as number) < -95.6 ||
+      (longitude as number) > -74
+    ) {
+      continue;
+    }
+    const views = Array.isArray(row.Views ?? row.views) ? (row.Views ?? row.views) : [];
+    const enabled = (views as unknown[])
+      .filter((view): view is Record<string, unknown> => Boolean(view && typeof view === "object"))
+      .filter((view) => String(view.Status ?? view.status).toLowerCase() === "enabled")
+      .map((view) => {
+        const source = text(view.Url ?? view.url);
+        const description = text(view.Description ?? view.description) ?? "";
+        try {
+          const parsed = new URL(source ?? "");
+          const match = parsed.pathname.match(/^\/map\/Cctv\/([A-Za-z0-9_.-]+)$/);
+          const host = parsed.hostname.toLowerCase();
+          if (
+            parsed.protocol !== "https:" ||
+            (host !== "511on.ca" && !host.endsWith(".traveliq.co")) ||
+            !match
+          ) {
+            return null;
+          }
+          return {
+            description,
+            snapshotUrl: `${ONTARIO_IMAGE_ORIGIN}${encodeURIComponent(match[1])}`,
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((view): view is { description: string; snapshotUrl: string } => view !== null);
+    const view =
+      enabled.find((candidate) => !/\bdown\b/i.test(candidate.description)) ?? enabled[0];
+    if (!view) continue;
+    const frameId = new URL(view.snapshotUrl).pathname.slice("/map/Cctv/".length);
+    const frameBase = dev
+      ? `${globalThis.location?.origin ?? "http://localhost"}${ONTARIO_FRAME_DEV_BASE}`
+      : ONTARIO_FRAME_EDGE_BASE;
+    const location = text(row.Location ?? row.location);
+    const roadway = text(row.Roadway ?? row.roadway);
+    cameras.push({
+      id: `ontario-${rawId}`,
+      name: [location ?? roadway ?? `Ontario 511 Camera ${rawId}`, view.description]
+        .filter(Boolean)
+        .join(" · "),
+      provider: "Ontario 511",
+      longitude: longitude as number,
+      latitude: latitude as number,
+      snapshotUrl: `${frameBase}/${encodeURIComponent(frameId)}`,
+      attribution: "Open Government Licence – Ontario",
+      refreshMs: 60_000,
+    });
+  }
+  return cameras;
+}
+
+export function normalizeDriveBcCameras(payload: unknown): CctvCamera[] {
+  if (!Array.isArray(payload)) return [];
+  const cameras: CctvCamera[] = [];
+  for (const value of payload.slice(0, 2_000)) {
+    if (!value || typeof value !== "object") continue;
+    const row = value as Record<string, unknown>;
+    const rawId = finite(row.id);
+    const location = row.location as { coordinates?: unknown } | undefined;
+    const coordinates = Array.isArray(location?.coordinates) ? location.coordinates : [];
+    const longitude = finite(coordinates[0]);
+    const latitude = finite(coordinates[1]);
+    if (
+      row.is_on !== true ||
+      row.should_appear !== true ||
+      rawId === null ||
+      !Number.isSafeInteger(rawId) ||
+      rawId <= 0 ||
+      !validCoordinate(longitude, latitude) ||
+      (latitude as number) < 48 ||
+      (latitude as number) > 61 ||
+      (longitude as number) < -139.1 ||
+      (longitude as number) > -113.5
+    ) {
+      continue;
+    }
+    cameras.push({
+      id: `drivebc-${rawId}`,
+      name: text(row.name) ?? `DriveBC Camera ${rawId}`,
+      provider: "DriveBC",
+      longitude: longitude as number,
+      latitude: latitude as number,
+      snapshotUrl: `${DRIVEBC_IMAGE_ORIGIN}${rawId}.jpg`,
+      attribution: "DriveBC, Open Government Licence – British Columbia",
+      refreshMs: 10 * 60_000,
+    });
   }
   return cameras;
 }
@@ -341,6 +468,8 @@ export async function fetchCctvCzml(
       Accept: "application/json",
       "Digitraffic-User": "GeoLibre/3.0 (+https://geolibre.org)",
     }),
+    fetchCatalog(catalogProxyUrl("ontario"), fetcher, options.signal, normalizeOntarioCameras),
+    fetchCatalog(catalogProxyUrl("drivebc"), fetcher, options.signal, normalizeDriveBcCameras),
   ]);
   if (options.signal?.aborted) {
     throw options.signal.reason ?? new DOMException("CCTV request aborted", "AbortError");

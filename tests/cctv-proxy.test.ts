@@ -150,3 +150,86 @@ describe("Calgary CCTV edge proxy", () => {
     assert.equal(oversized.status, 502);
   });
 });
+
+describe("CCTV catalog edge proxy", () => {
+  it("relays only the fixed Ontario and DriveBC JSON catalogs", async () => {
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input));
+      return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    for (const provider of ["ontario", "drivebc"]) {
+      const response = await tilesWorker.fetch(
+        new Request(`https://tiles.geolibre.app/cctv/catalog/${provider}.json`, {
+          headers: { origin: "http://localhost:5173" },
+        }),
+        {},
+        {} as ExecutionContext,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      assert.equal(response.headers.get("cache-control"), "public, max-age=900");
+    }
+    assert.deepEqual(requested, [
+      "https://511on.ca/api/v2/get/cameras?format=json&lang=en",
+      "https://www.drivebc.ca/api/webcams/",
+    ]);
+  });
+
+  it("rejects untrusted callers, unknown providers, and malformed upstream JSON", async () => {
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const forbidden = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/catalog/ontario.json", {
+        headers: { origin: "https://example.com" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(forbidden.status, 403);
+    assert.equal(fetched, false);
+    const unknown = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/catalog/unknown.json", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(unknown.status, 404);
+    const malformed = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/catalog/ontario.json", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(malformed.status, 502);
+  });
+});
+
+describe("Ontario CCTV edge proxy", () => {
+  it("relays a pinned Ontario frame with browser-readable CORS", async () => {
+    let requested = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/ontario/1456", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(requested, "https://511on.ca/map/Cctv/1456");
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  });
+});
