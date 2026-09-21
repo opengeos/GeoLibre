@@ -886,7 +886,10 @@ export const tilesWorker = {
             accept: "application/json",
             "user-agent": "GeoLibre-Launch-Library-Proxy/1.0 (+https://geolibre.org)",
           },
-          cf: { cacheEverything: true, cacheTtl: 900 },
+          cf: {
+            cacheEverything: true,
+            cacheTtlByStatus: { "200-299": 900, "300-599": 0 },
+          },
         });
       } catch {
         return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });

@@ -290,20 +290,24 @@ export async function fetchBikeShareCzml(
   options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<GodsEyeViewFeedPayload> {
   const request = options.fetch ?? fetch;
-  const queue = [...GBFS_SYSTEMS];
-  const payloads: GodsEyeViewFeedPayload[] = [];
+  const queue = GBFS_SYSTEMS.map((_, index) => index);
+  const results: Array<GodsEyeViewFeedPayload | undefined> = [];
   const workers = Array.from({ length: 6 }, async () => {
     while (queue.length > 0) {
-      const system = queue.shift();
-      if (!system) return;
+      const index = queue.shift();
+      if (index === undefined) return;
+      const system = GBFS_SYSTEMS[index];
       try {
-        payloads.push(await fetchGbfsSystem(system, request, options.signal));
+        results[index] = await fetchGbfsSystem(system, request, options.signal);
       } catch {
         if (options.signal?.aborted) return;
       }
     }
   });
   await Promise.all(workers);
+  const payloads = results.filter(
+    (payload): payload is GodsEyeViewFeedPayload => payload !== undefined,
+  );
   if (payloads.length === 0) throw new Error("No bike-share systems were available");
   return {
     packets: [

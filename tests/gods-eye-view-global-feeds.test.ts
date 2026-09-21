@@ -128,6 +128,35 @@ describe("God's Eye View global feeds", () => {
     assert.equal(result.attributes.features.length, 1);
   });
 
+  it("keeps registry order when GBFS systems finish out of order", async () => {
+    const first = GBFS_SYSTEMS[0];
+    const second = GBFS_SYSTEMS[1];
+    const activeUrls = new Set([
+      first.informationUrl,
+      first.statusUrl,
+      second.informationUrl,
+      second.statusUrl,
+    ]);
+    const mockFetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (!activeUrls.has(url)) return new Response("unavailable", { status: 503 });
+      if (url === first.informationUrl || url === first.statusUrl) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      const stationId =
+        url === first.informationUrl || url === first.statusUrl ? "first" : "second";
+      const stations = url.includes("station_information")
+        ? [{ station_id: stationId, name: stationId, lat: 40, lon: -74 }]
+        : [{ station_id: stationId, num_bikes_available: 1 }];
+      return new Response(JSON.stringify({ data: { stations } }), { status: 200 });
+    }) as typeof fetch;
+
+    const result = await fetchBikeShareCzml({ fetch: mockFetch });
+
+    assert.equal(result.packets[1].id, `bike-share-${first.id}-first`);
+    assert.equal(result.packets[2].id, `bike-share-${second.id}-second`);
+  });
+
   it("returns successful GBFS systems when the remaining providers time out", async () => {
     const good = GBFS_SYSTEMS[0];
     const goodUrls = new Set([good.informationUrl, good.statusUrl]);

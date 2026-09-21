@@ -39,6 +39,15 @@ describe("Launch Library edge cache", () => {
     assert.equal(upper - lower, 30 * 86_400_000);
     const headers = new Headers(calls[0].init?.headers);
     assert.match(headers.get("user-agent") ?? "", /GeoLibre/);
+    const cf = (
+      calls[0].init as RequestInit & {
+        cf?: { cacheEverything?: boolean; cacheTtlByStatus?: Record<string, number> };
+      }
+    ).cf;
+    assert.deepEqual(cf, {
+      cacheEverything: true,
+      cacheTtlByStatus: { "200-299": 900, "300-599": 0 },
+    });
   });
 
   it("rejects untrusted browser origins", async () => {
