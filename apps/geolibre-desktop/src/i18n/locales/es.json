@@ -2375,6 +2375,8 @@
       "spaceMissions": "Misiones espaciales (30 días)",
       "satellites": "Satélites",
       "bikeShare": "Bicicletas compartidas",
+      "streetTraffic": "Tráfico urbano simulado",
+      "mappedAlpr": "Cámaras ALPR cartografiadas",
       "radio": "Emisoras de radio",
       "datacenters": "Centros de datos",
       "dams": "Presas",

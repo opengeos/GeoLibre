@@ -923,6 +923,8 @@ export {
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   GODS_EYE_VIEW_BIKE_SHARE_FLAG,
   GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+  GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
+  GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
 } from "./plugins/gods-eye-view";
 export {
   buildCelestrakTleUrl,
@@ -969,6 +971,19 @@ export {
   LAUNCH_LIBRARY_DEV_URL,
   LAUNCH_LIBRARY_EDGE_URL,
 } from "./plugins/gods-eye-view-global-feeds";
+export {
+  ALPR_MAX_VIEW_SPAN_DEGREES,
+  ALPR_QUERY_SNAP_DEGREES,
+  fetchMappedAlprCzml,
+  fetchStreetTrafficCzml,
+  mappedAlprToCzml,
+  streetTrafficToCzml,
+  TRAFFIC_MAX_VIEW_SPAN_DEGREES,
+  TRAFFIC_QUERY_SNAP_DEGREES,
+  viewportBoundsKey,
+  viewportQueryBounds,
+  type ViewBounds,
+} from "./plugins/gods-eye-view-viewport-feeds";
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,

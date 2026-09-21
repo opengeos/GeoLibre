@@ -2375,6 +2375,8 @@
       "spaceMissions": "Ruimtemissies (30 dagen)",
       "satellites": "Satellieten",
       "bikeShare": "Deelfietsen",
+      "streetTraffic": "Gesimuleerd wegverkeer",
+      "mappedAlpr": "Gekarteerde kentekencamera's",
       "radio": "Radiozenders",
       "datacenters": "Datacenters",
       "dams": "Dammen",

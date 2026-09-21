@@ -11,6 +11,8 @@ import {
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   GODS_EYE_VIEW_RADIO_FLAG,
   GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+  GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
+  GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -62,8 +64,20 @@ function makeGlobe(startingMultiplier = 0) {
       public farValue: number,
     ) {}
   }
+  let moveEndListener: (() => void) | null = null;
+  let viewBounds: [number, number, number, number] = [-122.5, 37.7, -122.4, 37.8];
   const viewer = {
     id: "viewer",
+    camera: {
+      moveEnd: {
+        addEventListener(callback: () => void) {
+          moveEndListener = callback;
+          return () => {
+            if (moveEndListener === callback) moveEndListener = null;
+          };
+        },
+      },
+    },
     clock: {
       shouldAnimate: false,
       multiplier: startingMultiplier,
@@ -97,7 +111,7 @@ function makeGlobe(startingMultiplier = 0) {
   const panel = document.getElementById("panel") as unknown as HTMLElement;
   const app = {
     getMap: () => null,
-    getViewBounds: () => [-122.5, 37.7, -122.4, 37.8] as [number, number, number, number],
+    getViewBounds: () => viewBounds,
     getCesiumScene: () => {
       handles += 1;
       return {
@@ -121,7 +135,17 @@ function makeGlobe(startingMultiplier = 0) {
     openRightPanel: () => {},
     onLocaleChange: () => () => {},
   } as unknown as GeoLibreAppAPI;
-  return { app, viewer, panel, points, handleCount: () => handles };
+  return {
+    app,
+    viewer,
+    panel,
+    points,
+    handleCount: () => handles,
+    setViewBounds: (bounds: [number, number, number, number]) => {
+      viewBounds = bounds;
+    },
+    fireMoveEnd: () => moveEndListener?.(),
+  };
 }
 
 /** Count feed requests without touching the network; failures are expected. */
@@ -299,8 +323,7 @@ describe("God's Eye View availability", () => {
       ];
       assert.deepEqual(
         sections.map((section) => section.dataset.feedGroup),
-        ["movement", "infrastructure", "events", "utilities"],
-        "empty groups stay hidden until they have a registered feed",
+        ["movement", "cameras", "infrastructure", "events", "utilities"],
       );
       assert.deepEqual(
         sections.map((section) => [
@@ -310,7 +333,8 @@ describe("God's Eye View availability", () => {
           ),
         ]),
         [
-          ["Movement", ["satellites", "bikeShare"]],
+          ["Movement", ["satellites", "bikeShare", "streetTraffic"]],
+          ["Cameras", ["mappedAlpr"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
           ["Events", ["earthquakes", "spaceMissions"]],
           ["Utilities", ["radio"]],
@@ -339,22 +363,29 @@ describe("God's Eye View feed refresh", () => {
         osmInfrastructure: true,
         bikeShare: true,
         spaceMissions: true,
+        streetTraffic: true,
+        mappedAlpr: true,
       });
       godsEyeViewPlugin.activate?.(globe.app);
       for (let i = 0; i < 20; i++) await flush();
 
       const layers = useAppStore.getState().layers;
-      assert.deepEqual(layers.map((layer) => layer.metadata.godsEyeViewFeed).sort(), [
-        "bikeShare",
-        "cables",
-        "dams",
-        "datacenters",
-        "earthquakes",
-        "osmInfrastructure",
-        "radio",
-        "satellites",
-        "spaceMissions",
-      ]);
+      assert.deepEqual(
+        layers.map((layer) => layer.metadata.godsEyeViewFeed).sort(),
+        [
+          "bikeShare",
+          "cables",
+          "dams",
+          "datacenters",
+          "earthquakes",
+          "osmInfrastructure",
+          "radio",
+          "satellites",
+          "spaceMissions",
+          "streetTraffic",
+          "mappedAlpr",
+        ].sort(),
+      );
       for (const layer of layers) assert.ok(layer.source.attribution, layer.name);
       const flags = [
         GODS_EYE_VIEW_RADIO_FLAG,
@@ -364,6 +395,8 @@ describe("God's Eye View feed refresh", () => {
         GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
         GODS_EYE_VIEW_BIKE_SHARE_FLAG,
         GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+        GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
+        GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
       ];
       for (const flag of flags) {
         assert.ok(
@@ -614,6 +647,42 @@ describe("God's Eye View feed refresh", () => {
       net.restore();
     }
   });
+
+  it("refreshes viewport feeds only after the camera enters a new snapped query cell", async () => {
+    const originalFetch = globalThis.fetch;
+    let overpassCalls = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (String(input).includes("tiles.geolibre.app/overpass")) overpassCalls += 1;
+      return new Response(JSON.stringify({ elements: [] }), { status: 200 });
+    }) as typeof fetch;
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: false,
+        satellites: false,
+        mappedAlpr: true,
+      });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let index = 0; index < 6; index += 1) await flush();
+      assert.equal(overpassCalls, 1);
+
+      globe.setViewBounds([-122.49, 37.71, -122.41, 37.79]);
+      globe.fireMoveEnd();
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      assert.equal(overpassCalls, 1, "a move inside the snapped query cell reuses its result");
+
+      globe.setViewBounds([-122.3, 37.7, -122.2, 37.8]);
+      globe.fireMoveEnd();
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      assert.equal(overpassCalls, 2);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      useAppStore.setState({ layers: [] });
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("God's Eye View clock speed", () => {
@@ -627,6 +696,8 @@ describe("God's Eye View clock speed", () => {
         spaceMissions: false,
         satellites: true,
         bikeShare: false,
+        streetTraffic: false,
+        mappedAlpr: false,
         radio: false,
         datacenters: false,
         dams: false,

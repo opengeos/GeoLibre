@@ -2407,6 +2407,8 @@
       "spaceMissions": "Space Missions (30d)",
       "satellites": "Satellites",
       "bikeShare": "Bike Share",
+      "streetTraffic": "Simulated Street Traffic",
+      "mappedAlpr": "Mapped ALPR Cameras",
       "radio": "Radio Stations",
       "datacenters": "Datacenters",
       "dams": "Dams",

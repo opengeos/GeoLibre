@@ -18,6 +18,15 @@ import {
 } from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
 import { fetchBikeShareCzml, fetchSpaceMissionsCzml } from "./gods-eye-view-global-feeds";
+import {
+  ALPR_MAX_VIEW_SPAN_DEGREES,
+  ALPR_QUERY_SNAP_DEGREES,
+  fetchMappedAlprCzml,
+  fetchStreetTrafficCzml,
+  TRAFFIC_MAX_VIEW_SPAN_DEGREES,
+  TRAFFIC_QUERY_SNAP_DEGREES,
+  viewportBoundsKey,
+} from "./gods-eye-view-viewport-feeds";
 import { OVERPASS_REQUEST_TIMEOUT_MS } from "./osm-downloader-api";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
@@ -31,8 +40,11 @@ export const GODS_EYE_VIEW_CABLES_FLAG = "godsEyeViewCables";
 export const GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG = "godsEyeViewOsmInfrastructure";
 export const GODS_EYE_VIEW_BIKE_SHARE_FLAG = "godsEyeViewBikeShare";
 export const GODS_EYE_VIEW_SPACE_MISSIONS_FLAG = "godsEyeViewSpaceMissions";
+export const GODS_EYE_VIEW_STREET_TRAFFIC_FLAG = "godsEyeViewStreetTraffic";
+export const GODS_EYE_VIEW_MAPPED_ALPR_FLAG = "godsEyeViewMappedAlpr";
 
 const REFRESH_TICK_MS = 10 * 60_000;
+const VIEWPORT_REFRESH_DEBOUNCE_MS = 400;
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
 const FEED_GROUPS = ["movement", "cameras", "infrastructure", "events", "utilities"] as const;
@@ -53,6 +65,7 @@ interface FeedDescriptor {
   flag: string;
   defaultEnabled: boolean;
   ownsClockWindow?: boolean;
+  viewportKey?: (bounds: FeedFetchContext["bounds"]) => string;
   fetch: (context: FeedFetchContext) => Promise<GodsEyeViewFeedPayload>;
 }
 
@@ -98,6 +111,18 @@ const FEED_DESCRIPTORS = {
     flag: GODS_EYE_VIEW_BIKE_SHARE_FLAG,
     defaultEnabled: false,
     fetch: ({ signal }) => fetchBikeShareCzml({ signal }),
+  },
+  streetTraffic: {
+    group: "movement",
+    label: ["panel.godsEyeView.streetTraffic", "Simulated Street Traffic"],
+    attribution: "Simulated vehicle positions on © OpenStreetMap contributors, ODbL 1.0",
+    refreshIntervalMs: 2 * 60 * 60_000,
+    timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
+    flag: GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
+    defaultEnabled: false,
+    viewportKey: (bounds) =>
+      viewportBoundsKey(bounds, TRAFFIC_MAX_VIEW_SPAN_DEGREES, TRAFFIC_QUERY_SNAP_DEGREES),
+    fetch: ({ bounds, signal, window }) => fetchStreetTrafficCzml(bounds, window, { signal }),
   },
   osmInfrastructure: {
     group: "infrastructure",
@@ -164,6 +189,18 @@ const FEED_DESCRIPTORS = {
     defaultEnabled: false,
     fetch: ({ signal }) => fetchSpaceMissionsCzml({ signal }),
   },
+  mappedAlpr: {
+    group: "cameras",
+    label: ["panel.godsEyeView.mappedAlpr", "Mapped ALPR Cameras"],
+    attribution: "Mapped ALPR cameras: © OpenStreetMap contributors, ODbL 1.0",
+    refreshIntervalMs: 60 * 60_000,
+    timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
+    flag: GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
+    defaultEnabled: false,
+    viewportKey: (bounds) =>
+      viewportBoundsKey(bounds, ALPR_MAX_VIEW_SPAN_DEGREES, ALPR_QUERY_SNAP_DEGREES),
+    fetch: ({ bounds, signal }) => fetchMappedAlprCzml(bounds, { signal }),
+  },
   radio: {
     group: "utilities",
     label: ["panel.godsEyeView.radio", "Radio Stations"],
@@ -206,6 +243,8 @@ interface FeedState {
   layerId: string | null;
   request: AbortController | null;
   generation: number;
+  lastViewportKey: string | null;
+  requestedViewportKey: string | null;
 }
 
 const feeds = Object.fromEntries(
@@ -219,6 +258,8 @@ const feeds = Object.fromEntries(
       layerId: null,
       request: null,
       generation: 0,
+      lastViewportKey: null,
+      requestedViewportKey: null,
     },
   ]),
 ) as Record<FeedId, FeedState>;
@@ -239,6 +280,8 @@ let cesiumRef: CesiumSceneHandle | null = null;
 let unregisterPanel: (() => void) | null = null;
 let unsubscribeLocale: (() => void) | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let viewportRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let removeViewportListener: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let savedClockAnimating: boolean | null = null;
 let savedClockMultiplier: number | null = null;
@@ -437,10 +480,13 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
 async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   const state = feeds[feed];
   if (!state.enabled || !cesiumRef) return;
+  const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+  const bounds = appRef?.getViewBounds?.() ?? null;
+  const viewportKey = descriptor.viewportKey?.(bounds) ?? null;
   if (
     !force &&
     state.lastUpdated &&
-    Date.now() - state.lastUpdated.getTime() < FEED_DESCRIPTORS[feed].refreshIntervalMs &&
+    Date.now() - state.lastUpdated.getTime() < descriptor.refreshIntervalMs &&
     // Recent data the user can no longer see is no reason to skip: a feed
     // toggled off and on has had its layer removed and must rebuild it, and a
     // project load brings the layer back without the rows, which are stripped
@@ -452,24 +498,25 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   state.request?.abort();
   const controller = new AbortController();
   state.request = controller;
+  state.requestedViewportKey = viewportKey;
   const generation = (state.generation += 1);
   state.loading = true;
   state.failed = false;
   renderPanel();
-  const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
   const timeout = setTimeout(() => controller.abort(), descriptor.timeoutMs);
   try {
     const window = timeWindow();
     const payload = await descriptor.fetch({
       signal: controller.signal,
       window,
-      bounds: appRef?.getViewBounds?.() ?? null,
+      bounds,
     });
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
     upsertLayer(feed, payload, updatedAt);
     if (descriptor.ownsClockWindow) applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
+    state.lastViewportKey = viewportKey;
     if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
     // No `signal.aborted` check: the timeout watchdog aborts this very request,
@@ -485,6 +532,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     if (generation === state.generation) {
       state.loading = false;
       state.request = null;
+      state.requestedViewportKey = null;
       renderPanel();
     }
   }
@@ -495,6 +543,8 @@ function removeFeedLayer(feed: FeedId): void {
   state.generation += 1;
   state.request?.abort();
   state.request = null;
+  state.requestedViewportKey = null;
+  state.lastViewportKey = null;
   state.loading = false;
   const layer = state.layerId
     ? useAppStore.getState().layers.find((candidate) => candidate.id === state.layerId)
@@ -514,6 +564,34 @@ function setFeedEnabled(feed: FeedId, enabled: boolean): void {
     if (feed === "satellites") disableDenseCatalog();
   }
   renderPanel();
+}
+
+function refreshViewportFeeds(): void {
+  const bounds = appRef?.getViewBounds?.() ?? null;
+  for (const feed of FEED_IDS) {
+    const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+    if (!feeds[feed].enabled || !descriptor.viewportKey) continue;
+    const key = descriptor.viewportKey(bounds);
+    if (key === feeds[feed].lastViewportKey || key === feeds[feed].requestedViewportKey) continue;
+    void refreshFeed(feed);
+  }
+}
+
+function bindViewportRefresh(): void {
+  removeViewportListener?.();
+  removeViewportListener = null;
+  if (viewportRefreshTimer) clearTimeout(viewportRefreshTimer);
+  viewportRefreshTimer = null;
+  const moveEnd = cesiumRef?.viewer.camera?.moveEnd;
+  if (!moveEnd?.addEventListener) return;
+  const onMoveEnd = () => {
+    if (viewportRefreshTimer) clearTimeout(viewportRefreshTimer);
+    viewportRefreshTimer = setTimeout(() => {
+      viewportRefreshTimer = null;
+      refreshViewportFeeds();
+    }, VIEWPORT_REFRESH_DEBOUNCE_MS);
+  };
+  removeViewportListener = moveEnd.addEventListener(onMoveEnd);
 }
 
 function setDenseEnabled(enabled: boolean): void {
@@ -717,6 +795,10 @@ function renderPanel(): void {
 function resetRuntime(): void {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
+  if (viewportRefreshTimer) clearTimeout(viewportRefreshTimer);
+  viewportRefreshTimer = null;
+  removeViewportListener?.();
+  removeViewportListener = null;
   unsubscribeLocale?.();
   unsubscribeLocale = null;
   unregisterPanel?.();
@@ -785,6 +867,7 @@ function startRefreshing(): void {
   refreshTimer = setInterval(() => {
     for (const feed of FEED_IDS) void refreshFeed(feed, false);
   }, REFRESH_TICK_MS);
+  bindViewportRefresh();
   syncDenseCatalog();
 }
 
@@ -812,6 +895,10 @@ export function reattachGodsEyeView(app: GeoLibreAppAPI): void {
   cesiumRef = next;
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
+  if (viewportRefreshTimer) clearTimeout(viewportRefreshTimer);
+  viewportRefreshTimer = null;
+  removeViewportListener?.();
+  removeViewportListener = null;
   if (cesiumRef) {
     savedClockAnimating = cesiumRef.clock.shouldAnimate;
     savedClockMultiplier = cesiumRef.clock.multiplier;

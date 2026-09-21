@@ -2375,6 +2375,8 @@
       "spaceMissions": "Missions spatiales (30 j)",
       "satellites": "Satellites",
       "bikeShare": "Vélos en libre-service",
+      "streetTraffic": "Circulation routière simulée",
+      "mappedAlpr": "Caméras LAPI cartographiées",
       "radio": "Stations de radio",
       "datacenters": "Centres de données",
       "dams": "Barrages",

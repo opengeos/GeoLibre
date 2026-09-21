@@ -2327,6 +2327,8 @@
       "spaceMissions": "太空任务（30 天）",
       "satellites": "卫星",
       "bikeShare": "共享单车",
+      "streetTraffic": "模拟道路交通",
+      "mappedAlpr": "已标绘车牌识别摄像头",
       "radio": "广播电台",
       "datacenters": "数据中心",
       "dams": "水坝",

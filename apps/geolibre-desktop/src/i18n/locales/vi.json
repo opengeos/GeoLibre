@@ -2327,6 +2327,8 @@
       "spaceMissions": "Sứ mệnh không gian (30 ngày)",
       "satellites": "Vệ tinh",
       "bikeShare": "Chia sẻ xe đạp",
+      "streetTraffic": "Giao thông đường phố mô phỏng",
+      "mappedAlpr": "Camera nhận dạng biển số đã lập bản đồ",
       "radio": "Đài phát thanh",
       "datacenters": "Trung tâm dữ liệu",
       "dams": "Đập",
