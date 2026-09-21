@@ -253,6 +253,12 @@ describe("viewBoundsToOgcBbox", () => {
     assert.equal(viewBoundsToOgcBbox([0, Number.NaN, 10, 20]), null);
     assert.equal(viewBoundsToOgcBbox([0, 10, 20]), null);
   });
+
+  it("rejects a span too narrow to survive rounding", () => {
+    // An empty box would filter every feature out rather than narrow the query.
+    assert.equal(viewBoundsToOgcBbox([0, 0, 0.0000004, 1]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 0, 1, 0.0000004]), null);
+  });
 });
 
 describe("fetchOgcFeatureItems", () => {

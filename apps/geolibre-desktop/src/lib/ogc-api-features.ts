@@ -236,15 +236,21 @@ export function createOgcItemsUrl(request: {
  * Latitudes are clamped rather than wrapped — a camera tilted toward the pole
  * reports beyond ±90°, and the box there really is the pole.
  *
+ * Corners are rounded to six decimals *before* the box is checked for area, so
+ * a span too narrow to survive rounding is rejected rather than sent as an
+ * empty box — which would filter every feature out instead of narrowing the
+ * request.
+ *
  * @param bounds - A `[west, south, east, north]` extent in degrees.
  * @returns The `bbox` value, or null when the extent has no usable area.
  */
 export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
   if (bounds.length !== 4 || !bounds.every((value) => Number.isFinite(value))) return null;
   const [west, south, east, north] = bounds;
+  const round = (value: number) => Number(value.toFixed(6));
   const clampLatitude = (value: number) => Math.max(-90, Math.min(90, value));
-  const southEdge = clampLatitude(south);
-  const northEdge = clampLatitude(north);
+  const southEdge = round(clampLatitude(south));
+  const northEdge = round(clampLatitude(north));
   if (!(southEdge < northEdge)) return null;
 
   const span = east - west;
@@ -254,13 +260,14 @@ export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
   if (span < 360) {
     // Wrap the west corner into range, then carry the span across from it so
     // the box keeps its width instead of being wrapped corner by corner.
-    westEdge = ((((west + 180) % 360) + 360) % 360) - 180;
-    eastEdge = westEdge + span;
-    if (eastEdge > 180) eastEdge -= 360;
+    const wrappedWest = ((((west + 180) % 360) + 360) % 360) - 180;
+    const wrappedEast = wrappedWest + span > 180 ? wrappedWest + span - 360 : wrappedWest + span;
+    westEdge = round(wrappedWest);
+    eastEdge = round(wrappedEast);
+    if (westEdge === eastEdge) return null;
   }
 
-  const format = (value: number) => Number(value.toFixed(6)).toString();
-  return [westEdge, southEdge, eastEdge, northEdge].map(format).join(",");
+  return [westEdge, southEdge, eastEdge, northEdge].map(String).join(",");
 }
 
 /**
