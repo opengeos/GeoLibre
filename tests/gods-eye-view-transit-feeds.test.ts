@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ENTUR_CLIENT_NAME,
   ENTUR_TRANSIT_URL,
+  GTFS_MAX_RESPONSE_BYTES,
   decodeGtfsRealtimeVehicles,
   fetchTransitCzml,
   transitVehiclesToCzml,
@@ -197,5 +198,22 @@ describe("God's Eye View transit feed", () => {
     assert.equal(payload.attributes.features.length, 0);
     assert.equal(calls[0].url, ENTUR_TRANSIT_URL);
     assert.equal(new Headers(calls[0].init?.headers).get("ET-Client-Name"), ENTUR_CLIENT_NAME);
+  });
+
+  it("stops reading a headerless response at the byte limit", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(GTFS_MAX_RESPONSE_BYTES));
+        controller.enqueue(new Uint8Array(1));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetcher = (async () => new Response(body, { status: 200 })) as typeof fetch;
+
+    await assert.rejects(() => fetchTransitCzml({ fetch: fetcher }), /exceeds the 8 MiB limit/);
+    assert.equal(cancelled, true);
   });
 });

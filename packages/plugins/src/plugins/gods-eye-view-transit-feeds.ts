@@ -153,6 +153,8 @@ function finite(value: unknown): number | null {
 }
 
 function enturMode(routeId: string | null): TransitVehicle["mode"] {
+  // GTFS-Realtime carries no route type. Entur codes identify these known rail
+  // operators, but metro, tram, ferry, and unknown operators use bus styling.
   const railCodes = new Set(["VYG", "GJB", "SJN", "FLT", "GOA", "NSB", "VYT", "FLB"]);
   return routeId && railCodes.has(routeId.split(":")[0]) ? "rail" : "bus";
 }
@@ -325,6 +327,45 @@ export function transitVehiclesToCzml(
   return { packets, attributes: { type: "FeatureCollection", features } as FeatureCollection };
 }
 
+async function readBoundedResponse(response: Response): Promise<Uint8Array> {
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > GTFS_MAX_RESPONSE_BYTES) {
+    throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
+  }
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > GTFS_MAX_RESPONSE_BYTES) {
+      throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
+    }
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > GTFS_MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /** Fetch and decode Entur's browser-accessible national vehicle feed. */
 export async function fetchTransitCzml(
   options: { signal?: AbortSignal; fetch?: typeof fetch; now?: Date } = {},
@@ -334,10 +375,6 @@ export async function fetchTransitCzml(
     headers: { "ET-Client-Name": ENTUR_CLIENT_NAME },
   });
   if (!response.ok) throw new Error(`Entur transit request failed (${response.status})`);
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > GTFS_MAX_RESPONSE_BYTES) {
-    throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
-  }
-  const snapshot = decodeGtfsRealtimeVehicles(await response.arrayBuffer());
+  const snapshot = decodeGtfsRealtimeVehicles(await readBoundedResponse(response));
   return transitVehiclesToCzml(snapshot.vehicles, options.now ?? new Date());
 }
