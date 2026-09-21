@@ -37,19 +37,14 @@ const calgary = [
   },
 ];
 
-const austin = {
-  meta: {
-    view: {
-      columns: [
-        { fieldName: "camera_id" },
-        { fieldName: "location_name" },
-        { fieldName: "camera_status" },
-        { fieldName: "location" },
-      ],
-    },
+const austin = [
+  {
+    camera_id: "86",
+    location_name: "Congress Ave / 6th St",
+    camera_status: "TURNED_ON",
+    location: { type: "Point", coordinates: [-97.7431, 30.2672] },
   },
-  data: [["86", "Congress Ave / 6th St", "TURNED_ON", "POINT (-97.7431 30.2672)"]],
-};
+];
 
 const fintraffic = {
   features: [
@@ -183,13 +178,11 @@ describe("God's Eye View CCTV feeds", () => {
       [],
     );
     assert.deepEqual(
-      normalizeAustinCameras({
-        ...austin,
-        data: [
-          ["86", "Congress Ave / 6th St", "REMOVED", "POINT (-97.7431 30.2672)"],
-          ["87", "Outside", "TURNED_ON", "POINT (-80 25)"],
-        ],
-      }),
+      normalizeAustinCameras([
+        { ...austin[0], camera_status: "REMOVED" },
+        { ...austin[0], camera_id: "87", location: { type: "Point", coordinates: [-80, 25] } },
+        { ...austin[0], camera_id: "88", location: { type: "LineString", coordinates: [] } },
+      ]),
       [],
     );
     assert.deepEqual(

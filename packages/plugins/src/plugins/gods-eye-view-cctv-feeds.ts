@@ -12,7 +12,7 @@ export const CCTV_CATALOG_FAILURE_CACHE_MS = 60_000;
 
 export const TFL_CATALOG_URL = "https://api.tfl.gov.uk/Place/Type/JamCam";
 export const AUSTIN_CATALOG_URL =
-  "https://data.austintexas.gov/api/views/b4k4-adkb/rows.json?accessType=DOWNLOAD";
+  "https://data.austintexas.gov/resource/b4k4-adkb.json?$limit=5000&$where=camera_status%3D%27TURNED_ON%27&$select=camera_id%2Clocation_name%2Ccamera_status%2Clocation";
 export const CALGARY_CATALOG_URL = "https://data.calgary.ca/resource/k7p9-kppz.json?$limit=500";
 export const FINTRAFFIC_CATALOG_URL = "https://tie.digitraffic.fi/api/weathercam/v1/stations";
 export const CCTV_CATALOG_EDGE_BASE = "https://tiles.geolibre.app/cctv/catalog";
@@ -121,36 +121,22 @@ export function normalizeTflCameras(payload: unknown): CctvCamera[] {
 }
 
 export function normalizeAustinCameras(payload: unknown, dev = isViteDevServer()): CctvCamera[] {
-  if (!payload || typeof payload !== "object") return [];
-  const catalog = payload as {
-    meta?: { view?: { columns?: unknown } };
-    data?: unknown;
-  };
-  const columns = Array.isArray(catalog.meta?.view?.columns) ? catalog.meta.view.columns : [];
-  const rows = Array.isArray(catalog.data) ? catalog.data : [];
-  const fieldIndexes = new Map<string, number>();
-  columns.slice(0, 200).forEach((value, index) => {
-    if (!value || typeof value !== "object") return;
-    const fieldName = text((value as Record<string, unknown>).fieldName);
-    if (fieldName) fieldIndexes.set(fieldName, index);
-  });
-  const valueAt = (row: unknown[], field: string): unknown => {
-    const index = fieldIndexes.get(field);
-    return index === undefined ? undefined : row[index];
-  };
+  if (!Array.isArray(payload)) return [];
   const cameras: CctvCamera[] = [];
-  for (const value of rows.slice(0, 5_000)) {
-    if (!Array.isArray(value)) continue;
-    const rawId = text(valueAt(value, "camera_id"));
-    const status = text(valueAt(value, "camera_status"));
-    const point = text(valueAt(value, "location"));
-    const pointMatch = point?.match(/^POINT \((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\)$/);
-    const longitude = finite(pointMatch?.[1]);
-    const latitude = finite(pointMatch?.[2]);
+  for (const value of payload.slice(0, 5_000)) {
+    if (!value || typeof value !== "object") continue;
+    const row = value as Record<string, unknown>;
+    const rawId = text(row.camera_id);
+    const status = text(row.camera_status);
+    const location = row.location as { type?: unknown; coordinates?: unknown } | undefined;
+    const coordinates = Array.isArray(location?.coordinates) ? location.coordinates : [];
+    const longitude = finite(coordinates[0]);
+    const latitude = finite(coordinates[1]);
     if (
       !rawId ||
       !/^\d{1,6}$/.test(rawId) ||
       status?.toUpperCase() !== "TURNED_ON" ||
+      location?.type !== "Point" ||
       !validCoordinate(longitude, latitude) ||
       (latitude as number) < 30.02 ||
       (latitude as number) > 30.58 ||
@@ -159,7 +145,7 @@ export function normalizeAustinCameras(payload: unknown, dev = isViteDevServer()
     ) {
       continue;
     }
-    const rawName = text(valueAt(value, "location_name"));
+    const rawName = text(row.location_name);
     const name =
       rawName && rawName.length <= 140 && !/[\r\n]/.test(rawName)
         ? rawName
