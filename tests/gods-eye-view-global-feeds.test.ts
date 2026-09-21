@@ -38,9 +38,13 @@ describe("God's Eye View global feeds", () => {
   });
 
   it("uses the local fixed proxy before the edge cache during development", () => {
-    const urls = buildLaunchLibraryRequestUrls(new Date("2026-09-20T00:00:00Z"), "localhost");
+    const urls = buildLaunchLibraryRequestUrls(true);
     assert.equal(urls[0], LAUNCH_LIBRARY_DEV_URL);
     assert.equal(urls[1], LAUNCH_LIBRARY_EDGE_URL);
+  });
+
+  it("uses only the shared edge cache outside the development server", () => {
+    assert.deepEqual(buildLaunchLibraryRequestUrls(false), [LAUNCH_LIBRARY_EDGE_URL]);
   });
 
   it("normalizes launch sites and ignores records without coordinates", () => {
@@ -57,19 +61,17 @@ describe("God's Eye View global feeds", () => {
     assert.equal(result.attributes.features[0].properties?.provider, "Example Space");
   });
 
-  it("tries the shared edge cache before the public Launch Library endpoint", async () => {
+  it("reads space missions through the shared edge cache", async () => {
     const calls: string[] = [];
     const mockFetch = (async (input: string | URL | Request) => {
       calls.push(String(input));
-      if (calls.length === 1) return new Response("missing", { status: 404 });
       return new Response(JSON.stringify({ results: [launch] }), { status: 200 });
     }) as typeof fetch;
     const result = await fetchSpaceMissionsCzml({
       fetch: mockFetch,
-      now: new Date("2026-09-20T00:00:00Z"),
     });
     assert.equal(calls[0], LAUNCH_LIBRARY_EDGE_URL);
-    assert.match(calls[1], /^https:\/\/ll\.thespacedevs\.com\/2\.3\.0\/launches\//);
+    assert.equal(calls.length, 1);
     assert.equal(result.attributes.features.length, 1);
   });
 

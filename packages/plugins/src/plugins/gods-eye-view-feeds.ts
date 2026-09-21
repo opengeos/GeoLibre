@@ -124,7 +124,7 @@ export function buildCelestrakTleUrl(group = "stations"): string {
   return url.toString();
 }
 
-function isViteDevServer(): boolean {
+export function isViteDevServer(): boolean {
   return Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 }
 

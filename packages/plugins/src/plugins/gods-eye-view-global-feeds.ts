@@ -1,6 +1,7 @@
 import type { CzmlPacket } from "@geolibre/core";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import type { GodsEyeViewFeedPayload } from "./gods-eye-view-catalog-feeds";
+import { isViteDevServer } from "./gods-eye-view-feeds";
 
 export const LAUNCH_LIBRARY_EDGE_URL = "https://tiles.geolibre.app/launch-library/recent";
 export const LAUNCH_LIBRARY_API_URL = "https://ll.thespacedevs.com/2.3.0/launches/";
@@ -145,16 +146,8 @@ export function buildLaunchLibraryUrl(now = new Date()): string {
   return url.toString();
 }
 
-export function buildLaunchLibraryRequestUrls(now = new Date(), hostname?: string): string[] {
-  const browserHostname =
-    hostname ?? (typeof globalThis.location === "undefined" ? "" : globalThis.location.hostname);
-  return [
-    ...(browserHostname === "localhost" || browserHostname === "127.0.0.1"
-      ? [LAUNCH_LIBRARY_DEV_URL]
-      : []),
-    LAUNCH_LIBRARY_EDGE_URL,
-    buildLaunchLibraryUrl(now),
-  ];
+export function buildLaunchLibraryRequestUrls(isDevServer = isViteDevServer()): string[] {
+  return [...(isDevServer ? [LAUNCH_LIBRARY_DEV_URL] : []), LAUNCH_LIBRARY_EDGE_URL];
 }
 
 export function launchLibraryToCzml(value: unknown): GodsEyeViewFeedPayload {
@@ -207,11 +200,11 @@ export function launchLibraryToCzml(value: unknown): GodsEyeViewFeedPayload {
 }
 
 export async function fetchSpaceMissionsCzml(
-  options: { fetch?: typeof fetch; signal?: AbortSignal; now?: Date } = {},
+  options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<GodsEyeViewFeedPayload> {
   const request = options.fetch ?? fetch;
   let lastError: Error | null = null;
-  for (const url of buildLaunchLibraryRequestUrls(options.now)) {
+  for (const url of buildLaunchLibraryRequestUrls()) {
     try {
       const response = await request(url, { signal: options.signal });
       if (!response.ok) throw new Error(`Launch Library 2 failed (${response.status})`);

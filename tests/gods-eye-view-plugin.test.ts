@@ -4,11 +4,13 @@ import { parseHTML } from "linkedom";
 import { useAppStore } from "@geolibre/core";
 import {
   GODS_EYE_VIEW_CABLES_FLAG,
+  GODS_EYE_VIEW_BIKE_SHARE_FLAG,
   GODS_EYE_VIEW_DAMS_FLAG,
   GODS_EYE_VIEW_DATACENTERS_FLAG,
   GODS_EYE_VIEW_DENSE_SATELLITES_FLAG,
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   GODS_EYE_VIEW_RADIO_FLAG,
+  GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -237,6 +239,36 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
         { status: 200 },
       );
     }
+    if (url.includes("launch-library/recent")) {
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: "launch-1",
+              name: "Launch",
+              pad: { longitude: 10, latitude: 20 },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }
+    if (url.includes("station_information.json")) {
+      return new Response(
+        JSON.stringify({
+          data: { stations: [{ station_id: "station-1", name: "Station", lon: 10, lat: 20 }] },
+        }),
+        { status: 200 },
+      );
+    }
+    if (url.includes("station_status.json")) {
+      return new Response(
+        JSON.stringify({
+          data: { stations: [{ station_id: "station-1", num_bikes_available: 2 }] },
+        }),
+        { status: 200 },
+      );
+    }
     return new Response(TLE_TEXT, { status: 200, headers: { "content-type": "text/plain" } });
   }) as typeof fetch;
   return {
@@ -305,12 +337,15 @@ describe("God's Eye View feed refresh", () => {
         dams: true,
         cables: true,
         osmInfrastructure: true,
+        bikeShare: true,
+        spaceMissions: true,
       });
       godsEyeViewPlugin.activate?.(globe.app);
       for (let i = 0; i < 20; i++) await flush();
 
       const layers = useAppStore.getState().layers;
       assert.deepEqual(layers.map((layer) => layer.metadata.godsEyeViewFeed).sort(), [
+        "bikeShare",
         "cables",
         "dams",
         "datacenters",
@@ -318,6 +353,7 @@ describe("God's Eye View feed refresh", () => {
         "osmInfrastructure",
         "radio",
         "satellites",
+        "spaceMissions",
       ]);
       for (const layer of layers) assert.ok(layer.source.attribution, layer.name);
       const flags = [
@@ -326,6 +362,8 @@ describe("God's Eye View feed refresh", () => {
         GODS_EYE_VIEW_DAMS_FLAG,
         GODS_EYE_VIEW_CABLES_FLAG,
         GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
+        GODS_EYE_VIEW_BIKE_SHARE_FLAG,
+        GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
       ];
       for (const flag of flags) {
         assert.ok(
@@ -340,6 +378,8 @@ describe("God's Eye View feed refresh", () => {
         "/dams/",
         "telegeography_submarine_cables",
         "tiles.geolibre.app/overpass",
+        "launch-library/recent",
+        "station_information.json",
       ]) {
         assert.ok(calls.includes(source), source);
       }
