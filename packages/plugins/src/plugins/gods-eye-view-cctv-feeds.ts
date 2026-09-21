@@ -59,11 +59,9 @@ function validCoordinate(longitude: number | null, latitude: number | null): boo
 }
 
 function refreshedUrl(url: string, refreshMs: number, nowMs: number): string {
-  const parsed = new URL(url, "https://web.geolibre.app");
+  const parsed = new URL(url);
   parsed.searchParams.set("geolibre_frame", String(Math.floor(nowMs / refreshMs)));
-  return parsed.origin === "https://web.geolibre.app"
-    ? `${parsed.pathname}${parsed.search}`
-    : parsed.toString();
+  return parsed.toString();
 }
 
 export function normalizeTflCameras(payload: unknown): CctvCamera[] {

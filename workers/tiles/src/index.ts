@@ -418,16 +418,7 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
 function isAllowedProxyImageRequest(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (origin) return isAllowedProxyOrigin(origin);
-  const referer = request.headers.get("referer");
-  if (referer) return isAllowedProxyOrigin(referer);
-  // Privacy settings may suppress both provenance headers. Fetch Metadata is
-  // browser-controlled, so accept only a genuine no-CORS image subresource —
-  // never a generic headerless fetch. This route can only reach a fixed public
-  // camera host and its output is edge-cached for 30 seconds.
-  return (
-    request.headers.get("sec-fetch-dest") === "image" &&
-    request.headers.get("sec-fetch-mode") === "no-cors"
-  );
+  return isAllowedProxyOrigin(request.headers.get("referer"));
 }
 
 /**
