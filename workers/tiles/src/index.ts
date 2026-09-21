@@ -369,8 +369,7 @@ const NEGATIVE_CACHE_CONTROL = "public, max-age=300";
  * Whether an `Origin` header may use the OpenAerialMap search proxy. Allowed:
  *
  *   - the production web app on `*.geolibre.app` (any subdomain, plus the apex)
- *   - Cloudflare Pages deploy previews (project `geolibre-preview`) and
- *     `*.workers.dev` preview deployments
+ *   - Cloudflare Pages deploy previews for the `geolibre-preview` project
  *   - local dev on `localhost` / `127.0.0.1`
  *
  * Everything else gets a 403 so the route can't be driven as an open proxy from
@@ -398,7 +397,6 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
       return true;
     }
     if (hostname.endsWith(".geolibre-preview.pages.dev")) return true;
-    if (hostname.endsWith(".workers.dev")) return true;
   }
   if (
     (protocol === "http:" || protocol === "https:") &&

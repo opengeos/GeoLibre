@@ -58,6 +58,16 @@ describe("aircraft edge proxies", () => {
     );
     assert.equal(response.status, 403);
     assert.equal(fetched, false);
+
+    const workersDevResponse = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opensky/states", {
+        headers: { origin: "https://untrusted-tenant.workers.dev" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(workersDevResponse.status, 403);
+    assert.equal(fetched, false);
   });
 
   it("rejects malformed successful aircraft feeds without caching them", async () => {
