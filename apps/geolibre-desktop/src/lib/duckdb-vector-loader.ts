@@ -1,5 +1,5 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { isGeographicCrs } from "./crs-utils";
 import {
   detectGeometryColumn,
@@ -1064,6 +1064,46 @@ export async function reprojectFeatureCollectionToWgs84(
     await connection.close();
     await dropFilesIfPresent(db, [sourceFile]);
   }
+}
+
+/**
+ * Reproject a bare coordinate list to WGS84 (EPSG:4326), preserving order,
+ * length, and any Z value.
+ *
+ * The positions travel as the parts of a single `MultiPoint` so the engine pays
+ * the per-row cost of its GeoJSON round-trip once instead of once per feature.
+ * Callers that hold geometry which reuses the same vertex many times (a TIN
+ * surface, where each point belongs to ~6 triangles) should deduplicate first
+ * and rebuild from the result, so the transform scales with the real vertex
+ * count rather than the coordinate count.
+ *
+ * @param positions Coordinates in `sourceCrs`, as `[x, y]` or `[x, y, z]`.
+ * @param sourceCrs Source CRS as `AUTHORITY:CODE` or WKT, as ST_Transform accepts.
+ * @returns The same coordinates, in the same order, as WGS84 lon/lat.
+ */
+export async function reprojectPositionsToWgs84(
+  positions: Position[],
+  sourceCrs: string,
+): Promise<Position[]> {
+  if (positions.length === 0) return [];
+  const reprojected = await reprojectFeatureCollectionToWgs84(
+    {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "MultiPoint", coordinates: positions },
+        },
+      ],
+    },
+    sourceCrs,
+  );
+  const geometry = reprojected.features[0]?.geometry;
+  if (!geometry || geometry.type !== "MultiPoint") {
+    throw new Error("Reprojection did not return the expected coordinate list.");
+  }
+  return geometry.coordinates;
 }
 
 async function dropFilesIfPresent(db: duckdb.AsyncDuckDB, fileNames: string[]): Promise<void> {

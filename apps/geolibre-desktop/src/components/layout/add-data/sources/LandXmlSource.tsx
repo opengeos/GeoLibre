@@ -5,9 +5,10 @@ import { FileUp } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isGeographicCrs } from "../../../../lib/crs-utils";
-import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
+import { reprojectPositionsToWgs84 } from "../../../../lib/duckdb-vector-loader";
 import {
   parseLandXml,
+  reprojectLandXmlCollection,
   type LandXmlLayerKind,
   type LandXmlParseResult,
 } from "../../../../lib/landxml";
@@ -151,8 +152,13 @@ export function LandXmlSource() {
     const layers: GeoLibreLayer[] = [];
 
     for (const parsedLayer of selectedLayers) {
+      // Reproject the distinct vertices rather than the assembled geometry: a
+      // TIN reuses each point across ~6 triangles, so transforming the faces
+      // directly does several times the work for the same result.
       const geojson = reprojectionCrs
-        ? await reprojectFeatureCollectionToWgs84(parsedLayer.features, reprojectionCrs)
+        ? await reprojectLandXmlCollection(parsedLayer.features, (positions) =>
+            reprojectPositionsToWgs84(positions, reprojectionCrs),
+          )
         : parsedLayer.features;
       const baseLayer = createBaseLayer(
         `${baseName} ${parsedLayer.name}`,

@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import type { FeatureCollection, Position } from "geojson";
 import { DOMParser } from "linkedom";
-import { parseLandXml } from "../apps/geolibre-desktop/src/lib/landxml";
+import { parseLandXml, reprojectLandXmlCollection } from "../apps/geolibre-desktop/src/lib/landxml";
 
 const originalParser = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");
 Object.defineProperty(globalThis, "DOMParser", { configurable: true, value: DOMParser });
@@ -38,12 +39,25 @@ describe("LandXML parser", () => {
     assert.ok(surface);
     assert.equal(
       surface.features.features.length,
+      1,
+      "a TIN surface is one MultiPolygon, not one feature per face",
+    );
+    const surfaceFeature = surface.features.features[0];
+    assert.equal(surfaceFeature.geometry.type, "MultiPolygon");
+    assert.equal(surfaceFeature.properties?.landxml_kind, "surface");
+    assert.equal(surfaceFeature.properties?.surface_name, "Existing Ground");
+    assert.equal(
+      surfaceFeature.properties?.face_count,
       3,
       "hidden edges are retained and invalid face references are skipped",
     );
-    assert.deepEqual(surface.features.features[0].geometry, {
-      type: "Polygon",
-      coordinates: [
+    assert.equal(
+      surfaceFeature.geometry.type === "MultiPolygon" && surfaceFeature.geometry.coordinates.length,
+      3,
+    );
+    assert.deepEqual(
+      surfaceFeature.geometry.type === "MultiPolygon" && surfaceFeature.geometry.coordinates[0],
+      [
         [
           [-71.064, 42.358, 10],
           [-71.054, 42.358, 16],
@@ -51,7 +65,7 @@ describe("LandXML parser", () => {
           [-71.064, 42.358, 10],
         ],
       ],
-    });
+    );
 
     const alignments = result.layers.find((layer) => layer.kind === "alignment");
     assert.ok(alignments);
@@ -164,5 +178,81 @@ describe("LandXML parser", () => {
   it("rejects non-LandXML and empty LandXML documents", () => {
     assert.throws(() => parseLandXml("<root />"), /does not contain a LandXML document/);
     assert.throws(() => parseLandXml("<LandXML />"), /No supported LandXML/);
+  });
+});
+
+describe("LandXML reprojection", () => {
+  const TIN = `
+    <LandXML>
+      <Surfaces><Surface name="Grid"><Definition surfType="TIN">
+        <Pnts>
+          <P id="1">0 0 5</P><P id="2">0 10 6</P><P id="3">10 0 7</P><P id="4">10 10 8</P>
+        </Pnts>
+        <Faces><F>1 2 3</F><F>2 3 4</F></Faces>
+      </Definition></Surface></Surfaces>
+    </LandXML>
+  `;
+
+  it("transforms each distinct vertex once, however many faces reuse it", async () => {
+    const collection = parseLandXml(TIN).layers[0].features;
+    const batches: Position[][] = [];
+    const out = await reprojectLandXmlCollection(collection, async (positions) => {
+      batches.push(positions);
+      return positions.map(([x, y, z]) => (z === undefined ? [x + 100, y] : [x + 100, y, z]));
+    });
+
+    // Two triangles use six corners between them, but the TIN has four points.
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0].length, 4);
+
+    const geometry = out.features[0].geometry;
+    assert.equal(geometry.type, "MultiPolygon");
+    if (geometry.type !== "MultiPolygon") return;
+    assert.equal(geometry.coordinates.length, 2);
+    // Ring order, closure, and Z survive the rebuild.
+    assert.deepEqual(geometry.coordinates[0], [
+      [
+        [100, 0, 5],
+        [110, 0, 6],
+        [100, 10, 7],
+        [100, 0, 5],
+      ],
+    ]);
+    assert.equal(out.features[0].properties?.face_count, 2);
+  });
+
+  it("keeps points that share an XY but differ in Z distinct", async () => {
+    const collection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [1, 2, 10],
+              [1, 2, 20],
+            ],
+          },
+        },
+      ],
+    };
+    const seen: Position[][] = [];
+    const out = await reprojectLandXmlCollection(collection, async (positions) => {
+      seen.push(positions);
+      return positions.map(([x, y, z]) => [x, y, z as number]);
+    });
+    assert.equal(seen[0].length, 2, "a shared XY with two elevations is two vertices");
+    const geometry = out.features[0].geometry;
+    assert.equal(geometry.type === "LineString" && geometry.coordinates.length, 2);
+  });
+
+  it("rejects a projector that does not return one position per input", async () => {
+    const collection = parseLandXml(TIN).layers[0].features;
+    await assert.rejects(
+      () => reprojectLandXmlCollection(collection, async () => []),
+      /different number of coordinates/,
+    );
   });
 });
