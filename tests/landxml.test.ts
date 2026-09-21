@@ -248,6 +248,51 @@ describe("LandXML reprojection", () => {
     assert.equal(geometry.type === "LineString" && geometry.coordinates.length, 2);
   });
 
+  it("batches 2D and 3D positions separately so a missing elevation stays missing", async () => {
+    // An alignment whose curve carries no elevation, beside CgPoints that do.
+    const collection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [10, 10],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Point", coordinates: [20, 20, 5] },
+        },
+      ],
+    };
+
+    const batches: Position[][] = [];
+    const out = await reprojectLandXmlCollection(collection, async (positions) => {
+      batches.push(positions);
+      // Mirrors the engine's homogenization: one dimension for the whole batch.
+      const dimension = Math.max(...positions.map((position) => position.length));
+      assert.equal(
+        positions.every((position) => position.length === dimension),
+        true,
+        "a batch must not mix 2D and 3D positions",
+      );
+      return positions.map((position) => [...position]);
+    });
+
+    assert.equal(batches.length, 2, "one batch per coordinate dimension");
+    assert.deepEqual(batches.map((batch) => batch.length).sort(), [1, 2]);
+    const line = out.features[0].geometry;
+    assert.equal(line.type === "LineString" && line.coordinates[0].length, 2, "2D stays 2D");
+    const point = out.features[1].geometry;
+    assert.deepEqual(point.type === "Point" && point.coordinates, [20, 20, 5]);
+  });
+
   it("rejects a projector that does not return one position per input", async () => {
     const collection = parseLandXml(TIN).layers[0].features;
     await assert.rejects(

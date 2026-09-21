@@ -208,10 +208,7 @@ export async function reprojectLandXmlCollection(
   }
   if (distinct.length === 0) return collection;
 
-  const reprojected = await reprojectPositions(distinct);
-  if (reprojected.length !== distinct.length) {
-    throw new Error("Reprojection returned a different number of coordinates than it was given.");
-  }
+  const reprojected = await reprojectByDimension(distinct, reprojectPositions);
   const replace = (position: Position): Position => {
     const index = indexByKey.get(positionKey(position));
     return index === undefined ? position : reprojected[index];
@@ -224,6 +221,41 @@ export async function reprojectLandXmlCollection(
       return { ...feature, geometry: replaceGeometryPositions(feature.geometry, replace) };
     }),
   };
+}
+
+/**
+ * Reproject positions in one batch per coordinate dimension.
+ *
+ * LandXML elevations are optional, so a single layer can hold both `[x, y]` and
+ * `[x, y, z]` positions — a CgPoint with no elevation beside one that has it, or
+ * a curve sampled between two endpoints that carry no Z. Engines that transform
+ * a batch as one multi-part geometry require a consistent dimension across the
+ * parts and pad the short ones, which would turn "no elevation" into a real
+ * elevation of zero. Grouping first keeps each batch homogeneous, so a 2D
+ * position stays 2D.
+ */
+async function reprojectByDimension(
+  positions: Position[],
+  reprojectPositions: (positions: Position[]) => Promise<Position[]>,
+): Promise<Position[]> {
+  const indicesByDimension = new Map<number, number[]>();
+  for (const [index, position] of positions.entries()) {
+    const existing = indicesByDimension.get(position.length);
+    if (existing) existing.push(index);
+    else indicesByDimension.set(position.length, [index]);
+  }
+
+  const reprojected: Position[] = new Array(positions.length);
+  for (const indices of indicesByDimension.values()) {
+    const batch = await reprojectPositions(indices.map((index) => positions[index]));
+    if (batch.length !== indices.length) {
+      throw new Error("Reprojection returned a different number of coordinates than it was given.");
+    }
+    for (const [batchIndex, sourceIndex] of indices.entries()) {
+      reprojected[sourceIndex] = batch[batchIndex];
+    }
+  }
+  return reprojected;
 }
 
 function replaceGeometryPositions(
