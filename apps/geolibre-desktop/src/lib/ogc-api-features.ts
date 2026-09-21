@@ -229,9 +229,16 @@ export function createOgcItemsUrl(request: {
  * after panning past the 180th meridian) runs outside ±180° longitude because
  * the view takes in more than one copy of the world. That is not a valid CRS84
  * box, so the longitudes are wrapped back into range and a view that already
- * spans a whole world copy collapses to the full -180…180 width. A wrapped box
- * whose west ends up greater than its east is kept that way: that is precisely
- * how OGC API - Features spells a box crossing the antimeridian.
+ * spans a whole world copy collapses to the full -180…180 width.
+ *
+ * A view that straddles the antimeridian also widens to the full -180…180
+ * range, rather than being spelled `west > east`. That spelling is what the
+ * specification prescribes for a crossing box, but servers do not honour it
+ * uniformly: pygeoapi (which this dialog offers as its sample service) simply
+ * sorts the pair, so a crossing box silently returns the *complement* of what
+ * the user is looking at. Widening only narrows less; it is a superset of the
+ * view under either reading, and the latitudes still do their share of the
+ * filtering.
  *
  * Latitudes are clamped rather than wrapped — a camera tilted toward the pole
  * reports beyond ±90°, and the box there really is the pole.
@@ -261,10 +268,14 @@ export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
     // Wrap the west corner into range, then carry the span across from it so
     // the box keeps its width instead of being wrapped corner by corner.
     const wrappedWest = ((((west + 180) % 360) + 360) % 360) - 180;
-    const wrappedEast = wrappedWest + span > 180 ? wrappedWest + span - 360 : wrappedWest + span;
-    westEdge = round(wrappedWest);
-    eastEdge = round(wrappedEast);
-    if (westEdge === eastEdge) return null;
+    const wrappedEast = wrappedWest + span;
+    // Past 180° the box would have to cross the antimeridian, which is not safe
+    // to spell; the -180…180 defaults already stand in for it.
+    if (wrappedEast <= 180) {
+      westEdge = round(wrappedWest);
+      eastEdge = round(wrappedEast);
+      if (westEdge === eastEdge) return null;
+    }
   }
 
   return [westEdge, southEdge, eastEdge, northEdge].map(String).join(",");

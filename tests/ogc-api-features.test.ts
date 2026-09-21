@@ -237,10 +237,17 @@ describe("viewBoundsToOgcBbox", () => {
     assert.equal(viewBoundsToOgcBbox([-400, -60, 400, 60]), "-180,-60,180,60");
   });
 
-  it("wraps a view panned past the antimeridian, keeping its width", () => {
-    // 350°E..370°E is 10 wide and straddles the meridian: west > east says so.
+  it("wraps a view panned a whole world copy east, keeping its width", () => {
     assert.equal(viewBoundsToOgcBbox([350, -10, 370, 10]), "-10,-10,10,10");
-    assert.equal(viewBoundsToOgcBbox([170, -10, 190, 10]), "170,-10,-170,10");
+    assert.equal(viewBoundsToOgcBbox([-370, -10, -350, 10]), "-10,-10,10,10");
+  });
+
+  it("widens a view straddling the antimeridian instead of crossing the box", () => {
+    // A `west > east` box is how the specification spells a crossing one, but
+    // pygeoapi sorts the pair and answers with the complement of the view. The
+    // full width is a superset of the view under either reading.
+    assert.equal(viewBoundsToOgcBbox([170, -10, 190, 10]), "-180,-10,180,10");
+    assert.equal(viewBoundsToOgcBbox([-190, -10, -170, 10]), "-180,-10,180,10");
   });
 
   it("clamps latitudes that run past the poles", () => {
