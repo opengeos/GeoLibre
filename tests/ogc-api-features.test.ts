@@ -250,6 +250,13 @@ describe("viewBoundsToOgcBbox", () => {
     assert.equal(viewBoundsToOgcBbox([-190, -10, -170, 10]), "-180,-10,180,10");
   });
 
+  it("still reads as the whole world when the span only rounds up to 360", () => {
+    // The `span < 360` test runs on the raw extent, so these take the wrapping
+    // path; it has to arrive at the same full-width box the shortcut would.
+    assert.equal(viewBoundsToOgcBbox([-180, -10, 179.9999996, 10]), "-180,-10,180,10");
+    assert.equal(viewBoundsToOgcBbox([-10, -10, 349.9999996, 10]), "-180,-10,180,10");
+  });
+
   it("clamps latitudes that run past the poles", () => {
     assert.equal(viewBoundsToOgcBbox([-10, -95, 10, 95]), "-10,-90,10,90");
   });
