@@ -87,6 +87,38 @@ const MAPLIBRE_OVERLAY_Z_INDEX = "6";
 // `Marker#setZIndex()`.
 const MARKER_Z_INDEX = CONTROL_CONTAINER_Z_INDEX;
 
+// maplibre-gl-lidar renders its point clouds into an overlaid deck.gl canvas
+// that it parks in the canvas container, right after the map canvas (see
+// opengeos/GeoLibre#2530). That wrapper has no z-index of its own, so raising
+// the map canvas would bury the point cloud entirely. Give it the canvas's own
+// z-index: equal z-index plus a later DOM position keeps it above the basemap,
+// while markers and the control container -- both one step higher -- stay above
+// the points, which is what the issue asked for.
+const LIDAR_CANVAS_CLASS = "maplibre-gl-lidar-canvas";
+const OVERLAID_DECK_CANVAS_Z_INDEX = MAP_CANVAS_Z_INDEX;
+
+/**
+ * The stylesheet that keeps MapLibre's own overlays in the right order once the
+ * map canvas is raised. Exported so the ordering can be asserted without a DOM.
+ *
+ * @returns The CSS injected while the effects engine is attached.
+ */
+export function effectsOverlayCss(): string {
+  return `
+      .${EFFECTS_MAP_CLASS} .maplibregl-boxzoom,
+      .${EFFECTS_MAP_CLASS} .mapboxgl-boxzoom {
+        z-index: ${MAPLIBRE_OVERLAY_Z_INDEX};
+      }
+      .${EFFECTS_MAP_CLASS} .maplibregl-marker,
+      .${EFFECTS_MAP_CLASS} .mapboxgl-marker {
+        z-index: ${MARKER_Z_INDEX};
+      }
+      .${EFFECTS_MAP_CLASS} .${LIDAR_CANVAS_CLASS} {
+        z-index: ${OVERLAID_DECK_CANVAS_Z_INDEX};
+      }
+    `;
+}
+
 // Roughly one star per this many CSS pixels of starfield area.
 const STAR_AREA_PER_STAR = 900;
 // Starfield parallax scales exactly like the reference: a full 360° longitude
@@ -628,16 +660,7 @@ class EffectsEngine {
 
     const style = document.createElement("style");
     style.id = EFFECTS_OVERLAY_STYLE_ID;
-    style.textContent = `
-      .${EFFECTS_MAP_CLASS} .maplibregl-boxzoom,
-      .${EFFECTS_MAP_CLASS} .mapboxgl-boxzoom {
-        z-index: ${MAPLIBRE_OVERLAY_Z_INDEX};
-      }
-      .${EFFECTS_MAP_CLASS} .maplibregl-marker,
-      .${EFFECTS_MAP_CLASS} .mapboxgl-marker {
-        z-index: ${MARKER_Z_INDEX};
-      }
-    `;
+    style.textContent = effectsOverlayCss();
     document.head.appendChild(style);
     return style;
   }

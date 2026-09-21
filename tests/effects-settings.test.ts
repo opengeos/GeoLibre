@@ -6,6 +6,7 @@ import {
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  effectsOverlayCss,
   nextEffectsFrameTime,
   normalizeEffectsSettings,
 } from "../packages/plugins/src/plugins/maplibre-effects";
@@ -83,5 +84,26 @@ describe("nextEffectsFrameTime", () => {
     for (let index = 1; index < renderedAt.length; index += 1) {
       assert.ok(renderedAt[index] - renderedAt[index - 1] + 0.1 >= 1000 / 60);
     }
+  });
+});
+
+describe("effectsOverlayCss", () => {
+  it("keeps the LiDAR point-cloud canvas above the basemap but below markers", () => {
+    const css = effectsOverlayCss();
+    const zIndexFor = (selector: string) => {
+      const rule = css.split("}").find((block) => block.includes(`.${selector}`));
+      assert.ok(rule, `no rule for .${selector}`);
+      const zIndex = /z-index:\s*(\d+)/.exec(rule);
+      assert.ok(zIndex, `no z-index for .${selector}`);
+      return Number(zIndex[1]);
+    };
+
+    // The deck.gl canvas the LiDAR plugin parks after the map canvas shares the
+    // canvas's z-index, so DOM order puts it above the basemap; markers (and
+    // the control container, which matches them) stay above the points. See
+    // opengeos/GeoLibre#2530.
+    const lidarCanvas = zIndexFor("maplibre-gl-lidar-canvas");
+    const marker = zIndexFor("maplibregl-marker");
+    assert.ok(lidarCanvas < marker, `${lidarCanvas} should be below ${marker}`);
   });
 });
