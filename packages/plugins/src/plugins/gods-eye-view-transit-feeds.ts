@@ -122,6 +122,14 @@ export const TRANSIT_FEEDS = [
   },
 ] as const satisfies readonly TransitFeedDefinition[];
 
+/**
+ * Entur, the feed the exported decoder helpers default to.
+ *
+ * Resolved by `id` rather than by array position so reordering or inserting a
+ * registry entry cannot silently repoint those public defaults.
+ */
+const ENTUR_FEED: TransitFeedDefinition = TRANSIT_FEEDS.find((feed) => feed.id === "entur-norway")!;
+
 interface GtfsTripDescriptor {
   tripId?: string | null;
   routeId?: string | null;
@@ -306,7 +314,7 @@ function normalizeVehicleEntity(
 
 /** Decode the bounded subset of GTFS-Realtime used by the Transit feed. */
 export function decodeGtfsRealtimeVehicles(bytes: Uint8Array | ArrayBuffer): TransitSnapshot {
-  return decodeTransitFeed(bytes, TRANSIT_FEEDS[5]);
+  return decodeTransitFeed(bytes, ENTUR_FEED);
 }
 
 /** Decode and normalize one registered GTFS-Realtime feed. */
@@ -374,7 +382,7 @@ function predictPosition(
 export function transitVehiclesToCzml(
   vehicles: readonly TransitVehicle[],
   now: Date,
-  feed: TransitFeedDefinition = TRANSIT_FEEDS[5],
+  feed: TransitFeedDefinition = ENTUR_FEED,
 ): GodsEyeViewFeedPayload {
   const stop = new Date(now.getTime() + TRANSIT_COAST_SECONDS * 1000);
   // No document `clock`: the feed does not set `ownsClockWindow`, and the CZML
@@ -391,6 +399,14 @@ export function transitVehiclesToCzml(
     rail: [217, 166, 255, 255],
     ferry: [95, 214, 255, 255],
     unknown: [216, 221, 229, 255],
+  };
+  const modePixelSizes: Record<TransitMode, number> = {
+    bus: 7,
+    tram: 7,
+    subway: 8,
+    rail: 8,
+    ferry: 8,
+    unknown: 7,
   };
   for (const vehicle of vehicles) {
     const ageSeconds = vehicle.observedAtMs
@@ -425,7 +441,7 @@ export function transitVehiclesToCzml(
       },
       properties,
       point: {
-        pixelSize: ["rail", "subway", "ferry"].includes(vehicle.mode) ? 8 : 7,
+        pixelSize: modePixelSizes[vehicle.mode],
         color: { rgba: modeColors[vehicle.mode] },
         outlineColor: { rgba: [0, 0, 0, 190] },
         outlineWidth: 1,

@@ -565,15 +565,21 @@ export async function proxyAircraftRequestGuarded(
   res.end(entry.body);
 }
 
-/** Fixed, bounded GTFS-Realtime relays for local development. */
+/**
+ * Fixed, bounded GTFS-Realtime relays for local development.
+ *
+ * Status codes mirror `handleTransitFeed` in the edge worker — 404 for an
+ * unregistered provider, 502 for any upstream failure — so tooling that reads
+ * them sees the same shape in dev and production.
+ */
 export async function proxyTransitRequestGuarded(
   feedId: string,
   res: ServerResponse,
 ): Promise<void> {
   if (!Object.hasOwn(TRANSIT_UPSTREAMS, feedId)) {
-    res.statusCode = 400;
+    res.statusCode = 404;
     res.setHeader("content-type", "text/plain");
-    res.end("Invalid transit provider");
+    res.end("Unknown transit provider");
     return;
   }
   let entry = transitCaches.get(feedId);
@@ -586,7 +592,7 @@ export async function proxyTransitRequestGuarded(
       },
     });
     if (!response.ok) {
-      res.statusCode = response.status;
+      res.statusCode = 502;
       res.setHeader("content-type", "text/plain");
       res.end(`Transit provider returned HTTP ${response.status}`);
       return;
