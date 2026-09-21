@@ -216,20 +216,27 @@ export function identifyPopupShellMaxWidth(popup: LayerPopupConfig | undefined):
 }
 
 /**
- * Apply an author's {@link LayerPopupConfig.maxWidth} to a popup root.
+ * Apply an author's {@link LayerPopupConfig.maxWidth} to a *filled* popup root.
  *
  * Written as an inline style so it beats both the Tailwind cap on the element
  * and the wider `:has(.geolibre-popup-image)` rule in the app stylesheet, and
  * kept inside `min()` with the viewport so an oversized setting still leaves
- * the map visible on a phone. `width` rides along because the image rule
- * otherwise pins the popup to 420px and the new cap would never be reached.
+ * the map visible on a phone.
+ *
+ * `width` is set only for a popup that carries a picture, which is why this
+ * runs after the content is in place. There the `:has(.geolibre-popup-image)`
+ * rule already pins a fixed `width: min(420px, …)` that has to be overridden
+ * or the new cap could never be reached, and the image is `width: 100%` of its
+ * cell, so a shrink-to-fit popup would draw a thumbnail as narrow as the text
+ * beside it. A text-only popup keeps shrinking to its content the way it
+ * always has, with the author's value as its ceiling rather than its size.
  */
 export function applyPopupWidth(root: HTMLElement, popup: LayerPopupConfig | undefined): void {
   const maxWidth = resolvePopupMaxWidth(popup);
   if (maxWidth === undefined) return;
   const cap = `min(${maxWidth}px, calc(100vw - 48px))`;
   root.style.maxWidth = cap;
-  root.style.width = cap;
+  if (root.querySelector(".geolibre-popup-image")) root.style.width = cap;
 }
 
 /**
@@ -260,7 +267,6 @@ export function createIdentifyPopupElement(
   const root = document.createElement("div");
   root.className =
     "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
-  applyPopupWidth(root, popup);
 
   const title = document.createElement("div");
   // Leave room for MapLibre's close button, which sits in the same corner the
@@ -274,6 +280,10 @@ export function createIdentifyPopupElement(
   root.appendChild(title);
 
   root.appendChild(createIdentifyPopupRows(properties, featureId, options));
+
+  // Last, because applyPopupWidth reads the finished content to decide whether
+  // the popup needs a fixed width or may keep shrinking to fit.
+  applyPopupWidth(root, popup);
 
   return root;
 }

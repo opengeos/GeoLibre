@@ -525,6 +525,16 @@ def test_normalize_popup_size_shorthand_wins_over_the_mapping_key():
     assert config["maxWidth"] == 480
 
 
+def test_normalize_popup_size_shorthand_skips_the_mapping_value_entirely():
+    # The mapping value is never validated when the shorthand overrides it, the
+    # way an inline `tooltip` key is dropped when `tooltip=` was passed -- an
+    # out-of-range value about to be overwritten must not raise.
+    config = project.normalize_popup(
+        {"max_width": 5000, "image_height": 1}, max_width=480, image_height=320
+    )
+    assert config == {"maxWidth": 480, "imageHeight": 320}
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

@@ -213,7 +213,6 @@ function createGlobalIdentifyPopupElement(
   const root = document.createElement("div");
   root.className =
     "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
-  applyPopupWidth(root, maxWidth === undefined ? undefined : { maxWidth });
 
   const title = document.createElement("div");
   title.className = "font-semibold text-foreground";
@@ -317,6 +316,9 @@ function createGlobalIdentifyPopupElement(
     }
     body.appendChild(section);
   }
+
+  // Last, so applyPopupWidth can see whether any group drew a picture.
+  applyPopupWidth(root, maxWidth === undefined ? undefined : { maxWidth });
 
   return root;
 }

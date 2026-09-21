@@ -940,6 +940,15 @@ def normalize_popup(
                 kwargs["image_height"] = value
             else:
                 kwargs[mapped] = value
+        # Drop the mapping's copy of a size the dedicated argument also carries,
+        # rather than validating a value that is about to be overwritten -- the
+        # same thing `inline_tooltip` gets when `tooltip=` was passed. Left in,
+        # an out-of-range mapping value would raise even though the argument
+        # that wins is perfectly valid.
+        if max_width is not None:
+            kwargs.pop("max_width", None)
+        if image_height is not None:
+            kwargs.pop("image_height", None)
         config = popup_config(**kwargs)
     else:
         config = popup_config(popup)

@@ -46,6 +46,12 @@ const PHOTO_POPUP: LayerPopupConfig = {
   ],
 };
 
+/** The same layer without the picture, so only the text rows are drawn. */
+const TEXT_POPUP: LayerPopupConfig = {
+  titleField: "name",
+  fields: [{ field: "name", label: "Site" }],
+};
+
 describe("popup width", () => {
   it("leaves the root's default cap alone when nothing is configured", () => {
     withDocument();
@@ -65,12 +71,27 @@ describe("popup width", () => {
     assert.equal(root.style.width, "min(480px, calc(100vw - 48px))");
   });
 
+  it("leaves a text-only popup free to shrink to its content", () => {
+    withDocument();
+    const root = createIdentifyPopupElement("Sites", CITY, undefined, {
+      popup: { ...TEXT_POPUP, maxWidth: 480 },
+    });
+    // The author's value is this popup's ceiling, not its size: without a
+    // picture there is no fixed-width CSS rule to override, and pinning it
+    // would pad every short feature out to 480px.
+    assert.equal(root.style.maxWidth, "min(480px, calc(100vw - 48px))");
+    assert.equal(root.style.width, "");
+    assert.equal(root.querySelector(".geolibre-popup-image"), null);
+  });
+
   it("clamps a width a hand-edited project put out of range", () => {
     withDocument();
     const root = createIdentifyPopupElement("Sites", CITY, undefined, {
-      popup: { maxWidth: 4000 },
+      popup: { ...PHOTO_POPUP, maxWidth: 4000 },
     });
-    assert.equal(root.style.maxWidth, `min(${POPUP_MAX_WIDTH_RANGE.max}px, calc(100vw - 48px))`);
+    const cap = `min(${POPUP_MAX_WIDTH_RANGE.max}px, calc(100vw - 48px))`;
+    assert.equal(root.style.maxWidth, cap);
+    assert.equal(root.style.width, cap);
   });
 
   it("clears the width for an unusable value rather than throwing", () => {
