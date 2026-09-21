@@ -2374,6 +2374,8 @@
       "earthquakes": "Terremotos",
       "spaceMissions": "Misiones espaciales (30 días)",
       "satellites": "Satélites",
+      "flights": "Vuelos en vivo",
+      "militaryFlights": "Vuelos militares",
       "bikeShare": "Bicicletas compartidas",
       "streetTraffic": "Tráfico urbano simulado",
       "mappedAlpr": "Cámaras ALPR cartografiadas",

@@ -26,6 +26,19 @@ const CELESTRAK_STARLINK_TLE_BASE = "https://celestrak.org/NORAD/elements/supple
 const CELESTRAK_CACHE_TTL_MS = 6 * 60 * 60_000;
 const LAUNCH_LIBRARY_API_URL = "https://ll.thespacedevs.com/2.3.0/launches/";
 const LAUNCH_LIBRARY_CACHE_TTL_MS = 15 * 60_000;
+const AIRCRAFT_UPSTREAMS = {
+  opensky: {
+    url: "https://opensky-network.org/api/states/all",
+    cacheTtlMs: 30_000,
+    label: "OpenSky",
+  },
+  military: {
+    url: "https://api.adsb.lol/v2/mil",
+    cacheTtlMs: 15_000,
+    label: "adsb.lol",
+  },
+} as const;
+const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
 const CELESTRAK_GROUPS = new Set([
   "stations",
   "visual",
@@ -37,6 +50,10 @@ const CELESTRAK_GROUPS = new Set([
 ]);
 const celestrakCache = new Map<string, { body: Buffer; expiresAt: number }>();
 let launchLibraryCache: { body: Buffer; expiresAt: number } | null = null;
+const aircraftCaches = new Map<
+  keyof typeof AIRCRAFT_UPSTREAMS,
+  { body: Buffer; expiresAt: number }
+>();
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -320,7 +337,11 @@ export async function fetchWithGuard(
     if (fetchImpl) {
       // No undici dispatcher on this path — resolve+validate before fetching.
       await assertResolvedPublicHost(new URL(current).hostname, options.lookup);
-      response = await fetchImpl(current, { ...rest, signal, redirect: "manual" });
+      response = await fetchImpl(current, {
+        ...rest,
+        signal,
+        redirect: "manual",
+      });
     } else {
       response = (await undiciFetch(current, {
         ...rest,
@@ -474,6 +495,77 @@ export async function proxyLaunchLibraryRequestGuarded(res: ServerResponse): Pro
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("content-length", String(entry.body.byteLength));
   res.end(entry.body);
+}
+
+/** Fixed, short-lived aircraft feed relay for local development. */
+export async function proxyAircraftRequestGuarded(
+  kind: keyof typeof AIRCRAFT_UPSTREAMS,
+  res: ServerResponse,
+): Promise<void> {
+  const config = AIRCRAFT_UPSTREAMS[kind];
+  let entry = aircraftCaches.get(kind);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const response = await fetchWithGuard(config.url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "GeoLibre-Aircraft-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+    if (!response.ok) {
+      res.statusCode = response.status;
+      res.setHeader("content-type", "text/plain");
+      res.end(`${config.label} returned HTTP ${response.status}`);
+      return;
+    }
+    const body = await readBodyWithLimit(response, 25 * 1024 * 1024);
+    const parsed = JSON.parse(body.toString("utf8")) as {
+      states?: unknown;
+      ac?: unknown;
+    };
+    if (kind === "opensky" ? !Array.isArray(parsed.states) : !Array.isArray(parsed.ac)) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end(`${config.label} returned a malformed response`);
+      return;
+    }
+    entry = { body, expiresAt: Date.now() + config.cacheTtlMs };
+    aircraftCaches.set(kind, entry);
+  }
+
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", `public, max-age=${Math.floor(config.cacheTtlMs / 1000)}`);
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("content-length", String(entry.body.byteLength));
+  res.end(entry.body);
+}
+
+/** Normalize ADSBDB's ordinary not-found response so it stays out of diagnostics. */
+export async function proxyAdsbdbAircraftRequestGuarded(
+  icao: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!/^[0-9a-f]{6}$/i.test(icao)) {
+    res.statusCode = 400;
+    res.end("Invalid ICAO code");
+    return;
+  }
+  const response = await fetchWithGuard(`${ADSBDB_AIRCRAFT_BASE}${icao.toLowerCase()}`, {
+    headers: { accept: "application/json" },
+  });
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  if (response.status === 404) {
+    res.statusCode = 200;
+    res.setHeader("cache-control", "public, max-age=3600");
+    res.end('{"response":{"aircraft":null}}');
+    return;
+  }
+  const body = await readBodyWithLimit(response, 1024 * 1024);
+  res.statusCode = response.status;
+  res.setHeader("cache-control", response.ok ? "public, max-age=86400" : "no-store");
+  res.setHeader("content-length", String(body.byteLength));
+  res.end(body);
 }
 
 /**

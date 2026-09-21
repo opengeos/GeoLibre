@@ -2374,6 +2374,8 @@
       "earthquakes": "Depremler",
       "spaceMissions": "Uzay Görevleri (30 gün)",
       "satellites": "Uydular",
+      "flights": "Canlı Uçuşlar",
+      "militaryFlights": "Askerî Uçuşlar",
       "bikeShare": "Bisiklet Paylaşımı",
       "streetTraffic": "Simüle Edilmiş Sokak Trafiği",
       "mappedAlpr": "Haritalanmış Plaka Okuma Kameraları",

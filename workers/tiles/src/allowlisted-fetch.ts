@@ -13,6 +13,9 @@ export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/p
 // from the latter. A fixed upstream also keeps this relay's allowlist narrow;
 // availability is preferred over automatic fallback to additional hosts.
 export const OVERPASS_API_UPSTREAM = "https://z.overpass-api.de/api/interpreter";
+export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/all";
+export const ADSB_LOL_MILITARY_UPSTREAM = "https://api.adsb.lol/v2/mil";
+export const ADSBDB_AIRCRAFT_UPSTREAM = "https://api.adsbdb.com/v0/aircraft/";
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
@@ -21,6 +24,9 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   "https://api.openaerialmap.org/",
   HDX_CKAN_SEARCH_UPSTREAM,
   OVERPASS_API_UPSTREAM,
+  OPEN_SKY_STATES_UPSTREAM,
+  ADSB_LOL_MILITARY_UPSTREAM,
+  ADSBDB_AIRCRAFT_UPSTREAM,
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

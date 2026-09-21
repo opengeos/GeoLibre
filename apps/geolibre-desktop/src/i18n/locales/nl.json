@@ -2374,6 +2374,8 @@
       "earthquakes": "Aardbevingen",
       "spaceMissions": "Ruimtemissies (30 dagen)",
       "satellites": "Satellieten",
+      "flights": "Livevluchten",
+      "militaryFlights": "Militaire vluchten",
       "bikeShare": "Deelfietsen",
       "streetTraffic": "Gesimuleerd wegverkeer",
       "mappedAlpr": "Gekarteerde kentekencamera's",

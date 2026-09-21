@@ -2326,6 +2326,8 @@
       "earthquakes": "地震",
       "spaceMissions": "太空任务（30 天）",
       "satellites": "卫星",
+      "flights": "实时航班",
+      "militaryFlights": "军用航班",
       "bikeShare": "共享单车",
       "streetTraffic": "模拟道路交通",
       "mappedAlpr": "已标绘车牌识别摄像头",

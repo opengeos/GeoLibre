@@ -2326,6 +2326,8 @@
       "earthquakes": "地震",
       "spaceMissions": "宇宙ミッション（30日）",
       "satellites": "衛星",
+      "flights": "ライブフライト",
+      "militaryFlights": "軍用機",
       "bikeShare": "シェアサイクル",
       "streetTraffic": "シミュレーション道路交通",
       "mappedAlpr": "マッピング済みナンバープレート認識カメラ",

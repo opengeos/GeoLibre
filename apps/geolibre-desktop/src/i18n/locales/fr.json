@@ -2374,6 +2374,8 @@
       "earthquakes": "Séismes",
       "spaceMissions": "Missions spatiales (30 j)",
       "satellites": "Satellites",
+      "flights": "Vols en direct",
+      "militaryFlights": "Vols militaires",
       "bikeShare": "Vélos en libre-service",
       "streetTraffic": "Circulation routière simulée",
       "mappedAlpr": "Caméras LAPI cartographiées",

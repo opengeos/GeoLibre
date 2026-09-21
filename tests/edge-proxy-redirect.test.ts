@@ -136,6 +136,9 @@ describe("tiles allowlisted fetch", () => {
       isAllowedTilesUpstreamUrl("https://data.humdata.org/api/3/action/package_search_v2"),
       false,
     );
+    assert.equal(isAllowedTilesUpstreamUrl("https://opensky-network.org/api/states/all"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://api.adsb.lol/v2/mil"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://api.adsbdb.com/v0/aircraft/abc123"), true);
     assert.equal(
       isAllowedTilesUpstreamUrl(
         "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color/0/0/0.png",
@@ -386,7 +389,9 @@ describe("Vite proxy guard — readBodyWithLimit", () => {
   });
 
   it("returns the full body when under the limit", async () => {
-    const response = new Response("hello", { headers: { "content-length": "5" } });
+    const response = new Response("hello", {
+      headers: { "content-length": "5" },
+    });
     const buf = await readBodyWithLimit(response, 100);
     assert.equal(buf.toString("utf8"), "hello");
   });

@@ -12,6 +12,8 @@ import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 import {
+  proxyAircraftRequestGuarded,
+  proxyAdsbdbAircraftRequestGuarded,
   proxyBinaryRequestGuarded,
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
@@ -511,6 +513,9 @@ const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const CELESTRAK_PROXY_PATH = "/__geolibre_celestrak";
 const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
+const OPEN_SKY_PROXY_PATH = "/opensky/states";
+const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
+const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
 const DUCKDB_WORKER_SOURCE_MAP_RE =
@@ -688,6 +693,38 @@ function wmsProxyPlugin(): Plugin {
           res.end("Launch Library 2 proxy request failed");
         }
       });
+      server.middlewares.use(OPEN_SKY_PROXY_PATH, async (_req, res) => {
+        try {
+          await proxyAircraftRequestGuarded("opensky", res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("OpenSky proxy request failed");
+        }
+      });
+      server.middlewares.use(ADSB_LOL_MILITARY_PROXY_PATH, async (_req, res) => {
+        try {
+          await proxyAircraftRequestGuarded("military", res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("adsb.lol proxy request failed");
+        }
+      });
+      server.middlewares.use(ADSBDB_AIRCRAFT_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(
+            req.url ?? "",
+            `http://localhost${ADSBDB_AIRCRAFT_PROXY_PATH}`,
+          );
+          const icao = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+          await proxyAdsbdbAircraftRequestGuarded(icao, res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("ADSBDB proxy request failed");
+        }
+      });
       server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {
         try {
           await proxyBinaryRequestGuarded(req, res, RASTER_PROXY_PATH);
@@ -862,8 +899,8 @@ function duckdbWasmBundlesPlugin(): Plugin {
   const variant = IS_TAURI_BUILD
     ? "src/lib/duckdb-wasm-bundles.tauri.ts"
     : DUCKDB_WASM_CDN
-      ? "src/lib/duckdb-wasm-bundles.cdn.ts"
-      : "src/lib/duckdb-wasm-bundles.ts";
+    ? "src/lib/duckdb-wasm-bundles.cdn.ts"
+    : "src/lib/duckdb-wasm-bundles.ts";
   const modulePath = path.resolve(__dirname, variant);
   return {
     name: "geolibre-duckdb-wasm-bundles",
