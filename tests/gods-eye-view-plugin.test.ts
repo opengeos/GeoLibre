@@ -15,6 +15,7 @@ import {
   GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
   GODS_EYE_VIEW_FLIGHTS_FLAG,
   GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
+  GODS_EYE_VIEW_CCTV_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -357,6 +358,12 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
         status: 200,
       });
     }
+    if (url.includes("api.tfl.gov.uk") || url.includes("data.calgary.ca")) {
+      return new Response("[]", { status: 200 });
+    }
+    if (url.includes("tie.digitraffic.fi")) {
+      return new Response(JSON.stringify({ features: [] }), { status: 200 });
+    }
     return new Response(TLE_TEXT, {
       status: 200,
       headers: { "content-type": "text/plain" },
@@ -401,7 +408,7 @@ describe("God's Eye View availability", () => {
         ]),
         [
           ["Movement", ["flights", "militaryFlights", "satellites", "bikeShare", "streetTraffic"]],
-          ["Cameras", ["mappedAlpr"]],
+          ["Cameras", ["mappedAlpr", "cctv"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
           ["Events", ["earthquakes", "spaceMissions"]],
           ["Utilities", ["radio"]],
@@ -434,6 +441,7 @@ describe("God's Eye View feed refresh", () => {
         mappedAlpr: true,
         flights: true,
         militaryFlights: true,
+        cctv: true,
       });
       godsEyeViewPlugin.activate?.(globe.app);
       for (let i = 0; i < 20; i++) await flush();
@@ -455,6 +463,7 @@ describe("God's Eye View feed refresh", () => {
           "mappedAlpr",
           "flights",
           "militaryFlights",
+          "cctv",
         ].sort(),
       );
       for (const layer of layers) assert.ok(layer.source.attribution, layer.name);
@@ -470,6 +479,7 @@ describe("God's Eye View feed refresh", () => {
         GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
         GODS_EYE_VIEW_FLIGHTS_FLAG,
         GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
+        GODS_EYE_VIEW_CCTV_FLAG,
       ];
       for (const flag of flags) {
         assert.ok(
@@ -488,9 +498,14 @@ describe("God's Eye View feed refresh", () => {
         "station_information.json",
         "opensky/states",
         "adsb-lol/military",
+        "api.tfl.gov.uk",
+        "data.calgary.ca",
+        "tie.digitraffic.fi",
       ]) {
         assert.ok(calls.includes(source), source);
       }
+      const cctv = layers.find((layer) => layer.metadata.godsEyeViewFeed === "cctv");
+      assert.equal(cctv?.popup?.fields?.[0]?.kind, "image");
     } finally {
       godsEyeViewPlugin.deactivate?.(globe.app);
       godsEyeViewPlugin.applyProjectState?.(globe.app, {});
@@ -838,6 +853,7 @@ describe("God's Eye View clock speed", () => {
         bikeShare: false,
         streetTraffic: false,
         mappedAlpr: false,
+        cctv: false,
         radio: false,
         datacenters: false,
         dams: false,

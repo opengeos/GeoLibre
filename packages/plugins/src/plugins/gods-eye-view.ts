@@ -29,6 +29,11 @@ import {
 } from "./gods-eye-view-viewport-feeds";
 import { OVERPASS_REQUEST_TIMEOUT_MS } from "./osm-downloader-api";
 import { fetchMilitaryFlightsCzml, fetchOpenSkyCzml } from "./gods-eye-view-aircraft-feeds";
+import {
+  CCTV_MAX_VIEW_SPAN_DEGREES,
+  CCTV_QUERY_SNAP_DEGREES,
+  fetchCctvCzml,
+} from "./gods-eye-view-cctv-feeds";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -45,6 +50,7 @@ export const GODS_EYE_VIEW_STREET_TRAFFIC_FLAG = "godsEyeViewStreetTraffic";
 export const GODS_EYE_VIEW_MAPPED_ALPR_FLAG = "godsEyeViewMappedAlpr";
 export const GODS_EYE_VIEW_FLIGHTS_FLAG = "godsEyeViewFlights";
 export const GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG = "godsEyeViewMilitaryFlights";
+export const GODS_EYE_VIEW_CCTV_FLAG = "godsEyeViewCctv";
 
 // The aircraft feeds refresh every 15–30 seconds. Individual descriptors still
 // decide whether they are due, so this inexpensive scheduler does not increase
@@ -227,6 +233,19 @@ const FEED_DESCRIPTORS = {
     viewportKey: (bounds) =>
       viewportBoundsKey(bounds, ALPR_MAX_VIEW_SPAN_DEGREES, ALPR_QUERY_SNAP_DEGREES),
     fetch: ({ bounds, signal }) => fetchMappedAlprCzml(bounds, { signal }),
+  },
+  cctv: {
+    group: "cameras",
+    label: ["panel.godsEyeView.cctv", "Public CCTV Cameras"],
+    attribution:
+      "Public camera imagery: TfL Open Data; City of Calgary; Fintraffic / digitraffic.fi",
+    refreshIntervalMs: 60_000,
+    timeoutMs: 30_000,
+    flag: GODS_EYE_VIEW_CCTV_FLAG,
+    defaultEnabled: false,
+    viewportKey: (bounds) =>
+      viewportBoundsKey(bounds, CCTV_MAX_VIEW_SPAN_DEGREES, CCTV_QUERY_SNAP_DEGREES),
+    fetch: ({ bounds, signal }) => fetchCctvCzml(bounds, { signal }),
   },
   radio: {
     group: "utilities",
@@ -477,7 +496,20 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
   layer.geojson = payload.attributes;
   // Only the ISS carries a standing label, so hovering is how every other
   // satellite (and every quake) says what it is without a click.
-  layer.popup = { ...layer.popup, hover: true };
+  layer.popup =
+    feed === "cctv"
+      ? {
+          hover: true,
+          titleField: "name",
+          showFeatureId: false,
+          fields: [
+            { field: "snapshot", label: "Live snapshot", kind: "image" },
+            { field: "provider", label: "Provider" },
+            { field: "attribution", label: "Attribution" },
+            { field: "privacy", label: "Privacy" },
+          ],
+        }
+      : { ...layer.popup, hover: true };
   layer.metadata = {
     ...layer.metadata,
     [feedFlag(feed)]: true,
@@ -500,6 +532,7 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
       source: layer.source,
       metadata: layer.metadata,
       geojson: layer.geojson,
+      ...(feed === "cctv" ? { popup: layer.popup } : {}),
     });
     feeds[feed].layerId = existing.id;
   } else {

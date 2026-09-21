@@ -929,6 +929,7 @@ export {
   GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
   GODS_EYE_VIEW_FLIGHTS_FLAG,
   GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
+  GODS_EYE_VIEW_CCTV_FLAG,
 } from "./plugins/gods-eye-view";
 export {
   ADSB_LOL_EDGE_URL,
@@ -943,6 +944,17 @@ export {
   predictAircraftPosition,
   type AircraftObservation,
 } from "./plugins/gods-eye-view-aircraft-feeds";
+export {
+  CCTV_MAX_CAMERAS,
+  CCTV_MAX_VIEW_SPAN_DEGREES,
+  CCTV_QUERY_SNAP_DEGREES,
+  cctvCamerasToCzml,
+  fetchCctvCzml,
+  normalizeCalgaryCameras,
+  normalizeFintrafficCameras,
+  normalizeTflCameras,
+  type CctvCamera,
+} from "./plugins/gods-eye-view-cctv-feeds";
 export {
   buildCelestrakTleUrl,
   buildUsgsFeedUrl,

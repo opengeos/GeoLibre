@@ -38,6 +38,7 @@ import * as UPNG from "upng-js";
 import {
   ADSB_LOL_MILITARY_UPSTREAM,
   ADSBDB_AIRCRAFT_UPSTREAM,
+  CALGARY_CCTV_FRAME_UPSTREAM,
   fetchAllowlistedUpstream,
   HDX_CKAN_SEARCH_UPSTREAM,
   OPEN_SKY_STATES_UPSTREAM,
@@ -114,6 +115,8 @@ const ADSBDB_AIRCRAFT_PATH = /^\/adsbdb\/aircraft\/([0-9a-fA-F]{6})$/;
 const OPEN_SKY_CACHE_SECONDS = 30;
 const ADSB_LOL_CACHE_SECONDS = 15;
 const AIRCRAFT_FEED_MAX_BODY_BYTES = 25 * 1024 * 1024;
+const CALGARY_CCTV_PATH = /^\/cctv\/calgary\/(\d{1,4})\.jpg$/;
+const CCTV_FRAME_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 // The public Overpass endpoint rejects some browser origins (notably Pages
 // previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
@@ -882,6 +885,39 @@ async function handleAdsbdbAircraft(
   return response;
 }
 
+async function handleCalgaryCctvFrame(
+  request: Request,
+  ctx: ExecutionContext,
+  frameId: string,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(
+      `${CALGARY_CCTV_FRAME_UPSTREAM}loc${frameId}.jpg`,
+      { headers: { accept: "image/jpeg,image/*" } },
+    );
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const contentType = originResponse.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
+  const body = await readResponseBytesWithLimit(originResponse, CCTV_FRAME_MAX_BODY_BYTES);
+  if (!originResponse.ok || !body || !["image/jpeg", "image/png"].includes(contentType)) {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", contentType);
+  headers.set("cache-control", "public, max-age=30");
+  const response = new Response(body, { status: 200, headers });
+  if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
 export const tilesWorker = {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -1143,6 +1179,11 @@ export const tilesWorker = {
     const adsbdbMatch = ADSBDB_AIRCRAFT_PATH.exec(url.pathname);
     if (adsbdbMatch) {
       return handleAdsbdbAircraft(request, ctx, adsbdbMatch[1]);
+    }
+
+    const calgaryCctvMatch = CALGARY_CCTV_PATH.exec(url.pathname);
+    if (calgaryCctvMatch) {
+      return handleCalgaryCctvFrame(request, ctx, calgaryCctvMatch[1]);
     }
 
     // Source Cooperative metadata: source.coop sends no CORS headers, so the

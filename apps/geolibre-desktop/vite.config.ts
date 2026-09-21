@@ -15,6 +15,7 @@ import {
   proxyAircraftRequestGuarded,
   proxyAdsbdbAircraftRequestGuarded,
   proxyBinaryRequestGuarded,
+  proxyCalgaryCctvFrameRequestGuarded,
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
   proxyOverpassRequestGuarded,
@@ -517,6 +518,7 @@ const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
 const OPEN_SKY_PROXY_PATH = "/opensky/states";
 const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
+const CALGARY_CCTV_FRAME_PROXY_PATH = "/cctv/calgary";
 const OVERPASS_PROXY_PATH = "/overpass";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
@@ -725,6 +727,20 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("ADSBDB proxy request failed");
+        }
+      });
+      server.middlewares.use(CALGARY_CCTV_FRAME_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(
+            req.url ?? "",
+            `http://localhost${CALGARY_CCTV_FRAME_PROXY_PATH}`,
+          );
+          const frameId = decodeURIComponent(requestUrl.pathname).match(/^\/(\d{1,4})\.jpg$/)?.[1];
+          await proxyCalgaryCctvFrameRequestGuarded(frameId ?? "", res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Calgary CCTV frame request failed");
         }
       });
       server.middlewares.use(OVERPASS_PROXY_PATH, async (req, res) => {

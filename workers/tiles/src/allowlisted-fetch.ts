@@ -17,6 +17,7 @@ export const OVERPASS_API_FALLBACK_UPSTREAM = "https://overpass.private.coffee/a
 export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/all";
 export const ADSB_LOL_MILITARY_UPSTREAM = "https://api.adsb.lol/v2/mil";
 export const ADSBDB_AIRCRAFT_UPSTREAM = "https://api.adsbdb.com/v0/aircraft/";
+export const CALGARY_CCTV_FRAME_UPSTREAM = "https://trafficcam.calgary.ca/";
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
@@ -29,6 +30,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   OPEN_SKY_STATES_UPSTREAM,
   ADSB_LOL_MILITARY_UPSTREAM,
   ADSBDB_AIRCRAFT_UPSTREAM,
+  CALGARY_CCTV_FRAME_UPSTREAM,
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

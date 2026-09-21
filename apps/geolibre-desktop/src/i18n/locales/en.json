@@ -2411,6 +2411,7 @@
       "bikeShare": "Bike Share",
       "streetTraffic": "Simulated Street Traffic",
       "mappedAlpr": "Mapped ALPR Cameras",
+      "cctv": "Public CCTV Cameras",
       "radio": "Radio Stations",
       "datacenters": "Datacenters",
       "dams": "Dams",

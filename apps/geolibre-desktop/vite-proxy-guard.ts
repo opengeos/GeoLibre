@@ -39,6 +39,7 @@ const AIRCRAFT_UPSTREAMS = {
   },
 } as const;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
+const CALGARY_CCTV_FRAME_BASE = "https://trafficcam.calgary.ca/loc";
 const OVERPASS_EDGE_URL = "https://tiles.geolibre.app/overpass";
 const OVERPASS_MAX_REQUEST_BYTES = 20_000;
 const CELESTRAK_GROUPS = new Set([
@@ -566,6 +567,35 @@ export async function proxyAdsbdbAircraftRequestGuarded(
   const body = await readBodyWithLimit(response, 1024 * 1024);
   res.statusCode = response.status;
   res.setHeader("cache-control", response.ok ? "public, max-age=86400" : "no-store");
+  res.setHeader("content-length", String(body.byteLength));
+  res.end(body);
+}
+
+/** Fixed, bounded image relay for Calgary's public traffic-camera snapshots. */
+export async function proxyCalgaryCctvFrameRequestGuarded(
+  frameId: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!/^\d{1,4}$/.test(frameId)) {
+    res.statusCode = 400;
+    res.end("Invalid Calgary camera id");
+    return;
+  }
+  const response = await fetchWithGuard(`${CALGARY_CCTV_FRAME_BASE}${frameId}.jpg`, {
+    headers: { accept: "image/jpeg,image/*" },
+  });
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
+  if (!response.ok || !["image/jpeg", "image/png"].includes(contentType)) {
+    await response.body?.cancel().catch(() => undefined);
+    res.statusCode = 502;
+    res.end("Calgary CCTV frame request failed");
+    return;
+  }
+  const body = await readBodyWithLimit(response, 5 * 1024 * 1024);
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=30");
+  res.setHeader("content-type", contentType);
   res.setHeader("content-length", String(body.byteLength));
   res.end(body);
 }
