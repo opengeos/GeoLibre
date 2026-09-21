@@ -221,24 +221,26 @@ format/reader/size rules those panels share — a per-panel copy would miss this
 check, so add new browse panels against that module rather than duplicating it
 (`source-coop-api.ts` re-exports it under its own names for compatibility).
 
-### `maplibre-gl-lidar` (`packages/plugins/package.json`) — checked by a test
+### `maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler
 
 The space-effects engine raises the MapLibre canvas to `z-index: 4` so its
 starfield canvases can sit underneath. That package renders point clouds into an
 **overlaid** deck.gl canvas which it parks in the canvas container, directly
-after the map canvas, tagged `maplibre-gl-lidar-canvas`. `LIDAR_CANVAS_CLASS`
-(`packages/plugins/src/plugins/maplibre-effects.ts`) mirrors that class so
-`effectsOverlayCss()` can hand the wrapper the canvas's own z-index. Drop the
-rule and the wrapper falls below the raised canvas, hiding the point cloud
-outright; drop the re-parenting upstream and the wrapper goes back to covering
-the Measure/Colorbar/Legend/HTML/Bookmark panels (#2530).
+after the map canvas, tagged `DECK_CANVAS_CLASS`
+(`maplibre-gl-lidar-canvas`). `effectsOverlayCss()`
+(`packages/plugins/src/plugins/maplibre-effects.ts`) hands that wrapper the
+canvas's own z-index. Drop the rule and the wrapper falls below the raised
+canvas, hiding the point cloud outright; drop the re-parenting upstream and the
+wrapper goes back to covering the Measure/Colorbar/Legend/HTML/Bookmark panels
+(#2530).
 
-Neither half fails the build on its own, so both are asserted:
-`tests/effects-settings.test.ts` builds the selector from the package's own
-exported `DECK_CANVAS_CLASS`, so a rename upstream fails the test rather than
-silently un-fixing the stacking, and `e2e/lidar-canvas-stacking.spec.ts` mounts
-the real control and asserts the resulting DOM order and z-indices. Run both on
-a bump.
+The **class** is imported from the package rather than copied, so a rename
+fails `npm run typecheck`. Keep it that way: the package is side-effect-free, so
+the import tree-shakes to the string and does not pull deck.gl into this
+eagerly loaded plugin. The **placement** is not visible to the compiler, so
+`e2e/lidar-canvas-stacking.spec.ts` mounts the real control and asserts the
+resulting DOM order and z-indices — run it on a bump
+(`npx playwright test e2e/lidar-canvas-stacking.spec.ts --project=features`).
 
 ### `maplibre-gl-raster` — checked by the compiler
 

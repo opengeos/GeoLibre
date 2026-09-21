@@ -15,6 +15,11 @@ import { waitForMap } from "./helpers";
 // drifts, so assert the resulting stack directly. No point cloud is loaded:
 // opening the panel is enough to mount the control and create the overlay, and
 // the stacking is a property of the DOM, not of the points.
+// Spelled out rather than imported from the package's `DECK_CANVAS_CLASS`:
+// Playwright transpiles specs to CJS, and this package's CJS entry pulls in
+// `@deck.gl/maplibre`, which publishes no CJS export. A rename upstream fails
+// `npm run typecheck` at the import in `maplibre-effects.ts` anyway, and this
+// spec's first assertion would fail loudly rather than pass vacuously.
 const WRAPPER = ".maplibre-gl-lidar-canvas";
 
 test.describe("LiDAR point-cloud canvas stacking", () => {
