@@ -269,12 +269,14 @@ export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
     // the box keeps its width instead of being wrapped corner by corner.
     const wrappedWest = ((((west + 180) % 360) + 360) % 360) - 180;
     const wrappedEast = wrappedWest + span;
+    // Checked before the widening below, so a sliver too narrow to survive
+    // rounding is rejected wherever it sits rather than only off the meridian.
+    if (round(wrappedWest) === round(wrappedEast)) return null;
     // Past 180° the box would have to cross the antimeridian, which is not safe
     // to spell; the -180…180 defaults already stand in for it.
     if (wrappedEast <= 180) {
       westEdge = round(wrappedWest);
       eastEdge = round(wrappedEast);
-      if (westEdge === eastEdge) return null;
     }
   }
 

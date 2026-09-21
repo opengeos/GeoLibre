@@ -272,6 +272,8 @@ describe("viewBoundsToOgcBbox", () => {
     // An empty box would filter every feature out rather than narrow the query.
     assert.equal(viewBoundsToOgcBbox([0, 0, 0.0000004, 1]), null);
     assert.equal(viewBoundsToOgcBbox([0, 0, 1, 0.0000004]), null);
+    // Sitting on the antimeridian must not turn the sliver into a whole world.
+    assert.equal(viewBoundsToOgcBbox([179.9999998, -10, 180.0000002, 10]), null);
   });
 });
 
