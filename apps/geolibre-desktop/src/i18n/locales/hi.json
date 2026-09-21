@@ -1970,7 +1970,7 @@
     "only3d": "केवल 3D",
     "noMapbox": "Mapbox नहीं",
     "noArcgis": "ArcGIS नहीं",
-    "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए सेटिंग्स में Cesium Ion टोकन जोड़ें"
+    "cesiumTokenHint": "टेरेन और Ion इमेजरी के लिए <settingsLink>सेटिंग्स → एनवायरनमेंट वेरिएबल</settingsLink> में Cesium Ion टोकन जोड़ें"
   },
   "renderer": {
     "basemap": "बेसमैप",

@@ -166,7 +166,12 @@ export type SettingsSection =
   | "startup";
 
 /** A field a deep-link can ask Settings to focus once the section renders. */
-export type SettingsFocusTarget = "shareToken" | "mapboxToken" | "arcgisKey" | "accentColor";
+export type SettingsFocusTarget =
+  | "shareToken"
+  | "cesiumToken"
+  | "mapboxToken"
+  | "arcgisKey"
+  | "accentColor";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
@@ -589,6 +594,7 @@ export function SettingsDialog({
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(null);
   const shareTokenInputRef = useRef<HTMLInputElement>(null);
+  const cesiumTokenInputRef = useRef<HTMLInputElement>(null);
   const mapboxTokenInputRef = useRef<HTMLInputElement>(null);
   const arcgisKeyInputRef = useRef<HTMLInputElement>(null);
   const languagePackFileRef = useRef<HTMLInputElement>(null);
@@ -850,11 +856,13 @@ export function SettingsDialog({
     const input =
       pendingFocus === "shareToken"
         ? shareTokenInputRef
-        : pendingFocus === "mapboxToken"
-          ? mapboxTokenInputRef
-          : pendingFocus === "arcgisKey"
-            ? arcgisKeyInputRef
-            : null;
+        : pendingFocus === "cesiumToken"
+          ? cesiumTokenInputRef
+          : pendingFocus === "mapboxToken"
+            ? mapboxTokenInputRef
+            : pendingFocus === "arcgisKey"
+              ? arcgisKeyInputRef
+              : null;
     if (!open || !input) return;
     if (effectiveSection !== "environment") return;
     const id = window.requestAnimationFrame(() => {
@@ -2860,6 +2868,7 @@ export function SettingsDialog({
                       />
                     </p>
                     <Input
+                      ref={cesiumTokenInputRef}
                       aria-label={t("settings.env.cesiumTokenTitle")}
                       type="password"
                       autoComplete="new-password"

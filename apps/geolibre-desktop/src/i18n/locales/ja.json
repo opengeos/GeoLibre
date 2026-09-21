@@ -1924,7 +1924,7 @@
     "only3d": "3Dのみ",
     "noMapbox": "Mapbox非対応",
     "noArcgis": "ArcGIS非対応",
-    "cesiumTokenHint": "地形とIon衛星画像を使うには、設定でCesium Ionトークンを追加してください"
+    "cesiumTokenHint": "地形とIon衛星画像を使うには、<settingsLink>設定 → 環境変数</settingsLink>でCesium Ionトークンを追加してください"
   },
   "renderer": {
     "basemap": "ベースマップ",

@@ -1970,7 +1970,7 @@
     "only3d": "Nur 3D",
     "noMapbox": "Kein Mapbox",
     "noArcgis": "Kein ArcGIS",
-    "cesiumTokenHint": "Fügen Sie in den Einstellungen ein Cesium-Ion-Token für Gelände und Ion-Bilder hinzu"
+    "cesiumTokenHint": "Fügen Sie unter <settingsLink>Einstellungen → Umgebungsvariablen</settingsLink> ein Cesium-Ion-Token für Gelände und Ion-Bilder hinzu"
   },
   "renderer": {
     "basemap": "Hintergrundkarte",

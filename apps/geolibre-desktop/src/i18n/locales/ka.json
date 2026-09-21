@@ -1970,7 +1970,7 @@
     "only3d": "მხოლოდ 3D",
     "noMapbox": "Mapbox-ის გარეშე",
     "noArcgis": "ArcGIS-ის გარეშე",
-    "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token პარამეტრებში"
+    "cesiumTokenHint": "რელიეფისა და Ion-ის სურათებისთვის დაამატეთ Cesium Ion-ის token <settingsLink>პარამეტრები → გარემოს ცვლადები</settingsLink> განყოფილებაში"
   },
   "renderer": {
     "basemap": "საბაზისო რუკა",

@@ -2153,7 +2153,7 @@
     "only3d": "ثلاثي الأبعاد فقط",
     "noMapbox": "بدون Mapbox",
     "noArcgis": "بدون ArcGIS",
-    "cesiumTokenHint": "أضف رمز Cesium Ion من الإعدادات للحصول على التضاريس وصور Ion"
+    "cesiumTokenHint": "أضف رمز Cesium Ion في <settingsLink>الإعدادات ← متغيرات البيئة</settingsLink> للحصول على التضاريس وصور Ion"
   },
   "renderer": {
     "basemap": "خريطة الأساس",

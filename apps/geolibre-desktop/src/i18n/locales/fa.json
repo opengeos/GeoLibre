@@ -1970,7 +1970,7 @@
     "only3d": "تنها سه‌بعدی",
     "noMapbox": "بدون Mapbox",
     "noArcgis": "بدون ArcGIS",
-    "cesiumTokenHint": "برای زمین و تصاویر Ion، یک توکن Cesium Ion در تنظیمات بیفزایید"
+    "cesiumTokenHint": "برای زمین و تصاویر Ion، یک توکن Cesium Ion در <settingsLink>تنظیمات ← متغیرهای محیطی</settingsLink> بیفزایید"
   },
   "renderer": {
     "basemap": "نقشهٔ پایه",

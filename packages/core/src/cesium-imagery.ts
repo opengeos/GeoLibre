@@ -91,11 +91,21 @@ export function normalizeCesiumBasemap(value: unknown): CesiumBasemapId {
   return CESIUM_BASEMAPS.find((entry) => entry.id === value)?.id ?? "project";
 }
 
-/** Missing credentials fall back to the project background without changing the saved choice. */
+/**
+ * Missing credentials fall back to keyless imagery without changing the saved
+ * choice.
+ *
+ * The fallback is ArcGIS World Imagery rather than the project background: a
+ * globe wants to look like the Earth, and the project's own basemap is usually
+ * a vector street style whose raster analogue is mostly empty ocean from
+ * orbit. It needs no key, so the globe looks the same with or without an Ion
+ * token — only terrain and the Ion-only basemaps are lost.
+ */
 export function availableCesiumBasemap(value: unknown, hasIonToken: boolean): CesiumBasemapId {
-  const requested = value ?? (hasIonToken ? "bing-aerial" : "project");
+  const keyless = "esri-imagery";
+  const requested = value ?? (hasIonToken ? "bing-aerial" : keyless);
   const entry = CESIUM_BASEMAPS.find((entry) => entry.id === requested);
-  return entry && (!("assetId" in entry) || hasIonToken) ? entry.id : "project";
+  return entry && (!("assetId" in entry) || hasIonToken) ? entry.id : keyless;
 }
 
 /**

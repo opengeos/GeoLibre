@@ -2062,7 +2062,7 @@
     "only3d": "Только 3D",
     "noMapbox": "Без Mapbox",
     "noArcgis": "Без ArcGIS",
-    "cesiumTokenHint": "Добавьте токен Cesium Ion в настройках, чтобы получить рельеф и снимки Ion"
+    "cesiumTokenHint": "Добавьте токен Cesium Ion в разделе <settingsLink>Настройки → Переменные среды</settingsLink>, чтобы получить рельеф и снимки Ion"
   },
   "renderer": {
     "basemap": "Базовая карта",

@@ -1924,7 +1924,7 @@
     "only3d": "chỉ 3D",
     "noMapbox": "không Mapbox",
     "noArcgis": "không ArcGIS",
-    "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong Cài đặt để dùng địa hình và ảnh vệ tinh Ion"
+    "cesiumTokenHint": "Thêm mã thông báo Cesium Ion trong <settingsLink>Cài đặt → Biến môi trường</settingsLink> để dùng địa hình và ảnh vệ tinh Ion"
   },
   "renderer": {
     "basemap": "Sơ đồ cơ sở",

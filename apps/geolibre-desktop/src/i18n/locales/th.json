@@ -1924,7 +1924,7 @@
     "only3d": "3 มิติเท่านั้น",
     "noMapbox": "ไม่รองรับ Mapbox",
     "noArcgis": "ไม่รองรับ ArcGIS",
-    "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ในการตั้งค่าเพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
+    "cesiumTokenHint": "เพิ่มโทเค็น Cesium Ion ใน<settingsLink>การตั้งค่า → ตัวแปรสภาพแวดล้อม</settingsLink> เพื่อใช้ข้อมูลภูมิประเทศและภาพถ่ายจาก Ion"
   },
   "renderer": {
     "basemap": "แผนที่ฐาน",

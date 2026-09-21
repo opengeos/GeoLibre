@@ -27,9 +27,10 @@ describe("Cesium basemap choices", () => {
     assert.equal(parseProject(JSON.stringify(legacy)).preferences?.map.cesiumBasemap, "project");
 
     // With no stored choice at all, the render-time gate still prefers Ion
-    // imagery when a token is configured.
+    // imagery when a token is configured, and keyless Esri imagery when none
+    // is: a globe with no key should still look like the Earth.
     assert.equal(availableCesiumBasemap(undefined, true), "bing-aerial");
-    assert.equal(availableCesiumBasemap(undefined, false), "project");
+    assert.equal(availableCesiumBasemap(undefined, false), "esri-imagery");
   });
 
   it("keeps stable unique IDs and normalizes unrecognized project values", () => {
@@ -45,7 +46,7 @@ describe("Cesium basemap choices", () => {
       assert.equal(availableCesiumBasemap(entry.id, true), entry.id);
       assert.equal(
         availableCesiumBasemap(entry.id, false),
-        "assetId" in entry ? "project" : entry.id,
+        "assetId" in entry ? "esri-imagery" : entry.id,
       );
     }
   });

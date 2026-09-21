@@ -1970,7 +1970,7 @@
     "only3d": "Alleen 3D",
     "noMapbox": "Geen Mapbox",
     "noArcgis": "Geen ArcGIS",
-    "cesiumTokenHint": "Voeg in Instellingen een Cesium Ion-token toe voor terrein en Ion-beelden"
+    "cesiumTokenHint": "Voeg via <settingsLink>Instellingen → Omgevingsvariabelen</settingsLink> een Cesium Ion-token toe voor terrein en Ion-beelden"
   },
   "renderer": {
     "basemap": "Achtergrondkaart",

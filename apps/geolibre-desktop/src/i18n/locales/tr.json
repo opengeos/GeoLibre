@@ -1970,7 +1970,7 @@
     "only3d": "Yalnızca 3B",
     "noMapbox": "Mapbox yok",
     "noArcgis": "ArcGIS yok",
-    "cesiumTokenHint": "Arazi ve Ion görüntüleri için Ayarlar'dan bir Cesium Ion belirteci ekleyin"
+    "cesiumTokenHint": "Arazi ve Ion görüntüleri için <settingsLink>Ayarlar → Ortam değişkenleri</settingsLink> bölümünden bir Cesium Ion belirteci ekleyin"
   },
   "renderer": {
     "basemap": "Altlık harita",

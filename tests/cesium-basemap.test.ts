@@ -228,6 +228,32 @@ describe("applyBasemapImagery", () => {
     );
   });
 
+  it("keeps a refused Ion basemap from blanking the globe", async () => {
+    // The chosen basemap is an Ion asset, not the `default` fallback: a token
+    // restricted to other origins 403s here, and Cesium draws no tile at all
+    // while any imagery layer in the stack has no provider — the globe goes to
+    // bare space rather than merely losing its basemap.
+    const { Cesium, viewer, arcgisRequests } = makeFakes();
+    Cesium.IonImageryProvider.fromAssetId = () => Promise.reject(new Error("403 Forbidden"));
+    const added = applyBasemapImagery(Cesium, viewer, [], { kind: "ion", assetId: 2 }, "jwt.token");
+    const provider = await (added[0] as FakeLayer).provider?.provider;
+    assert.ok(provider, "the layer resolved to a provider instead of rejecting");
+    assert.deepEqual(
+      arcgisRequests.map(({ url }) => url),
+      ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"],
+    );
+  });
+
+  it("keeps an unreachable ArcGIS basemap from blanking the globe", async () => {
+    const { Cesium, viewer, openStreetMapRequests } = makeFakes();
+    Cesium.ArcGisMapServerImageryProvider.fromUrl = () => Promise.reject(new Error("offline"));
+    const url = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
+    const added = applyBasemapImagery(Cesium, viewer, [], { kind: "arcgis", url }, undefined);
+    const provider = await (added[0] as FakeLayer).provider?.provider;
+    assert.ok(provider, "the layer resolved to a provider instead of rejecting");
+    assert.deepEqual(openStreetMapRequests, [{ url: "https://tile.openstreetmap.org/" }]);
+  });
+
   it("stands OpenStreetMap in when the keyless imagery service cannot be reached", async () => {
     const { Cesium, viewer, openStreetMapRequests } = makeFakes();
     Cesium.ArcGisMapServerImageryProvider.fromUrl = () => Promise.reject(new Error("offline"));

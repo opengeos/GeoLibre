@@ -1924,7 +1924,7 @@
     "only3d": "3D만",
     "noMapbox": "Mapbox 미지원",
     "noArcgis": "ArcGIS 미지원",
-    "cesiumTokenHint": "지형과 Ion 영상을 사용하려면 설정에서 Cesium Ion 토큰을 추가하세요"
+    "cesiumTokenHint": "지형과 Ion 영상을 사용하려면 <settingsLink>설정 → 환경 변수</settingsLink>에서 Cesium Ion 토큰을 추가하세요"
   },
   "renderer": {
     "basemap": "배경지도",

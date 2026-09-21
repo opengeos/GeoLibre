@@ -1924,7 +1924,7 @@
     "only3d": "仅 3D",
     "noMapbox": "不支持 Mapbox",
     "noArcgis": "不支持 ArcGIS",
-    "cesiumTokenHint": "在设置中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
+    "cesiumTokenHint": "在<settingsLink>设置 → 环境变量</settingsLink>中添加 Cesium Ion 令牌即可使用地形和 Ion 影像"
   },
   "renderer": {
     "basemap": "底图",

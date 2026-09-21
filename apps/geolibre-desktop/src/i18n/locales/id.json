@@ -1924,7 +1924,7 @@
     "only3d": "Hanya 3D",
     "noMapbox": "Tanpa Mapbox",
     "noArcgis": "Tanpa ArcGIS",
-    "cesiumTokenHint": "Tambahkan token Cesium Ion di Pengaturan untuk medan dan citra Ion"
+    "cesiumTokenHint": "Tambahkan token Cesium Ion di <settingsLink>Pengaturan → Variabel lingkungan</settingsLink> untuk medan dan citra Ion"
   },
   "renderer": {
     "basemap": "Peta dasar",

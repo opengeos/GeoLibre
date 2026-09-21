@@ -2002,7 +2002,7 @@
     "only3d": "3D only",
     "noMapbox": "No Mapbox",
     "noArcgis": "No ArcGIS",
-    "cesiumTokenHint": "Add a Cesium Ion token in Settings for terrain and Ion imagery"
+    "cesiumTokenHint": "Add a Cesium Ion token in <settingsLink>Settings → Environment variables</settingsLink> for terrain and Ion imagery"
   },
   "renderer": {
     "basemap": "Basemap",
