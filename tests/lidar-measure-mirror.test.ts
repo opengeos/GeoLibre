@@ -211,6 +211,54 @@ describe("LiDAR measure mirror", () => {
     });
   }
 
+  it("keeps quiet about a source that holds nothing yet", () => {
+    // The mirror attaches as soon as both panels are open, long before
+    // anything is measured, so a source with no data is "not ready" — not the
+    // private-field drift the warning exists for.
+    const { overlay, calls } = makeOverlay();
+    const { control } = makeControl();
+    const map: MeasureMirrorMap = {
+      getSource: (id) => (id === SOURCE_ID ? {} : undefined),
+      on: () => {},
+      off: () => {},
+    };
+
+    const warnings: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      syncLidarMeasureMirror({ map, overlay, control });
+    } finally {
+      console.warn = warn;
+    }
+
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(calls, []);
+  });
+
+  it("warns once when the source holds a shape it cannot read", () => {
+    const { overlay } = makeOverlay();
+    const { control } = makeControl();
+    const map: MeasureMirrorMap = {
+      getSource: (id) =>
+        id === SOURCE_ID ? { _data: "https://example.com/data.geojson" } : undefined,
+      on: () => {},
+      off: () => {},
+    };
+
+    const warnings: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      syncLidarMeasureMirror({ map, overlay, control });
+      syncLidarMeasureMirror({ map, overlay, control });
+    } finally {
+      console.warn = warn;
+    }
+
+    assert.equal(warnings.length, 1);
+  });
+
   it("ignores data events from other sources", () => {
     const { overlay, calls } = makeOverlay();
     const { map, emitSourceData } = makeMap(collection([lineFeature()]));

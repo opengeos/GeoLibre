@@ -259,6 +259,10 @@ function readMeasureGeometry(current: Attachment): GeoJSON.FeatureCollection | n
 
   const data = unwrapSourceData(source._data);
   if (data && typeof data === "object" && data.type === "FeatureCollection") return data;
+  // A source holding nothing yet is the same "not ready" case as no source at
+  // all. The control seeds an empty FeatureCollection today, so this is only
+  // reached if that changes — and it is not the drift the warning is for.
+  if (data === undefined) return null;
 
   if (!current.warnedShape) {
     current.warnedShape = true;
