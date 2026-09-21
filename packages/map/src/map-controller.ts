@@ -384,6 +384,8 @@ export class MapController implements MapEngine {
   readonly kind = "maplibre" as const;
   readonly capabilities: MapEngineCapabilities = MAPLIBRE_CAPABILITIES;
   private map: maplibregl.Map | null = null;
+  /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
+  private pendingViewClamp = false;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
   private compassControl: ResetBearingControl | null = null;
@@ -1154,7 +1156,7 @@ export class MapController implements MapEngine {
     this.map.setTransformConstrain(
       createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
     );
-    this.applyView(this.readView());
+    this.clampViewToPreferences();
     // The ellipsoid or the scale unit can change here (Settings' dropdowns)
     // without the basemap changing, so push the unit and redraw the body-aware
     // scale bar now — the store's ellipsoid subscription has already updated the
@@ -1163,6 +1165,37 @@ export class MapController implements MapEngine {
     // or both).
     this.scaleControl?.setUnit(preferences.scaleUnit);
     this.scaleControl?.refresh();
+  }
+
+  /**
+   * Re-apply the current camera so the constraints {@link applyMapPreferences}
+   * just installed (min/max zoom, max pitch, max bounds) actually clamp it.
+   *
+   * `applyView` gets there by jumping, and a jump *stops* an in-flight camera
+   * animation, leaving the camera wherever that animation had reached. Map
+   * preferences do change mid-animation: loading a LiDAR point cloud flips the
+   * projection preference through the deck.gl overlays' shared mercator lock
+   * from the very `load` event the plugin fires right after starting its
+   * fly-to-the-data, so that fly-to was being cancelled before it had moved a
+   * pixel and the layer never came into view. While the camera is moving,
+   * clamp once it settles instead — the setters above already constrain the
+   * animation's own target, so nothing escapes the new limits in the meantime.
+   */
+  private clampViewToPreferences(): void {
+    if (!this.map) return;
+    if (!this.isCameraMoving()) {
+      this.applyView(this.readView());
+      return;
+    }
+    // One deferred clamp is enough however many preference changes land during
+    // the same movement, and it must not re-arm on the `moveend` its own jump
+    // fires.
+    if (this.pendingViewClamp) return;
+    this.pendingViewClamp = true;
+    this.map.once("moveend", () => {
+      this.pendingViewClamp = false;
+      this.applyView(this.readView());
+    });
   }
 
   readView(): MapViewState {

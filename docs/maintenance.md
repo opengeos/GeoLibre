@@ -187,6 +187,22 @@ black — it declines the stack.
   real archive, through the real `layeradd` handler into the store, and fails if
   the id scheme moves or the selection stops reaching the handler.
 
+- **The MeasureControl's `_panel` and `_sourceId`**
+  (`packages/plugins/src/plugins/terrain-measure.ts`, via `measurePanelElement`
+  and `measureSourceId`) are private members that only the control knows: the
+  panel carries GeoLibre's Terrain (3D)/heading sections and the resize styling,
+  and the source id is how `lidar-measure-mirror.ts` finds the geometry it
+  redraws above a LiDAR point cloud (#2533). Both readers warn and fall back to
+  doing nothing on a rename, so after a bump check the console for
+  "MeasureControl: …not found" and confirm the Terrain section still appears and
+  a measured line still shows inside a point cloud.
+- **The measure paint** (`MEASURE_LINE_COLOR`/`MEASURE_LINE_WIDTH`/
+  `MEASURE_FILL_COLOR`, `packages/plugins/src/plugins/lidar-measure-mirror.ts`)
+  is passed to the control explicitly rather than left to its defaults, because
+  the deck.gl mirror has to repaint the same geometry in the same colour. Change
+  one form and change the RGBA twin beside it;
+  `tests/lidar-measure-mirror.test.ts` asserts the pair agrees.
+
 ### `maplibre-gl-basemap-control` (`packages/plugins/package.json`)
 
 `BASEMAP_PANEL_SELECTOR` / `BASEMAP_ROW_SELECTOR` / `BASEMAP_ROW_ID_ATTR`
@@ -233,6 +249,17 @@ canvas's own z-index. Drop the rule and the wrapper falls below the raised
 canvas, hiding the point cloud outright; drop the re-parenting upstream and the
 wrapper goes back to covering the Measure/Colorbar/Legend/HTML/Bookmark panels
 (#2530).
+
+`lidar-measure-mirror.ts` draws the Measure tool's line/polygon into that same
+overlay (`LidarControl.getDeckOverlay()`) with `depthTest: false`, the trick the
+plugin's own cross-section line uses to sit above the points. Two things there
+are not compiler checked: deck paints its layers in insertion order, so the
+mirror re-appends itself on any frame where it is no longer the overlay's last
+layer (streaming adds a chunk layer whenever the viewport pulls in new nodes),
+and the geometry is read from the MapLibre/Mapbox `geojson` source's `_data`
+field, since neither library exposes a public reader. Losing either costs only
+the mirror — the measured line goes back to being hidden inside the cloud, which
+is what #2533 was.
 
 The **class** is imported from the package rather than copied, so a rename
 fails `npm run typecheck`. Keep it that way: the package is side-effect-free, so

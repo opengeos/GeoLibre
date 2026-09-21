@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import * as maplibregl from "maplibre-gl";
 import {
   DEFAULT_LAYER_STYLE,
+  DEFAULT_PROJECT_PREFERENCES,
   BLANK_BASEMAP,
   setActiveEllipsoidId,
   type GeoLibreLayer,
@@ -36,6 +37,8 @@ interface FakeMap {
   queueRenderedFeatures: (features: unknown[]) => void;
   /** Move the camera without firing anything, as a jump before a sync would. */
   setZoom: (zoom: number) => void;
+  /** Whether `isMoving()` reports a camera animation or gesture in flight. */
+  setMoving: (moving: boolean) => void;
   /** Fire a map event at every handler the controller registered for it. */
   emit: (event: string, payload?: unknown) => void;
 }
@@ -61,6 +64,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   const handlers = new Map<string, Set<(event: unknown) => void>>();
   let pendingRenderedFeatures: unknown[] = [];
   let zoom = 4;
+  let moving = false;
 
   for (const id of initialBasemapLayers) {
     // Background layers participate in basemap visibility/opacity sync.
@@ -192,6 +196,18 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     jumpTo: record("jumpTo"),
     dragPan: { isActive: () => false },
     dragRotate: { isActive: () => false },
+    // Preference setters. Real MapLibre clamps the camera inside several of
+    // these; the fake only records them, so a test that cares about the camera
+    // asserts on jumpTo.
+    getMinZoom: () => 0,
+    setMinZoom: record("setMinZoom"),
+    setMaxZoom: record("setMaxZoom"),
+    setMaxPitch: record("setMaxPitch"),
+    setRenderWorldCopies: record("setRenderWorldCopies"),
+    setMaxBounds: record("setMaxBounds"),
+    setTransformConstrain: record("setTransformConstrain"),
+    setProjection: record("setProjection"),
+    isMoving: () => moving,
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
     cameraForBounds: (...args: unknown[]) => {
@@ -200,7 +216,15 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     },
     addControl: record("addControl"),
     removeControl: record("removeControl"),
-    once: () => {},
+    once: (event: string, handler: (event: unknown) => void) => {
+      const wrapped = (payload: unknown) => {
+        handlers.get(event)?.delete(wrapped);
+        handler(payload);
+      };
+      const existing = handlers.get(event) ?? new Set();
+      existing.add(wrapped);
+      handlers.set(event, existing);
+    },
     on: (event: string, handler: (event: unknown) => void) => {
       const existing = handlers.get(event) ?? new Set();
       existing.add(handler);
@@ -222,6 +246,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     },
     setZoom: (next) => {
       zoom = next;
+    },
+    setMoving: (next) => {
+      moving = next;
     },
     emit: (event, payload = { type: event }) => {
       for (const handler of [...(handlers.get(event) ?? [])]) handler(payload);
@@ -1561,6 +1588,70 @@ describe("MapController camera and query helpers", () => {
     );
     assert.ok(transition, "transition property set");
     assert.deepEqual(transition.args[2], { duration: 500 });
+  });
+});
+
+describe("MapController map preference camera clamp", () => {
+  // applyMapPreferences re-applies the current camera so the new constraints
+  // clamp it. That jump used to cancel whatever camera animation was running:
+  // loading a LiDAR point cloud flips the projection preference (the deck.gl
+  // mercator lock) from the `load` event fired right after the plugin starts
+  // its own fitBounds, so the fly-to-the-data died where it started.
+  const preferences = DEFAULT_PROJECT_PREFERENCES.map;
+
+  it("clamps the camera immediately when nothing is animating", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.applyMapPreferences(preferences);
+
+    assert.equal(fake.calls.filter((call) => call.method === "jumpTo").length, 1);
+  });
+
+  it("defers the clamp to moveend while the camera is animating", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    fake.setMoving(true);
+
+    controller.applyMapPreferences(preferences);
+    assert.deepEqual(
+      fake.calls.filter((call) => call.method === "jumpTo"),
+      [],
+      "a jump mid-animation would stop the animation",
+    );
+
+    // The constraints themselves still went in, so the animation's own target
+    // cannot escape them while the clamp waits.
+    for (const method of ["setMinZoom", "setMaxZoom", "setMaxPitch", "setMaxBounds"])
+      assert.ok(
+        fake.calls.some((call) => call.method === method),
+        `expected ${method} to be applied`,
+      );
+
+    fake.setMoving(false);
+    fake.emit("moveend");
+    assert.equal(fake.calls.filter((call) => call.method === "jumpTo").length, 1);
+  });
+
+  it("queues one clamp however many preference changes land mid-animation", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    fake.setMoving(true);
+
+    controller.applyMapPreferences(preferences);
+    controller.applyMapPreferences({ ...preferences, maxPitch: 60 });
+    controller.applyMapPreferences({ ...preferences, maxPitch: 45 });
+
+    fake.setMoving(false);
+    fake.emit("moveend");
+    assert.equal(fake.calls.filter((call) => call.method === "jumpTo").length, 1);
+
+    // And the next movement re-arms, rather than the flag latching on.
+    fake.setMoving(true);
+    controller.applyMapPreferences(preferences);
+    fake.setMoving(false);
+    fake.emit("moveend");
+    assert.equal(fake.calls.filter((call) => call.method === "jumpTo").length, 2);
   });
 });
 

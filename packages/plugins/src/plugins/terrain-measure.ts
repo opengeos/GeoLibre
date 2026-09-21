@@ -167,9 +167,30 @@ interface MeasureStateLike {
   areaUnit: AreaUnit;
 }
 
-/** The private panel element of the upstream MeasureControl. */
+/** Private members of the upstream MeasureControl this package reads. */
 interface MeasureControlInternals {
   _panel?: HTMLElement;
+  _sourceId?: string;
+}
+
+/**
+ * The id of the GeoJSON source the MeasureControl draws its line/polygon into
+ * (`measure-<uid>-source`). Private as of maplibre-gl-components@0.25.x, and
+ * read for the same reason as `_panel` above: only the control knows the id,
+ * which it generates per instance. Losing it costs the LiDAR measure mirror
+ * (see `lidar-measure-mirror.ts`) and nothing else, so this warns rather than
+ * throwing.
+ */
+export function measureSourceId(control: MeasureControl): string | null {
+  const sourceId = (control as unknown as MeasureControlInternals)._sourceId;
+  if (!sourceId) {
+    console.warn(
+      "MeasureControl: _sourceId not found; measured geometry will stay " +
+        "hidden inside LiDAR point clouds. Check maplibre-gl-components.",
+    );
+    return null;
+  }
+  return sourceId;
 }
 
 /**
