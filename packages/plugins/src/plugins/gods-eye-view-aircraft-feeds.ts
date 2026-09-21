@@ -239,6 +239,10 @@ function viewportCenter(bounds: [number, number, number, number] | null): [numbe
   return [(((west + unwrappedEast) / 2 + 180) % 360) - 180, (south + north) / 2];
 }
 
+function wrappedLongitudeDelta(longitude: number, center: number): number {
+  return ((longitude - center + 540) % 360) - 180;
+}
+
 async function enrichAircraft(
   observations: readonly AircraftObservation[],
   bounds: [number, number, number, number] | null,
@@ -251,9 +255,9 @@ async function enrichAircraft(
     .filter((aircraft) => /^[0-9a-f]{6}$/.test(aircraft.id))
     .sort(
       (a, b) =>
-        (a.longitude - centerLon) ** 2 +
+        wrappedLongitudeDelta(a.longitude, centerLon) ** 2 +
         (a.latitude - centerLat) ** 2 -
-        ((b.longitude - centerLon) ** 2 + (b.latitude - centerLat) ** 2),
+        (wrappedLongitudeDelta(b.longitude, centerLon) ** 2 + (b.latitude - centerLat) ** 2),
     )
     .slice(0, AIRCRAFT_ENRICHMENT_BUDGET);
   const values = new Map<string, AircraftEnrichment>();
@@ -287,10 +291,8 @@ async function enrichAircraft(
         if (value) values.set(aircraft.id, value);
       } catch (error) {
         if (signal?.aborted) throw error;
-        enrichmentCache.set(aircraft.id, {
-          value: null,
-          expiresAt: now + ENRICHMENT_TTL_MS,
-        });
+        // A transport error, throttle, or upstream outage is not a confirmed
+        // negative lookup. Leave it uncached so the next feed refresh retries.
       }
     }),
   );
@@ -366,10 +368,10 @@ export async function fetchMilitaryFlightsCzml(
   const nowValue = finite(payload.now);
   const snapshotTimeMs =
     nowValue === null
-      ? (window.current?.getTime() ?? Date.now())
+      ? window.current?.getTime() ?? Date.now()
       : nowValue > 1e12
-        ? nowValue
-        : nowValue * 1000;
+      ? nowValue
+      : nowValue * 1000;
   const observations = payload.ac.flatMap((row) => {
     const value = normalizeAdsbLolAircraft(row, snapshotTimeMs);
     return value ? [value] : [];

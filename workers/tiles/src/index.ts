@@ -113,6 +113,7 @@ const ADSB_LOL_MILITARY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PATH = /^\/adsbdb\/aircraft\/([0-9a-fA-F]{6})$/;
 const OPEN_SKY_CACHE_SECONDS = 30;
 const ADSB_LOL_CACHE_SECONDS = 15;
+const AIRCRAFT_FEED_MAX_BODY_BYTES = 25 * 1024 * 1024;
 
 // The public Overpass endpoint rejects some browser origins (notably Pages
 // previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
@@ -743,6 +744,7 @@ async function handleAircraftFeed(
   request: Request,
   upstream: string,
   cacheSeconds: number,
+  arrayKey: "states" | "ac",
 ): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
@@ -754,21 +756,50 @@ async function handleAircraftFeed(
         accept: "application/json",
         "user-agent": "GeoLibre-Aircraft-Proxy/1.0 (+https://geolibre.org)",
       },
-      cf: {
-        cacheEverything: true,
-        cacheTtlByStatus: { "200-299": cacheSeconds, "300-599": -1 },
-      },
     });
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }
+  const declaredLength = Number(originResponse.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > AIRCRAFT_FEED_MAX_BODY_BYTES) {
+    await originResponse.body?.cancel().catch(() => undefined);
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const reader = originResponse.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > AIRCRAFT_FEED_MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      chunks.push(value);
+    }
+  }
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  if (originResponse.ok) {
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown>;
+      if (!payload || typeof payload !== "object" || !Array.isArray(payload[arrayKey])) {
+        throw new Error("Malformed aircraft feed");
+      }
+    } catch {
+      return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+    }
+  }
   const headers = new Headers(CORS_HEADERS);
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", originResponse.ok ? `public, max-age=${cacheSeconds}` : "no-store");
-  return new Response(originResponse.body, {
-    status: originResponse.status,
-    headers,
-  });
+  return new Response(body, { status: originResponse.status, headers });
 }
 
 async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Response> {
@@ -1045,11 +1076,16 @@ export const tilesWorker = {
     }
 
     if (url.pathname === OPEN_SKY_PATH) {
-      return handleAircraftFeed(request, OPEN_SKY_STATES_UPSTREAM, OPEN_SKY_CACHE_SECONDS);
+      return handleAircraftFeed(
+        request,
+        OPEN_SKY_STATES_UPSTREAM,
+        OPEN_SKY_CACHE_SECONDS,
+        "states",
+      );
     }
 
     if (url.pathname === ADSB_LOL_MILITARY_PATH) {
-      return handleAircraftFeed(request, ADSB_LOL_MILITARY_UPSTREAM, ADSB_LOL_CACHE_SECONDS);
+      return handleAircraftFeed(request, ADSB_LOL_MILITARY_UPSTREAM, ADSB_LOL_CACHE_SECONDS, "ac");
     }
 
     const adsbdbMatch = ADSBDB_AIRCRAFT_PATH.exec(url.pathname);

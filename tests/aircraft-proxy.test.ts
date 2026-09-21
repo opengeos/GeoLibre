@@ -39,11 +39,7 @@ describe("aircraft edge proxies", () => {
       assert.equal(calls[0].url, entry.upstream);
       assert.equal(response.headers.get("access-control-allow-origin"), "*");
       assert.equal(response.headers.get("cache-control"), `public, max-age=${entry.ttl}`);
-      const cf = (calls[0].init as RequestInit & { cf?: unknown }).cf;
-      assert.deepEqual(cf, {
-        cacheEverything: true,
-        cacheTtlByStatus: { "200-299": entry.ttl, "300-599": -1 },
-      });
+      assert.equal((calls[0].init as RequestInit & { cf?: unknown }).cf, undefined);
     });
   }
 
@@ -62,6 +58,42 @@ describe("aircraft edge proxies", () => {
     );
     assert.equal(response.status, 403);
     assert.equal(fetched, false);
+  });
+
+  it("rejects malformed successful aircraft feeds without caching them", async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"states":"not-an-array"}', { status: 200 })) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opensky/states", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), null);
+  });
+
+  it("rejects oversized aircraft feeds before reading their body", async () => {
+    let cancelled = false;
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 200, headers: { "content-length": String(26 * 1024 * 1024) } },
+      )) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opensky/states", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 502);
+    assert.equal(cancelled, true);
   });
 
   it("normalizes an unknown ADSBDB aircraft into a cacheable empty result", async () => {

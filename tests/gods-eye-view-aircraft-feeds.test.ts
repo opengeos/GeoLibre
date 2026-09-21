@@ -149,4 +149,62 @@ describe("God's Eye View aircraft feeds", () => {
       8,
     );
   });
+
+  it("selects nearby enrichment candidates across the antimeridian", async () => {
+    const enriched: string[] = [];
+    const states = Array.from({ length: 9 }, (_, index) => [
+      (0x200000 + index).toString(16),
+      `DATE${index}`,
+      "US",
+      null,
+      1_795_000_000,
+      index === 8 ? -179.9 : 170 + index,
+      0,
+      1_000,
+      false,
+      100,
+      90,
+      0,
+      null,
+      1_000,
+    ]);
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === OPEN_SKY_EDGE_URL) {
+        return new Response(JSON.stringify({ time: 1_795_000_000, states }), { status: 200 });
+      }
+      enriched.push(url.split("/").at(-1) ?? "");
+      return new Response('{"response":{"aircraft":null}}', { status: 200 });
+    }) as typeof fetch;
+
+    await fetchOpenSkyCzml(
+      { start: new Date(), stop: new Date(), current: new Date() },
+      { fetch: fetcher, bounds: [179.7, -1, -179.7, 1] },
+    );
+
+    assert.equal(enriched.length, 8);
+    assert.ok(enriched.includes("200008"));
+  });
+
+  it("retries transient ADSBDB enrichment failures on the next refresh", async () => {
+    let enrichmentCalls = 0;
+    const states = [["300000", "RETRY", "US", null, 1_795_000_000, 0, 0, 1_000, false, 100, 90, 0]];
+    const fetcher = (async (input: string | URL | Request) => {
+      if (String(input) === OPEN_SKY_EDGE_URL) {
+        return new Response(JSON.stringify({ time: 1_795_000_000, states }), { status: 200 });
+      }
+      enrichmentCalls += 1;
+      if (enrichmentCalls === 1) return new Response("unavailable", { status: 503 });
+      return new Response('{"response":{"aircraft":{"registration":"N300"}}}', {
+        status: 200,
+      });
+    }) as typeof fetch;
+    const window = { start: new Date(), stop: new Date(), current: new Date() };
+
+    await fetchOpenSkyCzml(window, { fetch: fetcher, bounds: [-1, -1, 1, 1] });
+    const retried = await fetchOpenSkyCzml(window, { fetch: fetcher, bounds: [-1, -1, 1, 1] });
+
+    assert.equal(enrichmentCalls, 2);
+    assert.equal(retried.attributes.features[0].properties?.registration, "N300");
+  });
 });
