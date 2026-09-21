@@ -220,7 +220,14 @@ export async function reprojectLandXmlCollection(
   // face sharing it.
   const replace = (position: Position): Position => {
     const index = indexByKey.get(positionKey(position));
-    return index === undefined ? [...position] : [...reprojected[index]];
+    // Unreachable while both passes walk the same coordinates with the same
+    // test for a position. Stated as an error rather than falling back to the
+    // input, which would splice source-CRS coordinates into otherwise-WGS84
+    // geometry and land the layer somewhere far away instead of failing.
+    if (index === undefined) {
+      throw new Error("Reprojection could not match a coordinate to a transformed vertex.");
+    }
+    return [...reprojected[index]];
   };
 
   return {
