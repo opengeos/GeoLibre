@@ -16,6 +16,15 @@ export const ENTUR_CLIENT_NAME = "GeoLibre-Gods-Eye-View";
 export const TRANSIT_EDGE_BASE = "https://tiles.geolibre.app/transit/vehicles";
 export const TRANSIT_DEV_BASE = "/transit/vehicles";
 export const GTFS_MAX_ENTITIES = 50_000;
+/**
+ * Ceiling on the merged vehicle count across every provider.
+ *
+ * `GTFS_MAX_ENTITIES` bounds one feed, not the fan-out: seven feeds each just
+ * under that cap would hand Cesium and deck.gl ~350k packets every refresh.
+ * 100k is roughly ten times the real-world combined count, so a misbehaving
+ * upstream is bounded without ever trimming a healthy snapshot.
+ */
+export const TRANSIT_MAX_MERGED_VEHICLES = 100_000;
 export const GTFS_MAX_STRING_CHARS = 256;
 export const GTFS_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
@@ -122,13 +131,24 @@ export const TRANSIT_FEEDS = [
   },
 ] as const satisfies readonly TransitFeedDefinition[];
 
+export type TransitFeedId = (typeof TRANSIT_FEEDS)[number]["id"];
+
+/** Look up a registered feed, failing loudly rather than yielding `undefined`. */
+function transitFeedById(id: TransitFeedId): TransitFeedDefinition {
+  const feed = TRANSIT_FEEDS.find((candidate) => candidate.id === id);
+  if (!feed) throw new Error(`TRANSIT_FEEDS is missing the ${id} entry`);
+  return feed;
+}
+
 /**
  * Entur, the feed the exported decoder helpers default to.
  *
  * Resolved by `id` rather than by array position so reordering or inserting a
- * registry entry cannot silently repoint those public defaults.
+ * registry entry cannot silently repoint those public defaults. The id is typed
+ * against the registry, so renaming the entry is a compile error rather than an
+ * `undefined` that only surfaces as a `TypeError` at the call site.
  */
-const ENTUR_FEED: TransitFeedDefinition = TRANSIT_FEEDS.find((feed) => feed.id === "entur-norway")!;
+const ENTUR_FEED = transitFeedById("entur-norway");
 
 interface GtfsTripDescriptor {
   tripId?: string | null;
@@ -558,14 +578,26 @@ export async function fetchTransitCzml(
     );
     throw firstFailure?.reason ?? new Error("Every transit provider failed");
   }
+  // Take whole providers, in registry order, while the merged budget lasts. The
+  // first provider is always kept: a single feed cannot exceed the per-feed cap,
+  // so it always fits, and an empty result here would look like a healthy feed
+  // with no vehicles.
+  const merged: GodsEyeViewFeedPayload[] = [];
+  let vehicles = 0;
+  for (const result of successes) {
+    const count = result.value.attributes.features.length;
+    if (merged.length > 0 && vehicles + count > TRANSIT_MAX_MERGED_VEHICLES) continue;
+    vehicles += count;
+    merged.push(result.value);
+  }
   return {
     packets: [
       { id: "document", name: "Live Transit", version: "1.0" },
-      ...successes.flatMap((result) => result.value.packets.slice(1)),
+      ...merged.flatMap((payload) => payload.packets.slice(1)),
     ],
     attributes: {
       type: "FeatureCollection",
-      features: successes.flatMap((result) => result.value.attributes.features),
+      features: merged.flatMap((payload) => payload.attributes.features),
     },
   };
 }

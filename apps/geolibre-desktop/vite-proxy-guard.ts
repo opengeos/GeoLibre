@@ -38,7 +38,8 @@ const AIRCRAFT_UPSTREAMS = {
     label: "adsb.lol",
   },
 } as const;
-const TRANSIT_UPSTREAMS = {
+/** Exported so a test can hold it against the edge relay and the feed registry. */
+export const TRANSIT_UPSTREAMS = {
   mbta: "https://cdn.mbta.com/realtime/VehiclePositions.pb",
   "capmetro-austin": "https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream",
   "metrotransit-msp": "https://svc.metrotransit.org/mtgtfs/vehiclepositions.pb",

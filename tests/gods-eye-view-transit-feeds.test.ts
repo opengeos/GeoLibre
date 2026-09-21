@@ -7,6 +7,7 @@ import {
   GTFS_MAX_RESPONSE_BYTES,
   TRANSIT_FEEDS,
   TRANSIT_DEV_BASE,
+  TRANSIT_MAX_MERGED_VEHICLES,
   decodeGtfsRealtimeVehicles,
   decodeTransitFeed,
   fetchTransitCzml,
@@ -14,6 +15,8 @@ import {
   transitVehiclesToCzml,
   type TransitVehicle,
 } from "../packages/plugins/src/plugins/gods-eye-view-transit-feeds";
+import { TRANSIT_UPSTREAMS as DEV_TRANSIT_UPSTREAMS } from "../apps/geolibre-desktop/vite-proxy-guard";
+import { TRANSIT_UPSTREAMS as EDGE_TRANSIT_UPSTREAMS } from "../workers/tiles/src/allowlisted-fetch";
 
 interface FixtureVehicle {
   entityId: string;
@@ -277,5 +280,41 @@ describe("God's Eye View transit feed", () => {
       () => fetchTransitCzml({ fetch: fetcher }),
       new RegExp(`exceeds the ${GTFS_MAX_ENTITIES} entity limit`),
     );
+  });
+
+  it("keeps the merged snapshot under the combined vehicle ceiling", async () => {
+    // Every provider returns a feed right at the per-feed cap, so each one is
+    // individually legal while the fan-out is 3.5x the merged ceiling.
+    const perFeed = Math.ceil(TRANSIT_MAX_MERGED_VEHICLES / 2);
+    const bytes = encodeFeed(
+      Array.from({ length: perFeed }, (_, index) => ({
+        entityId: `v${index}`,
+        latitude: 60,
+        longitude: 10,
+      })),
+    );
+    const fetcher = (async () => new Response(bytes, { status: 200 })) as typeof fetch;
+
+    const payload = await fetchTransitCzml({ fetch: fetcher, dev: true });
+    assert.ok(payload.attributes.features.length <= TRANSIT_MAX_MERGED_VEHICLES);
+    // Whole providers are kept, so the two that fit are both complete.
+    assert.equal(payload.attributes.features.length, perFeed * 2);
+  });
+});
+
+describe("transit relay registry parity", () => {
+  it("keeps both relay upstream maps in step with the feed registry", () => {
+    const relayed = TRANSIT_FEEDS.filter((feed) => !("directUrl" in feed))
+      .map((feed) => feed.id)
+      .sort();
+    assert.deepEqual(Object.keys(EDGE_TRANSIT_UPSTREAMS).sort(), relayed);
+    assert.deepEqual(Object.keys(DEV_TRANSIT_UPSTREAMS).sort(), relayed);
+    for (const id of relayed) {
+      assert.equal(
+        DEV_TRANSIT_UPSTREAMS[id as keyof typeof DEV_TRANSIT_UPSTREAMS],
+        EDGE_TRANSIT_UPSTREAMS[id as keyof typeof EDGE_TRANSIT_UPSTREAMS],
+        `the dev and edge relays disagree on the ${id} upstream`,
+      );
+    }
   });
 });
