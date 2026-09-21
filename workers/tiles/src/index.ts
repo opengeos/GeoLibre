@@ -117,6 +117,7 @@ const ADSB_LOL_CACHE_SECONDS = 15;
 const AIRCRAFT_FEED_MAX_BODY_BYTES = 25 * 1024 * 1024;
 const CALGARY_CCTV_PATH = /^\/cctv\/calgary\/(\d{1,4})\.jpg$/;
 const CCTV_FRAME_MAX_BODY_BYTES = 5 * 1024 * 1024;
+const CCTV_FRAME_UPSTREAM_TIMEOUT_MS = 30_000;
 
 // The public Overpass endpoint rejects some browser origins (notably Pages
 // previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
@@ -907,26 +908,35 @@ async function handleCalgaryCctvFrame(
   const cache = typeof caches === "undefined" ? null : caches.default;
   const cached = await cache?.match(request);
   if (cached) return cached;
-  let originResponse: Response;
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(
+    () => upstreamController.abort(),
+    CCTV_FRAME_UPSTREAM_TIMEOUT_MS,
+  );
   try {
-    originResponse = await fetchAllowlistedUpstream(
+    const originResponse = await fetchAllowlistedUpstream(
       `${CALGARY_CCTV_FRAME_UPSTREAM}loc${frameId}.jpg`,
-      { headers: { accept: "image/jpeg,image/*" } },
+      {
+        headers: { accept: "image/jpeg,image/*" },
+        signal: upstreamController.signal,
+      },
     );
+    const contentType = originResponse.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
+    const body = await readResponseBytesWithLimit(originResponse, CCTV_FRAME_MAX_BODY_BYTES);
+    if (!originResponse.ok || !body || !["image/jpeg", "image/png"].includes(contentType)) {
+      return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+    }
+    const headers = new Headers(CORS_HEADERS);
+    headers.set("content-type", contentType);
+    headers.set("cache-control", "public, max-age=30");
+    const response = new Response(body, { status: 200, headers });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  } finally {
+    clearTimeout(upstreamTimeout);
   }
-  const contentType = originResponse.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
-  const body = await readResponseBytesWithLimit(originResponse, CCTV_FRAME_MAX_BODY_BYTES);
-  if (!originResponse.ok || !body || !["image/jpeg", "image/png"].includes(contentType)) {
-    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
-  }
-  const headers = new Headers(CORS_HEADERS);
-  headers.set("content-type", contentType);
-  headers.set("cache-control", "public, max-age=30");
-  const response = new Response(body, { status: 200, headers });
-  if (cache) ctx.waitUntil(cache.put(request, response.clone()));
-  return response;
 }
 
 export const tilesWorker = {

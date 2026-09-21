@@ -47,6 +47,36 @@ describe("Calgary CCTV edge proxy", () => {
     assert.equal(response.status, 200);
   });
 
+  it("returns 502 when the upstream frame body stalls", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let startedReading!: () => void;
+    const readingStarted = new Promise<void>((resolve) => {
+      startedReading = resolve;
+    });
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            startedReading();
+            signal?.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+          },
+        }),
+        { status: 200, headers: { "content-type": "image/jpeg" } },
+      );
+    }) as typeof fetch;
+    const pending = tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    await readingStarted;
+    t.mock.timers.tick(30_000);
+    assert.equal((await pending).status, 502);
+  });
+
   it("rejects a request with neither an allowed origin nor referrer", async () => {
     const headerlessResponse = await tilesWorker.fetch(
       new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg"),
