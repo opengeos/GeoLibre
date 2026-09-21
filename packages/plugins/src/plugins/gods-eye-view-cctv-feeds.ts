@@ -253,12 +253,13 @@ export function cctvCamerasToCzml(
   return { packets, attributes: { type: "FeatureCollection", features } };
 }
 
-async function fetchCatalog(
+async function fetchCatalog<T>(
   url: string,
   fetcher: typeof fetch,
   signal: AbortSignal | undefined,
+  normalize: (payload: unknown) => T,
   headers?: HeadersInit,
-): Promise<unknown> {
+): Promise<T> {
   let catalogCache = catalogCaches.get(fetcher);
   if (!catalogCache) {
     catalogCache = new Map();
@@ -267,11 +268,14 @@ async function fetchCatalog(
   const cached = catalogCache.get(url);
   if (cached && cached.expiresAt > Date.now()) {
     if (cached.status === "rejected") throw cached.error;
-    return cached.payload;
+    return cached.payload as T;
   }
   try {
     const response = await fetcher(url, { headers, signal });
-    if (!response.ok) throw new Error(`CCTV catalog failed (${response.status})`);
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`CCTV catalog failed (${response.status})`);
+    }
     const length = Number(response.headers.get("content-length"));
     if (Number.isFinite(length) && length > MAX_CATALOG_BYTES) {
       throw new Error("CCTV catalog is too large");
@@ -296,7 +300,7 @@ async function fetchCatalog(
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    const payload = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    const payload = normalize(JSON.parse(new TextDecoder().decode(bytes)) as unknown);
     catalogCache.set(url, {
       expiresAt: Date.now() + CCTV_CATALOG_CACHE_MS,
       status: "fulfilled",
@@ -327,14 +331,12 @@ export async function fetchCctvCzml(
   if (!queryBounds) return cctvCamerasToCzml([], options.nowMs);
   const fetcher = options.fetch ?? fetch;
   const results = await Promise.allSettled([
-    fetchCatalog(TFL_CATALOG_URL, fetcher, options.signal).then(normalizeTflCameras),
-    fetchCatalog(CALGARY_CATALOG_URL, fetcher, options.signal).then((payload) =>
-      normalizeCalgaryCameras(payload),
-    ),
-    fetchCatalog(FINTRAFFIC_CATALOG_URL, fetcher, options.signal, {
+    fetchCatalog(TFL_CATALOG_URL, fetcher, options.signal, normalizeTflCameras),
+    fetchCatalog(CALGARY_CATALOG_URL, fetcher, options.signal, normalizeCalgaryCameras),
+    fetchCatalog(FINTRAFFIC_CATALOG_URL, fetcher, options.signal, normalizeFintrafficCameras, {
       Accept: "application/json",
       "Digitraffic-User": "GeoLibre/3.0 (+https://geolibre.org)",
-    }).then(normalizeFintrafficCameras),
+    }),
   ]);
   if (options.signal?.aborted) {
     throw options.signal.reason ?? new DOMException("CCTV request aborted", "AbortError");
