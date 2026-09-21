@@ -16,6 +16,7 @@ import {
   GODS_EYE_VIEW_FLIGHTS_FLAG,
   GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
   GODS_EYE_VIEW_CCTV_FLAG,
+  GODS_EYE_VIEW_TRANSIT_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -364,6 +365,9 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
     if (url.includes("tie.digitraffic.fi")) {
       return new Response(JSON.stringify({ features: [] }), { status: 200 });
     }
+    if (url.includes("api.entur.io")) {
+      return new Response(new Uint8Array(), { status: 200 });
+    }
     return new Response(TLE_TEXT, {
       status: 200,
       headers: { "content-type": "text/plain" },
@@ -407,7 +411,10 @@ describe("God's Eye View availability", () => {
           ),
         ]),
         [
-          ["Movement", ["flights", "militaryFlights", "satellites", "bikeShare", "streetTraffic"]],
+          [
+            "Movement",
+            ["flights", "militaryFlights", "satellites", "bikeShare", "transit", "streetTraffic"],
+          ],
           ["Cameras", ["mappedAlpr", "cctv"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
           ["Events", ["earthquakes", "spaceMissions"]],
@@ -422,7 +429,7 @@ describe("God's Eye View availability", () => {
 });
 
 describe("God's Eye View feed refresh", () => {
-  it("dispatches every Tier A feed with identity and attribution", async () => {
+  it("dispatches every registered feed with identity and attribution", async () => {
     const net = stubFeeds();
     const globe = makeGlobe();
     try {
@@ -442,6 +449,7 @@ describe("God's Eye View feed refresh", () => {
         flights: true,
         militaryFlights: true,
         cctv: true,
+        transit: true,
       });
       godsEyeViewPlugin.activate?.(globe.app);
       for (let i = 0; i < 20; i++) await flush();
@@ -464,6 +472,7 @@ describe("God's Eye View feed refresh", () => {
           "flights",
           "militaryFlights",
           "cctv",
+          "transit",
         ].sort(),
       );
       for (const layer of layers) assert.ok(layer.source.attribution, layer.name);
@@ -480,6 +489,7 @@ describe("God's Eye View feed refresh", () => {
         GODS_EYE_VIEW_FLIGHTS_FLAG,
         GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
         GODS_EYE_VIEW_CCTV_FLAG,
+        GODS_EYE_VIEW_TRANSIT_FLAG,
       ];
       for (const flag of flags) {
         assert.ok(
@@ -501,6 +511,7 @@ describe("God's Eye View feed refresh", () => {
         "api.tfl.gov.uk",
         "data.calgary.ca",
         "tie.digitraffic.fi",
+        "api.entur.io",
       ]) {
         assert.ok(calls.includes(source), source);
       }
@@ -851,6 +862,7 @@ describe("God's Eye View clock speed", () => {
         spaceMissions: false,
         satellites: true,
         bikeShare: false,
+        transit: false,
         streetTraffic: false,
         mappedAlpr: false,
         cctv: false,

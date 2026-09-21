@@ -34,6 +34,7 @@ import {
   CCTV_QUERY_SNAP_DEGREES,
   fetchCctvCzml,
 } from "./gods-eye-view-cctv-feeds";
+import { fetchTransitCzml } from "./gods-eye-view-transit-feeds";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -51,6 +52,7 @@ export const GODS_EYE_VIEW_MAPPED_ALPR_FLAG = "godsEyeViewMappedAlpr";
 export const GODS_EYE_VIEW_FLIGHTS_FLAG = "godsEyeViewFlights";
 export const GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG = "godsEyeViewMilitaryFlights";
 export const GODS_EYE_VIEW_CCTV_FLAG = "godsEyeViewCctv";
+export const GODS_EYE_VIEW_TRANSIT_FLAG = "godsEyeViewTransit";
 
 // The aircraft feeds refresh every 15–30 seconds. Individual descriptors still
 // decide whether they are due, so this inexpensive scheduler does not increase
@@ -144,6 +146,16 @@ const FEED_DESCRIPTORS = {
     flag: GODS_EYE_VIEW_BIKE_SHARE_FLAG,
     defaultEnabled: false,
     fetch: ({ signal }) => fetchBikeShareCzml({ signal }),
+  },
+  transit: {
+    group: "movement",
+    label: ["panel.godsEyeView.transit", "Live Transit"],
+    attribution: "Live transit: Entur, data under the Norwegian Licence for Open Government Data",
+    refreshIntervalMs: 15_000,
+    timeoutMs: 20_000,
+    flag: GODS_EYE_VIEW_TRANSIT_FLAG,
+    defaultEnabled: false,
+    fetch: ({ signal }) => fetchTransitCzml({ signal }),
   },
   streetTraffic: {
     group: "movement",

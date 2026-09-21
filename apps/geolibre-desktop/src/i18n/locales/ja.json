@@ -2329,6 +2329,7 @@
       "flights": "ライブフライト",
       "militaryFlights": "軍用機",
       "bikeShare": "シェアサイクル",
+      "transit": "リアルタイム公共交通",
       "streetTraffic": "シミュレーション道路交通",
       "mappedAlpr": "マッピング済みナンバープレート認識カメラ",
       "cctv": "公共CCTVカメラ",

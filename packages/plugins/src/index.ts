@@ -930,6 +930,7 @@ export {
   GODS_EYE_VIEW_FLIGHTS_FLAG,
   GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
   GODS_EYE_VIEW_CCTV_FLAG,
+  GODS_EYE_VIEW_TRANSIT_FLAG,
 } from "./plugins/gods-eye-view";
 export {
   ADSB_LOL_EDGE_URL,
@@ -966,6 +967,18 @@ export {
   normalizeTflCameras,
   type CctvCamera,
 } from "./plugins/gods-eye-view-cctv-feeds";
+export {
+  ENTUR_CLIENT_NAME,
+  ENTUR_TRANSIT_URL,
+  GTFS_MAX_ENTITIES,
+  GTFS_MAX_RESPONSE_BYTES,
+  GTFS_MAX_STRING_CHARS,
+  decodeGtfsRealtimeVehicles,
+  fetchTransitCzml,
+  transitVehiclesToCzml,
+  type TransitSnapshot,
+  type TransitVehicle,
+} from "./plugins/gods-eye-view-transit-feeds";
 export {
   buildCelestrakTleUrl,
   buildUsgsFeedUrl,

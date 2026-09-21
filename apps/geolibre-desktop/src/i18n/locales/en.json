@@ -2409,6 +2409,7 @@
       "flights": "Live Flights",
       "militaryFlights": "Military Flights",
       "bikeShare": "Bike Share",
+      "transit": "Live Transit",
       "streetTraffic": "Simulated Street Traffic",
       "mappedAlpr": "Mapped ALPR Cameras",
       "cctv": "Public CCTV Cameras",
