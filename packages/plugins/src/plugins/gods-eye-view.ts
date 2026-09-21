@@ -532,6 +532,8 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
       source: layer.source,
       metadata: layer.metadata,
       geojson: layer.geojson,
+      // Unlike the plain attribute popups, CCTV's image field is part of the
+      // feed contract and must survive every source replacement.
       ...(feed === "cctv" ? { popup: layer.popup } : {}),
     });
     feeds[feed].layerId = existing.id;

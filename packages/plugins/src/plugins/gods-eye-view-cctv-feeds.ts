@@ -109,7 +109,7 @@ export function normalizeCalgaryCameras(payload: unknown, dev = isViteDevServer(
       const parsed = new URL(sourceUrl ?? "");
       const match =
         parsed.protocol === "https:" && parsed.hostname === "trafficcam.calgary.ca"
-          ? parsed.pathname.match(/^\/loc(\d+)\.jpg$/i)
+          ? parsed.pathname.match(/^\/loc(\d{1,4})\.jpg$/i)
           : null;
       frameId = match?.[1] ?? null;
     } catch {

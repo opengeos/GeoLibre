@@ -79,6 +79,7 @@ describe("God's Eye View CCTV feeds", () => {
     assert.deepEqual(
       normalizeCalgaryCameras([
         { ...calgary[0], camera_url: { url: "https://example.com/loc86.jpg" } },
+        { ...calgary[0], camera_url: { url: "https://trafficcam.calgary.ca/loc12345.jpg" } },
       ]),
       [],
     );
