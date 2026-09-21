@@ -888,7 +888,7 @@ export const tilesWorker = {
           },
           cf: {
             cacheEverything: true,
-            cacheTtlByStatus: { "200-299": 900, "300-599": 0 },
+            cacheTtlByStatus: { "200-299": 900, "300-599": -1 },
           },
         });
       } catch {
