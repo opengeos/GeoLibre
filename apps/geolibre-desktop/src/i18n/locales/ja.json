@@ -2316,6 +2316,13 @@
     "godsEyeView": {
       "description": "公開データフィードから、時間情報を持つ地球上の事象をライブ表示します。",
       "globeOnly": "ライブ地球フィードは Cesium 地球儀に描画されます。表示するには 3D 地球儀に切り替えてください。",
+      "groups": {
+        "movement": "移動",
+        "cameras": "カメラ",
+        "infrastructure": "インフラ",
+        "events": "イベント",
+        "utilities": "ユーティリティ"
+      },
       "earthquakes": "地震",
       "satellites": "衛星",
       "radio": "ラジオ局",

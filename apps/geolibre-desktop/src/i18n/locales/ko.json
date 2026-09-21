@@ -2316,6 +2316,13 @@
     "godsEyeView": {
       "description": "공개 데이터 피드에서 시간 정보가 포함된 실시간 지구 이벤트를 표시합니다.",
       "globeOnly": "실시간 지구 피드는 Cesium 지구본에 렌더링됩니다. 보려면 3D 지구본으로 전환하세요.",
+      "groups": {
+        "movement": "이동",
+        "cameras": "카메라",
+        "infrastructure": "인프라",
+        "events": "이벤트",
+        "utilities": "유틸리티"
+      },
       "earthquakes": "지진",
       "satellites": "위성",
       "radio": "라디오 방송국",

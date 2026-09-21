@@ -2316,6 +2316,13 @@
     "godsEyeView": {
       "description": "来自公共数据源、具有时间信息的实时地球事件。",
       "globeOnly": "实时地球数据会渲染在 Cesium 地球仪上。请切换到 3D 地球仪查看。",
+      "groups": {
+        "movement": "动态目标",
+        "cameras": "摄像头",
+        "infrastructure": "基础设施",
+        "events": "事件",
+        "utilities": "实用工具"
+      },
       "earthquakes": "地震",
       "satellites": "卫星",
       "radio": "广播电台",

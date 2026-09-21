@@ -2316,6 +2316,13 @@
     "godsEyeView": {
       "description": "Các sự kiện Trái Đất trực tiếp, có yếu tố thời gian từ nguồn dữ liệu công khai.",
       "globeOnly": "Nguồn dữ liệu trực tiếp được hiển thị trên địa cầu Cesium. Hãy chuyển sang địa cầu 3D để xem.",
+      "groups": {
+        "movement": "Di chuyển",
+        "cameras": "Camera",
+        "infrastructure": "Cơ sở hạ tầng",
+        "events": "Sự kiện",
+        "utilities": "Tiện ích"
+      },
       "earthquakes": "Động đất",
       "satellites": "Vệ tinh",
       "radio": "Đài phát thanh",

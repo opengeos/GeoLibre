@@ -2364,6 +2364,13 @@
     "godsEyeView": {
       "description": "Événements terrestres en direct et temporels issus de flux de données publics.",
       "globeOnly": "Les flux en direct s’affichent sur le globe Cesium. Passez au globe 3D pour les voir.",
+      "groups": {
+        "movement": "Mouvement",
+        "cameras": "Caméras",
+        "infrastructure": "Infrastructure",
+        "events": "Événements",
+        "utilities": "Utilitaires"
+      },
       "earthquakes": "Séismes",
       "satellites": "Satellites",
       "radio": "Stations de radio",

@@ -2316,6 +2316,13 @@
     "godsEyeView": {
       "description": "Peristiwa Bumi langsung berbasis waktu dari umpan data publik.",
       "globeOnly": "Umpan globe langsung dirender pada globe Cesium. Beralihlah ke globe 3D untuk melihatnya.",
+      "groups": {
+        "movement": "Pergerakan",
+        "cameras": "Kamera",
+        "infrastructure": "Infrastruktur",
+        "events": "Peristiwa",
+        "utilities": "Utilitas"
+      },
       "earthquakes": "Gempa bumi",
       "satellites": "Satelit",
       "radio": "Stasiun Radio",

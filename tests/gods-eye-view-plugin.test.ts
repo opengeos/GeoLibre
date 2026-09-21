@@ -256,6 +256,39 @@ describe("God's Eye View availability", () => {
       assert.equal(isPluginEngineSupported(godsEyeViewPlugin, engine), true, engine);
     }
   });
+
+  it("groups registered feeds in upstream panel order", () => {
+    const net = stubFetch();
+    const globe = makeGlobe();
+    try {
+      godsEyeViewPlugin.activate?.(globe.app);
+      const sections = [
+        ...globe.panel.querySelectorAll<HTMLElement>(".geolibre-gods-eye-view-feed-group"),
+      ];
+      assert.deepEqual(
+        sections.map((section) => section.dataset.feedGroup),
+        ["movement", "infrastructure", "events", "utilities"],
+        "empty groups stay hidden until they have a registered feed",
+      );
+      assert.deepEqual(
+        sections.map((section) => [
+          section.querySelector("h3")?.textContent,
+          [...section.querySelectorAll<HTMLElement>("[data-feed-id]")].map(
+            (row) => row.dataset.feedId,
+          ),
+        ]),
+        [
+          ["Movement", ["satellites"]],
+          ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
+          ["Events", ["earthquakes"]],
+          ["Utilities", ["radio"]],
+        ],
+      );
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      net.restore();
+    }
+  });
 });
 
 describe("God's Eye View feed refresh", () => {

@@ -2364,6 +2364,13 @@
     "godsEyeView": {
       "description": "Eventos terrestres ao vivo e temporais de feeds de dados públicos.",
       "globeOnly": "Os feeds ao vivo são renderizados no globo Cesium. Mude para o globo 3D para visualizá-los.",
+      "groups": {
+        "movement": "Movimento",
+        "cameras": "Câmeras",
+        "infrastructure": "Infraestrutura",
+        "events": "Eventos",
+        "utilities": "Utilitários"
+      },
       "earthquakes": "Terremotos",
       "satellites": "Satélites",
       "radio": "Estações de rádio",

@@ -2364,6 +2364,13 @@
     "godsEyeView": {
       "description": "Eventi terrestri in tempo reale e temporali da feed di dati pubblici.",
       "globeOnly": "I feed in tempo reale vengono visualizzati sul globo Cesium. Passa al globo 3D per vederli.",
+      "groups": {
+        "movement": "Movimento",
+        "cameras": "Telecamere",
+        "infrastructure": "Infrastrutture",
+        "events": "Eventi",
+        "utilities": "Utilità"
+      },
       "earthquakes": "Terremoti",
       "satellites": "Satelliti",
       "radio": "Stazioni radio",

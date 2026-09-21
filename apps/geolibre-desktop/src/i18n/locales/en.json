@@ -2396,6 +2396,13 @@
     "godsEyeView": {
       "description": "Live, time-aware Earth events from public data feeds.",
       "globeOnly": "Live globe feeds render on the Cesium globe. Switch to the 3D globe to view them.",
+      "groups": {
+        "movement": "Movement",
+        "cameras": "Cameras",
+        "infrastructure": "Infrastructure",
+        "events": "Events",
+        "utilities": "Utilities"
+      },
       "earthquakes": "Earthquakes",
       "satellites": "Satellites",
       "radio": "Radio Stations",

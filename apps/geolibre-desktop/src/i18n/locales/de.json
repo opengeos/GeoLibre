@@ -2364,6 +2364,13 @@
     "godsEyeView": {
       "description": "Live-Ereignisse auf der Erde mit Zeitbezug aus öffentlichen Datenfeeds.",
       "globeOnly": "Live-Globusfeeds werden auf dem Cesium-Globus dargestellt. Wechseln Sie zum 3D-Globus, um sie anzuzeigen.",
+      "groups": {
+        "movement": "Bewegung",
+        "cameras": "Kameras",
+        "infrastructure": "Infrastruktur",
+        "events": "Ereignisse",
+        "utilities": "Dienstprogramme"
+      },
       "earthquakes": "Erdbeben",
       "satellites": "Satelliten",
       "radio": "Radiosender",

@@ -30,43 +30,148 @@ export const GODS_EYE_VIEW_CABLES_FLAG = "godsEyeViewCables";
 export const GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG = "godsEyeViewOsmInfrastructure";
 
 const REFRESH_TICK_MS = 10 * 60_000;
-const FEED_REFRESH_INTERVAL_MS: Record<FeedId, number> = {
-  earthquakes: 10 * 60_000,
-  // CelesTrak asks clients not to retrieve the same data more often than every
-  // two hours. Six catalog requests every ten minutes would be needlessly rude.
-  satellites: 2 * 60 * 60_000,
-  radio: 60 * 60_000,
-  datacenters: 24 * 60 * 60_000,
-  dams: 24 * 60 * 60_000,
-  cables: 24 * 60 * 60_000,
-  osmInfrastructure: 60 * 60_000,
-};
-// Overpass gets the same longer budget as the shared OSM downloader. The
-// whole-file catalogs are a few megabytes from a CDN mirror and only refresh
-// once a day, so a timeout there costs a full day of data; they get a middle
-// budget. Small bounded API responses should fail faster.
-const FEED_TIMEOUT_MS: Record<FeedId, number> = {
-  earthquakes: 20_000,
-  satellites: 20_000,
-  radio: 20_000,
-  datacenters: 60_000,
-  dams: 60_000,
-  cables: 60_000,
-  osmInfrastructure: OVERPASS_REQUEST_TIMEOUT_MS,
-};
 const ARC_DURATION_MS = 3 * 60 * 60_000;
 
-const FEED_IDS = [
-  "earthquakes",
-  "satellites",
-  "radio",
-  "datacenters",
-  "dams",
-  "cables",
-  "osmInfrastructure",
-] as const;
+const FEED_GROUPS = ["movement", "cameras", "infrastructure", "events", "utilities"] as const;
+type FeedGroup = (typeof FEED_GROUPS)[number];
+type FeedOption = "dense";
 
-type FeedId = (typeof FEED_IDS)[number];
+interface FeedFetchContext {
+  signal: AbortSignal;
+  window: CzmlTimeWindow;
+  bounds: [number, number, number, number] | null;
+}
+
+interface FeedDescriptor {
+  id: string;
+  group: FeedGroup;
+  label: readonly [key: string, fallback: string];
+  attribution: string;
+  refreshIntervalMs: number;
+  timeoutMs: number;
+  flag: string;
+  defaultEnabled: boolean;
+  options: readonly FeedOption[];
+  ownsClockWindow?: boolean;
+  fetch: (context: FeedFetchContext) => Promise<GodsEyeViewFeedPayload>;
+}
+
+/**
+ * The complete contract for every feed.
+ *
+ * Keeping registration, presentation, persistence and dispatch together makes
+ * adding a feed one typed object instead of edits to parallel records. In
+ * particular, there is no catch-all branch that can silently send a new feed
+ * through the OSM infrastructure loader.
+ */
+const FEED_DESCRIPTORS = {
+  satellites: {
+    id: "satellites",
+    group: "movement",
+    label: ["panel.godsEyeView.satellites", "Satellites"],
+    attribution: "Satellites: CelesTrak (celestrak.org), Dr. T.S. Kelso",
+    // CelesTrak asks clients not to retrieve the same data more often than every
+    // two hours. Six catalog requests every ten minutes would be needlessly rude.
+    refreshIntervalMs: 2 * 60 * 60_000,
+    timeoutMs: 20_000,
+    flag: GODS_EYE_VIEW_SATELLITES_FLAG,
+    defaultEnabled: true,
+    options: ["dense"],
+    ownsClockWindow: true,
+    async fetch({ signal, window }) {
+      const packets = await fetchCelestrakSatelliteCatalogCzml({
+        ...window,
+        signal,
+        // Five-minute samples interpolate smoothly while keeping the core
+        // CZML layer below autosave's 10 MiB snapshot limit. A selected orbit
+        // still uses the full TLE with SGP4, independent of this.
+        stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
+        maxSatellites: 2_000,
+      });
+      return { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
+    },
+  },
+  osmInfrastructure: {
+    id: "osmInfrastructure",
+    group: "infrastructure",
+    label: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
+    attribution: "OSM infrastructure: © OpenStreetMap contributors, ODbL 1.0",
+    refreshIntervalMs: 60 * 60_000,
+    // Overpass gets the same longer budget as the shared OSM downloader.
+    timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
+    flag: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
+    defaultEnabled: false,
+    options: [],
+    fetch: ({ bounds, signal }) => fetchOsmInfrastructureCzml(bounds, { signal }),
+  },
+  datacenters: {
+    id: "datacenters",
+    group: "infrastructure",
+    label: ["panel.godsEyeView.datacenters", "Datacenters"],
+    attribution: "Datacenters: © OpenStreetMap contributors, ODbL 1.0",
+    refreshIntervalMs: 24 * 60 * 60_000,
+    timeoutMs: 60_000,
+    flag: GODS_EYE_VIEW_DATACENTERS_FLAG,
+    defaultEnabled: false,
+    options: [],
+    fetch: ({ signal }) => fetchDatacentersCzml({ signal }),
+  },
+  cables: {
+    id: "cables",
+    group: "infrastructure",
+    label: ["panel.godsEyeView.cables", "Submarine Cables"],
+    attribution: "Submarine cables: © TeleGeography, submarinecablemap.com, CC BY-NC-SA 3.0",
+    refreshIntervalMs: 24 * 60 * 60_000,
+    timeoutMs: 60_000,
+    flag: GODS_EYE_VIEW_CABLES_FLAG,
+    defaultEnabled: false,
+    options: [],
+    fetch: ({ signal }) => fetchSubmarineCablesCzml({ signal }),
+  },
+  dams: {
+    id: "dams",
+    group: "infrastructure",
+    label: ["panel.godsEyeView.dams", "Dams"],
+    attribution: "Dams: © OpenStreetMap contributors, ODbL 1.0; Open Infrastructure Map",
+    refreshIntervalMs: 24 * 60 * 60_000,
+    timeoutMs: 60_000,
+    flag: GODS_EYE_VIEW_DAMS_FLAG,
+    defaultEnabled: false,
+    options: [],
+    fetch: ({ signal }) => fetchDamsCzml({ signal }),
+  },
+  earthquakes: {
+    id: "earthquakes",
+    group: "events",
+    label: ["panel.godsEyeView.earthquakes", "Earthquakes"],
+    attribution: "Earthquakes: Data courtesy of the U.S. Geological Survey",
+    refreshIntervalMs: 10 * 60_000,
+    timeoutMs: 20_000,
+    flag: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
+    defaultEnabled: true,
+    options: [],
+    ownsClockWindow: true,
+    async fetch({ signal, window }) {
+      const packets = await fetchUsgsEarthquakeCzml(window, { signal });
+      return { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
+    },
+  },
+  radio: {
+    id: "radio",
+    group: "utilities",
+    label: ["panel.godsEyeView.radio", "Radio Stations"],
+    attribution: "Radio stations: Radio Browser (radio-browser.info), public domain",
+    refreshIntervalMs: 60 * 60_000,
+    timeoutMs: 20_000,
+    flag: GODS_EYE_VIEW_RADIO_FLAG,
+    defaultEnabled: false,
+    options: [],
+    fetch: ({ signal }) => fetchRadioBrowserCzml({ signal }),
+  },
+} as const satisfies Record<string, FeedDescriptor>;
+
+type FeedId = keyof typeof FEED_DESCRIPTORS;
+const FEED_IDS = Object.keys(FEED_DESCRIPTORS) as FeedId[];
 
 /**
  * Simulated seconds per real second, offered in the panel.
@@ -80,19 +185,12 @@ const SPEED_OPTIONS = [1, 10, 60, 600] as const;
 const DEFAULT_SPEED = 1;
 
 /** What a project persists: the feed toggles and the clock speed. */
-interface GodsEyeViewProjectState {
-  earthquakes: boolean;
-  satellites: boolean;
-  radio: boolean;
-  datacenters: boolean;
-  dams: boolean;
-  cables: boolean;
-  osmInfrastructure: boolean;
+type GodsEyeViewProjectState = Record<FeedId, boolean> & {
   /** Add the current Starlink shell as lightweight points. */
   dense: boolean;
   /** One of {@link SPEED_OPTIONS}. */
   speed: number;
-}
+};
 
 interface FeedState {
   enabled: boolean;
@@ -104,71 +202,20 @@ interface FeedState {
   generation: number;
 }
 
-const feeds: Record<FeedId, FeedState> = {
-  earthquakes: {
-    enabled: true,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  satellites: {
-    enabled: true,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  radio: {
-    enabled: false,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  datacenters: {
-    enabled: false,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  dams: {
-    enabled: false,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  cables: {
-    enabled: false,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-  osmInfrastructure: {
-    enabled: false,
-    loading: false,
-    lastUpdated: null,
-    failed: false,
-    layerId: null,
-    request: null,
-    generation: 0,
-  },
-};
+const feeds = Object.fromEntries(
+  FEED_IDS.map((feed) => [
+    feed,
+    {
+      enabled: FEED_DESCRIPTORS[feed].defaultEnabled,
+      loading: false,
+      lastUpdated: null,
+      failed: false,
+      layerId: null,
+      request: null,
+      generation: 0,
+    },
+  ]),
+) as Record<FeedId, FeedState>;
 
 /**
  * The feed toggles as the project holds them, kept separately from
@@ -176,16 +223,10 @@ const feeds: Record<FeedId, FeedState> = {
  * refresh) cannot overwrite what a later save should persist.
  */
 let savedState: GodsEyeViewProjectState = {
-  earthquakes: true,
-  satellites: true,
-  radio: false,
-  datacenters: false,
-  dams: false,
-  cables: false,
-  osmInfrastructure: false,
+  ...Object.fromEntries(FEED_IDS.map((feed) => [feed, FEED_DESCRIPTORS[feed].defaultEnabled])),
   dense: false,
   speed: DEFAULT_SPEED,
-};
+} as GodsEyeViewProjectState;
 
 let appRef: GeoLibreAppAPI | null = null;
 let cesiumRef: CesiumSceneHandle | null = null;
@@ -215,43 +256,14 @@ function translate(
   return appRef?.translate?.(key, fallback, params) ?? fallback;
 }
 
-const FEED_FLAGS: Record<FeedId, string> = {
-  earthquakes: GODS_EYE_VIEW_EARTHQUAKES_FLAG,
-  satellites: GODS_EYE_VIEW_SATELLITES_FLAG,
-  radio: GODS_EYE_VIEW_RADIO_FLAG,
-  datacenters: GODS_EYE_VIEW_DATACENTERS_FLAG,
-  dams: GODS_EYE_VIEW_DAMS_FLAG,
-  cables: GODS_EYE_VIEW_CABLES_FLAG,
-  osmInfrastructure: GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
-};
-
 function feedFlag(feed: FeedId): string {
-  return FEED_FLAGS[feed];
+  return FEED_DESCRIPTORS[feed].flag;
 }
-
-const FEED_LABELS: Record<FeedId, [string, string]> = {
-  earthquakes: ["panel.godsEyeView.earthquakes", "Earthquakes"],
-  satellites: ["panel.godsEyeView.satellites", "Satellites"],
-  radio: ["panel.godsEyeView.radio", "Radio Stations"],
-  datacenters: ["panel.godsEyeView.datacenters", "Datacenters"],
-  dams: ["panel.godsEyeView.dams", "Dams"],
-  cables: ["panel.godsEyeView.cables", "Submarine Cables"],
-  osmInfrastructure: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
-};
 
 function feedName(feed: FeedId): string {
-  return translate(...FEED_LABELS[feed]);
+  const [key, fallback] = FEED_DESCRIPTORS[feed].label;
+  return translate(key, fallback);
 }
-
-const FEED_ATTRIBUTION: Record<FeedId, string> = {
-  earthquakes: "Earthquakes: Data courtesy of the U.S. Geological Survey",
-  satellites: "Satellites: CelesTrak (celestrak.org), Dr. T.S. Kelso",
-  radio: "Radio stations: Radio Browser (radio-browser.info), public domain",
-  datacenters: "Datacenters: © OpenStreetMap contributors, ODbL 1.0",
-  dams: "Dams: © OpenStreetMap contributors, ODbL 1.0; Open Infrastructure Map",
-  cables: "Submarine cables: © TeleGeography, submarinecablemap.com, CC BY-NC-SA 3.0",
-  osmInfrastructure: "OSM infrastructure: © OpenStreetMap contributors, ODbL 1.0",
-};
 
 function timeWindow(): CzmlTimeWindow {
   const start = new Date();
@@ -376,7 +388,7 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
     id: existing?.id,
     name: feedName(feed),
     data: payload.packets,
-    attribution: FEED_ATTRIBUTION[feed],
+    attribution: FEED_DESCRIPTORS[feed].attribution,
   });
   // The renderer consumes CZML, while the existing Attribute Table consumes a
   // complete GeoJSON row model. Moving entities have no single geometry, but
@@ -422,7 +434,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   if (
     !force &&
     state.lastUpdated &&
-    Date.now() - state.lastUpdated.getTime() < FEED_REFRESH_INTERVAL_MS[feed] &&
+    Date.now() - state.lastUpdated.getTime() < FEED_DESCRIPTORS[feed].refreshIntervalMs &&
     // Recent data the user can no longer see is no reason to skip: a feed
     // toggled off and on has had its layer removed and must rebuild it, and a
     // project load brings the layer back without the rows, which are stripped
@@ -438,43 +450,19 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   state.loading = true;
   state.failed = false;
   renderPanel();
-  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS[feed]);
+  const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+  const timeout = setTimeout(() => controller.abort(), descriptor.timeoutMs);
   try {
     const window = timeWindow();
-    let payload: GodsEyeViewFeedPayload;
-    if (feed === "earthquakes") {
-      const packets = await fetchUsgsEarthquakeCzml(window, {
-        signal: controller.signal,
-      });
-      payload = { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
-    } else if (feed === "satellites") {
-      const packets = await fetchCelestrakSatelliteCatalogCzml({
-        ...window,
-        signal: controller.signal,
-        // Five-minute samples interpolate smoothly while keeping the core
-        // CZML layer below autosave's 10 MiB snapshot limit. A selected
-        // orbit still uses the full TLE with SGP4, independent of this.
-        stepSeconds: CELESTRAK_CORE_SAMPLE_STEP_SECONDS,
-        maxSatellites: 2_000,
-      });
-      payload = { packets, attributes: czmlPacketsToAttributeGeoJson(packets) };
-    } else if (feed === "radio") {
-      payload = await fetchRadioBrowserCzml({ signal: controller.signal });
-    } else if (feed === "datacenters") {
-      payload = await fetchDatacentersCzml({ signal: controller.signal });
-    } else if (feed === "dams") {
-      payload = await fetchDamsCzml({ signal: controller.signal });
-    } else if (feed === "cables") {
-      payload = await fetchSubmarineCablesCzml({ signal: controller.signal });
-    } else {
-      payload = await fetchOsmInfrastructureCzml(appRef?.getViewBounds?.() ?? null, {
-        signal: controller.signal,
-      });
-    }
+    const payload = await descriptor.fetch({
+      signal: controller.signal,
+      window,
+      bounds: appRef?.getViewBounds?.() ?? null,
+    });
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
     upsertLayer(feed, payload, updatedAt);
-    if (feed === "earthquakes" || feed === "satellites") applyFeedClockWindow(window);
+    if (descriptor.ownsClockWindow) applyFeedClockWindow(window);
     state.lastUpdated = updatedAt;
     if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
@@ -550,15 +538,14 @@ function setSpeed(speed: number): void {
 /** Coerce an untrusted project settings blob into a full toggle record. */
 function normalizeProjectState(value: unknown): GodsEyeViewProjectState {
   const record = (value ?? {}) as Record<string, unknown>;
+  const toggles = Object.fromEntries(
+    FEED_IDS.map((feed) => [
+      feed,
+      typeof record[feed] === "boolean" ? record[feed] : FEED_DESCRIPTORS[feed].defaultEnabled,
+    ]),
+  ) as Record<FeedId, boolean>;
   return {
-    earthquakes: typeof record.earthquakes === "boolean" ? record.earthquakes : true,
-    satellites: typeof record.satellites === "boolean" ? record.satellites : true,
-    radio: typeof record.radio === "boolean" ? record.radio : false,
-    datacenters: typeof record.datacenters === "boolean" ? record.datacenters : false,
-    dams: typeof record.dams === "boolean" ? record.dams : false,
-    cables: typeof record.cables === "boolean" ? record.cables : false,
-    osmInfrastructure:
-      typeof record.osmInfrastructure === "boolean" ? record.osmInfrastructure : false,
+    ...toggles,
     dense: typeof record.dense === "boolean" ? record.dense : false,
     // A hand-edited project can carry anything; only an offered step is honoured.
     speed: SPEED_OPTIONS.find((option) => option === record.speed) ?? DEFAULT_SPEED,
@@ -634,67 +621,88 @@ function renderPanel(): void {
     panel.append(note);
   }
 
-  for (const feed of FEED_IDS) {
-    const row = document.createElement("div");
-    row.style.cssText =
-      "display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid hsl(var(--border));border-radius:6px";
-    const label = document.createElement("label");
-    label.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = feeds[feed].enabled;
-    checkbox.disabled = !cesiumRef;
-    checkbox.addEventListener("change", () => setFeedEnabled(feed, checkbox.checked));
-    const name = document.createElement("span");
-    name.textContent = feedName(feed);
-    label.append(checkbox, name);
-    const status = document.createElement("div");
-    status.textContent = statusText(feed);
-    status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
-    row.append(label, status);
-    if (feed === "satellites") {
-      const dense = denseCatalog.snapshot();
-      const button = document.createElement("button");
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(savedState.dense));
-      button.setAttribute(
-        "aria-label",
-        translate("panel.godsEyeView.denseSatellites", "Dense satellite catalog"),
-      );
-      button.disabled = !cesiumRef || !feeds.satellites.enabled;
-      button.textContent =
-        dense.status === "loading"
-          ? translate("panel.godsEyeView.denseLoading", "DENSE ···")
-          : dense.status === "failed"
-            ? translate("panel.godsEyeView.denseFailed", "DENSE !")
-            : dense.status === "ready"
-              ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
-                  count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
-                    appRef?.getLocale?.(),
-                  ),
-                })
-              : translate("panel.godsEyeView.dense", "DENSE");
-      button.title =
-        dense.status === "failed"
-          ? translate(
-              "panel.godsEyeView.denseError",
-              "Could not load the Starlink catalog: {{error}}. Select to retry.",
-              { error: dense.error ?? "unknown error" },
-            )
-          : translate(
-              "panel.godsEyeView.denseDescription",
-              "Show the full Starlink shell as lightweight points (no labels or table rows).",
-            );
-      button.style.cssText =
-        "align-self:flex-start;margin-top:4px;padding:3px 8px;border:1px solid hsl(var(--border));border-radius:999px;background:" +
-        (savedState.dense
-          ? "hsl(var(--primary));color:hsl(var(--primary-foreground))"
-          : "transparent") +
-        ";font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer";
-      button.addEventListener("click", () => setDenseEnabled(!savedState.dense));
-      row.append(button);
+  for (const group of FEED_GROUPS) {
+    const groupFeeds = FEED_IDS.filter((feed) => FEED_DESCRIPTORS[feed].group === group);
+    if (groupFeeds.length === 0) continue;
+    const section = document.createElement("section");
+    section.className = "geolibre-gods-eye-view-feed-group";
+    section.dataset.feedGroup = group;
+    section.style.cssText = "display:flex;flex-direction:column;gap:8px";
+    const heading = document.createElement("h3");
+    heading.textContent = translate(
+      `panel.godsEyeView.groups.${group}`,
+      group[0].toUpperCase() + group.slice(1),
+    );
+    heading.style.cssText =
+      "margin:2px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:hsl(var(--muted-foreground))";
+    section.append(heading);
+
+    for (const feed of groupFeeds) {
+      const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+      const row = document.createElement("div");
+      row.dataset.feedId = feed;
+      row.style.cssText =
+        "display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid hsl(var(--border));border-radius:6px";
+      const label = document.createElement("label");
+      label.style.cssText =
+        "display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = feeds[feed].enabled;
+      checkbox.disabled = !cesiumRef;
+      checkbox.addEventListener("change", () => setFeedEnabled(feed, checkbox.checked));
+      const name = document.createElement("span");
+      name.textContent = feedName(feed);
+      label.append(checkbox, name);
+      const status = document.createElement("div");
+      status.textContent = statusText(feed);
+      status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
+      row.append(label, status);
+      if (descriptor.options.includes("dense")) {
+        const dense = denseCatalog.snapshot();
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("aria-pressed", String(savedState.dense));
+        button.setAttribute(
+          "aria-label",
+          translate("panel.godsEyeView.denseSatellites", "Dense satellite catalog"),
+        );
+        button.disabled = !cesiumRef || !feeds.satellites.enabled;
+        button.textContent =
+          dense.status === "loading"
+            ? translate("panel.godsEyeView.denseLoading", "DENSE ···")
+            : dense.status === "failed"
+              ? translate("panel.godsEyeView.denseFailed", "DENSE !")
+              : dense.status === "ready"
+                ? translate("panel.godsEyeView.denseCount", "DENSE · {{count}}", {
+                    count: (coreSatelliteCatalogNumbers().size + dense.count).toLocaleString(
+                      appRef?.getLocale?.(),
+                    ),
+                  })
+                : translate("panel.godsEyeView.dense", "DENSE");
+        button.title =
+          dense.status === "failed"
+            ? translate(
+                "panel.godsEyeView.denseError",
+                "Could not load the Starlink catalog: {{error}}. Select to retry.",
+                { error: dense.error ?? "unknown error" },
+              )
+            : translate(
+                "panel.godsEyeView.denseDescription",
+                "Show the full Starlink shell as lightweight points (no labels or table rows).",
+              );
+        button.style.cssText =
+          "align-self:flex-start;margin-top:4px;padding:3px 8px;border:1px solid hsl(var(--border));border-radius:999px;background:" +
+          (savedState.dense
+            ? "hsl(var(--primary));color:hsl(var(--primary-foreground))"
+            : "transparent") +
+          ";font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer";
+        button.addEventListener("click", () => setDenseEnabled(!savedState.dense));
+        row.append(button);
+      }
+      section.append(row);
     }
-    panel.append(row);
+    panel.append(section);
   }
   panel.append(speedRow());
   container.append(panel);

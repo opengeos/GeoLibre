@@ -2364,6 +2364,13 @@
     "godsEyeView": {
       "description": "Herkese açık veri akışlarından canlı, zamana bağlı Dünya olayları.",
       "globeOnly": "Canlı küre akışları Cesium küresinde görüntülenir. Görmek için 3B küreye geçin.",
+      "groups": {
+        "movement": "Hareket",
+        "cameras": "Kameralar",
+        "infrastructure": "Altyapı",
+        "events": "Olaylar",
+        "utilities": "Yardımcı Araçlar"
+      },
       "earthquakes": "Depremler",
       "satellites": "Uydular",
       "radio": "Radyo İstasyonları",
