@@ -532,9 +532,9 @@ function upsertLayer(feed: FeedId, payload: GodsEyeViewFeedPayload, updatedAt: D
       source: layer.source,
       metadata: layer.metadata,
       geojson: layer.geojson,
-      // Unlike the plain attribute popups, CCTV's image field is part of the
-      // feed contract and must survive every source replacement.
-      ...(feed === "cctv" ? { popup: layer.popup } : {}),
+      // A loaded legacy layer may lack the image field, but once a popup exists
+      // it belongs to the user just like every other feed's popup.
+      ...(feed === "cctv" && !existing.popup ? { popup: layer.popup } : {}),
     });
     feeds[feed].layerId = existing.id;
   } else {

@@ -7,6 +7,7 @@ import { viewportQueryBounds, type ViewBounds } from "./gods-eye-view-viewport-f
 export const CCTV_MAX_VIEW_SPAN_DEGREES = 5;
 export const CCTV_QUERY_SNAP_DEGREES = 0.1;
 export const CCTV_MAX_CAMERAS = 12;
+export const CCTV_CATALOG_CACHE_MS = 15 * 60_000;
 
 export const TFL_CATALOG_URL = "https://api.tfl.gov.uk/Place/Type/JamCam";
 export const CALGARY_CATALOG_URL = "https://data.calgary.ca/resource/k7p9-kppz.json?$limit=500";
@@ -17,6 +18,7 @@ export const CALGARY_FRAME_DEV_BASE = "/cctv/calgary";
 const TFL_IMAGE_ORIGIN = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/";
 const FINTRAFFIC_IMAGE_ORIGIN = "https://weathercam.digitraffic.fi/";
 const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
+const catalogCache = new Map<string, { expiresAt: number; payload: unknown }>();
 
 export interface CctvCamera {
   id: string;
@@ -250,15 +252,37 @@ async function fetchCatalog(
   signal: AbortSignal | undefined,
   headers?: HeadersInit,
 ): Promise<unknown> {
+  const cached = catalogCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.payload;
   const response = await fetcher(url, { headers, signal });
   if (!response.ok) throw new Error(`CCTV catalog failed (${response.status})`);
   const length = Number(response.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_CATALOG_BYTES) {
     throw new Error("CCTV catalog is too large");
   }
-  const body = await response.arrayBuffer();
-  if (body.byteLength > MAX_CATALOG_BYTES) throw new Error("CCTV catalog is too large");
-  return JSON.parse(new TextDecoder().decode(body)) as unknown;
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("CCTV catalog has no response body");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_CATALOG_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("CCTV catalog is too large");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const payload = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  catalogCache.set(url, { expiresAt: Date.now() + CCTV_CATALOG_CACHE_MS, payload });
+  return payload;
 }
 
 export async function fetchCctvCzml(

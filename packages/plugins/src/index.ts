@@ -946,6 +946,7 @@ export {
 } from "./plugins/gods-eye-view-aircraft-feeds";
 export {
   CCTV_MAX_CAMERAS,
+  CCTV_CATALOG_CACHE_MS,
   CCTV_MAX_VIEW_SPAN_DEGREES,
   CCTV_QUERY_SNAP_DEGREES,
   cctvCamerasToCzml,

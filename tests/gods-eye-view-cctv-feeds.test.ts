@@ -109,6 +109,24 @@ describe("God's Eye View CCTV feeds", () => {
     assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
   });
 
+  it("stops reading a chunked catalog once it crosses the byte ceiling", async () => {
+    const fetcher = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(8 * 1024 * 1024));
+            controller.enqueue(new Uint8Array([1]));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    await assert.rejects(
+      fetchCctvCzml([-0.2, 51.45, 0, 51.65], { fetch: fetcher }),
+      /Every CCTV provider failed/,
+    );
+  });
+
   it("fetches providers independently and keeps cameras inside the viewport", async () => {
     const requested: string[] = [];
     const fetcher = (async (input: RequestInfo | URL) => {
@@ -122,9 +140,17 @@ describe("God's Eye View CCTV feeds", () => {
       fetch: fetcher,
       nowMs: 0,
     });
-    assert.equal(requested.length, 3);
+    const refreshed = await fetchCctvCzml([-0.2, 51.45, 0, 51.65], {
+      fetch: fetcher,
+      nowMs: 60_000,
+    });
+    assert.equal(requested.length, 4, "successful catalogs are cached; a failed provider retries");
     assert.equal(result.attributes.features.length, 1);
     assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
+    assert.notEqual(
+      refreshed.attributes.features[0].properties?.snapshot,
+      result.attributes.features[0].properties?.snapshot,
+    );
   });
 
   it("does not download global catalogs while the globe is zoomed out", async () => {
