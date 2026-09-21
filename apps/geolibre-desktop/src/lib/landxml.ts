@@ -3,6 +3,7 @@ import type {
   FeatureCollection,
   GeoJsonProperties,
   Geometry,
+  GeometryCollection,
   LineString,
   MultiPolygon,
   Point,
@@ -163,7 +164,11 @@ function rebuildPositions(
   return node.map((child) => rebuildPositions(child, replace));
 }
 
-function eachGeometry(geometry: Geometry, visit: (geometry: Geometry) => void): void {
+/** Visit every geometry that carries coordinates, flattening any collection. */
+function eachGeometry(
+  geometry: Geometry,
+  visit: (geometry: Exclude<Geometry, GeometryCollection>) => void,
+): void {
   if (geometry.type === "GeometryCollection") {
     for (const child of geometry.geometries) eachGeometry(child, visit);
     return;
@@ -197,7 +202,6 @@ export async function reprojectLandXmlCollection(
   for (const feature of collection.features) {
     if (!feature.geometry) continue;
     eachGeometry(feature.geometry, (geometry) => {
-      if (geometry.type === "GeometryCollection") return;
       visitPositions(geometry.coordinates, (position) => {
         const key = positionKey(position);
         if (indexByKey.has(key)) return;
