@@ -140,7 +140,10 @@ describe("God's Eye View CCTV feeds", () => {
     );
     assert.deepEqual(
       normalizeOntarioCameras([
-        { ...ontario[0], Views: [{ Url: "https://example.com/1", Status: "Enabled" }] },
+        {
+          ...ontario[0],
+          Views: [{ Url: "https://mirror.traveliq.co/map/Cctv/1", Status: "Enabled" }],
+        },
       ]),
       [],
     );

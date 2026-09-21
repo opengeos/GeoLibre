@@ -630,7 +630,7 @@ export async function proxyCctvCatalogRequestGuarded(
   provider: string,
   res: ServerResponse,
 ): Promise<void> {
-  if (!(provider in CCTV_CATALOG_URLS)) {
+  if (!Object.hasOwn(CCTV_CATALOG_URLS, provider)) {
     res.statusCode = 400;
     res.end("Invalid CCTV catalog provider");
     return;

@@ -239,11 +239,7 @@ export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer(
           const parsed = new URL(source ?? "");
           const match = parsed.pathname.match(/^\/map\/Cctv\/([A-Za-z0-9_.-]+)$/);
           const host = parsed.hostname.toLowerCase();
-          if (
-            parsed.protocol !== "https:" ||
-            (host !== "511on.ca" && !host.endsWith(".traveliq.co")) ||
-            !match
-          ) {
+          if (parsed.protocol !== "https:" || host !== "511on.ca" || !match) {
             return null;
           }
           return {
