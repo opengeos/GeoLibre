@@ -167,7 +167,15 @@ function attach(
 function keepOnTop(current: Attachment): void {
   const layer = current.layer;
   if (!layer) return;
-  const layers = current.overlay.getLayers();
+  let layers: Layer[];
+  try {
+    layers = current.overlay.getLayers();
+  } catch {
+    // This runs from a map `render` listener, so a torn-down overlay must not
+    // throw out of it — give up on the mirror instead, like `place` does.
+    current.layer = null;
+    return;
+  }
   if (layers[layers.length - 1]?.id === MIRROR_LAYER_ID) return;
   place(current, layer);
 }
@@ -260,9 +268,10 @@ function readMeasureGeometry(current: Attachment): GeoJSON.FeatureCollection | n
   const data = unwrapSourceData(source._data);
   if (data && typeof data === "object" && data.type === "FeatureCollection") return data;
   // A source holding nothing yet is the same "not ready" case as no source at
-  // all. The control seeds an empty FeatureCollection today, so this is only
-  // reached if that changes — and it is not the drift the warning is for.
-  if (data === undefined) return null;
+  // all (`null` included — maplibre's wrapper can carry it). The control seeds
+  // an empty FeatureCollection today, so this is only reached if that changes,
+  // and it is not the drift the warning is for.
+  if (data == null) return null;
 
   if (!current.warnedShape) {
     current.warnedShape = true;

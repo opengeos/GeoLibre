@@ -218,7 +218,9 @@ describe("LiDAR measure mirror", () => {
     const { overlay, calls } = makeOverlay();
     const { control } = makeControl();
     const map: MeasureMirrorMap = {
-      getSource: (id) => (id === SOURCE_ID ? {} : undefined),
+      // `{}` is a source before any data, `{ _data: { geojson: null } }` the
+      // wrapper holding nothing — both are "not ready", not a shape mismatch.
+      getSource: (id) => (id === SOURCE_ID ? { _data: { geojson: null } } : undefined),
       on: () => {},
       off: () => {},
     };
@@ -233,6 +235,23 @@ describe("LiDAR measure mirror", () => {
     }
 
     assert.deepEqual(warnings, []);
+    assert.deepEqual(calls, []);
+  });
+
+  it("gives up quietly when the overlay is torn down under a render", () => {
+    // keepOnTop runs from a map `render` listener, so it must not throw out of
+    // one when the LiDAR panel goes away mid-frame.
+    const { overlay, calls } = makeOverlay();
+    const { map, emit } = makeMap(collection([lineFeature()]));
+    const { control } = makeControl();
+
+    syncLidarMeasureMirror({ map, overlay, control });
+    overlay.getLayers = () => {
+      throw new Error("overlay destroyed");
+    };
+    calls.length = 0;
+
+    assert.doesNotThrow(() => emit("render"));
     assert.deepEqual(calls, []);
   });
 
