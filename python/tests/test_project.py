@@ -543,6 +543,11 @@ def test_normalize_popup_size_shorthand_skips_the_mapping_value_entirely():
         ({"image_height": 10}, "image_height must be between 40 and 1200 pixels"),
         ({"max_width": 480.5}, "max_width must be a whole number of pixels"),
         ({"image_height": "big"}, "image_height must be a whole number of pixels"),
+        # int(float("inf")) raises OverflowError, which must still surface as
+        # the ValueError this API documents.
+        ({"max_width": float("inf")}, "max_width must be a whole number of pixels"),
+        ({"image_height": float("-inf")}, "image_height must be a whole number of pixels"),
+        ({"image_height": float("nan")}, "image_height must be a whole number of pixels"),
     ],
 )
 def test_popup_config_rejects_a_size_the_app_would_not_render(kwargs, message):
@@ -550,6 +555,11 @@ def test_popup_config_rejects_a_size_the_app_would_not_render(kwargs, message):
     # read one way in the notebook and draw another on the map.
     with pytest.raises(ValueError, match=message):
         project.popup_config(**kwargs)
+
+
+def test_popup_field_rejects_an_infinite_decimals():
+    with pytest.raises(ValueError, match="decimals must be a whole number"):
+        project.popup_field("pop", kind="number", decimals=float("inf"))
 
 
 def test_normalize_popup_rejects_an_unknown_config_key():

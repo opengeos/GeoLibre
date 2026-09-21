@@ -540,7 +540,10 @@ def _popup_pixel_size(name: str, value: Any, bounds: tuple[int, int]) -> int:
     try:
         size = int(value)
         exact = size == value
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError is what `int(float("inf"))` raises, so without it an
+        # infinite size escapes as an internal error instead of the ValueError
+        # this function documents.
         exact = False
     if not exact:
         raise ValueError(f"{name} must be a whole number of pixels, got {value!r}")
@@ -611,7 +614,8 @@ def popup_field(
         try:
             digits = int(decimals)
             exact = digits == decimals
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
+            # `int(float("inf"))` raises OverflowError, not ValueError.
             exact = False
         if not exact:
             raise ValueError(f"decimals must be a whole number, got {decimals!r}")
