@@ -83,7 +83,7 @@ export interface TransitVehicle {
 export interface TransitSnapshot {
   version: string | null;
   timestampMs: number | null;
-  entityCount: number;
+  decodedEntityCount: number;
   truncated: boolean;
   vehicles: TransitVehicle[];
 }
@@ -223,7 +223,7 @@ export function decodeGtfsRealtimeVehicles(bytes: Uint8Array | ArrayBuffer): Tra
   return {
     version: text(message.header.version),
     timestampMs: headerTimestamp !== null && headerTimestamp > 0 ? headerTimestamp * 1000 : null,
-    entityCount: message.entities.length,
+    decodedEntityCount: message.entities.length,
     truncated: message.truncated,
     vehicles: [...byId.values()],
   };
@@ -336,6 +336,9 @@ async function readBoundedResponse(response: Response): Promise<Uint8Array> {
     throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
   }
   if (!response.body) {
+    // Synthetic and nonstandard Response implementations may not expose a
+    // stream. Their arrayBuffer API cannot stop mid-read, so this fallback can
+    // only enforce the cap after buffering (unless content-length rejected it).
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > GTFS_MAX_RESPONSE_BYTES) {
       throw new Error("Entur GTFS-Realtime response exceeds the 8 MiB limit");
@@ -379,5 +382,8 @@ export async function fetchTransitCzml(
   });
   if (!response.ok) throw new Error(`Entur transit request failed (${response.status})`);
   const snapshot = decodeGtfsRealtimeVehicles(await readBoundedResponse(response));
+  if (snapshot.truncated) {
+    throw new Error(`Entur transit feed exceeds the ${GTFS_MAX_ENTITIES} entity limit`);
+  }
   return transitVehiclesToCzml(snapshot.vehicles, options.now ?? new Date());
 }

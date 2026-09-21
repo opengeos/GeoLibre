@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ENTUR_CLIENT_NAME,
   ENTUR_TRANSIT_URL,
+  GTFS_MAX_ENTITIES,
   GTFS_MAX_RESPONSE_BYTES,
   decodeGtfsRealtimeVehicles,
   fetchTransitCzml,
@@ -83,6 +84,13 @@ function encodeFeed(vehicles: FixtureVehicle[]): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+function encodeEmptyEntities(count: number): Uint8Array {
+  const header = [...stringField(1, "2.0")];
+  const bytes = [...messageField(1, header)];
+  for (let index = 0; index < count; index += 1) bytes.push(...messageField(2, []));
+  return new Uint8Array(bytes);
+}
+
 const bus: TransitVehicle = {
   id: "bus-1",
   longitude: 10.75,
@@ -123,7 +131,7 @@ describe("God's Eye View transit feed", () => {
 
     assert.equal(decoded.version, "2.0");
     assert.equal(decoded.timestampMs, 1_795_000_000_000);
-    assert.equal(decoded.entityCount, 2);
+    assert.equal(decoded.decodedEntityCount, 2);
     assert.equal(decoded.vehicles.length, 1);
     assert.deepEqual(decoded.vehicles[0], {
       id: "vehicle-1",
@@ -215,5 +223,15 @@ describe("God's Eye View transit feed", () => {
 
     await assert.rejects(() => fetchTransitCzml({ fetch: fetcher }), /exceeds the 8 MiB limit/);
     assert.equal(cancelled, true);
+  });
+
+  it("rejects a truncated entity snapshot instead of silently showing partial data", async () => {
+    const bytes = encodeEmptyEntities(GTFS_MAX_ENTITIES + 1);
+    const fetcher = (async () => new Response(bytes, { status: 200 })) as typeof fetch;
+
+    await assert.rejects(
+      () => fetchTransitCzml({ fetch: fetcher }),
+      new RegExp(`exceeds the ${GTFS_MAX_ENTITIES} entity limit`),
+    );
   });
 });
