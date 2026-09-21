@@ -960,6 +960,9 @@ export {
   normalizeFintrafficCameras,
   normalizeDriveBcCameras,
   normalizeOntarioCameras,
+  normalizeNswCameras,
+  NSW_FRAME_DEV_BASE,
+  NSW_FRAME_EDGE_BASE,
   normalizeTflCameras,
   type CctvCamera,
 } from "./plugins/gods-eye-view-cctv-feeds";

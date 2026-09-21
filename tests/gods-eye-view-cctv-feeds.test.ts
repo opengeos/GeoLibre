@@ -8,6 +8,7 @@ import {
   normalizeDriveBcCameras,
   normalizeFintrafficCameras,
   normalizeOntarioCameras,
+  normalizeNswCameras,
   normalizeTflCameras,
 } from "../packages/plugins/src/plugins/gods-eye-view-cctv-feeds";
 
@@ -76,6 +77,21 @@ const driveBc = [
   },
 ];
 
+const nsw = {
+  features: [
+    {
+      type: "Feature",
+      id: "023651ee-389c-4677-978e-d39b6c24c1e7",
+      geometry: { type: "Point", coordinates: [151.10533, -34.02977] },
+      properties: {
+        title: "5 Ways (Miranda)",
+        view: "5 Ways at The Boulevarde looking west towards Sutherland.",
+        href: "https://webcams.transport.nsw.gov.au/livetraffic-webcams/cameras/5_ways_&_miranda.jpeg",
+      },
+    },
+  ],
+};
+
 describe("God's Eye View CCTV feeds", () => {
   it("normalizes pinned TfL, Calgary, and Fintraffic frame sources", () => {
     assert.equal(normalizeTflCameras(tfl)[0].id, "tfl-00001.00001");
@@ -105,6 +121,16 @@ describe("God's Eye View CCTV feeds", () => {
     const driveBcCamera = normalizeDriveBcCameras(driveBc)[0];
     assert.equal(driveBcCamera.id, "drivebc-888");
     assert.equal(driveBcCamera.snapshotUrl, "https://www.drivebc.ca/images/888.jpg");
+  });
+
+  it("normalizes pinned Live Traffic NSW frame sources", () => {
+    const camera = normalizeNswCameras(nsw, false)[0];
+    assert.equal(camera.provider, "Live Traffic NSW");
+    assert.equal(camera.snapshotUrl, "https://tiles.geolibre.app/cctv/nsw/5_ways_%26_miranda.jpeg");
+    assert.equal(
+      normalizeNswCameras(nsw, true)[0].snapshotUrl,
+      "http://localhost/cctv/nsw/5_ways_%26_miranda.jpeg",
+    );
   });
 
   it("rejects off-host and inactive camera records", () => {
@@ -148,6 +174,17 @@ describe("God's Eye View CCTV feeds", () => {
       [],
     );
     assert.deepEqual(normalizeDriveBcCameras([{ ...driveBc[0], is_on: false }]), []);
+    assert.deepEqual(
+      normalizeNswCameras({
+        features: [
+          {
+            ...nsw.features[0],
+            properties: { ...nsw.features[0].properties, href: "https://example.com/camera.jpg" },
+          },
+        ],
+      }),
+      [],
+    );
   });
 
   it("rejects null and otherwise non-numeric camera coordinates", () => {
@@ -216,10 +253,10 @@ describe("God's Eye View CCTV feeds", () => {
         fetch: fetcher,
         nowMs: 60_000,
       });
-      assert.equal(requested.length, 5, "immediate repeats use every catalog cache");
+      assert.equal(requested.length, 6, "immediate repeats use every catalog cache");
       currentTime += CCTV_CATALOG_FAILURE_CACHE_MS + 1;
       await fetchCctvCzml([-0.2, 51.45, 0, 51.65], { fetch: fetcher, nowMs: 120_000 });
-      assert.equal(requested.length, 6, "failed catalogs retry after the shorter failure TTL");
+      assert.equal(requested.length, 7, "failed catalogs retry after the shorter failure TTL");
       assert.equal(result.attributes.features.length, 1);
       assert.equal(result.attributes.features[0].properties?.provider, "Transport for London");
       assert.notEqual(

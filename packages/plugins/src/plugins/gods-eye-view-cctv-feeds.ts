@@ -19,10 +19,13 @@ export const CALGARY_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/calgary"
 export const CALGARY_FRAME_DEV_BASE = "/cctv/calgary";
 export const ONTARIO_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/ontario";
 export const ONTARIO_FRAME_DEV_BASE = "/cctv/ontario";
+export const NSW_FRAME_EDGE_BASE = "https://tiles.geolibre.app/cctv/nsw";
+export const NSW_FRAME_DEV_BASE = "/cctv/nsw";
 
 const TFL_IMAGE_ORIGIN = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/";
 const FINTRAFFIC_IMAGE_ORIGIN = "https://weathercam.digitraffic.fi/";
 const DRIVEBC_IMAGE_ORIGIN = "https://www.drivebc.ca/images/";
+const NSW_IMAGE_ORIGIN = "https://webcams.transport.nsw.gov.au/livetraffic-webcams/cameras/";
 const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
 type CatalogCacheEntry =
   | { expiresAt: number; status: "fulfilled"; payload: unknown }
@@ -65,7 +68,7 @@ function validCoordinate(longitude: number | null, latitude: number | null): boo
   );
 }
 
-function catalogProxyUrl(provider: "ontario" | "drivebc", dev = isViteDevServer()): string {
+function catalogProxyUrl(provider: "ontario" | "drivebc" | "nsw", dev = isViteDevServer()): string {
   const base = dev
     ? `${globalThis.location?.origin ?? "http://localhost"}${CCTV_CATALOG_DEV_BASE}`
     : CCTV_CATALOG_EDGE_BASE;
@@ -315,6 +318,70 @@ export function normalizeDriveBcCameras(payload: unknown): CctvCamera[] {
   return cameras;
 }
 
+export function normalizeNswCameras(payload: unknown, dev = isViteDevServer()): CctvCamera[] {
+  if (!payload || typeof payload !== "object") return [];
+  const features = (payload as { features?: unknown }).features;
+  if (!Array.isArray(features)) return [];
+  const cameras: CctvCamera[] = [];
+  for (const value of features.slice(0, 1_000)) {
+    if (!value || typeof value !== "object") continue;
+    const feature = value as Record<string, unknown>;
+    const rawId = text(feature.id);
+    const geometry = feature.geometry as { coordinates?: unknown } | undefined;
+    const coordinates = Array.isArray(geometry?.coordinates) ? geometry.coordinates : [];
+    const longitude = finite(coordinates[0]);
+    const latitude = finite(coordinates[1]);
+    if (
+      !rawId ||
+      !/^[A-Za-z0-9-]{1,100}$/.test(rawId) ||
+      !validCoordinate(longitude, latitude) ||
+      (latitude as number) < -38 ||
+      (latitude as number) > -28 ||
+      (longitude as number) < 140.8 ||
+      (longitude as number) > 154
+    ) {
+      continue;
+    }
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    const source = text(properties.href);
+    let frameId: string | null = null;
+    try {
+      const parsed = new URL(source ?? "");
+      const prefix = new URL(NSW_IMAGE_ORIGIN);
+      const filename = parsed.pathname.startsWith(prefix.pathname)
+        ? parsed.pathname.slice(prefix.pathname.length)
+        : "";
+      if (
+        parsed.protocol === "https:" &&
+        parsed.hostname === prefix.hostname &&
+        /^[a-z0-9_.&-]{1,100}\.(?:jpe?g)$/i.test(filename)
+      ) {
+        frameId = filename;
+      }
+    } catch {
+      frameId = null;
+    }
+    if (!frameId) continue;
+    const view = text(properties.view);
+    const title = text(properties.title);
+    const name = view && view.length <= 140 && !/[\r\n]/.test(view) ? view : title;
+    const frameBase = dev
+      ? `${globalThis.location?.origin ?? "http://localhost"}${NSW_FRAME_DEV_BASE}`
+      : NSW_FRAME_EDGE_BASE;
+    cameras.push({
+      id: `nsw-${rawId}`,
+      name: name ?? `Live Traffic NSW Camera ${rawId}`,
+      provider: "Live Traffic NSW",
+      longitude: longitude as number,
+      latitude: latitude as number,
+      snapshotUrl: `${frameBase}/${encodeURIComponent(frameId)}`,
+      attribution: "Live Traffic NSW — Transport for NSW (CC BY 4.0)",
+      refreshMs: 60_000,
+    });
+  }
+  return cameras;
+}
+
 function selectViewportCameras(cameras: CctvCamera[], bounds: ViewBounds): CctvCamera[] {
   const [west, south, east, north] = bounds;
   const centerLongitude = west + (east - west) / 2;
@@ -465,6 +532,7 @@ export async function fetchCctvCzml(
     }),
     fetchCatalog(catalogProxyUrl("ontario"), fetcher, options.signal, normalizeOntarioCameras),
     fetchCatalog(catalogProxyUrl("drivebc"), fetcher, options.signal, normalizeDriveBcCameras),
+    fetchCatalog(catalogProxyUrl("nsw"), fetcher, options.signal, normalizeNswCameras),
   ]);
   if (options.signal?.aborted) {
     throw options.signal.reason ?? new DOMException("CCTV request aborted", "AbortError");
