@@ -252,7 +252,8 @@ export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer(
       })
       .filter((view): view is { description: string; frameId: string } => view !== null);
     const view =
-      enabled.find((candidate) => !/\bdown\b/i.test(candidate.description)) ?? enabled[0];
+      enabled.find((candidate) => !/^looking down[.!]?$/i.test(candidate.description)) ??
+      enabled[0];
     if (!view) continue;
     const frameBase = dev
       ? `${globalThis.location?.origin ?? "http://localhost"}${ONTARIO_FRAME_DEV_BASE}`
