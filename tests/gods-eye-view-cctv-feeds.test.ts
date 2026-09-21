@@ -99,6 +99,20 @@ describe("God's Eye View CCTV feeds", () => {
     );
   });
 
+  it("rejects null and otherwise non-numeric camera coordinates", () => {
+    assert.deepEqual(normalizeTflCameras([{ ...tfl[0], lon: null }]), []);
+    assert.deepEqual(
+      normalizeCalgaryCameras([{ ...calgary[0], point: { coordinates: [[], 51.05] } }]),
+      [],
+    );
+    assert.deepEqual(
+      normalizeFintrafficCameras({
+        features: [{ ...fintraffic.features[0], geometry: { coordinates: [24.94, false] } }],
+      }),
+      [],
+    );
+  });
+
   it("creates refreshable image billboards and an image popup property", () => {
     const camera = normalizeTflCameras(tfl)[0];
     const result = cctvCamerasToCzml([camera], 120_000);
