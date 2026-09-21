@@ -31,6 +31,22 @@ describe("Calgary CCTV edge proxy", () => {
     assert.equal(response.headers.get("cache-control"), "public, max-age=30");
   });
 
+  it("accepts the Referer-only request shape sent by popup image elements", async () => {
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      })) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg", {
+        headers: { referer: "https://web.geolibre.app/" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 200);
+  });
+
   it("rejects untrusted origins, malformed ids, non-images, and oversized frames", async () => {
     let fetched = false;
     globalThis.fetch = (async () => {
@@ -48,6 +64,16 @@ describe("Calgary CCTV edge proxy", () => {
       {} as ExecutionContext,
     );
     assert.equal(forbidden.status, 403);
+    assert.equal(fetched, false);
+
+    const forbiddenReferer = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/cctv/calgary/86.jpg", {
+        headers: { referer: "https://example.com/" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(forbiddenReferer.status, 403);
     assert.equal(fetched, false);
 
     const malformed = await tilesWorker.fetch(

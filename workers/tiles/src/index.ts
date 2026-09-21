@@ -411,6 +411,18 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
 }
 
 /**
+ * Image elements use `no-cors` mode and normally send `Referer`, not `Origin`.
+ * Prefer Origin when present so an untrusted caller cannot hide behind a forged
+ * allowed referrer; only fall back for the header shape produced by `<img>`.
+ */
+function isAllowedProxyImageRequest(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  return origin
+    ? isAllowedProxyOrigin(origin)
+    : isAllowedProxyOrigin(request.headers.get("referer"));
+}
+
+/**
  * Resolves a `/source-coop/...` path to its fixed upstream, or null when the
  * path is not one of the two allowlisted reads (see SOURCE_COOP_PREFIX above).
  */
@@ -890,7 +902,7 @@ async function handleCalgaryCctvFrame(
   ctx: ExecutionContext,
   frameId: string,
 ): Promise<Response> {
-  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+  if (!isAllowedProxyImageRequest(request)) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
   }
   const cache = typeof caches === "undefined" ? null : caches.default;
