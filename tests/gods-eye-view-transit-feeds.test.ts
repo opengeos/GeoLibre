@@ -5,8 +5,12 @@ import {
   ENTUR_TRANSIT_URL,
   GTFS_MAX_ENTITIES,
   GTFS_MAX_RESPONSE_BYTES,
+  TRANSIT_FEEDS,
+  TRANSIT_DEV_BASE,
   decodeGtfsRealtimeVehicles,
+  decodeTransitFeed,
   fetchTransitCzml,
+  transitRequestUrl,
   transitVehiclesToCzml,
   type TransitVehicle,
 } from "../packages/plugins/src/plugins/gods-eye-view-transit-feeds";
@@ -205,10 +209,47 @@ describe("God's Eye View transit feed", () => {
     const payload = await fetchTransitCzml({
       fetch: fetcher,
       now: new Date("2026-09-20T12:00:00Z"),
+      dev: true,
     });
     assert.equal(payload.attributes.features.length, 0);
-    assert.equal(calls[0].url, ENTUR_TRANSIT_URL);
-    assert.equal(new Headers(calls[0].init?.headers).get("ET-Client-Name"), ENTUR_CLIENT_NAME);
+    assert.equal(calls.length, TRANSIT_FEEDS.length);
+    const enturCall = calls.find((call) => call.url === ENTUR_TRANSIT_URL);
+    assert.equal(new Headers(enturCall?.init?.headers).get("ET-Client-Name"), ENTUR_CLIENT_NAME);
+    assert.ok(calls.some((call) => call.url === `${TRANSIT_DEV_BASE}/mbta`));
+  });
+
+  it("uses fixed proxy routes for non-CORS providers", () => {
+    assert.equal(transitRequestUrl(TRANSIT_FEEDS[0], true), "/transit/vehicles/mbta");
+    assert.equal(
+      transitRequestUrl(TRANSIT_FEEDS[0], false),
+      "https://tiles.geolibre.app/transit/vehicles/mbta",
+    );
+    assert.equal(transitRequestUrl(TRANSIT_FEEDS[5], true), ENTUR_TRANSIT_URL);
+  });
+
+  it("applies provider-specific route mode classification", () => {
+    const decoded = decodeTransitFeed(
+      encodeFeed([
+        {
+          entityId: "red-line",
+          vehicleId: "train-1",
+          routeId: "Red",
+          latitude: 42.36,
+          longitude: -71.06,
+        },
+      ]),
+      TRANSIT_FEEDS[0],
+    );
+    assert.equal(decoded.vehicles[0].mode, "subway");
+  });
+
+  it("keeps successful operators when one provider fails", async () => {
+    const fetcher = (async (input: string | URL | Request) => {
+      if (String(input).endsWith("/mbta")) return new Response("down", { status: 503 });
+      return new Response(encodeFeed([]), { status: 200 });
+    }) as typeof fetch;
+    const payload = await fetchTransitCzml({ fetch: fetcher, dev: true });
+    assert.equal(payload.packets.length, 1);
   });
 
   it("stops reading a headerless response at the byte limit", async () => {

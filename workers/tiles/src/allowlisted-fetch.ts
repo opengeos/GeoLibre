@@ -25,6 +25,14 @@ export const DRIVEBC_CCTV_CATALOG_UPSTREAM = "https://www.drivebc.ca/api/webcams
 export const NSW_CCTV_CATALOG_UPSTREAM = "https://data.livetraffic.com/cameras/traffic-cam.json";
 export const NSW_CCTV_FRAME_UPSTREAM =
   "https://webcams.transport.nsw.gov.au/livetraffic-webcams/cameras/";
+export const TRANSIT_UPSTREAMS = {
+  mbta: "https://cdn.mbta.com/realtime/VehiclePositions.pb",
+  "capmetro-austin": "https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream",
+  "metrotransit-msp": "https://svc.metrotransit.org/mtgtfs/vehiclepositions.pb",
+  "hsl-helsinki": "https://realtime.hsl.fi/realtime/vehicle-positions/v2/hsl",
+  "ovapi-nl": "https://gtfs.ovapi.nl/nl/vehiclePositions.pb",
+  "translink-seq": "https://gtfsrt.api.translink.com.au/api/realtime/seq/VehiclePositions",
+} as const;
 
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
@@ -44,6 +52,10 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   DRIVEBC_CCTV_CATALOG_UPSTREAM,
   NSW_CCTV_CATALOG_UPSTREAM,
   NSW_CCTV_FRAME_UPSTREAM,
+  ...Object.values(TRANSIT_UPSTREAMS),
+  // CapMetro's fixed Socrata download endpoint redirects to a versioned file
+  // path on the same public-data host.
+  "https://data.texas.gov/api/views/",
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

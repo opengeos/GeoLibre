@@ -38,6 +38,17 @@ const AIRCRAFT_UPSTREAMS = {
     label: "adsb.lol",
   },
 } as const;
+const TRANSIT_UPSTREAMS = {
+  mbta: "https://cdn.mbta.com/realtime/VehiclePositions.pb",
+  "capmetro-austin": "https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream",
+  "metrotransit-msp": "https://svc.metrotransit.org/mtgtfs/vehiclepositions.pb",
+  "hsl-helsinki": "https://realtime.hsl.fi/realtime/vehicle-positions/v2/hsl",
+  "ovapi-nl": "https://gtfs.ovapi.nl/nl/vehiclePositions.pb",
+  "translink-seq": "https://gtfsrt.api.translink.com.au/api/realtime/seq/VehiclePositions",
+} as const;
+const TRANSIT_CACHE_TTL_MS = 15_000;
+const OVAPI_TRANSIT_CACHE_TTL_MS = 60_000;
+const TRANSIT_MAX_BODY_BYTES = 8 * 1024 * 1024;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
 const AUSTIN_CCTV_FRAME_BASE = "https://cctv.austinmobility.io/image/";
 const CALGARY_CCTV_FRAME_BASE = "https://trafficcam.calgary.ca/loc";
@@ -67,6 +78,7 @@ const aircraftCaches = new Map<
   keyof typeof AIRCRAFT_UPSTREAMS,
   { body: Buffer; expiresAt: number }
 >();
+const transitCaches = new Map<string, { body: Buffer; expiresAt: number }>();
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -549,6 +561,54 @@ export async function proxyAircraftRequestGuarded(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", `public, max-age=${Math.floor(config.cacheTtlMs / 1000)}`);
   res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("content-length", String(entry.body.byteLength));
+  res.end(entry.body);
+}
+
+/** Fixed, bounded GTFS-Realtime relays for local development. */
+export async function proxyTransitRequestGuarded(
+  feedId: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!Object.hasOwn(TRANSIT_UPSTREAMS, feedId)) {
+    res.statusCode = 400;
+    res.setHeader("content-type", "text/plain");
+    res.end("Invalid transit provider");
+    return;
+  }
+  let entry = transitCaches.get(feedId);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const upstream = TRANSIT_UPSTREAMS[feedId as keyof typeof TRANSIT_UPSTREAMS];
+    const response = await fetchWithGuard(upstream, {
+      headers: {
+        accept: "application/x-protobuf,application/octet-stream",
+        "user-agent": "GeoLibre-Transit-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+    if (!response.ok) {
+      res.statusCode = response.status;
+      res.setHeader("content-type", "text/plain");
+      res.end(`Transit provider returned HTTP ${response.status}`);
+      return;
+    }
+    const body = await readBodyWithLimit(response, TRANSIT_MAX_BODY_BYTES);
+    if (body.byteLength === 0) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end("Transit provider returned an empty response");
+      return;
+    }
+    const cacheTtlMs = feedId === "ovapi-nl" ? OVAPI_TRANSIT_CACHE_TTL_MS : TRANSIT_CACHE_TTL_MS;
+    entry = { body, expiresAt: Date.now() + cacheTtlMs };
+    transitCaches.set(feedId, entry);
+  }
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader(
+    "cache-control",
+    feedId === "ovapi-nl" ? "public, max-age=60" : "public, max-age=15",
+  );
+  res.setHeader("content-type", "application/x-protobuf");
   res.setHeader("content-length", String(entry.body.byteLength));
   res.end(entry.body);
 }

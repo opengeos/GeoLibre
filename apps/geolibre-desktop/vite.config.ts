@@ -21,6 +21,7 @@ import {
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
   proxyOverpassRequestGuarded,
+  proxyTransitRequestGuarded,
   proxyOntarioCctvFrameRequestGuarded,
   proxyNswCctvFrameRequestGuarded,
 } from "./vite-proxy-guard";
@@ -522,6 +523,7 @@ const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
 const OPEN_SKY_PROXY_PATH = "/opensky/states";
 const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
+const TRANSIT_PROXY_PATH = "/transit/vehicles";
 const AUSTIN_CCTV_FRAME_PROXY_PATH = "/cctv/austin";
 const CALGARY_CCTV_FRAME_PROXY_PATH = "/cctv/calgary";
 const CCTV_CATALOG_PROXY_PATH = "/cctv/catalog";
@@ -735,6 +737,17 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("ADSBDB proxy request failed");
+        }
+      });
+      server.middlewares.use(TRANSIT_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(req.url ?? "", `http://localhost${TRANSIT_PROXY_PATH}`);
+          const feedId = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+          await proxyTransitRequestGuarded(feedId, res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Transit proxy request failed");
         }
       });
       server.middlewares.use(CALGARY_CCTV_FRAME_PROXY_PATH, async (req, res) => {

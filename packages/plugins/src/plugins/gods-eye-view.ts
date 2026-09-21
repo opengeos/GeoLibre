@@ -150,7 +150,8 @@ const FEED_DESCRIPTORS = {
   transit: {
     group: "movement",
     label: ["panel.godsEyeView.transit", "Live Transit"],
-    attribution: "Live transit: Entur, data under the Norwegian Licence for Open Government Data",
+    attribution:
+      "Live transit: MBTA/MassDOT; CapMetro; Metro Transit; HSL; OVapi; Entur; TransLink Queensland",
     refreshIntervalMs: 15_000,
     timeoutMs: 20_000,
     flag: GODS_EYE_VIEW_TRANSIT_FLAG,

@@ -40,10 +40,11 @@ including its public-feed selection and normalization approach. Each enabled
 layer adds its provider credit to Cesium's **Data attribution** control. The
 datacenter, dam, and current-view infrastructure feeds use OpenStreetMap data
 under ODbL; Radio Browser is public domain; USGS earthquake data is U.S. public
-domain; CelesTrak requests citation; Entur transit data is published under the
-Norwegian Licence for Open Government Data; and the live TeleGeography cable feed is
-read from GeoLibre's Source Cooperative mirror under CC BY-NC-SA 3.0,
-including its NonCommercial restriction.
+domain; CelesTrak requests citation; live transit combines MBTA, CapMetro,
+Metro Transit, HSL, OVapi, Entur, and TransLink feeds under their respective
+public-data terms; and the live TeleGeography cable feed is read from GeoLibre's
+Source Cooperative mirror under CC BY-NC-SA 3.0, including its NonCommercial
+restriction.
 
 ![A plugin submenu, with Activate above the four map-corner positions](https://assets.geolibre.app/images/geolibre-plugin-position-menu.webp)
 

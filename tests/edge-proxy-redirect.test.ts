@@ -153,6 +153,20 @@ describe("tiles allowlisted fetch", () => {
     assert.equal(isAllowedTilesUpstreamUrl("https://data.livetraffic.com/events.json"), false);
   });
 
+  it("accepts the fixed transit feeds and CapMetro's versioned redirect path", () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://cdn.mbta.com/realtime/VehiclePositions.pb"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://gtfs.ovapi.nl/nl/vehiclePositions.pb"), true);
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://data.texas.gov/api/views/eiei-9rpf/files/versioned"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://cdn.mbta.com/realtime/TripUpdates.pb"), false);
+    assert.equal(isAllowedTilesUpstreamUrl("https://data.texas.gov/resource/secret.json"), false);
+  });
+
   it("refuses off-host and off-prefix S3 redirects", async () => {
     assert.equal(isAllowedTilesUpstreamUrl("https://api.openaerialmap.org/meta"), true);
     assert.equal(isAllowedTilesUpstreamUrl("https://evil.example/meta"), false);
