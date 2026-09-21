@@ -547,6 +547,7 @@
       "collectionPlaceholder": "collection-id",
       "maxFeatures": "Max features",
       "bbox": "Bounding box",
+      "bboxHint": "Load only features inside this box, as west,south,east,north. Use view fills it from the current map extent.",
       "datetime": "Date and time",
       "errorCollection": "Enter an OGC API - Features collection id.",
       "errorMaxFeatures": "Enter a max features value of 1 or more.",

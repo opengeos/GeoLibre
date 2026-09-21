@@ -223,6 +223,47 @@ export function createOgcItemsUrl(request: {
 }
 
 /**
+ * Formats a map view's extent as an OGC API - Features `bbox` parameter value.
+ *
+ * The extent a map engine reports is the camera's own, which at low zoom (or
+ * after panning past the 180th meridian) runs outside ±180° longitude because
+ * the view takes in more than one copy of the world. That is not a valid CRS84
+ * box, so the longitudes are wrapped back into range and a view that already
+ * spans a whole world copy collapses to the full -180…180 width. A wrapped box
+ * whose west ends up greater than its east is kept that way: that is precisely
+ * how OGC API - Features spells a box crossing the antimeridian.
+ *
+ * Latitudes are clamped rather than wrapped — a camera tilted toward the pole
+ * reports beyond ±90°, and the box there really is the pole.
+ *
+ * @param bounds - A `[west, south, east, north]` extent in degrees.
+ * @returns The `bbox` value, or null when the extent has no usable area.
+ */
+export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
+  if (bounds.length !== 4 || !bounds.every((value) => Number.isFinite(value))) return null;
+  const [west, south, east, north] = bounds;
+  const clampLatitude = (value: number) => Math.max(-90, Math.min(90, value));
+  const southEdge = clampLatitude(south);
+  const northEdge = clampLatitude(north);
+  if (!(southEdge < northEdge)) return null;
+
+  const span = east - west;
+  if (!(span > 0)) return null;
+  let westEdge = -180;
+  let eastEdge = 180;
+  if (span < 360) {
+    // Wrap the west corner into range, then carry the span across from it so
+    // the box keeps its width instead of being wrapped corner by corner.
+    westEdge = ((((west + 180) % 360) + 360) % 360) - 180;
+    eastEdge = westEdge + span;
+    if (eastEdge > 180) eastEdge -= 360;
+  }
+
+  const format = (value: number) => Number(value.toFixed(6)).toString();
+  return [westEdge, southEdge, eastEdge, northEdge].map(format).join(",");
+}
+
+/**
  * Reads the feature collections from a `/collections` document, in document
  * order and deduplicated by id.
  *

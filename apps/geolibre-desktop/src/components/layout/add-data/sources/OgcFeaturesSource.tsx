@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { ListTree, Loader2 } from "lucide-react";
+import { Crop, ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -8,6 +8,7 @@ import {
   fetchOgcFeatureCollections,
   fetchOgcFeatureItems,
   parseOgcFeaturesUrl,
+  viewBoundsToOgcBbox,
   type OgcFeaturesCollectionOption,
 } from "../../../../lib/ogc-api-features";
 import { buildOgcFeaturesLayer } from "../apply-service";
@@ -439,13 +440,30 @@ export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) 
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ogc-features-bbox">{t("addData.ogcFeatures.bbox")}</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="ogc-features-bbox">{t("addData.ogcFeatures.bbox")}</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-2 text-xs"
+                onClick={() => {
+                  const extent = source.shell.mapControllerRef.current?.getViewBounds();
+                  const value = extent ? viewBoundsToOgcBbox(extent) : null;
+                  if (value) setBbox(value);
+                }}
+              >
+                <Crop className="h-3 w-3" />
+                {t("rasterSubset.useView")}
+              </Button>
+            </div>
             <Input
               id="ogc-features-bbox"
               placeholder={t("addData.common.optional")}
               value={bbox}
               onChange={(event) => setBbox(event.target.value)}
             />
+            <p className="text-xs text-muted-foreground">{t("addData.ogcFeatures.bboxHint")}</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ogc-features-datetime">{t("addData.ogcFeatures.datetime")}</Label>

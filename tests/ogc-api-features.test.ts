@@ -9,6 +9,7 @@ import {
   nextItemsPageUrl,
   parseOgcCollections,
   parseOgcFeaturesUrl,
+  viewBoundsToOgcBbox,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-features";
 import { buildOgcFeaturesLayer } from "../apps/geolibre-desktop/src/components/layout/add-data/apply-service";
 
@@ -220,6 +221,37 @@ describe("nextItemsPageUrl", () => {
       nextItemsPageUrl({ links: [{ rel: "next", href: "https://evil.example/items" }] }, current),
       null,
     );
+  });
+});
+
+describe("viewBoundsToOgcBbox", () => {
+  it("formats an in-range view as west,south,east,north", () => {
+    assert.equal(viewBoundsToOgcBbox([4.85, 52.3, 4.95, 52.4]), "4.85,52.3,4.95,52.4");
+  });
+
+  it("rounds to six decimals rather than emitting float noise", () => {
+    assert.equal(viewBoundsToOgcBbox([4.8512345678, 52.3, 4.95, 52.4]), "4.851235,52.3,4.95,52.4");
+  });
+
+  it("collapses a view wider than one world copy to the full longitude span", () => {
+    assert.equal(viewBoundsToOgcBbox([-400, -60, 400, 60]), "-180,-60,180,60");
+  });
+
+  it("wraps a view panned past the antimeridian, keeping its width", () => {
+    // 350°E..370°E is 10 wide and straddles the meridian: west > east says so.
+    assert.equal(viewBoundsToOgcBbox([350, -10, 370, 10]), "-10,-10,10,10");
+    assert.equal(viewBoundsToOgcBbox([170, -10, 190, 10]), "170,-10,-170,10");
+  });
+
+  it("clamps latitudes that run past the poles", () => {
+    assert.equal(viewBoundsToOgcBbox([-10, -95, 10, 95]), "-10,-90,10,90");
+  });
+
+  it("rejects an extent with no usable area", () => {
+    assert.equal(viewBoundsToOgcBbox([10, 20, 10, 30]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 20, 10, 20]), null);
+    assert.equal(viewBoundsToOgcBbox([0, Number.NaN, 10, 20]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 10, 20]), null);
   });
 });
 
