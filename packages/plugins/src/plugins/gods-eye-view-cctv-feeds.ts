@@ -22,7 +22,6 @@ export const ONTARIO_FRAME_DEV_BASE = "/cctv/ontario";
 
 const TFL_IMAGE_ORIGIN = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/";
 const FINTRAFFIC_IMAGE_ORIGIN = "https://weathercam.digitraffic.fi/";
-const ONTARIO_IMAGE_ORIGIN = "https://511on.ca/map/Cctv/";
 const DRIVEBC_IMAGE_ORIGIN = "https://www.drivebc.ca/images/";
 const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
 type CatalogCacheEntry =
@@ -249,17 +248,16 @@ export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer(
           }
           return {
             description,
-            snapshotUrl: `${ONTARIO_IMAGE_ORIGIN}${encodeURIComponent(match[1])}`,
+            frameId: match[1],
           };
         } catch {
           return null;
         }
       })
-      .filter((view): view is { description: string; snapshotUrl: string } => view !== null);
+      .filter((view): view is { description: string; frameId: string } => view !== null);
     const view =
       enabled.find((candidate) => !/\bdown\b/i.test(candidate.description)) ?? enabled[0];
     if (!view) continue;
-    const frameId = new URL(view.snapshotUrl).pathname.slice("/map/Cctv/".length);
     const frameBase = dev
       ? `${globalThis.location?.origin ?? "http://localhost"}${ONTARIO_FRAME_DEV_BASE}`
       : ONTARIO_FRAME_EDGE_BASE;
@@ -273,7 +271,7 @@ export function normalizeOntarioCameras(payload: unknown, dev = isViteDevServer(
       provider: "Ontario 511",
       longitude: longitude as number,
       latitude: latitude as number,
-      snapshotUrl: `${frameBase}/${encodeURIComponent(frameId)}`,
+      snapshotUrl: `${frameBase}/${encodeURIComponent(view.frameId)}`,
       attribution: "Open Government Licence – Ontario",
       refreshMs: 60_000,
     });
