@@ -742,6 +742,7 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
 
 async function handleAircraftFeed(
   request: Request,
+  ctx: ExecutionContext,
   upstream: string,
   cacheSeconds: number,
   arrayKey: "states" | "ac",
@@ -749,6 +750,9 @@ async function handleAircraftFeed(
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
   }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
   let originResponse: Response;
   try {
     originResponse = await fetchAllowlistedUpstream(upstream, {
@@ -775,7 +779,13 @@ async function handleAircraftFeed(
   const headers = new Headers(CORS_HEADERS);
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", originResponse.ok ? `public, max-age=${cacheSeconds}` : "no-store");
-  return new Response(body, { status: originResponse.status, headers });
+  const response = new Response(body, { status: originResponse.status, headers });
+  // Cache only after the bounded body has passed schema validation. Using the
+  // Cache API here (instead of `cf.cacheEverything` on the upstream fetch)
+  // prevents a malformed third-party response from being cached before the
+  // Worker can inspect it.
+  if (originResponse.ok && cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
 }
 
 /** Read an upstream response defensively without letting stream errors escape. */
@@ -817,10 +827,17 @@ async function readResponseBytesWithLimit(
   return body;
 }
 
-async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Response> {
+async function handleAdsbdbAircraft(
+  request: Request,
+  ctx: ExecutionContext,
+  icao: string,
+): Promise<Response> {
   if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
   }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
   let originResponse: Response;
   try {
     originResponse = await fetchAllowlistedUpstream(
@@ -837,10 +854,12 @@ async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Res
   if (originResponse.status === 404) {
     await originResponse.body?.cancel().catch(() => undefined);
     headers.set("cache-control", "public, max-age=3600");
-    return new Response('{"response":{"aircraft":null}}', {
+    const response = new Response('{"response":{"aircraft":null}}', {
       status: 200,
       headers,
     });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
   }
   const body = await readResponseBytesWithLimit(originResponse, 1024 * 1024);
   if (!body) return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
@@ -858,7 +877,9 @@ async function handleAdsbdbAircraft(request: Request, icao: string): Promise<Res
     }
   }
   headers.set("cache-control", originResponse.ok ? "public, max-age=86400" : "no-store");
-  return new Response(body, { status: originResponse.status, headers });
+  const response = new Response(body, { status: originResponse.status, headers });
+  if (originResponse.ok && cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
 }
 
 export const tilesWorker = {
@@ -1102,6 +1123,7 @@ export const tilesWorker = {
     if (url.pathname === OPEN_SKY_PATH) {
       return handleAircraftFeed(
         request,
+        ctx,
         OPEN_SKY_STATES_UPSTREAM,
         OPEN_SKY_CACHE_SECONDS,
         "states",
@@ -1109,12 +1131,18 @@ export const tilesWorker = {
     }
 
     if (url.pathname === ADSB_LOL_MILITARY_PATH) {
-      return handleAircraftFeed(request, ADSB_LOL_MILITARY_UPSTREAM, ADSB_LOL_CACHE_SECONDS, "ac");
+      return handleAircraftFeed(
+        request,
+        ctx,
+        ADSB_LOL_MILITARY_UPSTREAM,
+        ADSB_LOL_CACHE_SECONDS,
+        "ac",
+      );
     }
 
     const adsbdbMatch = ADSBDB_AIRCRAFT_PATH.exec(url.pathname);
     if (adsbdbMatch) {
-      return handleAdsbdbAircraft(request, adsbdbMatch[1]);
+      return handleAdsbdbAircraft(request, ctx, adsbdbMatch[1]);
     }
 
     // Source Cooperative metadata: source.coop sends no CORS headers, so the

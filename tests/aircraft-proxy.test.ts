@@ -3,8 +3,14 @@ import { afterEach, describe, it } from "node:test";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
+const originalCaches = globalThis.caches;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  Object.defineProperty(globalThis, "caches", {
+    configurable: true,
+    writable: true,
+    value: originalCaches,
+  });
 });
 
 describe("aircraft edge proxies", () => {
@@ -68,6 +74,39 @@ describe("aircraft edge proxies", () => {
     );
     assert.equal(workersDevResponse.status, 403);
     assert.equal(fetched, false);
+  });
+
+  it("edge-caches aircraft responses only after validation", async () => {
+    let cachedResponse: Response | null = null;
+    let cacheWrite: Promise<unknown> | null = null;
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        default: {
+          match: async () => undefined,
+          put: async (_request: Request, response: Response) => {
+            cachedResponse = response;
+          },
+        },
+      },
+    });
+    globalThis.fetch = (async () =>
+      new Response('{"time":1,"states":[]}', { status: 200 })) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request("https://tiles.geolibre.app/opensky/states", {
+        headers: { origin: "http://localhost:5173" },
+      }),
+      {},
+      {
+        waitUntil(promise) {
+          cacheWrite = promise;
+        },
+      } as ExecutionContext,
+    );
+    await cacheWrite;
+    assert.equal(response.status, 200);
+    assert.deepEqual(await cachedResponse?.json(), { time: 1, states: [] });
   });
 
   it("rejects malformed successful aircraft feeds without caching them", async () => {
