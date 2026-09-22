@@ -130,7 +130,7 @@ browser against an authenticated Mapbox map):
   Mapbox map (`geo-editor-mapbox.ts`); the toolbar's rotate and
   feature-properties popups come from `maplibre-gl-geo-editor`'s `createPopup`
   option, fed mapbox-gl's `Popup`. Text markers use Mapbox's `Open Sans
-Regular` glyphs when the style has no font to borrow.
+  Regular` glyphs when the style has no font to borrow.
 - **Atmospheric Effects** (its overlay canvases mount in the Mapbox canvas
   container; the control container is lifted above them, as on MapLibre) and
   **Sun** (canvas night mask, raster layer and `setLight` all apply to
