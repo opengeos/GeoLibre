@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
 import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-geometry";
 import type { GeoLibreSelection } from "@geolibre/plugins";
+import { createPluginLayerGroupActions } from "../apps/geolibre-desktop/src/lib/plugin-layer-groups";
 import { createPluginLayerQueries } from "../apps/geolibre-desktop/src/lib/plugin-layer-queries";
 
 // These exercise `createPluginLayerQueries`, which `createAppAPI` spreads into
@@ -211,23 +212,23 @@ describe("external plugin query API", () => {
   });
 });
 
-// The group half of the API a plugin needs to build nested folders (#2553):
-// `listLayerGroups` is the only way to address a group the plugin did not
-// create, and `moveLayerGroupToGroup` is what the panel's own "Move to group"
-// menu calls. The write is a typed passthrough in `createAppAPI`, so these
-// exercise the store action behind it for the cases a plugin can hit.
+// The group half of the API a plugin needs to build nested folders (#2553).
+// These go through the same factories `createAppAPI` spreads in rather than
+// calling the store directly: every method on `GeoLibreAppAPI` is optional, so
+// type checking alone would not notice a delegate going missing or forwarding
+// its arguments in the wrong order.
 describe("external plugin layer-group API", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Plugin group API" });
   });
 
-  it("reports the folder tree with an explicit null parent at the root", () => {
-    const store = useAppStore.getState();
-    const parentId = store.addLayerGroup("Basins");
-    const childId = store.addLayerGroup("Sub-basins");
-    store.moveLayerGroupToGroup(childId, parentId);
+  it("nests a group inside another one and reports the tree", () => {
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const parentId = app.addLayerGroup("Basins");
+    const childId = app.addLayerGroup("Sub-basins");
+    app.moveLayerGroupToGroup(childId, parentId);
 
-    assert.deepEqual(createPluginLayerQueries().listLayerGroups(), [
+    assert.deepEqual(app.listLayerGroups(), [
       { id: parentId, name: "Basins", parentId: null, visible: true, opacity: 1, collapsed: false },
       {
         id: childId,
@@ -241,44 +242,60 @@ describe("external plugin layer-group API", () => {
   });
 
   it("lifts a nested group back to the panel root with a null parent", () => {
-    const store = useAppStore.getState();
-    const parentId = store.addLayerGroup("Basins");
-    const childId = store.addLayerGroup("Sub-basins");
-    store.moveLayerGroupToGroup(childId, parentId);
-    store.moveLayerGroupToGroup(childId, null);
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const parentId = app.addLayerGroup("Basins");
+    const childId = app.addLayerGroup("Sub-basins");
+    app.moveLayerGroupToGroup(childId, parentId);
+    app.moveLayerGroupToGroup(childId, null);
 
     assert.deepEqual(
-      createPluginLayerQueries()
-        .listLayerGroups()
-        .map((group) => group.parentId),
+      app.listLayerGroups().map((group) => group.parentId),
       [null, null],
     );
   });
 
   it("refuses a move that would make a group its own ancestor", () => {
-    const store = useAppStore.getState();
-    const parentId = store.addLayerGroup("Basins");
-    const childId = store.addLayerGroup("Sub-basins");
-    store.moveLayerGroupToGroup(childId, parentId);
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const parentId = app.addLayerGroup("Basins");
+    const childId = app.addLayerGroup("Sub-basins");
+    app.moveLayerGroupToGroup(childId, parentId);
     // The cycle the panel's menu never offers but a plugin could ask for.
-    store.moveLayerGroupToGroup(parentId, childId);
+    app.moveLayerGroupToGroup(parentId, childId);
 
-    const groups = createPluginLayerQueries().listLayerGroups();
+    const groups = app.listLayerGroups();
     assert.equal(groups.find((group) => group.id === parentId)?.parentId, null);
     assert.equal(groups.find((group) => group.id === childId)?.parentId, parentId);
   });
 
   it("ignores an unknown group id on either side of the move", () => {
-    const store = useAppStore.getState();
-    const groupId = store.addLayerGroup("Basins");
-    store.moveLayerGroupToGroup("missing-group", groupId);
-    store.moveLayerGroupToGroup(groupId, "missing-parent");
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const groupId = app.addLayerGroup("Basins");
+    app.moveLayerGroupToGroup("missing-group", groupId);
+    app.moveLayerGroupToGroup(groupId, "missing-parent");
 
     assert.deepEqual(
-      createPluginLayerQueries()
-        .listLayerGroups()
-        .map((group) => [group.id, group.parentId]),
+      app.listLayerGroups().map((group) => [group.id, group.parentId]),
       [[groupId, null]],
+    );
+  });
+
+  it("moves layers into a group it created and removes the group alone", () => {
+    const store = useAppStore.getState();
+    const layerId = store.addGeoJsonLayer("Catchments", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", id: "A", properties: {}, geometry: null }],
+    });
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const groupId = app.addLayerGroup("Basins");
+    app.moveLayersToGroup([layerId], groupId);
+    assert.equal(useAppStore.getState().layers[0]?.groupId, groupId);
+
+    // Removing the folder must leave the layer behind, not delete it with it.
+    app.removeLayerGroup(groupId);
+    assert.deepEqual(app.listLayerGroups(), []);
+    assert.deepEqual(
+      app.listLayers().map((layer) => layer.id),
+      [layerId],
     );
   });
 });

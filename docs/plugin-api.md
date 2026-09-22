@@ -574,7 +574,7 @@ const subBasins = app.addLayerGroup?.("Sub-basins");
 if (basins && subBasins) app.moveLayerGroupToGroup?.(subBasins, basins);
 
 // Remove the folder without removing the layers inside it.
-app.removeLayerGroup?.(subBasins);
+if (subBasins) app.removeLayerGroup?.(subBasins);
 ```
 
 `moveLayerGroupToGroup` is the group-of-groups counterpart of `moveLayersToGroup`: the same reparenting the Layers panel's own "Move to group" menu performs. It is a no-op when either id is unknown, when the group is already in that parent, and when the move would make a group its own ancestor — the host refuses the cycle rather than corrupting the tree, so a plugin does not have to walk the parent chain itself.
