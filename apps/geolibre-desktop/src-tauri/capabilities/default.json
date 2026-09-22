@@ -38,7 +38,7 @@
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
     {
-      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The loopback scope is only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, and GeoLens use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. Any custom/self-hosted service falls back to browser fetch.",
+      "comment": "Hosts routed through the native HTTP client to bypass WebView network restrictions. The loopback scope is only the GeoLibre sidecar port (lib/sidecar-fetch.ts). Geocoding, Share, GeoLens, and the assistant's TypeSafe fast path (lib/assistant/typesafe-fetch.ts, which has no browser route at all because api.typesafe.ai refuses the app origin) use the remaining HTTPS hosts; keep those scopes in sync with their fetch adapters. Any custom/self-hosted service falls back to browser fetch.",
       "identifier": "http:default",
       "allow": [
         { "url": "http://127.0.0.1:8765/*" },
@@ -49,7 +49,8 @@
         { "url": "https://maps.googleapis.com/*" },
         { "url": "https://www.cartociudad.es/*" },
         { "url": "https://share.geolibre.app/*" },
-        { "url": "https://datasets.geolibre.app/*" }
+        { "url": "https://datasets.geolibre.app/*" },
+        { "url": "https://api.typesafe.ai/*" }
       ]
     }
   ]

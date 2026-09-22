@@ -123,6 +123,9 @@ export const OS_ENV_VAR_NAMES: readonly string[] = [
   "OPENAI_COMPATIBLE_MODEL",
   // Web-search tool (Tavily).
   "TAVILY_API_KEY",
+  // TypeSafe fast path (assistant/fast-path.ts). Optional: without it the
+  // assistant simply routes every request through the model as before.
+  "JEV_API_KEY",
 ];
 
 /**

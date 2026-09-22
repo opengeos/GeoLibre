@@ -930,6 +930,7 @@ const ALLOWED_ENV_VARS: &[&str] = &[
     "OPENAI_COMPATIBLE_API_KEY",
     "OPENAI_COMPATIBLE_MODEL",
     "TAVILY_API_KEY",
+    "JEV_API_KEY",
 ];
 
 /// Read the AI Assistant's allowlisted variables from the OS environment.

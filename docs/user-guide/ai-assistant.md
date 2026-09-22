@@ -190,6 +190,7 @@ the UI:
 | Ollama | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` |
 | Custom (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_MODEL` |
 | Web search | `TAVILY_API_KEY` |
+| [Fast path](#fast-path-for-simple-commands-optional) | `JEV_API_KEY` |
 
 **Precedence:** a value you enter in **Settings → Environment Variables** always
 wins; the OS environment only fills in the gaps. In the AI settings, any field
@@ -227,6 +228,72 @@ load the latest Sentinel-2 scene over this view
 zoom to Africa, then switch to a dark basemap
 add an OpenTopoMap basemap
 ```
+
+## Fast path for simple commands (optional)
+
+A handful of requests are pure routing — "hide the rivers", "make the basemap
+dark", "zoom to the counties layer". They need no reasoning, no SQL and no code,
+just an intent and a layer id. Sending them through the full model still costs a
+round trip carrying the system prompt and every tool definition.
+
+If a [TypeSafe](https://typesafe.ai) credential is configured, GeoLibre routes
+those requests with **Jev**, a model that returns typed judgments instead of
+generated text, and then runs the very same tool the model would have called.
+Measured against this repo's own prompt, that turns a **~3.8 s** wait on a
+hosted model (or **~0.8 s** on a local one) into **~190 ms**.
+
+It covers exactly six commands:
+
+| Command | Example |
+| --- | --- |
+| Switch the basemap style | "make the basemap dark" |
+| Add a named tile basemap | "add OpenTopoMap" |
+| Show or hide a layer | "hide the rivers" |
+| Change a layer's opacity | "set the cities layer to half transparent" |
+| Zoom to a layer | "zoom to the counties layer" |
+| Remove a layer | "drop the elevation raster" |
+
+Everything else — querying data, geoprocessing, styling by attribute, adding
+data, running code — is classified as complex and goes to your LLM exactly as
+before. So does any request the router is not confident about, any layer it
+cannot match, and any request at all if TypeSafe is slow, unreachable or not
+configured. The fast path can only make a request faster; it can never be the
+reason one fails.
+
+Because every action runs through the same tool as the slow path, fast-path
+changes appear in the transcript and are **undoable** like any other.
+
+### Enabling it
+
+=== "Desktop"
+
+    Set `JEV_API_KEY` in **Settings → Environment Variables**, or export it in
+    your shell before launching the app (see
+    [Reading keys from your system environment](#reading-keys-from-your-system-environment-desktop)).
+    The desktop app reaches TypeSafe through Tauri's native HTTP client.
+
+=== "Web / Docker"
+
+    `api.typesafe.ai` refuses browser origins, so a browser build **cannot**
+    call it directly — a personal `JEV_API_KEY` has no effect there. Instead the
+    deployment operator sets `JEV_API_KEY` on the
+    [AI proxy Worker](https://github.com/opengeos/GeoLibre/tree/main/workers/ai-proxy),
+    which exposes the routing endpoint at `/systemone` with the credential held
+    server-side. Deployments already using the managed AI proxy pick this up
+    with no client configuration.
+
+    ```bash
+    cd workers/ai-proxy
+    npx wrangler secret put JEV_API_KEY
+    ```
+
+    Leaving the secret unset disables the route; the assistant keeps working
+    through the model as usual.
+
+Note that enabling the fast path means the text of a prompt and your **layer
+names** are sent to TypeSafe for routing. On a local-Ollama setup, where nothing
+otherwise leaves your machine, that is a real trade-off — which is why the fast
+path is off unless you configure it.
 
 ## Voice commands
 
@@ -368,7 +435,9 @@ load a CSV from a URL with pandas and summarize its columns
   the current view are sent to the model — not your feature data.
 - **What leaves your browser.** When you send a prompt, it (plus that scoped
   context) is sent to your chosen LLM provider using your own key. Don't enable
-  the assistant on sensitive data you can't share with that provider.
+  the assistant on sensitive data you can't share with that provider. With the
+  optional [fast path](#fast-path-for-simple-commands-optional) enabled, the
+  prompt and your layer names also go to TypeSafe for routing.
 
 !!! note "Code-execution caveat"
     The JavaScript and Python fallbacks execute model-generated code in the app

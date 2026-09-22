@@ -4408,6 +4408,10 @@
     "codeApprovalAlways": "Allow assistant code for the rest of this session",
     "codeApprovalRun": "Run",
     "codeApprovalDecline": "Cancel",
+    "fastPath": {
+      "done": "Done.",
+      "failed": "That didn't go through — see the transcript."
+    },
     "voice": {
       "start": "Start voice commands · or hold Space to talk",
       "stop": "Stop voice commands",

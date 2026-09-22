@@ -28,11 +28,13 @@ describe("OS_ENV_VAR_NAMES", () => {
 
   it("only lists recognized assistant env var names", () => {
     // A name is legitimate if it backs a provider field or is one of the
-    // non-field extras the assistant reads (overrides + the web-search key).
+    // non-field extras the assistant reads (overrides, the web-search key, and
+    // the TypeSafe fast-path key — none of which select an LLM provider).
     const extras = new Set([
       "GEOLIBRE_ASSISTANT_PROVIDER",
       "GEOLIBRE_ASSISTANT_MODEL",
       "TAVILY_API_KEY",
+      "JEV_API_KEY",
     ]);
     for (const name of allowlist) {
       assert.ok(fieldNames.has(name) || extras.has(name), `unrecognized OS env name: ${name}`);

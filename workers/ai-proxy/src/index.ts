@@ -25,10 +25,35 @@ declare global {
     SEARCH_MESSAGES_MODEL?: string;
     /** Enables the `/tavily` route. */
     TAVILY_API_KEY?: string;
+    /** TypeSafe credential; enables the `/systemone` fast-path route. */
+    JEV_API_KEY?: string;
+    /** Overrides the pinned System One model. Defaults to `jev-latest`. */
+    JEV_MODEL?: string;
   }
 }
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
+
+const TYPESAFE_SYSTEM_ONE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+
+/** Pinned System One model for the `/systemone` route. */
+const DEFAULT_SYSTEM_ONE_MODEL = "jev-latest";
+
+/**
+ * Upper bound on questions in one `/systemone` request.
+ *
+ * The assistant's routing asks six; the ceiling leaves room for that to grow
+ * while keeping the route from being used for bulk classification work.
+ */
+const MAX_SYSTEM_ONE_QUESTIONS = 32;
+
+/**
+ * Bound on the whole System One exchange.
+ *
+ * The client gives up well before this (it is racing the chat round trip it
+ * replaces), so this exists to free the Worker rather than to be waited on.
+ */
+const SYSTEM_ONE_TIMEOUT_MS = 10_000;
 
 // Search + synthesis on one round trip, and this bound covers the whole body
 // rather than just the response headers, so it sits well above Tavily's.
@@ -519,6 +544,107 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+/**
+ * Proxy the assistant's TypeSafe fast path (`/systemone`).
+ *
+ * TypeSafe answers a browser preflight with "Disallowed CORS origin" and sends
+ * no `Access-Control-Allow-Origin`, so the web build cannot call it directly at
+ * all. Routing it through here gives the browser an origin it is allowed to
+ * talk to and keeps the credential server-side, exactly as `/tavily` does —
+ * the route is a no-op 503 on deployments that do not configure `JEV_API_KEY`.
+ *
+ * The fast path exists to beat the chat round trip, so this is deliberately
+ * tighter than `/v1/chat/completions`: a small body, a pinned model, a bounded
+ * question count, and a short timeout. A request that cannot be answered
+ * quickly is worth less to the caller than a refusal it can fall through on.
+ */
+async function proxySystemOne(
+  request: Request,
+  env: Env,
+  origin: string | null,
+): Promise<Response> {
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
+
+  const apiKey = env.JEV_API_KEY?.trim();
+  if (!apiKey) {
+    return jsonError("The fast path is not configured", 503, responseHeaders(origin));
+  }
+
+  // Routing questions are small by construction; anything larger is not a fast
+  // path and is refused rather than forwarded.
+  const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 131_072);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBoundedJson(request, maximumBytes);
+  } catch (error) {
+    const status = error instanceof RangeError ? 413 : 400;
+    return jsonError(
+      error instanceof Error ? error.message : "Invalid request body",
+      status,
+      responseHeaders(origin),
+    );
+  }
+
+  const questions = body.questions;
+  if (!questions || typeof questions !== "object" || Array.isArray(questions)) {
+    return jsonError("questions must be an object", 400, responseHeaders(origin));
+  }
+  const questionCount = Object.keys(questions).length;
+  if (questionCount === 0 || questionCount > MAX_SYSTEM_ONE_QUESTIONS) {
+    return jsonError(
+      `questions must hold between 1 and ${MAX_SYSTEM_ONE_QUESTIONS} entries`,
+      400,
+      responseHeaders(origin),
+    );
+  }
+  if (body.state === undefined || body.state === null) {
+    return jsonError("state is required", 400, responseHeaders(origin));
+  }
+
+  // Pinned rather than passed through: this proxy exists for GeoLibre's own
+  // routing questions, not as an open relay for arbitrary TypeSafe usage.
+  const model = env.JEV_MODEL?.trim() || DEFAULT_SYSTEM_ONE_MODEL;
+
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), SYSTEM_ONE_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(TYPESAFE_SYSTEM_ONE_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model, state: body.state, questions }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return jsonError("Fast path timed out", 504, responseHeaders(origin));
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
+
+  const headers = responseHeaders(origin);
+  headers.set(
+    "Content-Type",
+    upstream.headers.get("Content-Type") ?? "application/json; charset=utf-8",
+  );
+  headers.set("Cache-Control", "no-store");
+  console.log(
+    JSON.stringify({
+      message: "System One proxy request",
+      status: upstream.status,
+      questionCount,
+      colo: request.cf?.colo,
+    }),
+  );
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 async function proxyMessagesSearch(
   request: Request,
   env: Env,
@@ -649,7 +775,8 @@ export default {
     if (
       url.pathname !== "/v1/chat/completions" &&
       url.pathname !== "/search" &&
-      url.pathname !== "/tavily"
+      url.pathname !== "/tavily" &&
+      url.pathname !== "/systemone"
     ) {
       return jsonError("Not found", 404, responseHeaders(origin));
     }
@@ -663,6 +790,9 @@ export default {
       }
       if (url.pathname === "/tavily") {
         return await proxyTavily(request, env, origin);
+      }
+      if (url.pathname === "/systemone") {
+        return await proxySystemOne(request, env, origin);
       }
       return await proxyChat(request, env, origin);
     } catch (error) {
