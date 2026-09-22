@@ -356,6 +356,19 @@ export function interpretFastPathAnswers(
       // The Score is a probability-weighted position across OPACITY_LEVELS, so
       // it is continuous: normalising by the top index maps it onto 0–1 without
       // snapping "mostly transparent" to the same value as "half".
+      //
+      // This is the one actionable intent with no confidence gate, which is
+      // deliberate and worth stating because it reads as an omission. Score
+      // confidence measures how concentrated the distribution is, and on an
+      // *ordered* dimension a spread across adjacent levels is not doubt — it
+      // is the answer, "between mostly transparent and half", which the
+      // weighted score already expresses. Gating on it would reject precisely
+      // the in-between values a Score exists to give. `visible` is banded
+      // instead because show and hide are opposites rather than neighbours, so
+      // a split there really is a coin toss. The residual case a gate would
+      // catch is a bimodal answer (mass at both ends), whose midpoint means
+      // nothing; that is left to the user, because opacity is the cheapest
+      // intent to get wrong — immediately visible and undoable.
       const opacity = Math.min(1, Math.max(0, score / (OPACITY_LEVELS.length - 1)));
       return { tool: "set_layer_opacity", input: { layer, opacity } };
     }
