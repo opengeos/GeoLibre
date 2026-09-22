@@ -1837,6 +1837,32 @@ describe("Mapbox live layer sources", () => {
     assert.ok(map.getLayer("geolibre-mapbox-remote-geojson-circle"));
   });
 
+  it("asks a shared source once, however many style layers read it", async () => {
+    const { engine, map } = makeEngine();
+    engine.syncLayers([
+      {
+        ...geojsonLayer({ id: "remote" }),
+        geojson: undefined,
+        source: { url: "https://example.test/cities.geojson" },
+      },
+    ]);
+    // The fill, outline and circle rows all read the one source, so a failed
+    // read must not be retried once per row.
+    assert.ok(map.layers.filter((styleLayer) => styleLayer.id.startsWith("geolibre-")).length > 1);
+    const original = globalThis.fetch;
+    let requests = 0;
+    globalThis.fetch = (async () => {
+      requests += 1;
+      return { ok: false, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    try {
+      assert.equal(await engine.getLayerGeoJson("remote"), null);
+    } finally {
+      globalThis.fetch = original;
+    }
+    assert.equal(requests, 1);
+  });
+
   it("falls back to the record's own features when the source has none", async () => {
     const { engine } = makeEngine();
     const layer = geojsonLayer({ id: "inline" });

@@ -987,6 +987,22 @@ export class MapboxEngine implements MapEngine {
   }
 
   /**
+   * The distinct sources behind a project layer's style layers, in draw order.
+   * Deduplicated because a layer usually compiles to several style layers over
+   * one source (a fill and its outline), and the readers below would otherwise
+   * serialize, or re-fetch, the same source once per row.
+   */
+  private candidateSourceIds(layer: GeoLibreLayer): string[] {
+    return [
+      ...new Set(
+        this.candidateLayerIds(layer)
+          .map((nativeId) => this.styleLayerSourceId(nativeId))
+          .filter((sourceId): sourceId is string => sourceId !== null),
+      ),
+    ];
+  }
+
+  /**
    * Resolve a layer's rendered GeoJSON from its live Mapbox source.
    *
    * The store record only carries inline GeoJSON for layers added from
@@ -1005,9 +1021,7 @@ export class MapboxEngine implements MapEngine {
     const map = this.map;
     const layer = this.layers.find((candidate) => candidate.id === id);
     if (!map || !layer) return layer?.geojson ?? null;
-    for (const nativeId of this.candidateLayerIds(layer)) {
-      const sourceId = this.styleLayerSourceId(nativeId);
-      if (!sourceId) continue;
+    for (const sourceId of this.candidateSourceIds(layer)) {
       const source = map.getSource(sourceId);
       if (source?.type !== "geojson") continue;
       let data: unknown;
@@ -1057,9 +1071,7 @@ export class MapboxEngine implements MapEngine {
     if (!map || !layer) return null;
     const httpUrl = (value: unknown): value is string =>
       typeof value === "string" && /^https?:\/\//i.test(value);
-    for (const nativeId of this.candidateLayerIds(layer)) {
-      const sourceId = this.styleLayerSourceId(nativeId);
-      if (!sourceId) continue;
+    for (const sourceId of this.candidateSourceIds(layer)) {
       const source = map.getSource(sourceId);
       if (source?.type !== "raster") continue;
       let spec: Record<string, unknown> | undefined;
