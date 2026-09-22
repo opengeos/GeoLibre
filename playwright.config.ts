@@ -29,6 +29,7 @@ const CORE_SPECS = [
   "rtl.spec.ts",
   "pwa.spec.ts",
   "style-manager.spec.ts",
+  "identify-restore.spec.ts",
 ];
 
 const coreMatch = CORE_SPECS.map((spec) => `**/${spec}`);
