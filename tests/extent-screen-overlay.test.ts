@@ -6,6 +6,7 @@ import { CESIUM_CAPABILITIES, CESIUM_PANE_CAPABILITIES } from "../packages/map/s
 import { ARCGIS_CAPABILITIES, ARCGIS_DECK_CAPABILITIES } from "../packages/map/src/arcgis-engine";
 import {
   projectExtentCorners,
+  screenOverlayCovers,
   usesScreenOverlay,
 } from "../apps/geolibre-desktop/src/hooks/useExtentScreenOverlay";
 import type { MapEngine, MapEngineCapabilities, MapExtent } from "../packages/map/src/map-engine";
@@ -136,5 +137,40 @@ describe("usesScreenOverlay (#2475)", () => {
     assert.equal(usesScreenOverlay(null, true), false);
     assert.equal(usesScreenOverlay(undefined, true), false);
     assert.equal(usesScreenOverlay(fakeEngine(MAPBOX_CAPABILITIES, false), true), false);
+  });
+});
+
+describe("screenOverlayCovers (#2475)", () => {
+  const narrow: MapExtent = [-10, -5, 10, 5];
+  const global: MapExtent = [-180, -85, 180, 85];
+
+  it("covers a normal box on a 2D engine, so the caller skips showExtent", () => {
+    assert.equal(screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), true, narrow, 170), true);
+    assert.equal(screenOverlayCovers(fakeEngine(MAPLIBRE_CAPABILITIES), true, narrow, 170), true);
+  });
+  it("does not cover a box past the span guard, so the native rectangle draws", () => {
+    // The overlay opts out of a near-global box on purpose; without this the
+    // Basemap Extract panel's "Use view" at world zoom drew no outline at all
+    // on Mapbox, where it used to get the engine's own rectangle.
+    assert.equal(screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), true, global, 170), false);
+    // No guard (the Raster Subset panel): even a wide box is the overlay's.
+    assert.equal(screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), true, global), true);
+  });
+  it("never covers a globe engine, a closed panel, or a missing box", () => {
+    assert.equal(screenOverlayCovers(fakeEngine(CESIUM_CAPABILITIES), true, narrow, 170), false);
+    assert.equal(screenOverlayCovers(fakeEngine(ARCGIS_CAPABILITIES), true, narrow), false);
+    assert.equal(screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), false, narrow), false);
+    assert.equal(screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), true, null), false);
+  });
+  it("agrees with projectExtentCorners about which boxes it draws", () => {
+    for (const bbox of [narrow, global, [-10, -86, 10, 86] as MapExtent]) {
+      for (const guard of [undefined, 170]) {
+        assert.equal(
+          screenOverlayCovers(fakeEngine(MAPBOX_CAPABILITIES), true, bbox, guard),
+          projectExtentCorners(flatProject, bbox, guard) !== null,
+          `${JSON.stringify(bbox)} @ ${guard}`,
+        );
+      }
+    }
   });
 });
