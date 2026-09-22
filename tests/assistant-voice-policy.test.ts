@@ -147,8 +147,17 @@ describe("voice Space ownership", () => {
 
 describe("voice button click guard", () => {
   it("ignores the click Space itself would synthesize on the focused button", () => {
+    // A keyboard activation carries no pointer, so its `detail` is 0.
     assert.equal(shouldIgnoreVoiceButtonClick(true), true);
+    assert.equal(shouldIgnoreVoiceButtonClick(true, 0), true);
     assert.equal(shouldIgnoreVoiceButtonClick(false), false);
+  });
+
+  it("honours a real mouse click that lands while Space happens to be down", () => {
+    // Resting a hand on the spacebar while reaching for the mouse must not
+    // swallow the click.
+    assert.equal(shouldIgnoreVoiceButtonClick(true, 1), false);
+    assert.equal(shouldIgnoreVoiceButtonClick(true, 2), false);
   });
 });
 

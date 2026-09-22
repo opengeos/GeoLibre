@@ -1012,14 +1012,20 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   aria-pressed={voiceActive}
                   disabled={!hasKey}
                   title={t(voiceActive ? "assistant.voice.stop" : "assistant.voice.start")}
-                  onClick={() => {
+                  onClick={(event) => {
                     // Space activates a focused button natively, so a hold that
                     // is claiming push-to-talk must not also toggle this off.
                     // An open mic is the exception: Space never claims there, so
                     // a click must still stop it even with a hand resting on the
-                    // spacebar.
-                    if (shouldIgnoreVoiceButtonClick(voice.spaceHeld && voice.mode !== "open-mic"))
+                    // spacebar — and a real mouse click is honoured either way.
+                    if (
+                      shouldIgnoreVoiceButtonClick(
+                        voice.spaceHeld && voice.mode !== "open-mic",
+                        event.detail,
+                      )
+                    ) {
                       return;
+                    }
                     voice.toggle();
                   }}
                 >

@@ -45,8 +45,6 @@ export interface SpeechRecognizer {
   onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
-  onstart: (() => void) | null;
-  onaudiostart: (() => void) | null;
 }
 
 /** Constructs a recognizer. */

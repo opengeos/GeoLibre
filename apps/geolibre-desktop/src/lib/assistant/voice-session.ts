@@ -217,10 +217,6 @@ export class VoiceSession {
     recognizer.continuous = true;
     recognizer.interimResults = true;
     recognizer.maxAlternatives = 1;
-    recognizer.onstart = () => {
-      if (generation !== this.generation) return;
-      this.lastStartedAt = Date.now();
-    };
     recognizer.onresult = (event) => {
       if (generation !== this.generation) return;
       const { final, interim } = readSpeechResults(event);
@@ -252,6 +248,11 @@ export class VoiceSession {
       this.handleRecognizerEnd(generation);
     };
     try {
+      // Recorded here rather than from `onstart`: a recognizer broken enough to
+      // end without ever starting would otherwise leave this stale, the elapsed
+      // check would read every restart as unhurried, and the brake below would
+      // never engage.
+      this.lastStartedAt = Date.now();
       recognizer.start();
     } catch {
       this.fail("assistant.voice.errorGeneric");
@@ -444,6 +445,7 @@ export class VoiceSession {
       // of a pause, not the end of the turn. Re-arm and keep listening — the
       // release is the endpoint, and the phrases heard so far are kept.
       if (this.pushToTalkHeld) {
+        if (!this.allowRestart()) return;
         this.restartListening(generation);
         return;
       }
@@ -455,16 +457,27 @@ export class VoiceSession {
       this.stop();
       return;
     }
-    if (Date.now() - this.lastStartedAt < IMMEDIATE_RESTART_MS) {
-      this.restartCount += 1;
-      if (this.restartCount >= MAX_IMMEDIATE_RESTARTS) {
-        this.fail("assistant.voice.errorGeneric");
-        return;
-      }
-    } else {
-      this.restartCount = 0;
-    }
+    if (!this.allowRestart()) return;
     this.restartListening(generation);
+  }
+
+  /**
+   * Whether the recognizer that just ended may be restarted.
+   *
+   * Ending the moment it started is not a silence, it is a recognizer that
+   * cannot run. Both modes re-arm themselves — an open mic at every pause, a
+   * held key whenever the engine stops early — so both need the same brake, or
+   * a broken engine spins a restart loop for as long as the panel is open.
+   */
+  private allowRestart(): boolean {
+    if (Date.now() - this.lastStartedAt >= IMMEDIATE_RESTART_MS) {
+      this.restartCount = 0;
+      return true;
+    }
+    this.restartCount += 1;
+    if (this.restartCount < MAX_IMMEDIATE_RESTARTS) return true;
+    this.fail("assistant.voice.errorGeneric");
+    return false;
   }
 
   /**
@@ -566,7 +579,6 @@ export class VoiceSession {
     if (!recognizer) return;
     recognizer.onresult = null;
     recognizer.onerror = null;
-    recognizer.onstart = null;
     try {
       recognizer.abort();
     } catch {

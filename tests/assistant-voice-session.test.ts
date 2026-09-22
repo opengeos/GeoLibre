@@ -18,8 +18,6 @@ class FakeRecognizer implements SpeechRecognizer {
   onresult: ((event: SpeechRecognitionResultEvent) => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
   onend: (() => void) | null = null;
-  onstart: (() => void) | null = null;
-  onaudiostart: (() => void) | null = null;
 
   started = false;
   stopCalls = 0;
@@ -30,7 +28,6 @@ class FakeRecognizer implements SpeechRecognizer {
   start(): void {
     if (this.failOnStart) throw new Error("already started");
     this.started = true;
-    this.onstart?.();
   }
 
   /** Ends the recognizer the way `stop()` does: the turn is finalized. */
@@ -330,6 +327,27 @@ describe("voice session open-mic restarts", () => {
     for (let i = 0; i < 6 && h.session.isActive(); i++) h.current.end();
     assert.equal(h.session.getStatus(), "error");
     assert.ok(h.recognizers.length <= 6, `stopped restarting after ${h.recognizers.length}`);
+  });
+
+  it("gives up on a held key whose recognizer will not stay running", () => {
+    // The held branch re-arms too, so it needs the same brake as an open mic —
+    // without it a flaky engine spins a restart loop for as long as Space is
+    // down.
+    const h = harness();
+    h.session.start("push-to-talk");
+    for (let i = 0; i < 8 && h.session.isActive(); i++) h.current.end();
+    assert.equal(h.session.getStatus(), "error");
+    assert.ok(h.recognizers.length <= 8, `restarted ${h.recognizers.length} times`);
+  });
+
+  it("brakes on a recognizer that ends without ever reporting a start", () => {
+    // The elapsed check is measured from the call, not from `onstart`: an
+    // engine that never fires it would otherwise look unhurried every time and
+    // never trip the cap.
+    const h = harness();
+    h.session.start("open-mic");
+    for (let i = 0; i < 8 && h.session.isActive(); i++) h.current.end();
+    assert.equal(h.session.getStatus(), "error");
   });
 
   it("keeps reporting a run in flight across a restart", () => {

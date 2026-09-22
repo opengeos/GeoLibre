@@ -161,11 +161,18 @@ export function shouldHandlePushToTalkKeyDown(event: VoiceKey | null | undefined
 
 /**
  * Whether a click on the mic button should be ignored because Space is down.
+ *
  * Space activates a focused button natively, so without this the same physical
  * gesture would both claim push-to-talk and toggle the session off under it.
+ * Only that synthetic activation is swallowed: it carries no pointer, so its
+ * `detail` is 0, which is what tells it apart from a real mouse click that
+ * merely lands while a hand is resting on the spacebar.
+ *
+ * @param spaceKeyHeld - Whether Space is physically down and could claim voice.
+ * @param detail - The click event's `detail` (0 for a keyboard activation).
  */
-export function shouldIgnoreVoiceButtonClick(spaceKeyHeld: boolean): boolean {
-  return Boolean(spaceKeyHeld);
+export function shouldIgnoreVoiceButtonClick(spaceKeyHeld: boolean, detail = 0): boolean {
+  return Boolean(spaceKeyHeld) && detail === 0;
 }
 
 /**
