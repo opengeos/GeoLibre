@@ -685,6 +685,8 @@
       "crsPlaceholder": "e.g. EPSG:26915",
       "crsPresetLabel": "Common coordinate systems...",
       "crsHelp": "Leave blank if the drawing is already in longitude/latitude (WGS84). Otherwise enter the EPSG code of the drawing's coordinate system to reproject it.",
+      "elevation3d": "Render Z values in 3D",
+      "elevation3dHelp": "Draws contours, 3D polylines, and surveyed points at their coordinate Z values instead of flat on the map. Ignored when the drawing carries no elevations. Identify and feature highlighting are unavailable in 3D; the Style panel switches back to 2D at any time.",
       "readError": "Could not read this CAD file.",
       "errorNoLayers": "No layers were found in this CAD file.",
       "errorChooseFile": "Choose a CAD (DXF/DWG) file first.",

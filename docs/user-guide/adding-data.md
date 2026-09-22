@@ -15,7 +15,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
-| **CAD (DXF/DWG) Layer** | Loads AutoCAD drawings, converting their entities to vector features. |
+| **CAD (DXF/DWG) Layer** | Loads AutoCAD drawings, converting their entities to vector features. Coordinate Z values (contours, 3D polylines, surveyed points) are kept and rendered in 3D unless **Render Z values in 3D** is unchecked. |
 | **File Geodatabase (GDB)** | Opens an Esri file geodatabase and adds one of its feature classes as a layer. |
 | **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |

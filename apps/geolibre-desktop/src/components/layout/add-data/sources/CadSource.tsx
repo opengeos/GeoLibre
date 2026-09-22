@@ -54,6 +54,12 @@ export function CadSource() {
   const [defaultName] = useState(() => t("addData.cad.defaultName"));
   const source = useAddDataSource(defaultName);
   const [selectedFile, setSelectedFile] = useState<SelectedCadFile | null>(null);
+  // CAD drawings routinely carry elevations (contours, 3D polylines, surveyed
+  // points) that MapLibre's flat 2D layers ignore, so the layer defaults to
+  // GeoLibre's deck.gl Z-coordinate renderer the way LandXML does (issue
+  // #2559). The flag is inert for a drawing with no real Z, and the Style panel
+  // switches back to 2D at any time.
+  const [elevation3dEnabled, setElevation3dEnabled] = useState(true);
   const [layers, setLayers] = useState<CadLayerInfo[]>([]);
   // `null` = nothing chosen yet; "" is a real selection (an unnamed OGR layer,
   // which ST_Read reads as the first layer), so the two must stay distinct.
@@ -174,20 +180,23 @@ export function CadSource() {
       throw err;
     }
 
+    const baseLayer = createBaseLayer(
+      name,
+      "geojson",
+      { type: "geojson" },
+      {
+        sourceKind: "cad",
+        cadLayer: selectedLayer,
+        sourceCrs: overrideSourceCrs || null,
+        featureCount: featureCollection.features.length,
+      },
+      { geojson: featureCollection },
+    );
+
     source.addAndClose(
       {
-        ...createBaseLayer(
-          name,
-          "geojson",
-          { type: "geojson" },
-          {
-            sourceKind: "cad",
-            cadLayer: selectedLayer,
-            sourceCrs: overrideSourceCrs || null,
-            featureCount: featureCollection.features.length,
-          },
-          { geojson: featureCollection },
-        ),
+        ...baseLayer,
+        style: { ...baseLayer.style, elevation3dEnabled },
         geojson: featureCollection,
         sourcePath: selectedFile.path,
       },
@@ -281,6 +290,18 @@ export function CadSource() {
             ))}
           </Select>
           <p className="text-xs text-muted-foreground">{t("addData.cad.crsHelp")}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={elevation3dEnabled}
+              onChange={(event) => setElevation3dEnabled(event.target.checked)}
+            />
+            {t("addData.cad.elevation3d")}
+          </label>
+          <p className="text-xs text-muted-foreground">{t("addData.cad.elevation3dHelp")}</p>
         </div>
 
         <SampleDataSelect
