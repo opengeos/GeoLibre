@@ -18,10 +18,21 @@
  *
  * Everything here is pure except {@link resolveFastPathAction}, which is the
  * only function that touches the network, so the routing rules can be tested
- * without a browser or an API key.
+ * without a browser or an API key. The transport itself — where the questions
+ * go, what a failure means — is shared with the catalog lookup in
+ * {@link ./system-one}.
  */
 
 import type { Tool } from "@strands-agents/sdk";
+import {
+  flattenCriterionName,
+  postSystemOne,
+  SYSTEM_ONE_MAX_CHOICES,
+  type SystemOneAnswer,
+  type SystemOneAnswers,
+  type SystemOneEndpoint,
+  type SystemOneFetch,
+} from "./system-one";
 
 /** The intents the fast path can satisfy, plus the fall-through. */
 export const FAST_PATH_INTENTS = [
@@ -97,13 +108,12 @@ export const FAST_PATH_MIN_DESTRUCTIVE_CONFIDENCE = 0.95;
 export const FAST_PATH_TIMEOUT_MS = 1_500;
 
 /**
- * Hard cap on options in one question, enforced by the TypeSafe API
- * (`Too many choices. Must have at most 255 choices.`).
+ * Hard cap on options in one question.
  *
  * The layer question scales with the user's project, so a large project would
  * otherwise turn every prompt into a 400. One slot is reserved for `none`.
  */
-export const FAST_PATH_MAX_CHOICES = 255;
+export const FAST_PATH_MAX_CHOICES = SYSTEM_ONE_MAX_CHOICES;
 
 /** Ordered opacity levels; the Score answer indexes into these. */
 const OPACITY_LEVELS = [
@@ -116,78 +126,6 @@ const OPACITY_LEVELS = [
 
 /** Sentinel meaning "the request names no option from this set". */
 const NONE = "none";
-
-/** Longest layer or basemap name embedded in a question. */
-const MAX_NAME_LENGTH = 80;
-
-/**
- * Flatten a user-controlled name for safe use inside a question.
- *
- * Layer names reach here from places the user does not necessarily control —
- * a shared `.geolibre.json`, a remote service's layer list — and they are
- * interpolated into the text the classifier reads. Collapsing newlines and
- * control characters and capping the length keeps a name from being shaped
- * into instructions that argue for a different option.
- *
- * This bounds the surface rather than closing it: the real guarantee is that
- * {@link interpretFastPathAnswers} only ever emits an id that is already in
- * `state`, so the worst a crafted name can do is argue for another of the
- * user's own layers — which is also why `remove_layer` is the one intent held
- * to a higher confidence bar.
- */
-function safeName(name: string): string {
-  const flattened = name
-    .replace(/[\p{C}\p{Zl}\p{Zp}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return flattened.length > MAX_NAME_LENGTH ? `${flattened.slice(0, MAX_NAME_LENGTH)}…` : flattened;
-}
-
-/** The TypeSafe endpoint. Overridable for tests and self-hosted proxies. */
-export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-
-/**
- * Resolve a same-origin `/path` against the page origin.
- *
- * A reverse proxy in front of the app is configured as a path, and browser
- * `fetch` resolves that itself — but Tauri's native HTTP client, which is the
- * only transport that can reach TypeSafe on the desktop, requires an absolute
- * URL. Doing it here rather than at config time covers every route into this
- * function, including the runtime env map that is rebuilt without an origin.
- */
-function absoluteUrl(url: string): string {
-  if (!url.startsWith("/")) return url;
-  const origin = globalThis.location?.origin;
-  return origin && origin !== "null" ? new URL(url, origin).toString().replace(/\/+$/, "") : url;
-}
-
-/**
- * Statuses that mean "this endpoint will never serve the fast path".
- *
- * 503 is what the proxy returns when the operator never set a TypeSafe
- * credential; 404 is an older proxy with no `/systemone` route at all. Neither
- * changes while the app is running.
- */
-const UNAVAILABLE_STATUSES = new Set([404, 503]);
-
-/**
- * Endpoints that answered "not configured", so later prompts skip them.
- *
- * `GEOLIBRE_AI_PROXY_BASE_URL` is set on *every* managed deployment, whether or
- * not its operator enabled the fast path, and routing runs on every prompt. So
- * without this, a deployment that never opted in would pay a round trip — and a
- * rate-limit token — per message, forever. One wasted request per session is
- * the right price for discovering that; one per message is not.
- *
- * Deliberately narrow: only the statuses above disable an endpoint. A timeout,
- * a network blip or a 500 leaves it enabled, because those do recover.
- */
-const unavailableEndpoints = new Set<string>();
-
-/** Forget which endpoints reported themselves unconfigured. Exported for tests. */
-export function resetFastPathAvailability(): void {
-  unavailableEndpoints.clear();
-}
 
 /**
  * Whether the fast path can run for this project at all.
@@ -217,7 +155,7 @@ export function buildFastPathQuestions(state: FastPathState): Record<string, unk
   const layerCriteria: Record<string, string> = Object.fromEntries(
     state.layers.map((layer) => [
       layer.id,
-      `The layer named "${safeName(layer.name)}" (${safeName(layer.type)})`,
+      `The layer named "${flattenCriterionName(layer.name)}" (${flattenCriterionName(layer.type)})`,
     ]),
   );
   layerCriteria[NONE] = "The request does not refer to any layer already on the map";
@@ -225,13 +163,16 @@ export function buildFastPathQuestions(state: FastPathState): Record<string, unk
   const styleCriteria: Record<string, string> = Object.fromEntries(
     state.styleBasemaps.map((basemap) => [
       basemap.id,
-      `The "${safeName(basemap.name)}" basemap style`,
+      `The "${flattenCriterionName(basemap.name)}" basemap style`,
     ]),
   );
   styleCriteria[NONE] = "The request names no basemap style";
 
   const tileCriteria: Record<string, string> = Object.fromEntries(
-    state.tileBasemaps.map((basemap) => [basemap.id, `The "${safeName(basemap.name)}" tile layer`]),
+    state.tileBasemaps.map((basemap) => [
+      basemap.id,
+      `The "${flattenCriterionName(basemap.name)}" tile layer`,
+    ]),
   );
   tileCriteria[NONE] = "The request names no tile basemap";
 
@@ -289,15 +230,10 @@ export function buildFastPathQuestions(state: FastPathState): Record<string, unk
 }
 
 /** One typed answer, as the System One response carries it. */
-interface FastPathAnswer {
-  choice?: string;
-  noul?: number;
-  score?: number;
-  confidence?: number;
-}
+type FastPathAnswer = SystemOneAnswer;
 
 /** The answers map from a System One response. */
-export type FastPathAnswers = Record<string, FastPathAnswer | undefined>;
+export type FastPathAnswers = SystemOneAnswers;
 
 /** Read a choice answer that must clear `minConfidence` and not be `none`. */
 function resolvedChoice(answer: FastPathAnswer | undefined, minConfidence: number): string | null {
@@ -402,49 +338,6 @@ export function interpretFastPathAnswers(
   }
 }
 
-/** Where the fast path sends its questions, and how it authenticates. */
-export interface FastPathEndpoint {
-  url: string;
-  /**
-   * Bearer credential, or null when the endpoint supplies its own.
-   *
-   * The managed proxy holds the TypeSafe key server-side — nginx injects the
-   * instance token and the Worker attaches the credential — so the browser
-   * sends no `Authorization` at all, exactly as it does for managed chat.
-   */
-  apiKey: string | null;
-}
-
-/**
- * Decide where to send routing questions, or null when the fast path is off.
- *
- * A managed proxy wins over a personal credential: where an operator has
- * configured one, it is the only route that works in a browser at all, since
- * `api.typesafe.ai` refuses the app's origin outright.
- */
-export function resolveFastPathEndpoint(env: Record<string, string>): FastPathEndpoint | null {
-  // An explicit routing endpoint wins over everything. It is what a dev server
-  // or a self-hosted deployment points at its own token-injecting proxy, and it
-  // is deliberately separate from the chat proxy: the two can live in different
-  // places, and a deployment may want routing without changing where chat goes.
-  // The endpoint supplies its own credential, so no Authorization is sent.
-  const explicit = env.GEOLIBRE_FAST_PATH_URL?.trim().replace(/\/+$/, "");
-  if (explicit) return { url: absoluteUrl(explicit), apiKey: null };
-
-  const proxy = env.GEOLIBRE_AI_PROXY_BASE_URL?.trim().replace(/\/+$/, "");
-  if (proxy) {
-    // The proxy base is normalized to end in `/v1` because it doubles as an
-    // OpenAI-compatible chat base URL (`managedProxyBaseUrl`). On the Worker,
-    // `/systemone` is a root-level route — a sibling of `/v1/chat/completions`,
-    // alongside `/search` and `/tavily` — so that suffix has to come off first.
-    const root = proxy.replace(/\/v1$/, "");
-    return { url: `${root}/systemone`, apiKey: null };
-  }
-
-  const key = env.JEV_API_KEY?.trim();
-  return key ? { url: TYPESAFE_ENDPOINT, apiKey: key } : null;
-}
-
 /**
  * Run one assistant tool outside the agent loop.
  *
@@ -482,11 +375,11 @@ export async function runToolDirectly(
   }
 }
 
+/** Where the fast path sends its questions, and how it authenticates. */
+export type FastPathEndpoint = SystemOneEndpoint;
+
 /** The transport used to reach TypeSafe, injectable for tests. */
-export type FastPathFetch = (
-  url: string,
-  init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
-) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+export type FastPathFetch = SystemOneFetch;
 
 /** Options for one fast-path attempt. */
 export interface ResolveFastPathOptions {
@@ -514,54 +407,22 @@ export async function resolveFastPathAction(
   options: ResolveFastPathOptions,
 ): Promise<FastPathAction | null> {
   const { prompt, state, endpoint, fetchImpl, signal } = options;
-  if (!prompt.trim() || !endpoint?.url || !fastPathFitsProject(state)) return null;
-  if (unavailableEndpoints.has(endpoint.url)) return null;
+  if (!prompt.trim() || !fastPathFitsProject(state)) return null;
 
-  // An `abort` listener only catches an abort that has not happened yet. The
-  // caller can already be cancelled by the time this runs — on desktop the
-  // transport is resolved by dynamic import first, which is a real async gap to
-  // press Stop in — and attaching a listener after the event has fired would
-  // let the request go out anyway.
-  if (signal?.aborted) return null;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? FAST_PATH_TIMEOUT_MS);
-  const abort = () => controller.abort();
-  signal?.addEventListener("abort", abort);
-
-  try {
-    const response = await fetchImpl(endpoint.url, {
-      method: "POST",
-      headers: {
-        ...(endpoint.apiKey ? { Authorization: `Bearer ${endpoint.apiKey}` } : {}),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "jev-latest",
-        state: {
-          request: prompt,
-          layers_currently_loaded: state.layers.map((layer) => ({
-            id: layer.id,
-            name: safeName(layer.name),
-            type: safeName(layer.type),
-          })),
-        },
-        questions: buildFastPathQuestions(state),
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      if (UNAVAILABLE_STATUSES.has(response.status)) unavailableEndpoints.add(endpoint.url);
-      return null;
-    }
-    const body = (await response.json()) as { answers?: FastPathAnswers };
-    if (!body?.answers) return null;
-    return interpretFastPathAnswers(body.answers, state);
-  } catch {
-    // Timed out, offline, origin refused, malformed JSON — all the same answer.
-    return null;
-  } finally {
-    clearTimeout(timeout);
-    signal?.removeEventListener("abort", abort);
-  }
+  const answers = await postSystemOne({
+    endpoint,
+    fetchImpl,
+    state: {
+      request: prompt,
+      layers_currently_loaded: state.layers.map((layer) => ({
+        id: layer.id,
+        name: flattenCriterionName(layer.name),
+        type: flattenCriterionName(layer.type),
+      })),
+    },
+    questions: buildFastPathQuestions(state),
+    timeoutMs: options.timeoutMs ?? FAST_PATH_TIMEOUT_MS,
+    signal,
+  });
+  return answers ? interpretFastPathAnswers(answers, state) : null;
 }

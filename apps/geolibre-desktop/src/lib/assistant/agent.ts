@@ -6,11 +6,11 @@ import { configForProvider, createModel, readRuntimeEnv, resolveProviderConfig }
 import { NAMED_TILE_BASEMAPS } from "./basemaps";
 import {
   resolveFastPathAction,
-  resolveFastPathEndpoint,
   runToolDirectly,
   type FastPathAction,
   type FastPathState,
 } from "./fast-path";
+import { resolveSystemOneEndpoint } from "./system-one";
 import { typesafeFetch } from "./typesafe-fetch";
 import {
   assistantSelectionKey,
@@ -154,7 +154,7 @@ export class AssistantSession {
    * which is the common case and must cost nothing but the routing request.
    */
   private async *streamFastPath(prompt: string): AsyncGenerator<AssistantStreamEvent, boolean> {
-    const endpoint = resolveFastPathEndpoint(readRuntimeEnv());
+    const endpoint = resolveSystemOneEndpoint(readRuntimeEnv());
     if (!endpoint) return false;
 
     const state = fastPathState();

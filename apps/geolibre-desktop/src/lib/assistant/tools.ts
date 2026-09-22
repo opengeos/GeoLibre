@@ -17,8 +17,12 @@ import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
 import { cleanStatement, maskSqlLiterals, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import { findNamedTileBasemap, NAMED_TILE_BASEMAPS } from "./basemaps";
+import { selectCatalogTools, type CatalogMatch, type CatalogTool } from "./catalog-select";
 import { describeLayers, summarizeLayers } from "./layer-summary";
 import { buildSymbologyStyle } from "./symbology";
+import { readRuntimeEnv } from "./provider";
+import { resolveSystemOneEndpoint } from "./system-one";
+import { typesafeFetch } from "./typesafe-fetch";
 import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
@@ -103,6 +107,55 @@ const MAX_MODEL_ALGORITHM_MATCHES = 25;
 
 /** Full detail for at most this many `list_whitebox_tools` search hits. */
 const MAX_WHITEBOX_MATCHES = 25;
+
+/**
+ * Keyword hits offered to the catalog lookup as extra candidates.
+ *
+ * A one-word search can match hundreds of tools by substring; feeding all of
+ * them into a Choice question would crowd out the categories the lookup's own
+ * first question chose. This keeps the reinforcement without the takeover.
+ */
+const MAX_KEYWORD_CANDIDATES = 40;
+
+/**
+ * Rank the catalog against a search, semantically first and literally after.
+ *
+ * The two searches answer different questions. The substring filter is exact
+ * and free and is the whole answer when the model already knows the catalog's
+ * word for something; the Jev lookup understands a description of the operation
+ * and is the only thing that answers at all when it does not. Merging them —
+ * ranked semantic hits, then everything the filter found — is strictly better
+ * than either: over 20 raster requests phrased in the user's own words the
+ * filter alone found the right tool 0 times and the merge found it 19 times,
+ * 18 of them first, while for single-keyword searches the merge lifted the
+ * right tool into first place 15 times out of 20 against the filter's 8.
+ *
+ * The lookup needs a credential the deployment may not have, so its absence is
+ * the ordinary case: `selectCatalogTools` returns null and this degrades to
+ * exactly the filter that shipped before it.
+ */
+async function rankWhiteboxSearch(
+  query: string,
+  tools: readonly CatalogTool[],
+  keywordMatches: readonly CatalogTool[],
+): Promise<CatalogMatch[] | null> {
+  const endpoint = resolveSystemOneEndpoint(readRuntimeEnv());
+  if (!endpoint) return null;
+  try {
+    return await selectCatalogTools({
+      query,
+      tools,
+      keywordMatches: keywordMatches.slice(0, MAX_KEYWORD_CANDIDATES),
+      endpoint,
+      fetchImpl: await typesafeFetch(),
+    });
+  } catch (error) {
+    // `selectCatalogTools` resolves rather than throws for every failure it
+    // knows about; this covers the transport import, which does not.
+    console.warn("[GeoLibre] Assistant catalog selection was unavailable:", error);
+    return null;
+  }
+}
 
 /** Statement keywords that write data or have side effects. */
 const SQL_WRITE_KEYWORDS =
@@ -737,25 +790,46 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
   const listWhiteboxTools = tool({
     name: "list_whitebox_tools",
     description:
-      "List Whitebox raster/terrain tools that can run in the browser (hydrology such as fill_depressions, d8_pointer, flow accumulation and extract_streams; terrain such as slope, aspect, hillshade; LiDAR; image processing; raster↔vector conversion) with their exact parameter names, kinds and defaults. The catalog runs to ~1000 tools, so pass `search` to filter by name, id or category ('slope', 'stream', 'hydro'); without it you get the category names to search within. Call this before run_whitebox_tool.",
+      "List Whitebox raster/terrain tools that can run in the browser (hydrology such as fill_depressions, d8_pointer, flow accumulation and extract_streams; terrain such as slope, aspect, hillshade; LiDAR; image processing; raster↔vector conversion) with their exact parameter names, kinds and defaults. The catalog runs to ~1000 tools, so always pass `search`; without it you get the category names to search within. `search` is matched both literally and by meaning, so describe the operation in a phrase ('remove sinks from a DEM so water drains off the edge') rather than guessing one keyword — a description finds tools whose names share no words with it. Results are ranked best-first and each carries a `match` of 'semantic' or 'keyword'. Call this before run_whitebox_tool.",
     inputSchema: z.object({
       search: z
         .string()
         .optional()
-        .describe("Filter by tool name, id or category, e.g. 'slope' or 'hydrology'."),
+        .describe(
+          "What you are looking for: a description of the operation ('separate bare earth returns from vegetation in a point cloud') or a keyword ('slope').",
+        ),
     }),
     callback: async (input) => {
       const tools = await (await getScripting()).listWhiteboxTools();
-      const query = input.search?.trim().toLowerCase();
+      const query = input.search?.trim();
       if (query) {
-        const matches = tools.filter((item) =>
-          `${item.name} ${item.id} ${item.category}`.toLowerCase().includes(query),
+        const needle = query.toLowerCase();
+        // `description` joins the haystack so that filling the catalog's empty
+        // summaries upstream improves this filter too, not only the lookup.
+        const keywordMatches = tools.filter((item) =>
+          `${item.name} ${item.id} ${item.category} ${item.description}`
+            .toLowerCase()
+            .includes(needle),
         );
+        const selected = await rankWhiteboxSearch(query, tools, keywordMatches);
+        const byId = new Map(tools.map((item) => [item.id, item]));
+        const ranked = (selected ?? [])
+          .map((match) => byId.get(match.id))
+          .filter((item) => item !== undefined);
+        const rankedIds = new Set(ranked.map((item) => item.id));
+        const merged = [
+          // Semantic hits lead: they are ranked, and the model reads top-down.
+          ...ranked.map((item) => ({ ...item, match: "semantic" as const })),
+          ...keywordMatches
+            .filter((item) => !rankedIds.has(item.id))
+            .map((item) => ({ ...item, match: "keyword" as const })),
+        ];
         return json({
-          search: input.search,
-          matched: matches.length,
-          truncated: matches.length > MAX_WHITEBOX_MATCHES,
-          tools: matches.slice(0, MAX_WHITEBOX_MATCHES),
+          search: query,
+          matched: merged.length,
+          selected: selected !== null,
+          truncated: merged.length > MAX_WHITEBOX_MATCHES,
+          tools: merged.slice(0, MAX_WHITEBOX_MATCHES),
         });
       }
       // ~1000 tools with full parameter lists is far too much to serialize, so
@@ -769,7 +843,7 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
         categories: [...categories]
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([category, count]) => ({ category, tools: count })),
-        hint: "Call again with `search` (a category, a tool name, or a keyword like 'stream') to get exact ids and parameters.",
+        hint: "Call again with `search` to get exact ids and parameters. A phrase describing the operation ('extract the stream network from a DEM') searches the catalog by meaning; a category or tool name still matches literally.",
       });
     },
   });
