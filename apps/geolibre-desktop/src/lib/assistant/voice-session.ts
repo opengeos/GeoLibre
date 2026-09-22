@@ -136,6 +136,26 @@ export class VoiceSession {
   /** Pending end-of-phrase timer for an open mic. */
   private endpointTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** True while the push-to-talk key is physically down. */
+  private pushToTalkHeld = false;
+
+  /**
+   * Final fragments heard during the current push-to-talk hold, joined into one
+   * request when the key is released. A hold is one request however many
+   * phrases the engine decides it contains.
+   */
+  private heldPhrases: string[] = [];
+
+  /**
+   * Identifies the turn, as opposed to the recognizer. Unlike `generation` it
+   * survives the restarts a session makes on its own, so a reply can be matched
+   * to the turn that asked for it.
+   */
+  private turnId = 0;
+
+  /** The turn that started the agent run now in flight. */
+  private runTurn: number | null = null;
+
   constructor(options: VoiceSessionOptions) {
     this.options = options;
   }
@@ -175,6 +195,9 @@ export class VoiceSession {
     this.teardown();
     this.mode = mode;
     this.restartCount = 0;
+    this.turnId += 1;
+    this.heldPhrases = [];
+    this.pushToTalkHeld = mode === "push-to-talk";
     this.cancelSpeech();
     const generation = ++this.generation;
     let recognizer: SpeechRecognizer;
@@ -186,7 +209,12 @@ export class VoiceSession {
     }
     this.recognizer = recognizer;
     recognizer.lang = this.options.language();
-    recognizer.continuous = mode === "open-mic";
+    // Continuous in both modes. With `continuous = false` the engine returns at
+    // most one final result and then stops itself at the first pause it hears —
+    // which would end a push-to-talk turn mid-sentence, while the key is still
+    // held, and silently drop the rest. The endpoint is ours to decide: the key
+    // release for push-to-talk, the silence timer for an open mic.
+    recognizer.continuous = true;
     recognizer.interimResults = true;
     recognizer.maxAlternatives = 1;
     recognizer.onstart = () => {
@@ -206,7 +234,10 @@ export class VoiceSession {
         this.clearEndpoint();
         this.restartCount = 0;
         this.emit({ type: "interim", text: "" });
-        this.emit({ type: "transcript", text: final });
+        // A hold is one request. The engine may split it into several phrases,
+        // so they are kept until the key is released and sent together.
+        if (this.mode === "push-to-talk") this.heldPhrases.push(final);
+        else this.emit({ type: "transcript", text: final });
       }
     };
     recognizer.onerror = (event) => {
@@ -236,7 +267,15 @@ export class VoiceSession {
    * whose microphone belongs to the button, not to the key.
    */
   releasePushToTalk(): void {
-    if (this.disposed || this.mode !== "push-to-talk" || !this.recognizer) return;
+    if (this.disposed || this.mode !== "push-to-talk") return;
+    // Cleared first: the recognizer ending is what finishes the turn, and
+    // `handleRecognizerEnd` re-arms instead while the key is still down.
+    this.pushToTalkHeld = false;
+    if (!this.recognizer) {
+      // Defensive: nothing is listening, so the turn is whatever was heard.
+      this.flushHeldPhrases();
+      return;
+    }
     try {
       // stop() (not abort()) so the phrase in progress is still delivered.
       this.recognizer.stop();
@@ -269,6 +308,7 @@ export class VoiceSession {
   notifyRunStart(): void {
     if (this.disposed || !this.isActive()) return;
     this.running = true;
+    this.runTurn = this.turnId;
     this.setStatus("executing");
   }
 
@@ -302,13 +342,14 @@ export class VoiceSession {
     const synthesis = this.options.synthesis;
     const createUtterance = this.options.createUtterance;
     if (this.disposed || !synthesis || !createUtterance || !text.trim()) return;
-    // A push-to-talk recognizer ends when the key is released, so one that is
-    // still live here belongs to a *newer* hold — the answer being handed over
-    // is from a turn the user has already moved on from. Reading it out would
-    // talk over the question they are asking now, into a hot microphone that
-    // would then transcribe it. New intent supersedes old, so this one is
-    // dropped; the transcript still has it.
-    if (this.mode === "push-to-talk" && this.recognizer) return;
+    // An answer belongs to the turn that asked for it. If the session has moved
+    // on to another turn since — the user held Space again rather than waiting —
+    // reading the old answer would talk over the question they are asking now,
+    // into a live microphone that would then transcribe it. New intent
+    // supersedes old, so this one is dropped; the transcript still has it.
+    // Keyed on the turn rather than on a live recognizer, so an answer that
+    // beats the engine's own `end` event for its *own* turn is still read out.
+    if (this.runTurn !== null && this.runTurn !== this.turnId) return;
     this.cancelSpeech();
     const generation = this.generation;
     let utterance: SpeechSynthesisUtterance;
@@ -376,8 +417,16 @@ export class VoiceSession {
     this.recognizer = null;
     if (wasSuspended) return; // speak() will resume it.
     if (this.mode !== "open-mic") {
-      // Push-to-talk: the turn is over. Keep the session alive while its agent
-      // run or spoken reply is still in flight so the panel keeps reporting it.
+      // A recognizer that ends while the key is still down is the engine's idea
+      // of a pause, not the end of the turn. Re-arm and keep listening — the
+      // release is the endpoint, and the phrases heard so far are kept.
+      if (this.pushToTalkHeld) {
+        this.restartListening(generation);
+        return;
+      }
+      // The turn is over. Keep the session alive while its agent run or spoken
+      // reply is still in flight so the panel keeps reporting it.
+      this.flushHeldPhrases();
       this.releaseStream();
       if (this.running || this.speaking) return;
       this.stop();
@@ -395,16 +444,27 @@ export class VoiceSession {
     this.restartListening(generation);
   }
 
-  /** Re-arms the recognizer for an open-mic session under the same identity. */
+  /**
+   * Re-arms the recognizer under the same turn.
+   *
+   * Both modes need this: an open mic re-arms after every pause, and a
+   * push-to-talk hold re-arms whenever the engine ends the recognizer while the
+   * key is still down.
+   */
   private restartListening(generation: number): void {
-    if (generation !== this.generation || this.disposed || this.mode !== "open-mic") return;
     const mode = this.mode;
+    if (generation !== this.generation || this.disposed || !mode) return;
     // Both are carried across the restart, because `start()` tears the session
     // down and clears them — and both describe the session, not the recognizer:
     // the count exists to notice one that keeps ending the moment it starts,
     // and the run is still in flight regardless of which recognizer is live.
     const restarts = this.restartCount;
     const running = this.running;
+    // The turn outlives the recognizer: a restart is the same request, with the
+    // same phrases behind it and the same key still held.
+    const turn = this.turnId;
+    const held = this.pushToTalkHeld;
+    const phrases = this.heldPhrases;
     // start() no-ops on an unchanged mode while active, so the status is
     // dropped to idle first — the session identity (generation) still moves,
     // which is what fences the recognizer being replaced.
@@ -427,6 +487,9 @@ export class VoiceSession {
     if (this.getStatus() === "error") return;
     this.restartCount = restarts;
     this.running = running;
+    this.turnId = turn;
+    this.pushToTalkHeld = held;
+    this.heldPhrases = phrases;
     // A restart is not a new turn; keep reporting the run that is still going.
     if (running) this.setStatus("executing");
   }
@@ -503,6 +566,8 @@ export class VoiceSession {
     this.running = false;
     this.suspendedForPlayback = false;
     this.restartCount = 0;
+    this.pushToTalkHeld = false;
+    this.heldPhrases = [];
     this.clearEndpoint();
     const recognizer = this.recognizer;
     this.abortRecognizer();
@@ -530,6 +595,21 @@ export class VoiceSession {
         // A recognizer that refuses to stop will end on its own.
       }
     }, endpointMs);
+  }
+
+  /**
+   * Publishes everything heard during a push-to-talk hold as one request.
+   *
+   * The engine may have split the hold into several phrases — a pause for
+   * thought is enough — but the user made one request, so they are joined.
+   */
+  private flushHeldPhrases(): void {
+    const phrases = this.heldPhrases;
+    this.heldPhrases = [];
+    const text = phrases.join(" ").replace(/\s+/g, " ").trim();
+    if (!text) return;
+    this.emit({ type: "interim", text: "" });
+    this.emit({ type: "transcript", text });
   }
 
   /** Cancels a pending end-of-phrase timer. */

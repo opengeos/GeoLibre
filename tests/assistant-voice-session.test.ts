@@ -156,10 +156,13 @@ describe("voice session start", () => {
     assert.equal(h.session.getMode(), "open-mic");
   });
 
-  it("configures a push-to-talk recognizer for a single turn", () => {
+  it("keeps a push-to-talk recognizer continuous so the key owns the endpoint", () => {
+    // With `continuous = false` the engine returns one final result and stops
+    // itself at the first pause, ending the turn mid-sentence with the key
+    // still down.
     const h = harness();
     h.session.start("push-to-talk");
-    assert.equal(h.current.continuous, false);
+    assert.equal(h.current.continuous, true);
     assert.equal(h.session.getMode(), "push-to-talk");
   });
 
@@ -259,6 +262,51 @@ describe("voice session push-to-talk", () => {
     assert.equal(h.session.getStatus(), "executing");
     h.session.notifyRunEnd();
     assert.equal(h.session.getStatus(), "idle");
+  });
+});
+
+describe("voice session push-to-talk endpoint", () => {
+  it("keeps listening when the engine ends the recognizer mid-hold", () => {
+    // The engine ends on its own at a pause. The key is still down, so the turn
+    // is not over: re-arm and keep what was already heard.
+    const h = harness();
+    h.session.start("push-to-talk");
+    const first = h.current;
+    h.current.say("show me the rivers");
+    first.end();
+    assert.ok(h.recognizers.length > 1, "the recognizer was not re-armed");
+    assert.deepEqual(h.transcripts(), [], "the turn was sent before the key came up");
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("sends one request for a hold the engine split into phrases", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("buffer the roads by 100 metres");
+    h.current.end();
+    h.current.say("then clip them to the county");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), [
+      "buffer the roads by 100 metres then clip them to the county",
+    ]);
+  });
+
+  it("sends nothing for a hold that heard nothing", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), []);
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("does not re-arm once the key is up", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("zoom to Kenya");
+    const count = h.recognizers.length;
+    h.session.releasePushToTalk();
+    assert.equal(h.recognizers.length, count);
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
   });
 });
 
@@ -383,6 +431,20 @@ describe("voice session spoken replies", () => {
     h.session.stop();
     assert.equal(h.synthesis!.cancelCalls, 1);
     assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("reads an answer back even if it beats the engine's own end event", () => {
+    // The guard keys on the turn, not on a live recognizer: a fast reply for
+    // the turn that just ended must still be spoken.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.speak("Twelve.");
+    assert.deepEqual(
+      h.synthesis!.spoken.map((u) => u.text),
+      ["Twelve."],
+    );
   });
 
   it("drops a stale answer rather than reading it into a newer turn", () => {
