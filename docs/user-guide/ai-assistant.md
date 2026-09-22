@@ -293,10 +293,11 @@ changes appear in the transcript and are **undoable** like any other.
     ```
 
     Leaving the secret unset disables the route; the assistant keeps working
-    through the model as usual. The endpoint must be reachable over **HTTPS**:
-    a plain-HTTP routing endpoint on another origin is refused, because the
-    answer it returns decides which tool the assistant runs. Loopback, and an
-    endpoint on the same origin as the app itself, are allowed.
+    through the model as usual. A routing endpoint on **another origin must use
+    HTTPS** — a plain-HTTP one is refused, because the answer it returns decides
+    which tool the assistant runs. Loopback and an endpoint on the app's own
+    origin are the exceptions: there, HTTPS would protect nothing that an
+    attacker in a position to read the request does not already have.
 
 === "Local development"
 
