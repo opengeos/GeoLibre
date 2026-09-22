@@ -425,6 +425,7 @@
       "kindImagery": "画像",
       "altitudeOffset": "高度オフセット (m)",
       "quickPicks": "クイック選択",
+      "quickPicksPlaceholder": "アセットを選択…",
       "hint": "アセットIDは ion.cesium.com の「My Assets」で確認できます。アセットは設定で構成したトークンと共有されている必要があります。",
       "errorAssetId": "Cesium IonのアセットID（正の整数）を入力してください。",
       "errorAltitude": "高度オフセットをメートル単位の数値で入力してください。",

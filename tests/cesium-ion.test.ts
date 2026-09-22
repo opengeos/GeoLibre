@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   CESIUM_ION_QUICK_PICKS,
   CESIUM_ION_SOURCE_KIND,
+  CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID,
   CESIUM_OSM_BUILDINGS_ASSET_ID,
   cesiumIonAssetId,
   cesiumIonAssetKind,
@@ -77,6 +78,15 @@ describe("cesium-ion layer builder", () => {
     assert.equal(cesiumIonAssetId(plain), null, "the source kind is the contract, not the field");
     assert.equal(isCesiumOnlyLayer(plain), false);
     assert.ok(CESIUM_ION_QUICK_PICKS.some((p) => p.assetId === CESIUM_OSM_BUILDINGS_ASSET_ID));
+    const google = CESIUM_ION_QUICK_PICKS.find(
+      (p) => p.assetId === CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID,
+    );
+    assert.equal(google?.kind, "3d-tiles", "Google Photorealistic tiles load as a tileset");
+    assert.equal(
+      new Set(CESIUM_ION_QUICK_PICKS.map((p) => p.assetId)).size,
+      CESIUM_ION_QUICK_PICKS.length,
+      "asset ids are the dropdown option values, so they must be unique",
+    );
   });
 });
 

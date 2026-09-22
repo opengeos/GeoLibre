@@ -429,6 +429,7 @@
       "kindImagery": "Bilddaten",
       "altitudeOffset": "Höhenversatz (m)",
       "quickPicks": "Schnellauswahl",
+      "quickPicksPlaceholder": "Asset auswählen…",
       "hint": "Asset-IDs finden Sie unter „My Assets“ auf ion.cesium.com. Das Asset muss für das in den Einstellungen konfigurierte Token freigegeben sein.",
       "errorAssetId": "Geben Sie eine Cesium-Ion-Asset-ID ein (eine positive ganze Zahl).",
       "errorAltitude": "Geben Sie den Höhenversatz als Zahl in Metern ein.",

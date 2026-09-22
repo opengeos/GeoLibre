@@ -445,6 +445,7 @@
       "kindImagery": "الصور",
       "altitudeOffset": "إزاحة الارتفاع (م)",
       "quickPicks": "اختيارات سريعة",
+      "quickPicksPlaceholder": "اختر أصلًا…",
       "hint": "تجد معرّفات الأصول ضمن My Assets على ion.cesium.com. يجب أن يكون الأصل مشاركًا مع الرمز المضبوط في الإعدادات.",
       "errorAssetId": "أدخل معرّف أصل Cesium Ion (عدد صحيح موجب).",
       "errorAltitude": "أدخل إزاحة الارتفاع كرقم بالأمتار.",

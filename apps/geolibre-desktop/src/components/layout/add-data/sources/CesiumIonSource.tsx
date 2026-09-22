@@ -4,7 +4,7 @@ import {
   parseCesiumIonAssetId,
   type CesiumIonAssetKind,
 } from "@geolibre/core";
-import { Button, Input, Label, Select } from "@geolibre/ui";
+import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCesiumIonToken } from "../../../../hooks/useCesiumIonToken";
@@ -23,6 +23,14 @@ export function CesiumIonSource() {
   const [assetId, setAssetId] = useState("");
   const [kind, setKind] = useState<CesiumIonAssetKind>("3d-tiles");
   const [altitudeOffset, setAltitudeOffset] = useState("0");
+
+  // The dropdown mirrors the form rather than holding its own state: typing an
+  // asset id by hand, or switching the layer type, drops it back to the
+  // placeholder instead of leaving a stale pick selected.
+  const selectedQuickPick =
+    CESIUM_ION_QUICK_PICKS.find(
+      (pick) => String(pick.assetId) === assetId.trim() && pick.kind === kind,
+    )?.assetId.toString() ?? "";
 
   const handleSubmit = source.runSubmit(() => {
     const id = parseCesiumIonAssetId(assetId);
@@ -91,24 +99,27 @@ export function CesiumIonSource() {
           </div>
         ) : null}
         <div className="space-y-1.5">
-          <Label>{t("addData.cesiumIon.quickPicks")}</Label>
-          <div className="flex flex-wrap gap-2">
+          <Label htmlFor="cesium-ion-quick-pick">{t("addData.cesiumIon.quickPicks")}</Label>
+          <Select
+            id="cesium-ion-quick-pick"
+            value={selectedQuickPick}
+            onChange={(event) => {
+              const pick = CESIUM_ION_QUICK_PICKS.find(
+                (candidate) => String(candidate.assetId) === event.target.value,
+              );
+              if (!pick) return;
+              setAssetId(String(pick.assetId));
+              setKind(pick.kind);
+              source.setLayerName(pick.name);
+            }}
+          >
+            <option value="">{t("addData.cesiumIon.quickPicksPlaceholder")}</option>
             {CESIUM_ION_QUICK_PICKS.map((pick) => (
-              <Button
-                key={pick.assetId}
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setAssetId(String(pick.assetId));
-                  setKind(pick.kind);
-                  source.setLayerName(pick.name);
-                }}
-              >
+              <option key={pick.assetId} value={String(pick.assetId)}>
                 {pick.name}
-              </Button>
+              </option>
             ))}
-          </div>
+          </Select>
           <p className="text-xs text-muted-foreground">{t("addData.cesiumIon.hint")}</p>
         </div>
       </div>

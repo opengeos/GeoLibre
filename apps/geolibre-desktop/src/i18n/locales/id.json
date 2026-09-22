@@ -425,6 +425,7 @@
       "kindImagery": "Citra",
       "altitudeOffset": "Offset ketinggian (m)",
       "quickPicks": "Pilihan cepat",
+      "quickPicksPlaceholder": "Pilih aset…",
       "hint": "Temukan id aset di bagian My Assets pada ion.cesium.com. Aset harus dibagikan dengan token yang dikonfigurasi di Pengaturan.",
       "errorAssetId": "Masukkan id aset Cesium Ion (bilangan bulat positif).",
       "errorAltitude": "Masukkan offset ketinggian sebagai angka dalam meter.",

@@ -429,6 +429,7 @@
       "kindImagery": "Imágenes",
       "altitudeOffset": "Desplazamiento de altitud (m)",
       "quickPicks": "Selección rápida",
+      "quickPicksPlaceholder": "Elige un recurso…",
       "hint": "Encontrará los id de recurso en «My Assets» en ion.cesium.com. El recurso debe estar compartido con el token configurado en Configuración.",
       "errorAssetId": "Introduzca un id de recurso de Cesium Ion (un número entero positivo).",
       "errorAltitude": "Introduzca el desplazamiento de altitud como un número de metros.",

@@ -19,6 +19,13 @@ export const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
 /** Bing Maps Aerial through Ion, the imagery asset every Ion account can use. */
 export const CESIUM_BING_AERIAL_ASSET_ID = 2;
 
+/**
+ * Google Photorealistic 3D Tiles served through Ion. Unlike the two above it
+ * is not free on every plan: Ion accounts without it get a 403 the globe
+ * surfaces as a layer error.
+ */
+export const CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID = 2275207;
+
 /** Ion assets offered as one-click picks in the Add Data dialog. */
 export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<{
   assetId: number;
@@ -27,6 +34,11 @@ export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<{
 }> = [
   { assetId: CESIUM_OSM_BUILDINGS_ASSET_ID, kind: "3d-tiles", name: "Cesium OSM Buildings" },
   { assetId: CESIUM_BING_AERIAL_ASSET_ID, kind: "imagery", name: "Bing Maps Aerial (Ion)" },
+  {
+    assetId: CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID,
+    kind: "3d-tiles",
+    name: "Google Photorealistic 3D Tiles",
+  },
 ];
 
 /** Parse an Ion asset id the way the Add Data form and the project file carry it. */

@@ -425,6 +425,7 @@
       "kindImagery": "ภาพถ่าย",
       "altitudeOffset": "ค่าชดเชยความสูง (ม.)",
       "quickPicks": "ตัวเลือกด่วน",
+      "quickPicksPlaceholder": "เลือกแอสเซ็ต…",
       "hint": "ดู id ของแอสเซ็ตได้ที่ My Assets บน ion.cesium.com แอสเซ็ตต้องถูกแชร์กับโทเค็นที่ตั้งค่าไว้ในการตั้งค่า",
       "errorAssetId": "ป้อน id ของแอสเซ็ต Cesium Ion (จำนวนเต็มบวก)",
       "errorAltitude": "ป้อนค่าชดเชยความสูงเป็นตัวเลขหน่วยเมตร",

@@ -429,6 +429,7 @@
       "kindImagery": "इमेजरी",
       "altitudeOffset": "ऊँचाई ऑफ़सेट (मी)",
       "quickPicks": "त्वरित चयन",
+      "quickPicksPlaceholder": "एक एसेट चुनें…",
       "hint": "एसेट id ion.cesium.com पर My Assets के अंतर्गत मिलते हैं। एसेट को सेटिंग्स में कॉन्फ़िगर किए गए टोकन के साथ साझा किया गया होना चाहिए।",
       "errorAssetId": "एक Cesium Ion एसेट id दर्ज करें (एक धनात्मक पूर्ण संख्या)।",
       "errorAltitude": "ऊँचाई ऑफ़सेट को मीटर की संख्या के रूप में दर्ज करें।",

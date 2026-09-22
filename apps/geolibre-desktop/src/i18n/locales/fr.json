@@ -429,6 +429,7 @@
       "kindImagery": "Imagerie",
       "altitudeOffset": "Décalage d'altitude (m)",
       "quickPicks": "Sélection rapide",
+      "quickPicksPlaceholder": "Choisir un asset…",
       "hint": "Les id d'asset se trouvent sous « My Assets » sur ion.cesium.com. L'asset doit être partagé avec le jeton configuré dans les Paramètres.",
       "errorAssetId": "Entrez un id d'asset Cesium Ion (un nombre entier positif).",
       "errorAltitude": "Entrez le décalage d'altitude sous forme de nombre de mètres.",

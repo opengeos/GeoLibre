@@ -425,6 +425,7 @@
       "kindImagery": "影像",
       "altitudeOffset": "高度偏移（米）",
       "quickPicks": "快速选择",
+      "quickPicksPlaceholder": "选择资产…",
       "hint": "可在 ion.cesium.com 的“My Assets”中查找资产 id。该资产必须已与设置中配置的令牌共享。",
       "errorAssetId": "请输入 Cesium Ion 资产 id（正整数）。",
       "errorAltitude": "请以米为单位输入高度偏移数值。",

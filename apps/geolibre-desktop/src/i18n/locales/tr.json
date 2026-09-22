@@ -429,6 +429,7 @@
       "kindImagery": "Görüntü",
       "altitudeOffset": "Yükseklik kaydırması (m)",
       "quickPicks": "Hızlı seçimler",
+      "quickPicksPlaceholder": "Bir varlık seçin…",
       "hint": "Varlık kimliklerini ion.cesium.com adresindeki My Assets altında bulabilirsiniz. Varlık, Ayarlar'da yapılandırılan belirteçle paylaşılmış olmalıdır.",
       "errorAssetId": "Bir Cesium Ion varlık kimliği girin (pozitif bir tam sayı).",
       "errorAltitude": "Yükseklik kaydırmasını metre cinsinden bir sayı olarak girin.",

@@ -429,6 +429,7 @@
       "kindImagery": "Beelden",
       "altitudeOffset": "Hoogteverschuiving (m)",
       "quickPicks": "Snelle keuzes",
+      "quickPicksPlaceholder": "Kies een asset…",
       "hint": "Asset-id's vindt u onder ‘My Assets’ op ion.cesium.com. De asset moet gedeeld zijn met het token dat in Instellingen is ingesteld.",
       "errorAssetId": "Voer een Cesium Ion-asset-id in (een positief geheel getal).",
       "errorAltitude": "Voer de hoogteverschuiving in als een aantal meters.",

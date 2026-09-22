@@ -425,6 +425,7 @@
       "kindImagery": "Hình ảnh",
       "altitudeOffset": "Độ lệch cao độ (m)",
       "quickPicks": "Chọn nhanh",
+      "quickPicksPlaceholder": "Chọn tài sản…",
       "hint": "Tìm id tài sản trong mục My Assets tại ion.cesium.com. Tài sản phải được chia sẻ với mã thông báo đã cấu hình trong Cài đặt.",
       "errorAssetId": "Nhập id tài sản Cesium Ion (một số nguyên dương).",
       "errorAltitude": "Nhập độ lệch cao độ dưới dạng số mét.",
