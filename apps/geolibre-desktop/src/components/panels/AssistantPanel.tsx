@@ -410,6 +410,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     // Accumulated separately from the transcript turn so the spoken reply is
     // the whole answer, read once at the end, rather than a stream of fragments.
     let replyText = "";
+    // Whether the run ended in a shown error, as opposed to finishing or being
+    // stopped by the user.
+    let failed = false;
     // Turns are tracked by stable id (not array index), so updaters stay pure —
     // safe under React Strict Mode / concurrent re-invocation — and a stale
     // generator from a stopped/cleared run can no longer corrupt a new one.
@@ -456,6 +459,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       // Compare against myGeneration so a newer send can't unmask this older
       // run's cancellation as a failure.
       if (cancelledGenerationRef.current !== myGeneration) {
+        failed = true;
         const message =
           (activeProfile?.provider ?? resolveProviderConfig()?.provider) === "ollama" &&
           isOllamaNetworkFailure(error)
@@ -481,9 +485,19 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         // Speak before ending the run: a push-to-talk session whose microphone
         // has already closed stays alive only for a reply that is under way, so
         // the other order would end the session and swallow the answer.
+        //
         // A dictated question gets a spoken answer; a typed one stays silent
-        // even while the microphone is open, and a superseded run says nothing.
-        if (options.spoken && replyText) voiceRef.current?.speakReply(replyText);
+        // even while the microphone is open. A run the user stopped says
+        // nothing at all — Stop already silenced the session, and an open-mic
+        // session stays active, so reading out the half of the answer that had
+        // arrived would talk over the cancellation. A run that *failed* does
+        // get a word: the whole point of voice mode is not having to watch the
+        // screen, so a silent failure leaves the user waiting on an answer that
+        // is never coming.
+        if (options.spoken && cancelledGenerationRef.current !== myGeneration) {
+          if (replyText) voiceRef.current?.speakReply(replyText);
+          else if (failed) voiceRef.current?.speakReply(t("assistant.voice.failed"));
+        }
         if (options.spoken) voiceRef.current?.notifyRunEnd();
       }
     }
@@ -979,7 +993,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   onClick={() => {
                     // Space activates a focused button natively, so a hold that
                     // is claiming push-to-talk must not also toggle this off.
-                    if (shouldIgnoreVoiceButtonClick(voice.spaceHeld)) return;
+                    // An open mic is the exception: Space never claims there, so
+                    // a click must still stop it even with a hand resting on the
+                    // spacebar.
+                    if (shouldIgnoreVoiceButtonClick(voice.spaceHeld && voice.mode !== "open-mic"))
+                      return;
                     voice.toggle();
                   }}
                 >

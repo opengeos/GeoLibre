@@ -4411,6 +4411,7 @@
       "releaseToSend": "Release Space to send",
       "working": "Working on what you said…",
       "speaking": "Reading the answer aloud",
+      "failed": "Sorry — that request did not go through. The transcript has the details.",
       "speakRepliesTitle": "Read answers aloud",
       "muteReplies": "Stop reading answers aloud",
       "errorDenied": "Microphone access was denied. Allow it for this site, then try again.",

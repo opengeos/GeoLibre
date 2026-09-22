@@ -124,12 +124,28 @@ describe("turning a reply into speech", () => {
     assert.equal(spokenTextFromMarkdown("Open https://example.com/x now"), "Open now");
   });
 
-  it("strips headings, emphasis, list markers and table pipes", () => {
+  it("strips headings, emphasis and list markers", () => {
     assert.equal(
       spokenTextFromMarkdown("## Result\n\n- **Nairobi**: 4.4M\n- _Mombasa_: 1.2M"),
       "Result Nairobi: 4.4M Mombasa: 1.2M",
     );
-    assert.equal(spokenTextFromMarkdown("| a | b |\n| - | - |\n| 1 | 2 |"), "");
+  });
+
+  it("reads a table's cells instead of swallowing the answer", () => {
+    // "Top N" questions are usually answered in a table. Blanking the rows left
+    // speak() with an empty string, so the user heard nothing at all.
+    assert.equal(
+      spokenTextFromMarkdown("| City | Pop |\n| --- | --- |\n| Nairobi | 4.4M |"),
+      "City, Pop. Nairobi, 4.4M.",
+    );
+    assert.equal(spokenTextFromMarkdown("| a | b |\n| - | - |\n| 1 | 2 |"), "a, b. 1, 2.");
+  });
+
+  it("drops an aligned separator row without touching the data", () => {
+    assert.equal(
+      spokenTextFromMarkdown("| Name | Population |\n|:---|---:|\n| Harris | 4,731,145 |"),
+      "Name, Population. Harris, 4,731,145.",
+    );
   });
 
   it("keeps inline code as the word it is", () => {

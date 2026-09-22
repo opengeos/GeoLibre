@@ -177,9 +177,17 @@ export function spokenTextFromMarkdown(markdown: string): string {
     .replace(/`([^`]*)`/g, "$1")
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
     .replace(/^\s{0,3}>\s?/gm, "")
-    // List markers and table pipes, which otherwise read as punctuation.
+    // List markers, which otherwise read as punctuation.
     .replace(/^\s*([-*+]|\d+\.)\s+/gm, "")
-    .replace(/^\s*\|.*\|\s*$/gm, " ")
+    // Tables: drop the separator row (it is all dashes and colons), then read
+    // each remaining row as its cells. Blanking whole rows would swallow the
+    // answer entirely — "top N" questions are usually answered in a table, and
+    // an empty string leaves `speak()` with nothing to say and the user with no
+    // idea why.
+    .replace(/^[ \t]*\|?[\s|:-]*\|[\s|:-]*$/gm, " ")
+    .replace(/^[ \t]*\|[ \t]*/gm, "")
+    .replace(/[ \t]*\|[ \t]*$/gm, ".")
+    .replace(/[ \t]*\|[ \t]*/g, ", ")
     .replace(/(\*\*|__|\*|_|~~)/g, "")
     .replace(/^\s*([-*_]\s*){3,}$/gm, " ")
     .replace(/\bhttps?:\/\/\S+/gi, " ")
