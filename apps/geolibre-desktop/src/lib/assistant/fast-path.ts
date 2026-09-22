@@ -117,8 +117,62 @@ const OPACITY_LEVELS = [
 /** Sentinel meaning "the request names no option from this set". */
 const NONE = "none";
 
+/** Longest layer or basemap name embedded in a question. */
+const MAX_NAME_LENGTH = 80;
+
+/**
+ * Flatten a user-controlled name for safe use inside a question.
+ *
+ * Layer names reach here from places the user does not necessarily control —
+ * a shared `.geolibre.json`, a remote service's layer list — and they are
+ * interpolated into the text the classifier reads. Collapsing newlines and
+ * control characters and capping the length keeps a name from being shaped
+ * into instructions that argue for a different option.
+ *
+ * This bounds the surface rather than closing it: the real guarantee is that
+ * {@link interpretFastPathAnswers} only ever emits an id that is already in
+ * `state`, so the worst a crafted name can do is argue for another of the
+ * user's own layers — which is also why `remove_layer` is the one intent held
+ * to a higher confidence bar.
+ */
+function safeName(name: string): string {
+  const flattened = name
+    .replace(/[\p{C}\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flattened.length > MAX_NAME_LENGTH ? `${flattened.slice(0, MAX_NAME_LENGTH)}…` : flattened;
+}
+
 /** The TypeSafe endpoint. Overridable for tests and self-hosted proxies. */
 export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+
+/**
+ * Statuses that mean "this endpoint will never serve the fast path".
+ *
+ * 503 is what the proxy returns when the operator never set a TypeSafe
+ * credential; 404 is an older proxy with no `/systemone` route at all. Neither
+ * changes while the app is running.
+ */
+const UNAVAILABLE_STATUSES = new Set([404, 503]);
+
+/**
+ * Endpoints that answered "not configured", so later prompts skip them.
+ *
+ * `GEOLIBRE_AI_PROXY_BASE_URL` is set on *every* managed deployment, whether or
+ * not its operator enabled the fast path, and routing runs on every prompt. So
+ * without this, a deployment that never opted in would pay a round trip — and a
+ * rate-limit token — per message, forever. One wasted request per session is
+ * the right price for discovering that; one per message is not.
+ *
+ * Deliberately narrow: only the statuses above disable an endpoint. A timeout,
+ * a network blip or a 500 leaves it enabled, because those do recover.
+ */
+const unavailableEndpoints = new Set<string>();
+
+/** Forget which endpoints reported themselves unconfigured. Exported for tests. */
+export function resetFastPathAvailability(): void {
+  unavailableEndpoints.clear();
+}
 
 /**
  * Whether the fast path can run for this project at all.
@@ -146,17 +200,23 @@ export function fastPathFitsProject(state: FastPathState): boolean {
  */
 export function buildFastPathQuestions(state: FastPathState): Record<string, unknown> {
   const layerCriteria: Record<string, string> = Object.fromEntries(
-    state.layers.map((layer) => [layer.id, `The layer named "${layer.name}" (${layer.type})`]),
+    state.layers.map((layer) => [
+      layer.id,
+      `The layer named "${safeName(layer.name)}" (${safeName(layer.type)})`,
+    ]),
   );
   layerCriteria[NONE] = "The request does not refer to any layer already on the map";
 
   const styleCriteria: Record<string, string> = Object.fromEntries(
-    state.styleBasemaps.map((basemap) => [basemap.id, `The "${basemap.name}" basemap style`]),
+    state.styleBasemaps.map((basemap) => [
+      basemap.id,
+      `The "${safeName(basemap.name)}" basemap style`,
+    ]),
   );
   styleCriteria[NONE] = "The request names no basemap style";
 
   const tileCriteria: Record<string, string> = Object.fromEntries(
-    state.tileBasemaps.map((basemap) => [basemap.id, `The "${basemap.name}" tile layer`]),
+    state.tileBasemaps.map((basemap) => [basemap.id, `The "${safeName(basemap.name)}" tile layer`]),
   );
   tileCriteria[NONE] = "The request names no tile basemap";
 
@@ -419,6 +479,7 @@ export async function resolveFastPathAction(
 ): Promise<FastPathAction | null> {
   const { prompt, state, endpoint, fetchImpl, signal } = options;
   if (!prompt.trim() || !endpoint?.url || !fastPathFitsProject(state)) return null;
+  if (unavailableEndpoints.has(endpoint.url)) return null;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? FAST_PATH_TIMEOUT_MS);
@@ -438,15 +499,18 @@ export async function resolveFastPathAction(
           request: prompt,
           layers_currently_loaded: state.layers.map((layer) => ({
             id: layer.id,
-            name: layer.name,
-            type: layer.type,
+            name: safeName(layer.name),
+            type: safeName(layer.type),
           })),
         },
         questions: buildFastPathQuestions(state),
       }),
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (UNAVAILABLE_STATUSES.has(response.status)) unavailableEndpoints.add(endpoint.url);
+      return null;
+    }
     const body = (await response.json()) as { answers?: FastPathAnswers };
     if (!body?.answers) return null;
     return interpretFastPathAnswers(body.answers, state);

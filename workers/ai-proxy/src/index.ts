@@ -563,13 +563,20 @@ async function proxySystemOne(
   env: Env,
   origin: string | null,
 ): Promise<Response> {
-  const limited = withOrigin(await rateLimit(request, env), origin);
-  if (limited) return limited;
-
+  // Configuration is checked before the limiter here, unlike `/tavily`, and the
+  // difference is the call pattern. Search runs when the model decides to use
+  // it; routing runs on *every* prompt a managed deployment sends. Drawing a
+  // token to answer "not configured" would halve every existing deployment's
+  // chat budget for a feature its operator never enabled. The route is already
+  // behind the instance-token check in `fetch`, so this is not an open probe,
+  // and the client stops asking once it sees this 503.
   const apiKey = env.JEV_API_KEY?.trim();
   if (!apiKey) {
     return jsonError("The fast path is not configured", 503, responseHeaders(origin));
   }
+
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
 
   // Routing questions are small by construction; anything larger is not a fast
   // path and is refused rather than forwarded.
