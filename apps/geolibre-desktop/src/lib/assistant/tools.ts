@@ -17,7 +17,12 @@ import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
 import { cleanStatement, maskSqlLiterals, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import { findNamedTileBasemap, NAMED_TILE_BASEMAPS } from "./basemaps";
-import { selectCatalogTools, type CatalogMatch, type CatalogTool } from "./catalog-select";
+import {
+  mergeCatalogMatches,
+  selectCatalogTools,
+  type CatalogMatch,
+  type CatalogTool,
+} from "./catalog-select";
 import { describeLayers, summarizeLayers } from "./layer-summary";
 import { buildSymbologyStyle } from "./symbology";
 import { readRuntimeEnv } from "./provider";
@@ -128,7 +133,7 @@ const MAX_KEYWORD_CANDIDATES = 40;
  * ranked semantic hits, then everything the filter found — is strictly better
  * than either: over 20 raster requests phrased in the user's own words the
  * filter alone found the right tool 0 times and the merge found it 19 times,
- * 18 of them first, while for single-keyword searches the merge lifted the
+ * 19 of them first, while for single-keyword searches the merge lifted the
  * right tool into first place 15 times out of 20 against the filter's 8.
  *
  * The lookup needs a credential the deployment may not have, so its absence is
@@ -811,25 +816,8 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
           summary: item.description,
         }));
         const selected = await rankWhiteboxSearch(query, tools, keywordMatches);
-        const byId = new Map(tools.map((item) => [item.id, item]));
-        const ranked = (selected ?? [])
-          .map((match) => byId.get(match.id))
-          .filter((item) => item !== undefined);
-        const rankedIds = new Set(ranked.map((item) => item.id));
-        const merged = [
-          // Semantic hits lead: they are ranked, and the model reads top-down.
-          ...ranked.map((item) => ({ ...item, match: "semantic" as const })),
-          ...keywordMatches
-            .filter((item) => !rankedIds.has(item.id))
-            .map((item) => ({ ...item, match: "keyword" as const })),
-        ];
-        return json({
-          search: query,
-          matched: merged.length,
-          selected: selected !== null,
-          truncated: merged.length > MAX_WHITEBOX_MATCHES,
-          tools: merged.slice(0, MAX_WHITEBOX_MATCHES),
-        });
+        const merged = mergeCatalogMatches(selected, keywordMatches, tools, MAX_WHITEBOX_MATCHES);
+        return json({ search: query, selected: selected !== null, ...merged });
       }
       // ~1000 tools with full parameter lists is far too much to serialize, so
       // an unfiltered call returns the categories to search within instead.

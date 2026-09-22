@@ -7,7 +7,7 @@
  * a filter given the request in the user's own words ("get rid of the grainy
  * speckle in a radar image") matched **nothing** on all 20, because no tool is
  * named "grainy". Given instead the single best keyword a model could guess, it
- * put the right tool somewhere in its 25 results 18 times — but first only 8
+ * put the right tool somewhere in its 25 results 19 times — but first only 8
  * times, so the model still had to read a list and choose.
  *
  * This module asks Jev instead. 775 tools do not fit in one Choice question
@@ -35,7 +35,6 @@ import {
   postSystemOne,
   SYSTEM_ONE_MAX_CHOICES,
   type SystemOneAnswer,
-  type SystemOneAnswers,
   type SystemOneEndpoint,
   type SystemOneFetch,
 } from "./system-one";
@@ -48,11 +47,9 @@ export interface CatalogTool {
   /**
    * What the tool does, when the catalog says.
    *
-   * Every one of the 775 snapshot entries currently carries `summary: ""` —
-   * the upstream generator reserves the field and never fills it — so the tool
-   * question falls back to the name and category. It is read here rather than
-   * ignored so that filling those summaries upstream improves this lookup (and
-   * the keyword filter beside it) without another change in this file.
+   * 770 of the 775 snapshot entries carry one. The five that do not are in the
+   * taxonomy but not in the Whitebox runtime catalog the summaries come from,
+   * so the tool question falls back to their name and category.
    */
   description?: string;
 }
@@ -94,7 +91,7 @@ export const CATALOG_MIN_CATEGORY_CONFIDENCE = 0.1;
  *
  * The point of selecting is to hand the model a shortlist it can read rather
  * than a page it must skim, so this stays small. Measured over 20 requests the
- * right tool was first 18 times and inside the top five 19 times, so a longer
+ * right tool was first 19 times and inside the top five 19 times, so a longer
  * list buys almost nothing and costs the model tokens on every raster request.
  */
 export const CATALOG_SHORTLIST_SIZE = 5;
@@ -286,16 +283,74 @@ export function rankCatalogTools(
   const known = new Set(tools.map((tool) => tool.id));
 
   if (!answer.probabilities) {
-    // Only an argmax came back; it is still worth one entry.
+    // Only an argmax came back; it is still worth one entry, held to the same
+    // floor as a distribution would be. Without that, the one response shape
+    // that carries no distribution is also the one with no threshold, so a
+    // bare `{choice, confidence: 0.001}` would be promoted ahead of every
+    // keyword match — the opposite of what the floor exists for.
     const choice = answer.choice;
+    const confidence = answer.confidence ?? 1;
     if (!choice || choice === NONE || !known.has(choice)) return [];
-    return [{ id: choice, probability: answer.confidence ?? 1 }];
+    if (confidence < minProbability) return [];
+    return [{ id: choice, probability: confidence }];
   }
   return Object.entries(answer.probabilities)
     .filter(([id, probability]) => id !== NONE && known.has(id) && probability >= minProbability)
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([id, probability]) => ({ id, probability }));
+}
+
+/** One tool in a merged result, tagged with how it was found. */
+export type MergedCatalogTool<T> = T & { match: "semantic" | "keyword" };
+
+/** A merged search result, shaped for `list_whitebox_tools`. */
+export interface MergedCatalogResult<T> {
+  /** What to show, semantic hits first. */
+  tools: MergedCatalogTool<T>[];
+  /** How many distinct tools matched at all, before any cap. */
+  matched: number;
+  /** Whether `tools` is a subset of those. */
+  truncated: boolean;
+}
+
+/**
+ * Combine a semantic shortlist with the keyword hits, ranked first.
+ *
+ * The cap applies to the **keyword half only**, which is what makes "selection
+ * can only add" true rather than merely close. Capping the combined list would
+ * let five semantic hits push the 21st to 25th keyword hits out of a response
+ * that used to contain them — a search that got strictly worse because the
+ * lookup was configured. So the keyword half is cut exactly where it always
+ * was, and the shortlist sits in front of it.
+ *
+ * @param selected - The lookup's shortlist, or null when it did not run.
+ * @param keywordMatches - Substring hits, already ranked by the caller.
+ * @param tools - The full catalog, to resolve selected ids against.
+ * @param limit - How many keyword hits to keep.
+ */
+export function mergeCatalogMatches<T extends { id: string }>(
+  selected: readonly CatalogMatch[] | null,
+  keywordMatches: readonly T[],
+  tools: readonly T[],
+  limit: number,
+): MergedCatalogResult<T> {
+  const byId = new Map(tools.map((tool) => [tool.id, tool]));
+  const ranked = (selected ?? [])
+    .map((match) => byId.get(match.id))
+    .filter((tool): tool is T => tool !== undefined);
+  const rankedIds = new Set(ranked.map((tool) => tool.id));
+
+  const merged: MergedCatalogTool<T>[] = [
+    // Semantic hits lead: they are ranked, and the model reads top-down.
+    ...ranked.map((tool) => ({ ...tool, match: "semantic" as const })),
+    ...keywordMatches
+      .slice(0, limit)
+      .filter((tool) => !rankedIds.has(tool.id))
+      .map((tool) => ({ ...tool, match: "keyword" as const })),
+  ];
+  const everything = new Set([...keywordMatches.map((tool) => tool.id), ...rankedIds]);
+  return { tools: merged, matched: everything.size, truncated: merged.length < everything.size };
 }
 
 /** Options for one catalog lookup. */
@@ -384,6 +439,3 @@ export async function selectCatalogTools(
   const matches = rankCatalogTools(second.tool, shortlist);
   return matches.length > 0 ? matches : null;
 }
-
-/** Re-exported so callers need only this module's types. */
-export type { SystemOneAnswers as CatalogAnswers };

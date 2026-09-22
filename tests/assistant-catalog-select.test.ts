@@ -4,6 +4,7 @@ import {
   buildCategoryQuestion,
   buildToolQuestion,
   groupCatalogByCategory,
+  mergeCatalogMatches,
   rankCatalogTools,
   selectBeamCategories,
   selectCatalogTools,
@@ -198,6 +199,16 @@ describe("tool ranking", () => {
     assert.deepEqual(ranked, []);
   });
 
+  it("holds an argmax-only answer to the same floor as a distribution", () => {
+    // The one response shape carrying no distribution must not also be the one
+    // with no threshold: a bare low-confidence choice is promoted ahead of
+    // every keyword match, which is the opposite of what the floor is for.
+    const argmax = (confidence: number) =>
+      rankCatalogTools({ choice: "slope", confidence }, CATALOG, { minProbability: 0.1 });
+    assert.deepEqual(argmax(0.001), []);
+    assert.deepEqual(argmax(0.9), [{ id: "slope", probability: 0.9 }]);
+  });
+
   it("honours the shortlist limit", () => {
     const ranked = rankCatalogTools(
       {
@@ -383,5 +394,93 @@ describe("selectCatalogTools", () => {
       null,
     );
     assert.equal(calls, 0);
+  });
+});
+
+describe("mergeCatalogMatches", () => {
+  const tools = Array.from({ length: 40 }, (_, index) => ({
+    id: `t${index}`,
+    name: `Tool ${index}`,
+    category: "Raster",
+  }));
+  const selected = [
+    { id: "t30", probability: 0.8 },
+    { id: "t31", probability: 0.1 },
+  ];
+
+  it("leads with the semantic hits and tags where each came from", () => {
+    const merged = mergeCatalogMatches(selected, tools.slice(0, 3), tools, 25);
+    assert.deepEqual(
+      merged.tools.map((tool) => [tool.id, tool.match]),
+      [
+        ["t30", "semantic"],
+        ["t31", "semantic"],
+        ["t0", "keyword"],
+        ["t1", "keyword"],
+        ["t2", "keyword"],
+      ],
+    );
+  });
+
+  it("never displaces a keyword hit the filter alone would have returned", () => {
+    // The additive contract. Capping the combined list would let two semantic
+    // hits push the 24th and 25th keyword hits out of a response that used to
+    // contain them — a search made worse by configuring the lookup.
+    const withoutSelection = mergeCatalogMatches(null, tools, tools, 25);
+    const withSelection = mergeCatalogMatches(selected, tools, tools, 25);
+    const kept = new Set(withSelection.tools.map((tool) => tool.id));
+    for (const tool of withoutSelection.tools) {
+      assert.ok(kept.has(tool.id), `${tool.id} was dropped once selection ran`);
+    }
+    assert.equal(withoutSelection.tools.length, 25);
+    assert.equal(withSelection.tools.length, 27);
+  });
+
+  it("does not list a tool twice when both halves find it", () => {
+    const merged = mergeCatalogMatches(
+      [{ id: "t0", probability: 0.9 }],
+      tools.slice(0, 3),
+      tools,
+      25,
+    );
+    assert.deepEqual(
+      merged.tools.map((tool) => tool.id),
+      ["t0", "t1", "t2"],
+    );
+  });
+
+  it("counts every distinct match, not just the ones shown", () => {
+    const merged = mergeCatalogMatches(selected, tools, tools, 25);
+    assert.equal(merged.matched, 40);
+    assert.equal(merged.truncated, true);
+
+    const small = mergeCatalogMatches(selected, tools.slice(0, 3), tools, 25);
+    assert.equal(small.matched, 5);
+    assert.equal(small.truncated, false);
+  });
+
+  it("is exactly the keyword filter when the lookup did not run", () => {
+    const merged = mergeCatalogMatches(null, tools.slice(0, 3), tools, 25);
+    assert.deepEqual(
+      merged.tools.map((tool) => [tool.id, tool.match]),
+      [
+        ["t0", "keyword"],
+        ["t1", "keyword"],
+        ["t2", "keyword"],
+      ],
+    );
+  });
+
+  it("ignores a selected id that is not in the catalog", () => {
+    const merged = mergeCatalogMatches(
+      [{ id: "ghost", probability: 1 }],
+      tools.slice(0, 2),
+      tools,
+      25,
+    );
+    assert.deepEqual(
+      merged.tools.map((tool) => tool.id),
+      ["t0", "t1"],
+    );
   });
 });

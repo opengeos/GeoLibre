@@ -81,6 +81,41 @@ function absoluteUrl(url: string): string {
 }
 
 /**
+ * Whether an endpoint may be used, given the scheme it was configured with.
+ *
+ * What travels to System One is the user's prompt, their layer names and their
+ * catalog searches, and what comes back decides which tool the assistant runs
+ * — including, on the fast path, `remove_layer`. Over cleartext an on-path
+ * observer reads the first and rewrites the second, so plain HTTP is refused.
+ *
+ * Two carve-outs, both cases where HTTPS would add nothing:
+ *
+ * - **Loopback.** `http://127.0.0.1:5173/systemone` is the dev server's own
+ *   proxy route. There is no network hop to observe.
+ * - **Same origin as the page.** A self-hosted deployment served over plain
+ *   HTTP on an internal network resolves `/systemone` against its own origin.
+ *   Refusing that would disable the feature for them while protecting nothing:
+ *   an attacker positioned to read this request is already reading the app
+ *   itself, the prompt as it was typed, and the project as it loads.
+ *
+ * A malformed URL is refused rather than passed to `fetch` to fail later.
+ */
+function isAllowedEndpointUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "https:") return true;
+  if (parsed.protocol !== "http:") return false;
+
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "::1" || /^127\./.test(host)) return true;
+  return parsed.origin === globalThis.location?.origin;
+}
+
+/**
  * Decide where to send questions, or null when System One is not configured.
  *
  * A managed proxy wins over a personal credential: where an operator has
@@ -99,7 +134,7 @@ export function resolveSystemOneEndpoint(env: Record<string, string>): SystemOne
   // places, and a deployment may want routing without changing where chat goes.
   // The endpoint supplies its own credential, so no Authorization is sent.
   const explicit = env.GEOLIBRE_FAST_PATH_URL?.trim().replace(/\/+$/, "");
-  if (explicit) return { url: absoluteUrl(explicit), apiKey: null };
+  if (explicit) return allowed({ url: absoluteUrl(explicit), apiKey: null });
 
   const proxy = env.GEOLIBRE_AI_PROXY_BASE_URL?.trim().replace(/\/+$/, "");
   if (proxy) {
@@ -108,11 +143,28 @@ export function resolveSystemOneEndpoint(env: Record<string, string>): SystemOne
     // `/systemone` is a root-level route — a sibling of `/v1/chat/completions`,
     // alongside `/search` and `/tavily` — so that suffix has to come off first.
     const root = proxy.replace(/\/v1$/, "");
-    return { url: `${root}/systemone`, apiKey: null };
+    return allowed({ url: absoluteUrl(`${root}/systemone`), apiKey: null });
   }
 
   const key = env.JEV_API_KEY?.trim();
   return key ? { url: TYPESAFE_ENDPOINT, apiKey: key } : null;
+}
+
+/**
+ * Pass an endpoint through, or refuse it for its scheme.
+ *
+ * Refusing is loud, unlike every other stand-down in this module: a deployment
+ * that configured an endpoint and silently never uses it has no way to find out
+ * why, and the reason here is a fixable misconfiguration rather than a service
+ * being unavailable.
+ */
+function allowed(endpoint: SystemOneEndpoint): SystemOneEndpoint | null {
+  if (isAllowedEndpointUrl(endpoint.url)) return endpoint;
+  console.warn(
+    `[GeoLibre] Ignoring the System One endpoint ${endpoint.url}: it is plain HTTP on another` +
+      " origin, which would expose prompts and let a response be rewritten. Use HTTPS.",
+  );
+  return null;
 }
 
 /**
