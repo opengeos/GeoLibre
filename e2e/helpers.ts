@@ -85,7 +85,27 @@ export interface TestMapHandle {
   isRotating(): boolean;
   project(lngLat: [number, number]): { x: number; y: number };
   getCanvas(): HTMLCanvasElement;
+  on(type: "movestart", listener: () => void): unknown;
 }
+
+/**
+ * Every method of `TestMapHandle`, checked before a candidate is accepted.
+ *
+ * The walk below meets many hook values, so the probe is what tells a map from
+ * anything else. Check the whole interface rather than a sample of it: a value
+ * carrying only the sampled methods would be stashed and then throw from
+ * whichever spec first reached for one of the others.
+ */
+const TEST_MAP_METHODS = [
+  "getCenter",
+  "getZoom",
+  "isMoving",
+  "isZooming",
+  "isRotating",
+  "project",
+  "getCanvas",
+  "on",
+] as const satisfies readonly (keyof TestMapHandle)[];
 
 declare global {
   interface Window {
@@ -118,37 +138,39 @@ interface HookLike {
  * against their own engine (`bindMapboxMap`, defined locally in each).
  */
 export async function bindMapLibreMap(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const container = document.querySelector(".maplibregl-map");
-    if (!container) return false;
-    const fiberKey = Object.keys(container).find((key) => key.startsWith("__reactFiber"));
-    if (!fiberKey) return false;
-    const asMap = (value: unknown): TestMapHandle | null => {
-      const candidate = value as Partial<TestMapHandle> | null | undefined;
-      return typeof candidate?.project === "function" &&
-        typeof candidate.getZoom === "function" &&
-        typeof candidate.getCenter === "function"
-        ? (candidate as TestMapHandle)
-        : null;
-    };
-    let fiber: FiberLike | undefined = (container as unknown as Record<string, FiberLike>)[
-      fiberKey
-    ];
-    while (fiber) {
-      for (const side of [fiber, fiber.alternate]) {
-        let hook = side?.memoizedState;
-        while (hook) {
-          const held = hook.memoizedState?.current as { getMap?: () => unknown } | undefined;
-          const map = asMap(typeof held?.getMap === "function" ? held.getMap() : held);
-          if (map) {
-            window.__geolibreTestMap = map;
-            return true;
+  await page.waitForFunction(
+    (methods: readonly string[]) => {
+      const container = document.querySelector(".maplibregl-map");
+      if (!container) return false;
+      const fiberKey = Object.keys(container).find((key) => key.startsWith("__reactFiber"));
+      if (!fiberKey) return false;
+      const asMap = (value: unknown): TestMapHandle | null => {
+        if (typeof value !== "object" || value === null) return null;
+        const candidate = value as Record<string, unknown>;
+        return methods.every((method) => typeof candidate[method] === "function")
+          ? (candidate as unknown as TestMapHandle)
+          : null;
+      };
+      let fiber: FiberLike | undefined = (container as unknown as Record<string, FiberLike>)[
+        fiberKey
+      ];
+      while (fiber) {
+        for (const side of [fiber, fiber.alternate]) {
+          let hook = side?.memoizedState;
+          while (hook) {
+            const held = hook.memoizedState?.current as { getMap?: () => unknown } | undefined;
+            const map = asMap(typeof held?.getMap === "function" ? held.getMap() : held);
+            if (map) {
+              window.__geolibreTestMap = map;
+              return true;
+            }
+            hook = hook.next;
           }
-          hook = hook.next;
         }
+        fiber = fiber.return;
       }
-      fiber = fiber.return;
-    }
-    return false;
-  });
+      return false;
+    },
+    TEST_MAP_METHODS as readonly string[],
+  );
 }

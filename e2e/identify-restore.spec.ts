@@ -27,6 +27,8 @@ const TARGETS_TEXT = readFixture("identify-targets.geojson");
 
 /** The east target square's centre, where the Identify click lands. */
 const EAST_TARGET: [number, number] = [-90, 37];
+/** That square's west edge, the anchor the miss-click measures itself from. */
+const EAST_TARGET_WEST_EDGE: [number, number] = [-91, 37];
 
 interface Camera {
   lng: number;
@@ -38,6 +40,8 @@ declare global {
   interface Window {
     /** Consecutive still polls seen by `waitForCameraIdle`, kept page-side. */
     __geolibreIdleTicks?: number;
+    /** Camera movements counted since `watchCameraMoves` last reset it. */
+    __geolibreMoveCount?: number;
   }
 }
 
@@ -45,10 +49,11 @@ declare global {
 const STILL_POLLS = 5;
 
 /**
- * How far in from the canvas edge the miss-click lands, in pixels. Inside the
- * 40 px `FIT_BOUNDS_PADDING` a fit reserves, so no fitted feature can be there.
+ * How far west of the identified square's own edge the miss-click lands, in
+ * pixels. Anchored to the rendered feature rather than to the fit's padding, so
+ * it stays a miss whatever `FIT_BOUNDS_PADDING` becomes.
  */
-const MISS_CLICK_INSET = 12;
+const MISS_CLICK_GAP = 20;
 
 /** Reads the live camera through the handle `bindMapLibreMap` stashed. */
 async function readCamera(page: Page): Promise<Camera> {
@@ -84,6 +89,30 @@ async function waitForCameraIdle(page: Page): Promise<void> {
     STILL_POLLS,
     { polling: 100 },
   );
+}
+
+/**
+ * Starts counting camera movements on the page, from zero.
+ *
+ * `movestart` fires the instant a fit begins, so the count answers "did the
+ * camera move at all since this point" rather than "is it moving right now".
+ * That is what a suppression assertion needs: a re-fit cannot slip between two
+ * polls, and the answer does not depend on catching an animation mid-flight.
+ */
+async function watchCameraMoves(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    if (window.__geolibreMoveCount === undefined) {
+      window.__geolibreTestMap!.on("movestart", () => {
+        window.__geolibreMoveCount = (window.__geolibreMoveCount ?? 0) + 1;
+      });
+    }
+    window.__geolibreMoveCount = 0;
+  });
+}
+
+/** How many camera movements began since `watchCameraMoves`. */
+async function readCameraMoves(page: Page): Promise<number> {
+  return page.evaluate(() => window.__geolibreMoveCount ?? 0);
 }
 
 /** Clicks the map at a geographic position, projecting it through the camera. */
@@ -169,6 +198,9 @@ test("dismissing an Identify popup restores the selection without moving the cam
   const identifiedCamera = await readCamera(page);
   expect(identifiedCamera.zoom).toBeGreaterThan(contextCamera.zoom + 1);
 
+  // From here on, any camera movement at all is a failure, so count movements
+  // rather than sampling positions.
+  await watchCameraMoves(page);
   await identifyPopup(page).locator(".maplibregl-popup-close-button").click();
   await expect(identifyPopup(page)).toHaveCount(0);
 
@@ -184,6 +216,7 @@ test("dismissing an Identify popup restores the selection without moving the cam
   // ...and the camera stayed on the square. Before the read-once marker this
   // is where it flew back out to `contextCamera`.
   await waitForCameraIdle(page);
+  expect(await readCameraMoves(page)).toBe(0);
   const restoredCamera = await readCamera(page);
   expect(restoredCamera.zoom).toBeCloseTo(identifiedCamera.zoom, 2);
   expect(restoredCamera.lng).toBeCloseTo(identifiedCamera.lng, 2);
@@ -214,6 +247,7 @@ test("a selection made while the Identify popup is open survives its dismissal",
   await waitForCameraIdle(page);
   const pickedCamera = await readCamera(page);
 
+  await watchCameraMoves(page);
   await identifyPopup(page).locator(".maplibregl-popup-close-button").click();
   await expect(identifyPopup(page)).toHaveCount(0);
 
@@ -227,6 +261,7 @@ test("a selection made while the Identify popup is open survives its dismissal",
   expect(await selectedRow.locator("td").first().innerText()).toBe(otherFeatureId);
 
   await waitForCameraIdle(page);
+  expect(await readCameraMoves(page)).toBe(0);
   const afterCamera = await readCamera(page);
   expect(afterCamera.zoom).toBeCloseTo(pickedCamera.zoom, 2);
   expect(afterCamera.lng).toBeCloseTo(pickedCamera.lng, 2);
@@ -251,23 +286,33 @@ test("clicking past the features clears the Identify result instead of restoring
   await waitForCameraIdle(page);
   const identifiedCamera = await readCamera(page);
 
-  // A point on screen but off both squares. The fit that just framed the
-  // identified square reserves `FIT_BOUNDS_PADDING` (40 px, `map-controller.ts`)
-  // on every side, so anything inside that band is guaranteed empty; stay well
-  // within it. Were the click to land on a feature after all, a fresh popup
-  // would open and the assertion below would say so.
-  const missPoint = await page.evaluate((inset) => {
-    const map = window.__geolibreTestMap!;
-    const rect = map.getCanvas().getBoundingClientRect();
-    return { x: rect.left + inset, y: rect.top + rect.height / 2 };
-  }, MISS_CLICK_INSET);
-  await page.mouse.click(missPoint.x, missPoint.y);
+  // A point on screen but off both squares, measured from the identified
+  // square's own west edge rather than from the fit's padding, so the gap
+  // survives a change to that constant. The edge assertion is what would catch
+  // a future fit that left no room to the west of it.
+  await watchCameraMoves(page);
+  const miss = await page.evaluate(
+    ([edgeLngLat, gap]) => {
+      const map = window.__geolibreTestMap!;
+      const edge = map.project(edgeLngLat as [number, number]);
+      const rect = map.getCanvas().getBoundingClientRect();
+      return {
+        edgeX: edge.x,
+        x: rect.left + edge.x - (gap as number),
+        y: rect.top + rect.height / 2,
+      };
+    },
+    [EAST_TARGET_WEST_EDGE, MISS_CLICK_GAP] as const,
+  );
+  expect(miss.edgeX).toBeGreaterThan(MISS_CLICK_GAP);
+  await page.mouse.click(miss.x, miss.y);
 
   await expect(identifyPopup(page)).toHaveCount(0);
   await expect(attributeTable(page)).toContainText("- identify-targets");
   await expect(page.getByTestId("attribute-table-status")).toContainText("0 selected");
 
   await waitForCameraIdle(page);
+  expect(await readCameraMoves(page)).toBe(0);
   const clearedCamera = await readCamera(page);
   expect(clearedCamera.zoom).toBeCloseTo(identifiedCamera.zoom, 2);
   expect(clearedCamera.lng).toBeCloseTo(identifiedCamera.lng, 2);
