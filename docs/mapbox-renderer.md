@@ -217,7 +217,13 @@ basemap is an offline archive falls back to the default basemap (with a console
 warning). Pick a Mapbox style from the shared Basemaps panel instead.
 MapLibre custom protocols, tiled/streamed vector imports beyond the bridge's
 materialization limits, custom COG terrain, and other plugin-owned layers
-require additional adapters. Layers drawn with deck.gl need none:
+require additional adapters. **Custom terrain sources** are one of those with
+UI of its own: mapbox-gl has no `raster-dem` source a COG can back, so the
+Terrain settings dialog's "Terrain source" section (a COG URL, a local file, or
+a raster layer already on the map) is hidden on this renderer and explains why.
+Mapbox's own global terrain and the vertical-exaggeration slider still work.
+
+Layers drawn with deck.gl need none:
 `@deck.gl/mapbox` targets Mapbox GL JS natively, so the engine reports
 `capabilities.deckOverlay` and the shared interleaved overlay binds to the
 Mapbox map through `app.getMapboxMap()`. Visible unsupported layers report an error

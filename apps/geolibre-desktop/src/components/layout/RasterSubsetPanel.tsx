@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { clamp } from "../../lib/clamp";
 import {
   extractRasterSubset,
@@ -35,11 +36,6 @@ const PANEL_DEFAULT_W = 320;
 const PANEL_MARGIN = 12;
 
 interface PanelPos {
-  x: number;
-  y: number;
-}
-
-interface ScreenPoint {
   x: number;
   y: number;
 }
@@ -234,8 +230,6 @@ export function RasterSubsetPanel({
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
-  // Projected screen positions of the box's four corners, for the SVG overlay.
-  const [screenPoints, setScreenPoints] = useState<ScreenPoint[] | null>(null);
 
   // Cancels the in-flight extraction's network requests when the panel is closed
   // or a new extraction starts, so a stalled request never leaves the UI stuck
@@ -271,61 +265,17 @@ export function RasterSubsetPanel({
     setZoom(String(z));
   }, [layer, mapControllerRef, mapReadyGeneration]);
 
-  // Latest box, read inside the projection callback so the map listeners don't
-  // need `bbox` as a dependency (which changes on every drag mousemove).
-  const bboxRef = useRef(bbox);
-  bboxRef.current = bbox;
-  // The current projection function, so the bbox-change effect can trigger a
-  // reproject without re-subscribing the map listeners.
-  const reprojectRef = useRef<() => void>(() => {});
-
   // Keep the SVG overlay's corner positions in sync with the map's camera
-  // (pan/zoom/rotate/pitch/resize). Subscribed once per layer/map (not per box
-  // edit) to avoid tearing down and re-attaching listeners on every drag tick.
-  // Projecting all four corners keeps the outline correct under rotation.
-  // Rendered as an SVG (not a MapLibre layer) so it stays visible above the
-  // interleaved deck.gl COG/raster overlay.
-  useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !layer) {
-      setScreenPoints(null);
-      return;
-    }
-    const reproject = () => {
-      const b = bboxRef.current;
-      if (!b) {
-        setScreenPoints(null);
-        return;
-      }
-      const [w, s, e, n] = b;
-      const corners: [number, number][] = [
-        [w, n],
-        [e, n],
-        [e, s],
-        [w, s],
-      ];
-      setScreenPoints(
-        corners.map((corner) => {
-          const p = map.project(corner);
-          return { x: p.x, y: p.y };
-        }),
-      );
-    };
-    reprojectRef.current = reproject;
-    reproject();
-    map.on("move", reproject);
-    map.on("resize", reproject);
-    return () => {
-      map.off("move", reproject);
-      map.off("resize", reproject);
-    };
-  }, [layer, mapControllerRef, mapReadyGeneration]);
-
-  // Reproject when the box itself changes, reusing the already-subscribed
-  // projection function rather than re-attaching map listeners.
-  useEffect(() => {
-    reprojectRef.current();
-  }, [bbox]);
+  // (pan/zoom/rotate/pitch/resize). Rendered as an SVG (not a style layer) so
+  // it stays visible above the interleaved deck.gl COG/raster overlay — which
+  // for this panel is the very raster the box is drawn over. It projects
+  // through the engine's render surface, so both 2D engines get it.
+  const screenPoints = useExtentScreenOverlay(
+    mapControllerRef,
+    bbox ?? null,
+    Boolean(layer),
+    mapReadyGeneration,
+  );
 
   // Both renderers share the pointer lifecycle; the globe draws a native rectangle.
   useEffect(() => {
@@ -345,9 +295,12 @@ export function RasterSubsetPanel({
     });
   }, [drawing, mapControllerRef, clearStatus, mapReadyGeneration]);
 
+  // The globe engines project a wide box to nothing, so they draw the extent as
+  // a native entity instead of taking the SVG overlay above.
   useEffect(() => {
-    if (!layer || !bbox) return;
-    return mapControllerRef.current?.showExtent(bbox);
+    const engine = mapControllerRef.current;
+    if (!layer || !bbox || !engine || engine.capabilities.screenOverlays) return;
+    return engine.showExtent(bbox);
   }, [layer, bbox, mapControllerRef, mapReadyGeneration]);
 
   const handleUseView = useCallback(() => {

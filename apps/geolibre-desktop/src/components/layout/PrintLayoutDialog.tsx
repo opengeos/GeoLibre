@@ -46,6 +46,7 @@ import {
   mapBodyAspectRatio,
   PAPER_SIZES,
   resolvePageSize,
+  scaleZoomTarget,
   type BodyCorner,
   type CustomSize,
   type LayoutOptions,
@@ -118,6 +119,7 @@ import {
   type AtlasTokenContext,
 } from "../../lib/print-atlas";
 import { clearAtlasFeatureMask, showAtlasFeatureMask } from "../../lib/print-atlas-mask";
+import { clamp } from "../../lib/clamp";
 
 interface PrintLayoutDialogProps {
   open: boolean;
@@ -191,6 +193,11 @@ export function PrintLayoutDialog({
   // Follow the map's scale-bar unit preference so the printed bar matches the
   // on-screen one (metric / imperial / nautical).
   const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  // The project's zoom limits. An engine without a MapLibre map exposes none of
+  // its own, but `applyMapPreferences` feeds it these (clamped to [0, 24], the
+  // range every engine accepts), so they are what its camera can reach.
+  const prefMinZoom = useAppStore((s) => s.preferences.map.minZoom);
+  const prefMaxZoom = useAppStore((s) => s.preferences.map.maxZoom);
   const setPrintLayout = useAppStore((s) => s.setPrintLayout);
   // The composer's settings belong to the project, so the controls start from
   // what it was saved with. Read once per mount: the dialog is remounted on
@@ -1741,29 +1748,43 @@ export function PrintLayoutDialog({
     (targetRatio: number) => {
       const engine = mapControllerRef.current;
       const map = engine?.getMap();
-      if (engine && !map && captureMode !== "extent" && targetRatio > 0 && currentRatio > 0) {
-        engine.flyTo({
-          zoom: engine.readView().zoom + Math.log2(currentRatio / targetRatio),
-          duration: 0,
-        });
+      if (engine && !map && captureMode !== "extent") {
+        // `applyMapPreferences` feeds a non-MapLibre engine the project's zoom
+        // limits (clamped to [0, 24], the range every engine accepts), so those
+        // are what this camera can reach.
+        const target = scaleZoomTarget(
+          engine.readView().zoom,
+          currentRatio,
+          targetRatio,
+          clamp(prefMinZoom, 0, 24),
+          clamp(prefMaxZoom, 0, 24),
+        );
+        if (!target) return;
+        // A scale the camera cannot reach is applied partially, so say so rather
+        // than letting the value snap back unexplained — the same contract the
+        // MapLibre branch below has had since GH #743.
+        setScaleNotice(target.clamped ? t("printLayout.errors.scaleOutOfRange") : null);
+        // Already there (or clamped to where it is): recapture without moving,
+        // so the reported scale still refreshes.
+        if (!target.unchanged) engine.flyTo({ zoom: target.zoom, duration: 0 });
         void recapture(null);
         return;
       }
-      if (captureMode === "extent" || !map || !(targetRatio > 0) || !(currentRatio > 0)) {
-        return;
-      }
-      const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
-      // Clamp to the map's own zoom limits (not a fixed 0–24) so the out-of-range
-      // notice reflects what this map can actually reach.
-      const minZoom = map.getMinZoom();
-      const maxZoom = map.getMaxZoom();
-      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+      if (captureMode === "extent" || !map) return;
+      // The map's own zoom limits (not a fixed 0–24), so the out-of-range notice
+      // reflects what this map can actually reach.
+      const target = scaleZoomTarget(
+        map.getZoom(),
+        currentRatio,
+        targetRatio,
+        map.getMinZoom(),
+        map.getMaxZoom(),
+      );
+      if (!target) return;
       // The requested scale needs a zoom past the map's limits, so it can only be
       // applied partially: surface that instead of letting the value snap back
       // with no explanation (GH #743). A reachable scale clears the notice.
-      setScaleNotice(
-        Math.abs(clampedZoom - newZoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
-      );
+      setScaleNotice(target.clamped ? t("printLayout.errors.scaleOutOfRange") : null);
       // Drop a still-pending idle handler / fallback timer from a prior applyScale
       // before registering new ones, so two quick scale changes don't both fire.
       if (idleRecaptureRef.current) {
@@ -1777,11 +1798,11 @@ export function PrintLayoutDialog({
       // No effective zoom change (already at target, or clamped): MapLibre won't
       // emit an "idle", so recapture directly rather than registering a handler
       // that would never fire and could later fire on an unrelated render.
-      if (Math.abs(clampedZoom - map.getZoom()) < 1e-6) {
+      if (target.unchanged) {
         recapture(null);
         return;
       }
-      map.setZoom(clampedZoom);
+      map.setZoom(target.zoom);
       // Recapture once the map is idle, so tiles for the new zoom have finished
       // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
       // runs in viewport mode, so pin the recapture to a null clip. Use map.on
@@ -1812,7 +1833,7 @@ export function PrintLayoutDialog({
         }
       }, 1500);
     },
-    [mapControllerRef, captureMode, currentRatio, recapture, t],
+    [mapControllerRef, captureMode, currentRatio, prefMaxZoom, prefMinZoom, recapture, t],
   );
 
   // Hide the dialog so the map is interactive, let the user drag an extent box,

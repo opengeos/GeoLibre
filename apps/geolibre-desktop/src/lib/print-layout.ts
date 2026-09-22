@@ -656,6 +656,68 @@ export function computeScaleRatio(opts: LayoutOptions): number {
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 0;
 }
 
+/** A zoom the camera should move to in order to reach a requested 1:N scale. */
+export interface ScaleZoomTarget {
+  /** The zoom to apply, already clamped to the map's limits. */
+  zoom: number;
+  /** True when the limits stopped the camera short of the requested scale. */
+  clamped: boolean;
+  /** True when the clamped zoom is where the camera already is. */
+  unchanged: boolean;
+}
+
+/**
+ * The zoom that renders a requested 1:N scale, clamped to what the map can
+ * reach.
+ *
+ * The reported scale is linear in metres-per-pixel, which halves per zoom
+ * level, so the delta is `log2(currentRatio / targetRatio)`.
+ *
+ * Shared by both of the Print Layout composer's camera paths — a MapLibre map
+ * and a `MapEngine` without one — because they drifted apart once already: the
+ * engine path shipped with no clamp and no notice, so a scale past the map's
+ * zoom range silently snapped back on the Mapbox renderer while MapLibre
+ * explained itself (#2475, regressing GH #743).
+ *
+ * @param currentZoom - The camera's current zoom.
+ * @param currentRatio - The 1:N scale the current capture renders at; must be
+ *   positive.
+ * @param targetRatio - The requested 1:N scale; must be positive.
+ * @param minZoom - The map's minimum zoom.
+ * @param maxZoom - The map's maximum zoom. A `maxZoom` below `minZoom` is
+ *   ignored in favour of `minZoom`, matching how a map applies its own limits.
+ * @returns The clamped zoom plus whether it was clamped and whether it is a
+ *   no-op, or `null` when the inputs cannot produce a scale.
+ */
+export function scaleZoomTarget(
+  currentZoom: number,
+  currentRatio: number,
+  targetRatio: number,
+  minZoom: number,
+  maxZoom: number,
+): ScaleZoomTarget | null {
+  if (
+    !Number.isFinite(currentZoom) ||
+    !Number.isFinite(currentRatio) ||
+    !(currentRatio > 0) ||
+    // An `Infinity` target passes `> 0` and would drive the camera to minZoom
+    // rather than being rejected; a long enough digit string parses to it.
+    !Number.isFinite(targetRatio) ||
+    !(targetRatio > 0) ||
+    !Number.isFinite(minZoom) ||
+    !Number.isFinite(maxZoom)
+  ) {
+    return null;
+  }
+  const wanted = currentZoom + Math.log2(currentRatio / targetRatio);
+  const zoom = Math.max(minZoom, Math.min(Math.max(minZoom, maxZoom), wanted));
+  return {
+    zoom,
+    clamped: Math.abs(zoom - wanted) > 1e-3,
+    unchanged: Math.abs(zoom - currentZoom) < 1e-6,
+  };
+}
+
 /**
  * Draw the full page layout onto a canvas. The canvas pixel dimensions define
  * the render resolution; all furniture is scaled relative to the page so the

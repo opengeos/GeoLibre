@@ -1849,6 +1849,7 @@
     "controlLabel": "Toggle terrain (double-click for exaggeration)",
     "sourceLabel": "Terrain source",
     "sourceDescription": "Use an EPSG:3857 or EPSG:4326 single-band COG as the elevation source. The file must allow CORS and HTTP range requests.",
+    "sourceUnsupported": "This renderer uses its own global terrain. A custom COG or raster-layer elevation source requires the MapLibre, 3D globe, or ArcGIS renderer.",
     "rasterLayerLabel": "Raster layer",
     "rasterLayerPlaceholder": "Select a raster layer",
     "rasterLayerDescription": "Use a COG raster layer already loaded on the map as the elevation source.",

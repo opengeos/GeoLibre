@@ -280,6 +280,34 @@ export interface MapEngineCapabilities {
    * built-in on-map controls have somewhere to mount.
    */
   readonly domControls: boolean;
+  /**
+   * Straight screen-space geometry pinned through
+   * {@link MapRenderSurface.project} tracks the map closely enough to draw an
+   * overlay with, so a panel renders its own SVG outline instead of asking for
+   * a native one through {@link MapEngine.showExtent}.
+   *
+   * Both 2D engines qualify — including in globe projection, where a
+   * four-corner box is already the accepted approximation — and the SVG is what
+   * the extract panels want, because it sits above the interleaved deck.gl
+   * raster overlay that a style layer would end up underneath. The globe
+   * engines do not: a box wide enough to wrap past the limb has corners that
+   * project to nothing, so they draw the extent natively instead.
+   */
+  readonly screenOverlays: boolean;
+  /**
+   * The engine draws flat when the project asks for a `mercator` projection, so
+   * globe-only features read `preferences.map.projection` to decide whether
+   * they apply. Without it the engine is a globe whatever that preference says,
+   * because it has no flat mode the preference maps onto.
+   */
+  readonly flatProjection: boolean;
+  /**
+   * {@link MapEngine.setTerrainCogSource} can install a custom DEM — a COG URL,
+   * a local file, or a raster layer already on the map — as the elevation
+   * source. Without it the engine only has its own default terrain, so the
+   * Terrain source controls are hidden rather than left to fail quietly.
+   */
+  readonly terrainSource: boolean;
 }
 
 /**
@@ -300,6 +328,9 @@ export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   picking: true,
   onMapDrawing: true,
   domControls: true,
+  screenOverlays: true,
+  flatProjection: true,
+  terrainSource: true,
 });
 
 /** One feature returned by {@link MapEngine.identifyFeatures}. */

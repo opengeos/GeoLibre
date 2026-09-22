@@ -7,6 +7,7 @@ import {
   pageMm,
   pagePx,
   resolvePageSize,
+  scaleZoomTarget,
   type LayoutOptions,
   type LegendEntry,
 } from "../apps/geolibre-desktop/src/lib/print-layout";
@@ -1148,5 +1149,57 @@ describe("drawLayout data blocks (GH #1324)", () => {
     assert.ok(rec.fills.some((f) => f.text === "5" && f.textAlign === "right"));
     // The path itself: one stroked polyline with a segment per point pair.
     assert.ok(rec.polylines.includes(2), "expected a stroked 2-segment polyline for the 3 points");
+  });
+});
+
+describe("scaleZoomTarget (#2475, GH #743)", () => {
+  it("halves the ground scale per zoom level", () => {
+    const target = scaleZoomTarget(10, 100_000, 50_000, 0, 24);
+    assert.ok(target);
+    assert.equal(target.zoom, 11);
+    assert.equal(target.clamped, false);
+    assert.equal(target.unchanged, false);
+    // And back out again.
+    assert.equal(scaleZoomTarget(10, 100_000, 400_000, 0, 24)?.zoom, 8);
+  });
+  it("reports a request the map cannot reach as clamped", () => {
+    // 1:1 from 1:100,000 is ~17 levels in; a map capped at 14 cannot get there.
+    const target = scaleZoomTarget(10, 100_000, 1, 0, 14);
+    assert.ok(target);
+    assert.equal(target.zoom, 14);
+    assert.equal(target.clamped, true, "the notice must fire on every renderer");
+    assert.equal(target.unchanged, false);
+    const out = scaleZoomTarget(10, 100_000, 1e12, 5, 24);
+    assert.equal(out?.zoom, 5);
+    assert.equal(out?.clamped, true);
+  });
+  it("flags a no-op so the caller recaptures without moving the camera", () => {
+    const same = scaleZoomTarget(10, 100_000, 100_000, 0, 24);
+    assert.equal(same?.unchanged, true);
+    assert.equal(same?.clamped, false);
+    // Already pinned at the ceiling: clamped *and* a no-op, so a MapLibre map
+    // would never emit the "idle" the recapture waits for.
+    const pinned = scaleZoomTarget(24, 100_000, 1, 0, 24);
+    assert.equal(pinned?.zoom, 24);
+    assert.equal(pinned?.clamped, true);
+    assert.equal(pinned?.unchanged, true);
+  });
+  it("prefers minZoom when a map reports limits the wrong way round", () => {
+    assert.equal(scaleZoomTarget(10, 100_000, 50_000, 12, 8)?.zoom, 12);
+  });
+  it("returns null rather than a NaN zoom for unusable inputs", () => {
+    assert.equal(scaleZoomTarget(10, 0, 50_000, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, 0, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, -5, 0, 24), null);
+    assert.equal(scaleZoomTarget(Number.NaN, 100_000, 50_000, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, 50_000, Number.NaN, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, 50_000, 0, Number.POSITIVE_INFINITY), null);
+  });
+  it("rejects an infinite ratio instead of pinning the camera to a limit", () => {
+    // A long enough digit string parses to Infinity, which passes `> 0` and
+    // would otherwise send `wanted` to -Infinity and the camera to minZoom.
+    assert.equal(scaleZoomTarget(10, 100_000, Number.POSITIVE_INFINITY, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, Number.POSITIVE_INFINITY, 50_000, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, Number("1".repeat(400)), 0, 24), null);
   });
 });

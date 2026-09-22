@@ -1550,20 +1550,17 @@ export function TopToolbar({
           },
         ]
       : []),
-    // Print layout renders from the MapLibre canvas; the palette has no disabled
-    // state, so drop the command rather than offer one that opens a dialog which
-    // cannot produce a preview (#2268 review).
-    ...(capabilities.nativeMapInstance
-      ? [
-          {
-            id: "project.print-layout",
-            title: t("toolbar.item.printLayoutEllipsis"),
-            group: t("toolbar.commandGroup.project"),
-            icon: Printer,
-            run: () => setPrintLayoutOpen(true),
-          },
-        ]
-      : []),
+    // The composer captures through the engine's render surface, so it produces
+    // a preview on every renderer (#2475); it was gated on a MapLibre map back
+    // when it read that canvas directly (#2268 review), which left the menu item
+    // working while the palette had no entry at all.
+    {
+      id: "project.print-layout",
+      title: t("toolbar.item.printLayoutEllipsis"),
+      group: t("toolbar.commandGroup.project"),
+      icon: Printer,
+      run: () => setPrintLayoutOpen(true),
+    },
     // Add Data
     {
       id: "add.vector",

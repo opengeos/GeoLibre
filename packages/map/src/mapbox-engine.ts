@@ -76,6 +76,11 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   picking: true,
   onMapDrawing: true,
   domControls: true,
+  screenOverlays: true,
+  flatProjection: true,
+  // mapbox-gl has no `raster-dem` source a COG can back, so the terrain
+  // source controls stay hidden here (#2475).
+  terrainSource: false,
 });
 
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";
