@@ -26,6 +26,7 @@ import {
   proxyOntarioCctvFrameRequestGuarded,
   proxyNswCctvFrameRequestGuarded,
 } from "./vite-proxy-guard";
+import { fastPathProxyPlugin } from "./vite-fast-path-proxy";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 import { ARCGIS_SDK_HOST, ARCGIS_SDK_VERSION } from "../../packages/map/src/arcgis-sdk";
@@ -1349,6 +1350,7 @@ export default defineConfig({
     copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
+    fastPathProxyPlugin(),
     selectiveJsMinifyPlugin(),
     removeJupyterLiteFromTauriDistPlugin(),
     ...pwaPlugin(),

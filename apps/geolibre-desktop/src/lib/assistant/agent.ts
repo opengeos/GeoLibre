@@ -25,7 +25,21 @@ import { createAssistantTools, type AssistantToolDeps } from "./tools";
 /** A streamed update surfaced to the chat UI. */
 export type AssistantStreamEvent =
   | { type: "text"; text: string }
-  | { type: "tool"; name: string; input: unknown; error?: string };
+  | {
+      type: "tool";
+      name: string;
+      input: unknown;
+      error?: string;
+      /**
+       * True when the fast path routed this call instead of the model.
+       *
+       * Surfaced because the feature is built to fail silently: without a mark
+       * on the turn, "the fast path is off" and "the fast path is not helping"
+       * look identical, which is how a misbuilt endpoint URL survived a whole
+       * benchmarking round.
+       */
+      routed?: boolean;
+    };
 
 /**
  * The live map state the fast path routes against.
@@ -173,7 +187,11 @@ export class AssistantSession {
     if (!tool) return false;
 
     const error = await runToolDirectly(tool, action.input);
-    yield { type: "tool", name: action.tool, input: action.input, error };
+    console.debug(
+      `[geolibre] assistant fast path: ${action.tool} ${JSON.stringify(action.input)}` +
+        (error ? ` — failed: ${error}` : ""),
+    );
+    yield { type: "tool", name: action.tool, input: action.input, error, routed: true };
     // The transcript already shows the call; this line is what voice mode reads
     // back, so a silent success would leave a hands-free user with no answer.
     yield {

@@ -147,6 +147,21 @@ function safeName(name: string): string {
 export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 
 /**
+ * Resolve a same-origin `/path` against the page origin.
+ *
+ * A reverse proxy in front of the app is configured as a path, and browser
+ * `fetch` resolves that itself — but Tauri's native HTTP client, which is the
+ * only transport that can reach TypeSafe on the desktop, requires an absolute
+ * URL. Doing it here rather than at config time covers every route into this
+ * function, including the runtime env map that is rebuilt without an origin.
+ */
+function absoluteUrl(url: string): string {
+  if (!url.startsWith("/")) return url;
+  const origin = globalThis.location?.origin;
+  return origin && origin !== "null" ? new URL(url, origin).toString().replace(/\/+$/, "") : url;
+}
+
+/**
  * Statuses that mean "this endpoint will never serve the fast path".
  *
  * 503 is what the proxy returns when the operator never set a TypeSafe
@@ -408,6 +423,14 @@ export interface FastPathEndpoint {
  * `api.typesafe.ai` refuses the app's origin outright.
  */
 export function resolveFastPathEndpoint(env: Record<string, string>): FastPathEndpoint | null {
+  // An explicit routing endpoint wins over everything. It is what a dev server
+  // or a self-hosted deployment points at its own token-injecting proxy, and it
+  // is deliberately separate from the chat proxy: the two can live in different
+  // places, and a deployment may want routing without changing where chat goes.
+  // The endpoint supplies its own credential, so no Authorization is sent.
+  const explicit = env.GEOLIBRE_FAST_PATH_URL?.trim().replace(/\/+$/, "");
+  if (explicit) return { url: absoluteUrl(explicit), apiKey: null };
+
   const proxy = env.GEOLIBRE_AI_PROXY_BASE_URL?.trim().replace(/\/+$/, "");
   if (proxy) {
     // The proxy base is normalized to end in `/v1` because it doubles as an

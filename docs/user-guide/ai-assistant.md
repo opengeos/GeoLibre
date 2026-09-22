@@ -295,6 +295,28 @@ changes appear in the transcript and are **undoable** like any other.
     Leaving the secret unset disables the route; the assistant keeps working
     through the model as usual.
 
+=== "Local development"
+
+    A browser dev server can reach neither endpoint on its own: TypeSafe
+    refuses `http://localhost:5173` as an origin, and the Worker wants an
+    instance token a page cannot supply. So `npm run dev` proxies `/systemone`
+    itself when you give it a credential, and points the app at that route:
+
+    ```bash
+    # through the deployed Worker, which holds the TypeSafe key (preferred —
+    # this is the same path production uses)
+    GEOLIBRE_AI_PROXY_TOKEN=… npm run dev
+
+    # or straight to TypeSafe with your own key
+    JEV_API_KEY=… npm run dev
+    ```
+
+    The dev server prints which one it is using at startup, and neither value
+    enters the client bundle. With neither set the route is not registered and
+    the fast path stays off. `npm run tauri:dev` needs none of this: the
+    desktop build reads `JEV_API_KEY` from your environment and reaches
+    TypeSafe through Tauri's native HTTP client.
+
 Note that enabling the fast path means the text of a prompt and your **layer
 names** are sent to TypeSafe for routing. On a local-Ollama setup, where nothing
 otherwise leaves your machine, that is a real trade-off — which is why the fast

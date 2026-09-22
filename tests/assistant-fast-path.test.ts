@@ -503,3 +503,48 @@ describe("names that the user may not control", () => {
     assert.ok(questions.layer.criteria.l.length < 200);
   });
 });
+
+describe("an explicit routing endpoint", () => {
+  it("wins over the chat proxy and carries no credential", () => {
+    // A dev server and a self-hosted deployment both point this at their own
+    // token-injecting proxy; it is separate from the chat proxy because the two
+    // need not be the same service.
+    assert.deepEqual(
+      resolveFastPathEndpoint({
+        GEOLIBRE_FAST_PATH_URL: "http://localhost:5173/systemone",
+        GEOLIBRE_AI_PROXY_BASE_URL: "https://ai.geolibre.app/v1",
+        JEV_API_KEY: "personal-key",
+      }),
+      { url: "http://localhost:5173/systemone", apiKey: null },
+    );
+  });
+
+  it("is not appended to, unlike the chat proxy base", () => {
+    // The chat base gets `/systemone` appended and its `/v1` stripped; an
+    // explicit endpoint is already the full URL and must be left alone.
+    assert.deepEqual(
+      resolveFastPathEndpoint({ GEOLIBRE_FAST_PATH_URL: "https://x.test/systemone/" }),
+      {
+        url: "https://x.test/systemone",
+        apiKey: null,
+      },
+    );
+  });
+
+  it("absolutizes a same-origin path, which the native transport requires", () => {
+    // Browser fetch resolves "/systemone" itself; Tauri's native HTTP client,
+    // the only transport that can reach TypeSafe on the desktop, does not.
+    const origin = "http://localhost:5199";
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "location");
+    Object.defineProperty(globalThis, "location", { value: { origin }, configurable: true });
+    try {
+      assert.deepEqual(resolveFastPathEndpoint({ GEOLIBRE_FAST_PATH_URL: "/systemone" }), {
+        url: `${origin}/systemone`,
+        apiKey: null,
+      });
+    } finally {
+      if (previous) Object.defineProperty(globalThis, "location", previous);
+      else delete (globalThis as { location?: unknown }).location;
+    }
+  });
+});

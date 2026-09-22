@@ -108,6 +108,8 @@ interface Turn {
   text: string;
   /** Tool name for `role === "tool"`. */
   tool?: string;
+  /** Whether the fast path routed this call instead of the model. */
+  routed?: boolean;
   /** Whether a tool call errored. */
   failed?: boolean;
 }
@@ -454,6 +456,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               tool: event.name,
               text: detail,
               failed: Boolean(event.error),
+              routed: event.routed,
             });
             return next;
           });
@@ -867,6 +870,14 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
                   <span className="break-all">
                     <span className="font-semibold">{turn.tool}</span>
+                    {turn.routed ? (
+                      <span
+                        className="ms-1 rounded-sm border px-1 py-px text-[0.65rem] align-middle"
+                        title={t("assistant.fastPath.routedHint")}
+                      >
+                        {t("assistant.fastPath.routed")}
+                      </span>
+                    ) : null}
                     {turn.text ? ` · ${turn.text}` : ""}
                   </span>
                 </div>

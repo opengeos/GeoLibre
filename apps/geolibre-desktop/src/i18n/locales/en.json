@@ -4410,7 +4410,9 @@
     "codeApprovalDecline": "Cancel",
     "fastPath": {
       "done": "Done.",
-      "failed": "That didn't go through — see the transcript."
+      "failed": "That didn't go through — see the transcript.",
+      "routed": "fast",
+      "routedHint": "Routed without the language model, so this ran in a fraction of the usual time."
     },
     "voice": {
       "start": "Start voice commands · or hold Space to talk",

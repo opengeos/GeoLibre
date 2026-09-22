@@ -278,11 +278,23 @@ function browserOrigin(): string | undefined {
   return origin && origin !== "null" ? origin : undefined;
 }
 
-function managedProxyBaseUrl(proxyUrl: string, baseOrigin?: string): string {
-  let normalized = proxyUrl.trim().replace(/\/+$/, "");
+/**
+ * Absolutize a configured proxy path against the page origin.
+ *
+ * A same-origin `/path` form is what a reverse proxy in front of the app
+ * configures, and Tauri's native HTTP client cannot resolve a relative URL, so
+ * it has to become absolute before it reaches either transport.
+ */
+function managedProxyPath(proxyUrl: string, baseOrigin?: string): string {
+  const normalized = proxyUrl.trim().replace(/\/+$/, "");
   if (baseOrigin && normalized.startsWith("/")) {
-    normalized = new URL(normalized, baseOrigin).toString().replace(/\/+$/, "");
+    return new URL(normalized, baseOrigin).toString().replace(/\/+$/, "");
   }
+  return normalized;
+}
+
+function managedProxyBaseUrl(proxyUrl: string, baseOrigin?: string): string {
+  const normalized = managedProxyPath(proxyUrl, baseOrigin);
   return normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
 }
 
@@ -295,6 +307,13 @@ export function readBuildTimeAssistantEnv(
 ): RuntimeEnv {
   if (!viteEnv) return {};
   const result: RuntimeEnv = {};
+  // Routing endpoint for the assistant's fast path. Separate from the chat
+  // proxy because the two need not be the same service: the dev server proxies
+  // only routing, and a deployment may add routing without moving chat.
+  const fastPathUrl = viteEnv.VITE_GEOLIBRE_FAST_PATH_URL?.trim().replace(/\/+$/, "");
+  if (fastPathUrl) {
+    result.GEOLIBRE_FAST_PATH_URL = managedProxyPath(fastPathUrl, baseOrigin);
+  }
   const proxyUrl = viteEnv.VITE_GEOLIBRE_AI_URL?.trim().replace(/\/+$/, "");
   if (proxyUrl) {
     result.OPENAI_COMPATIBLE_BASE_URL = managedProxyBaseUrl(proxyUrl, baseOrigin);
