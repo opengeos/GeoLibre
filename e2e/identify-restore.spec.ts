@@ -44,6 +44,12 @@ declare global {
 /** How many consecutive still polls count as "the camera has come to rest". */
 const STILL_POLLS = 5;
 
+/**
+ * How far in from the canvas edge the miss-click lands, in pixels. Inside the
+ * 40 px `FIT_BOUNDS_PADDING` a fit reserves, so no fitted feature can be there.
+ */
+const MISS_CLICK_INSET = 12;
+
 /** Reads the live camera through the handle `bindMapLibreMap` stashed. */
 async function readCamera(page: Page): Promise<Camera> {
   return page.evaluate(() => {
@@ -245,13 +251,16 @@ test("clicking past the features clears the Identify result instead of restoring
   await waitForCameraIdle(page);
   const identifiedCamera = await readCamera(page);
 
-  // A point on screen but off both squares: the fit frames a 2°-tall square,
-  // so the canvas edge is well clear of it.
-  const missPoint = await page.evaluate(() => {
+  // A point on screen but off both squares. The fit that just framed the
+  // identified square reserves `FIT_BOUNDS_PADDING` (40 px, `map-controller.ts`)
+  // on every side, so anything inside that band is guaranteed empty; stay well
+  // within it. Were the click to land on a feature after all, a fresh popup
+  // would open and the assertion below would say so.
+  const missPoint = await page.evaluate((inset) => {
     const map = window.__geolibreTestMap!;
     const rect = map.getCanvas().getBoundingClientRect();
-    return { x: rect.left + 12, y: rect.top + rect.height / 2 };
-  });
+    return { x: rect.left + inset, y: rect.top + rect.height / 2 };
+  }, MISS_CLICK_INSET);
   await page.mouse.click(missPoint.x, missPoint.y);
 
   await expect(identifyPopup(page)).toHaveCount(0);
