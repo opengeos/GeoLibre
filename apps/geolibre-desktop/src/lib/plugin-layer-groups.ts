@@ -16,10 +16,10 @@ import { useAppStore } from "@geolibre/core";
  * order. The store actions are covered by their own tests; what these need
  * covering for is the delegation itself.
  *
- * The signatures are deliberately narrower than the store's. `addLayerGroup`
- * and `moveLayersToGroup` drop `beforeLayerId` (a plugin has no panel position
- * to anchor to), and `removeLayerGroup` drops `options`, so a plugin can take
- * a folder apart but never delete the layers inside it.
+ * The signatures are deliberately narrower than the store's. `moveLayersToGroup`
+ * drops `beforeLayerId` (a plugin has no panel position to anchor to), and
+ * `removeLayerGroup` drops `options`, so a plugin can take a folder apart but
+ * never delete the layers inside it.
  */
 export function createPluginLayerGroupActions() {
   return {
