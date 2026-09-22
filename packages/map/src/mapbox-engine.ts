@@ -215,6 +215,10 @@ export class MapboxEngine implements MapEngine {
   // `restoreLayerStyles` can hand it back: the ordinary mirror never writes
   // paint on those layers.
   private storyPaintBackups = new Map<string, Map<string, Map<string, unknown>>>();
+  // Style layers a chapter's `durationMs` gave a paint transition, so
+  // `restoreLayerStyles` can take it back off them before the opacities are
+  // restored (otherwise the restore itself animates).
+  private storyTransitions = new Set<string>();
   private storyCameraToken = 0;
   private onDiagnostic?: (event: MapDiagnosticEvent) => void;
   private reportedDiagnosticKeys = new Set<string>();
@@ -951,12 +955,134 @@ export class MapboxEngine implements MapEngine {
   waitAndSyncLayers(layers: GeoLibreLayer[]): void {
     this.syncLayers(layers);
   }
-  async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
-    return this.layers.find((l) => l.id === id)?.geojson ?? null;
+  /**
+   * Style layer ids on the map that render a project layer: the ones this
+   * engine compiled for it, plus the ones a plugin registered for a
+   * control-drawn layer (`metadata.nativeLayerIds`), which has no plan at all.
+   * MapLibre resolves the same pair through `getCandidateStyleLayers`.
+   *
+   * Wider than {@link nativeLayerIds}, which answers the layer control and so
+   * deliberately names only the rows this engine owns; the live-source readers
+   * and story fades below need the plugin-registered ones too, or they miss
+   * every control-drawn layer.
+   */
+  private candidateLayerIds(layer: GeoLibreLayer): string[] {
+    const map = this.map;
+    if (!map) return [];
+    const planned = (this.plans.get(layer.id)?.layers ?? []).map((spec) => spec.id);
+    const native = Array.isArray(layer.metadata.nativeLayerIds)
+      ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
+      : [];
+    return [...new Set([...planned, ...native])].filter((id) => Boolean(map.getLayer(id)));
   }
+
+  /** The source id a style layer reads, when it names one. */
+  private styleLayerSourceId(nativeId: string): string | null {
+    const styleLayer = this.map?.getLayer(nativeId);
+    const sourceId =
+      styleLayer && "source" in styleLayer
+        ? (styleLayer as { source?: unknown }).source
+        : undefined;
+    return typeof sourceId === "string" ? sourceId : null;
+  }
+
+  /**
+   * Resolve a layer's rendered GeoJSON from its live Mapbox source.
+   *
+   * The store record only carries inline GeoJSON for layers added from
+   * in-memory data; a URL-backed layer and a layer a plugin draws itself keep
+   * their features only in the source, so the story-map HTML export would drop
+   * them (#936). MapLibre asks its worker for the parsed collection through
+   * `GeoJSONSource.getData()`; mapbox-gl has no such call, so a source set from
+   * an object is read back through `serialize()` and a URL-backed one is
+   * fetched from the same URL the source loaded (the browser cache normally
+   * answers it).
+   *
+   * @param id GeoLibre store layer id.
+   * @returns The source's FeatureCollection, or null when it has none.
+   */
+  async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
+    const map = this.map;
+    const layer = this.layers.find((candidate) => candidate.id === id);
+    if (!map || !layer) return layer?.geojson ?? null;
+    for (const nativeId of this.candidateLayerIds(layer)) {
+      const sourceId = this.styleLayerSourceId(nativeId);
+      if (!sourceId) continue;
+      const source = map.getSource(sourceId);
+      if (source?.type !== "geojson") continue;
+      let data: unknown;
+      try {
+        data = (source as mapboxgl.GeoJSONSource).serialize().data;
+      } catch {
+        // A source still being set up cannot be serialized; try the next one.
+        continue;
+      }
+      if (data && typeof data === "object" && "features" in data) return data as FeatureCollection;
+      // A URL-backed source keeps only the URL. Only http(s) is fetched back:
+      // a `data:`/`blob:` URL would already have been an object above, and an
+      // app-internal protocol has no fetchable body.
+      if (typeof data === "string" && /^https?:\/\//i.test(data)) {
+        try {
+          const response = await fetch(data);
+          if (!response.ok) continue;
+          const parsed: unknown = await response.json();
+          if (parsed && typeof parsed === "object" && "features" in parsed)
+            return parsed as FeatureCollection;
+        } catch {
+          // Offline, CORS, or unparseable: fall through so the export simply
+          // omits this layer's features, as MapLibre does when its source has
+          // no usable data.
+        }
+      }
+    }
+    return layer.geojson ?? null;
+  }
+  /**
+   * Read the live Mapbox raster source spec backing a project layer.
+   *
+   * Service-backed rasters a plugin registers (the Time Slider's and
+   * Timelapse's frames) carry no tile or TileJSON URL in their store record and
+   * have no compiled plan, so the story-map export could only inline them by
+   * reading the source back off the map (#1272). Only http(s) URLs are
+   * returned, matching MapController: a source backed by an app-internal
+   * protocol cannot load in a standalone page.
+   *
+   * @param id GeoLibre store layer id.
+   * @returns The serialized raster source spec, or null when the layer has no
+   *   embeddable raster source.
+   */
   getLayerRasterSource(id: string): Record<string, unknown> | null {
-    const source = this.plans.get(id)?.source;
-    return source?.type === "raster" || source?.type === "image" ? { ...source } : null;
+    const map = this.map;
+    const layer = this.layers.find((candidate) => candidate.id === id);
+    if (!map || !layer) return null;
+    const httpUrl = (value: unknown): value is string =>
+      typeof value === "string" && /^https?:\/\//i.test(value);
+    for (const nativeId of this.candidateLayerIds(layer)) {
+      const sourceId = this.styleLayerSourceId(nativeId);
+      if (!sourceId) continue;
+      const source = map.getSource(sourceId);
+      if (source?.type !== "raster") continue;
+      let spec: Record<string, unknown> | undefined;
+      try {
+        spec = (source as mapboxgl.RasterTileSource).serialize() as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (!spec || typeof spec !== "object") continue;
+      // Prefer the TileJSON `url` over `tiles`, as MapController does: it is
+      // the stable endpoint, rather than a resolved tile template that can
+      // embed a time-limited token.
+      if (httpUrl(spec.url)) {
+        const { tiles: _tiles, ...rest } = spec;
+        return rest;
+      }
+      const tiles = Array.isArray(spec.tiles) ? spec.tiles.filter(httpUrl) : [];
+      if (tiles.length > 0) {
+        const { url: _url, ...rest } = spec;
+        return { ...rest, tiles };
+      }
+    }
+    return null;
   }
   setStyle(url: string): void {
     this.setResolvedStyle(url);
@@ -970,6 +1096,9 @@ export class MapboxEngine implements MapEngine {
       this.reportedDiagnosticKeys.clear();
       this.plans.clear();
       this.previous.clear();
+      // The new style carries none of the old style layers, so the fade
+      // transitions recorded against them are gone with it.
+      this.storyTransitions.clear();
       this.layerControlHost.remove();
       this.map.setStyle(prepared, {
         diff: false,
@@ -1064,9 +1193,95 @@ export class MapboxEngine implements MapEngine {
         color ?? (document.documentElement.classList.contains("dark") ? "#262626" : "#ffffff"),
       );
   }
-  setStoryLayerOpacity(id: string, opacity: number): void {
-    this.storyOpacities.set(id, opacity);
-    this.syncLayers(this.layers);
+  /**
+   * Fade a project layer in or out for story-map playback.
+   *
+   * A chapter changes several layers at once and the presenter replays every
+   * change it passes, so this writes the opacity paint of that one layer
+   * instead of re-running a whole `syncLayers` per call. `durationMs` becomes
+   * the layer's paint transition, as it does on MapLibre: without it mapbox-gl
+   * cuts straight to the new opacity and a chapter's fade is a hard switch.
+   *
+   * @param id GeoLibre store layer id to fade.
+   * @param opacity Target opacity, clamped to the 0-1 range.
+   * @param durationMs Optional transition duration in milliseconds. Pass 0 for
+   *   an instant change; leave undefined to keep the style's own transition.
+   */
+  setStoryLayerOpacity(id: string, opacity: number, durationMs?: number): void {
+    const clamped = Math.min(1, Math.max(0, opacity));
+    this.storyOpacities.set(id, clamped);
+    const map = this.map;
+    const layer = this.layers.find((candidate) => candidate.id === id);
+    // Nothing is on the map to fade yet (a chapter replayed before the style
+    // finished loading); the next sync picks the stored opacity up.
+    if (!map?.isStyleLoaded() || !layer) {
+      this.syncLayers(this.layers);
+      return;
+    }
+    for (const nativeId of this.candidateLayerIds(layer))
+      this.setStoryOpacityTransition(nativeId, durationMs);
+    if (isMapboxPluginLayer(layer)) {
+      this.mirrorPluginLayerState({ ...layer, opacity: clamped });
+      return;
+    }
+    // Not compiled yet (or deliberately not compiled, as for a 3D Z layer the
+    // deck.gl overlay owns): let the ordinary sync decide what to draw.
+    if (!this.plans.has(id)) {
+      this.syncLayers(this.layers);
+      return;
+    }
+    let plan: MapboxLayerPlan;
+    try {
+      plan = compileMapboxLayer({ ...layer, opacity: clamped }, { textFont: this.textFont });
+    } catch {
+      // The layer does not compile at all; a full sync reports that the usual
+      // way instead of failing silently here.
+      this.syncLayers(this.layers);
+      return;
+    }
+    for (const spec of plan.layers) {
+      if (!map.getLayer(spec.id)) continue;
+      const paint = (spec.paint ?? {}) as Record<string, unknown>;
+      for (const property of STORY_OPACITY_PAINT_PROPERTIES[spec.type] ?? []) {
+        const value = paint[property];
+        if (value === undefined) continue;
+        try {
+          map.setPaintProperty(spec.id, property as keyof mapboxgl.AnyPaint, value as never);
+        } catch {
+          // A property this style layer does not carry.
+        }
+      }
+    }
+    // Keep the remembered plan in step with what the map now shows, or the
+    // next `syncLayers` would diff the restored paint against a plan that
+    // still holds the pre-fade opacity and skip writing it back.
+    this.plans.set(id, plan);
+  }
+  /**
+   * Give a story fade mapbox-gl's paint transition, so the chapter's duration
+   * animates the opacity instead of cutting to it. The `-transition` keys are
+   * the same ones MapLibre's `setStoryLayerOpacity` writes.
+   */
+  private setStoryOpacityTransition(nativeId: string, durationMs: number | undefined): void {
+    const map = this.map;
+    if (!map || typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0)
+      return;
+    const type = map.getLayer(nativeId)?.type;
+    if (!type) return;
+    for (const property of STORY_OPACITY_PAINT_PROPERTIES[type] ?? []) {
+      try {
+        map.setPaintProperty(
+          nativeId,
+          `${property}-transition` as keyof mapboxgl.AnyPaint,
+          {
+            duration: durationMs,
+          } as never,
+        );
+        this.storyTransitions.add(nativeId);
+      } catch {
+        // A property this style layer does not carry.
+      }
+    }
   }
   restoreLayerStyles(): void {
     this.storyCameraToken++;
@@ -1075,8 +1290,34 @@ export class MapboxEngine implements MapEngine {
       this.pendingStoryRotate = null;
     }
     this.map?.stop();
+    // Clear the fade transitions first, otherwise the restored opacities
+    // animate back in over the last chapter's duration (MapLibre's
+    // `restoreLayerStyles` does the same).
+    this.setStoryTransitionsInstant();
     this.storyOpacities.clear();
     this.syncLayers(this.layers);
+  }
+  /** Take the transition back off every style layer a story fade touched. */
+  private setStoryTransitionsInstant(): void {
+    const map = this.map;
+    for (const nativeId of this.storyTransitions) {
+      const type = map?.getLayer(nativeId)?.type;
+      if (!map || !type) continue;
+      for (const property of STORY_OPACITY_PAINT_PROPERTIES[type] ?? []) {
+        try {
+          map.setPaintProperty(
+            nativeId,
+            `${property}-transition` as keyof mapboxgl.AnyPaint,
+            {
+              duration: 0,
+            } as never,
+          );
+        } catch {
+          // The layer may have been replaced meanwhile; its own paint applies.
+        }
+      }
+    }
+    this.storyTransitions.clear();
   }
   /** Style layer ids currently on the map that render `layer`. */
   private nativeLayerIds(layer: GeoLibreLayer): string[] {

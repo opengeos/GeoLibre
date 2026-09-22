@@ -84,9 +84,14 @@ function makeMap() {
     getSource: (id: string) =>
       sources.has(id)
         ? {
+            // `type` and `serialize()` are what the live-source readers
+            // (getLayerGeoJson, getLayerRasterSource) go through, the way
+            // mapbox-gl's own source objects expose them.
+            type: (sources.get(id) as { type?: unknown }).type,
             // Expose the stored spec's advertised bounds, if any, so the
             // engine's source-bounds lookup (fitLayer) can read them.
             bounds: (sources.get(id) as { bounds?: unknown }).bounds,
+            serialize: () => ({ ...sources.get(id)! }),
             setData: (data: unknown) => {
               calls.push(`setData:${id}`);
               sources.set(id, { ...sources.get(id)!, data });
@@ -1681,6 +1686,200 @@ describe("Mapbox story opacity on plugin-owned layers", () => {
       (map.getLayer("dep-index")?.paint as Record<string, unknown>)["raster-opacity"],
       1,
     );
+  });
+});
+
+describe("Mapbox story chapter fades", () => {
+  const circleId = "geolibre-mapbox-cities-geojson-circle";
+
+  /** A compiled point layer, synced and ready to fade. */
+  function makeStoryEngine() {
+    const { engine, map } = makeEngine();
+    const layer = {
+      ...geojsonLayer({ id: "cities" }),
+      geojson: {
+        type: "FeatureCollection" as const,
+        features: [
+          {
+            type: "Feature" as const,
+            properties: {},
+            geometry: { type: "Point" as const, coordinates: [0, 0] },
+          },
+        ],
+      },
+    };
+    engine.syncLayers([layer]);
+    return { engine, map, layer };
+  }
+
+  const circlePaint = (map: ReturnType<typeof makeMap>) =>
+    map.getLayer(circleId)?.paint as Record<string, unknown>;
+
+  it("fades a layer over the chapter's duration instead of cutting to the opacity", () => {
+    const { engine, map } = makeStoryEngine();
+    const base = circlePaint(map)["circle-opacity"] as number;
+    map.calls.length = 0;
+    engine.setStoryLayerOpacity("cities", 0.5, 2000);
+    // The transition is what turns a chapter's `duration` into a fade; without
+    // it mapbox-gl jumps straight to the new opacity (issue #2475).
+    assert.deepEqual(circlePaint(map)["circle-opacity-transition"], { duration: 2000 });
+    assert.deepEqual(circlePaint(map)["circle-stroke-opacity-transition"], { duration: 2000 });
+    assert.ok(
+      Math.abs((circlePaint(map)["circle-opacity"] as number) - base * 0.5) < 1e-9,
+      `circle-opacity ${circlePaint(map)["circle-opacity"]}`,
+    );
+    // Only that one layer's opacity is written: a chapter replays a change per
+    // layer, and a full syncLayers per call would recompile every other one.
+    assert.deepEqual(
+      map.calls.filter((call) => /^(addLayer|removeLayer|addSource|removeSource):/.test(call)),
+      [],
+    );
+  });
+
+  it("keeps the style's own transition when a chapter names no duration", () => {
+    const { engine, map } = makeStoryEngine();
+    engine.setStoryLayerOpacity("cities", 0.5);
+    assert.equal(circlePaint(map)["circle-opacity-transition"], undefined);
+  });
+
+  it("applies an instant change for a zero duration, and clamps the opacity", () => {
+    const { engine, map } = makeStoryEngine();
+    const base = circlePaint(map)["circle-opacity"] as number;
+    engine.setStoryLayerOpacity("cities", 5, 0);
+    assert.deepEqual(circlePaint(map)["circle-opacity-transition"], { duration: 0 });
+    assert.equal(circlePaint(map)["circle-opacity"], base);
+    engine.setStoryLayerOpacity("cities", -1, 0);
+    assert.equal(circlePaint(map)["circle-opacity"], 0);
+  });
+
+  it("restores the layer's own opacity without animating it back in", () => {
+    const { engine, map } = makeStoryEngine();
+    const base = circlePaint(map)["circle-opacity"] as number;
+    engine.setStoryLayerOpacity("cities", 0.2, 2000);
+    engine.restoreLayerStyles();
+    // The direct paint write above has to leave the remembered plan in step,
+    // or this restore would diff against the pre-fade plan and skip writing.
+    assert.equal(circlePaint(map)["circle-opacity"], base);
+    assert.deepEqual(circlePaint(map)["circle-opacity-transition"], { duration: 0 });
+  });
+
+  it("remembers the opacity when the style is still loading", () => {
+    const { engine, map, layer } = makeStoryEngine();
+    map.setStyleLoaded(false);
+    engine.setStoryLayerOpacity("cities", 0.4, 500);
+    map.setStyleLoaded(true);
+    engine.syncLayers([layer]);
+    assert.ok(
+      Math.abs((circlePaint(map)["circle-opacity"] as number) - 0.4 * 0.6) < 1e-9,
+      `circle-opacity ${circlePaint(map)["circle-opacity"]}`,
+    );
+  });
+});
+
+describe("Mapbox live layer sources", () => {
+  /** A layer a plugin draws itself: native ids on the record, no plan. */
+  function pluginLayer(id: string, nativeId: string) {
+    return {
+      ...geojsonLayer({ id }),
+      type: "raster" as const,
+      geojson: undefined,
+      source: { sourceId: `${nativeId}-source` },
+      metadata: {
+        externalNativeLayer: true,
+        sourceKind: "time-slider",
+        nativeLayerIds: [nativeId],
+      },
+    };
+  }
+
+  it("reads a plugin-owned layer's GeoJSON back off the map", async () => {
+    const { engine, map } = makeEngine();
+    const collection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 2] } },
+      ],
+    };
+    map.addSource("coverage-source", { type: "geojson", data: collection });
+    map.addLayer({ id: "coverage", type: "line", source: "coverage-source", paint: {} });
+    const layer = { ...pluginLayer("mapillary", "coverage"), type: "geojson" as const };
+    engine.syncLayers([layer]);
+    assert.deepEqual(await engine.getLayerGeoJson("mapillary"), collection);
+  });
+
+  it("fetches a URL-backed source's features, which mapbox-gl cannot hand back", async () => {
+    const { engine, map } = makeEngine();
+    const collection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [3, 4] } },
+      ],
+    };
+    engine.syncLayers([
+      {
+        ...geojsonLayer({ id: "remote" }),
+        geojson: undefined,
+        source: { url: "https://example.test/cities.geojson" },
+      },
+    ]);
+    const original = globalThis.fetch;
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      requested.push(String(input));
+      return { ok: true, json: async () => collection } as Response;
+    }) as typeof fetch;
+    try {
+      assert.deepEqual(await engine.getLayerGeoJson("remote"), collection);
+    } finally {
+      globalThis.fetch = original;
+    }
+    assert.deepEqual(requested, ["https://example.test/cities.geojson"]);
+    assert.ok(map.getLayer("geolibre-mapbox-remote-geojson-circle"));
+  });
+
+  it("falls back to the record's own features when the source has none", async () => {
+    const { engine } = makeEngine();
+    const layer = geojsonLayer({ id: "inline" });
+    engine.syncLayers([layer]);
+    assert.deepEqual(await engine.getLayerGeoJson("inline"), layer.geojson);
+    assert.equal(await engine.getLayerGeoJson("missing"), null);
+  });
+
+  it("reads a plugin-owned raster's live source, preferring its TileJSON url", () => {
+    const { engine, map } = makeEngine();
+    map.addSource("frame-source", {
+      type: "raster",
+      url: "https://example.test/tilejson.json",
+      tiles: ["https://example.test/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    });
+    map.addLayer({ id: "frame", type: "raster", source: "frame-source", paint: {} });
+    engine.syncLayers([pluginLayer("time-slider", "frame")]);
+    assert.deepEqual(engine.getLayerRasterSource("time-slider"), {
+      type: "raster",
+      url: "https://example.test/tilejson.json",
+      tileSize: 256,
+    });
+  });
+
+  it("returns tile templates when there is no TileJSON url, and nothing for an app-internal source", () => {
+    const { engine, map } = makeEngine();
+    map.addSource("tiled-source", {
+      type: "raster",
+      tiles: ["https://example.test/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    });
+    map.addLayer({ id: "tiled", type: "raster", source: "tiled-source", paint: {} });
+    map.addSource("local-source", { type: "raster", tiles: ["blob:http://localhost/{z}/{x}/{y}"] });
+    map.addLayer({ id: "local", type: "raster", source: "local-source", paint: {} });
+    engine.syncLayers([pluginLayer("remote", "tiled"), pluginLayer("local", "local")]);
+    assert.deepEqual(engine.getLayerRasterSource("remote"), {
+      type: "raster",
+      tiles: ["https://example.test/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    });
+    // A blob/pmtiles/geolibre source could not load in a standalone export.
+    assert.equal(engine.getLayerRasterSource("local"), null);
   });
 });
 
