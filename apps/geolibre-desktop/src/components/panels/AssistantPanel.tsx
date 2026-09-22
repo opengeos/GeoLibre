@@ -403,7 +403,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const myGeneration = (sendGenerationRef.current += 1);
     setRunning(true);
     setInput("");
-    voiceRef.current?.notifyRunStart();
+    // Only a dictated run drives the voice status. Typing while the microphone
+    // happens to be open would otherwise flip the strip to "Working on what you
+    // said…", claiming it heard something the user only typed.
+    if (options.spoken) voiceRef.current?.notifyRunStart();
     // Accumulated separately from the transcript turn so the spoken reply is
     // the whole answer, read once at the end, rather than a stream of fragments.
     let replyText = "";
@@ -481,7 +484,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         // A dictated question gets a spoken answer; a typed one stays silent
         // even while the microphone is open, and a superseded run says nothing.
         if (options.spoken && replyText) voiceRef.current?.speakReply(replyText);
-        voiceRef.current?.notifyRunEnd();
+        if (options.spoken) voiceRef.current?.notifyRunEnd();
       }
     }
   };
@@ -497,8 +500,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     declineAllPendingCode();
     runningRef.current = false;
     setRunning(false);
-    // Stop is "be quiet now": silence a reply still being read aloud, and let
-    // the voice session drop back out of its working state.
+    // Stop is "be quiet now", so it silences a reply already being read aloud —
+    // notifyRunEnd alone would let the session talk on to the end of the answer
+    // the user just cancelled — and drops the session out of its working state.
+    voiceRef.current?.silence();
     voiceRef.current?.notifyRunEnd();
   };
 
@@ -526,6 +531,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
   const voiceActive = voice.status !== "idle" && voice.status !== "error";
+  // A live phrase takes the status line, but never the live region (see below).
+  const showVoiceInterim = Boolean(voiceInterim) && !voice.errorKey;
 
   // Clear the transcript and the agent's conversation history (so the next
   // message starts fresh), stopping any in-flight run first.
@@ -898,17 +905,27 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   />
                 ))}
               </div>
+              {/* The live region carries the status only. The interim preview
+                  is revised several times a second, and a polite region would
+                  queue and read back every revision of a half-heard phrase. */}
               <span
                 aria-live="polite"
                 className={cn(
                   "truncate",
                   voice.errorKey ? "text-destructive" : "text-muted-foreground",
+                  // Yields the line to the preview without leaving the
+                  // accessibility tree: the status text itself is unchanged, so
+                  // this does not re-announce it.
+                  showVoiceInterim && "sr-only",
                 )}
               >
-                {voice.errorKey
-                  ? t(voice.errorKey)
-                  : voiceInterim || t(voiceStatusKey(voice.status, voice.mode))}
+                {voice.errorKey ? t(voice.errorKey) : t(voiceStatusKey(voice.status, voice.mode))}
               </span>
+              {showVoiceInterim ? (
+                <span aria-hidden="true" className="truncate text-muted-foreground">
+                  {voiceInterim}
+                </span>
+              ) : null}
             </div>
           ) : null}
           <div className="flex items-end gap-2 px-3 py-2">

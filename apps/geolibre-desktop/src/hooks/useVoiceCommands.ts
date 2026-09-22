@@ -19,7 +19,6 @@ import {
   type VoiceMessageKey,
 } from "../lib/assistant/speech";
 import {
-  MICROPHONE_VISUALIZER_GATE,
   PUSH_TO_TALK_HOLD_DELAY_MS,
   SPACE_INTERACTIVE_SELECTOR,
   isInteractiveSpaceTarget,
@@ -54,6 +53,8 @@ export interface VoiceCommands {
   visualizerRef: (node: HTMLElement | null) => void;
   /** Reads an assistant reply aloud, if replies are spoken and voice is live. */
   speakReply: (markdown: string) => void;
+  /** Silences a reply being read aloud, leaving the session otherwise alone. */
+  silence: () => void;
   notifyRunStart: () => void;
   notifyRunEnd: () => void;
 }
@@ -158,8 +159,12 @@ export function useVoiceCommands({
           : (window.AudioContext ??
             (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
       if (!AudioContextClass) return;
+      // Held outside the try so the catch can close a context that was created
+      // but never published to meterRef — stopMeter() can only release one that
+      // got that far, and a native audio context leaks for the page's life.
+      let context: AudioContext | null = null;
       try {
-        const context = new AudioContextClass();
+        context = new AudioContextClass();
         void context.resume().catch(() => {});
         const analyser = context.createAnalyser();
         analyser.fftSize = 64;
@@ -196,6 +201,9 @@ export function useVoiceCommands({
         render();
       } catch {
         stopMeter();
+        // A no-op when stopMeter() already closed this one: closing twice only
+        // rejects, and that rejection is swallowed here.
+        void context?.close().catch(() => {});
       }
     },
     [stopMeter],
@@ -421,6 +429,8 @@ export function useVoiceCommands({
     session.speak(spokenTextFromMarkdown(markdown));
   }, []);
 
+  const silence = useCallback(() => sessionRef.current?.cancelSpeech(), []);
+
   const notifyRunStart = useCallback(() => sessionRef.current?.notifyRunStart(), []);
   const notifyRunEnd = useCallback(() => sessionRef.current?.notifyRunEnd(), []);
 
@@ -441,10 +451,11 @@ export function useVoiceCommands({
     stop,
     visualizerRef,
     speakReply,
+    silence,
     notifyRunStart,
     notifyRunEnd,
   };
 }
 
 /** Re-exported so the panel can guard the microphone button's click. */
-export { shouldIgnoreVoiceButtonClick, MICROPHONE_VISUALIZER_GATE };
+export { shouldIgnoreVoiceButtonClick };
