@@ -317,6 +317,26 @@ describe("fast-path request", () => {
     }
   });
 
+  it("does not send a request that was already cancelled", async () => {
+    // The caller can be cancelled during the async gap before this runs (on
+    // desktop the transport resolves by dynamic import first). An `abort`
+    // listener attached after the event has fired never fires, so the state
+    // has to be read once up front.
+    let called = false;
+    const action = await resolveFastPathAction({
+      prompt: "hide the rivers",
+      state: STATE,
+      endpoint,
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, json: async () => ({ answers: answers() }) };
+      },
+      signal: AbortSignal.abort(),
+    });
+    assert.equal(action, null);
+    assert.equal(called, false);
+  });
+
   it("gives up once it stops being fast", async () => {
     const slow: FastPathFetch = (_url, init) =>
       new Promise((_resolve, reject) => {

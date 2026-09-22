@@ -494,6 +494,13 @@ export async function resolveFastPathAction(
   if (!prompt.trim() || !endpoint?.url || !fastPathFitsProject(state)) return null;
   if (unavailableEndpoints.has(endpoint.url)) return null;
 
+  // An `abort` listener only catches an abort that has not happened yet. The
+  // caller can already be cancelled by the time this runs — on desktop the
+  // transport is resolved by dynamic import first, which is a real async gap to
+  // press Stop in — and attaching a listener after the event has fired would
+  // let the request go out anyway.
+  if (signal?.aborted) return null;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? FAST_PATH_TIMEOUT_MS);
   const abort = () => controller.abort();
