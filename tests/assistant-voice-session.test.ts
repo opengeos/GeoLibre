@@ -423,6 +423,48 @@ describe("voice session spoken replies", () => {
     assert.equal(h.session.getStatus(), "listening");
   });
 
+  it("drops an answer from a push-to-talk turn once an open mic has started", () => {
+    // The user gave up waiting and switched to the button. The older answer
+    // must not be read into the new session, nor abort its microphone.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("first question");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.start("open-mic");
+    const listening = h.current;
+    h.session.speak("The answer to the first question.");
+    assert.deepEqual(h.synthesis!.spoken, []);
+    assert.equal(h.session.getStatus(), "listening");
+    assert.equal(listening.abortCalls, 0, "the new session's microphone was taken");
+  });
+
+  it("brings an open mic back when a reply is silenced part-way", () => {
+    // Cancelling the audio is not enough: the utterance's end event bails once
+    // `speaking` is false, so without going through the resume path the mic
+    // stays suspended and the status sticks on "speaking".
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.session.speak("A long answer nobody wants to sit through.");
+    assert.equal(h.session.getStatus(), "speaking");
+    h.session.stopSpeaking();
+    assert.equal(h.synthesis!.cancelCalls, 1);
+    assert.equal(h.session.getStatus(), "listening");
+    assert.ok(h.current.started, "the microphone never came back");
+  });
+
+  it("ends a push-to-talk turn when its reply is silenced part-way", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.speak("Twelve.");
+    h.session.notifyRunEnd();
+    h.session.stopSpeaking();
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
   it("silences a reply when the session stops", () => {
     const h = harness({ synthesis: true });
     h.session.start("open-mic");

@@ -395,6 +395,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
    */
   const runPrompt = async (prompt: string, options: { spoken?: boolean } = {}) => {
     if (!prompt || runningRef.current || !hasKey) return;
+    // New intent supersedes old, typed as much as spoken: a reply still being
+    // read aloud answers the previous question, and the run that produced it has
+    // already been marked finished, so nothing else would stop it talking over
+    // this one.
+    voiceRef.current?.silence();
     const history = promptHistoryRef.current;
     if (history.at(-1) !== prompt) history.push(prompt);
     promptHistoryIndexRef.current = null;

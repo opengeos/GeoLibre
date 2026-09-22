@@ -386,7 +386,30 @@ export class VoiceSession {
     }
   }
 
-  /** Silences a reply in progress. Safe to call when nothing is speaking. */
+  /**
+   * Silences a reply in progress and settles the session it belonged to.
+   *
+   * This is the one callers outside the session should use. `cancelSpeech()`
+   * only stops the audio: on its own it would strand an open mic that had been
+   * suspended for the playback, leaving it deaf with the status stuck on
+   * "speaking", because the utterance's `end` event bails once `speaking` is
+   * already false. Going through the same resume path playback normally ends on
+   * brings the microphone back, or finishes a push-to-talk turn that is over.
+   */
+  stopSpeaking(): void {
+    if (!this.speaking) return;
+    const generation = this.generation;
+    this.cancelSpeech();
+    this.resumeAfterPlayback(generation);
+  }
+
+  /**
+   * Silences a reply in progress without settling the session.
+   *
+   * Internal: it is what `start()` and `stop()` use, where the caller goes on to
+   * rebuild or tear down the session itself. Everything else wants
+   * {@link stopSpeaking}.
+   */
   cancelSpeech(): void {
     if (!this.speaking) return;
     this.speaking = false;

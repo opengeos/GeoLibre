@@ -412,7 +412,7 @@ export function useVoiceCommands({
 
   const setSpeakReplies = useCallback((next: boolean) => {
     setSpeakRepliesState(next);
-    if (!next) sessionRef.current?.cancelSpeech();
+    if (!next) sessionRef.current?.stopSpeaking();
     try {
       window.localStorage.setItem(SPEAK_STORAGE_KEY, String(next));
     } catch {
@@ -429,7 +429,7 @@ export function useVoiceCommands({
     session.speak(spokenTextFromMarkdown(markdown));
   }, []);
 
-  const silence = useCallback(() => sessionRef.current?.cancelSpeech(), []);
+  const silence = useCallback(() => sessionRef.current?.stopSpeaking(), []);
 
   const notifyRunStart = useCallback(() => sessionRef.current?.notifyRunStart(), []);
   const notifyRunEnd = useCallback(() => sessionRef.current?.notifyRunEnd(), []);
