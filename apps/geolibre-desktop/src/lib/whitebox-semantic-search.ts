@@ -33,6 +33,7 @@
 
 import type { WhiteboxTool } from "@geolibre/processing";
 import {
+  CATALOG_MAX_KEYWORD_CANDIDATES,
   selectCatalogTools,
   type CatalogMatch,
   type CatalogTool,
@@ -66,15 +67,6 @@ export const SEMANTIC_SPARSE_HITS = 3;
  * done.
  */
 export const SEMANTIC_DEBOUNCE_MS = 500;
-
-/**
- * Substring hits offered to the lookup as extra candidates.
- *
- * Mirrors the assistant's cap for the same reason: a one-word search can match
- * hundreds of tools, and feeding all of them into the Choice question would
- * crowd out the categories the lookup's own first question chose.
- */
-const MAX_KEYWORD_CANDIDATES = 40;
 
 /**
  * Whether a query is worth asking about, given what the substring filter found.
@@ -141,7 +133,7 @@ export async function searchWhiteboxToolsByMeaning(
       query: options.query,
       tools: options.tools.map(whiteboxCatalogTool),
       keywordMatches: options.keywordMatches
-        .slice(0, MAX_KEYWORD_CANDIDATES)
+        .slice(0, CATALOG_MAX_KEYWORD_CANDIDATES)
         .map(whiteboxCatalogTool),
       endpoint,
       fetchImpl: await typesafeFetch(),

@@ -18,6 +18,7 @@ import { cleanStatement, maskSqlLiterals, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import { findNamedTileBasemap, NAMED_TILE_BASEMAPS } from "./basemaps";
 import {
+  CATALOG_MAX_KEYWORD_CANDIDATES,
   mergeCatalogMatches,
   selectCatalogTools,
   type CatalogMatch,
@@ -115,15 +116,6 @@ const MAX_MODEL_ALGORITHM_MATCHES = 25;
 const MAX_WHITEBOX_MATCHES = 25;
 
 /**
- * Keyword hits offered to the catalog lookup as extra candidates.
- *
- * A one-word search can match hundreds of tools by substring; feeding all of
- * them into a Choice question would crowd out the categories the lookup's own
- * first question chose. This keeps the reinforcement without the takeover.
- */
-const MAX_KEYWORD_CANDIDATES = 40;
-
-/**
  * Rank the catalog against a search, semantically first and literally after.
  *
  * The two searches answer different questions. The substring filter is exact
@@ -151,7 +143,7 @@ async function rankWhiteboxSearch(
     return await selectCatalogTools({
       query,
       tools,
-      keywordMatches: keywordMatches.slice(0, MAX_KEYWORD_CANDIDATES),
+      keywordMatches: keywordMatches.slice(0, CATALOG_MAX_KEYWORD_CANDIDATES),
       endpoint,
       fetchImpl: await typesafeFetch(),
     });

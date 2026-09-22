@@ -117,6 +117,19 @@ export const CATALOG_MIN_TOOL_PROBABILITY = 0.01;
  */
 export const CATALOG_TIMEOUT_MS = 6_000;
 
+/**
+ * Keyword hits a caller should offer the lookup as extra candidates.
+ *
+ * A one-word search can match hundreds of tools by substring; feeding all of
+ * them into a Choice question would crowd out the categories the lookup's own
+ * first question chose. This keeps the reinforcement without the takeover.
+ *
+ * Lives here rather than in each caller because both the assistant and the
+ * Whitebox toolbox cap `keywordMatches` for exactly this reason, and two
+ * independent literals would drift the first time one is tuned.
+ */
+export const CATALOG_MAX_KEYWORD_CANDIDATES = 40;
+
 /** Example tool names listed per category in the first question. */
 const CATEGORY_EXAMPLES = 6;
 
