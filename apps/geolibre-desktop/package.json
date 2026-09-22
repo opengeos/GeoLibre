@@ -77,7 +77,7 @@
     "jspdf": "^4.2.1",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^6.10.0",
-    "maplibre-gl-3d-tiles": "^0.5.7",
+    "maplibre-gl-3d-tiles": "^0.5.8",
     "maplibre-gl-basemap-control": "^0.14.3",
     "maplibre-gl-components": "^0.31.1",
     "maplibre-gl-duckdb": "^0.2.4",
