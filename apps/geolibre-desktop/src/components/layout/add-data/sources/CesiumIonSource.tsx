@@ -108,7 +108,17 @@ export function CesiumIonSource() {
               const pick = CESIUM_ION_QUICK_PICKS.find(
                 (candidate) => String(candidate.assetId) === event.target.value,
               );
-              if (!pick) return;
+              if (!pick) {
+                // Re-picking the placeholder means "I'll type an id myself", so
+                // drop what the previous pick filled in, the way the Deck.gl
+                // sample dropdown drops a sample's placement. Returning without
+                // a state change would leave the native select showing the
+                // placeholder while the fields below still held the old pick.
+                setAssetId("");
+                setKind("3d-tiles");
+                source.setLayerName(t("addData.cesiumIon.defaultName"));
+                return;
+              }
               setAssetId(String(pick.assetId));
               setKind(pick.kind);
               source.setLayerName(pick.name);

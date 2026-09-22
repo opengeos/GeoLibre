@@ -77,6 +77,9 @@ describe("cesium-ion layer builder", () => {
     };
     assert.equal(cesiumIonAssetId(plain), null, "the source kind is the contract, not the field");
     assert.equal(isCesiumOnlyLayer(plain), false);
+  });
+
+  it("offers quick picks with unique ids, valid groups, and the expected depot ids", () => {
     assert.ok(CESIUM_ION_QUICK_PICKS.some((p) => p.assetId === CESIUM_OSM_BUILDINGS_ASSET_ID));
     const google = CESIUM_ION_QUICK_PICKS.find(
       (p) => p.assetId === CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID,
