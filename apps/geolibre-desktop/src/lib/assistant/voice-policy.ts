@@ -73,6 +73,16 @@ export const SPACE_INTERACTIVE_SELECTOR = [
   '[role="treeitem"]',
 ].join(", ");
 
+/** Containers whose canvas is a map, across every engine GeoLibre renders with. */
+const MAP_SURFACE_SELECTOR = [
+  ".maplibregl-canvas-container",
+  ".maplibregl-map",
+  ".mapboxgl-canvas-container",
+  ".mapboxgl-map",
+  ".cesium-viewer",
+  ".esri-view-surface",
+].join(", ");
+
 /** The DOM surface the rules probe, narrowed to the methods they call. */
 type Probe = {
   tagName?: string;
@@ -85,14 +95,17 @@ type Probe = {
 /**
  * Whether Space began on a map surface, which is reserved for push-to-talk.
  *
- * Both engines give their canvas a tabindex so it can take keyboard camera
+ * Every engine gives its canvas a tabindex so it can take keyboard camera
  * input, which would otherwise make the generic focus guard below read a click
- * on the map as a button activation.
+ * on the map as a button activation. All of the engines GeoLibre ships are
+ * listed, so the first 500 ms of a hold behaves the same whichever one is
+ * rendering — MapLibre and Mapbox use their own prefixes, and ArcGIS puts its
+ * canvas inside the view surface.
  */
 export function isPushToTalkSurface(target: EventTarget | null | undefined): boolean {
   const probe = target as Probe;
   if (probe?.tagName?.toUpperCase?.() !== "CANVAS") return false;
-  return Boolean(probe?.closest?.(".maplibregl-canvas-container, .maplibregl-map, .cesium-viewer"));
+  return Boolean(probe?.closest?.(MAP_SURFACE_SELECTOR));
 }
 
 /** Whether a focused target owns Space for UI interaction. */

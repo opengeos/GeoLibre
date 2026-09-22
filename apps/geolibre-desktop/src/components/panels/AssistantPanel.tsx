@@ -495,8 +495,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         // screen, so a silent failure leaves the user waiting on an answer that
         // is never coming.
         if (options.spoken && cancelledGenerationRef.current !== myGeneration) {
-          if (replyText) voiceRef.current?.speakReply(replyText);
-          else if (failed) voiceRef.current?.speakReply(t("assistant.voice.failed"));
+          // Failure wins over whatever text arrived first: a run that threw
+          // part-way leaves a truncated answer, and reading that out as though
+          // it were the whole thing is worse than saying it did not go through.
+          if (failed) voiceRef.current?.speakReply(t("assistant.voice.failed"));
+          else if (replyText) voiceRef.current?.speakReply(replyText);
         }
         if (options.spoken) voiceRef.current?.notifyRunEnd();
       }

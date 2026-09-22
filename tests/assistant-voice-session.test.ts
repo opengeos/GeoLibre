@@ -385,6 +385,36 @@ describe("voice session spoken replies", () => {
     assert.equal(h.session.getStatus(), "idle");
   });
 
+  it("drops a stale answer rather than reading it into a newer turn", () => {
+    // The user got impatient and asked again. A push-to-talk recognizer ends on
+    // key release, so one that is live when the previous turn's answer finally
+    // arrives means a new hold is under way — reading the old answer would talk
+    // over the new question, into a microphone that would transcribe it.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("first question");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.start("push-to-talk");
+    h.session.speak("The answer to the first question.");
+    assert.deepEqual(h.synthesis!.spoken, []);
+    assert.equal(h.session.getStatus(), "listening", "the new turn keeps listening");
+    assert.ok(h.recognizers.at(-1)!.started, "and its microphone stays open");
+  });
+
+  it("still reads an answer back when the turn that asked is the live one", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.speak("Twelve.");
+    assert.deepEqual(
+      h.synthesis!.spoken.map((u) => u.text),
+      ["Twelve."],
+    );
+  });
+
   it("says nothing when there is no synthesizer or nothing to say", () => {
     const h = harness();
     h.session.start("open-mic");

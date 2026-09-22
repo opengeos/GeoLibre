@@ -302,6 +302,13 @@ export class VoiceSession {
     const synthesis = this.options.synthesis;
     const createUtterance = this.options.createUtterance;
     if (this.disposed || !synthesis || !createUtterance || !text.trim()) return;
+    // A push-to-talk recognizer ends when the key is released, so one that is
+    // still live here belongs to a *newer* hold — the answer being handed over
+    // is from a turn the user has already moved on from. Reading it out would
+    // talk over the question they are asking now, into a hot microphone that
+    // would then transcribe it. New intent supersedes old, so this one is
+    // dropped; the transcript still has it.
+    if (this.mode === "push-to-talk" && this.recognizer) return;
     this.cancelSpeech();
     const generation = this.generation;
     let utterance: SpeechSynthesisUtterance;

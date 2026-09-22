@@ -121,6 +121,23 @@ describe("voice Space ownership", () => {
     assert.equal(isInteractiveSpaceTarget(canvas), false);
   });
 
+  it("treats every engine's map surface the same way", () => {
+    // GeoLibre renders with MapLibre, Mapbox, Cesium and ArcGIS. If one of them
+    // is missing here, the first 500 ms of a hold behaves differently depending
+    // on which engine happens to be active.
+    for (const container of [
+      ".maplibregl-map",
+      ".mapboxgl-map",
+      ".mapboxgl-canvas-container",
+      ".cesium-viewer",
+      ".esri-view-surface",
+    ]) {
+      const canvas = element({ tagName: "canvas", matches: ["[tabindex]", container] });
+      assert.equal(isPushToTalkSurface(canvas), true, container);
+      assert.equal(isInteractiveSpaceTarget(canvas), false, container);
+    }
+  });
+
   it("does not mistake an unrelated canvas for the map", () => {
     const chart = element({ tagName: "CANVAS", matches: ["[tabindex]"] });
     assert.equal(isPushToTalkSurface(chart), false);
