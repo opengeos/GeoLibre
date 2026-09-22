@@ -118,7 +118,7 @@
     "copc": "^0.0.9",
     "fast-xml-parser": "^5.11.1",
     "geotiff": "^3.0.5",
-    "geotiff-geokeys-to-proj4": "^2024.4.13",
+    "geotiff-geokeys-to-proj4": "^2026.8.16",
     "laz-perf": "^0.0.7",
     "mapbox-gl": "^3.30.0",
     "maplibre-gl": "^6.9.0",
