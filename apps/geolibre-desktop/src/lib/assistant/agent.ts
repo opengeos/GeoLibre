@@ -7,6 +7,7 @@ import { NAMED_TILE_BASEMAPS } from "./basemaps";
 import {
   resolveFastPathAction,
   resolveFastPathEndpoint,
+  runToolDirectly,
   type FastPathAction,
   type FastPathState,
 } from "./fast-path";
@@ -49,33 +50,6 @@ function fastPathState(): FastPathState {
       name: basemap.label,
     })),
   };
-}
-
-/**
- * Run one assistant tool outside the agent loop.
- *
- * The tool is the same instance the model would have called, so the store
- * mutation, the undo entry and any validation behave identically — the only
- * difference is who decided to call it.
- *
- * @returns The failure message, or undefined when the tool succeeded.
- */
-async function runToolDirectly(
-  tool: Tool,
-  input: Record<string, unknown>,
-): Promise<string | undefined> {
-  try {
-    const stream = tool.stream({
-      toolUse: { name: tool.name, toolUseId: `fast-path-${Date.now()}`, input },
-    } as Parameters<Tool["stream"]>[0]);
-    let next = await stream.next();
-    while (!next.done) next = await stream.next();
-    const result = next.value;
-    if (result.status !== "error") return undefined;
-    return result.error?.message ?? "Tool failed";
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
 }
 
 /**
@@ -184,6 +158,13 @@ export class AssistantSession {
     } finally {
       this.fastPathAbort = null;
     }
+    // `resolveFastPathAction` reports a cancelled request the same way as a
+    // timeout or a refusal — as "no action" — so the abort has to be read from
+    // the signal. Falling through here would send the prompt to the model the
+    // user just pressed Stop on, and on the first turn of a session
+    // `agent?.cancel()` is a no-op because no agent exists yet. Only `cancel()`
+    // touches this signal; the routing timeout aborts a controller of its own.
+    if (abort.signal.aborted) return true;
     if (!action) return false;
 
     const tool = this.toolNamed(action.tool);

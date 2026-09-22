@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { tool } from "@strands-agents/sdk";
+import { z } from "zod";
 import {
   buildFastPathQuestions,
   fastPathFitsProject,
   interpretFastPathAnswers,
   resolveFastPathAction,
   resolveFastPathEndpoint,
+  runToolDirectly,
   FAST_PATH_MAX_CHOICES,
   TYPESAFE_ENDPOINT,
   type FastPathAnswers,
@@ -332,5 +335,57 @@ describe("fast-path request", () => {
     });
     assert.equal(action, null);
     assert.equal(called, false);
+  });
+});
+
+describe("running a tool directly", () => {
+  // The fast path calls Tool.stream() itself rather than going through the
+  // agent loop, with a ToolContext built by assertion. These run a real SDK
+  // tool through it so a @strands-agents/sdk bump that changes the contract
+  // fails here instead of at runtime, where it would surface as a generic
+  // "Tool failed" string in the user's transcript.
+  const visibility = (onCall: (input: unknown) => unknown) =>
+    tool({
+      name: "set_layer_visibility",
+      description: "Show or hide a layer",
+      inputSchema: z.object({ layer: z.string(), visible: z.boolean() }),
+      callback: onCall,
+    });
+
+  it("invokes the real tool with the routed input and reports success", async () => {
+    let received: unknown;
+    const error = await runToolDirectly(
+      visibility((input) => {
+        received = input;
+        return { ok: true };
+      }),
+      { layer: "lyr_rivers", visible: false },
+    );
+    assert.equal(error, undefined);
+    assert.deepEqual(received, { layer: "lyr_rivers", visible: false });
+  });
+
+  it("returns the message when the tool throws, rather than propagating", async () => {
+    const error = await runToolDirectly(
+      visibility(() => {
+        throw new Error('No layer matching "ghost".');
+      }),
+      { layer: "ghost", visible: true },
+    );
+    assert.equal(error, 'No layer matching "ghost".');
+  });
+
+  it("reports a schema violation instead of running the tool", async () => {
+    let called = false;
+    const error = await runToolDirectly(
+      visibility(() => {
+        called = true;
+        return {};
+      }),
+      // `visible` must be a boolean; the SDK validates before the callback.
+      { layer: "lyr_rivers", visible: "nope" },
+    );
+    assert.equal(called, false);
+    assert.ok(error, "a rejected input must surface as an error, not silent success");
   });
 });

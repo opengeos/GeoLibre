@@ -257,8 +257,13 @@ Everything else — querying data, geoprocessing, styling by attribute, adding
 data, running code — is classified as complex and goes to your LLM exactly as
 before. So does any request the router is not confident about, any layer it
 cannot match, and any request at all if TypeSafe is slow, unreachable or not
-configured. The fast path can only make a request faster; it can never be the
-reason one fails.
+configured. The fast path can never be the reason a request fails.
+
+It is not free for those requests, though: routing happens **before** the model
+request starts, so a complex request waits for the routing answer (typically
+under 200 ms, and abandoned after 1.5 s) before its LLM round trip begins. On a
+multi-second model turn that is a small share of the total, but it is a real
+cost — which is the other reason the fast path stays off unless you enable it.
 
 Because every action runs through the same tool as the slow path, fast-path
 changes appear in the transcript and are **undoable** like any other.

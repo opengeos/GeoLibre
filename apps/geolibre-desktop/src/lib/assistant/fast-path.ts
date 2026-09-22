@@ -21,6 +21,8 @@
  * without a browser or an API key.
  */
 
+import type { Tool } from "@strands-agents/sdk";
+
 /** The intents the fast path can satisfy, plus the fall-through. */
 export const FAST_PATH_INTENTS = [
   "set_basemap",
@@ -334,8 +336,45 @@ export function resolveFastPathEndpoint(env: Record<string, string>): FastPathEn
     return { url: `${root}/systemone`, apiKey: null };
   }
 
-  const key = env.JEV_API_KEY?.trim() || env.TYPESAFE_API_KEY?.trim();
+  const key = env.JEV_API_KEY?.trim();
   return key ? { url: TYPESAFE_ENDPOINT, apiKey: key } : null;
+}
+
+/**
+ * Run one assistant tool outside the agent loop.
+ *
+ * The tool is the same instance the model would have called, so the store
+ * mutation, the undo entry and any validation behave identically — the only
+ * difference is who decided to call it.
+ *
+ * Lives here rather than beside the session so it can be tested against a real
+ * SDK tool: `agent.ts` pulls in the whole app (the store, MapLibre) and cannot
+ * be imported outside a browser. The `ToolContext` is built by assertion
+ * because only `toolUse` is read on this path — the agent/session fields the
+ * SDK also declares belong to a model-driven run, so a bump that starts
+ * requiring one of them would surface as a failure here rather than a type
+ * error, which is what `tests/assistant-fast-path.test.ts` pins down.
+ *
+ * @param tool The registered tool to invoke.
+ * @param input Input matching that tool's schema.
+ * @returns The failure message, or undefined when the tool succeeded.
+ */
+export async function runToolDirectly(
+  tool: Tool,
+  input: Record<string, unknown>,
+): Promise<string | undefined> {
+  try {
+    const stream = tool.stream({
+      toolUse: { name: tool.name, toolUseId: `fast-path-${Date.now()}`, input },
+    } as Parameters<Tool["stream"]>[0]);
+    let next = await stream.next();
+    while (!next.done) next = await stream.next();
+    const result = next.value;
+    if (result.status !== "error") return undefined;
+    return result.error?.message ?? "Tool failed";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 /** The transport used to reach TypeSafe, injectable for tests. */
