@@ -31,6 +31,7 @@ import {
   stacCatalogUrl,
   stacCollectionsUrl,
   tileColumnsOf,
+  tileTableName,
   tileUrlPrefix,
   vectorTileTemplate,
   withTileColumns,
@@ -177,6 +178,43 @@ describe("vectorTileTemplate", () => {
     assert.ok(out.tiles.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
     assert.deepEqual(tileColumnsOf(out.tiles), ["nature", "year"]);
     assert.ok(out.tiles.includes("sig=abc123"));
+  });
+
+  it("keeps a partitioned scope out of the path but verbatim in the query", () => {
+    // GeoLens 1.20+ mints `{table}:{partition}` scopes. `:` is not a legal
+    // PostgreSQL identifier, so leaving it in the path makes the tile service
+    // answer `400 Invalid table name`.
+    const out = vectorTileTemplate(
+      { baseUrl: "https://demo.getgeolens.com" },
+      {
+        kind: "vector",
+        sig: "abc123",
+        exp: 1790046000,
+        scope: "nyc_subway_lines_mta:p0",
+        expiresIn: 720,
+      },
+    );
+    assert.equal(out.sourceLayer, "data.nyc_subway_lines_mta");
+    assert.ok(
+      out.tiles.startsWith(
+        "https://demo.getgeolens.com/api/tiles/data.nyc_subway_lines_mta/{z}/{x}/{y}.pbf?",
+      ),
+    );
+    assert.ok(!out.tiles.slice(0, out.tiles.indexOf("?")).includes(":p0"));
+    // The signature was minted over the full scope, so the query keeps it.
+    assert.equal(
+      new URLSearchParams(out.tiles.slice(out.tiles.indexOf("?") + 1)).get("scope"),
+      "nyc_subway_lines_mta:p0",
+    );
+  });
+});
+
+describe("tileTableName", () => {
+  it("strips a partition suffix and leaves a plain scope alone", () => {
+    assert.equal(tileTableName("nyc_subway_lines_mta:p0"), "nyc_subway_lines_mta");
+    assert.equal(tileTableName("world_countries"), "world_countries");
+    assert.equal(tileTableName("tracks:p12"), "tracks");
+    assert.equal(tileTableName(""), "");
   });
 });
 
