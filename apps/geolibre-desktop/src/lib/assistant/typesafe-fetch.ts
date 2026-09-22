@@ -44,8 +44,13 @@ async function resolveTransport(): Promise<FastPathFetch> {
   } catch (error) {
     // A missing capability must not disable the feature outright: browser fetch
     // still works wherever the origin happens to be allowed.
+    //
+    // The fallback is memoized along with the success case, unlike the retrying
+    // memo in `os-env.ts`. What fails here is importing the plugin or reaching
+    // its capability, neither of which changes while the app is running, so a
+    // retry would re-pay the failed import on every prompt — out of the very
+    // latency budget this module exists to protect — and never succeed.
     console.warn("[geolibre] TypeSafe fast path falling back to browser fetch:", error);
-    cached = null;
     return browserFetch;
   }
 }
