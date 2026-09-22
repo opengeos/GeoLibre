@@ -272,6 +272,32 @@ describe("CesiumLayerSync with Ion assets", () => {
     sync.destroy();
   });
 
+  it("reports a layer that fails to load so the app can surface it", async () => {
+    const g = makeGlobe();
+    g.Cesium.IonResource.fromAssetId = async () => {
+      throw new Error("Resource Not Found");
+    };
+    const errors: Array<{ layerName: string; message: string }> = [];
+    const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {
+      ionToken: () => "tok",
+      onLayerError: ({ layerName, message }) => errors.push({ layerName, message }),
+    });
+    sync.sync([
+      createCesiumIonLayer({
+        id: "j",
+        name: "Japan 3D Building Data",
+        assetId: 2602291,
+        kind: "3d-tiles",
+      }),
+    ]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].layerName, "Japan 3D Building Data");
+    assert.match(errors[0].message, /Resource Not Found/);
+    assert.deepEqual(g.calls.flights, [], "a failed layer has no extent to fit");
+    sync.destroy();
+  });
+
   it("drops a pending fit when its layer is removed before it loads", async () => {
     const g = makeGlobe();
     const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {

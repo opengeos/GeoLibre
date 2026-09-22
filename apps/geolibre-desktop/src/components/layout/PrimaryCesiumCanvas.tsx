@@ -1,4 +1,9 @@
-import { CesiumCanvas, type CesiumWidgetControlLabels, type MapEngine } from "@geolibre/map";
+import {
+  CesiumCanvas,
+  type CesiumWidgetControlLabels,
+  type MapDiagnosticEvent,
+  type MapEngine,
+} from "@geolibre/map";
 import { useMemo, type ComponentType, type ReactElement, type RefObject } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
@@ -51,6 +56,8 @@ export interface PrimaryCesiumCanvasProps {
   engineRef: RefObject<MapEngine | null>;
   /** Called once the engine is live, to re-arm anything keyed to map readiness. */
   onEngineReady: () => void;
+  /** Forwards a globe layer that failed to load to the Diagnostics panel. */
+  onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
 }
 
 /**
@@ -68,7 +75,11 @@ export interface PrimaryCesiumCanvasProps {
  * mounted beside it, and the menus gate those on `engine.capabilities` rather
  * than on the renderer's name.
  */
-export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumCanvasProps) {
+export function PrimaryCesiumCanvas({
+  engineRef,
+  onEngineReady,
+  onMapDiagnosticEvent,
+}: PrimaryCesiumCanvasProps) {
   const { t } = useTranslation();
   const ionToken = useCesiumIonToken();
   // Cesium's toolbar widgets render outside React and hardcode English, so the
@@ -107,6 +118,7 @@ export function PrimaryCesiumCanvas({ engineRef, onEngineReady }: PrimaryCesiumC
         onEngineReady={onEngineReady}
         controlLabels={controlLabels}
         popupCloseLabel={t("common.close")}
+        onMapDiagnosticEvent={onMapDiagnosticEvent}
       />
       {ionToken ? null : <CesiumTokenHint />}
     </div>

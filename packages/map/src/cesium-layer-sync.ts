@@ -940,6 +940,13 @@ export interface CesiumLayerSyncDeps {
    * control-managed vector layers; omitted, the discovery is skipped.
    */
   onTilesetFields?: (layerId: string, fields: string[]) => void;
+  /**
+   * Reports a layer that failed to load, so the app can show it the way the 2D
+   * renderers show theirs (the Diagnostics panel). Without this a failure is
+   * invisible: the record stays in the Layers panel and the globe simply draws
+   * nothing — the shape an Ion asset takes when the account cannot stream it.
+   */
+  onLayerError?: (error: { layerId: string; layerName: string; message: string }) => void;
 }
 
 async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
@@ -2137,10 +2144,23 @@ export class CesiumLayerSync {
     else if (kind === "pointcloud") created = this.createPointCloud(entry);
     else if (kind === "points") this.createPointBatch(entry);
     else created = this.createTileset(entry);
-    // A fit requested before the handle existed runs here (see zoomToLayer):
-    // this is the one place every create funnels through.
-    if (created) void created.then(() => this.flushPendingZoom(entry));
-    else this.flushPendingZoom(entry);
+    // Every create funnels through here, so this is where a fit requested
+    // before the handle existed runs (see zoomToLayer) and where a load
+    // failure is reported.
+    if (created) void created.then(() => this.settleEntry(entry));
+    else this.settleEntry(entry);
+  }
+
+  /** Runs the once-loaded work for `entry`: a pending fit, or a load failure. */
+  private settleEntry(entry: LayerEntry): void {
+    this.flushPendingZoom(entry);
+    if (entry.loadError && !entry.cancelled) {
+      this.deps.onLayerError?.({
+        layerId: entry.layer.id,
+        layerName: entry.layer.name,
+        message: entry.loadError,
+      });
+    }
   }
 
   /**

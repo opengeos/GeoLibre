@@ -2726,6 +2726,7 @@ export function DesktopShell({
                 <PrimaryCesiumCanvas
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
+                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />
               ) : (
                 <>

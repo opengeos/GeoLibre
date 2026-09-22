@@ -28,6 +28,7 @@ import { getPrimaryCesiumControlHost } from "./cesium-control-host";
 import { pickDrawingLocation, placeCesiumPin, suspendCesiumNavigation } from "./cesium-drawing";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { captureEngineImage } from "./map-capture";
+import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { TerrariumTerrainProvider } from "./cesium-terrarium";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import type { MapRenderSurface } from "./map-engine";
@@ -209,6 +210,13 @@ export interface CesiumEngineOptions {
    * and whether per-pane visibility overrides apply — see `CesiumCanvas`.
    */
   viewId?: string;
+  /**
+   * Forwards a renderer failure to the app's Diagnostics panel, the way
+   * `MapCanvas` and `MapboxCanvas` forward theirs. The globe's own failures are
+   * layer loads: an Ion asset the account cannot stream, a tileset URL that
+   * 404s, a KML that will not parse.
+   */
+  onDiagnostic?: (event: MapDiagnosticEvent) => void;
 }
 
 /**
@@ -356,8 +364,11 @@ export class CesiumEngine implements MapEngine {
     this.worldTerrainAvailable = options.worldTerrainAvailable ?? true;
     this.capabilities =
       options.viewId === undefined ? CESIUM_CAPABILITIES : CESIUM_PANE_CAPABILITIES;
+    const onDiagnostic = options.onDiagnostic;
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
+      onLayerError: ({ layerName, message }) =>
+        onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium" }),
     });
     this.terrainExaggeration = viewer.scene.verticalExaggeration ?? 1;
     this.installInputTracking();

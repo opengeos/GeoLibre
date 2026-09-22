@@ -15,6 +15,7 @@ import { isSameView } from "./cesium-camera";
 import { installCesiumInteractions } from "./cesium-interactions";
 import { CesiumEngine } from "./cesium-engine";
 import { consumePendingIdentifyRestore } from "./map-identify-lifecycle";
+import type { MapDiagnosticEvent } from "./map-diagnostic";
 import type { BuiltInMapControl, MapEngine } from "./map-engine";
 import { applySelectionHighlight, selectionFitKey } from "./map-selection";
 import { CesiumControlHost, setPrimaryCesiumControlHost } from "./cesium-control-host";
@@ -114,6 +115,11 @@ export interface CesiumCanvasProps {
   controlLabels?: CesiumWidgetControlLabels;
   /** Translated accessible label for the Identify popup close button. */
   popupCloseLabel?: string;
+  /**
+   * Forwards a layer that failed to load to the app's Diagnostics panel, the
+   * way `MapCanvas` and `MapboxCanvas` forward their renderer failures.
+   */
+  onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
 }
 
 /**
@@ -160,6 +166,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   onEngineReady,
   controlLabels,
   popupCloseLabel,
+  onMapDiagnosticEvent,
 }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<CesiumWidget | null>(null);
@@ -194,6 +201,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   popupCloseLabelRef.current = popupCloseLabel;
   const controlLabelsRef = useRef(controlLabels);
   controlLabelsRef.current = controlLabels;
+  const onMapDiagnosticEventRef = useRef(onMapDiagnosticEvent);
+  onMapDiagnosticEventRef.current = onMapDiagnosticEvent;
 
   // No pane id means this globe *is* the primary map area, not a pane beside it.
   const isPrimary = viewId === undefined;
@@ -400,6 +409,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         const engine = new CesiumEngine(Cesium, viewer, {
           viewId: viewIdRef.current,
           worldTerrainAvailable: Boolean(token),
+          onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
         });
         engineInstanceRef.current = engine;
 
