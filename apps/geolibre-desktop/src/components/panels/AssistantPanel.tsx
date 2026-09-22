@@ -514,7 +514,16 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   /** Sends the composer's draft. */
   const send = () => runPrompt(input.trim());
 
-  const stop = () => {
+  /**
+   * Cancels the agent run in flight, leaving voice mode alone.
+   *
+   * Separate from {@link stop} because a spoken interruption runs through here
+   * on its way into the next turn: telling the voice session the run ended
+   * would let it conclude the turn is over — a push-to-talk recognizer has
+   * already closed by then — and shut the session down a moment before the new
+   * turn tries to start on it.
+   */
+  const cancelRun = () => {
     cancelledGenerationRef.current = sendGenerationRef.current;
     session.cancel();
     // Decline any code awaiting approval so a stopped run doesn't leave the
@@ -522,6 +531,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     declineAllPendingCode();
     runningRef.current = false;
     setRunning(false);
+  };
+
+  const stop = () => {
+    cancelRun();
     // Stop is "be quiet now", so it silences a reply already being read aloud —
     // notifyRunEnd alone would let the session talk on to the end of the answer
     // the user just cancelled — and drops the session out of its working state.
@@ -545,8 +558,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       const prompt = text.trim();
       if (!prompt) return;
       // New intent supersedes old: a phrase spoken while the assistant is still
-      // answering cancels that run instead of queueing behind it.
-      if (runningRef.current) stop();
+      // answering cancels that run instead of queueing behind it. Only the run —
+      // the session has to survive into the turn starting on the next line.
+      if (runningRef.current) cancelRun();
       void runPrompt(prompt, { spoken: true });
     },
   });

@@ -141,6 +141,15 @@ describe("turning a reply into speech", () => {
     assert.equal(spokenTextFromMarkdown("| a | b |\n| - | - |\n| 1 | 2 |"), "a, b. 1, 2.");
   });
 
+  it("keeps a body row of placeholder dashes, which only looks like a separator", () => {
+    // `| - | - |` is a valid separator *and* a valid row of placeholders, so
+    // only the row directly under the header is the separator.
+    assert.equal(
+      spokenTextFromMarkdown("| City | Note |\n| --- | --- |\n| Nairobi | - |\n| - | - |"),
+      "City, Note. Nairobi, -. -, -.",
+    );
+  });
+
   it("drops an aligned separator row without touching the data", () => {
     assert.equal(
       spokenTextFromMarkdown("| Name | Population |\n|:---|---:|\n| Harris | 4,731,145 |"),

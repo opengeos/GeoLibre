@@ -168,7 +168,7 @@ export const MAX_SPOKEN_CHARS = 700;
  */
 export function spokenTextFromMarkdown(markdown: string): string {
   if (!markdown) return "";
-  const text = markdown
+  const text = stripTableSeparators(markdown)
     // Fenced code, including one the stream has not closed yet.
     .replace(/```[\s\S]*?(```|$)/g, " ")
     // Images first: their alt text is decorative, unlike a link's label.
@@ -179,12 +179,10 @@ export function spokenTextFromMarkdown(markdown: string): string {
     .replace(/^\s{0,3}>\s?/gm, "")
     // List markers, which otherwise read as punctuation.
     .replace(/^\s*([-*+]|\d+\.)\s+/gm, "")
-    // Tables: drop the separator row (it is all dashes and colons), then read
-    // each remaining row as its cells. Blanking whole rows would swallow the
-    // answer entirely — "top N" questions are usually answered in a table, and
-    // an empty string leaves `speak()` with nothing to say and the user with no
-    // idea why.
-    .replace(/^[ \t]*\|?[\s|:-]*\|[\s|:-]*$/gm, " ")
+    // Tables: drop the separator row, then read each remaining row as its cells.
+    // Blanking whole rows would swallow the answer entirely — "top N" questions
+    // are usually answered in a table, and an empty string leaves `speak()` with
+    // nothing to say and the user with no idea why.
     .replace(/^[ \t]*\|[ \t]*/gm, "")
     .replace(/[ \t]*\|[ \t]*$/gm, ".")
     .replace(/[ \t]*\|[ \t]*/g, ", ")
@@ -194,6 +192,38 @@ export function spokenTextFromMarkdown(markdown: string): string {
     .replace(/\s+/g, " ")
     .trim();
   return truncateSpoken(text, MAX_SPOKEN_CHARS);
+}
+
+/**
+ * Drops the separator row of each markdown table, which carries no words.
+ *
+ * Position decides this, not content: `| - | - |` is a valid separator *and* a
+ * valid row of placeholder cells, so only the row directly under a header — and
+ * only the first such row in a table — is dropped. Matching on shape alone
+ * would silently swallow a row of the answer, which is the failure this whole
+ * path exists to avoid.
+ *
+ * @param markdown - The reply text.
+ */
+function stripTableSeparators(markdown: string): string {
+  let afterRow = false;
+  let separatorTaken = false;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (!/^[ \t]*\|.*\|[ \t]*$/.test(line)) {
+        // Anything that is not a table row ends the table.
+        afterRow = false;
+        separatorTaken = false;
+        return line;
+      }
+      const isSeparator = /^[ \t|:-]+$/.test(line);
+      const drop = isSeparator && afterRow && !separatorTaken;
+      if (drop) separatorTaken = true;
+      afterRow = true;
+      return drop ? " " : line;
+    })
+    .join("\n");
 }
 
 /**

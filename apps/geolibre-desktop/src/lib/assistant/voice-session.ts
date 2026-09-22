@@ -40,8 +40,8 @@ export type VoiceStatus = "idle" | "listening" | "executing" | "speaking" | "err
 
 /** Everything the session tells its owner. */
 export type VoiceEvent =
-  /** The status changed. `detailKey` is a catalog key, never English. */
-  | { type: "state"; status: VoiceStatus; mode: VoiceMode | null; detailKey?: string }
+  /** The status changed. */
+  | { type: "state"; status: VoiceStatus; mode: VoiceMode | null }
   /** A phrase still being revised — preview only, never sent. */
   | { type: "interim"; text: string }
   /** A finished phrase, ready to send to the assistant. */
