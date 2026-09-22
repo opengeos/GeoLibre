@@ -206,8 +206,11 @@ const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
 const BUILDING_COUNT_H3_PMTILES_SAMPLE_URL =
   "https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles";
+// Overture keeps only the newest release in this bucket, so a pinned sample
+// URL goes 404 on the release after the one it names. Refresh it along with
+// the `maplibre-gl-overture-maps` bump that follows a new Overture release.
 const PMTILES_SAMPLE_URL =
-  "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-07-22.0/buildings.pmtiles";
+  "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-08-19.0/buildings.pmtiles";
 const TILEZEN_PMTILES_SAMPLE_URL =
   "https://r2-public.protomaps.com/protomaps-sample-datasets/tilezen.pmtiles";
 const ZARR_SAMPLE_URL =

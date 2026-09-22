@@ -69,7 +69,7 @@
     "maplibre-gl-lidar": "^0.17.1",
     "maplibre-gl-nasa-earthdata": "^0.1.4",
     "maplibre-gl-national-map": "^0.1.1",
-    "maplibre-gl-overture-maps": "^0.4.0",
+    "maplibre-gl-overture-maps": "^0.4.1",
     "maplibre-gl-planetary-computer": "^0.4.0",
     "maplibre-gl-raster": "^0.14.12",
     "maplibre-gl-splat": "^0.2.8",
