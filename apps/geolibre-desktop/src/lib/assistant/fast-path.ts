@@ -246,9 +246,18 @@ export function interpretFastPathAnswers(
   state: FastPathState,
 ): FastPathAction | null {
   const intent = answers.intent;
-  if (!intent?.choice || (intent.confidence ?? 0) < FAST_PATH_MIN_CONFIDENCE) return null;
+  if (!intent?.choice) return null;
   if (!FAST_PATH_INTENTS.includes(intent.choice as FastPathIntent)) return null;
   if (intent.choice === "complex") return null;
+  // Deleting a layer has to clear the destructive bar on the *intent* as well
+  // as on the layer: "hide the rivers" and "drop the rivers" name the same
+  // layer, so a confident layer match says nothing about which of the two was
+  // asked for, and only one of them is undoable by pressing the button again.
+  const minIntentConfidence =
+    intent.choice === "remove_layer"
+      ? FAST_PATH_MIN_DESTRUCTIVE_CONFIDENCE
+      : FAST_PATH_MIN_CONFIDENCE;
+  if ((intent.confidence ?? 0) < minIntentConfidence) return null;
 
   /** The chosen layer, if it clears `minConfidence` and still exists. */
   const layerId = (minConfidence: number): string | null => {

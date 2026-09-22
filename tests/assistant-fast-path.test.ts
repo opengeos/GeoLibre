@@ -109,6 +109,24 @@ describe("fast-path routing", () => {
     assert.ok(withConfidence("remove_layer", 0.97));
   });
 
+  it("holds the remove_layer intent itself to the destructive bar", () => {
+    // "hide the rivers" and "drop the rivers" name the same layer, so a
+    // confident layer match says nothing about which was asked for.
+    const withIntentConfidence = (intent: string, confidence: number) =>
+      interpretFastPathAnswers(
+        answers({
+          intent: { choice: intent, confidence },
+          layer: { choice: "lyr_dem", confidence: 1 },
+          visible: { noul: 0.01 },
+        }),
+        STATE,
+      );
+
+    assert.ok(withIntentConfidence("set_layer_visibility", 0.86));
+    assert.equal(withIntentConfidence("remove_layer", 0.86), null);
+    assert.ok(withIntentConfidence("remove_layer", 0.96));
+  });
+
   it("refuses a layer that is not on the map", () => {
     const action = interpretFastPathAnswers(
       answers({

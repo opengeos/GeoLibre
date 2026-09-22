@@ -15,6 +15,10 @@ export interface LayerSummary {
    * no in-memory GeoJSON (tile, raster and service layers are not queryable).
    */
   sqlTable: string | null;
+  /** Whether the layer is currently shown on the map. */
+  visible: boolean;
+  /** Current layer opacity, 0-1. */
+  opacity: number;
 }
 
 /** Detect a layer's geometry family from its first feature. */
@@ -38,6 +42,8 @@ function summarizeLayer(layer: GeoLibreLayer, sqlTable: string | null): LayerSum
         }))
       : [],
     sqlTable,
+    visible: layer.visible,
+    opacity: layer.opacity,
   };
 }
 
@@ -73,6 +79,18 @@ export function describeLayers(layers: GeoLibreLayer[]): string {
         summary.geometryType ? `, ${summary.geometryType}` : "",
         `, ${summary.featureCount} features`,
         summary.sqlTable ? `, SQL table ${summary.sqlTable}` : "",
+        // Current display state, so a follow-up turn can reason about a change
+        // it did not make itself. The fast path executes without going through
+        // the agent, so its actions never enter the model's conversation
+        // history; re-sending state the model can see keeps "undo that" and
+        // "why is it hidden?" answerable. Only stated when it is not the
+        // default, to keep the context short for the common case. Only an
+        // explicit `false` counts as hidden: a layer that never set the field
+        // is shown, and must not be reported to the model as hidden.
+        summary.visible === false ? ", hidden" : "",
+        typeof summary.opacity === "number" && summary.opacity < 1
+          ? `, opacity ${summary.opacity}`
+          : "",
         `)`,
         fields ? ` fields: ${fields}` : "",
       ].join("");

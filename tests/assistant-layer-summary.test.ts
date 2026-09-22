@@ -90,3 +90,27 @@ describe("describeLayers", () => {
     assert.equal(describeLayers([]), "No layers are currently loaded.");
   });
 });
+
+describe("display state in the model context", () => {
+  // The fast path changes visibility and opacity without going through the
+  // agent, so those actions never enter the model's conversation history. The
+  // prepended layer context is what lets a follow-up turn ("undo that", "why is
+  // it hidden?") see the result.
+  it("reports a hidden layer and a faded one, and stays quiet otherwise", () => {
+    const layer = (overrides: Partial<GeoLibreLayer>) =>
+      ({ ...geojsonLayer("l1", "US Cities"), ...overrides }) as GeoLibreLayer;
+
+    assert.match(describeLayers([layer({ visible: false })]), /, hidden\)/);
+    assert.match(describeLayers([layer({ opacity: 0.5 })]), /, opacity 0\.5\)/);
+
+    const normal = describeLayers([layer({ visible: true, opacity: 1 })]);
+    assert.doesNotMatch(normal, /hidden/);
+    assert.doesNotMatch(normal, /opacity/);
+  });
+
+  it("does not call a layer hidden just because the field is absent", () => {
+    // A layer built without the field is shown, not hidden; reporting it as
+    // hidden would have the model "fix" something that was never wrong.
+    assert.doesNotMatch(describeLayers([geojsonLayer("l1", "US Cities")]), /hidden/);
+  });
+});
