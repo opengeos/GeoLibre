@@ -286,10 +286,13 @@ test("clicking past the features clears the Identify result instead of restoring
   await waitForCameraIdle(page);
   const identifiedCamera = await readCamera(page);
 
-  // A point on screen but off both squares, measured from the identified
-  // square's own west edge rather than from the fit's padding, so the gap
-  // survives a change to that constant. The edge assertion is what would catch
-  // a future fit that left no room to the west of it.
+  // A point on screen but off both squares: the midpoint of the identified
+  // square's west edge, shifted west. Both coordinates come from that projected
+  // edge rather than from the canvas or the fit's padding, so the click stays
+  // beside the feature wherever the framing puts it. The camera is north-up
+  // here, so the square projects to an axis-aligned box and any point west of
+  // its west edge is outside it whatever the latitude. The edge assertion is
+  // what would catch a future fit that left no room to the west of it.
   await watchCameraMoves(page);
   const miss = await page.evaluate(
     ([edgeLngLat, gap]) => {
@@ -299,7 +302,7 @@ test("clicking past the features clears the Identify result instead of restoring
       return {
         edgeX: edge.x,
         x: rect.left + edge.x - (gap as number),
-        y: rect.top + rect.height / 2,
+        y: rect.top + edge.y,
       };
     },
     [EAST_TARGET_WEST_EDGE, MISS_CLICK_GAP] as const,
