@@ -127,7 +127,7 @@
     "proj4": "^2.22.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "satellite.js": "^6.0.2",
+    "satellite.js": "^7.1.0",
     "zarrita": "^0.7.3"
   },
   "devDependencies": {
