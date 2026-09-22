@@ -430,7 +430,10 @@
       "altitudeOffset": "Yükseklik kaydırması (m)",
       "quickPicks": "Hızlı seçimler",
       "quickPicksPlaceholder": "Bir varlık seçin…",
+      "quickPicksGlobal": "Her ion hesabında bulunur",
+      "quickPicksDepot": "Asset Depot örnekleri",
       "hint": "Varlık kimliklerini ion.cesium.com adresindeki My Assets altında bulabilirsiniz. Varlık, Ayarlar'da yapılandırılan belirteçle paylaşılmış olmalıdır.",
+      "depotHint": "Asset Depot örnekleri yalnızca ion.cesium.com → Asset Depot üzerinden hesabınıza ekledikten sonra yayınlanır.",
       "errorAssetId": "Bir Cesium Ion varlık kimliği girin (pozitif bir tam sayı).",
       "errorAltitude": "Yükseklik kaydırmasını metre cinsinden bir sayı olarak girin.",
       "tokenMissing": "Yapılandırılmış bir Cesium Ion belirteci yok. Ayarlar → Ortam değişkenleri (VITE_CESIUM_TOKEN) altından bir tane ekleyin, aksi halde varlık yüklenemez."

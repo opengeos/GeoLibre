@@ -438,7 +438,10 @@
       "altitudeOffset": "Смещение по высоте (м)",
       "quickPicks": "Быстрый выбор",
       "quickPicksPlaceholder": "Выберите ресурс…",
+      "quickPicksGlobal": "Доступно в любом аккаунте ion",
+      "quickPicksDepot": "Примеры из Asset Depot",
       "hint": "Id ресурсов можно найти в разделе «My Assets» на ion.cesium.com. Доступ к ресурсу должен быть открыт для токена, указанного в настройках.",
+      "depotHint": "Примеры из Asset Depot начинают передаваться только после добавления в ваш аккаунт на ion.cesium.com → Asset Depot.",
       "errorAssetId": "Введите id ресурса Cesium Ion (положительное целое число).",
       "errorAltitude": "Введите смещение по высоте числом в метрах.",
       "tokenMissing": "Токен Cesium Ion не настроен. Добавьте его в разделе Настройки → Переменные среды (VITE_CESIUM_TOKEN), иначе ресурс не загрузится."

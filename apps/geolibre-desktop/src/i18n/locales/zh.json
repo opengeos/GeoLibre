@@ -426,7 +426,10 @@
       "altitudeOffset": "高度偏移（米）",
       "quickPicks": "快速选择",
       "quickPicksPlaceholder": "选择资产…",
+      "quickPicksGlobal": "所有 ion 账户均可使用",
+      "quickPicksDepot": "Asset Depot 示例",
       "hint": "可在 ion.cesium.com 的“My Assets”中查找资产 id。该资产必须已与设置中配置的令牌共享。",
+      "depotHint": "Asset Depot 示例需先在 ion.cesium.com → Asset Depot 中添加到你的账户后才能加载。",
       "errorAssetId": "请输入 Cesium Ion 资产 id（正整数）。",
       "errorAltitude": "请以米为单位输入高度偏移数值。",
       "tokenMissing": "尚未配置 Cesium Ion 令牌。请在设置 → 环境变量（VITE_CESIUM_TOKEN）中添加，否则资产将无法加载。"

@@ -430,7 +430,10 @@
       "altitudeOffset": "Höhenversatz (m)",
       "quickPicks": "Schnellauswahl",
       "quickPicksPlaceholder": "Asset auswählen…",
+      "quickPicksGlobal": "In jedem ion-Konto enthalten",
+      "quickPicksDepot": "Asset-Depot-Beispiele",
       "hint": "Asset-IDs finden Sie unter „My Assets“ auf ion.cesium.com. Das Asset muss für das in den Einstellungen konfigurierte Token freigegeben sein.",
+      "depotHint": "Asset-Depot-Beispiele werden erst gestreamt, wenn Sie sie unter ion.cesium.com → Asset Depot Ihrem Konto hinzufügen.",
       "errorAssetId": "Geben Sie eine Cesium-Ion-Asset-ID ein (eine positive ganze Zahl).",
       "errorAltitude": "Geben Sie den Höhenversatz als Zahl in Metern ein.",
       "tokenMissing": "Es ist kein Cesium-Ion-Token konfiguriert. Fügen Sie eines unter Einstellungen → Umgebungsvariablen (VITE_CESIUM_TOKEN) hinzu, sonst kann das Asset nicht geladen werden."

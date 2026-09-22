@@ -27,10 +27,11 @@ export function CesiumIonSource() {
   // The dropdown mirrors the form rather than holding its own state: typing an
   // asset id by hand, or switching the layer type, drops it back to the
   // placeholder instead of leaving a stale pick selected.
-  const selectedQuickPick =
-    CESIUM_ION_QUICK_PICKS.find(
-      (pick) => String(pick.assetId) === assetId.trim() && pick.kind === kind,
-    )?.assetId.toString() ?? "";
+  const selectedPick = CESIUM_ION_QUICK_PICKS.find(
+    (pick) => String(pick.assetId) === assetId.trim() && pick.kind === kind,
+  );
+  const globalPicks = CESIUM_ION_QUICK_PICKS.filter((pick) => pick.group === "global");
+  const depotPicks = CESIUM_ION_QUICK_PICKS.filter((pick) => pick.group === "depot");
 
   const handleSubmit = source.runSubmit(() => {
     const id = parseCesiumIonAssetId(assetId);
@@ -102,7 +103,7 @@ export function CesiumIonSource() {
           <Label htmlFor="cesium-ion-quick-pick">{t("addData.cesiumIon.quickPicks")}</Label>
           <Select
             id="cesium-ion-quick-pick"
-            value={selectedQuickPick}
+            value={selectedPick ? String(selectedPick.assetId) : ""}
             onChange={(event) => {
               const pick = CESIUM_ION_QUICK_PICKS.find(
                 (candidate) => String(candidate.assetId) === event.target.value,
@@ -114,13 +115,26 @@ export function CesiumIonSource() {
             }}
           >
             <option value="">{t("addData.cesiumIon.quickPicksPlaceholder")}</option>
-            {CESIUM_ION_QUICK_PICKS.map((pick) => (
-              <option key={pick.assetId} value={String(pick.assetId)}>
-                {pick.name}
-              </option>
-            ))}
+            <optgroup label={t("addData.cesiumIon.quickPicksGlobal")}>
+              {globalPicks.map((pick) => (
+                <option key={pick.assetId} value={String(pick.assetId)}>
+                  {pick.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={t("addData.cesiumIon.quickPicksDepot")}>
+              {depotPicks.map((pick) => (
+                <option key={pick.assetId} value={String(pick.assetId)}>
+                  {pick.name}
+                </option>
+              ))}
+            </optgroup>
           </Select>
-          <p className="text-xs text-muted-foreground">{t("addData.cesiumIon.hint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedPick?.group === "depot"
+              ? t("addData.cesiumIon.depotHint")
+              : t("addData.cesiumIon.hint")}
+          </p>
         </div>
       </div>
     </AddDataSourceForm>

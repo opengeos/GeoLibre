@@ -430,7 +430,10 @@
       "altitudeOffset": "სიმაღლის წანაცვლება (მ)",
       "quickPicks": "სწრაფი არჩევანი",
       "quickPicksPlaceholder": "აირჩიეთ აქტივი…",
+      "quickPicksGlobal": "ხელმისაწვდომია ყველა ion ანგარიშზე",
+      "quickPicksDepot": "Asset Depot-ის ნიმუშები",
       "hint": "აქტივების id-ები იხილეთ „My Assets“ განყოფილებაში ion.cesium.com-ზე. აქტივი გაზიარებული უნდა იყოს პარამეტრებში მითითებულ token-თან.",
+      "depotHint": "Asset Depot-ის ნიმუშები გადაიცემა მხოლოდ მას შემდეგ, რაც მათ დაამატებთ თქვენს ანგარიშზე ion.cesium.com → Asset Depot.",
       "errorAssetId": "შეიყვანეთ Cesium Ion-ის აქტივის id (დადებითი მთელი რიცხვი).",
       "errorAltitude": "შეიყვანეთ სიმაღლის წანაცვლება რიცხვად, მეტრებში.",
       "tokenMissing": "Cesium Ion-ის token არ არის მითითებული. დაამატეთ იგი პარამეტრები → გარემოს ცვლადები (VITE_CESIUM_TOKEN) განყოფილებაში, წინააღმდეგ შემთხვევაში აქტივი ვერ ჩაიტვირთება."

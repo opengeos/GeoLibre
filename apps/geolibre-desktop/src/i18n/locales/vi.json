@@ -426,7 +426,10 @@
       "altitudeOffset": "Độ lệch cao độ (m)",
       "quickPicks": "Chọn nhanh",
       "quickPicksPlaceholder": "Chọn tài sản…",
+      "quickPicksGlobal": "Có sẵn trong mọi tài khoản ion",
+      "quickPicksDepot": "Mẫu từ Asset Depot",
       "hint": "Tìm id tài sản trong mục My Assets tại ion.cesium.com. Tài sản phải được chia sẻ với mã thông báo đã cấu hình trong Cài đặt.",
+      "depotHint": "Mẫu từ Asset Depot chỉ phát trực tuyến sau khi bạn thêm chúng vào tài khoản tại ion.cesium.com → Asset Depot.",
       "errorAssetId": "Nhập id tài sản Cesium Ion (một số nguyên dương).",
       "errorAltitude": "Nhập độ lệch cao độ dưới dạng số mét.",
       "tokenMissing": "Chưa cấu hình mã thông báo Cesium Ion. Hãy thêm trong Cài đặt → Biến môi trường (VITE_CESIUM_TOKEN), nếu không tài sản sẽ không tải được."

@@ -426,7 +426,10 @@
       "altitudeOffset": "Offset ketinggian (m)",
       "quickPicks": "Pilihan cepat",
       "quickPicksPlaceholder": "Pilih aset…",
+      "quickPicksGlobal": "Termasuk di setiap akun ion",
+      "quickPicksDepot": "Contoh Asset Depot",
       "hint": "Temukan id aset di bagian My Assets pada ion.cesium.com. Aset harus dibagikan dengan token yang dikonfigurasi di Pengaturan.",
+      "depotHint": "Contoh Asset Depot baru dapat dialirkan setelah Anda menambahkannya ke akun Anda di ion.cesium.com → Asset Depot.",
       "errorAssetId": "Masukkan id aset Cesium Ion (bilangan bulat positif).",
       "errorAltitude": "Masukkan offset ketinggian sebagai angka dalam meter.",
       "tokenMissing": "Belum ada token Cesium Ion yang dikonfigurasi. Tambahkan di Pengaturan → Variabel lingkungan (VITE_CESIUM_TOKEN), jika tidak aset akan gagal dimuat."

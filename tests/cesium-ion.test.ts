@@ -87,6 +87,23 @@ describe("cesium-ion layer builder", () => {
       CESIUM_ION_QUICK_PICKS.length,
       "asset ids are the dropdown option values, so they must be unique",
     );
+    // Every pick lands in one of the two optgroups the dialog renders, and
+    // both groups are non-empty so neither renders as an empty heading.
+    for (const pick of CESIUM_ION_QUICK_PICKS) {
+      assert.ok(
+        pick.group === "global" || pick.group === "depot",
+        `${pick.name} needs a quick-pick group`,
+      );
+      assert.ok(Number.isInteger(pick.assetId) && pick.assetId > 0, `${pick.name} needs an id`);
+    }
+    assert.ok(CESIUM_ION_QUICK_PICKS.some((p) => p.group === "global"));
+    assert.ok(CESIUM_ION_QUICK_PICKS.some((p) => p.group === "depot"));
+    const depot = CESIUM_ION_QUICK_PICKS.filter((p) => p.group === "depot");
+    assert.deepEqual(
+      depot.map((p) => p.assetId),
+      [2602291, 69380, 43978, 28945, 75343, 3827],
+      "Asset Depot sample ids are the ones Cesium's own samples use",
+    );
   });
 });
 

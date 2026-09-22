@@ -426,7 +426,10 @@
       "altitudeOffset": "高度オフセット (m)",
       "quickPicks": "クイック選択",
       "quickPicksPlaceholder": "アセットを選択…",
+      "quickPicksGlobal": "すべての ion アカウントで利用可能",
+      "quickPicksDepot": "Asset Depot のサンプル",
       "hint": "アセットIDは ion.cesium.com の「My Assets」で確認できます。アセットは設定で構成したトークンと共有されている必要があります。",
+      "depotHint": "Asset Depot のサンプルは、ion.cesium.com → Asset Depot でアカウントに追加してから配信されます。",
       "errorAssetId": "Cesium IonのアセットID（正の整数）を入力してください。",
       "errorAltitude": "高度オフセットをメートル単位の数値で入力してください。",
       "tokenMissing": "Cesium Ionトークンが設定されていません。設定 → 環境変数 (VITE_CESIUM_TOKEN) で追加しないと、アセットを読み込めません。"

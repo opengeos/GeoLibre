@@ -446,7 +446,10 @@
       "altitudeOffset": "إزاحة الارتفاع (م)",
       "quickPicks": "اختيارات سريعة",
       "quickPicksPlaceholder": "اختر أصلًا…",
+      "quickPicksGlobal": "متاح مع كل حساب ion",
+      "quickPicksDepot": "عينات Asset Depot",
       "hint": "تجد معرّفات الأصول ضمن My Assets على ion.cesium.com. يجب أن يكون الأصل مشاركًا مع الرمز المضبوط في الإعدادات.",
+      "depotHint": "لا تُبث عينات Asset Depot إلا بعد إضافتها إلى حسابك من ion.cesium.com ← Asset Depot.",
       "errorAssetId": "أدخل معرّف أصل Cesium Ion (عدد صحيح موجب).",
       "errorAltitude": "أدخل إزاحة الارتفاع كرقم بالأمتار.",
       "tokenMissing": "لم يُضبط أي رمز Cesium Ion. أضف واحدًا من الإعدادات ← متغيرات البيئة (VITE_CESIUM_TOKEN) وإلا فسيفشل تحميل الأصل."

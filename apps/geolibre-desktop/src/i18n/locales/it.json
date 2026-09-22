@@ -430,7 +430,10 @@
       "altitudeOffset": "Scostamento di altitudine (m)",
       "quickPicks": "Scelte rapide",
       "quickPicksPlaceholder": "Scegli un asset…",
+      "quickPicksGlobal": "Inclusi in ogni account ion",
+      "quickPicksDepot": "Esempi dell'Asset Depot",
       "hint": "Gli id asset si trovano in «My Assets» su ion.cesium.com. L'asset deve essere condiviso con il token configurato nelle Impostazioni.",
+      "depotHint": "Gli esempi dell'Asset Depot vengono trasmessi solo dopo averli aggiunti al tuo account su ion.cesium.com → Asset Depot.",
       "errorAssetId": "Inserisci un id asset di Cesium Ion (un numero intero positivo).",
       "errorAltitude": "Inserisci lo scostamento di altitudine come numero di metri.",
       "tokenMissing": "Nessun token Cesium Ion configurato. Aggiungine uno in Impostazioni → Variabili d'ambiente (VITE_CESIUM_TOKEN), altrimenti l'asset non verrà caricato."

@@ -26,19 +26,51 @@ export const CESIUM_BING_AERIAL_ASSET_ID = 2;
  */
 export const CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID = 2275207;
 
-/** Ion assets offered as one-click picks in the Add Data dialog. */
-export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<{
+/**
+ * Which tier of the Ion catalog a quick pick comes from. `global` assets ship
+ * with every Ion account; `depot` assets are Asset Depot samples the account
+ * has to add once at ion.cesium.com before they stream (until then the
+ * endpoint 404s and the globe reports a layer error).
+ */
+export type CesiumIonQuickPickGroup = "global" | "depot";
+
+export interface CesiumIonQuickPick {
   assetId: number;
   kind: CesiumIonAssetKind;
   name: string;
-}> = [
-  { assetId: CESIUM_OSM_BUILDINGS_ASSET_ID, kind: "3d-tiles", name: "Cesium OSM Buildings" },
-  { assetId: CESIUM_BING_AERIAL_ASSET_ID, kind: "imagery", name: "Bing Maps Aerial (Ion)" },
+  group: CesiumIonQuickPickGroup;
+}
+
+/**
+ * Ion assets offered as one-click picks in the Add Data dialog. Asset ids are
+ * the dropdown's option values, so they have to stay unique; the ids below are
+ * the ones Cesium's own samples use.
+ */
+export const CESIUM_ION_QUICK_PICKS: ReadonlyArray<CesiumIonQuickPick> = [
+  {
+    assetId: CESIUM_OSM_BUILDINGS_ASSET_ID,
+    kind: "3d-tiles",
+    name: "Cesium OSM Buildings",
+    group: "global",
+  },
+  {
+    assetId: CESIUM_BING_AERIAL_ASSET_ID,
+    kind: "imagery",
+    name: "Bing Maps Aerial (Ion)",
+    group: "global",
+  },
   {
     assetId: CESIUM_GOOGLE_PHOTOREALISTIC_ASSET_ID,
     kind: "3d-tiles",
     name: "Google Photorealistic 3D Tiles",
+    group: "global",
   },
+  { assetId: 2602291, kind: "3d-tiles", name: "Japan 3D Building Data", group: "depot" },
+  { assetId: 69380, kind: "3d-tiles", name: "Melbourne Photogrammetry", group: "depot" },
+  { assetId: 43978, kind: "3d-tiles", name: "Melbourne Point Cloud", group: "depot" },
+  { assetId: 28945, kind: "3d-tiles", name: "Montreal Point Cloud", group: "depot" },
+  { assetId: 75343, kind: "3d-tiles", name: "New York City 3D Buildings", group: "depot" },
+  { assetId: 3827, kind: "imagery", name: "Washington DC 2017", group: "depot" },
 ];
 
 /** Parse an Ion asset id the way the Add Data form and the project file carry it. */

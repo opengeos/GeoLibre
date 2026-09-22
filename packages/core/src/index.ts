@@ -154,6 +154,8 @@ export {
   isCesiumOnlyLayer,
   parseCesiumIonAssetId,
   type CesiumIonAssetKind,
+  type CesiumIonQuickPick,
+  type CesiumIonQuickPickGroup,
   type CesiumIonLayerOptions,
 } from "./cesium-ion";
 export {

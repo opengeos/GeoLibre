@@ -430,7 +430,10 @@
       "altitudeOffset": "جابه‌جایی ارتفاع (متر)",
       "quickPicks": "انتخاب‌های سریع",
       "quickPicksPlaceholder": "یک دارایی انتخاب کنید…",
+      "quickPicksGlobal": "همراه هر حساب ion",
+      "quickPicksDepot": "نمونه‌های Asset Depot",
       "hint": "شناسهٔ دارایی‌ها را در بخش My Assets در ion.cesium.com بیابید. دارایی باید با توکن تنظیم‌شده در تنظیمات هم‌رسانی شده باشد.",
+      "depotHint": "نمونه‌های Asset Depot تنها پس از افزودن به حسابتان در ion.cesium.com ← Asset Depot پخش می‌شوند.",
       "errorAssetId": "یک شناسهٔ دارایی Cesium Ion (عدد صحیح مثبت) وارد کنید.",
       "errorAltitude": "جابه‌جایی ارتفاع را به‌صورت عدد و بر حسب متر وارد کنید.",
       "tokenMissing": "هیچ توکن Cesium Ion تنظیم نشده است. یکی را در تنظیمات ← متغیرهای محیطی (VITE_CESIUM_TOKEN) بیفزایید، وگرنه بارگیری دارایی ناموفق خواهد بود."

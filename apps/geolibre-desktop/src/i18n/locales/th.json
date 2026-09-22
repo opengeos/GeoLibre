@@ -426,7 +426,10 @@
       "altitudeOffset": "ค่าชดเชยความสูง (ม.)",
       "quickPicks": "ตัวเลือกด่วน",
       "quickPicksPlaceholder": "เลือกแอสเซ็ต…",
+      "quickPicksGlobal": "มีในทุกบัญชี ion",
+      "quickPicksDepot": "ตัวอย่างจาก Asset Depot",
       "hint": "ดู id ของแอสเซ็ตได้ที่ My Assets บน ion.cesium.com แอสเซ็ตต้องถูกแชร์กับโทเค็นที่ตั้งค่าไว้ในการตั้งค่า",
+      "depotHint": "ตัวอย่างจาก Asset Depot จะสตรีมได้ก็ต่อเมื่อเพิ่มลงในบัญชีของคุณที่ ion.cesium.com → Asset Depot แล้ว",
       "errorAssetId": "ป้อน id ของแอสเซ็ต Cesium Ion (จำนวนเต็มบวก)",
       "errorAltitude": "ป้อนค่าชดเชยความสูงเป็นตัวเลขหน่วยเมตร",
       "tokenMissing": "ยังไม่ได้ตั้งค่าโทเค็น Cesium Ion โปรดเพิ่มในการตั้งค่า → ตัวแปรสภาพแวดล้อม (VITE_CESIUM_TOKEN) มิฉะนั้นจะโหลดแอสเซ็ตไม่สำเร็จ"

@@ -434,7 +434,10 @@
       "altitudeOffset": "Altitude offset (m)",
       "quickPicks": "Quick picks",
       "quickPicksPlaceholder": "Choose an asset…",
+      "quickPicksGlobal": "Included with every ion account",
+      "quickPicksDepot": "Asset Depot samples",
       "hint": "Find asset ids under My Assets at ion.cesium.com. The asset must be shared with the token configured in Settings.",
+      "depotHint": "Asset Depot samples stream only after you add them to your account at ion.cesium.com → Asset Depot.",
       "errorAssetId": "Enter a Cesium Ion asset id (a positive whole number).",
       "errorAltitude": "Enter the altitude offset as a number of metres.",
       "tokenMissing": "No Cesium Ion token is configured. Add one in Settings → Environment variables (VITE_CESIUM_TOKEN) or the asset will fail to load."
