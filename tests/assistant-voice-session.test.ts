@@ -90,7 +90,15 @@ function fakeStream() {
 }
 
 /** Builds a session over fakes, exposing what the test needs to drive it. */
-function harness(options: { synthesis?: boolean; streams?: boolean; endpointMs?: number } = {}) {
+function harness(
+  options: {
+    synthesis?: boolean;
+    streams?: boolean;
+    endpointMs?: number;
+    /** Start a run from inside the transcript event, as the panel does. */
+    autoRun?: boolean;
+  } = {},
+) {
   const recognizers: FakeRecognizer[] = [];
   const events: VoiceEvent[] = [];
   const streams: Array<ReturnType<typeof fakeStream>> = [];
@@ -117,7 +125,13 @@ function harness(options: { synthesis?: boolean; streams?: boolean; endpointMs?:
       ? (text) => ({ text, lang: "", onend: null, onerror: null }) as SpeechSynthesisUtterance
       : undefined,
     language: () => "en-US",
-    onEvent: (event) => events.push(event),
+    onEvent: (event) => {
+      events.push(event);
+      // The panel starts the agent run synchronously from its transcript
+      // handler, nested inside the session's own call stack. Mirrored here so
+      // that ordering is covered rather than assumed.
+      if (options.autoRun && event.type === "transcript") session.notifyRunStart();
+    },
   });
   return {
     session,
@@ -294,6 +308,20 @@ describe("voice session push-to-talk endpoint", () => {
     h.session.releasePushToTalk();
     assert.deepEqual(h.transcripts(), []);
     assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("survives a run started from inside the transcript event", () => {
+    // The production order is one call stack: releasing the key ends the
+    // recognizer, which publishes the transcript, which starts the run. The
+    // session must see that run before it decides the turn is over, or it stops
+    // a moment before the run it is meant to report.
+    const h = harness({ autoRun: true });
+    h.session.start("push-to-talk");
+    h.current.say("zoom to Kenya");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+    assert.equal(h.session.isActive(), true, "the session ended under its own run");
+    assert.equal(h.session.getStatus(), "executing");
   });
 
   it("does not re-arm once the key is up", () => {

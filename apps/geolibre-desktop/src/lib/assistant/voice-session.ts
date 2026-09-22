@@ -343,6 +343,11 @@ export class VoiceSession {
     const synthesis = this.options.synthesis;
     const createUtterance = this.options.createUtterance;
     if (this.disposed || !synthesis || !createUtterance || !text.trim()) return;
+    // A stopped session has nowhere to report the playback — the status strip
+    // is hidden once voice mode is off — and the turn fence below cannot catch
+    // it, because stopping does not begin a new turn. Enforced here rather than
+    // left to every caller to remember.
+    if (!this.isActive()) return;
     // An answer belongs to the turn that asked for it. If the session has moved
     // on to another turn since — the user held Space again rather than waiting —
     // reading the old answer would talk over the question they are asking now,
@@ -378,7 +383,7 @@ export class VoiceSession {
     // recording indicator — and animate the meter off the speakers — through a
     // turn the user is not part of.
     this.releaseStream();
-    if (this.isActive()) this.setStatus("speaking");
+    this.setStatus("speaking");
     try {
       synthesis.speak(utterance);
     } catch {
