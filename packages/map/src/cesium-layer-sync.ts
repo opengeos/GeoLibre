@@ -82,6 +82,7 @@ import type {
   ImageryProvider,
   PointPrimitiveCollection,
   PointPrimitive,
+  Rectangle,
   Resource,
   TilingScheme,
 } from "@cesium/engine";
@@ -111,6 +112,19 @@ const SELECTED_ORBIT_STEPS = 180;
 
 /** Ground metres one fill-pattern tile spans on a draped polygon. */
 const PATTERN_TILE_METERS = 20;
+
+/** Flight time for a zoom-to-layer, matching the engine's own fits. */
+const ZOOM_TO_LAYER_SECONDS = 0.8;
+
+/**
+ * Entry kinds whose handle is one of the targets `Viewer.flyTo` frames. It
+ * reads their extent for us — a tileset's bounding sphere, an imagery layer's
+ * rectangle, a data source's entities — which is the whole reason a fit goes
+ * through the handle rather than the store. The two point kinds are left out:
+ * a `PointPrimitiveCollection` is not a flyTo target, and those layers carry
+ * bounds in the store anyway.
+ */
+const FLY_TO_KINDS = new Set<EntryKind>(["imagery", "geojson", "kml", "czml", "3dtiles"]);
 
 /** The subset of a Cesium `Event` the camera watch needs. */
 interface CameraEvent {
@@ -1427,6 +1441,57 @@ export class CesiumLayerSync {
 
   private readonly entries = new Map<string, LayerEntry>();
   private scratchBoundingSphere?: BoundingSphere;
+  /** Layer whose fit is waiting for its Cesium object to finish loading. */
+  private pendingZoomLayerId: string | null = null;
+
+  /**
+   * Fly the camera to a layer's own extent, for the layers that have no bounds
+   * in the store: an Ion asset, a tileset by URL, CZML, KML. Their extent is a
+   * property of the loaded Cesium object (a tileset's bounding sphere, an
+   * imagery layer's rectangle, a data source's entities), so `getLayerBounds`
+   * has nothing to offer and `CesiumEngine.fitLayer` hands the fit here.
+   *
+   * A layer added a moment ago has no handle yet, so the request is remembered
+   * and runs when that entry finishes loading. Only one is kept: a second
+   * request replaces the first rather than queueing a flight behind it.
+   *
+   * @param layerId - The store id of the layer to frame.
+   */
+  zoomToLayer(layerId: string): void {
+    this.pendingZoomLayerId = layerId;
+    const entry = this.entries.get(layerId);
+    if (entry) this.flushPendingZoom(entry);
+  }
+
+  /** Runs a pending {@link zoomToLayer} once `entry` has something to fly to. */
+  private flushPendingZoom(entry: LayerEntry): void {
+    if (this.pendingZoomLayerId !== entry.layer.id) return;
+    if (this.flyToHandle(entry)) this.pendingZoomLayerId = null;
+  }
+
+  /**
+   * Fly to whatever `entry` put in the scene. Returns false when there is
+   * nothing to frame yet (still loading, already removed, or a handle kind
+   * that carries no extent), so the caller can leave the request pending.
+   */
+  private flyToHandle(entry: LayerEntry): boolean {
+    const handle = entry.handle;
+    if (!handle || entry.cancelled || !FLY_TO_KINDS.has(entry.kind)) return false;
+    const viewer = this.viewer;
+    // An I3S scene layer is a `3dtiles` entry, but an I3SDataProvider is not a
+    // target `Viewer.flyTo` accepts; it publishes its footprint as a rectangle.
+    const extent = (handle as { extent?: Rectangle }).extent;
+    if (extent) {
+      viewer.camera.flyTo({ destination: extent, duration: ZOOM_TO_LAYER_SECONDS });
+      return true;
+    }
+    void Promise.resolve(
+      viewer.flyTo(handle as ImageryLayer | DataSource | Cesium3DTileset, {
+        duration: ZOOM_TO_LAYER_SECONDS,
+      }),
+    ).catch(() => {});
+    return true;
+  }
 
   getRenderStatus(): { pending: string[]; errors: string[] } {
     const pending: string[] = [];
@@ -2064,13 +2129,18 @@ export class CesiumLayerSync {
     const kind = entryKind(layer);
     const entry: LayerEntry = { kind, layer, handle: null, cancelled: false };
     this.entries.set(layer.id, entry);
-    if (kind === "imagery") void this.createImagery(entry);
-    else if (kind === "geojson") void this.createGeoJson(entry);
-    else if (kind === "kml") void this.createKml(entry);
-    else if (kind === "czml") void this.createCzml(entry);
-    else if (kind === "pointcloud") void this.createPointCloud(entry);
+    let created: Promise<void> | null = null;
+    if (kind === "imagery") created = this.createImagery(entry);
+    else if (kind === "geojson") created = this.createGeoJson(entry);
+    else if (kind === "kml") created = this.createKml(entry);
+    else if (kind === "czml") created = this.createCzml(entry);
+    else if (kind === "pointcloud") created = this.createPointCloud(entry);
     else if (kind === "points") this.createPointBatch(entry);
-    else void this.createTileset(entry);
+    else created = this.createTileset(entry);
+    // A fit requested before the handle existed runs here (see zoomToLayer):
+    // this is the one place every create funnels through.
+    if (created) void created.then(() => this.flushPendingZoom(entry));
+    else this.flushPendingZoom(entry);
   }
 
   /**
@@ -3553,6 +3623,8 @@ export class CesiumLayerSync {
    */
   private destroyEntry(entry: LayerEntry): void {
     entry.cancelled = true;
+    // A fit still waiting on this entry has nothing left to frame.
+    if (this.pendingZoomLayerId === entry.layer.id) this.pendingZoomLayerId = null;
     entry.abort?.abort();
     entry.documentCleanup?.();
     entry.documentCleanup = undefined;

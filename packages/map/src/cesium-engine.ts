@@ -549,7 +549,15 @@ export class CesiumEngine implements MapEngine {
 
   fitLayer(layer: GeoLibreLayer): void {
     const bounds = getLayerBounds(layer);
-    if (bounds) this.fitBounds(bounds);
+    if (bounds) {
+      this.fitBounds(bounds);
+      return;
+    }
+    // An Ion asset, a tileset by URL, CZML and KML keep no bounds in the store:
+    // their extent belongs to the Cesium object the sync loads. Hand the fit
+    // over, including for a layer added a moment ago whose object is still
+    // loading — the sync flies as soon as it has one.
+    this.layerSync.zoomToLayer(layer.id);
   }
 
   readCameraAltitude(): number | null {

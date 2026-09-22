@@ -48,6 +48,9 @@ export function CesiumIonSource() {
         kind,
         altitudeOffset: kind === "3d-tiles" ? offset : 0,
       }),
+      // The asset's extent is only known once the globe has loaded it, so the
+      // fit waits for the tileset/imagery rather than resolving from the store.
+      { fit: true },
     );
   });
 

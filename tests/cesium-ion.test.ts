@@ -116,6 +116,7 @@ function makeGlobe() {
     ionImagery: [] as Array<{ assetId: number; token?: string }>,
     tilesetUrls: [] as unknown[],
     primitives: [] as unknown[],
+    flights: [] as unknown[],
     imagery: [] as Array<{ provider: unknown; show: boolean; alpha: number }>,
   };
   const Cesium = {
@@ -157,7 +158,15 @@ function makeGlobe() {
   };
   const viewer = {
     clock: { currentTime: { dayNumber: 0, secondsOfDay: 0 } },
-    camera: { moveEnd: new Cesium.Event(), changed: new Cesium.Event() },
+    camera: {
+      moveEnd: new Cesium.Event(),
+      changed: new Cesium.Event(),
+      flyTo: (options: unknown) => calls.flights.push(options),
+    },
+    flyTo: async (target: unknown) => {
+      calls.flights.push(target);
+      return true;
+    },
     scene: {
       canvas: { clientWidth: 800, clientHeight: 600, width: 800, height: 600 },
       primitives: {
@@ -239,6 +248,40 @@ describe("CesiumLayerSync with Ion assets", () => {
     const status = sync.getRenderStatus();
     assert.equal(status.errors.length, 2);
     assert.match(status.errors[0], /Ion token is not configured/);
+    sync.destroy();
+  });
+
+  it("fits a layer that has no store bounds once its Cesium object loads", async () => {
+    const g = makeGlobe();
+    const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {
+      ionToken: () => "tok",
+    });
+    const layer = createCesiumIonLayer({ id: "b", name: "B", assetId: 96188, kind: "3d-tiles" });
+    sync.sync([layer]);
+    // The Add Data dialog asks for the fit the moment the layer is added, long
+    // before the tileset exists: the request waits rather than being dropped.
+    sync.zoomToLayer("b");
+    assert.deepEqual(g.calls.flights, [], "nothing to fly to yet");
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(g.calls.flights.length, 1, "flew once the tileset loaded");
+    assert.equal(g.calls.flights[0], g.calls.primitives[0], "framed the loaded tileset");
+
+    // A later request, with the handle in hand, flies straight away.
+    sync.zoomToLayer("b");
+    assert.equal(g.calls.flights.length, 2);
+    sync.destroy();
+  });
+
+  it("drops a pending fit when its layer is removed before it loads", async () => {
+    const g = makeGlobe();
+    const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {
+      ionToken: () => "tok",
+    });
+    sync.sync([createCesiumIonLayer({ id: "b", name: "B", assetId: 96188, kind: "3d-tiles" })]);
+    sync.zoomToLayer("b");
+    sync.sync([]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.deepEqual(g.calls.flights, [], "the layer the fit targeted is gone");
     sync.destroy();
   });
 });
