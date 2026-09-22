@@ -72,11 +72,6 @@ export function getSpeechRecognizerFactory(): SpeechRecognizerFactory | null {
   return Ctor ? () => new Ctor() : null;
 }
 
-/** Whether this browser can transcribe the microphone. */
-export function isVoiceInputSupported(): boolean {
-  return getSpeechRecognizerFactory() !== null;
-}
-
 /** Whether this browser can speak the assistant's replies. */
 export function isVoiceOutputSupported(): boolean {
   if (typeof window === "undefined") return false;

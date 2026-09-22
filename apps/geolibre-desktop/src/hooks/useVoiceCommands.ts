@@ -328,10 +328,12 @@ export function useVoiceCommands({
       // Background Space is reserved at once so the page cannot scroll under
       // the gesture; a focused control keeps its own behavior for now.
       if (!preservesNative) event.preventDefault();
-      // A click-started session is intentionally open-mic: Space only claims an
-      // idle session, so releasing the key can never surprise the user by
-      // cutting off a conversation they started with the button.
-      if (sessionRef.current?.isActive()) return;
+      // A click-started session is intentionally open-mic, and Space leaves it
+      // alone: releasing the key must never surprise the user by cutting off a
+      // conversation they started with the button. Every other state — idle, or
+      // a push-to-talk turn still working or speaking — is fair game, so a hold
+      // can interrupt an answer with a new one.
+      if (sessionRef.current?.getMode() === "open-mic") return;
       cancelHold();
       holdTimer = setTimeout(() => {
         holdTimer = null;
@@ -340,7 +342,7 @@ export function useVoiceCommands({
         // owner, not to voice.
         if (document.activeElement !== holdFocusOwner) return;
         if (document.visibilityState === "hidden" || !document.hasFocus()) return;
-        if (sessionRef.current?.isActive()) return;
+        if (sessionRef.current?.getMode() === "open-mic") return;
         // Blur before listening starts, so the eventual Space release cannot
         // also activate the control that was focused when the hold began.
         if (holdControl && document.activeElement === holdControl) holdControl.blur?.();

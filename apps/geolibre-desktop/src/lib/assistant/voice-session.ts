@@ -65,6 +65,8 @@ export interface VoiceSessionOptions {
   language: () => string;
   /** Receives every event. Must not throw. */
   onEvent: (event: VoiceEvent) => void;
+  /** Open-mic end-of-phrase silence, in ms. Overridden by tests. */
+  endpointMs?: number;
 }
 
 /**
@@ -77,6 +79,19 @@ const MAX_IMMEDIATE_RESTARTS = 5;
 
 /** A restart sooner than this after a start counts as "immediate". */
 const IMMEDIATE_RESTART_MS = 350;
+
+/**
+ * How long an open mic waits after the last word before it forces the phrase
+ * to be finalized.
+ *
+ * Recognizers decide on their own when a phrase has ended, and Chrome is
+ * deliberately patient about it — well over a second of silence — which shows
+ * up as dead air between finishing a sentence and the map moving. Stopping the
+ * recognizer ourselves ends the phrase immediately; the open-mic session then
+ * re-arms as it does after any other silence, so nothing is lost. Push-to-talk
+ * needs none of this: releasing the key is the endpoint.
+ */
+const OPEN_MIC_ENDPOINT_MS = 900;
 
 /** Owns the microphone, the recognizer and the spoken reply for one panel. */
 export class VoiceSession {
@@ -112,6 +127,15 @@ export class VoiceSession {
   /** True once the agent run this session triggered is in flight. */
   private running = false;
 
+  /**
+   * Set while a same-mode restart is in flight, so the teardown it goes through
+   * keeps the microphone stream instead of releasing and re-acquiring one.
+   */
+  private retainStream = false;
+
+  /** Pending end-of-phrase timer for an open mic. */
+  private endpointTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(options: VoiceSessionOptions) {
     this.options = options;
   }
@@ -142,7 +166,10 @@ export class VoiceSession {
    */
   start(mode: VoiceMode): void {
     if (this.disposed) return;
-    if (this.isActive() && this.mode === mode) return;
+    // Only a *live recognizer* makes this a no-op: the guard exists to stop two
+    // recognizers stacking on one microphone. A session still working or
+    // speaking has no recognizer, and starting there is the user superseding it.
+    if (this.isActive() && this.mode === mode && this.recognizer) return;
     // Tear the previous session down first; its callbacks are already fenced
     // off by the generation this bumps.
     this.teardown();
@@ -171,8 +198,12 @@ export class VoiceSession {
       const { final, interim } = readSpeechResults(event);
       // Speech is intent: it supersedes a reply still being read out.
       if (final || interim) this.cancelSpeech();
-      if (interim) this.emit({ type: "interim", text: interim });
+      if (interim) {
+        this.emit({ type: "interim", text: interim });
+        this.armEndpoint(generation);
+      }
       if (final) {
+        this.clearEndpoint();
         this.restartCount = 0;
         this.emit({ type: "interim", text: "" });
         this.emit({ type: "transcript", text: final });
@@ -282,10 +313,16 @@ export class VoiceSession {
     utterance.onend = finish;
     utterance.onerror = finish;
     this.speaking = true;
+    this.clearEndpoint();
     if (this.mode === "open-mic" && this.recognizer) {
       this.suspendedForPlayback = true;
       this.abortRecognizer();
     }
+    // The meter holds its own capture stream. Nothing is listening while the
+    // reply plays, so holding the microphone open would light the browser's
+    // recording indicator — and animate the meter off the speakers — through a
+    // turn the user is not part of.
+    this.releaseStream();
     if (this.isActive()) this.setStatus("speaking");
     try {
       synthesis.speak(utterance);
@@ -360,7 +397,21 @@ export class VoiceSession {
     // which is what fences the recognizer being replaced.
     this.status = "idle";
     this.mode = null;
-    this.start(mode);
+    // The microphone survives the restart. Re-acquiring one per pause costs a
+    // fresh getUserMedia and AudioContext on every sentence, and drops the
+    // meter to its baseline between utterances.
+    this.retainStream = true;
+    try {
+      this.start(mode);
+    } finally {
+      this.retainStream = false;
+    }
+    // A restart that could not open a recognizer has already reported the
+    // failure; restoring the run over it would paint the session as working
+    // with nothing listening behind it. Read through the accessor: the compiler
+    // narrows `this.status` at the assignment above and does not track the
+    // `start()` call reassigning it.
+    if (this.getStatus() === "error") return;
     this.restartCount = restarts;
     this.running = running;
     // A restart is not a new turn; keep reporting the run that is still going.
@@ -390,10 +441,13 @@ export class VoiceSession {
    */
   private async acquireStream(generation: number): Promise<void> {
     const request = this.options.requestStream;
-    if (!request) return;
+    // A retained stream from the session this one restarted is already live.
+    if (!request || this.stream) return;
     try {
       const stream = await request();
-      if (generation !== this.generation || this.disposed) {
+      // `speaking` joins the identity checks: a stream that lands mid-reply
+      // belongs to a turn during which nothing should be holding the mic.
+      if (generation !== this.generation || this.disposed || this.speaking) {
         // The session this stream was acquired for is gone — release it here
         // rather than promoting it onto a session that did not ask for it.
         for (const track of stream.getTracks()) track.stop();
@@ -436,10 +490,40 @@ export class VoiceSession {
     this.running = false;
     this.suspendedForPlayback = false;
     this.restartCount = 0;
+    this.clearEndpoint();
     const recognizer = this.recognizer;
     this.abortRecognizer();
     if (recognizer) recognizer.onend = null;
-    this.releaseStream();
+    if (!this.retainStream) this.releaseStream();
+  }
+
+  /**
+   * (Re)starts the end-of-phrase timer for an open mic.
+   *
+   * Stopping the recognizer is what ends the phrase: it delivers the final
+   * result at once instead of after the engine's own, much longer, silence
+   * window, and `onend` then re-arms the session.
+   */
+  private armEndpoint(generation: number): void {
+    if (this.mode !== "open-mic") return;
+    this.clearEndpoint();
+    const endpointMs = this.options.endpointMs ?? OPEN_MIC_ENDPOINT_MS;
+    this.endpointTimer = setTimeout(() => {
+      this.endpointTimer = null;
+      if (generation !== this.generation || this.disposed) return;
+      try {
+        this.recognizer?.stop();
+      } catch {
+        // A recognizer that refuses to stop will end on its own.
+      }
+    }, endpointMs);
+  }
+
+  /** Cancels a pending end-of-phrase timer. */
+  private clearEndpoint(): void {
+    if (this.endpointTimer === null) return;
+    clearTimeout(this.endpointTimer);
+    this.endpointTimer = null;
   }
 
   /** Tears the session down, then reports the failure. */

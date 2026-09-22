@@ -256,8 +256,11 @@ first few sentences; the full reply is always in the transcript.
 A few things worth knowing:
 
 - **The microphone closes while an answer is being read**, so the assistant
-  cannot transcribe itself and answer its own reply. To interrupt, start a new
-  turn — hold Space, or click the microphone — which stops the playback at once.
+  cannot transcribe itself and answer its own reply. To interrupt a push-to-talk
+  answer, hold Space again — the new turn stops the playback at once. An open
+  mic reopens by itself when the answer ends, and the button stops it sooner;
+  Space deliberately leaves an open mic alone, so a stray key press can never
+  cut off a session you started with the button.
 - **Speaking again while it is still working cancels that run** and starts over
   with what you just said, the same way sending a new message would.
 - **Recognition is your browser's, not GeoLibre's.** Chrome, Edge and Safari

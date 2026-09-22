@@ -81,17 +81,40 @@ class FakeSynthesis {
   }
 }
 
+/** A microphone stream that records whether its track was stopped. */
+function fakeStream() {
+  const track = {
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+  };
+  return { track, stream: { getTracks: () => [track] } as unknown as MediaStream };
+}
+
 /** Builds a session over fakes, exposing what the test needs to drive it. */
-function harness(options: { synthesis?: boolean } = {}) {
+function harness(options: { synthesis?: boolean; streams?: boolean; endpointMs?: number } = {}) {
   const recognizers: FakeRecognizer[] = [];
   const events: VoiceEvent[] = [];
+  const streams: Array<ReturnType<typeof fakeStream>> = [];
   const synthesis = options.synthesis ? new FakeSynthesis() : null;
+  // When set, every recognizer built from here on refuses to start.
+  let failStarts = false;
   const session = new VoiceSession({
     createRecognizer: () => {
       const recognizer = new FakeRecognizer();
+      recognizer.failOnStart = failStarts;
       recognizers.push(recognizer);
       return recognizer;
     },
+    endpointMs: options.endpointMs,
+    requestStream: options.streams
+      ? async () => {
+          const made = fakeStream();
+          streams.push(made);
+          return made.stream;
+        }
+      : undefined,
     synthesis: synthesis as unknown as SpeechSynthesis | null,
     createUtterance: synthesis
       ? (text) => ({ text, lang: "", onend: null, onerror: null }) as SpeechSynthesisUtterance
@@ -103,7 +126,12 @@ function harness(options: { synthesis?: boolean } = {}) {
     session,
     recognizers,
     events,
+    streams,
     synthesis,
+    /** Make every future recognizer refuse to start. */
+    breakRecognizers: () => {
+      failStarts = true;
+    },
     /** The recognizer currently driving the session. */
     get current() {
       return recognizers.at(-1)!;
@@ -366,6 +394,121 @@ describe("voice session spoken replies", () => {
     withVoice.session.start("open-mic");
     withVoice.session.speak("   ");
     assert.equal(withVoice.synthesis!.spoken.length, 0);
+  });
+});
+
+describe("voice session end-of-phrase", () => {
+  it("stops an open mic after the silence window so the phrase lands sooner", async () => {
+    // Recognizers wait well over a second before calling a phrase finished,
+    // which is dead air between the last word and the app reacting.
+    const h = harness({ endpointMs: 10 });
+    h.session.start("open-mic");
+    const first = h.current;
+    h.current.say("zoom to Kenya", false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(first.stopCalls, 1);
+    // Ending the phrase is not ending the session: it re-arms as usual.
+    assert.ok(h.recognizers.length > 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("restarts the window while the user is still talking", async () => {
+    const h = harness({ endpointMs: 40 });
+    h.session.start("open-mic");
+    const first = h.current;
+    for (let i = 0; i < 4; i++) {
+      h.current.say(`word ${i}`, false);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+    assert.equal(first.stopCalls, 0, "a speaker mid-sentence must not be cut off");
+  });
+
+  it("leaves push-to-talk to the key, which is its own endpoint", async () => {
+    const h = harness({ endpointMs: 10 });
+    h.session.start("push-to-talk");
+    h.current.say("still holding", false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(h.current.stopCalls, 0);
+  });
+});
+
+describe("voice session microphone stream", () => {
+  it("keeps one stream across the restarts an open mic makes on every pause", async () => {
+    // Re-acquiring per pause costs a getUserMedia and an AudioContext per
+    // sentence, and drops the meter to baseline between utterances.
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams.length, 1);
+    h.current.end();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams.length, 1, "the restart re-acquired the microphone");
+    assert.equal(h.streams[0].track.stopped, false);
+  });
+
+  it("releases the microphone while a reply is read aloud", async () => {
+    const h = harness({ streams: true, synthesis: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.session.speak("Twelve rivers.");
+    assert.equal(h.streams[0].track.stopped, true);
+    assert.deepEqual(h.events.filter((e) => e.type === "stream").at(-1), {
+      type: "stream",
+      stream: null,
+    });
+  });
+
+  it("drops a stream that arrives after the session it was acquired for", async () => {
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    h.session.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams[0].track.stopped, true);
+  });
+
+  it("releases the microphone when the session ends", async () => {
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.session.stop();
+    assert.equal(h.streams[0].track.stopped, true);
+  });
+});
+
+describe("voice session supersede", () => {
+  it("lets a new push-to-talk turn replace one that is still working", () => {
+    // The turn has no recognizer left (the key was released), so the same-mode
+    // guard must not read it as a session already listening.
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    assert.equal(h.session.getStatus(), "executing");
+    const before = h.recognizers.length;
+    h.session.start("push-to-talk");
+    assert.equal(h.recognizers.length, before + 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("still refuses to stack a second recognizer on a live microphone", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.session.start("open-mic");
+    assert.equal(h.recognizers.length, 1);
+  });
+
+  it("keeps a failed restart in its error state", () => {
+    // Restoring the run over the failure would paint the session as working
+    // with nothing listening behind it.
+    const h = harness();
+    h.session.start("open-mic");
+    h.current.say("zoom to Kenya");
+    h.session.notifyRunStart();
+    h.breakRecognizers();
+    h.recognizers.at(-1)!.end();
+    assert.equal(h.session.getStatus(), "error");
+    assert.equal(h.session.isActive(), false);
   });
 });
 
