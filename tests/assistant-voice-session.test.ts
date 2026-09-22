@@ -498,17 +498,20 @@ describe("voice session supersede", () => {
     assert.equal(h.recognizers.length, 1);
   });
 
-  it("keeps a failed restart in its error state", () => {
+  it("keeps a failed restart in its error state, with no microphone behind it", async () => {
     // Restoring the run over the failure would paint the session as working
-    // with nothing listening behind it.
-    const h = harness();
+    // with nothing listening behind it — and the stream a restart deliberately
+    // retains must not survive into an error state either.
+    const h = harness({ streams: true });
     h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
     h.current.say("zoom to Kenya");
     h.session.notifyRunStart();
     h.breakRecognizers();
     h.recognizers.at(-1)!.end();
     assert.equal(h.session.getStatus(), "error");
     assert.equal(h.session.isActive(), false);
+    assert.equal(h.streams[0].track.stopped, true);
   });
 });
 

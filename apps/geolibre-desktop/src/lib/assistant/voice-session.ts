@@ -252,6 +252,12 @@ export class VoiceSession {
    *   set their own terminal status (the error path).
    */
   stop(options: { preserveStatus?: boolean } = {}): void {
+    // Ending the session always releases the microphone, even mid-restart:
+    // `restartListening` holds the stream across the teardown that `start()`
+    // does, and a failure there arrives here (via `fail()`) with the flag still
+    // set — which would leave a live track behind an idle or error state.
+    // `start()` tears down directly, so retention is unaffected.
+    this.retainStream = false;
     this.teardown();
     this.cancelSpeech();
     this.mode = null;
