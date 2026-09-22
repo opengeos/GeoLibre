@@ -5,27 +5,34 @@
  * filter box and the assistant's `list_whitebox_tools` — and both want the same
  * rule, so it lives here once.
  *
- * The rule is: **match names and summaries, but never let a summary match
- * outrank a name match.**
+ * The rule has two halves. **Match names and summaries, but never let a summary
+ * match outrank a name match**, and **within the name matches, put the tool
+ * actually called that first.**
  *
- * Both halves matter. Searching summaries is what lets "speckle" find the four
- * SAR filters, none of which say so in their name — before the catalog carried
- * summaries that search returned nothing at all. But a summary is a paragraph,
- * so a common word hits dozens of tools: matching name and summary in one
- * joined string leaves the results in catalog order with nothing to separate
- * the tool called Slope from the forty that mention slope in passing. Measured
- * against the shipped catalog, that put the Slope tool 47th of 51 hits for
- * "slope", and 15th of 18 for "watershed".
+ * The first half is what lets "speckle" find the four SAR filters, none of
+ * which say so in their name — before the catalog carried summaries that search
+ * returned nothing at all. But a summary is a paragraph, so a common word hits
+ * dozens of tools: matching name and summary in one joined string leaves the
+ * results in catalog order with nothing to separate the tool called Slope from
+ * the forty that mention slope in passing. Measured against the shipped
+ * catalog, that put the Slope tool 47th of 51 hits for "slope", and 15th of 18
+ * for "watershed".
  *
- * Splitting the two restores every tool to exactly the position it held before
- * the catalog carried summaries at all — Slope back to 20th, Watershed to 12th
- * — while keeping the summary hits behind them as added reach.
+ * The second half is what the first does not fix. Splitting names from
+ * summaries restored Slope to 20th of 21 — the rank it held before the catalog
+ * carried summaries at all — which is still buried behind every tool whose name
+ * merely contains the word (Average Flowpath Slope, Downslope Index, …). So the
+ * name matches are themselves tiered: a tool whose id or label *is* the query
+ * leads, then the ones it is a prefix of, then the rest in catalog order.
+ * Searching "slope", "watershed" or "aspect" now reaches the tool of that name
+ * first instead of 20th, 12th and 2nd.
  *
- * Note what that does *not* do: within the name matches the order is still the
- * catalog's, so "slope" leads with Average Flowpath Slope and reaches the tool
- * called Slope 20th. That is long-standing behaviour and not something this
- * function tries to change; ranking exact and prefix matches first would be a
- * real improvement to the toolbox and a separate, deliberate one.
+ * Ranking reads {@link WhiteboxToolText.identifiers} — the tool's own id and
+ * label — rather than the joined text the substring pass uses, so a category
+ * name cannot promote its whole category ("terrain" would otherwise rank the 36
+ * tools filed under Terrain ahead of the tools named after it). Identifiers are
+ * compared with `_` and `-` folded to spaces, so `fill_depressions`,
+ * `fill-depressions` and `Fill Depressions` are one query.
  */
 
 /** The searchable text of one tool. */
@@ -37,9 +44,32 @@ export interface WhiteboxToolText {
    * from i18n rather than from the catalog.
    */
   name: string;
+  /**
+   * The tool's own names: its id and its display label, separately.
+   *
+   * Only these are ranked. `name` decides *whether* a tool matches; this
+   * decides *where* among the matches it lands.
+   */
+  identifiers: readonly string[];
   /** The catalog's description of what the tool does; may be empty. */
   summary: string;
 }
+
+/**
+ * Fold an id or a label into the form exact and prefix matches compare in.
+ *
+ * Whitebox ids are `snake_case` and labels are Title Case, so folding the
+ * separators is what lets one query match both.
+ */
+function foldIdentifier(value: string): string {
+  return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Where a tool lands: named exactly, named with the query as a prefix, … */
+const EXACT = 0;
+const PREFIX = 1;
+const NAMED = 2;
+const DESCRIBED = 3;
 
 /**
  * Order a tool list against a search, name matches first.
@@ -47,8 +77,9 @@ export interface WhiteboxToolText {
  * @param tools - The tools to search, already narrowed by category/source.
  * @param query - The raw search text; blank returns `tools` unchanged.
  * @param textOf - The searchable text for one tool.
- * @returns Tools matching by name, in their original order, followed by those
- *   matching only by summary. Non-matches are dropped.
+ * @returns Tools whose name the query matches, most exactly first and in their
+ *   original order within each tier, followed by those matching only by
+ *   summary. Non-matches are dropped.
  */
 export function searchWhiteboxTools<T>(
   tools: readonly T[],
@@ -57,13 +88,19 @@ export function searchWhiteboxTools<T>(
 ): T[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [...tools];
+  // A query of only separators folds to nothing, and every identifier starts
+  // with nothing — so the tiers are skipped rather than matching the catalog.
+  const folded = foldIdentifier(needle);
 
-  const named: T[] = [];
-  const describedOnly: T[] = [];
+  const tiers: T[][] = [[], [], [], []];
   for (const tool of tools) {
     const text = textOf(tool);
-    if (text.name.toLowerCase().includes(needle)) named.push(tool);
-    else if (text.summary.toLowerCase().includes(needle)) describedOnly.push(tool);
+    const identifiers = folded ? text.identifiers.map(foldIdentifier) : [];
+    if (identifiers.includes(folded)) tiers[EXACT].push(tool);
+    else if (identifiers.some((identifier) => identifier.startsWith(folded)))
+      tiers[PREFIX].push(tool);
+    else if (text.name.toLowerCase().includes(needle)) tiers[NAMED].push(tool);
+    else if (text.summary.toLowerCase().includes(needle)) tiers[DESCRIBED].push(tool);
   }
-  return [...named, ...describedOnly];
+  return tiers.flat();
 }

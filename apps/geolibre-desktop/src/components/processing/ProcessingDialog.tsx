@@ -63,6 +63,7 @@ import {
 } from "../../lib/subset-tool-url";
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
 import { searchWhiteboxTools } from "../../lib/whitebox-tool-search";
+import { useWhiteboxSemanticSearch } from "../../hooks/useWhiteboxSemanticSearch";
 import { fieldSourceInputName, isFieldParameterName } from "../../lib/whitebox-field-params";
 import {
   DISTANCE_UNITS,
@@ -916,21 +917,83 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     ];
   }, [tools, matchesSource, t, i18n.language]);
 
+  // Everything the category and source filters allow, before the search text.
+  // Memoized apart from the search so the semantic lookup below sees a stable
+  // list across keystrokes, and so it searches the same scope the list shows.
+  const scopedTools = useMemo(
+    () =>
+      tools.filter(
+        (tool) => (category === "All" || (tool.category ?? "") === category) && matchesSource(tool),
+      ),
+    [category, matchesSource, tools],
+  );
+
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    const inScope = tools.filter(
-      (tool) => (category === "All" || (tool.category ?? "") === category) && matchesSource(tool),
-    );
-    return searchWhiteboxTools(inScope, normalizedQuery, (tool) => ({
+    return searchWhiteboxTools(scopedTools, normalizedQuery, (tool) => ({
       name: [
         tool.id,
         toolLabel(t, tool),
         tool.category ?? "",
         translateWhiteboxCategory(t, tool.category),
       ].join(" "),
+      // The tool's own names, which is what exact/prefix ranking measures. The
+      // categories stay out: they are shared by dozens of tools, so ranking
+      // them would let "terrain" promote everything filed under Terrain ahead
+      // of the tools actually named after it.
+      identifiers: [tool.id, toolLabel(t, tool)],
       summary: tool.summary || "",
     }));
-  }, [category, matchesSource, query, t, tools]);
+  }, [query, scopedTools, t]);
+
+  // A second, optional search that understands a description of an operation
+  // rather than a word from the catalog ("remove sinks so water drains off the
+  // edge" -> fill_depressions). Off entirely unless the deployment configured a
+  // System One endpoint, and never a substitute for the filter above: its hits
+  // are shown as their own group in front of it, so the substring list someone
+  // is already reading keeps its order. #2566
+  const semantic = useWhiteboxSemanticSearch(query, scopedTools, filteredTools, !loadingTools);
+
+  const semanticTools = useMemo(() => {
+    if (!semantic.matches?.length) return [];
+    const byId = new Map(scopedTools.map((tool) => [tool.id, tool]));
+    return semantic.matches
+      .map((match) => byId.get(match.id))
+      .filter((tool): tool is WhiteboxTool => tool !== undefined);
+  }, [semantic.matches, scopedTools]);
+
+  // The substring hits the ranked group does not already show. Listing a tool
+  // twice under two headings reads as two different tools.
+  const keywordTools = useMemo(() => {
+    if (semanticTools.length === 0) return filteredTools;
+    const ranked = new Set(semanticTools.map((tool) => tool.id));
+    return filteredTools.filter((tool) => !ranked.has(tool.id));
+  }, [filteredTools, semanticTools]);
+
+  const renderToolRow = useCallback(
+    (tool: WhiteboxTool) => (
+      <button
+        key={tool.id}
+        type="button"
+        ref={selectedTool?.id === tool.id ? selectedButtonRef : undefined}
+        className={cn(
+          "block w-full px-3 py-2 text-start text-sm transition-colors hover:bg-accent",
+          selectedTool?.id === tool.id && "bg-accent",
+          tool.locked && "opacity-60",
+        )}
+        onClick={() => setSelectedToolId(tool.id)}
+      >
+        <span className="block truncate font-medium">
+          {tool.locked ? t("processing.whitebox.lockedPrefix") : ""}
+          {toolLabel(t, tool)}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {translateWhiteboxCategory(t, tool.category)}
+        </span>
+      </button>
+    ),
+    [selectedTool?.id, t],
+  );
 
   const loadWhitebox = useCallback(async () => {
     setLoadingTools(true);
@@ -1995,9 +2058,23 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="ps-9"
-                placeholder={t("processing.searchTools")}
+                // The end padding is reserved whenever the lookup could run, not
+                // only while it is running: letting it appear with the spinner
+                // would reflow the text under the cursor mid-typing.
+                className={cn("ps-9", semantic.available && "pe-9")}
+                placeholder={
+                  semantic.available
+                    ? t("processing.whitebox.searchToolsByMeaning")
+                    : t("processing.searchTools")
+                }
               />
+              {semantic.pending && (
+                <Loader2
+                  role="status"
+                  aria-label={t("processing.whitebox.searchingByMeaning")}
+                  className="absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground"
+                />
+              )}
             </div>
             <Button
               type="button"
@@ -2106,32 +2183,30 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {t("processing.whitebox.loadingTools")}
                 </div>
-              ) : filteredTools.length === 0 ? (
+              ) : filteredTools.length === 0 && semanticTools.length === 0 ? (
                 <div className="p-3 text-sm text-muted-foreground">
                   {t("processing.whitebox.noToolsFound")}
                 </div>
               ) : (
-                filteredTools.map((tool) => (
-                  <button
-                    key={tool.id}
-                    type="button"
-                    ref={selectedTool?.id === tool.id ? selectedButtonRef : undefined}
-                    className={cn(
-                      "block w-full px-3 py-2 text-start text-sm transition-colors hover:bg-accent",
-                      selectedTool?.id === tool.id && "bg-accent",
-                      tool.locked && "opacity-60",
-                    )}
-                    onClick={() => setSelectedToolId(tool.id)}
-                  >
-                    <span className="block truncate font-medium">
-                      {tool.locked ? t("processing.whitebox.lockedPrefix") : ""}
-                      {toolLabel(t, tool)}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {translateWhiteboxCategory(t, tool.category)}
-                    </span>
-                  </button>
-                ))
+                <>
+                  {/* Headings appear only once the lookup has answered, so with
+                      it off or unanswered this is the flat list it always was. */}
+                  {semanticTools.length > 0 && (
+                    <div
+                      className="bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground"
+                      data-testid="whitebox-best-matches"
+                    >
+                      {t("processing.whitebox.bestMatches")}
+                    </div>
+                  )}
+                  {semanticTools.map(renderToolRow)}
+                  {semanticTools.length > 0 && keywordTools.length > 0 && (
+                    <div className="bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                      {t("processing.whitebox.otherMatches")}
+                    </div>
+                  )}
+                  {keywordTools.map(renderToolRow)}
+                </>
               )}
             </div>
           </ScrollArea>

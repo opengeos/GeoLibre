@@ -18,6 +18,7 @@ const CATALOG: SnapshotTool[] = JSON.parse(
 /** The dialog's and the assistant's shared view of a tool's searchable text. */
 const textOf = (tool: SnapshotTool) => ({
   name: [tool.id, tool.display_name, tool.category ?? ""].join(" "),
+  identifiers: [tool.id, tool.display_name],
   summary: tool.summary ?? "",
 });
 
@@ -41,17 +42,41 @@ describe("searchWhiteboxTools", () => {
     );
   });
 
-  it("restores the rank a summary-free catalog would have given", () => {
-    // The regression this exists for. ~30 tools mention "slope" in passing, so
-    // searching one joined string pushed the tool called Slope from 20th of 21
-    // hits to 47th of 51 — it fell off the visible list.
+  it("leads with the tool the query names", () => {
+    // The regression this exists for. Splitting names from summaries restored
+    // Slope to 20th of 21 name matches, which is still behind every tool whose
+    // name merely contains the word; ranking exact matches first is what
+    // actually puts it where it was searched for. #2566.
+    assert.equal(search("slope")[0], "slope");
+    assert.equal(search("watershed")[0], "watershed");
+    assert.equal(search("aspect")[0], "aspect");
+    assert.equal(search("fill depressions")[0], "fill_depressions");
+  });
+
+  it("matches an id whatever separator the query uses", () => {
+    // Ids are snake_case and labels are Title Case, so both fold to the same
+    // thing and a hyphen is nobody's mistake to make.
+    for (const query of ["fill_depressions", "fill-depressions", "Fill Depressions"]) {
+      assert.equal(search(query)[0], "fill_depressions", query);
+    }
+  });
+
+  it("ranks prefix matches behind exact ones and ahead of the rest", () => {
     const hits = search("slope");
-    const named = CATALOG.filter((tool) => textOf(tool).name.toLowerCase().includes("slope"));
-    assert.equal(
-      hits.indexOf("slope"),
-      named.findIndex((t) => t.id === "slope"),
+    const prefixed = hits.indexOf("slope_vs_aspect_plot");
+    const contained = hits.indexOf("average_flowpath_slope");
+    assert.ok(prefixed > 0, "Slope Vs Aspect Plot should be a prefix match");
+    assert.ok(prefixed < contained, "a prefix match should outrank a contains-only match");
+  });
+
+  it("does not let a category promote every tool filed under it", () => {
+    // "terrain" is one of the catalog's largest categories. Ranking it would
+    // put its 36 tools ahead of the ones named after it.
+    const hits = search("terrain");
+    assert.ok(
+      hits.indexOf("terrain_ruggedness_index") < 5,
+      `expected a tool named Terrain… near the top, got ${hits.slice(0, 5).join(", ")}`,
     );
-    assert.ok(hits.length > named.length, "the summary matches should still be included");
   });
 
   it("keeps the summary matches, which are the whole point of searching them", () => {
@@ -61,14 +86,21 @@ describe("searchWhiteboxTools", () => {
     assert.ok(hits.includes("frost_filter"), hits.slice(0, 5).join(", "));
   });
 
-  it("orders name matches among themselves by catalog order, not by relevance", () => {
-    // Deliberately not a ranking function: the dialog has always listed tools
-    // in catalog order and this only separates the two kinds of hit. So
-    // "slope" still leads with Average Flowpath Slope, as it always has.
-    const named = CATALOG.filter((tool) => textOf(tool).name.toLowerCase().includes("hillshade"));
+  it("keeps catalog order within one tier", () => {
+    // Only the tiers reorder anything: tools that match the query the same way
+    // are still listed in the order the catalog gives them.
+    const contained = CATALOG.filter((tool) => {
+      const { identifiers } = textOf(tool);
+      const folded = identifiers.map((name) => name.toLowerCase().replace(/[_-]+/g, " "));
+      return (
+        textOf(tool).name.toLowerCase().includes("hillshade") &&
+        !folded.some((name) => name.startsWith("hillshade"))
+      );
+    }).map((tool) => tool.id);
+    const hits = search("hillshade");
     assert.deepEqual(
-      search("hillshade").slice(0, named.length),
-      named.map((tool) => tool.id),
+      hits.filter((id) => contained.includes(id)),
+      contained,
     );
   });
 
@@ -78,6 +110,11 @@ describe("searchWhiteboxTools", () => {
 
   it("is case-insensitive and ignores surrounding space", () => {
     assert.deepEqual(search("  HILLSHADE "), search("hillshade"));
+  });
+
+  it("does not treat a separator-only query as a prefix of everything", () => {
+    // "__" folds to the empty string, which every identifier starts with.
+    assert.deepEqual(search("__"), []);
   });
 
   it("handles a tool with no summary at all", () => {

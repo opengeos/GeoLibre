@@ -813,6 +813,7 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
         // always outranks a tool that merely mentions the query in its summary.
         const keywordMatches = searchWhiteboxTools(tools, query, (item) => ({
           name: `${item.name} ${item.id} ${item.category}`,
+          identifiers: [item.id, item.name],
           summary: item.description,
         }));
         const selected = await rankWhiteboxSearch(query, tools, keywordMatches);
