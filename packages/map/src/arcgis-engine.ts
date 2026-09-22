@@ -93,6 +93,9 @@ export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   picking: true,
   onMapDrawing: true,
   domControls: true,
+  screenOverlays: false,
+  flatProjection: true,
+  terrainSource: true,
 });
 
 export const ARCGIS_DECK_CAPABILITIES: MapEngineCapabilities = Object.freeze({

@@ -135,12 +135,16 @@ export function ControlsMenu({
     viewer && AUTHORING_CONTROL_ITEMS.includes(id) ? false : isMenuItemVisible(uiProfile, id);
   // Atmospheric effects only render on the globe (the engine idles in Mercator),
   // so the submenu is disabled while the map is in a flat projection (#783). The
-  // GlobeControl toggle syncs this preference via the map "projectiontransition"
-  // event, so the menu reacts the moment the user switches projections. The
-  // Cesium renderer is a globe whatever the 2D projection preference says, and
-  // its effects branch drives the native sky box and atmosphere (#2287).
+  // globe control syncs this preference on every engine that has one — MapLibre
+  // through "projectiontransition", Mapbox and ArcGIS through their own toggles
+  // — so the menu reacts the moment the user switches projections. Cesium has no
+  // flat mode the preference maps onto (`flatProjection`), it is a globe
+  // whatever the preference says, and its effects branch drives the native sky
+  // box and atmosphere (#2287). Gating on "not a MapLibre map" instead left the
+  // submenu enabled on Mapbox in Mercator, where the effects draw nothing
+  // (#2475).
   const globeProjection = useAppStore((s) => s.preferences.map.projection === "globe");
-  const globeActive = globeProjection || !capabilities.nativeMapInstance;
+  const globeActive = globeProjection || !capabilities.flatProjection;
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const setPreferences = useAppStore((s) => s.setPreferences);
   // Ground elevation under the pointer in the status bar (#1813). Off by

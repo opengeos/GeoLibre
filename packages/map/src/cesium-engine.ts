@@ -72,6 +72,11 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   picking: true,
   onMapDrawing: true,
   domControls: true,
+  // A globe: screen-space boxes break past the limb, and the 2D projection
+  // preference has no flat mode here to map onto.
+  screenOverlays: false,
+  flatProjection: false,
+  terrainSource: true,
 });
 
 /**
