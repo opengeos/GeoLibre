@@ -85,8 +85,13 @@ test.describe("Cesium 3D globe pane", () => {
     // the hint about what an Ion token would add. This is the assertion that
     // distinguishes the keyless path from the tokened one — and the one that
     // catches a build the config's env override could not reach.
+    //
+    // Match the leading phrase only. The hint interpolates a Settings button
+    // whose label is part of the catalog string, so pinning the whole sentence
+    // breaks whenever that label is reworded — #2526 renamed it to "Settings →
+    // Environment variables" and took this test down with it.
     await expect(
-      page.getByText("Add a Cesium Ion token in Settings for terrain and Ion imagery"),
+      page.getByText(/Add a Cesium Ion token in/),
       "the globe pane came up with an Ion token, so this run is not testing the keyless path. " +
         "playwright.config.ts blanks CESIUM_TOKEN/VITE_CESIUM_TOKEN for the build, but that misses " +
         "a token in apps/geolibre-desktop/.env.local (read off disk by vite.config.ts), and is not " +
