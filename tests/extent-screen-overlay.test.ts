@@ -4,8 +4,11 @@ import { MAPLIBRE_CAPABILITIES } from "../packages/map/src/map-engine";
 import { MAPBOX_CAPABILITIES } from "../packages/map/src/mapbox-engine";
 import { CESIUM_CAPABILITIES, CESIUM_PANE_CAPABILITIES } from "../packages/map/src/cesium-engine";
 import { ARCGIS_CAPABILITIES, ARCGIS_DECK_CAPABILITIES } from "../packages/map/src/arcgis-engine";
-import { projectExtentCorners } from "../apps/geolibre-desktop/src/hooks/useExtentScreenOverlay";
-import type { MapExtent } from "../packages/map/src/map-engine";
+import {
+  projectExtentCorners,
+  usesScreenOverlay,
+} from "../apps/geolibre-desktop/src/hooks/useExtentScreenOverlay";
+import type { MapEngine, MapEngineCapabilities, MapExtent } from "../packages/map/src/map-engine";
 
 /**
  * A stand-in for a Web Mercator `project`: 1 degree = 1 pixel, y flipped, so
@@ -100,5 +103,38 @@ describe("terrainSource capability (#2475)", () => {
   });
   it("still leaves Mapbox its own terrain and exaggeration", () => {
     assert.equal(MAPBOX_CAPABILITIES.terrain, true);
+  });
+});
+
+/**
+ * The smallest engine `usesScreenOverlay` reads: a capability object and a
+ * render surface, which every real engine has.
+ */
+function fakeEngine(capabilities: MapEngineCapabilities, hasSurface = true): MapEngine {
+  return {
+    capabilities,
+    getRenderSurface: () => (hasSurface ? ({} as never) : null),
+  } as unknown as MapEngine;
+}
+
+describe("usesScreenOverlay (#2475)", () => {
+  it("draws the SVG outline on the 2D engines", () => {
+    assert.equal(usesScreenOverlay(fakeEngine(MAPLIBRE_CAPABILITIES), true), true);
+    assert.equal(usesScreenOverlay(fakeEngine(MAPBOX_CAPABILITIES), true), true);
+  });
+  it("defers to showExtent on the globe engines", () => {
+    // Every engine has a render surface, so the capability is the only thing
+    // keeping the overlay off a globe: Cesium's `project` throws for a corner
+    // it cannot clamp into view, ArcGIS's returns {x: 0, y: 0}, and both draw
+    // the extent natively anyway — so the panel would show two boxes.
+    assert.equal(usesScreenOverlay(fakeEngine(CESIUM_CAPABILITIES), true), false);
+    assert.equal(usesScreenOverlay(fakeEngine(ARCGIS_CAPABILITIES), true), false);
+    assert.equal(usesScreenOverlay(fakeEngine(ARCGIS_DECK_CAPABILITIES), true), false);
+  });
+  it("draws nothing for a closed panel, a missing engine, or a torn-down map", () => {
+    assert.equal(usesScreenOverlay(fakeEngine(MAPBOX_CAPABILITIES), false), false);
+    assert.equal(usesScreenOverlay(null, true), false);
+    assert.equal(usesScreenOverlay(undefined, true), false);
+    assert.equal(usesScreenOverlay(fakeEngine(MAPBOX_CAPABILITIES, false), true), false);
   });
 });

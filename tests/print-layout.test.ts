@@ -1195,4 +1195,11 @@ describe("scaleZoomTarget (#2475, GH #743)", () => {
     assert.equal(scaleZoomTarget(10, 100_000, 50_000, Number.NaN, 24), null);
     assert.equal(scaleZoomTarget(10, 100_000, 50_000, 0, Number.POSITIVE_INFINITY), null);
   });
+  it("rejects an infinite ratio instead of pinning the camera to a limit", () => {
+    // A long enough digit string parses to Infinity, which passes `> 0` and
+    // would otherwise send `wanted` to -Infinity and the camera to minZoom.
+    assert.equal(scaleZoomTarget(10, 100_000, Number.POSITIVE_INFINITY, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, Number.POSITIVE_INFINITY, 50_000, 0, 24), null);
+    assert.equal(scaleZoomTarget(10, 100_000, Number("1".repeat(400)), 0, 24), null);
+  });
 });

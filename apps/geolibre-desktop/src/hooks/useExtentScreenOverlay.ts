@@ -18,6 +18,23 @@ interface Options {
 }
 
 /**
+ * Whether a panel should draw its own screen-space outline for this engine, or
+ * leave the extent to {@link MapEngine.showExtent}.
+ *
+ * Every engine has a render surface, so the capability is what separates them:
+ * on a globe engine `project` either throws for a corner it cannot clamp into
+ * view (Cesium) or silently returns `{x: 0, y: 0}` (ArcGIS), and the engine
+ * draws the extent natively anyway.
+ *
+ * @param engine - The live engine, or null before one is published.
+ * @param active - False while the owning panel is closed.
+ * @returns True when the SVG overlay is the right way to draw the box.
+ */
+export function usesScreenOverlay(engine: MapEngine | null | undefined, active: boolean): boolean {
+  return Boolean(active && engine?.capabilities.screenOverlays && engine.getRenderSurface());
+}
+
+/**
  * The box's four corners in screen space, in `[NW, NE, SE, SW]` order so the
  * caller can join them straight into an SVG `<polygon points>`.
  *
@@ -57,9 +74,9 @@ export function projectExtentCorners(
  * stays visible above the interleaved deck.gl COG/raster overlay — which is
  * exactly the layer a raster subset is drawn over. That only needs
  * `MapRenderSurface.project`, which every engine has, so the overlay works on
- * either 2D engine; the caller gates it on the engine's `screenOverlays`
- * capability and falls back to {@link MapEngine.showExtent} for the globe
- * engines (#2475).
+ * either 2D engine. It returns nothing on an engine without the
+ * `screenOverlays` capability, which is where the caller falls back to
+ * {@link MapEngine.showExtent} instead (#2475).
  *
  * @param mapControllerRef - Ref holding the live engine.
  * @param bbox - The box to outline, or `null` for none.
@@ -93,7 +110,12 @@ export function useExtentScreenOverlay(
   useEffect(() => {
     const engine = mapControllerRef.current;
     const surface = engine?.getRenderSurface();
-    if (!engine || !surface || !active) {
+    // Checked here rather than left to each caller, so a panel cannot forget it
+    // and end up with both this overlay and the engine's native one.
+    if (!engine || !surface || !usesScreenOverlay(engine, active)) {
+      // Drop the stale closure too, or a later `bbox` change would reproject
+      // through the engine this effect just let go of.
+      reprojectRef.current = () => {};
       setScreenPoints(null);
       return;
     }
@@ -114,6 +136,7 @@ export function useExtentScreenOverlay(
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => reproject());
     observer?.observe(surface.getContainer());
     return () => {
+      reprojectRef.current = () => {};
       unsubscribe();
       observer?.disconnect();
     };

@@ -698,7 +698,11 @@ export function scaleZoomTarget(
 ): ScaleZoomTarget | null {
   if (
     !Number.isFinite(currentZoom) ||
+    !Number.isFinite(currentRatio) ||
     !(currentRatio > 0) ||
+    // An `Infinity` target passes `> 0` and would drive the camera to minZoom
+    // rather than being rejected; a long enough digit string parses to it.
+    !Number.isFinite(targetRatio) ||
     !(targetRatio > 0) ||
     !Number.isFinite(minZoom) ||
     !Number.isFinite(maxZoom)
