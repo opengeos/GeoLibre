@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
+import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { clamp } from "../../lib/clamp";
 import {
   extractRasterSubset,
@@ -295,11 +295,13 @@ export function RasterSubsetPanel({
     });
   }, [drawing, mapControllerRef, clearStatus, mapReadyGeneration]);
 
-  // The globe engines project a wide box to nothing, so they draw the extent as
-  // a native entity instead of taking the SVG overlay above.
+  // Whatever the SVG overlay above does not cover — here, a globe engine — is
+  // drawn as a native entity instead. This panel sets no span guard: a raster's
+  // extent is never wide enough for the four corners to degenerate.
   useEffect(() => {
     const engine = mapControllerRef.current;
-    if (!layer || !bbox || !engine || engine.capabilities.screenOverlays) return;
+    if (!layer || !bbox || !engine) return;
+    if (screenOverlayCovers(engine, Boolean(layer), bbox)) return;
     return engine.showExtent(bbox);
   }, [layer, bbox, mapControllerRef, mapReadyGeneration]);
 

@@ -40,7 +40,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
+import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { clamp } from "../../lib/clamp";
 import {
   deleteOfflineBasemap,
@@ -87,6 +87,14 @@ const DEFAULT_ARCHIVE_URL = `${PLANET_PROXY_PREFIX}latest.pmtiles`;
 const CONFIRM_BYTES = 150 * 1024 * 1024;
 
 type Phase = "idle" | "running" | "done";
+
+/**
+ * A near-global box (e.g. "Use view" at a world/globe zoom) has corners that
+ * project to the same pole or wrap around, so the four-corner SVG polygon
+ * degenerates into a stray diagonal line. Past this span the panel takes the
+ * engine's native rectangle instead.
+ */
+const MAX_OVERLAY_SPAN_DEG = 170;
 
 interface PanelPos {
   x: number;
@@ -385,13 +393,7 @@ export function BasemapExtractPanel({
     bbox ?? null,
     open,
     mapReadyGeneration,
-    {
-      // A near-global box (e.g. "Use view" at a world/globe zoom) has corners
-      // that project to the same pole or wrap around, so the four-corner polygon
-      // degenerates into a stray diagonal line. Skip the overlay for such boxes;
-      // the extraction still works, there's just no meaningful rectangle to draw.
-      maxSpanDeg: 170,
-    },
+    { maxSpanDeg: MAX_OVERLAY_SPAN_DEG },
   );
 
   // Both renderers share the pointer lifecycle; the globe draws a native rectangle.
@@ -412,11 +414,14 @@ export function BasemapExtractPanel({
     });
   }, [drawing, mapControllerRef, clearStatus, mapReadyGeneration]);
 
-  // The globe engines project a wide box to nothing, so they draw the extent as
-  // a native entity instead of taking the SVG overlay above.
+  // Whatever the SVG overlay above does not cover — a globe engine, or a box
+  // too wide for the span guard — is drawn as a native entity instead, so a
+  // "Use view" at world zoom still gets an outline (the engine's own rectangle
+  // is a line, which does not degenerate the way four projected corners do).
   useEffect(() => {
     const engine = mapControllerRef.current;
-    if (!open || !bbox || !engine || engine.capabilities.screenOverlays) return;
+    if (!open || !bbox || !engine) return;
+    if (screenOverlayCovers(engine, open, bbox, MAX_OVERLAY_SPAN_DEG)) return;
     return engine.showExtent(bbox);
   }, [open, bbox, mapControllerRef, mapReadyGeneration]);
 

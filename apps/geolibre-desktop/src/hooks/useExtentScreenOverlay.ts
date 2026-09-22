@@ -34,6 +34,40 @@ export function usesScreenOverlay(engine: MapEngine | null | undefined, active: 
   return Boolean(active && engine?.capabilities.screenOverlays && engine.getRenderSurface());
 }
 
+/** Whether `bbox` is inside the caller's span guard. One definition, so the
+ * overlay and the caller's native fallback cannot disagree about a wide box. */
+function withinSpan(bbox: MapExtent, maxSpanDeg: number | undefined): boolean {
+  const [w, s, e, n] = bbox;
+  return maxSpanDeg === undefined || (e - w <= maxSpanDeg && n - s <= maxSpanDeg);
+}
+
+/**
+ * Whether {@link useExtentScreenOverlay} will actually outline `bbox`, so the
+ * caller knows when to fall back to {@link MapEngine.showExtent}.
+ *
+ * Not the same question as {@link usesScreenOverlay}: an engine that takes the
+ * overlay still opts out of a box wider than its span guard, and a wide box
+ * with no outline at all is worse than the engine's own rectangle — which has
+ * no span guard, because a native line does not degenerate.
+ *
+ * Deliberately derived from `bbox` rather than from the returned points, so a
+ * caller can depend on it in an effect without re-running on every camera move.
+ *
+ * @param engine - The live engine, or null before one is published.
+ * @param active - False while the owning panel is closed.
+ * @param bbox - The box to outline, or `null` for none.
+ * @param maxSpanDeg - The same guard passed to the hook, if any.
+ * @returns True when the SVG overlay covers this box.
+ */
+export function screenOverlayCovers(
+  engine: MapEngine | null | undefined,
+  active: boolean,
+  bbox: MapExtent | null,
+  maxSpanDeg?: number,
+): boolean {
+  return Boolean(bbox && usesScreenOverlay(engine, active) && withinSpan(bbox, maxSpanDeg));
+}
+
 /**
  * The box's four corners in screen space, in `[NW, NE, SE, SW]` order so the
  * caller can join them straight into an SVG `<polygon points>`.
@@ -51,9 +85,8 @@ export function projectExtentCorners(
   bbox: MapExtent | null,
   maxSpanDeg?: number,
 ): ExtentScreenPoint[] | null {
-  if (!bbox) return null;
+  if (!bbox || !withinSpan(bbox, maxSpanDeg)) return null;
   const [w, s, e, n] = bbox;
-  if (maxSpanDeg !== undefined && (e - w > maxSpanDeg || n - s > maxSpanDeg)) return null;
   const corners: [number, number][] = [
     [w, n],
     [e, n],
