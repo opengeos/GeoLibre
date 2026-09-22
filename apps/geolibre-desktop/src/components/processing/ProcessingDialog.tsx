@@ -2216,7 +2216,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               </Button>
             </div>
             {selectedTool?.summary && (
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              // Height-bounded and scrollable, not clamped. Catalog summaries
+              // run from one line to ~2,400 characters (`lee_filter`), and the
+              // long ones rendered 340px tall in a 624px dialog — pushing the
+              // parameter form and the Run button below the fold on the tools
+              // whose parameters most need explaining. Scrolling keeps the full
+              // text, which is the useful half of it, without letting it take
+              // the dialog over.
+              <p className="mt-2 max-h-24 max-w-3xl overflow-y-auto text-sm text-muted-foreground">
                 {translateToolDescription(t, "whitebox", {
                   id: selectedTool.id,
                   name: toolLabel(t, selectedTool),

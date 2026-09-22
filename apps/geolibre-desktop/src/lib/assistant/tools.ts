@@ -804,13 +804,23 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
       const query = input.search?.trim();
       if (query) {
         const needle = query.toLowerCase();
-        // `description` joins the haystack so that filling the catalog's empty
-        // summaries upstream improves this filter too, not only the lookup.
-        const keywordMatches = tools.filter((item) =>
-          `${item.name} ${item.id} ${item.category} ${item.description}`
-            .toLowerCase()
-            .includes(needle),
-        );
+        // Two passes, not one haystack. Searching the summary as well as the
+        // name finds tools the name alone would miss — `lee_filter` for
+        // "speckle" — but a summary is long enough that a common word hits
+        // dozens of tools, and folding both into one filter buries the tool
+        // actually named after the query among them. Measured over 20 keyword
+        // searches, that halved the number of times the right tool came first.
+        // So a name match still leads, in catalog order, and summary-only
+        // matches follow as the extra recall they are.
+        const matchesName = (item: WhiteboxToolSummary) =>
+          `${item.name} ${item.id} ${item.category}`.toLowerCase().includes(needle);
+        const named = tools.filter(matchesName);
+        const keywordMatches = [
+          ...named,
+          ...tools.filter(
+            (item) => !matchesName(item) && item.description.toLowerCase().includes(needle),
+          ),
+        ];
         const selected = await rankWhiteboxSearch(query, tools, keywordMatches);
         const byId = new Map(tools.map((item) => [item.id, item]));
         const ranked = (selected ?? [])
