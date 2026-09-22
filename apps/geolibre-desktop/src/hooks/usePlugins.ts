@@ -1105,6 +1105,11 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
       useAppStore.getState().addLayerGroup(name, layerIds),
     moveLayersToGroup: (layerIds: string[], groupId: string | null) =>
       useAppStore.getState().moveLayersToGroup(layerIds, groupId),
+    // The group-of-groups counterpart of moveLayersToGroup (#2553). The store
+    // action already refuses an unknown id and any move that would make a group
+    // its own ancestor, so a plugin cannot cycle the tree through this.
+    moveLayerGroupToGroup: (id: string, parentId: string | null) =>
+      useAppStore.getState().moveLayerGroupToGroup(id, parentId),
     removeLayerGroup: (id: string) => useAppStore.getState().removeLayerGroup(id),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),

@@ -75,6 +75,15 @@ export interface GeoLibreLayerSummary {
   opacity: number;
 }
 
+export interface GeoLibreLayerGroupSummary {
+  id: string;
+  name: string;
+  parentId: string | null;  // null for a group at the panel root
+  visible: boolean;
+  opacity: number;
+  collapsed: boolean;
+}
+
 export interface GeoLibreSelection {
   layerId: string | null;
   features: Feature<Geometry | null>[];
@@ -164,6 +173,12 @@ export interface GeoLibreAppAPI {
     layer: GeoLibreExternalNativeLayerRegistration,
   ) => void;
   unregisterExternalNativeLayer?: (id: string) => void;
+  // Layers-panel groups (folders). See "Layer groups" below.
+  addLayerGroup?: (name?: string, layerIds?: string[]) => string;
+  listLayerGroups?: () => GeoLibreLayerGroupSummary[];
+  moveLayersToGroup?: (layerIds: string[], groupId: string | null) => void;
+  moveLayerGroupToGroup?: (id: string, parentId: string | null) => void;
+  removeLayerGroup?: (id: string) => void;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -541,6 +556,42 @@ unsubscribe?.();
 These methods are a read-only query surface: calling them does not change the
 GeoLibre store. Plugins must also treat returned GeoJSON features as read-only
 and use host APIs such as `addGeoJsonLayer` when they need to add data.
+
+## Layer groups
+
+A plugin that adds several related layers can put them in a Layers-panel group (a folder) instead of leaving them loose at the panel root, and can nest one group inside another the same way a user can by hand.
+
+```typescript
+// Create a folder, optionally moving existing layers into it. Returns its id.
+const basins = app.addLayerGroup?.("Basins", [catchmentLayerId]) ?? null;
+
+// Append to a folder you created earlier rather than creating a second one
+// with the same name. A null group id lifts the layers back to the root.
+app.moveLayersToGroup?.([outletLayerId], basins);
+
+// Nest a folder inside another one. A null parent lifts it back to the root.
+const subBasins = app.addLayerGroup?.("Sub-basins");
+if (basins && subBasins) app.moveLayerGroupToGroup?.(subBasins, basins);
+
+// Remove the folder without removing the layers inside it.
+app.removeLayerGroup?.(subBasins);
+```
+
+`moveLayerGroupToGroup` is the group-of-groups counterpart of `moveLayersToGroup`: the same reparenting the Layers panel's own "Move to group" menu performs. It is a no-op when either id is unknown, when the group is already in that parent, and when the move would make a group its own ancestor — the host refuses the cycle rather than corrupting the tree, so a plugin does not have to walk the parent chain itself.
+
+`addLayerGroup` is the only source of group ids for folders a plugin creates. To address a folder it did not create — one the user made, or one another plugin made — read the tree first:
+
+```typescript
+const groups = app.listLayerGroups?.() ?? [];
+const existing = groups.find((group) => group.name === "Basins");
+const roots = groups.filter((group) => group.parentId === null);
+```
+
+`listLayerGroups` returns every group with `parentId` set to the enclosing group's id, or `null` at the root, so the flat array describes the whole folder tree. It is the store's own group order, which is not the panel's: the panel re-orders a group after its parent for display, while a reparent leaves the array alone. Like the other read-only queries, calling it does not change the store.
+
+Group visibility and opacity are **combined** with each child layer's own: a hidden group hides its children on the map without touching their individual `visible` flags, and group opacity multiplies into each child's. `removeLayerGroup` through this API removes only the folder, never its contents: the layers it held move to the panel root, and any groups nested inside it are reparented to the removed folder's own parent.
+
+These methods are typed optional for forward-compatibility with host variants, so call them with optional chaining.
 
 ## Raster and tile layers
 

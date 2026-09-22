@@ -50,6 +50,20 @@ export function createPluginLayerQueries() {
         visible,
         opacity,
       })),
+    // Flattened to a plain summary array with an explicit null parent, so a
+    // plugin reading the folder tree does not have to know that the store
+    // leaves `parentId` undefined for a root-level group.
+    listLayerGroups: () =>
+      useAppStore
+        .getState()
+        .layerGroups.map(({ id, name, parentId, visible, opacity, collapsed }) => ({
+          id,
+          name,
+          parentId: parentId ?? null,
+          visible,
+          opacity,
+          collapsed,
+        })),
     getLayerFeatures: (layerId: string) => {
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);

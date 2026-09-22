@@ -210,3 +210,75 @@ describe("external plugin query API", () => {
     ]);
   });
 });
+
+// The group half of the API a plugin needs to build nested folders (#2553):
+// `listLayerGroups` is the only way to address a group the plugin did not
+// create, and `moveLayerGroupToGroup` is what the panel's own "Move to group"
+// menu calls. The write is a typed passthrough in `createAppAPI`, so these
+// exercise the store action behind it for the cases a plugin can hit.
+describe("external plugin layer-group API", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Plugin group API" });
+  });
+
+  it("reports the folder tree with an explicit null parent at the root", () => {
+    const store = useAppStore.getState();
+    const parentId = store.addLayerGroup("Basins");
+    const childId = store.addLayerGroup("Sub-basins");
+    store.moveLayerGroupToGroup(childId, parentId);
+
+    assert.deepEqual(createPluginLayerQueries().listLayerGroups(), [
+      { id: parentId, name: "Basins", parentId: null, visible: true, opacity: 1, collapsed: false },
+      {
+        id: childId,
+        name: "Sub-basins",
+        parentId,
+        visible: true,
+        opacity: 1,
+        collapsed: false,
+      },
+    ]);
+  });
+
+  it("lifts a nested group back to the panel root with a null parent", () => {
+    const store = useAppStore.getState();
+    const parentId = store.addLayerGroup("Basins");
+    const childId = store.addLayerGroup("Sub-basins");
+    store.moveLayerGroupToGroup(childId, parentId);
+    store.moveLayerGroupToGroup(childId, null);
+
+    assert.deepEqual(
+      createPluginLayerQueries()
+        .listLayerGroups()
+        .map((group) => group.parentId),
+      [null, null],
+    );
+  });
+
+  it("refuses a move that would make a group its own ancestor", () => {
+    const store = useAppStore.getState();
+    const parentId = store.addLayerGroup("Basins");
+    const childId = store.addLayerGroup("Sub-basins");
+    store.moveLayerGroupToGroup(childId, parentId);
+    // The cycle the panel's menu never offers but a plugin could ask for.
+    store.moveLayerGroupToGroup(parentId, childId);
+
+    const groups = createPluginLayerQueries().listLayerGroups();
+    assert.equal(groups.find((group) => group.id === parentId)?.parentId, null);
+    assert.equal(groups.find((group) => group.id === childId)?.parentId, parentId);
+  });
+
+  it("ignores an unknown group id on either side of the move", () => {
+    const store = useAppStore.getState();
+    const groupId = store.addLayerGroup("Basins");
+    store.moveLayerGroupToGroup("missing-group", groupId);
+    store.moveLayerGroupToGroup(groupId, "missing-parent");
+
+    assert.deepEqual(
+      createPluginLayerQueries()
+        .listLayerGroups()
+        .map((group) => [group.id, group.parentId]),
+      [[groupId, null]],
+    );
+  });
+});

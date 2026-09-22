@@ -355,6 +355,20 @@ export interface GeoLibreLayerSummary {
   opacity: number;
 }
 
+/**
+ * A Layers-panel group (folder) as plugins see it. `parentId` is the enclosing
+ * group's id, or `null` for a group at the panel root, so the array a host
+ * returns describes the whole folder tree and not just its top level.
+ */
+export interface GeoLibreLayerGroupSummary {
+  id: string;
+  name: string;
+  parentId: string | null;
+  visible: boolean;
+  opacity: number;
+  collapsed: boolean;
+}
+
 export interface GeoLibreRasterWindowOptions {
   bounds: [number, number, number, number];
   width?: number;
@@ -620,8 +634,27 @@ export interface GeoLibreAppAPI {
    * creating a second group with the same name. No-op if the group is gone.
    */
   moveLayersToGroup?: (layerIds: string[], groupId: string | null) => void;
+  /**
+   * Nest a Layers-panel group inside another one, or lift it back to the panel
+   * root with a null parent id. The group-of-groups counterpart of
+   * {@link moveLayersToGroup}, so a plugin can build the same nested folders a
+   * user can build by hand in the Layers panel.
+   *
+   * No-op when either id is unknown, when the group is already in that parent,
+   * or when the move would make a group its own ancestor (the host refuses the
+   * cycle rather than corrupting the tree).
+   */
+  moveLayerGroupToGroup?: (id: string, parentId: string | null) => void;
   /** Remove a Layers-panel group without removing its child layers. */
   removeLayerGroup?: (id: string) => void;
+  /**
+   * Every Layers-panel group, with the parent link that spells out the folder
+   * tree. The read half of the group API: a plugin needs it to address a group
+   * it did not create itself, since {@link addLayerGroup} is otherwise the only
+   * source of group ids. The order is the host's own group order, not the
+   * panel's (which re-orders a group after its parent for display).
+   */
+  listLayerGroups?: () => GeoLibreLayerGroupSummary[];
   fitBounds?: (bounds: [number, number, number, number]) => void;
   /**
    * The geographic extent the primary map currently shows, as
