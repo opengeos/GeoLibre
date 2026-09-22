@@ -2184,18 +2184,25 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   {t("processing.whitebox.loadingTools")}
                 </div>
               ) : filteredTools.length === 0 && semanticTools.length === 0 ? (
-                <div className="p-3 text-sm text-muted-foreground">
-                  {t("processing.whitebox.noToolsFound")}
-                </div>
+                // A phrase with no substring hits is exactly the case the
+                // lookup exists for, so saying "no tools found" while still
+                // asking would have the dialog contradict itself for ~900ms.
+                semantic.pending ? (
+                  <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t("processing.whitebox.searchingByMeaning")}
+                  </div>
+                ) : (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    {t("processing.whitebox.noToolsFound")}
+                  </div>
+                )
               ) : (
                 <>
                   {/* Headings appear only once the lookup has answered, so with
                       it off or unanswered this is the flat list it always was. */}
                   {semanticTools.length > 0 && (
-                    <div
-                      className="bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground"
-                      data-testid="whitebox-best-matches"
-                    >
+                    <div className="bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
                       {t("processing.whitebox.bestMatches")}
                     </div>
                   )}

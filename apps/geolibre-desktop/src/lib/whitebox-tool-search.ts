@@ -47,8 +47,12 @@ export interface WhiteboxToolText {
   /**
    * The tool's own names: its id and its display label, separately.
    *
-   * Only these are ranked. `name` decides *whether* a tool matches; this
-   * decides *where* among the matches it lands.
+   * The exact and prefix tiers read these and nothing else, comparing them
+   * against the separator-folded query. So they decide *where* a tool lands
+   * among the matches, and — because folding lets `fill-depressions` reach an
+   * id spelled `fill_depressions` — they can also match a tool whose `name`
+   * does not literally contain the query. `name`, then `summary`, are the
+   * fallback tiers for everything no identifier matched.
    */
   identifiers: readonly string[];
   /** The catalog's description of what the tool does; may be empty. */
