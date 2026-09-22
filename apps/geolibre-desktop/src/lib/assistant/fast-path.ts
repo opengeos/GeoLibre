@@ -325,7 +325,14 @@ export interface FastPathEndpoint {
  */
 export function resolveFastPathEndpoint(env: Record<string, string>): FastPathEndpoint | null {
   const proxy = env.GEOLIBRE_AI_PROXY_BASE_URL?.trim().replace(/\/+$/, "");
-  if (proxy) return { url: `${proxy}/systemone`, apiKey: null };
+  if (proxy) {
+    // The proxy base is normalized to end in `/v1` because it doubles as an
+    // OpenAI-compatible chat base URL (`managedProxyBaseUrl`). On the Worker,
+    // `/systemone` is a root-level route — a sibling of `/v1/chat/completions`,
+    // alongside `/search` and `/tavily` — so that suffix has to come off first.
+    const root = proxy.replace(/\/v1$/, "");
+    return { url: `${root}/systemone`, apiKey: null };
+  }
 
   const key = env.JEV_API_KEY?.trim() || env.TYPESAFE_API_KEY?.trim();
   return key ? { url: TYPESAFE_ENDPOINT, apiKey: key } : null;

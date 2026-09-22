@@ -197,6 +197,20 @@ describe("fast-path endpoint", () => {
     );
   });
 
+  it("drops the /v1 the chat base URL carries, since /systemone is root-level", () => {
+    // managedProxyBaseUrl normalizes the proxy base to end in /v1 because it
+    // doubles as an OpenAI-compatible chat base. Appending /systemone to that
+    // asked the Worker for /v1/systemone, which 404s — caught end to end.
+    assert.deepEqual(
+      resolveFastPathEndpoint({ GEOLIBRE_AI_PROXY_BASE_URL: "https://ai.geolibre.app/v1" }),
+      { url: "https://ai.geolibre.app/systemone", apiKey: null },
+    );
+    assert.deepEqual(
+      resolveFastPathEndpoint({ GEOLIBRE_AI_PROXY_BASE_URL: "http://127.0.0.1:8798/v1/" }),
+      { url: "http://127.0.0.1:8798/systemone", apiKey: null },
+    );
+  });
+
   it("falls back to calling TypeSafe with the user's own key", () => {
     assert.deepEqual(resolveFastPathEndpoint({ JEV_API_KEY: "  abc  " }), {
       url: TYPESAFE_ENDPOINT,
