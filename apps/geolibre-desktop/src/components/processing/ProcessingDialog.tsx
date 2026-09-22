@@ -62,6 +62,7 @@ import {
   subsetUrlToolKind,
 } from "../../lib/subset-tool-url";
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
+import { searchWhiteboxTools } from "../../lib/whitebox-tool-search";
 import { fieldSourceInputName, isFieldParameterName } from "../../lib/whitebox-field-params";
 import {
   DISTANCE_UNITS,
@@ -917,23 +918,18 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return tools.filter((tool) => {
-      if (category !== "All" && (tool.category ?? "") !== category) {
-        return false;
-      }
-      if (!matchesSource(tool)) return false;
-      if (!normalizedQuery) return true;
-      return [
+    const inScope = tools.filter(
+      (tool) => (category === "All" || (tool.category ?? "") === category) && matchesSource(tool),
+    );
+    return searchWhiteboxTools(inScope, normalizedQuery, (tool) => ({
+      name: [
         tool.id,
         toolLabel(t, tool),
         tool.category ?? "",
         translateWhiteboxCategory(t, tool.category),
-        tool.summary || "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
-    });
+      ].join(" "),
+      summary: tool.summary || "",
+    }));
   }, [category, matchesSource, query, t, tools]);
 
   const loadWhitebox = useCallback(async () => {

@@ -23,6 +23,7 @@ import { buildSymbologyStyle } from "./symbology";
 import { readRuntimeEnv } from "./provider";
 import { resolveSystemOneEndpoint } from "./system-one";
 import { typesafeFetch } from "./typesafe-fetch";
+import { searchWhiteboxTools } from "../whitebox-tool-search";
 import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
@@ -803,24 +804,12 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
       const tools = await (await getScripting()).listWhiteboxTools();
       const query = input.search?.trim();
       if (query) {
-        const needle = query.toLowerCase();
-        // Two passes, not one haystack. Searching the summary as well as the
-        // name finds tools the name alone would miss — `lee_filter` for
-        // "speckle" — but a summary is long enough that a common word hits
-        // dozens of tools, and folding both into one filter buries the tool
-        // actually named after the query among them. Measured over 20 keyword
-        // searches, that halved the number of times the right tool came first.
-        // So a name match still leads, in catalog order, and summary-only
-        // matches follow as the extra recall they are.
-        const matchesName = (item: WhiteboxToolSummary) =>
-          `${item.name} ${item.id} ${item.category}`.toLowerCase().includes(needle);
-        const named = tools.filter(matchesName);
-        const keywordMatches = [
-          ...named,
-          ...tools.filter(
-            (item) => !matchesName(item) && item.description.toLowerCase().includes(needle),
-          ),
-        ];
+        // Shared with the Whitebox toolbox dialog's filter box: a name match
+        // always outranks a tool that merely mentions the query in its summary.
+        const keywordMatches = searchWhiteboxTools(tools, query, (item) => ({
+          name: `${item.name} ${item.id} ${item.category}`,
+          summary: item.description,
+        }));
         const selected = await rankWhiteboxSearch(query, tools, keywordMatches);
         const byId = new Map(tools.map((item) => [item.id, item]));
         const ranked = (selected ?? [])
