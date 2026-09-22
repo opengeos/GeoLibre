@@ -5,11 +5,14 @@ import {
   AlertCircle,
   Eraser,
   Loader2,
+  Mic,
   Send,
   Settings,
   ShieldAlert,
   Sparkles,
   Square,
+  Volume2,
+  VolumeX,
   Wrench,
   X,
 } from "lucide-react";
@@ -43,6 +46,8 @@ import {
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { shouldIgnoreVoiceButtonClick, useVoiceCommands } from "../../hooks/useVoiceCommands";
+import type { VoiceMode, VoiceStatus } from "../../lib/assistant/voice-session";
 // Paired with MapCanvas so it suspends pointer interaction while dragging.
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 
@@ -51,6 +56,8 @@ const MIN_PANEL_HEIGHT = 160;
 const MAX_PANEL_HEIGHT = 640;
 const RUNTIME_ENV_EVENT = "geolibre:runtime-env-change";
 const PROFILE_STORAGE_KEY = "geolibre.assistant.profileId";
+/** Bars in the microphone meter, matching the voice control it is modelled on. */
+const VOICE_VISUALIZER_BARS = 15;
 
 /**
  * Providers shown in the no-key setup card, each with the env var(s) that
@@ -123,6 +130,20 @@ function describeTool(name: string, input: unknown): string {
     }
   }
   return "";
+}
+
+/**
+ * The catalog key describing what voice mode is doing right now.
+ *
+ * The strip reports the *turn*, not just that the microphone is on: push-to-talk
+ * says how to send, an open mic says it is listening, and a run in flight keeps
+ * saying so, because those are the moments a user wonders whether it heard them.
+ */
+function voiceStatusKey(status: VoiceStatus, mode: VoiceMode | null) {
+  if (status === "executing") return "assistant.voice.working" as const;
+  if (status === "speaking") return "assistant.voice.speaking" as const;
+  if (mode === "push-to-talk") return "assistant.voice.releaseToSend" as const;
+  return "assistant.voice.listening" as const;
 }
 
 /**
@@ -366,8 +387,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
-  const send = async () => {
-    const prompt = input.trim();
+  /**
+   * Runs one prompt through the agent and streams it into the transcript.
+   *
+   * @param prompt - The already-trimmed request.
+   * @param options.spoken - Whether it was dictated, so the reply is read back.
+   */
+  const runPrompt = async (prompt: string, options: { spoken?: boolean } = {}) => {
     if (!prompt || runningRef.current || !hasKey) return;
     const history = promptHistoryRef.current;
     if (history.at(-1) !== prompt) history.push(prompt);
@@ -377,6 +403,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const myGeneration = (sendGenerationRef.current += 1);
     setRunning(true);
     setInput("");
+    voiceRef.current?.notifyRunStart();
+    // Accumulated separately from the transcript turn so the spoken reply is
+    // the whole answer, read once at the end, rather than a stream of fragments.
+    let replyText = "";
     // Turns are tracked by stable id (not array index), so updaters stay pure —
     // safe under React Strict Mode / concurrent re-invocation — and a stale
     // generator from a stopped/cleared run can no longer corrupt a new one.
@@ -391,6 +421,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     try {
       for await (const event of session.stream(prompt)) {
         if (event.type === "text") {
+          replyText += event.text;
           setTurns((prev) =>
             prev.map((turn) =>
               turn.id === assistantId ? { ...turn, text: turn.text + event.text } : turn,
@@ -444,9 +475,19 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       if (sendGenerationRef.current === myGeneration) {
         runningRef.current = false;
         setRunning(false);
+        // Speak before ending the run: a push-to-talk session whose microphone
+        // has already closed stays alive only for a reply that is under way, so
+        // the other order would end the session and swallow the answer.
+        // A dictated question gets a spoken answer; a typed one stays silent
+        // even while the microphone is open, and a superseded run says nothing.
+        if (options.spoken && replyText) voiceRef.current?.speakReply(replyText);
+        voiceRef.current?.notifyRunEnd();
       }
     }
   };
+
+  /** Sends the composer's draft. */
+  const send = () => runPrompt(input.trim());
 
   const stop = () => {
     cancelledGenerationRef.current = sendGenerationRef.current;
@@ -456,7 +497,35 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     declineAllPendingCode();
     runningRef.current = false;
     setRunning(false);
+    // Stop is "be quiet now": silence a reply still being read aloud, and let
+    // the voice session drop back out of its working state.
+    voiceRef.current?.notifyRunEnd();
   };
+
+  /** The phrase the microphone is hearing right now, previewed but not sent. */
+  const [voiceInterim, setVoiceInterim] = useState("");
+
+  /**
+   * Voice command mode. Its callbacks fire from the speech session's own event
+   * loop rather than from a render, so they go through the refs that already
+   * back the send guards instead of closing over this render's state.
+   */
+  const voice = useVoiceCommands({
+    enabled: hasKey,
+    onInterim: setVoiceInterim,
+    onTranscript: (text) => {
+      setVoiceInterim("");
+      const prompt = text.trim();
+      if (!prompt) return;
+      // New intent supersedes old: a phrase spoken while the assistant is still
+      // answering cancels that run instead of queueing behind it.
+      if (runningRef.current) stop();
+      void runPrompt(prompt, { spoken: true });
+    },
+  });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+  const voiceActive = voice.status !== "idle" && voice.status !== "error";
 
   // Clear the transcript and the agent's conversation history (so the next
   // message starts fresh), stopping any in-flight run first.
@@ -808,41 +877,116 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           </Button>
         </div>
       ) : (
-        <div className="flex items-end gap-2 border-t px-3 py-2">
-          <Textarea
-            ref={inputRef}
-            value={input}
-            onChange={(event) => {
-              setInput(event.target.value);
-              if (promptHistoryIndexRef.current === null) {
-                promptDraftRef.current = event.target.value;
-              }
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={t("assistant.placeholder")}
-            spellCheck
-            rows={2}
-            // Stays disabled if the key is removed mid-run; the Stop button is a
-            // separate control, so it remains reachable until the run ends.
-            disabled={!hasKey}
-            className="min-h-[2.5rem] flex-1 resize-none text-sm"
-          />
-          {running ? (
-            <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
-              <Square className="me-1 h-4 w-4" />
-              {t("assistant.stop")}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => void send()}
-              disabled={!hasKey || !input.trim()}
-              title={t("assistant.sendHint")}
-            >
-              <Send className="me-1 h-4 w-4" />
-              {t("assistant.send")}
-            </Button>
-          )}
+        <div className="border-t">
+          {voice.supported && (voiceActive || voice.errorKey) ? (
+            <div className="flex items-center gap-2 px-3 pt-2 text-xs">
+              {/* Bars are driven per frame straight from the analyser (see
+                  useVoiceCommands), which is why they carry no React state. */}
+              <div
+                ref={voice.visualizerRef}
+                aria-hidden="true"
+                className="flex h-4 shrink-0 items-end gap-px"
+              >
+                {Array.from({ length: VOICE_VISUALIZER_BARS }, (_, index) => (
+                  <span
+                    key={index}
+                    className={cn(
+                      "w-0.5 rounded-full",
+                      "h-[calc(2px_+_var(--voice-level,0)_*_14px)]",
+                      voice.errorKey ? "bg-destructive/50" : "bg-primary/70",
+                    )}
+                  />
+                ))}
+              </div>
+              <span
+                aria-live="polite"
+                className={cn(
+                  "truncate",
+                  voice.errorKey ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                {voice.errorKey
+                  ? t(voice.errorKey)
+                  : voiceInterim || t(voiceStatusKey(voice.status, voice.mode))}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-end gap-2 px-3 py-2">
+            <Textarea
+              ref={inputRef}
+              value={input}
+              onChange={(event) => {
+                setInput(event.target.value);
+                if (promptHistoryIndexRef.current === null) {
+                  promptDraftRef.current = event.target.value;
+                }
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={t("assistant.placeholder")}
+              spellCheck
+              rows={2}
+              // Stays disabled if the key is removed mid-run; the Stop button is a
+              // separate control, so it remains reachable until the run ends.
+              disabled={!hasKey}
+              className="min-h-[2.5rem] flex-1 resize-none text-sm"
+            />
+            {voice.supported ? (
+              <>
+                {voice.canSpeak ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    aria-pressed={voice.speakReplies}
+                    title={t(
+                      voice.speakReplies
+                        ? "assistant.voice.muteReplies"
+                        : "assistant.voice.speakRepliesTitle",
+                    )}
+                    onClick={() => voice.setSpeakReplies(!voice.speakReplies)}
+                  >
+                    {voice.speakReplies ? (
+                      <Volume2 className="h-4 w-4" />
+                    ) : (
+                      <VolumeX className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                ) : null}
+                <Button
+                  variant={voiceActive ? "default" : "outline"}
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  aria-pressed={voiceActive}
+                  disabled={!hasKey}
+                  title={t(voiceActive ? "assistant.voice.stop" : "assistant.voice.start")}
+                  onClick={() => {
+                    // Space activates a focused button natively, so a hold that
+                    // is claiming push-to-talk must not also toggle this off.
+                    if (shouldIgnoreVoiceButtonClick(voice.spaceHeld)) return;
+                    voice.toggle();
+                  }}
+                >
+                  <Mic className={cn("h-4 w-4", voice.status === "listening" && "animate-pulse")} />
+                </Button>
+              </>
+            ) : null}
+            {running ? (
+              <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
+                <Square className="me-1 h-4 w-4" />
+                {t("assistant.stop")}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void send()}
+                disabled={!hasKey || !input.trim()}
+                title={t("assistant.sendHint")}
+              >
+                <Send className="me-1 h-4 w-4" />
+                {t("assistant.send")}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

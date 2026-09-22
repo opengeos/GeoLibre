@@ -4403,7 +4403,22 @@
     "codeApprovalBody": "The assistant wants to run {{language}} code in the app. Review it first — it can change the map and access app data.",
     "codeApprovalAlways": "Allow assistant code for the rest of this session",
     "codeApprovalRun": "Run",
-    "codeApprovalDecline": "Cancel"
+    "codeApprovalDecline": "Cancel",
+    "voice": {
+      "start": "Start voice commands · or hold Space to talk",
+      "stop": "Stop voice commands",
+      "listening": "Listening… speak your request",
+      "releaseToSend": "Release Space to send",
+      "working": "Working on what you said…",
+      "speaking": "Reading the answer aloud",
+      "speakRepliesTitle": "Read answers aloud",
+      "muteReplies": "Stop reading answers aloud",
+      "errorDenied": "Microphone access was denied. Allow it for this site, then try again.",
+      "errorNoMicrophone": "No microphone was found. Connect one and try again.",
+      "errorNetwork": "Speech recognition could not reach its service. Check your connection.",
+      "errorLanguage": "Speech recognition does not support the current language.",
+      "errorGeneric": "Voice commands could not start. Check the microphone and try again."
+    }
   },
   "storymap": {
     "title": "Story Map",

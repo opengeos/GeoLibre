@@ -207,6 +207,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Provider-pluggable with your own API key, also read from OS environment variables
     - A dedicated AI Providers settings section with per-feature provider dropdowns and multiple named profiles (provider, model, and credentials) you can switch between from the assistant panel
     - An in-panel model picker over the active profile's models, credentials that survive a provider change, and arrow-key recall of previous prompts
+    - Voice commands: click the microphone for an open mic, or hold Space for push-to-talk, and have answers read back — the spoken request runs the same tools, so it stays auditable and undoable (needs a browser with the Web Speech API)
 - In-app Python Console plus a Python automation API for scripting the app
 - Notebook panel docked beside the map for running Jupyter against the live map. See [Notebook Panel](notebook.md)
     - The web build embeds a self-hosted JupyterLite site with an in-browser Pyodide kernel; the desktop build launches a uv-managed JupyterLab server

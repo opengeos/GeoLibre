@@ -228,6 +228,47 @@ zoom to Africa, then switch to a dark basemap
 add an OpenTopoMap basemap
 ```
 
+## Voice commands
+
+The assistant also listens. When your browser supports speech recognition, the
+composer gains a **microphone** button, and you can talk to the map instead of
+typing. What you say runs through exactly the same agent and the same tools as a
+typed request — so it is still auditable in the transcript and still undoable.
+
+There are two ways in, and they behave differently on purpose:
+
+| Gesture | Mode | How it ends |
+| --- | --- | --- |
+| **Click the microphone** | Open mic — it keeps listening, and each finished sentence is sent on its own | Click it again |
+| **Hold Space for half a second** | Push-to-talk — one turn | Release Space |
+
+Push-to-talk is deliberately a *hold*. A short tap on Space still activates
+whatever control has focus, and a space typed in the composer is always just a
+space, so the shortcut never gets in the way of ordinary use. The hold is only
+armed while the assistant panel is open.
+
+Answers are read back aloud, and the **speaker** button next to the microphone
+turns that off (the choice is remembered). Only *spoken* questions get spoken
+answers — typing while the microphone happens to be open stays silent. Code
+blocks and URLs are skipped when reading, and long answers are trimmed to their
+first few sentences; the full reply is always in the transcript.
+
+A few things worth knowing:
+
+- **The microphone closes while an answer is being read**, so the assistant
+  cannot transcribe itself and answer its own reply. To interrupt, start a new
+  turn — hold Space, or click the microphone — which stops the playback at once.
+- **Speaking again while it is still working cancels that run** and starts over
+  with what you just said, the same way sending a new message would.
+- **Recognition is your browser's, not GeoLibre's.** Chrome, Edge and Safari
+  provide it; Firefox and the desktop (Tauri) builds do not, and the microphone
+  button is simply not shown there. Note that Chrome's implementation sends
+  audio to Google's speech service for transcription — separate from your
+  configured AI provider, and subject to Google's terms. The text it returns is
+  then sent to your provider like any typed prompt.
+- **It listens in the app's language**, refined by your browser's regional
+  variant when they agree (`pt` with a `pt-BR` browser listens as `pt-BR`).
+
 ## What it can do
 
 The assistant works by calling a fixed set of tools — it cannot invent
@@ -334,6 +375,8 @@ load a CSV from a URL with pandas and summarize its columns
 ## Limitations
 
 - Requires a provider API key; offline use is not supported.
+- Voice commands need a browser with the Web Speech API (Chrome, Edge, Safari);
+  they are unavailable in Firefox and in the desktop app.
 - Subject to each provider's cost, rate limits, and your network's CORS/CSP
   policy (browser-side calls).
 - The unofficial Google Maps tile endpoints are intentionally **not** included;
