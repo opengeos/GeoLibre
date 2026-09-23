@@ -558,7 +558,12 @@ export function MapboxCanvas({
         const showPhotoAt = (lngLat: [number, number]): boolean => {
           const { photos } = pointerTargets();
           if (photos.size === 0) return false;
+          // Topmost photo layer first, matching the pointer and hover picks.
+          const order = new Map(
+            useAppStore.getState().layers.map((candidate, index) => [candidate.id, index]),
+          );
           const hit = [...photos]
+            .sort((a, b) => (order.get(b) ?? -1) - (order.get(a) ?? -1))
             .flatMap((layerId) => current.identifyFeatures(lngLat, layerId))
             .at(0);
           if (!hit) return false;

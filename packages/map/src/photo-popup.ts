@@ -70,8 +70,15 @@ const PHOTO_ZOOM_STEP = 1.15;
  *
  * @param src - The image data URL or URL (native resolution where available).
  * @param alt - Accessible label for the image.
+ * @param closeLabel - Accessible label for the close button.
+ * @param trigger - The element that opened the viewer; focus returns to it.
  */
-function openPhotoFullscreen(src: string, alt: string, closeLabel: string): void {
+function openPhotoFullscreen(
+  src: string,
+  alt: string,
+  closeLabel: string,
+  trigger?: HTMLElement,
+): void {
   const overlay = document.createElement("div");
   overlay.className = "geolibre-photo-fullscreen";
   overlay.setAttribute("role", "dialog");
@@ -271,8 +278,18 @@ function openPhotoFullscreen(src: string, alt: string, closeLabel: string): void
       void document.exitFullscreen().catch(() => {});
     }
     overlay.remove();
+    // Hand focus back to the thumbnail that opened the viewer.
+    if (trigger?.isConnected) trigger.focus();
   };
   const onKeyDown = (event: KeyboardEvent) => {
+    // The close button is the viewer's only control: keep Tab on it so focus
+    // cannot wander to the page behind (which the fallback overlay leaves
+    // reachable when native fullscreen is unavailable).
+    if (event.key === "Tab") {
+      event.preventDefault();
+      closeButton.focus();
+      return;
+    }
     if (event.key === "Escape") close();
   };
   const onFullscreenChange = () => {
@@ -345,7 +362,16 @@ export function createPhotoPopupElement(
     // not trigger MapLibre's double-click zoom.
     image.addEventListener("dblclick", (event) => {
       event.stopPropagation();
-      openPhotoFullscreen(fullResolution, image.alt, labels.close);
+      openPhotoFullscreen(fullResolution, image.alt, labels.close, image);
+    });
+    // Keyboard users open the viewer with Enter or Space on the focusable photo.
+    image.tabIndex = 0;
+    image.setAttribute("role", "button");
+    image.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      openPhotoFullscreen(fullResolution, image.alt, labels.close, image);
     });
     root.appendChild(image);
   } else {
