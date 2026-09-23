@@ -456,7 +456,11 @@ function setFootprints(map: MapLibreMap, rows: ResultRow[]): void {
     type: "FeatureCollection",
     features,
   });
-  appRef?.registerExternalNativeLayer?.({
+  // Without host registration there is no store layer, and the store
+  // subscription would read that as the user deleting the footprints.
+  const register = appRef?.registerExternalNativeLayer;
+  if (!register) return;
+  register({
     id: FOOTPRINT_STORE_LAYER_ID,
     name: tr("footprintsLayer", "Embedding footprints"),
     type: "geojson",
@@ -571,12 +575,20 @@ function startDraw(map: MapLibreMap, onComplete: (bbox: LonLatBbox) => void): ()
   map.dragPan.disable();
   map.boxZoom.disable();
   let start: LngLat | null = null;
-  const boxFrom = (a: LngLat, b: LngLat): LonLatBbox => [
-    Math.min(a.lng, b.lng),
-    Math.min(a.lat, b.lat),
-    Math.max(a.lng, b.lng),
-    Math.max(a.lat, b.lat),
-  ];
+  // MapLibre does not wrap event longitudes, so a box drawn on another world
+  // copy can reach 200° or -250°. Shift it back by whole worlds so its west
+  // edge is in [-180, 180), like the map-view search, and clamp a box that
+  // then crosses the antimeridian at 180°.
+  const boxFrom = (a: LngLat, b: LngLat): LonLatBbox => {
+    const west = Math.min(a.lng, b.lng);
+    const offset = normalizeLon(west) - west;
+    return [
+      west + offset,
+      Math.min(a.lat, b.lat),
+      Math.min(Math.max(a.lng, b.lng) + offset, 180),
+      Math.max(a.lat, b.lat),
+    ];
+  };
   const onDown = (event: MapMouseEvent): void => {
     start = event.lngLat;
   };
@@ -695,6 +707,7 @@ function readRegion(row: ResultRow): LonLatBbox {
 async function visualizeAlphaEarth(
   row: ResultRow,
   setStatus: (text: string) => void,
+  signal: AbortSignal,
 ): Promise<void> {
   const tile = row.aef!;
   // Read settings once: the user may change them while the bands load.
@@ -712,6 +725,7 @@ async function visualizeAlphaEarth(
     // The raster control stretches raw int8 values, so map the de-quantized
     // ±stretch back to raw: |v| = sqrt(stretch) · 127.5.
     const raw = Math.round(Math.sqrt(stretch) * 127.5);
+    signal.throwIfAborted();
     await app.addCogLayer(name, tile.url, {
       engine: "auto",
       bands: rgbBands.map((band) => band + 1).join(","),
@@ -734,7 +748,12 @@ async function visualizeAlphaEarth(
   setStatus(
     tr("rendering", "Reading bands {{bands}}…", { bands: rgbBands.map(aefBandName).join(", ") }),
   );
-  const bands = (await reader.readBands(plan, rgbBands)) as [Int8Array, Int8Array, Int8Array];
+  const bands = (await reader.readBands(plan, rgbBands, signal)) as [
+    Int8Array,
+    Int8Array,
+    Int8Array,
+  ];
+  signal.throwIfAborted();
   const rgba = renderAefRgba(bands, plan.width, plan.height, plan.bottomUp, stretch);
   const canvas = document.createElement("canvas");
   canvas.width = plan.width;
@@ -781,6 +800,7 @@ async function visualizeAlphaEarth(
 async function downloadAlphaEarthClip(
   row: ResultRow,
   setStatus: (text: string) => void,
+  signal: AbortSignal,
 ): Promise<void> {
   const tile = row.aef!;
   setStatus(tr("opening", "Opening {{name}}…", { name: row.subtitle }));
@@ -819,7 +839,7 @@ async function downloadAlphaEarthClip(
     tr("downloadingBands", "Reading bands {{done}} of {{total}}…", { done, total: AEF_BAND_COUNT }),
   );
   const batchBands = await mapWithConcurrency(batches, DOWNLOAD_CONCURRENCY, async (indices) => {
-    const raws = await reader.readBands(plan, indices);
+    const raws = await reader.readBands(plan, indices, signal);
     done += indices.length;
     setStatus(
       tr("downloadingBands", "Reading bands {{done}} of {{total}}…", {
@@ -850,6 +870,7 @@ async function downloadAlphaEarthClip(
   });
   const stem = row.subtitle.replace(/[^\w.-]+/g, "_");
   const defaultName = `alphaearth_${tile.year}_${tile.utmZone}_${stem}_clip.tif`;
+  signal.throwIfAborted();
   await saveBlob(new Blob(parts, { type: "image/tiff" }), {
     defaultName,
     extension: "tif",
@@ -888,6 +909,7 @@ async function loadEarthIndex(
     }
     throw error;
   }
+  signal.throwIfAborted();
   if (result.features.length === 0) {
     setStatus(tr("noPoints", "No embeddings fall inside the search area in this tile."));
     return;
@@ -1049,7 +1071,6 @@ function buildPanel(container: HTMLElement): () => void {
     }
     void runTask(async (signal) => {
       setStatus(tr("searching", "Searching…"));
-      state.searchBbox = bbox;
       let rows: ResultRow[];
       let total: number;
       if (state.datasetId === "alphaearth") {
@@ -1062,6 +1083,7 @@ function buildPanel(container: HTMLElement): () => void {
         total = rows.length;
       }
       if (signal.aborted || disposed) return;
+      state.searchBbox = bbox;
       state.results = rows;
       state.total = total;
       state.selectedIds = [];
@@ -1102,12 +1124,12 @@ function buildPanel(container: HTMLElement): () => void {
       return [
         taskButton(
           tr("visualize", "Visualize"),
-          () => visualizeAlphaEarth(row, statusSetter),
+          (signal) => visualizeAlphaEarth(row, statusSetter, signal),
           tr("visualizeTitle", "Add the selected bands to the map as an RGB layer"),
         ),
         taskButton(
           tr("downloadClip", "GeoTIFF"),
-          () => downloadAlphaEarthClip(row, statusSetter),
+          (signal) => downloadAlphaEarthClip(row, statusSetter, signal),
           tr("downloadClipTitle", "Save all 64 bands over the search area as a GeoTIFF"),
         ),
         button(
@@ -1403,6 +1425,9 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     disposed = true;
     controller?.abort();
+    controller = null;
+    // The aborted task belonged to this panel; the next panel starts idle.
+    state.busy = false;
     stopDrawing();
     unsubscribe();
     onFootprintClick = null;
