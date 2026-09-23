@@ -43,6 +43,41 @@ describe("collectQueryDataSources (issue #2582)", () => {
     ]);
   });
 
+  it("scopes a CTE to the query that defines it", () => {
+    // A same-named CTE elsewhere in the statement must not hide a real read.
+    assert.deepEqual(
+      sourcesOf(
+        "SELECT * FROM us_cities UNION ALL SELECT * FROM (WITH us_cities AS (SELECT ST_Point(0,0) AS g) SELECT * FROM us_cities) x",
+      ),
+      ["us_cities"],
+    );
+    assert.deepEqual(
+      sourcesOf(
+        "SELECT geom FROM cities WHERE EXISTS (WITH cities AS (SELECT 1) SELECT * FROM cities)",
+      ),
+      ["cities"],
+    );
+    // A non-recursive CTE body naming itself reads the real table.
+    assert.deepEqual(sourcesOf("WITH cities AS (SELECT * FROM cities) SELECT * FROM cities"), [
+      "cities",
+    ]);
+    // Later CTEs see earlier ones, and a recursive CTE sees itself.
+    assert.deepEqual(
+      sourcesOf("WITH a AS (SELECT ST_Point(1, 2) AS g), b AS (SELECT * FROM a) SELECT * FROM b"),
+      [],
+    );
+    assert.deepEqual(
+      sourcesOf(
+        "WITH RECURSIVE t(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 3) SELECT ST_Point(n, n) AS g FROM t",
+      ),
+      [],
+    );
+  });
+
+  it("treats identifiers as case-insensitive when de-duplicating", () => {
+    assert.deepEqual(sourcesOf("SELECT a.geom FROM Cities a JOIN cities b ON true"), ["Cities"]);
+  });
+
   it("tolerates input that is not a parse tree", () => {
     assert.deepEqual(collectQueryDataSources(null), []);
     assert.deepEqual(collectQueryDataSources({ statements: "nope" }), []);
