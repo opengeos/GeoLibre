@@ -179,6 +179,53 @@ describe("buildSymbologyStyle", () => {
     assert.throws(() => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }));
   });
 
+  it("lists the layer's real fields when the property does not exist", () => {
+    const layer = layerWith("population", [1, 2, 3]);
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "pop_est" }),
+      (error: Error) =>
+        /does not exist on layer "Test layer"/.test(error.message) &&
+        /Available fields: "population"\./.test(error.message) &&
+        !/Did you mean/.test(error.message),
+    );
+  });
+
+  it("suggests a field that differs only in case", () => {
+    const layer = layerWith("population", [1, 2, 3]);
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "Population" }),
+      /Did you mean "population"\?/,
+    );
+  });
+
+  it("truncates a long field list", () => {
+    const properties = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [`f${index}`, index]),
+    );
+    const layer = {
+      id: "wide",
+      name: "Wide",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: null, properties }],
+      },
+    } as unknown as GeoLibreLayer;
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "categorized", property: "missing" }),
+      (error: Error) =>
+        /"f49" \(and 10 more\)\.$/.test(error.message) && !/"f50"/.test(error.message),
+    );
+  });
+
+  it("says the field is all-null rather than missing when it exists", () => {
+    const layer = layerWith("pop", [null, null]);
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }),
+      /has no values on layer "Test layer"; it is null on every feature/,
+    );
+  });
+
   it("throws when graduated mode is asked for non-numeric data", () => {
     const layer = layerWith("kind", ["red", "green", "blue"]);
     assert.throws(() => buildSymbologyStyle(layer, { mode: "graduated", property: "kind" }));

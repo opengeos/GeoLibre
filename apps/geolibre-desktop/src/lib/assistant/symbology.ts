@@ -41,6 +41,52 @@ function propertyValues(layer: GeoLibreLayer, property: string): unknown[] {
   return values;
 }
 
+/**
+ * Every attribute name that appears on at least one of a layer's features, in
+ * first-seen order. Matches what `list_layers` reports as the layer's fields,
+ * without inferring column types the error message has no use for.
+ */
+function layerFieldNames(layer: GeoLibreLayer): string[] {
+  const names = new Set<string>();
+  for (const feature of layer.geojson?.features ?? []) {
+    for (const key of Object.keys(feature.properties ?? {})) names.add(key);
+  }
+  return [...names];
+}
+
+/** How many field names the missing-property error lists before truncating. */
+const MAX_LISTED_FIELDS = 50;
+
+/**
+ * Explain why a property produced no values: either the layer has no such
+ * field (then list the fields it does have, so a caller can correct the name
+ * without guessing again) or the field exists but is null on every feature.
+ */
+function missingPropertyError(layer: GeoLibreLayer, property: string): Error {
+  const fields = layerFieldNames(layer);
+  if (fields.includes(property)) {
+    return new Error(
+      `Property "${property}" has no values on layer "${layer.name}"; it is null on every feature.`,
+    );
+  }
+  if (fields.length === 0) {
+    return new Error(
+      `Property "${property}" does not exist on layer "${layer.name}", which has no attribute fields.`,
+    );
+  }
+  // Field names are case-sensitive, and a model often gets only the case
+  // wrong ("Population" for "population"), so name that match first.
+  const lower = property.toLowerCase();
+  const caseMatch = fields.find((field) => field.toLowerCase() === lower);
+  const listed = fields.slice(0, MAX_LISTED_FIELDS).map((field) => `"${field}"`);
+  const more = fields.length - listed.length;
+  return new Error(
+    `Property "${property}" does not exist on layer "${layer.name}".` +
+      (caseMatch ? ` Did you mean "${caseMatch}"?` : "") +
+      ` Available fields: ${listed.join(", ")}${more > 0 ? ` (and ${more} more)` : ""}.`,
+  );
+}
+
 /** Build graduated color stops from numeric breaks and a ramp. */
 function graduatedStops(
   values: number[],
@@ -111,7 +157,8 @@ function categorizedStops(values: unknown[], colorRamp: string): VectorStyleStop
  * @param layer The layer to read property values from.
  * @param request The symbology to apply.
  * @returns A partial style ready for `setLayerStyle`.
- * @throws If the property is missing, graduated mode has too few numeric values,
+ * @throws If the property is missing (the message lists the layer's actual
+ *   field names) or null on every feature, graduated mode has too few numeric values,
  *   or `breaks` was supplied with fewer than two distinct finite values in it.
  */
 export function buildSymbologyStyle(
@@ -120,9 +167,7 @@ export function buildSymbologyStyle(
 ): Partial<LayerStyle> {
   const colorRamp = request.colorRamp?.trim() || "viridis";
   const values = propertyValues(layer, request.property);
-  if (values.length === 0) {
-    throw new Error(`Property "${request.property}" has no values on layer "${layer.name}".`);
-  }
+  if (values.length === 0) throw missingPropertyError(layer, request.property);
 
   if (request.mode === "graduated") {
     const numbers = values
