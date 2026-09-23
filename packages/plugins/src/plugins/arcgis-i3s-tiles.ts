@@ -23,15 +23,45 @@ const ARCGIS_I3S_LAYER_ID_PREFIX = "arcgis-i3s-tiles";
 
 /**
  * Tile detail/memory caps shared by the deck.gl 3D-tiles overlays (this I3S
- * overlay and the Google Photorealistic one) so a large textured-mesh scene
- * doesn't load with deck.gl's unbounded defaults. Kept in one place so the two
- * overlays don't drift apart.
+ * overlay, the Google Photorealistic one, and the Mapbox one). Kept in one
+ * place so the overlays don't drift apart.
+ *
+ * `memoryAdjustedScreenSpaceError` stays off (issue #2560). @loaders.gl raises
+ * the error target by 2% for every tile that loads while GPU memory is over
+ * the cap, and only lowers it again as later tiles load, so a burst of loads
+ * while zooming in dropped Google tiles to a coarser level than the zoomed-out
+ * view and left them blurry until the next burst. The cache cap below bounds
+ * memory instead; see `applyThreeDTilesTilesetMemoryLimit`.
  */
 export const THREE_D_TILES_TILESET_LOAD_LIMITS = {
   maximumScreenSpaceError: 20,
   maximumMemoryUsage: 512,
-  memoryAdjustedScreenSpaceError: true,
+  memoryAdjustedScreenSpaceError: false,
 } as const;
+
+/**
+ * Make a deck.gl overlay's tile cache honour `maximumMemoryUsage`.
+ *
+ * @loaders.gl's Tileset3D reads `options.maximumMemoryUsage` for the
+ * screen-space-error adjustment, but its tile cache trims against the
+ * `maximumMemoryUsage` field, which it never copies from the options and so
+ * stays at its 32 MB default. With Google Photorealistic tiles that evicts
+ * every tile the previous view drew as soon as the camera moves, so zooming in
+ * (or back out) re-downloads the scene and falls back to coarse ancestors in
+ * the meantime (issue #2560). Call this from each overlay's `onTilesetLoad`.
+ *
+ * @param tileset The tileset object passed to `onTilesetLoad`.
+ */
+export function applyThreeDTilesTilesetMemoryLimit(tileset: unknown): void {
+  if (
+    tileset &&
+    typeof tileset === "object" &&
+    typeof (tileset as { maximumMemoryUsage?: unknown }).maximumMemoryUsage === "number"
+  ) {
+    (tileset as { maximumMemoryUsage: number }).maximumMemoryUsage =
+      THREE_D_TILES_TILESET_LOAD_LIMITS.maximumMemoryUsage;
+  }
+}
 
 /**
  * loaders.gl load options shared by the deck.gl 3D-tiles overlays (this I3S
@@ -399,6 +429,7 @@ export function buildArcgisI3sTilesDeckLayer(
     pickable: false,
     operation: "draw",
     onTilesetLoad: (tileset: unknown) => {
+      applyThreeDTilesTilesetMemoryLimit(tileset);
       warnOnUnsupportedI3sSceneLayerType(url, tileset);
       persistI3sTilesetCenter(layer.id, tileset);
       flyToI3sTileset(layer.id, tileset);

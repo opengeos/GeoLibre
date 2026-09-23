@@ -31,6 +31,7 @@ import {
 import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import {
   addArcgisI3sTilesLayer,
+  applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   createArcgisI3sStoreLayer,
   isArcgisI3sSceneLayerUrl,
@@ -1661,6 +1662,7 @@ function buildGooglePhotorealisticTilesDeckLayer(layer: GeoLibreLayer): Layer | 
       ...THREE_D_TILES_DECK_LOAD_OPTIONS,
       fetch: requestHeaders ? { headers: requestHeaders } : undefined,
     },
+    onTilesetLoad: applyThreeDTilesTilesetMemoryLimit,
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",

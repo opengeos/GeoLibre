@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
   i3sTilesetLngLat,
@@ -124,6 +125,32 @@ describe("THREE_D_TILES_DECK_LOAD_OPTIONS", () => {
   // top-level `worker` only works via a deprecated backwards-compat alias).
   it("disables loaders.gl workers via core.worker", () => {
     assert.equal(THREE_D_TILES_DECK_LOAD_OPTIONS.core.worker, false);
+  });
+
+  // Issue #2560: loaders.gl ratchets the error target up on every tile load
+  // over the memory cap, so zooming in could drop to a coarser level of detail.
+  it("keeps the screen-space error fixed rather than memory-adjusted", () => {
+    assert.equal(THREE_D_TILES_DECK_LOAD_OPTIONS.tileset.memoryAdjustedScreenSpaceError, false);
+  });
+});
+
+describe("applyThreeDTilesTilesetMemoryLimit", () => {
+  // Issue #2560: Tileset3D's cache trims against a field that stays at 32 MB
+  // whatever maximumMemoryUsage the load options pass.
+  it("syncs the tileset cache cap with the configured memory limit", () => {
+    const tileset = { maximumMemoryUsage: 32 };
+    applyThreeDTilesTilesetMemoryLimit(tileset);
+    assert.equal(
+      tileset.maximumMemoryUsage,
+      THREE_D_TILES_DECK_LOAD_OPTIONS.tileset.maximumMemoryUsage,
+    );
+  });
+
+  it("ignores values that are not a tileset", () => {
+    const other = { name: "not a tileset" };
+    applyThreeDTilesTilesetMemoryLimit(other);
+    assert.deepEqual(other, { name: "not a tileset" });
+    assert.doesNotThrow(() => applyThreeDTilesTilesetMemoryLimit(null));
   });
 });
 

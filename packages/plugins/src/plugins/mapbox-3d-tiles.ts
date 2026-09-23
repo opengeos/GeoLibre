@@ -8,7 +8,10 @@ import {
   acquireMercatorProjectionLock,
   releaseMercatorProjectionLock,
 } from "./map-projection-utils";
-import { THREE_D_TILES_DECK_LOAD_OPTIONS } from "./arcgis-i3s-tiles";
+import {
+  applyThreeDTilesTilesetMemoryLimit,
+  THREE_D_TILES_DECK_LOAD_OPTIONS,
+} from "./arcgis-i3s-tiles";
 
 /** Fly panel actions and initial loads through the active native renderer. */
 export function flyToDeckTilesLocation(
@@ -115,6 +118,7 @@ export async function restoreMapboxTiles(app: GeoLibreAppAPI, flyToId?: string):
             },
           },
           onTilesetLoad: (tileset: PositionedTileset & { zoom?: number }) => {
+            applyThreeDTilesTilesetMemoryLimit(tileset);
             applyTilesetAltitudeOffset(tileset, Number(layer.source.altitudeOffset ?? 0));
             const current = useAppStore.getState().layers.find(({ id }) => id === layer.id);
             if (!current || !isLive(layer, token)) return;
