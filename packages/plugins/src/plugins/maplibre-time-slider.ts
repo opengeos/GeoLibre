@@ -265,6 +265,9 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     // once the new layers exist. Capture the control so a later reassignment
     // cannot redirect this callback.
     const control = timeSliderControl;
+    // A control its map already removed reports the snapshot instead of its
+    // (now empty) live state; keep that snapshot in step with what was applied.
+    if (configBeforeRemoval.has(control)) configBeforeRemoval.set(control, nextConfig);
     control.setConfig(nextConfig);
     setTimeout(() => syncStoreLayers(control), 0);
     return true;
@@ -287,9 +290,9 @@ const configBeforeRemoval = new WeakMap<TimeSliderControl, TimeSliderConfig>();
  */
 function rememberConfigOnRemove(control: TimeSliderControl): TimeSliderControl {
   const onRemove = control.onRemove.bind(control);
-  control.onRemove = () => {
+  control.onRemove = (...args: Parameters<TimeSliderControl["onRemove"]>) => {
     configBeforeRemoval.set(control, control.getConfig());
-    onRemove();
+    onRemove(...args);
   };
   return control;
 }

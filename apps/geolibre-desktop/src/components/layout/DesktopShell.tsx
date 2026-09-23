@@ -1279,17 +1279,21 @@ export function DesktopShell({
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
     // A new map for the same project (a renderer swap) restores the plugins'
-    // live state, the same snapshot Save would write. The store's copy is only
-    // refreshed when a plugin is toggled or moved, so restoring from it would
-    // roll a plugin back to how it was then: a Time Slider stack added since
-    // came back empty.
+    // live settings and positions, the ones Save would write. The store's copy
+    // of those is only refreshed when a plugin is toggled or moved, so
+    // restoring from it rolled a plugin back to how it was then: a Time Slider
+    // stack added since came back empty. Which plugins are active still comes
+    // from the store, which every toggle does refresh, so a plugin the project
+    // requests but that failed to mount is retried.
     const remount = restoredProjectGeneration.current === projectGeneration;
     restoredProjectGeneration.current = projectGeneration;
     const storedPlugins = useAppStore.getState().projectPlugins;
+    const live = remount ? pluginManager.getProjectState() : null;
     pluginManager.restoreProjectState(
-      remount
+      live
         ? {
-            ...pluginManager.getProjectState(),
+            ...live,
+            activePluginIds: storedPlugins?.activePluginIds ?? live.activePluginIds,
             manifestUrls: storedPlugins?.manifestUrls ?? [],
           }
         : storedPlugins,
