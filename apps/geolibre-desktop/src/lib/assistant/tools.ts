@@ -24,7 +24,7 @@ import {
   type CatalogMatch,
   type CatalogTool,
 } from "./catalog-select";
-import { describeLayers, summarizeLayers } from "./layer-summary";
+import { describeLayers, SQL_GEOMETRY_SOURCE_METADATA_KEY, summarizeLayers } from "./layer-summary";
 import { buildSymbologyStyle } from "./symbology";
 import { readRuntimeEnv } from "./provider";
 import { resolveSystemOneEndpoint } from "./system-one";
@@ -373,7 +373,7 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
   const runSql = tool({
     name: "run_sql",
     description:
-      "Run a single read-only DuckDB Spatial SQL statement against the loaded layers (use the SQL table names from list_layers) and/or remote files. Returns column names, the row count, and a small preview. Set add_as_layer to add a geometry result to the map.",
+      "Run a single read-only DuckDB Spatial SQL statement against the loaded layers (use the SQL table names from list_layers) and/or remote files. Returns column names, the row count, and a small preview. Set add_as_layer to add a geometry result to the map. A geometry result that reads no layer, table or file comes back with geometrySource 'literal' and a warning: its geometry was typed into the SQL, so never present it as data.",
     inputSchema: z.object({
       sql: z.string().describe("A single SELECT statement (no trailing semicolon needed)."),
       add_as_layer: z
@@ -390,17 +390,37 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
         throw new Error("Only read-only SELECT/WITH queries are allowed.");
       }
       const result = await runSqlQuery(input.sql, store().layers);
+      // An empty source list means the query reads no layer, table or file, so
+      // its geometry was typed into the SQL (ST_Point(...), a WKT literal)
+      // rather than queried. Still allowed, since "drop a point at Bangkok" is a
+      // fair request, but flagged so neither the model nor a later tool call
+      // mistakes the result for real data (issue #2582).
+      const literalGeometry = Boolean(result.geojson) && result.dataSources?.length === 0;
       let addedLayerId: string | null = null;
       if (input.add_as_layer && result.geojson) {
         addedLayerId = store().addGeoJsonLayer(
           input.layer_name?.trim() || "SQL result",
           result.geojson,
         );
+        if (literalGeometry) {
+          const layer = store().layers.find((entry) => entry.id === addedLayerId);
+          store().updateLayer(addedLayerId, {
+            metadata: { ...layer?.metadata, [SQL_GEOMETRY_SOURCE_METADATA_KEY]: "literal" },
+          });
+        }
       }
       return json({
         columns: result.columns,
         rowCount: result.rowCount,
         hasGeometry: Boolean(result.geojson),
+        ...(result.geojson && result.dataSources ? { dataSources: result.dataSources } : {}),
+        ...(literalGeometry
+          ? {
+              geometrySource: "literal",
+              warning:
+                "This query reads no loaded layer, table or file: its geometry comes from literal values written into the SQL, not from queried data. Do not present it as data.",
+            }
+          : {}),
         preview: result.rows.slice(0, 10),
         addedLayerId,
       });

@@ -1,0 +1,934 @@
+{
+  "SELECT 1 AS x, ST_GeomFromText('POINT(100 13)') AS geometry": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "CONSTANT",
+              "type": "VALUE_CONSTANT",
+              "alias": "x",
+              "query_location": 7,
+              "value": {
+                "type": { "id": "INTEGER", "type_info": null },
+                "is_null": false,
+                "value": 1
+              }
+            },
+            {
+              "class": "FUNCTION",
+              "type": "FUNCTION",
+              "alias": "geometry",
+              "query_location": 15,
+              "function_name": "st_geomfromtext",
+              "schema": "",
+              "children": [
+                {
+                  "class": "CONSTANT",
+                  "type": "VALUE_CONSTANT",
+                  "alias": "",
+                  "query_location": 31,
+                  "value": {
+                    "type": { "id": "VARCHAR", "type_info": null },
+                    "is_null": false,
+                    "value": "POINT(100 13)"
+                  }
+                }
+              ],
+              "filter": null,
+              "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+              "distinct": false,
+              "is_operator": false,
+              "export_state": false,
+              "catalog": ""
+            }
+          ],
+          "from_table": {
+            "type": "EMPTY",
+            "alias": "",
+            "sample": null,
+            "query_location": 18446744073709552000
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT * FROM (SELECT 1 AS x, ST_GeomFromText('POINT(100 13)') AS geometry) t": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "STAR",
+              "type": "STAR",
+              "alias": "",
+              "query_location": 7,
+              "relation_name": "",
+              "exclude_list": [],
+              "replace_list": [],
+              "columns": false,
+              "expr": null,
+              "qualified_exclude_list": [],
+              "rename_list": []
+            }
+          ],
+          "from_table": {
+            "type": "SUBQUERY",
+            "alias": "t",
+            "sample": null,
+            "query_location": 18446744073709552000,
+            "subquery": {
+              "node": {
+                "type": "SELECT_NODE",
+                "modifiers": [],
+                "cte_map": { "map": [] },
+                "select_list": [
+                  {
+                    "class": "CONSTANT",
+                    "type": "VALUE_CONSTANT",
+                    "alias": "x",
+                    "query_location": 22,
+                    "value": {
+                      "type": { "id": "INTEGER", "type_info": null },
+                      "is_null": false,
+                      "value": 1
+                    }
+                  },
+                  {
+                    "class": "FUNCTION",
+                    "type": "FUNCTION",
+                    "alias": "geometry",
+                    "query_location": 30,
+                    "function_name": "st_geomfromtext",
+                    "schema": "",
+                    "children": [
+                      {
+                        "class": "CONSTANT",
+                        "type": "VALUE_CONSTANT",
+                        "alias": "",
+                        "query_location": 46,
+                        "value": {
+                          "type": { "id": "VARCHAR", "type_info": null },
+                          "is_null": false,
+                          "value": "POINT(100 13)"
+                        }
+                      }
+                    ],
+                    "filter": null,
+                    "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+                    "distinct": false,
+                    "is_operator": false,
+                    "export_state": false,
+                    "catalog": ""
+                  }
+                ],
+                "from_table": {
+                  "type": "EMPTY",
+                  "alias": "",
+                  "sample": null,
+                  "query_location": 18446744073709552000
+                },
+                "where_clause": null,
+                "group_expressions": [],
+                "group_sets": [],
+                "aggregate_handling": "STANDARD_HANDLING",
+                "having": null,
+                "sample": null,
+                "qualify": null
+              },
+              "named_param_map": []
+            },
+            "column_name_alias": []
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT * FROM (VALUES (1, 'POINT(0 0)')) v(id, wkt)": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "STAR",
+              "type": "STAR",
+              "alias": "",
+              "query_location": 7,
+              "relation_name": "",
+              "exclude_list": [],
+              "replace_list": [],
+              "columns": false,
+              "expr": null,
+              "qualified_exclude_list": [],
+              "rename_list": []
+            }
+          ],
+          "from_table": {
+            "type": "SUBQUERY",
+            "alias": "v",
+            "sample": null,
+            "query_location": 18446744073709552000,
+            "subquery": {
+              "node": {
+                "type": "SELECT_NODE",
+                "modifiers": [],
+                "cte_map": { "map": [] },
+                "select_list": [
+                  {
+                    "class": "STAR",
+                    "type": "STAR",
+                    "alias": "",
+                    "query_location": 18446744073709552000,
+                    "relation_name": "",
+                    "exclude_list": [],
+                    "replace_list": [],
+                    "columns": false,
+                    "expr": null,
+                    "qualified_exclude_list": [],
+                    "rename_list": []
+                  }
+                ],
+                "from_table": {
+                  "type": "EXPRESSION_LIST",
+                  "alias": "valueslist",
+                  "sample": null,
+                  "query_location": 18446744073709552000,
+                  "expected_names": [],
+                  "expected_types": [],
+                  "values": [
+                    [
+                      {
+                        "class": "CONSTANT",
+                        "type": "VALUE_CONSTANT",
+                        "alias": "",
+                        "query_location": 23,
+                        "value": {
+                          "type": { "id": "INTEGER", "type_info": null },
+                          "is_null": false,
+                          "value": 1
+                        }
+                      },
+                      {
+                        "class": "CONSTANT",
+                        "type": "VALUE_CONSTANT",
+                        "alias": "",
+                        "query_location": 26,
+                        "value": {
+                          "type": { "id": "VARCHAR", "type_info": null },
+                          "is_null": false,
+                          "value": "POINT(0 0)"
+                        }
+                      }
+                    ]
+                  ]
+                },
+                "where_clause": null,
+                "group_expressions": [],
+                "group_sets": [],
+                "aggregate_handling": "STANDARD_HANDLING",
+                "having": null,
+                "sample": null,
+                "qualify": null
+              },
+              "named_param_map": []
+            },
+            "column_name_alias": ["id", "wkt"]
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT ST_Point(i, i) AS g FROM range(5) r(i)": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "FUNCTION",
+              "type": "FUNCTION",
+              "alias": "g",
+              "query_location": 7,
+              "function_name": "st_point",
+              "schema": "",
+              "children": [
+                {
+                  "class": "COLUMN_REF",
+                  "type": "COLUMN_REF",
+                  "alias": "",
+                  "query_location": 16,
+                  "column_names": ["i"]
+                },
+                {
+                  "class": "COLUMN_REF",
+                  "type": "COLUMN_REF",
+                  "alias": "",
+                  "query_location": 19,
+                  "column_names": ["i"]
+                }
+              ],
+              "filter": null,
+              "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+              "distinct": false,
+              "is_operator": false,
+              "export_state": false,
+              "catalog": ""
+            }
+          ],
+          "from_table": {
+            "type": "TABLE_FUNCTION",
+            "alias": "r",
+            "sample": null,
+            "query_location": 32,
+            "function": {
+              "class": "FUNCTION",
+              "type": "FUNCTION",
+              "alias": "",
+              "query_location": 32,
+              "function_name": "range",
+              "schema": "",
+              "children": [
+                {
+                  "class": "CONSTANT",
+                  "type": "VALUE_CONSTANT",
+                  "alias": "",
+                  "query_location": 38,
+                  "value": {
+                    "type": { "id": "INTEGER", "type_info": null },
+                    "is_null": false,
+                    "value": 5
+                  }
+                }
+              ],
+              "filter": null,
+              "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+              "distinct": false,
+              "is_operator": false,
+              "export_state": false,
+              "catalog": ""
+            },
+            "column_name_alias": ["i"],
+            "with_ordinality": "WITHOUT_ORDINALITY"
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "WITH pts AS (SELECT ST_Point(1, 2) AS g) SELECT * FROM pts": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": {
+            "map": [
+              {
+                "key": "pts",
+                "value": {
+                  "aliases": [],
+                  "query": {
+                    "node": {
+                      "type": "SELECT_NODE",
+                      "modifiers": [],
+                      "cte_map": { "map": [] },
+                      "select_list": [
+                        {
+                          "class": "FUNCTION",
+                          "type": "FUNCTION",
+                          "alias": "g",
+                          "query_location": 20,
+                          "function_name": "st_point",
+                          "schema": "",
+                          "children": [
+                            {
+                              "class": "CONSTANT",
+                              "type": "VALUE_CONSTANT",
+                              "alias": "",
+                              "query_location": 29,
+                              "value": {
+                                "type": { "id": "INTEGER", "type_info": null },
+                                "is_null": false,
+                                "value": 1
+                              }
+                            },
+                            {
+                              "class": "CONSTANT",
+                              "type": "VALUE_CONSTANT",
+                              "alias": "",
+                              "query_location": 32,
+                              "value": {
+                                "type": { "id": "INTEGER", "type_info": null },
+                                "is_null": false,
+                                "value": 2
+                              }
+                            }
+                          ],
+                          "filter": null,
+                          "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+                          "distinct": false,
+                          "is_operator": false,
+                          "export_state": false,
+                          "catalog": ""
+                        }
+                      ],
+                      "from_table": {
+                        "type": "EMPTY",
+                        "alias": "",
+                        "sample": null,
+                        "query_location": 18446744073709552000
+                      },
+                      "where_clause": null,
+                      "group_expressions": [],
+                      "group_sets": [],
+                      "aggregate_handling": "STANDARD_HANDLING",
+                      "having": null,
+                      "sample": null,
+                      "qualify": null
+                    },
+                    "named_param_map": []
+                  },
+                  "materialized": "CTE_MATERIALIZE_DEFAULT",
+                  "key_targets": []
+                }
+              }
+            ]
+          },
+          "select_list": [
+            {
+              "class": "STAR",
+              "type": "STAR",
+              "alias": "",
+              "query_location": 48,
+              "relation_name": "",
+              "exclude_list": [],
+              "replace_list": [],
+              "columns": false,
+              "expr": null,
+              "qualified_exclude_list": [],
+              "rename_list": []
+            }
+          ],
+          "from_table": {
+            "type": "BASE_TABLE",
+            "alias": "",
+            "sample": null,
+            "query_location": 55,
+            "schema_name": "",
+            "table_name": "pts",
+            "column_name_alias": [],
+            "catalog_name": "",
+            "at_clause": null
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "WITH big AS (SELECT * FROM cities WHERE pop > 1) SELECT * FROM big": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": {
+            "map": [
+              {
+                "key": "big",
+                "value": {
+                  "aliases": [],
+                  "query": {
+                    "node": {
+                      "type": "SELECT_NODE",
+                      "modifiers": [],
+                      "cte_map": { "map": [] },
+                      "select_list": [
+                        {
+                          "class": "STAR",
+                          "type": "STAR",
+                          "alias": "",
+                          "query_location": 20,
+                          "relation_name": "",
+                          "exclude_list": [],
+                          "replace_list": [],
+                          "columns": false,
+                          "expr": null,
+                          "qualified_exclude_list": [],
+                          "rename_list": []
+                        }
+                      ],
+                      "from_table": {
+                        "type": "BASE_TABLE",
+                        "alias": "",
+                        "sample": null,
+                        "query_location": 27,
+                        "schema_name": "",
+                        "table_name": "cities",
+                        "column_name_alias": [],
+                        "catalog_name": "",
+                        "at_clause": null
+                      },
+                      "where_clause": {
+                        "class": "COMPARISON",
+                        "type": "COMPARE_GREATERTHAN",
+                        "alias": "",
+                        "query_location": 44,
+                        "left": {
+                          "class": "COLUMN_REF",
+                          "type": "COLUMN_REF",
+                          "alias": "",
+                          "query_location": 40,
+                          "column_names": ["pop"]
+                        },
+                        "right": {
+                          "class": "CONSTANT",
+                          "type": "VALUE_CONSTANT",
+                          "alias": "",
+                          "query_location": 46,
+                          "value": {
+                            "type": { "id": "INTEGER", "type_info": null },
+                            "is_null": false,
+                            "value": 1
+                          }
+                        }
+                      },
+                      "group_expressions": [],
+                      "group_sets": [],
+                      "aggregate_handling": "STANDARD_HANDLING",
+                      "having": null,
+                      "sample": null,
+                      "qualify": null
+                    },
+                    "named_param_map": []
+                  },
+                  "materialized": "CTE_MATERIALIZE_DEFAULT",
+                  "key_targets": []
+                }
+              }
+            ]
+          },
+          "select_list": [
+            {
+              "class": "STAR",
+              "type": "STAR",
+              "alias": "",
+              "query_location": 56,
+              "relation_name": "",
+              "exclude_list": [],
+              "replace_list": [],
+              "columns": false,
+              "expr": null,
+              "qualified_exclude_list": [],
+              "rename_list": []
+            }
+          ],
+          "from_table": {
+            "type": "BASE_TABLE",
+            "alias": "",
+            "sample": null,
+            "query_location": 63,
+            "schema_name": "",
+            "table_name": "big",
+            "column_name_alias": [],
+            "catalog_name": "",
+            "at_clause": null
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT name, geom FROM Cities": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "COLUMN_REF",
+              "type": "COLUMN_REF",
+              "alias": "",
+              "query_location": 7,
+              "column_names": ["name"]
+            },
+            {
+              "class": "COLUMN_REF",
+              "type": "COLUMN_REF",
+              "alias": "",
+              "query_location": 13,
+              "column_names": ["geom"]
+            }
+          ],
+          "from_table": {
+            "type": "BASE_TABLE",
+            "alias": "",
+            "sample": null,
+            "query_location": 23,
+            "schema_name": "",
+            "table_name": "Cities",
+            "column_name_alias": [],
+            "catalog_name": "",
+            "at_clause": null
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT ST_Buffer(geom, 1) AS g FROM read_parquet('x.parquet')": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "FUNCTION",
+              "type": "FUNCTION",
+              "alias": "g",
+              "query_location": 7,
+              "function_name": "st_buffer",
+              "schema": "",
+              "children": [
+                {
+                  "class": "COLUMN_REF",
+                  "type": "COLUMN_REF",
+                  "alias": "",
+                  "query_location": 17,
+                  "column_names": ["geom"]
+                },
+                {
+                  "class": "CONSTANT",
+                  "type": "VALUE_CONSTANT",
+                  "alias": "",
+                  "query_location": 23,
+                  "value": {
+                    "type": { "id": "INTEGER", "type_info": null },
+                    "is_null": false,
+                    "value": 1
+                  }
+                }
+              ],
+              "filter": null,
+              "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+              "distinct": false,
+              "is_operator": false,
+              "export_state": false,
+              "catalog": ""
+            }
+          ],
+          "from_table": {
+            "type": "TABLE_FUNCTION",
+            "alias": "",
+            "sample": null,
+            "query_location": 36,
+            "function": {
+              "class": "FUNCTION",
+              "type": "FUNCTION",
+              "alias": "",
+              "query_location": 36,
+              "function_name": "read_parquet",
+              "schema": "",
+              "children": [
+                {
+                  "class": "CONSTANT",
+                  "type": "VALUE_CONSTANT",
+                  "alias": "",
+                  "query_location": 49,
+                  "value": {
+                    "type": { "id": "VARCHAR", "type_info": null },
+                    "is_null": false,
+                    "value": "x.parquet"
+                  }
+                }
+              ],
+              "filter": null,
+              "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+              "distinct": false,
+              "is_operator": false,
+              "export_state": false,
+              "catalog": ""
+            },
+            "column_name_alias": [],
+            "with_ordinality": "WITHOUT_ORDINALITY"
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT (SELECT geom FROM countries LIMIT 1) AS g": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "select_list": [
+            {
+              "class": "SUBQUERY",
+              "type": "SUBQUERY",
+              "alias": "g",
+              "query_location": 7,
+              "subquery_type": "SCALAR",
+              "subquery": {
+                "node": {
+                  "type": "SELECT_NODE",
+                  "modifiers": [
+                    {
+                      "type": "LIMIT_MODIFIER",
+                      "limit": {
+                        "class": "CONSTANT",
+                        "type": "VALUE_CONSTANT",
+                        "alias": "",
+                        "query_location": 41,
+                        "value": {
+                          "type": { "id": "INTEGER", "type_info": null },
+                          "is_null": false,
+                          "value": 1
+                        }
+                      },
+                      "offset": null
+                    }
+                  ],
+                  "cte_map": { "map": [] },
+                  "select_list": [
+                    {
+                      "class": "COLUMN_REF",
+                      "type": "COLUMN_REF",
+                      "alias": "",
+                      "query_location": 15,
+                      "column_names": ["geom"]
+                    }
+                  ],
+                  "from_table": {
+                    "type": "BASE_TABLE",
+                    "alias": "",
+                    "sample": null,
+                    "query_location": 25,
+                    "schema_name": "",
+                    "table_name": "countries",
+                    "column_name_alias": [],
+                    "catalog_name": "",
+                    "at_clause": null
+                  },
+                  "where_clause": null,
+                  "group_expressions": [],
+                  "group_sets": [],
+                  "aggregate_handling": "STANDARD_HANDLING",
+                  "having": null,
+                  "sample": null,
+                  "qualify": null
+                },
+                "named_param_map": []
+              },
+              "child": null,
+              "comparison_type": "INVALID"
+            }
+          ],
+          "from_table": {
+            "type": "EMPTY",
+            "alias": "",
+            "sample": null,
+            "query_location": 18446744073709552000
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
+  "SELECT ST_Point(0,0) AS g UNION ALL SELECT geom FROM cities": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SET_OPERATION_NODE",
+          "modifiers": [],
+          "cte_map": { "map": [] },
+          "setop_type": "UNION",
+          "left": {
+            "type": "SELECT_NODE",
+            "modifiers": [],
+            "cte_map": { "map": [] },
+            "select_list": [
+              {
+                "class": "FUNCTION",
+                "type": "FUNCTION",
+                "alias": "g",
+                "query_location": 7,
+                "function_name": "st_point",
+                "schema": "",
+                "children": [
+                  {
+                    "class": "CONSTANT",
+                    "type": "VALUE_CONSTANT",
+                    "alias": "",
+                    "query_location": 16,
+                    "value": {
+                      "type": { "id": "INTEGER", "type_info": null },
+                      "is_null": false,
+                      "value": 0
+                    }
+                  },
+                  {
+                    "class": "CONSTANT",
+                    "type": "VALUE_CONSTANT",
+                    "alias": "",
+                    "query_location": 18,
+                    "value": {
+                      "type": { "id": "INTEGER", "type_info": null },
+                      "is_null": false,
+                      "value": 0
+                    }
+                  }
+                ],
+                "filter": null,
+                "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+                "distinct": false,
+                "is_operator": false,
+                "export_state": false,
+                "catalog": ""
+              }
+            ],
+            "from_table": {
+              "type": "EMPTY",
+              "alias": "",
+              "sample": null,
+              "query_location": 18446744073709552000
+            },
+            "where_clause": null,
+            "group_expressions": [],
+            "group_sets": [],
+            "aggregate_handling": "STANDARD_HANDLING",
+            "having": null,
+            "sample": null,
+            "qualify": null
+          },
+          "right": {
+            "type": "SELECT_NODE",
+            "modifiers": [],
+            "cte_map": { "map": [] },
+            "select_list": [
+              {
+                "class": "COLUMN_REF",
+                "type": "COLUMN_REF",
+                "alias": "",
+                "query_location": 43,
+                "column_names": ["geom"]
+              }
+            ],
+            "from_table": {
+              "type": "BASE_TABLE",
+              "alias": "",
+              "sample": null,
+              "query_location": 53,
+              "schema_name": "",
+              "table_name": "cities",
+              "column_name_alias": [],
+              "catalog_name": "",
+              "at_clause": null
+            },
+            "where_clause": null,
+            "group_expressions": [],
+            "group_sets": [],
+            "aggregate_handling": "STANDARD_HANDLING",
+            "having": null,
+            "sample": null,
+            "qualify": null
+          },
+          "setop_all": true
+        },
+        "named_param_map": []
+      }
+    ]
+  }
+}

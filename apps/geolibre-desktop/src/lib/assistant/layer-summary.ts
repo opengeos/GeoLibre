@@ -2,6 +2,13 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { inferPropertyColumns } from "../pglite-sql";
 import { assignTableNames } from "../sql-table-names";
 
+/**
+ * Layer metadata key `run_sql` sets to `"literal"` on a layer whose geometry was
+ * written into the SQL (e.g. `ST_Point(100, 13)`) rather than read from a
+ * loaded layer, table or file. Persists with the project.
+ */
+export const SQL_GEOMETRY_SOURCE_METADATA_KEY = "sqlGeometrySource";
+
 /** A short, model-facing description of one layer (no feature data leaked). */
 export interface LayerSummary {
   id: string;
@@ -19,6 +26,11 @@ export interface LayerSummary {
   visible: boolean;
   /** Current layer opacity, 0-1. */
   opacity: number;
+  /**
+   * Present (and true) only when the layer's geometry came from literal values
+   * in a `run_sql` query rather than from queried data.
+   */
+  literalGeometry?: true;
 }
 
 /** Detect a layer's geometry family from its first feature. */
@@ -44,6 +56,9 @@ function summarizeLayer(layer: GeoLibreLayer, sqlTable: string | null): LayerSum
     sqlTable,
     visible: layer.visible,
     opacity: layer.opacity,
+    ...(layer.metadata?.[SQL_GEOMETRY_SOURCE_METADATA_KEY] === "literal"
+      ? { literalGeometry: true as const }
+      : {}),
   };
 }
 
@@ -91,6 +106,7 @@ export function describeLayers(layers: GeoLibreLayer[]): string {
         typeof summary.opacity === "number" && summary.opacity < 1
           ? `, opacity ${summary.opacity}`
           : "",
+        summary.literalGeometry ? ", geometry from literal SQL values, not data" : "",
         `)`,
         fields ? ` fields: ${fields}` : "",
       ].join("");

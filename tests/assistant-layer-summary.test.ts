@@ -114,3 +114,19 @@ describe("display state in the model context", () => {
     assert.doesNotMatch(describeLayers([geojsonLayer("l1", "US Cities")]), /hidden/);
   });
 });
+
+describe("literal SQL geometry flag (issue #2582)", () => {
+  it("reports a run_sql layer built from literal geometry", () => {
+    const flagged = {
+      ...geojsonLayer("lit", "Pinned point"),
+      metadata: { sqlGeometrySource: "literal" },
+    } as GeoLibreLayer;
+    const plain = geojsonLayer("real", "Cities");
+    const [flaggedSummary, plainSummary] = summarizeLayers([flagged, plain]);
+    assert.equal(flaggedSummary.literalGeometry, true);
+    assert.equal("literalGeometry" in plainSummary, false);
+    const text = describeLayers([flagged, plain]);
+    assert.match(text, /"Pinned point".*geometry from literal SQL values, not data/);
+    assert.doesNotMatch(text.split("\n")[1], /literal/);
+  });
+});

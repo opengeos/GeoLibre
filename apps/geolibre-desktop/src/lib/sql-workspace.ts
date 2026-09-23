@@ -17,6 +17,7 @@ import {
   rowsFromResult,
 } from "./duckdb-vector-loader";
 import { GDAL_AUTO_FID_COLUMN, stripAutoFidColumn } from "./duckdb-geometry";
+import { collectQueryDataSources } from "./sql-data-sources";
 import { assignTableNames, type SqlWorkspaceTable } from "./sql-table-names";
 
 // Table naming lives in sql-table-names.ts (no DuckDB import) so the assistant
@@ -136,6 +137,14 @@ export interface SqlQueryResult {
   geometryColumn: string | null;
   /** Result as GeoJSON when a geometry column is present, otherwise null. */
   geojson: FeatureCollection | null;
+  /**
+   * The tables and table functions a geometry result reads from (see
+   * {@link collectQueryDataSources}). An empty array means the query reads no
+   * data at all, so its geometry comes from literal expressions in the SQL.
+   * Null or absent when it was not determined: the result has no geometry, the
+   * query could not be parsed, or the engine does not report it.
+   */
+  dataSources?: string[] | null;
 }
 
 /** A loaded layer's queryable table name and the columns its table exposes. */
@@ -295,6 +304,28 @@ interface DescribedQuery {
   columnNames: string[];
   /** Name of the first GEOMETRY-typed column, or null when there is none. */
   geometryColumn: string | null;
+}
+
+/**
+ * Ask DuckDB which tables and table functions a statement reads (see
+ * {@link collectQueryDataSources}). Returns null when the statement cannot be
+ * serialized, so a parser gap is reported as "unknown", never as "no data".
+ */
+async function queryDataSources(
+  connection: AsyncDuckDBConnection,
+  statement: string,
+): Promise<string[] | null> {
+  try {
+    const [row] = rowsFromResult(
+      await connection.query(`SELECT json_serialize_sql(${quoteSqlString(statement)}) AS ast`),
+    );
+    if (typeof row?.ast !== "string") return null;
+    const ast = JSON.parse(row.ast) as { error?: unknown };
+    if (ast.error !== false) return null;
+    return collectQueryDataSources(ast);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -749,6 +780,7 @@ async function runSqlStatementOnce(
         rowCount: rows.length,
         geometryColumn,
         geojson,
+        dataSources: await queryDataSources(connection, statement),
       };
     }
 
