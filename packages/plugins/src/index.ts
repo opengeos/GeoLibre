@@ -526,6 +526,17 @@ export {
   OSM_DOWNLOADER_PLUGIN_ID,
 } from "./plugins/maplibre-osm-downloader";
 export {
+  maplibreSatelliteEmbeddingsPlugin,
+  SATELLITE_EMBEDDINGS_PLUGIN_ID,
+  setSatelliteEmbeddingsFileSaver,
+  type SatelliteEmbeddingsFileSaver,
+} from "./plugins/maplibre-satellite-embeddings";
+export {
+  SATELLITE_EMBEDDING_DATASETS,
+  type SatelliteEmbeddingDataset,
+  type SatelliteEmbeddingDatasetId,
+} from "./plugins/satellite-embeddings-catalog";
+export {
   buildOsmDownloadQuery,
   defaultOverpassEndpoint,
   downloadOsmGeoJson,

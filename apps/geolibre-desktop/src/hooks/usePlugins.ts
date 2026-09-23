@@ -33,6 +33,7 @@ import {
   type EffectsSettings,
   maplibreEarthdataGisPlugin,
   setEarthdataCogSaver,
+  setSatelliteEmbeddingsFileSaver,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -51,6 +52,7 @@ import {
   maplibreSourceCoopPlugin,
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
+  maplibreSatelliteEmbeddingsPlugin,
   maplibreGeoLensPlugin,
   setGeoLensDefaultServerUrl,
   maplibreVantorPlugin,
@@ -230,6 +232,7 @@ manager.registerAll([
   maplibreSourceCoopPlugin,
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
+  maplibreSatelliteEmbeddingsPlugin,
   maplibreGeoLensPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
@@ -308,6 +311,17 @@ setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
   });
   return saved !== null;
 });
+
+// The Satellite Embeddings plugin builds clipped GeoTIFFs in memory; saving
+// them needs the app's file dialogs, injected the same way.
+setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+  saveBinaryFileWithFallback(blob, {
+    defaultName,
+    filters: [{ name: description, extensions: [extension] }],
+    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+    mimeType,
+  }),
+);
 
 // The Zarr panel can open a store from a folder on disk, but reading a folder
 // needs a filesystem API the plugins package does not have, so the picker is
