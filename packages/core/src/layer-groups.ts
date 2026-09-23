@@ -628,9 +628,20 @@ function arraysFromUnits(
 /** Direction {@link sortLayerGroupInPanel} orders names in, top of panel first. */
 export type LayerGroupSortOrder = "asc" | "desc";
 
-// Numeric-aware and case/accent-insensitive, so "Parcel 2" sorts before
-// "Parcel 10" and "owner" sits with "Owner", the way a file browser orders.
-const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+/**
+ * A numeric-aware, case/accent-insensitive collator, so "Parcel 2" sorts before
+ * "Parcel 10" and "owner" sits with "Owner", the way a file browser orders.
+ * Core has no i18n of its own, so the panel passes the app's display language;
+ * without one (or with a tag `Intl` rejects) the runtime default applies.
+ */
+function nameCollator(locale: string | undefined): Intl.Collator {
+  const options: Intl.CollatorOptions = { numeric: true, sensitivity: "base" };
+  try {
+    return new Intl.Collator(locale, options);
+  } catch {
+    return new Intl.Collator(undefined, options);
+  }
+}
 
 /**
  * Sort what sits directly inside a group by name, A to Z (`"asc"`) or Z to A
@@ -650,6 +661,8 @@ const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 
  * @param groups Group definitions.
  * @param id Group whose children to sort.
  * @param order `"asc"` for A to Z, `"desc"` for Z to A.
+ * @param locale BCP 47 tag whose collation rules to compare names by, normally
+ *   the app's display language. Defaults to the runtime locale.
  * @returns The new arrays, or `null` when the children are already in that
  *   order and nothing would change.
  */
@@ -658,8 +671,10 @@ export function sortLayerGroupInPanel(
   groups: LayerGroup[],
   id: string,
   order: LayerGroupSortOrder,
+  locale?: string,
 ): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
-  return sortGroupThroughUnits(buildLayerPanelUnits(layers, groups), layers, groups, id, order);
+  const units = buildLayerPanelUnits(layers, groups);
+  return sortGroupThroughUnits(units, layers, groups, id, order, nameCollator(locale));
 }
 
 /**
@@ -672,11 +687,12 @@ function sortGroupThroughUnits(
   groups: LayerGroup[],
   id: string,
   order: LayerGroupSortOrder,
+  collator: Intl.Collator,
 ): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
   const groupById = new Map(groups.map((g) => [g.id, g]));
   if (!groupById.has(id)) return null;
   const sign = order === "asc" ? 1 : -1;
-  const compare = (a: string, b: string) => sign * nameCollator.compare(a, b);
+  const compare = (a: string, b: string) => sign * collator.compare(a, b);
   // Label each unit with the direct child of `id` it sits in (`id` itself for
   // the group's own layers), or `undefined` when it lies outside the group.
   const branches = units.map((unit) => branchUnder(id, unit.groupId, groupById));
@@ -741,18 +757,21 @@ export function layerGroupMoveability(
  *
  * @param layers Flat layer list in store (render) order.
  * @param groups Group definitions.
+ * @param locale Collation locale, as for {@link sortLayerGroupInPanel}.
  * @returns Per-group flags, keyed by group id.
  */
 export function layerGroupSortability(
   layers: GeoLibreLayer[],
   groups: LayerGroup[],
+  locale?: string,
 ): Map<string, Record<LayerGroupSortOrder, boolean>> {
   const units = buildLayerPanelUnits(layers, groups);
+  const collator = nameCollator(locale);
   const result = new Map<string, Record<LayerGroupSortOrder, boolean>>();
   for (const group of groups) {
     result.set(group.id, {
-      asc: sortGroupThroughUnits(units, layers, groups, group.id, "asc") !== null,
-      desc: sortGroupThroughUnits(units, layers, groups, group.id, "desc") !== null,
+      asc: sortGroupThroughUnits(units, layers, groups, group.id, "asc", collator) !== null,
+      desc: sortGroupThroughUnits(units, layers, groups, group.id, "desc", collator) !== null,
     });
   }
   return result;

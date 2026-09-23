@@ -1035,8 +1035,8 @@ export function LayerPanel({
     [layers, layerGroups],
   );
   const groupSortability = useMemo(
-    () => layerGroupSortability(layers, layerGroups),
-    [layers, layerGroups],
+    () => layerGroupSortability(layers, layerGroups, i18n.language),
+    [layers, layerGroups, i18n.language],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -2969,7 +2969,7 @@ export function LayerPanel({
               <DropdownMenuItem
                 disabled={!sortability?.asc}
                 onSelect={() => {
-                  sortLayerGroup(group.id, "asc");
+                  sortLayerGroup(group.id, "asc", i18n.language);
                 }}
               >
                 <ArrowDownAZ className="me-2 h-3.5 w-3.5" />
@@ -2978,7 +2978,7 @@ export function LayerPanel({
               <DropdownMenuItem
                 disabled={!sortability?.desc}
                 onSelect={() => {
-                  sortLayerGroup(group.id, "desc");
+                  sortLayerGroup(group.id, "desc", i18n.language);
                 }}
               >
                 <ArrowDownZA className="me-2 h-3.5 w-3.5" />

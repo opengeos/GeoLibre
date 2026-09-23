@@ -597,6 +597,28 @@ describe("sortLayerGroupInPanel", () => {
     ]);
   });
 
+  it("collates by the given locale and survives an invalid tag", () => {
+    // Swedish sorts "Ö" after "Z"; the English collator folds it in with "O".
+    const layers = [
+      layer("o", { name: "Östra", groupId: "g" }),
+      layer("a", { name: "Alfa", groupId: "g" }),
+      layer("z", { name: "Zeta", groupId: "g" }),
+    ];
+    const topFirst = (sorted: ReturnType<typeof sortLayerGroupInPanel>) =>
+      [...(sorted?.layers ?? [])].reverse().map((l) => l.name);
+    assert.deepEqual(topFirst(sortLayerGroupInPanel(layers, [group("g")], "g", "asc", "en")), [
+      "Alfa",
+      "Östra",
+      "Zeta",
+    ]);
+    assert.deepEqual(topFirst(sortLayerGroupInPanel(layers, [group("g")], "g", "asc", "sv")), [
+      "Alfa",
+      "Zeta",
+      "Östra",
+    ]);
+    assert.ok(sortLayerGroupInPanel(layers, [group("g")], "g", "asc", "not a locale!"));
+  });
+
   it("returns null for an unknown or empty group, and reports sortability", () => {
     const layers = [layer("a", { groupId: "g" }), layer("b", { groupId: "g" })];
     const groups = [group("g"), group("empty")];
