@@ -1,5 +1,6 @@
 import {
   compileLayerFilters,
+  documentLocale,
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   DEFAULT_LAYER_STYLE,
@@ -22,6 +23,12 @@ import {
   rasterPaint,
 } from "./style-mapper";
 import { authoredClusterInput, resolveVectorRenderMode } from "./cluster-input";
+import {
+  DEDUPED_LABEL_PROPERTY,
+  getDedupedLabelFeatures,
+  parseLabelOverride,
+  TEXT_MARKER_SHAPE_FILTER,
+} from "./label-style";
 import { proxyWmsTiles } from "./wms-proxy";
 import { arcgisOpacity, arcgisVectorStyle } from "./arcgis-vector-style";
 import { mapboxFillLayerId, mapboxLineLayerId, mapboxSourceId } from "./style-layer-ids";
@@ -371,6 +378,100 @@ export function compileMapboxLayer(
       } as LayerSpecification,
     ];
   };
+  // Attribute labels, compiled the way MapLibre's layer-sync builds them.
+  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+  // Unique/concatenate labels collapse co-located points into one label read
+  // from an aggregated source. As on MapLibre it needs inline point-only data
+  // and no active time, embed, authored or rule filter: the aggregated source
+  // is built from the raw features, which no style filter narrows.
+  const hasFeatureFilter = filters.length > 0;
+  const dedupedLabels =
+    labels.enabled &&
+    labels.dedupe !== "off" &&
+    !hasFeatureFilter &&
+    layer.geojson &&
+    labels.field &&
+    profile.hasPoint &&
+    !profile.hasLine &&
+    !profile.hasPolygon
+      ? getDedupedLabelFeatures(layer.geojson, labels)
+      : null;
+  const labelSourceId = `${sourceId}-labels-dedup`;
+  const labelLayer = (
+    base: Record<string, unknown>,
+    id: string,
+    sourceLayer: string | undefined,
+  ): LayerSpecification | null => {
+    if (style.extrusionEnabled || renderer === "heatmap" || !labels.enabled) return null;
+    const deduped = !sourceLayer && dedupedLabels;
+    let text: unknown = labelFieldTextField(labels, documentLocale());
+    if (deduped) text = ["get", DEDUPED_LABEL_PROPERTY];
+    else if (labels.expression.trim()) {
+      try {
+        const parsed: unknown = JSON.parse(labels.expression);
+        // Only an array is an expression; anything else keeps the field text.
+        if (Array.isArray(parsed)) text = parsed;
+      } catch {
+        // An unparseable label expression must not take the geometry with
+        // it; keep the field-based text.
+      }
+    }
+    if (text === "") return null;
+    // Data-defined overrides read source attributes, which the aggregated
+    // dedup features do not carry. An invalid one falls back to the control.
+    const override = (source: string, expectedType: "number" | "color" | "boolean") =>
+      deduped ? null : parseLabelOverride(source, expectedType);
+    const size = override(labels.sizeExpression, "number");
+    const color = override(labels.colorExpression, "color");
+    const opacity = override(labels.opacityExpression, "number");
+    const priority = override(labels.priorityExpression, "number");
+    const visible = override(labels.visibilityExpression, "boolean");
+    // Geo Editor text markers carry their own annotation text, so the label
+    // layer skips them; a visibility override gates each feature's label.
+    const labelFilter = [
+      "all",
+      ["!", TEXT_MARKER_SHAPE_FILTER],
+      ...(visible ? [visible] : []),
+      ...filters,
+    ];
+    return {
+      ...base,
+      ...(deduped ? { source: labelSourceId } : {}),
+      id: `${id}-labels`,
+      type: "symbol",
+      ...(deduped ? {} : { filter: labelFilter as FilterSpecification }),
+      minzoom: Math.max(style.minZoom, labels.minZoom),
+      maxzoom: Math.min(style.maxZoom, labels.maxZoom),
+      layout: {
+        ...layout,
+        "text-field": text as DataDrivenPropertyValueSpecification<string>,
+        "text-font": compileOptions.textFont ?? DEFAULT_MAPBOX_TEXT_FONT,
+        "text-size": (size ??
+          Math.max(1, labels.size)) as DataDrivenPropertyValueSpecification<number>,
+        // The aggregated source is points, so it cannot use line placement.
+        "symbol-placement": !deduped && labels.placement === "line" ? "line" : "point",
+        "text-allow-overlap": labels.allowOverlap,
+        "text-ignore-placement": labels.allowOverlap,
+        "text-anchor": labels.anchor,
+        "text-offset": [labels.offsetX, labels.offsetY],
+        "text-rotate": labels.rotation,
+        "text-max-width": Math.max(1, labels.maxWidth),
+        "text-transform": labels.transform,
+        // Lower sort keys place first, so they win when space is tight.
+        ...(priority
+          ? { "symbol-sort-key": priority as DataDrivenPropertyValueSpecification<number> }
+          : {}),
+      },
+      paint: {
+        "text-color": (color ?? labels.color) as DataDrivenPropertyValueSpecification<string>,
+        "text-halo-color": labels.haloColor,
+        "text-halo-width": Math.max(0, labels.haloWidth),
+        // Replaces the layer opacity rather than multiplying into it, as on
+        // MapLibre: wrapping would invalidate top-level zoom interpolations.
+        "text-opacity": (opacity ?? layer.opacity) as DataDrivenPropertyValueSpecification<number>,
+      },
+    } as LayerSpecification;
+  };
   const vectorLayers = (sourceLayer?: string): LayerSpecification[] => {
     const base = {
       source: sourceId,
@@ -402,47 +503,8 @@ export function compileMapboxLayer(
       },
       ...(profile.hasPoint ? pointLayers(base, id) : []),
     ].filter(Boolean) as LayerSpecification[];
-    const labels = style.labels;
-    if (labels.enabled && (labels.field || labels.expression)) {
-      let text: DataDrivenPropertyValueSpecification<string> = labelFieldTextField(
-        labels,
-      ) as DataDrivenPropertyValueSpecification<string>;
-      if (labels.expression.trim()) {
-        try {
-          text = JSON.parse(labels.expression) as DataDrivenPropertyValueSpecification<string>;
-        } catch {
-          // An unparseable label expression must not take the geometry with
-          // it; keep the field-based text.
-        }
-      }
-      result.push({
-        ...base,
-        id: `${id}-labels`,
-        type: "symbol",
-        ...(filter ? { filter: filter as FilterSpecification } : {}),
-        minzoom: Math.max(style.minZoom, labels.minZoom),
-        maxzoom: Math.min(style.maxZoom, labels.maxZoom),
-        layout: {
-          ...layout,
-          "text-field": text,
-          "text-font": compileOptions.textFont ?? DEFAULT_MAPBOX_TEXT_FONT,
-          "text-size": labels.size,
-          "symbol-placement": labels.placement,
-          "text-allow-overlap": labels.allowOverlap,
-          "text-anchor": labels.anchor,
-          "text-offset": [labels.offsetX, labels.offsetY],
-          "text-rotate": labels.rotation,
-          "text-max-width": labels.maxWidth,
-          "text-transform": labels.transform,
-        },
-        paint: {
-          "text-color": labels.color,
-          "text-halo-color": labels.haloColor,
-          "text-halo-width": labels.haloWidth,
-          "text-opacity": layer.opacity,
-        },
-      });
-    }
+    const label = labelLayer(base, id, sourceLayer);
+    if (label) result.push(label);
     return result;
   };
   if (layer.geojson) {
@@ -464,6 +526,9 @@ export function compileMapboxLayer(
             clusterMaxZoom,
           }
         : { type: "geojson", data: layer.geojson, generateId: true },
+      ...(dedupedLabels && labels.enabled && !style.extrusionEnabled && renderer !== "heatmap"
+        ? { additionalSources: { [labelSourceId]: { type: "geojson", data: dedupedLabels } } }
+        : {}),
       layers: vectorLayers(),
     };
   }
@@ -590,9 +655,7 @@ export type MapboxUnsupportedStyleSetting =
   | "invertedFill"
   | "lineDecoration"
   | "geometryGenerator"
-  | "blendMode"
-  | "labelDedupe"
-  | "labelExpressions";
+  | "blendMode";
 
 /** The {@link MapboxUnsupportedStyleSetting}s this layer's style turns on. */
 export function mapboxUnsupportedStyleSettings(
@@ -601,7 +664,6 @@ export function mapboxUnsupportedStyleSettings(
   const cached = unsupportedSettingsCache.get(layer);
   if (cached) return cached;
   const style = layer.style;
-  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
   const settings: MapboxUnsupportedStyleSetting[] = [];
   // Marker icons only draw under the single point renderer on MapLibre too;
   // the heatmap and cluster renderers replace them.
@@ -615,18 +677,6 @@ export function mapboxUnsupportedStyleSettings(
   if (styleValue(style, "geometryGenerator") !== "none") settings.push("geometryGenerator");
   if ((style.blendMode ?? DEFAULT_LAYER_STYLE.blendMode) !== DEFAULT_LAYER_STYLE.blendMode)
     settings.push("blendMode");
-  if (labels.enabled && labels.dedupe !== "off") settings.push("labelDedupe");
-  if (
-    labels.enabled &&
-    [
-      labels.sizeExpression,
-      labels.colorExpression,
-      labels.opacityExpression,
-      labels.visibilityExpression,
-      labels.priorityExpression,
-    ].some((expression) => Boolean(expression?.trim()))
-  )
-    settings.push("labelExpressions");
   unsupportedSettingsCache.set(layer, settings);
   return settings;
 }

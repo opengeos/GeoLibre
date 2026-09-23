@@ -231,9 +231,11 @@ on the map instead of being silently omitted. The heatmap and clustered point
 renderers compile to native Mapbox layers, with a clustered layer's authored
 filters applied to its data before clustering, as on MapLibre. Advanced
 MapLibre-only symbology (marker icons, fill patterns, inverted fill, line
-decorations, the geometry generator, layer blend modes, label de-duplication and
-data-driven label expressions) is not reproduced by this native renderer, and
-the Style panel lists the ones a layer turns on. Mapbox Standard is loaded as a local style import with a shared opacity setting.
+decorations, the geometry generator and layer blend modes) is not reproduced by
+this native renderer, and the Style panel lists the ones a layer turns on.
+Attribute labels are: de-duplicated labels read an aggregated companion source,
+and the data-defined size, color, opacity, visibility and priority expressions
+apply as on MapLibre. Mapbox Standard is loaded as a local style import with a shared opacity setting.
 The Background card fades its land and water colors, labels (including ocean labels),
 3D objects, and atmosphere while preserving project layers and Standard's configuration.
 

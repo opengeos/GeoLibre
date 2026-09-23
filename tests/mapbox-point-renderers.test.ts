@@ -129,8 +129,6 @@ describe("mapboxUnsupportedStyleSettings", () => {
       "lineDecoration",
       "geometryGenerator",
       "blendMode",
-      "labelDedupe",
-      "labelExpressions",
     ]);
   });
 
@@ -139,12 +137,5 @@ describe("mapboxUnsupportedStyleSettings", () => {
       const layer = pointLayer({ markerEnabled: true, pointRenderer });
       assert.deepEqual(mapboxUnsupportedStyleSettings(layer), []);
     }
-  });
-
-  it("ignores label settings while labels are off", () => {
-    const layer = pointLayer({
-      labels: { ...DEFAULT_LAYER_STYLE.labels, dedupe: "unique", colorExpression: '"red"' },
-    });
-    assert.deepEqual(mapboxUnsupportedStyleSettings(layer), []);
   });
 });

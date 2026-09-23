@@ -734,7 +734,7 @@ export class MapboxEngine implements MapEngine {
         const oldPlan = this.plans.get(layer.id);
         const sourceChanged =
           oldPlan &&
-          (JSON.stringify(oldPlan.additionalSources) !== JSON.stringify(plan.additionalSources) ||
+          (sourcesShapeKey(oldPlan.additionalSources) !== sourcesShapeKey(plan.additionalSources) ||
             oldPlan.source.type !== plan.source.type ||
             (plan.source.type === "geojson" && oldPlan.source.type === "geojson"
               ? // Clustering is a source option mapbox-gl cannot change in
@@ -745,6 +745,15 @@ export class MapboxEngine implements MapEngine {
         if (sourceChanged) this.removeLayer(layer.id);
         for (const [id, source] of Object.entries(plan.additionalSources ?? {})) {
           if (!map.getSource(id)) map.addSource(id, source);
+          else if (
+            source.type === "geojson" &&
+            oldPlan?.additionalSources?.[id]?.type === "geojson" &&
+            (oldPlan.additionalSources[id] as mapboxgl.GeoJSONSourceSpecification).data !==
+              source.data
+          ) {
+            // A companion GeoJSON source (the dedup label points) got new data.
+            (map.getSource(id) as mapboxgl.GeoJSONSource).setData(source.data!);
+          }
         }
         if (!map.getSource(plan.sourceId)) map.addSource(plan.sourceId, plan.source);
         else if (
@@ -767,10 +776,19 @@ export class MapboxEngine implements MapEngine {
           else if (
             JSON.stringify(oldPlan?.layers.find((s) => s.id === spec.id)) !== JSON.stringify(spec)
           ) {
+            const oldSpec = oldPlan?.layers.find((s) => s.id === spec.id);
             for (const [key, value] of Object.entries(spec.paint ?? {}))
               map.setPaintProperty(spec.id, key as keyof mapboxgl.AnyPaint, value);
             for (const [key, value] of Object.entries(spec.layout ?? {}))
               map.setLayoutProperty(spec.id, key as keyof mapboxgl.AnyLayout, value);
+            // A property the new plan dropped (a cleared label priority, say)
+            // goes back to its default rather than keeping its last value.
+            for (const key of Object.keys(oldSpec?.paint ?? {}))
+              if (!(key in (spec.paint ?? {})))
+                map.setPaintProperty(spec.id, key as keyof mapboxgl.AnyPaint, undefined);
+            for (const key of Object.keys(oldSpec?.layout ?? {}))
+              if (!(key in (spec.layout ?? {})))
+                map.setLayoutProperty(spec.id, key as keyof mapboxgl.AnyLayout, undefined);
             if ("filter" in spec) map.setFilter(spec.id, spec.filter ?? null);
             map.setLayerZoomRange(spec.id, spec.minzoom ?? 0, spec.maxzoom ?? 24);
           }
@@ -1856,4 +1874,18 @@ function featureIndex(features: Feature[], feature: Feature): number {
     featureIndexes.set(features, indexes);
   }
   return indexes.get(feature) ?? -1;
+}
+
+/**
+ * What a plan's companion sources look like apart from GeoJSON data, which
+ * the engine updates in place with `setData` instead of rebuilding the layer.
+ */
+function sourcesShapeKey(sources: Record<string, mapboxgl.SourceSpecification> | undefined) {
+  return JSON.stringify(
+    Object.entries(sources ?? {}).map(([id, source]) =>
+      source.type === "geojson"
+        ? [id, { ...source, data: typeof source.data === "string" ? source.data : "inline" }]
+        : [id, source],
+    ),
+  );
 }

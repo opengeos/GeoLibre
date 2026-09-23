@@ -1204,6 +1204,63 @@ describe("MapboxEngine point renderers", () => {
   });
 });
 
+describe("MapboxEngine labels", () => {
+  const labelled = (labels: Record<string, unknown>) =>
+    geojsonLayer({
+      geojson: {
+        type: "FeatureCollection",
+        features: ["a", "a"].map((name) => ({
+          type: "Feature" as const,
+          properties: { name, pop: 1 },
+          geometry: { type: "Point" as const, coordinates: [0, 0] },
+        })),
+      },
+      style: {
+        ...geojsonLayer().style,
+        labels: { ...geojsonLayer().style.labels, enabled: true, field: "name", ...labels },
+      },
+    });
+
+  it("resets a layout property the new plan drops", () => {
+    const { engine, map } = makeEngine();
+    engine.syncLayers([labelled({ priorityExpression: '["get", "pop"]' })]);
+    const id = `${SOURCE}-geojson-labels`;
+    assert.deepEqual(map.getLayoutProperty(id, "symbol-sort-key"), ["get", "pop"]);
+    engine.syncLayers([labelled({ priorityExpression: "" })]);
+    assert.equal(map.getLayoutProperty(id, "symbol-sort-key"), undefined);
+    assert.ok(map.calls.includes(`setLayoutProperty:${id}:symbol-sort-key`));
+  });
+
+  it("updates the dedup label source in place when the data changes", () => {
+    const { engine, map } = makeEngine();
+    const layer = labelled({ dedupe: "unique" });
+    engine.syncLayers([layer]);
+    const dedup = `${SOURCE}-labels-dedup`;
+    assert.ok(map.sources.has(dedup));
+    map.calls.length = 0;
+    const moved = {
+      ...layer,
+      geojson: {
+        ...layer.geojson!,
+        features: [
+          ...layer.geojson!.features,
+          {
+            type: "Feature" as const,
+            properties: { name: "b", pop: 2 },
+            geometry: { type: "Point" as const, coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+    engine.syncLayers([moved]);
+    assert.ok(map.calls.includes(`setData:${dedup}`));
+    assert.ok(!map.calls.includes(`removeSource:${dedup}`));
+    // Turning dedupe off drops the companion source with the rebuilt plan.
+    engine.syncLayers([labelled({ dedupe: "off" })]);
+    assert.ok(!map.sources.has(dedup));
+  });
+});
+
 describe("MapboxEngine camera and preferences", () => {
   it("publishes geographic map clicks and removes the listener on cleanup", () => {
     const { engine, map } = makeEngine();
