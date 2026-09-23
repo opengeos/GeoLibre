@@ -1,5 +1,5 @@
 /** Temporary inverted-fill mask for the active Print Layout atlas feature. */
-import { buildInvertedMask } from "@geolibre/map/derived-geometry";
+import { buildInvertedMask, mapboxRenderableMask } from "@geolibre/map/derived-geometry";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
@@ -22,12 +22,15 @@ export function clearAtlasFeatureMask(map: MapLibreMap): void {
  * @param map - MapLibre map used by the Print Layout capture.
  * @param feature - Current coverage feature.
  * @param beforeLayerId - Optional label layer that should remain above the mask.
+ * @param options.mapbox - The map is mapbox-gl's (through MapLibre's types),
+ *   which needs the mask reshaped to draw it the same way.
  * @returns Whether a polygon mask could be rendered.
  */
 export function showAtlasFeatureMask(
   map: MapLibreMap,
   feature: Feature | undefined,
   beforeLayerId?: string,
+  options: { mapbox?: boolean } = {},
 ): boolean {
   if (feature?.geometry?.type !== "Polygon" && feature?.geometry?.type !== "MultiPolygon") {
     clearAtlasFeatureMask(map);
@@ -42,7 +45,8 @@ export function showAtlasFeatureMask(
     };
     featureCollections.set(polygonFeature, collection);
   }
-  const mask = buildInvertedMask(collection);
+  const built = buildInvertedMask(collection);
+  const mask = built && options.mapbox ? mapboxRenderableMask(built) : built;
   if (!mask) {
     clearAtlasFeatureMask(map);
     return false;

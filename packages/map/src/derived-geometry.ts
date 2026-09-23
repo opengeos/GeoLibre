@@ -93,6 +93,59 @@ function computeInvertedMask(
   }
 }
 
+// turf's mask is a world rectangle ([-180, -90] to [180, 90]) with every
+// feature cut out as a hole wound the same way as that rectangle. MapLibre
+// draws it as intended, but mapbox-gl drops a ring reaching the poles and draws
+// each same-wound hole as a polygon of its own, which inverts the mask (the
+// features filled, the world around them empty).
+const renderableMasks = new WeakMap<FeatureCollection, FeatureCollection<Polygon | MultiPolygon>>();
+
+/**
+ * An inverted-fill mask mapbox-gl draws the way MapLibre draws the original:
+ * the world ring pulled inside the Web Mercator latitude limit and the holes
+ * given the RFC 7946 opposing winding. Memoized per mask.
+ *
+ * @param mask - A mask from {@link buildInvertedMask}.
+ * @returns The same mask, safe for mapbox-gl.
+ */
+export function mapboxRenderableMask(
+  mask: FeatureCollection<Polygon | MultiPolygon>,
+): FeatureCollection<Polygon | MultiPolygon> {
+  const cached = renderableMasks.get(mask);
+  if (cached) return cached;
+  const winding = (ring: number[][]) => {
+    let sum = 0;
+    for (let i = 0; i < ring.length - 1; i++)
+      sum += (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1]);
+    return Math.sign(sum);
+  };
+  const maxLat = 85.0511;
+  const fix = (rings: number[][][]) =>
+    rings.map((ring, index) =>
+      index === 0
+        ? ring.map(([lng, lat]) => [lng, Math.max(-maxLat, Math.min(maxLat, lat))])
+        : winding(ring) === winding(rings[0])
+          ? [...ring].reverse()
+          : ring,
+    );
+  const result: FeatureCollection<Polygon | MultiPolygon> = {
+    ...mask,
+    features: mask.features.map((feature) =>
+      feature.geometry.type === "Polygon"
+        ? {
+            ...feature,
+            geometry: { ...feature.geometry, coordinates: fix(feature.geometry.coordinates) },
+          }
+        : {
+            ...feature,
+            geometry: { ...feature.geometry, coordinates: feature.geometry.coordinates.map(fix) },
+          },
+    ),
+  };
+  renderableMasks.set(mask, result);
+  return result;
+}
+
 /**
  * Build the geometry generator's derived collection: one derived feature per
  * source feature, preserving the source properties (so popups and filters
