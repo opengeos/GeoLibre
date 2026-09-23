@@ -494,7 +494,14 @@ export function MapboxCanvas({
             setPhotoCursor(false);
             return;
           }
-          const hits = current.identifyFeatures(lngLat);
+          // Query only the layers that want a tip or a photo pointer, topmost
+          // first, rather than every compiled layer once per frame.
+          const order = new Map(
+            useAppStore.getState().layers.map((layer, index) => [layer.id, index]),
+          );
+          const hits = [...new Set([...hover.keys(), ...photos])]
+            .sort((a, b) => (order.get(b) ?? -1) - (order.get(a) ?? -1))
+            .flatMap((layerId) => current.identifyFeatures(lngLat, layerId));
           setPhotoCursor(hits.some((hit) => photos.has(hit.layerId)));
           const hit = hits.find((candidate) => hover.has(candidate.layerId));
           const layer = hit && hover.get(hit.layerId);
@@ -548,9 +555,9 @@ export function MapboxCanvas({
         const showPhotoAt = (lngLat: [number, number]): boolean => {
           const { photos } = pointerTargets();
           if (photos.size === 0) return false;
-          const hit = current
-            .identifyFeatures(lngLat)
-            .find((candidate) => photos.has(candidate.layerId));
+          const hit = [...photos]
+            .flatMap((layerId) => current.identifyFeatures(lngLat, layerId))
+            .at(0);
           if (!hit) return false;
           const anchor =
             hit.geometry?.type === "Point"
