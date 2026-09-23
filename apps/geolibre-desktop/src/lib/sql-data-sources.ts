@@ -11,8 +11,9 @@ const ROW_GENERATOR_TABLE_FUNCTIONS: ReadonlySet<string> = new Set([
 /**
  * List the data a query reads, from DuckDB's parsed form of it
  * (`json_serialize_sql`): every base table that is not one of the query's own
- * CTEs in scope where it is read, and every table function that is not a row generator (`read_parquet`,
- * `ST_Read`, ...). Subqueries and CTE bodies are part of the tree, so a table
+ * CTEs in scope where it is read, and every table function other than the row
+ * generators (`range`, `generate_series`, `unnest`), so readers such as
+ * `read_parquet` and `ST_Read` count. Subqueries and CTE bodies are part of the tree, so a table
  * read anywhere in the statement counts. An empty list means nothing in the
  * query reads data: `SELECT ST_Point(100, 13) AS geom` or a `VALUES` list.
  *
@@ -53,7 +54,12 @@ export function collectQueryDataSources(ast: unknown): string[] {
       scope = names;
     }
     if (record.type === "BASE_TABLE" && typeof record.table_name === "string") {
-      if (!scope.has(record.table_name.toLowerCase())) tables.push(record.table_name);
+      // DuckDB resolves a CTE only for an unqualified name, so `main.cities`
+      // reads the real table even when a `cities` CTE is in scope.
+      const qualified =
+        (typeof record.schema_name === "string" && record.schema_name !== "") ||
+        (typeof record.catalog_name === "string" && record.catalog_name !== "");
+      if (qualified || !scope.has(record.table_name.toLowerCase())) tables.push(record.table_name);
     } else if (record.type === "TABLE_FUNCTION") {
       const name = (record.function as { function_name?: unknown } | undefined)?.function_name;
       if (typeof name === "string" && !ROW_GENERATOR_TABLE_FUNCTIONS.has(name.toLowerCase())) {

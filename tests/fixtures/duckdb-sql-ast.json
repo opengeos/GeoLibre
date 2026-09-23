@@ -1,4 +1,122 @@
 {
+  "WITH cities AS (SELECT ST_Point(0,0) AS g) SELECT * FROM main.cities": {
+    "error": false,
+    "statements": [
+      {
+        "node": {
+          "type": "SELECT_NODE",
+          "modifiers": [],
+          "cte_map": {
+            "map": [
+              {
+                "key": "cities",
+                "value": {
+                  "aliases": [],
+                  "query": {
+                    "node": {
+                      "type": "SELECT_NODE",
+                      "modifiers": [],
+                      "cte_map": { "map": [] },
+                      "select_list": [
+                        {
+                          "class": "FUNCTION",
+                          "type": "FUNCTION",
+                          "alias": "g",
+                          "query_location": 23,
+                          "function_name": "st_point",
+                          "schema": "",
+                          "children": [
+                            {
+                              "class": "CONSTANT",
+                              "type": "VALUE_CONSTANT",
+                              "alias": "",
+                              "query_location": 32,
+                              "value": {
+                                "type": { "id": "INTEGER", "type_info": null },
+                                "is_null": false,
+                                "value": 0
+                              }
+                            },
+                            {
+                              "class": "CONSTANT",
+                              "type": "VALUE_CONSTANT",
+                              "alias": "",
+                              "query_location": 34,
+                              "value": {
+                                "type": { "id": "INTEGER", "type_info": null },
+                                "is_null": false,
+                                "value": 0
+                              }
+                            }
+                          ],
+                          "filter": null,
+                          "order_bys": { "type": "ORDER_MODIFIER", "orders": [] },
+                          "distinct": false,
+                          "is_operator": false,
+                          "export_state": false,
+                          "catalog": ""
+                        }
+                      ],
+                      "from_table": {
+                        "type": "EMPTY",
+                        "alias": "",
+                        "sample": null,
+                        "query_location": 18446744073709552000
+                      },
+                      "where_clause": null,
+                      "group_expressions": [],
+                      "group_sets": [],
+                      "aggregate_handling": "STANDARD_HANDLING",
+                      "having": null,
+                      "sample": null,
+                      "qualify": null
+                    },
+                    "named_param_map": []
+                  },
+                  "materialized": "CTE_MATERIALIZE_DEFAULT",
+                  "key_targets": []
+                }
+              }
+            ]
+          },
+          "select_list": [
+            {
+              "class": "STAR",
+              "type": "STAR",
+              "alias": "",
+              "query_location": 50,
+              "relation_name": "",
+              "exclude_list": [],
+              "replace_list": [],
+              "columns": false,
+              "expr": null,
+              "qualified_exclude_list": [],
+              "rename_list": []
+            }
+          ],
+          "from_table": {
+            "type": "BASE_TABLE",
+            "alias": "",
+            "sample": null,
+            "query_location": 57,
+            "schema_name": "main",
+            "table_name": "cities",
+            "column_name_alias": [],
+            "catalog_name": "",
+            "at_clause": null
+          },
+          "where_clause": null,
+          "group_expressions": [],
+          "group_sets": [],
+          "aggregate_handling": "STANDARD_HANDLING",
+          "having": null,
+          "sample": null,
+          "qualify": null
+        },
+        "named_param_map": []
+      }
+    ]
+  },
   "SELECT * FROM us_cities UNION ALL SELECT * FROM (WITH us_cities AS (SELECT ST_Point(0,0) AS g) SELECT * FROM us_cities) x": {
     "error": false,
     "statements": [

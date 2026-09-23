@@ -61,6 +61,11 @@ describe("collectQueryDataSources (issue #2582)", () => {
     assert.deepEqual(sourcesOf("WITH cities AS (SELECT * FROM cities) SELECT * FROM cities"), [
       "cities",
     ]);
+    // A qualified name never resolves to a CTE.
+    assert.deepEqual(
+      sourcesOf("WITH cities AS (SELECT ST_Point(0,0) AS g) SELECT * FROM main.cities"),
+      ["cities"],
+    );
     // Later CTEs see earlier ones, and a recursive CTE sees itself.
     assert.deepEqual(
       sourcesOf("WITH a AS (SELECT ST_Point(1, 2) AS g), b AS (SELECT * FROM a) SELECT * FROM b"),
