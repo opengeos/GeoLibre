@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pathlib
+import re
+
 import pytest
 
 import geolibre.geolibre as gmod
-from geolibre.geolibre import Map
+from geolibre.geolibre import MAP_CONTROLS, MAP_PANELS, Map
 
 
 @pytest.fixture
@@ -132,3 +135,38 @@ def test_remove_layer_disarms_identify_before_the_project_sync(m):
     m.set_identify("Cities")
     m.remove_layer("Cities")
     assert m._ui["identify"] is None
+
+
+def _ts_string_set(source: str, name: str) -> set[str]:
+    """Pull the string literals out of an exported TS array constant.
+
+    Args:
+        source: Contents of the TypeScript module.
+        name: The exported constant to read.
+
+    Returns:
+        The quoted strings in that array.
+
+    Raises:
+        AssertionError: If the constant is not found.
+    """
+    match = re.search(rf"export const {name} = \[(.*?)\]", source, re.DOTALL)
+    assert match, f"{name} not found in ui-controls.ts"
+    return set(re.findall(r'"([^"]+)"', match.group(1)))
+
+
+def test_control_lists_match_the_typescript_source():
+    """MAP_PANELS/MAP_CONTROLS mirror the TS lists by hand; catch the drift.
+
+    Adding a control on one side only would otherwise pass CI on both and
+    silently accept a name the app rejects (or the reverse).
+    """
+    ts_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "apps/geolibre-desktop/src/lib/scripting/ui-controls.ts"
+    )
+    if not ts_path.exists():
+        pytest.skip("frontend source not present in this checkout")
+    source = ts_path.read_text(encoding="utf-8")
+    assert _ts_string_set(source, "SCRIPTABLE_PANELS") == set(MAP_PANELS)
+    assert _ts_string_set(source, "SCRIPTABLE_MAP_CONTROLS") == set(MAP_CONTROLS)
