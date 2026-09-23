@@ -120,6 +120,7 @@ import {
 } from "../../lib/print-atlas";
 import { clearAtlasFeatureMask, showAtlasFeatureMask } from "../../lib/print-atlas-mask";
 import { engineStyleMap } from "../../lib/engine-style-map";
+import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import { clamp } from "../../lib/clamp";
 
 interface PrintLayoutDialogProps {
@@ -359,8 +360,8 @@ export function PrintLayoutDialog({
   const renderer = useAppStore((state) => state.primaryRenderer);
   const [atlasEnabledSetting, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
   // Atlas drives the live 2D camera (fitBounds with padding, idle, the
-  // coverage mask), which both Style Spec engines share; the globes have none.
-  const atlasRendererSupported = renderer === "maplibre" || renderer === "mapbox";
+  // coverage mask), which every Style Spec engine shares; the globes have none.
+  const atlasRendererSupported = useMapCapabilities(mapControllerRef).styleSpec;
   const atlasEnabled = atlasEnabledSetting && atlasRendererSupported;
   const [atlasLayerId, setAtlasLayerId] = useState(initialLayout.atlasLayerId);
   // Coverage strategy: one page per feature, or pages tiling the layer's line
@@ -751,6 +752,8 @@ export function PrintLayoutDialog({
       }
       enginePreviewRef.current?.();
       enginePreviewRef.current = null;
+      // An atlas capture still in flight must not bring the preview back.
+      wasOpenRef.current = false;
       const map = mapControllerRef.current?.getMap();
       if (map) {
         if (idleRecaptureRef.current) {
