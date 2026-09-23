@@ -1,5 +1,8 @@
 import type { LabelDedupe } from "@geolibre/core";
 
+/** The property the aggregated dedup source carries each resolved label in. */
+export const DEDUPED_LABEL_PROPERTY = "__geolibre_label";
+
 /**
  * Pull a representative `[x, y]` from a point geometry, or null for any other
  * geometry type (only points participate in label deduplication).
@@ -73,7 +76,7 @@ export function buildDedupedLabelFeatures(
       type: "Feature",
       geometry: { type: "Point", coordinates: group.coordinates },
       // A namespaced key avoids clobbering a real source field named "label".
-      properties: { __geolibre_label: label },
+      properties: { [DEDUPED_LABEL_PROPERTY]: label },
     });
   }
   if (features.length === 0) return null;

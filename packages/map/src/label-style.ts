@@ -13,8 +13,7 @@ import { buildDedupedLabelFeatures } from "./label-dedup";
 // the validated data-defined overrides are built once here. Kept free of any
 // renderer import so the Mapbox bundle never pulls in maplibre-gl.
 
-/** The property the aggregated dedup source carries each resolved label in. */
-export const DEDUPED_LABEL_PROPERTY = "__geolibre_label";
+export { DEDUPED_LABEL_PROPERTY } from "./label-dedup";
 
 /** Geoman's shape value for a Geo Editor text marker. */
 export const TEXT_MARKER_SHAPE = "text_marker";
