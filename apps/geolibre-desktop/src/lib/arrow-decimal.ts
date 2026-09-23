@@ -34,6 +34,11 @@ type CellConverter = (value: unknown) => unknown;
  */
 export function decodeArrowDecimal(value: unknown, scale: number): unknown {
   if (value === null || value === undefined) return value;
+  // Arrow's JS reader returns every DECIMAL width as a BN wrapper object, never
+  // a plain number, and DuckDB-WASM exports DECIMAL(p <= 38) as 128-bit
+  // (checked against real output for DECIMAL(4,1), (10,3) and (38,0)). A
+  // `number` here was therefore not produced by the decimal reader, so it is
+  // passed through rather than guessed at.
   if (typeof value !== "object" && typeof value !== "bigint") return value;
   const digits = String(value);
   if (!/^-?\d+$/.test(digits)) return value;

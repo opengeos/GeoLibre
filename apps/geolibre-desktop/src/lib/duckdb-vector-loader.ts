@@ -53,11 +53,6 @@ const FEATURE_COUNT_COLUMN = "__geolibre_feature_count";
 
 let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
 
-interface DuckDbRow {
-  toJSON?: () => Record<string, unknown>;
-  [key: string]: unknown;
-}
-
 export interface DuckDbVectorFile {
   name: string;
   extension: string;
