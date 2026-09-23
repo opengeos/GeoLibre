@@ -3347,6 +3347,17 @@ class Map(anywidget.AnyWidget):
             project["layers"] = []
         elif not isinstance(layers, list):
             raise ValueError("Invalid project: 'layers' must be a list")
+        # A pinned Identify target belongs to the project being replaced, so
+        # drop it unless the incoming project still has that layer. Leaving it
+        # would replay `setIdentify` for a missing layer on the next sync, which
+        # the front end rejects into a reply nobody reads -- Identify would end
+        # up disarmed anyway, just via a stray error. "all" and None survive any
+        # project, as in `clear_layers`.
+        identify = self._ui.get("identify")
+        if identify not in (None, "all") and not any(
+            isinstance(layer, dict) and layer.get("id") == identify for layer in project["layers"]
+        ):
+            self._set_ui(identify=None)
         self._seq += 1
         self.project = project
 

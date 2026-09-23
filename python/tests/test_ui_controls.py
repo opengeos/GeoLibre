@@ -99,3 +99,36 @@ def test_set_projection_writes_project_preferences(m):
 def test_set_projection_rejects_unknown(m):
     with pytest.raises(ValueError):
         m.set_projection("albers")
+
+
+def test_load_project_drops_identify_for_a_missing_layer(m):
+    """A pinned Identify target that the incoming project lacks is cleared."""
+    layer_id = m.add_marker(-100, 40, name="Cities")
+    m.set_identify("Cities")
+    assert m._ui["identify"] == layer_id
+    m.load_project({"version": m.project["version"], "name": "Other", "mapView": {}})
+    assert m._ui["identify"] is None
+
+
+def test_load_project_keeps_identify_when_the_layer_survives(m):
+    """Reloading a project that still carries the layer leaves Identify armed."""
+    layer_id = m.add_marker(-100, 40, name="Cities")
+    m.set_identify("Cities")
+    m.load_project(m.project)
+    assert m._ui["identify"] == layer_id
+
+
+def test_load_project_keeps_identify_all(m):
+    """ "all" is not tied to any layer, so it survives a project replacement."""
+    m.add_marker(-100, 40, name="Cities")
+    m.set_identify()
+    m.load_project({"version": m.project["version"], "name": "Other", "mapView": {}})
+    assert m._ui["identify"] == "all"
+
+
+def test_remove_layer_disarms_identify_before_the_project_sync(m):
+    """Removing the armed layer clears Identify rather than leaving it stale."""
+    m.add_marker(-100, 40, name="Cities")
+    m.set_identify("Cities")
+    m.remove_layer("Cities")
+    assert m._ui["identify"] is None
