@@ -310,6 +310,9 @@ export function MapboxCanvas({
               // that was just replaced.
               asyncIdentifyAbort?.abort();
               removeIdentifyPopup({ restore: false });
+              // A photo or hover tip from the closed project must not linger.
+              removePhotoPopup();
+              removeHoverTooltip();
               globalIdentifyActivatedLayerId = null;
             } else if (!viewId && identifyPopupState && next.layers !== previous?.layers) {
               const identifiedLayer = next.layers.find(
@@ -571,7 +574,9 @@ export function MapboxCanvas({
             maxWidth: "none",
           })
             .setLngLat(anchor)
-            .setDOMContent(createPhotoPopupElement(hit.properties))
+            .setDOMContent(
+              createPhotoPopupElement(hit.properties, identifyAllLabelsRef.current.photo),
+            )
             .addTo(map);
           return true;
         };
@@ -618,13 +623,16 @@ export function MapboxCanvas({
           const loadingPopup = showPopupAt(lngLat, loading, maxWidth);
           const onLoadingClose = () => abort.abort();
           loadingPopup.once("close", onLoadingClose);
-          void load(abort.signal).then((show) => {
+          const settle = (show: (() => void) | null) => {
             if (abort.signal.aborted) return;
             asyncIdentifyAbort = null;
             // Detach first: swapping the popup fires its "close" synchronously.
             loadingPopup.off("close", onLoadingClose);
             show?.();
-          });
+          };
+          // The loaders report their own failures; one that rejects anyway
+          // still closes the loading popup rather than leaving it spinning.
+          void load(abort.signal).then(settle, () => settle(() => removeIdentifyPopup()));
         };
         // "Identify visible layers": every eligible layer's hits at the point,
         // grouped by layer in one popup, as MapCanvas shows them on MapLibre.
@@ -815,6 +823,7 @@ export function MapboxCanvas({
           point: { x: number; y: number },
         ): boolean => {
           const maxWidth = identifyPopupShellMaxWidth(layer.popup);
+          const labels = identifyAllLabelsRef.current;
           const message = (text: string) =>
             createIdentifyPopupElement(layer.name, { status: text });
           const store = useAppStore.getState();
@@ -827,18 +836,17 @@ export function MapboxCanvas({
               return true;
             }
             store.selectFeature(null);
-            identifyAsync(lngLat, message("Loading..."), maxWidth, async (signal) => {
+            identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
               try {
                 const result = await identifyPixelAt(layer.id, lngLat, { signal });
                 // A null result is a click off the image grid: a miss, not a failure.
                 const content = result
                   ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
-                  : message("No data at this location.");
+                  : message(labels.noData);
                 return () => showPopupAt(lngLat, content, maxWidth);
               } catch (error: unknown) {
                 if (signal.aborted || isAbortError(error)) return null;
-                const text =
-                  error instanceof Error ? error.message : "The pixel value could not be read.";
+                const text = error instanceof Error ? error.message : labels.pixelReadFailed;
                 return () => showPopupAt(lngLat, message(text), maxWidth);
               }
             });
@@ -847,7 +855,7 @@ export function MapboxCanvas({
           if (isWmsLayer(layer)) {
             store.selectFeature(null);
             const zoom = map.getZoom();
-            identifyAsync(lngLat, message("Loading..."), maxWidth, async (signal) => {
+            identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
               try {
                 const result = await fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
                 const content = createIdentifyPopupElement(
@@ -858,8 +866,7 @@ export function MapboxCanvas({
                 return () => showPopupAt(lngLat, content, maxWidth);
               } catch (error: unknown) {
                 if (signal.aborted || isAbortError(error)) return null;
-                const text =
-                  error instanceof Error ? error.message : "The WMS GetFeatureInfo request failed.";
+                const text = error instanceof Error ? error.message : labels.wmsFailed;
                 return () => showPopupAt(lngLat, message(text), maxWidth);
               }
             });

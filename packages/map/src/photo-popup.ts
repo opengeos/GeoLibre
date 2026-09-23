@@ -3,6 +3,25 @@ import { PHOTO_PROPERTY, PHOTO_FULL_PROPERTY, isInlineImageValue } from "@geolib
 // The geotagged-photo popup (thumbnail, caption, fullscreen viewer). Plain DOM,
 // shared by the MapLibre and Mapbox canvases.
 
+/** Translatable strings of the photo popup and its fullscreen viewer. */
+export interface PhotoPopupLabels {
+  /** Alt text for a photo with no name. */
+  photo: string;
+  noPreview: string;
+  viewFullResolution: string;
+  viewFullscreen: string;
+  close: string;
+}
+
+/** English fallbacks; the app passes translated labels. */
+export const DEFAULT_PHOTO_POPUP_LABELS: PhotoPopupLabels = {
+  photo: "Photo",
+  noPreview: "No preview available",
+  viewFullResolution: "Double-click to view at full resolution",
+  viewFullscreen: "Double-click to view fullscreen",
+  close: "Close",
+};
+
 /** `metadata.sourceKind` of a layer whose points open the photo popup on click. */
 export const PHOTO_SOURCE_KIND = "geotagged-photos";
 
@@ -52,7 +71,7 @@ const PHOTO_ZOOM_STEP = 1.15;
  * @param src - The image data URL or URL (native resolution where available).
  * @param alt - Accessible label for the image.
  */
-function openPhotoFullscreen(src: string, alt: string): void {
+function openPhotoFullscreen(src: string, alt: string, closeLabel: string): void {
   const overlay = document.createElement("div");
   overlay.className = "geolibre-photo-fullscreen";
   overlay.setAttribute("role", "dialog");
@@ -73,7 +92,7 @@ function openPhotoFullscreen(src: string, alt: string): void {
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "geolibre-photo-fullscreen-close";
-  closeButton.setAttribute("aria-label", "Close");
+  closeButton.setAttribute("aria-label", closeLabel);
   closeButton.textContent = "×";
   overlay.appendChild(closeButton);
 
@@ -294,9 +313,13 @@ function openPhotoFullscreen(src: string, alt: string): void {
  * HEIC) fall back to a "No preview available" note.
  *
  * @param properties - The clicked feature's properties.
+ * @param labels - Translated strings.
  * @returns The popup's DOM content element.
  */
-export function createPhotoPopupElement(properties: Record<string, unknown>): HTMLElement {
+export function createPhotoPopupElement(
+  properties: Record<string, unknown>,
+  labels: PhotoPopupLabels = DEFAULT_PHOTO_POPUP_LABELS,
+): HTMLElement {
   const root = document.createElement("div");
   root.className = "geolibre-photo-popup";
 
@@ -312,25 +335,23 @@ export function createPhotoPopupElement(properties: Record<string, unknown>): HT
     const fullResolution = fullImage ?? thumbnail;
     const image = document.createElement("img");
     image.src = thumbnail;
-    image.alt = typeof properties.name === "string" ? properties.name : "Photo";
+    image.alt = typeof properties.name === "string" ? properties.name : labels.photo;
     image.className = "geolibre-photo-popup-img";
     // Only promise "full resolution" when the native original is actually
     // embedded; otherwise the double-click just opens the thumbnail fullscreen.
-    image.title = fullImage
-      ? "Double-click to view at full resolution"
-      : "Double-click to view fullscreen";
+    image.title = fullImage ? labels.viewFullResolution : labels.viewFullscreen;
     // Double-click (not single, so it never fights the resize drag) opens the
     // photo fullscreen. The image is popup DOM, not the map canvas, so this does
     // not trigger MapLibre's double-click zoom.
     image.addEventListener("dblclick", (event) => {
       event.stopPropagation();
-      openPhotoFullscreen(fullResolution, image.alt);
+      openPhotoFullscreen(fullResolution, image.alt, labels.close);
     });
     root.appendChild(image);
   } else {
     const placeholder = document.createElement("div");
     placeholder.className = "geolibre-photo-popup-placeholder";
-    placeholder.textContent = "No preview available";
+    placeholder.textContent = labels.noPreview;
     root.appendChild(placeholder);
   }
 

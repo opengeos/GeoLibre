@@ -1,6 +1,7 @@
 import { resolveConfiguredPopupTitle, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature } from "geojson";
 import { applyPopupWidth, createIdentifyPopupRows } from "./feature-popup";
+import { DEFAULT_PHOTO_POPUP_LABELS, type PhotoPopupLabels } from "./photo-popup";
 
 // The grouped, all-layer Identify popup. Engine-neutral DOM, shared by the
 // MapLibre and Mapbox canvases so both show the same chooser.
@@ -17,6 +18,14 @@ export interface MapCanvasIdentifyAllLabels {
   loading: string;
   errorLabel: string;
   error: string;
+  /** A pixel read that landed off the image grid. */
+  noData: string;
+  /** Fallback when a pixel read fails without a message. */
+  pixelReadFailed: string;
+  /** Fallback when a WMS GetFeatureInfo request fails without a message. */
+  wmsFailed: string;
+  /** The geotagged-photo popup's strings; see `createPhotoPopupElement`. */
+  photo: PhotoPopupLabels;
 }
 
 /** English fallbacks; the app passes translated labels. */
@@ -31,6 +40,10 @@ export const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   loading: "Loading...",
   errorLabel: "Error",
   error: "Could not identify this layer.",
+  noData: "No data at this location.",
+  pixelReadFailed: "The pixel value could not be read.",
+  wmsFailed: "The WMS GetFeatureInfo request failed.",
+  photo: DEFAULT_PHOTO_POPUP_LABELS,
 };
 
 /** One entry in the grouped, all-layer Identify popup. */

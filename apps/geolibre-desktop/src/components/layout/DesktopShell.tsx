@@ -594,6 +594,16 @@ export function DesktopShell({
       loading: t("map.identifyAll.loading"),
       errorLabel: t("map.identifyAll.errorLabel"),
       error: t("map.identifyAll.error"),
+      noData: t("map.identifyAll.noData"),
+      pixelReadFailed: t("map.identifyAll.pixelReadFailed"),
+      wmsFailed: t("map.identifyAll.wmsFailed"),
+      photo: {
+        photo: t("map.identifyAll.photo"),
+        noPreview: t("map.identifyAll.photoNoPreview"),
+        viewFullResolution: t("map.identifyAll.photoViewFullResolution"),
+        viewFullscreen: t("map.identifyAll.photoViewFullscreen"),
+        close: t("map.identifyAll.photoClose"),
+      },
     }),
     [t],
   );

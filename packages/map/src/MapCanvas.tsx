@@ -257,6 +257,9 @@ export const MapCanvas = memo(function MapCanvas({
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const layerGroupsRef = useRef(layerGroups);
+  // Read by the photo-popup effect, which rebinds only on photo-layer changes.
+  const identifyLabelsRef = useRef(identifyAllLabels);
+  identifyLabelsRef.current = identifyAllLabels;
   layerGroupsRef.current = layerGroups;
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
@@ -935,7 +938,7 @@ export const MapCanvas = memo(function MapCanvas({
         const abortController = new AbortController();
         pixelIdentifyAbortController = abortController;
         selectFeature(null);
-        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, identifyAllLabels.loading));
         // Same dismissal dance as the WMS branch: the × on the loading popup
         // must cancel the read, but the programmatic swap to the result popup
         // also fires "close", so track user dismissal with a flag rather than
@@ -963,7 +966,7 @@ export const MapCanvas = memo(function MapCanvas({
             showIdentifyPopup(
               result
                 ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
-                : createIdentifyMessagePopupElement(layer.name, "No data at this location."),
+                : createIdentifyMessagePopupElement(layer.name, identifyAllLabels.noData),
             );
           })
           .catch((error: unknown) => {
@@ -971,7 +974,7 @@ export const MapCanvas = memo(function MapCanvas({
             pixelIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
             const message =
-              error instanceof Error ? error.message : "The pixel value could not be read.";
+              error instanceof Error ? error.message : identifyAllLabels.pixelReadFailed;
             showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
         return;
@@ -982,7 +985,7 @@ export const MapCanvas = memo(function MapCanvas({
         const abortController = new AbortController();
         wmsIdentifyAbortController = abortController;
         selectFeature(null);
-        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, identifyAllLabels.loading));
         // Closing the loading popup (the × button) must cancel the in-flight
         // request so its result does not reopen a popup the user dismissed.
         // Track user dismissal with a flag rather than the abort signal: the
@@ -1021,8 +1024,7 @@ export const MapCanvas = memo(function MapCanvas({
             if (userDismissed || isAbortError(error) || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
-            const message =
-              error instanceof Error ? error.message : "The WMS GetFeatureInfo request failed.";
+            const message = error instanceof Error ? error.message : identifyAllLabels.wmsFailed;
             showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
         return;
@@ -1131,7 +1133,9 @@ export const MapCanvas = memo(function MapCanvas({
         maxWidth: "none",
       })
         .setLngLat(anchor)
-        .setDOMContent(createPhotoPopupElement(feature.properties ?? {}))
+        .setDOMContent(
+          createPhotoPopupElement(feature.properties ?? {}, identifyLabelsRef.current.photo),
+        )
         .addTo(map);
     };
     const handleEnter = () => {
