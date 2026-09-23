@@ -27,6 +27,7 @@ import {
 import { describeLayers, summarizeLayers } from "./layer-summary";
 import { buildSymbologyStyle } from "./symbology";
 import { readRuntimeEnv } from "./provider";
+import { guardMapForScript } from "./map-script-guard";
 import { resolveSystemOneEndpoint } from "./system-one";
 import { typesafeFetch } from "./typesafe-fetch";
 import { searchWhiteboxTools } from "../whitebox-tool-search";
@@ -676,7 +677,7 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
   const runMaplibreJs = tool({
     name: "run_maplibre_js",
     description:
-      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties, controls, markers). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) and `maplibregl` (the MapLibre GL JS module, e.g. `maplibregl.TerrainControl`, `maplibregl.Marker`) in scope, and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable.",
+      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties, controls, markers). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) and `maplibregl` (the MapLibre GL JS module, e.g. `maplibregl.TerrainControl`, `maplibregl.Marker`) in scope, and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable. map.setStyle() and map.remove() are blocked: use set_basemap to change the basemap.",
     inputSchema: z.object({
       code: z.string().describe("JavaScript function body; `map` and `maplibregl` are in scope."),
     }),
@@ -694,7 +695,9 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
         map: unknown,
         maplibregl: unknown,
       ) => unknown;
-      const result = run(map, maplibregl);
+      // Whole-map mutations (setStyle, remove) are blocked: they bypass the
+      // store, so the Layers panel and undo would stop matching the map.
+      const result = run(guardMapForScript(map), maplibregl);
       // Coerce to a JSON-safe value so non-serializable returns (e.g. the map
       // object itself) don't blow up the tool result.
       let safe: JSONValue = null;
