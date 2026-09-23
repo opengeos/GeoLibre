@@ -170,6 +170,19 @@ export interface FtwGridTile {
   sizeBytes: Record<string, number>;
 }
 
+/**
+ * A lon/lat box as one or two boxes that do not cross the antimeridian. A box
+ * with west > east (a map view spanning 180°) is split at it.
+ */
+export function splitAntimeridian(bbox: LonLatBbox): LonLatBbox[] {
+  const [west, south, east, north] = bbox;
+  if (west <= east) return [bbox];
+  return [
+    [west, south, 180, north],
+    [-180, south, east, north],
+  ];
+}
+
 /** Most grid tiles one search lists. */
 export const FTW_MAX_SEARCH_TILES = 200;
 
@@ -225,8 +238,9 @@ export function searchFtwGrid(
   limit = FTW_MAX_SEARCH_TILES,
 ): { tiles: FtwGridTile[]; total: number } {
   const key = String(year);
+  const parts = splitAntimeridian(bbox);
   const matches = tiles.filter(
-    (tile) => tile.years.includes(year) && bboxesIntersect(tile.bbox, bbox),
+    (tile) => tile.years.includes(year) && parts.some((part) => bboxesIntersect(tile.bbox, part)),
   );
   matches.sort(
     (a, b) => (b.featureCounts[key] ?? 0) - (a.featureCounts[key] ?? 0) || a.id.localeCompare(b.id),
@@ -298,7 +312,10 @@ export function geometryBbox(geometry: Geometry | null | undefined): LonLatBbox 
 function geometryTouchesBbox(geometry: Geometry | null, bbox: LonLatBbox): boolean {
   const box = geometryBbox(geometry);
   return (
-    box !== null && box[0] <= bbox[2] && box[2] >= bbox[0] && box[1] <= bbox[3] && box[3] >= bbox[1]
+    box !== null &&
+    splitAntimeridian(bbox).some(
+      (part) => box[0] <= part[2] && box[2] >= part[0] && box[1] <= part[3] && box[3] >= part[1],
+    )
   );
 }
 
@@ -404,10 +421,11 @@ export async function loadFtwTileFeatures(
 
 /** Whether a clip box covers a whole grid tile, so clipping keeps every field. */
 export function clipCoversTile(clip: LonLatBbox, tile: FtwGridTile): boolean {
-  return (
-    clip[0] <= tile.bbox[0] &&
-    clip[1] <= tile.bbox[1] &&
-    clip[2] >= tile.bbox[2] &&
-    clip[3] >= tile.bbox[3]
+  return splitAntimeridian(clip).some(
+    (part) =>
+      part[0] <= tile.bbox[0] &&
+      part[1] <= tile.bbox[1] &&
+      part[2] >= tile.bbox[2] &&
+      part[3] >= tile.bbox[3],
   );
 }

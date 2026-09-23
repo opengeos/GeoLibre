@@ -53,7 +53,12 @@ const THRESHOLD_DEBOUNCE_MS = 150;
 
 /** `metadata.sourceKind` of the layers this plugin adds (PMTiles keep their own). */
 const TILE_FIELDS_SOURCE_KIND = "fields-of-the-world-tile";
-const DENSITY_SOURCE_KIND = "fields-of-the-world-density";
+/**
+ * Marks the field-density COG. Not `sourceKind`: the raster control owns that
+ * (`maplibre-gl-raster`), and the raster sync, Style panel and Mapbox COG path
+ * all key on it.
+ */
+const DENSITY_METADATA_KEY = "ftwFieldDensity";
 const FOOTPRINT_SOURCE_KIND = "fields-of-the-world-footprints";
 /**
  * Marks a field layer (the global archive or a loaded tile) whose threshold
@@ -282,7 +287,11 @@ function normalizeLon(lon: number): number {
   return ((((lon + 180) % 360) + 360) % 360) - 180;
 }
 
-/** The current map view as a [w, s, e, n] box (whole longitude range if it wraps). */
+/**
+ * The current map view as a [w, s, e, n] box. A view crossing the
+ * antimeridian keeps west > east (the grid helpers split it); a view wider
+ * than the world becomes the whole longitude range.
+ */
 function viewBbox(): LonLatBbox | null {
   const map = getStyleMap(appRef);
   if (!map) return null;
@@ -290,7 +299,7 @@ function viewBbox(): LonLatBbox | null {
   const clampLat = (value: number): number => Math.max(-90, Math.min(90, value));
   let west = normalizeLon(bounds.getWest());
   let east = normalizeLon(bounds.getEast());
-  if (bounds.getEast() - bounds.getWest() >= 360 || west > east) {
+  if (bounds.getEast() - bounds.getWest() >= 360) {
     west = -180;
     east = 180;
   }
@@ -311,14 +320,18 @@ function loadGrid(): Promise<FtwGridTile[]> {
   return gridPromise;
 }
 
-/** Saves a generated blob through the host saver, or an anchor download. */
+/**
+ * Saves a generated blob through the host saver, or an anchor download.
+ *
+ * @returns False when the user cancelled the save dialog (the host saver
+ *   resolves to null then).
+ */
 async function saveBlob(
   blob: Blob,
   options: { defaultName: string; extension: string; mimeType: string; description: string },
-): Promise<void> {
+): Promise<boolean> {
   if (fileSaver) {
-    await fileSaver(blob, options);
-    return;
+    return (await fileSaver(blob, options)) !== null;
   }
   const url = URL.createObjectURL(blob);
   try {
@@ -329,6 +342,7 @@ async function saveBlob(
   } finally {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  return true;
 }
 
 /** Fetches a file into memory, reporting progress as bytes arrive. */
@@ -446,15 +460,15 @@ async function addFieldDensity(
   if (!app?.addCogLayer)
     throw new Error(tr("cogUnavailable", "COG layers are not available here."));
   if (
-    useAppStore
-      .getState()
-      .layers.some((layer) => layer.metadata?.sourceKind === DENSITY_SOURCE_KIND)
+    useAppStore.getState().layers.some((layer) => layer.metadata?.[DENSITY_METADATA_KEY] === true)
   ) {
     setStatus(tr("densityExists", "The field density layer is already on the map."));
     return;
   }
   setStatus(tr("densityAdding", "Adding the field density layer…"));
   const name = tr("densityLayerName", "FTW field density (500 m)");
+  // addCogLayer takes no signal, so an abort is only honored before it starts.
+  signal.throwIfAborted();
   const id = await app.addCogLayer(name, FTW_DENSITY_COG_URL, {
     engine: "auto",
     bands: "1",
@@ -468,17 +482,19 @@ async function addFieldDensity(
     // The raster is global; fitting to it would zoom the map out to the world.
     zoomTo: false,
   });
-  signal.throwIfAborted();
+  // The layer exists now, so finish configuring it even if the task was
+  // aborted meanwhile; an unmarked layer would escape the duplicate check and
+  // never hide above DENSITY_MAX_ZOOM.
   const store = useAppStore.getState();
   const layer = store.layers.find((candidate) => candidate.id === id);
   if (layer) {
     store.updateLayer(id, {
       // Like the FTW app, hand over to the field boundaries once zoomed in.
       style: { ...layer.style, maxZoom: DENSITY_MAX_ZOOM },
-      metadata: { ...layer.metadata, sourceKind: DENSITY_SOURCE_KIND, attribution: ATTRIBUTION },
+      metadata: { ...layer.metadata, [DENSITY_METADATA_KEY]: true, attribution: ATTRIBUTION },
     });
   }
-  setStatus(tr("densityAdded", "Added {{name}}.", { name }));
+  if (!signal.aborted) setStatus(tr("densityAdded", "Added {{name}}.", { name }));
 }
 
 // ---------------------------------------------------------------------------
@@ -847,12 +863,16 @@ async function downloadTileParquet(
     ),
   );
   signal.throwIfAborted();
-  await saveBlob(blob, {
+  const saved = await saveBlob(blob, {
     defaultName,
     extension: "parquet",
     mimeType: "application/vnd.apache.parquet",
     description: "GeoParquet",
   });
+  if (!saved) {
+    setStatus(tr("saveCancelled", "Save cancelled."));
+    return;
+  }
   setStatus(
     tr("saved", "Saved {{name}} ({{size}}).", { name: defaultName, size: formatBytes(blob.size) }),
   );
@@ -869,13 +889,24 @@ async function downloadTileGeoJson(
   signal.throwIfAborted();
   const clipped = clipBox() !== null;
   const defaultName = `ftw-fields-${tile.id}-${year}${clipped ? "-clip" : ""}.geojson`;
-  const blob = new Blob([JSON.stringify(collection)], { type: "application/geo+json" });
-  await saveBlob(blob, {
+  // One JSON.stringify of up to a million polygons can pass V8's maximum
+  // string length; a Blob joins per-feature strings without one big string.
+  const parts: string[] = ['{"type":"FeatureCollection","features":['];
+  collection.features.forEach((feature, index) => {
+    parts.push(index === 0 ? JSON.stringify(feature) : `,${JSON.stringify(feature)}`);
+  });
+  parts.push("]}");
+  const blob = new Blob(parts, { type: "application/geo+json" });
+  const saved = await saveBlob(blob, {
     defaultName,
     extension: "geojson",
     mimeType: "application/geo+json",
     description: "GeoJSON",
   });
+  if (!saved) {
+    setStatus(tr("saveCancelled", "Save cancelled."));
+    return;
+  }
   setStatus(
     tr("savedFields", "Saved {{count}} fields to {{name}} ({{size}}).", {
       count: formatCount(collection.features.length),

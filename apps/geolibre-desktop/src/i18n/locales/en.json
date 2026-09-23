@@ -8341,6 +8341,7 @@
       "tileLayerName": "FTW fields {{tile}} {{year}}",
       "tileAdded": "Added {{count}} fields from {{tile}}.",
       "downloadingProgress": "Downloading {{name}}… {{loaded}}{{total}}",
+      "saveCancelled": "Save cancelled.",
       "saved": "Saved {{name}} ({{size}}).",
       "savedFields": "Saved {{count}} fields to {{name}} ({{size}}).",
       "infoSummary": "About Fields of the World",

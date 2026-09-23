@@ -14,6 +14,7 @@ import {
   geometryBbox,
   parseFtwDownloadGrid,
   searchFtwGrid,
+  splitAntimeridian,
   thresholdFromFilter,
   thresholdToConfidence,
 } from "../packages/plugins/src/plugins/fields-of-the-world-data";
@@ -204,6 +205,28 @@ describe("fields of the world download grid", () => {
     assert.equal(capped.total, 3);
   });
 
+  it("searches a view that crosses the antimeridian", () => {
+    const dateline = parseFtwDownloadGrid({
+      features: [
+        { properties: { tile_id: "S17E179", lat_min: -17, lon_min: 179, years: [2025] } },
+        { properties: { tile_id: "S17W180", lat_min: -17, lon_min: -180, years: [2025] } },
+        { properties: { tile_id: "S17E000", lat_min: -17, lon_min: 0, years: [2025] } },
+      ],
+    });
+    assert.deepEqual(splitAntimeridian([170, -20, -170, -10]), [
+      [170, -20, 180, -10],
+      [-180, -20, -170, -10],
+    ]);
+    assert.deepEqual(
+      searchFtwGrid(dateline, [170, -20, -170, -10], 2025)
+        .tiles.map((tile) => tile.id)
+        .sort(),
+      ["S17E179", "S17W180"],
+    );
+    assert.equal(clipCoversTile([170, -20, -170, -10], dateline[0]), true);
+    assert.equal(clipCoversTile([170, -20, -170, -10], dateline[2]), false);
+  });
+
   it("knows when a clip box keeps a whole tile", () => {
     const tile = tiles[1]; // [6, 0, 7, 1]
     assert.equal(clipCoversTile([-180, -90, 180, 90], tile), true);
@@ -266,6 +289,15 @@ describe("fields of the world GeoParquet rows", () => {
     const features = ftwRowsToFeatures(rows, [6.505, 0.105, 6.6, 0.2]);
     assert.equal(features.length, 1);
     assert.deepEqual(features[0].geometry, square(6.5, 0.1, 0.01));
+  });
+
+  it("clips with a box crossing the antimeridian", () => {
+    const dateline = [
+      { geometry: square(179.5, -17, 0.1) },
+      { geometry: square(-179.5, -17, 0.1) },
+      { geometry: square(0, -17, 0.1) },
+    ];
+    assert.equal(ftwRowsToFeatures(dateline, [179, -18, -179, -16]).length, 2);
   });
 
   it("measures geometry bounds", () => {
