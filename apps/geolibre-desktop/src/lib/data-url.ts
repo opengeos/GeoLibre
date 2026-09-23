@@ -320,6 +320,53 @@ function isLidarUrl(url: string): boolean {
 }
 
 /**
+ * Whether maplibre-gl-lidar streams this URL by viewport rather than
+ * downloading it whole. Mirrors the routing at the top of its (unexported)
+ * `loadPointCloud`, string tests included; see docs/maintenance.md.
+ */
+export function isStreamedLidarUrl(url: string): boolean {
+  return url.endsWith("/ept.json") || url.includes("/ept.json?") || /\.copc\./i.test(url);
+}
+
+/**
+ * A point cloud the LiDAR control downloads whole bypasses `readCappedBytes`,
+ * so ask for its size with a one-byte range request first and refuse one past
+ * the same ceiling as any other `?data=` download. A server that reports no
+ * size (or does not expose `Content-Range` to CORS) is let through, as the
+ * Add LiDAR Layer panel would.
+ */
+async function checkLidarDownloadSize(
+  url: string,
+  signal: AbortSignal | undefined,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { signal, headers: { Range: "bytes=0-0" } });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error(`Could not fetch ${url}. The server may be unreachable or blocking CORS.`, {
+      cause: error,
+    });
+  }
+  // A server that ignores the range answers with the whole file; stop it here.
+  await response.body?.cancel().catch(() => {});
+  if (!response.ok) throw new Error(`Could not fetch ${url}: HTTP ${response.status}.`);
+  const total = response.headers.get("content-range")?.match(/\/(\d+)\s*$/)?.[1];
+  const size = total
+    ? Number(total)
+    : response.status === 200
+      ? Number(response.headers.get("content-length"))
+      : NaN;
+  if (Number.isFinite(size) && size > MAX_DOWNLOAD_BYTES) {
+    throw new Error(
+      `${url} is too large to open from a URL (${Math.round(size / (1024 * 1024))} MB). ` +
+        "Convert it to COPC so it can be streamed instead.",
+    );
+  }
+}
+
+/**
  * Classify or fetch a supported data URL into startup-loadable layers. A
  * `dataType` hint overrides classification by the URL's path.
  */
@@ -327,11 +374,15 @@ export async function fetchRemoteData(
   url: string,
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch; dataType?: DataTypeHint | null } = {},
 ): Promise<RemoteData> {
-  if (options.dataType === "lidar") return { kind: "lidar", name: remoteName(url), url };
+  if (options.dataType === "lidar" || isLidarUrl(url)) {
+    if (!isStreamedLidarUrl(url)) {
+      await checkLidarDownloadSize(url, options.signal, options.fetchImpl ?? fetch);
+    }
+    return { kind: "lidar", name: remoteName(url), url };
+  }
   const ext = extension(url);
   if (["tif", "tiff", "cog"].includes(ext)) return { kind: "cog", name: remoteName(url), url };
   if (ext === "pmtiles") return { kind: "pmtiles", name: remoteName(url), url };
-  if (isLidarUrl(url)) return { kind: "lidar", name: remoteName(url), url };
   if (ext === "parquet" || ext === "geoparquet") {
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
   }

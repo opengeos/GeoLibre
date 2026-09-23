@@ -961,6 +961,9 @@
       "errorUrl": "โปรดป้อน URL ของ PMTiles แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
       "errorMlt": "ArcGIS ต้องใช้ไทล์เวกเตอร์ MVT ไม่ใช่ MLT"
     },
+    "lidar": {
+      "errorUrl": "โปรดป้อน URL ของ LiDAR แบบ HTTP หรือ HTTPS ที่ถูกต้อง"
+    },
     "zarr": {
       "errorUrl": "โปรดป้อน URL ของ Zarr แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
       "errorColorLimits": "ค่าสีสูงสุดต้องมากกว่าค่าสีต่ำสุด"

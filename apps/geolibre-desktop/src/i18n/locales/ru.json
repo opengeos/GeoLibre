@@ -1024,6 +1024,9 @@
       "errorUrl": "Введите корректный URL PMTiles по протоколу HTTP или HTTPS.",
       "errorMlt": "ArcGIS требует векторные тайлы MVT, а не MLT."
     },
+    "lidar": {
+      "errorUrl": "Введите корректный URL LiDAR по протоколу HTTP или HTTPS."
+    },
     "zarr": {
       "errorUrl": "Введите корректный URL Zarr по протоколу HTTP или HTTPS.",
       "errorColorLimits": "Верхний предел цвета должен быть больше нижнего."

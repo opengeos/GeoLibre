@@ -982,6 +982,9 @@
       "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor PMTiles in.",
       "errorMlt": "ArcGIS vereist MVT-vectortegels, geen MLT."
     },
+    "lidar": {
+      "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor LiDAR in."
+    },
     "zarr": {
       "errorUrl": "Voer een geldige HTTP- of HTTPS-URL voor Zarr in.",
       "errorColorLimits": "De maximale kleurgrens moet groter zijn dan de minimale."

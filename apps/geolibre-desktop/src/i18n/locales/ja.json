@@ -961,6 +961,9 @@
       "errorUrl": "有効なHTTPまたはHTTPSのPMTiles URLを入力してください。",
       "errorMlt": "ArcGISにはMLTではなくMVTベクタータイルが必要です。"
     },
+    "lidar": {
+      "errorUrl": "有効なHTTPまたはHTTPSのLiDAR URLを入力してください。"
+    },
     "zarr": {
       "errorUrl": "有効なHTTPまたはHTTPSのZarr URLを入力してください。",
       "errorColorLimits": "色の上限値は下限値より大きくしてください。"

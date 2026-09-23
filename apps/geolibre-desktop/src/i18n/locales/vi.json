@@ -961,6 +961,9 @@
       "errorUrl": "Hãy nhập URL PMTiles hợp lệ theo HTTP hoặc HTTPS.",
       "errorMlt": "ArcGIS yêu cầu ô bản đồ vector MVT, không phải MLT."
     },
+    "lidar": {
+      "errorUrl": "Hãy nhập URL LiDAR hợp lệ theo HTTP hoặc HTTPS."
+    },
     "zarr": {
       "errorUrl": "Hãy nhập URL Zarr hợp lệ theo HTTP hoặc HTTPS.",
       "errorColorLimits": "Giới hạn màu tối đa phải lớn hơn giới hạn tối thiểu."

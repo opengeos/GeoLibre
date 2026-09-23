@@ -3103,14 +3103,12 @@ export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
  * The control's `load` handler adds the store layer, so this resolves once the
  * layer exists.
  *
- * Args:
- *   app: The GeoLibre app API.
- *   url: The point cloud URL.
- *   options: `fit: false` keeps the camera still, for a batch the caller frames.
- *
- * Returns:
- *   The store layer id of the loaded point cloud, or null when the LiDAR
+ * @param app - The GeoLibre app API.
+ * @param url - The point cloud URL.
+ * @param options - `fit: false` keeps the camera still, for a batch the caller frames.
+ * @returns The store layer id of the loaded point cloud, or null when the LiDAR
  *   control could not be mounted.
+ * @throws When `url` is not an HTTP(S) URL, or the point cloud fails to load.
  */
 export async function addLidarLayerFromUrl(
   app: GeoLibreAppAPI,
@@ -3124,7 +3122,10 @@ export async function addLidarLayerFromUrl(
     // Reported below with the same message as a non-web scheme.
   }
   if (protocol !== "https:" && protocol !== "http:") {
-    throw new Error(`Enter a valid HTTP(S) point cloud URL: ${url}`);
+    throw new Error(
+      app.translate?.("addData.lidar.errorUrl", "Enter a valid HTTP or HTTPS LiDAR URL.") ??
+        "Enter a valid HTTP or HTTPS LiDAR URL.",
+    );
   }
   const load = async () => {
     const opened = await openStandaloneLidarControl(app, { reveal: false });

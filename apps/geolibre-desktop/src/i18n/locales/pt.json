@@ -982,6 +982,9 @@
       "errorUrl": "Digite uma URL HTTP ou HTTPS válida de PMTiles.",
       "errorMlt": "O ArcGIS requer blocos vetoriais MVT, não MLT."
     },
+    "lidar": {
+      "errorUrl": "Digite uma URL HTTP ou HTTPS válida de LiDAR."
+    },
     "zarr": {
       "errorUrl": "Digite uma URL HTTP ou HTTPS válida de Zarr.",
       "errorColorLimits": "O limite máximo de cor deve ser maior que o mínimo."

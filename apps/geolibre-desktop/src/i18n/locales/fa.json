@@ -982,6 +982,9 @@
       "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای PMTiles وارد کنید.",
       "errorMlt": "ArcGIS به کاشی‌های برداری MVT نیاز دارد، نه MLT."
     },
+    "lidar": {
+      "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای LiDAR وارد کنید."
+    },
     "zarr": {
       "errorUrl": "یک نشانی HTTP یا HTTPS معتبر برای Zarr وارد کنید.",
       "errorColorLimits": "حد بالای رنگ باید بزرگ‌تر از حد پایین باشد."

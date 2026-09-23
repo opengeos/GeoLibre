@@ -5,6 +5,7 @@ import {
   dataUrlParameters,
   serviceUrlParameter,
   fetchRemoteData,
+  isStreamedLidarUrl,
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
 } from "../apps/geolibre-desktop/src/lib/data-url";
@@ -431,7 +432,7 @@ describe("data URL deep links", () => {
     assert.equal(fetched, false);
   });
 
-  it("recognizes LAS, LAZ, COPC, and EPT point clouds without downloading them", async () => {
+  it("recognizes streamed COPC and EPT point clouds without fetching them", async () => {
     let fetched = false;
     const fetchImpl = (async () => {
       fetched = true;
@@ -439,8 +440,7 @@ describe("data URL deep links", () => {
     }) as unknown as typeof fetch;
     const cases: [string, string][] = [
       ["https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz", "autzen-classified"],
-      ["https://example.com/tile.LAZ?token=abc", "tile"],
-      ["https://example.com/survey.las", "survey"],
+      ["https://example.com/tile.copc.laz?token=abc", "tile"],
       ["https://example.com/autzen/ept.json", "autzen"],
     ];
     for (const [url, name] of cases) {
@@ -449,19 +449,82 @@ describe("data URL deep links", () => {
     assert.equal(fetched, false);
   });
 
-  it("treats an extensionless endpoint as LiDAR when hinted, without fetching it", async () => {
-    let fetched = false;
-    const fetchImpl = (async () => {
-      fetched = true;
-      throw new Error("unexpected");
+  /** A server answering a one-byte range request for a file of `size` bytes. */
+  const rangeServer = (size: number, requests: { url: string; range: string | null }[] = []) =>
+    (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(input),
+        range: new Headers(init?.headers).get("range"),
+      });
+      return new Response(new Uint8Array(1), {
+        status: 206,
+        headers: { "Content-Range": `bytes 0-0/${size}`, "Content-Length": "1" },
+      });
     }) as unknown as typeof fetch;
-    const url = "https://api.example.com/download/42?token=abc";
-    assert.deepEqual(await fetchRemoteData(url, { fetchImpl, dataType: "lidar" }), {
+
+  it("checks the size of a LAS/LAZ file the LiDAR control downloads whole", async () => {
+    const requests: { url: string; range: string | null }[] = [];
+    const fetchImpl = rangeServer(80 * 1024 * 1024, requests);
+    const cases: [string, string][] = [
+      ["https://example.com/tile.LAZ?token=abc", "tile"],
+      ["https://example.com/survey.las", "survey"],
+    ];
+    for (const [url, name] of cases) {
+      assert.deepEqual(await fetchRemoteData(url, { fetchImpl }), { kind: "lidar", name, url });
+    }
+    // One byte each, carrying the token the link came with.
+    assert.deepEqual(requests, [
+      { url: "https://example.com/tile.LAZ?token=abc", range: "bytes=0-0" },
+      { url: "https://example.com/survey.las", range: "bytes=0-0" },
+    ]);
+  });
+
+  it("refuses a whole-download point cloud past the download ceiling", async () => {
+    await assert.rejects(
+      fetchRemoteData("https://example.com/huge.laz", {
+        fetchImpl: rangeServer(300 * 1024 * 1024),
+      }),
+      /too large to open from a URL \(300 MB\).*COPC/,
+    );
+  });
+
+  it("lets a point cloud through when the server reports no size", async () => {
+    const fetchImpl = (async () =>
+      new Response(new Uint8Array(1), { status: 206 })) as unknown as typeof fetch;
+    const url = "https://example.com/survey.las";
+    assert.deepEqual(await fetchRemoteData(url, { fetchImpl }), {
       kind: "lidar",
-      name: "42",
+      name: "survey",
       url,
     });
-    assert.equal(fetched, false);
+  });
+
+  it("reports an endpoint that refuses the size check", async () => {
+    const fetchImpl = (async () =>
+      new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+    await assert.rejects(
+      fetchRemoteData("https://api.example.com/download/42", { fetchImpl, dataType: "lidar" }),
+      /HTTP 401/,
+    );
+  });
+
+  it("treats an extensionless endpoint as LiDAR when hinted", async () => {
+    const requests: { url: string; range: string | null }[] = [];
+    const url = "https://api.example.com/download/42?token=abc";
+    assert.deepEqual(
+      await fetchRemoteData(url, { fetchImpl: rangeServer(1024, requests), dataType: "lidar" }),
+      { kind: "lidar", name: "42", url },
+    );
+    assert.deepEqual(requests, [{ url, range: "bytes=0-0" }]);
+  });
+
+  it("mirrors maplibre-gl-lidar's streaming routing", () => {
+    assert.equal(isStreamedLidarUrl("https://example.com/a.copc.laz"), true);
+    assert.equal(isStreamedLidarUrl("https://example.com/a.COPC.LAZ?token=x"), true);
+    assert.equal(isStreamedLidarUrl("https://example.com/autzen/ept.json"), true);
+    assert.equal(isStreamedLidarUrl("https://example.com/autzen/ept.json?token=x"), true);
+    assert.equal(isStreamedLidarUrl("https://example.com/a.laz"), false);
+    assert.equal(isStreamedLidarUrl("https://api.example.com/download/42"), false);
   });
 
   it("names a file whose path carries a literal percent sign", async () => {

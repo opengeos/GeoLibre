@@ -269,6 +269,17 @@ eagerly loaded plugin. The **placement** is not visible to the compiler, so
 resulting DOM order and z-indices — run it on a bump
 (`npx playwright test e2e/lidar-canvas-stacking.spec.ts --project=features`).
 
+The `?data=` LiDAR deep link leans on two more things the compiler cannot see.
+`isStreamedLidarUrl` (`apps/geolibre-desktop/src/lib/data-url.ts`) copies the
+routing at the top of `LidarControl.loadPointCloud` (an `/ept.json` suffix or a
+`.copc.` anywhere in the URL streams; anything else downloads whole) so that only
+whole downloads get the size check. If upstream changes that routing, update the
+copy, or a streamed file gets a needless size check and a downloaded one skips
+it. `addLidarLayerFromUrl` also relies on `load` firing, and adding the store
+layer, before `loadPointCloud` resolves; it throws if not.
+`tests/lidar-url-layer.test.ts` pins the GeoLibre side of both. Re-read
+`loadPointCloud` on a bump.
+
 ### `maplibre-gl-raster` — stretch and gamma curves
 
 `buildContinuousColormapRgba`

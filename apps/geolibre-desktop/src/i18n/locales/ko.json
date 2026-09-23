@@ -961,6 +961,9 @@
       "errorUrl": "유효한 HTTP 또는 HTTPS PMTiles URL을 입력하세요.",
       "errorMlt": "ArcGIS에는 MLT가 아닌 MVT 벡터 타일이 필요합니다."
     },
+    "lidar": {
+      "errorUrl": "유효한 HTTP 또는 HTTPS LiDAR URL을 입력하세요."
+    },
     "zarr": {
       "errorUrl": "유효한 HTTP 또는 HTTPS Zarr URL을 입력하세요.",
       "errorColorLimits": "색상 최댓값은 최솟값보다 커야 합니다."

@@ -982,6 +982,9 @@
       "errorUrl": "Geçerli bir HTTP veya HTTPS PMTiles URL’si girin.",
       "errorMlt": "ArcGIS, MLT değil MVT vektör karoları gerektirir."
     },
+    "lidar": {
+      "errorUrl": "Geçerli bir HTTP veya HTTPS LiDAR URL’si girin."
+    },
     "zarr": {
       "errorUrl": "Geçerli bir HTTP veya HTTPS Zarr URL’si girin.",
       "errorColorLimits": "En yüksek renk sınırı en düşük sınırdan büyük olmalıdır."

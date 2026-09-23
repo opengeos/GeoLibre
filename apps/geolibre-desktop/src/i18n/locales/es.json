@@ -982,6 +982,9 @@
       "errorUrl": "Introduzca una URL HTTP o HTTPS válida de PMTiles.",
       "errorMlt": "ArcGIS requiere teselas vectoriales MVT, no MLT."
     },
+    "lidar": {
+      "errorUrl": "Introduzca una URL HTTP o HTTPS válida de LiDAR."
+    },
     "zarr": {
       "errorUrl": "Introduzca una URL HTTP o HTTPS válida de Zarr.",
       "errorColorLimits": "El límite máximo de color debe ser mayor que el mínimo."

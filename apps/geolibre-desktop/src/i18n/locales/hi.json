@@ -982,6 +982,9 @@
       "errorUrl": "एक मान्य HTTP या HTTPS PMTiles URL दर्ज करें।",
       "errorMlt": "ArcGIS को MVT वेक्टर टाइलों की आवश्यकता है, MLT की नहीं।"
     },
+    "lidar": {
+      "errorUrl": "एक मान्य HTTP या HTTPS LiDAR URL दर्ज करें।"
+    },
     "zarr": {
       "errorUrl": "एक मान्य HTTP या HTTPS Zarr URL दर्ज करें।",
       "errorColorLimits": "रंग की अधिकतम सीमा न्यूनतम सीमा से अधिक होनी चाहिए।"

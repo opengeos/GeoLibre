@@ -982,6 +982,9 @@
       "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de PMTiles.",
       "errorMlt": "ArcGIS nécessite des tuiles vectorielles MVT, et non MLT."
     },
+    "lidar": {
+      "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de LiDAR."
+    },
     "zarr": {
       "errorUrl": "Saisissez une URL HTTP ou HTTPS valide de Zarr.",
       "errorColorLimits": "La limite maximale de couleur doit être supérieure à la limite minimale."
