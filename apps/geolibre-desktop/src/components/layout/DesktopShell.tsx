@@ -754,9 +754,6 @@ export function DesktopShell({
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  // The project generation the plugins were last restored for; see the
-  // plugin-restore effect.
-  const restoredProjectGeneration = useRef<number | null>(null);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
@@ -1267,6 +1264,35 @@ export function DesktopShell({
     return () => setNonTiledRasterHandler(null);
   }, [t]);
 
+  // A renderer swap restores the plugins from the store's projectPlugins, which
+  // is only refreshed when a plugin is toggled or moved, so it would roll every
+  // plugin back to how it was then (a Time Slider stack added since came back
+  // empty). Refresh it the moment the renderer changes: this store subscriber
+  // runs synchronously inside setPrimaryRenderer, before React unmounts the old
+  // map, so every plugin still reports its live state from a live control.
+  useEffect(
+    () =>
+      useAppStore.subscribe((state, previous) => {
+        if (
+          state.primaryRenderer === previous.primaryRenderer ||
+          // A project load brings its own plugin state; never overwrite it.
+          state.projectGeneration !== previous.projectGeneration ||
+          state.projectPlugins !== previous.projectPlugins
+        )
+          return;
+        try {
+          const live = getPluginManager().getProjectState();
+          state.setProjectPlugins(
+            { ...live, manifestUrls: state.projectPlugins?.manifestUrls ?? [] },
+            false,
+          );
+        } catch (error) {
+          console.warn("[GeoLibre] Could not snapshot plugin state for the renderer swap", error);
+        }
+      }),
+    [],
+  );
+
   useEffect(() => {
     // Restoration should run only when a project is loaded (projectGeneration)
     // or the map is reinitialised (mapReadyGeneration), not on every
@@ -1278,36 +1304,7 @@ export function DesktopShell({
     if (!externalPluginsReady || !mapReadyGeneration || !engine) return;
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
-    // A new map for the same project (a renderer swap) restores the plugins'
-    // live settings and positions, the ones Save would write. The store's copy
-    // of those is only refreshed when a plugin is toggled or moved, so
-    // restoring from it rolled a plugin back to how it was then: a Time Slider
-    // stack added since came back empty. Which plugins are active still comes
-    // from the store, which every toggle does refresh, so a plugin the project
-    // requests but that failed to mount is retried.
-    const remount = restoredProjectGeneration.current === projectGeneration;
-    restoredProjectGeneration.current = projectGeneration;
-    const storedPlugins = useAppStore.getState().projectPlugins;
-    // A plugin that cannot report its state once its map is gone must not
-    // cost every plugin its restore: fall back to the stored copy.
-    let live: ReturnType<typeof pluginManager.getProjectState> | null = null;
-    if (remount) {
-      try {
-        live = pluginManager.getProjectState();
-      } catch (error) {
-        console.warn("[GeoLibre] Could not read live plugin state for the new map", error);
-      }
-    }
-    pluginManager.restoreProjectState(
-      live
-        ? {
-            ...live,
-            activePluginIds: storedPlugins?.activePluginIds ?? live.activePluginIds,
-            manifestUrls: storedPlugins?.manifestUrls ?? [],
-          }
-        : storedPlugins,
-      appAPI,
-    );
+    pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();
