@@ -2075,5 +2075,16 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.applyView(mapView);
   }, [mapView.center[0], mapView.center[1], mapView.zoom, mapView.bearing, mapView.pitch]);
 
-  return <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />;
+  // The map container sits inside a host element React owns. A control may
+  // reparent the container (the Time Slider wraps it in a flex column to dock
+  // its timeline below the map) and only undoes that when the map is torn down,
+  // which runs after React has already removed this component's DOM. React
+  // removes the host, which stays where it put it, instead of the container,
+  // so a renderer swap with such a control mounted no longer throws
+  // "removeChild: the node to be removed is not a child of this node".
+  return (
+    <div className="h-full w-full">
+      <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />
+    </div>
+  );
 });

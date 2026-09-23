@@ -174,9 +174,9 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     activeHost = app;
-    const control = savedConfig
-      ? controlFromConfig(savedConfig)
-      : new TimeSliderControl(buildDefaultOptions());
+    const control = rememberConfigOnRemove(
+      savedConfig ? controlFromConfig(savedConfig) : new TimeSliderControl(buildDefaultOptions()),
+    );
     timeSliderControl = control;
     attachStoreSync(control);
 
@@ -194,7 +194,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     activeHost = null;
     if (!timeSliderControl) return;
-    savedConfig = timeSliderControl.getConfig();
+    savedConfig = configBeforeRemoval.get(timeSliderControl) ?? timeSliderControl.getConfig();
     detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
     timeSliderControl = null;
@@ -210,7 +210,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     const config = timeSliderControl.getConfig();
     detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
-    const control = controlFromConfig(config);
+    const control = rememberConfigOnRemove(controlFromConfig(config));
     timeSliderControl = control;
     attachStoreSync(control);
     const added = app.addMapControl(control, timeSliderPosition);
@@ -227,7 +227,11 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     setTimeout(() => syncStoreLayers(control), 0);
   },
   getProjectState: () => {
-    const config = timeSliderControl?.getConfig() ?? savedConfig;
+    // A control its map already removed reports no sources; use its snapshot.
+    const config =
+      (timeSliderControl && configBeforeRemoval.get(timeSliderControl)) ??
+      timeSliderControl?.getConfig() ??
+      savedConfig;
     // getConfig() includes optional keys (e.g. dateFormat/beforeId) with
     // `undefined` values. The host drops plugin settings that are not strictly
     // JSON-compatible, and `undefined` fails that check, so round-trip through
@@ -266,6 +270,29 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     return true;
   },
 };
+
+// The config each control held when its map took it down. The library's
+// `getSources()` reads its live adapters, which `onRemove` destroys, so a
+// control removed by the map itself (a renderer swap tears the whole map down
+// before the plugin manager deactivates the plugin) would otherwise report no
+// sources at all and the user's stack would not survive the swap.
+const configBeforeRemoval = new WeakMap<TimeSliderControl, TimeSliderConfig>();
+
+/**
+ * Snapshot the control's config as its `onRemove` begins, so deactivating
+ * after the map already removed it still restores every source.
+ *
+ * @param control - A control about to be added to the map.
+ * @returns The same control.
+ */
+function rememberConfigOnRemove(control: TimeSliderControl): TimeSliderControl {
+  const onRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    configBeforeRemoval.set(control, control.getConfig());
+    onRemove();
+  };
+  return control;
+}
 
 /**
  * Builds constructor options from a serialized config so a fresh control

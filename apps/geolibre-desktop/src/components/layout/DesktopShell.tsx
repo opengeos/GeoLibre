@@ -754,6 +754,9 @@ export function DesktopShell({
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
+  // The project generation the plugins were last restored for; see the
+  // plugin-restore effect.
+  const restoredProjectGeneration = useRef<number | null>(null);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
@@ -1275,7 +1278,23 @@ export function DesktopShell({
     if (!externalPluginsReady || !mapReadyGeneration || !engine) return;
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
-    pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
+    // A new map for the same project (a renderer swap) restores the plugins'
+    // live state, the same snapshot Save would write. The store's copy is only
+    // refreshed when a plugin is toggled or moved, so restoring from it would
+    // roll a plugin back to how it was then: a Time Slider stack added since
+    // came back empty.
+    const remount = restoredProjectGeneration.current === projectGeneration;
+    restoredProjectGeneration.current = projectGeneration;
+    const storedPlugins = useAppStore.getState().projectPlugins;
+    pluginManager.restoreProjectState(
+      remount
+        ? {
+            ...pluginManager.getProjectState(),
+            manifestUrls: storedPlugins?.manifestUrls ?? [],
+          }
+        : storedPlugins,
+      appAPI,
+    );
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();
