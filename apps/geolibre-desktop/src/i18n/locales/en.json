@@ -7544,6 +7544,8 @@
     "renameGroup": "Rename group",
     "moveGroupUp": "Move group up",
     "moveGroupDown": "Move group down",
+    "sortGroupAscending": "Sort A to Z",
+    "sortGroupDescending": "Sort Z to A",
     "ungroupKeepLayers": "Ungroup (keep layers)",
     "deleteGroupAndLayers": "Delete group and layers",
     "groupActions": "Group actions",

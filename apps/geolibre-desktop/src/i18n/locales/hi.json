@@ -7405,6 +7405,8 @@
     "renameGroup": "समूह का नाम बदलें",
     "moveGroupUp": "समूह ऊपर ले जाएं",
     "moveGroupDown": "समूह नीचे ले जाएं",
+    "sortGroupAscending": "A से Z क्रमबद्ध करें",
+    "sortGroupDescending": "Z से A क्रमबद्ध करें",
     "ungroupKeepLayers": "समूह हटाएं (लेयर बनाए रखें)",
     "deleteGroupAndLayers": "समूह और लेयर हटाएं",
     "groupActions": "समूह क्रियाएं",

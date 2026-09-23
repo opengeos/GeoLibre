@@ -7405,6 +7405,8 @@
     "renameGroup": "Cambiar el nombre del grupo",
     "moveGroupUp": "Mover grupo arriba",
     "moveGroupDown": "Mover grupo abajo",
+    "sortGroupAscending": "Ordenar de A a Z",
+    "sortGroupDescending": "Ordenar de Z a A",
     "ungroupKeepLayers": "Desagrupar (conservar capas)",
     "deleteGroupAndLayers": "Eliminar grupo y capas",
     "groupActions": "Acciones de grupo",

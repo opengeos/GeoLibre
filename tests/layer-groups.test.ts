@@ -9,9 +9,11 @@ import {
   createEmptyProject,
   effectiveLayerRenderState,
   layerGroupMoveability,
+  layerGroupSortability,
   layerPanelGroupHeaders,
   normalizeGroupContiguity,
   reorderLayerGroupInPanel,
+  sortLayerGroupInPanel,
   parseProject,
   projectFromStore,
   serializeProject,
@@ -474,6 +476,141 @@ describe("reorderLayerGroupInPanel", () => {
   });
 });
 
+describe("sortLayerGroupInPanel", () => {
+  // Top-first rows of the panel, with every layer and group header listed,
+  // so a sort's effect inside a group is visible.
+  const rows = (layers: GeoLibreLayer[], groups: LayerGroup[]) =>
+    buildLayerTree(layers, groups).flatMap((item) =>
+      item.kind === "layer"
+        ? [item.layer.name]
+        : [`[${item.group.name}]`, ...item.children.map((child) => child.name)],
+    );
+
+  it("sorts a group's layers A to Z and Z to A, top of panel first (GeoLibre#2599)", () => {
+    // Store order is bottom-first, so the panel shows Carol, Alice, Bob.
+    const layers = [
+      layer("b", { name: "Bob", groupId: "g" }),
+      layer("a", { name: "Alice", groupId: "g" }),
+      layer("c", { name: "Carol", groupId: "g" }),
+    ];
+    const groups = [group("g", { name: "Owners" })];
+
+    const asc = sortLayerGroupInPanel(layers, groups, "g", "asc");
+    assert.ok(asc);
+    assert.deepEqual(rows(asc.layers, asc.groups), ["[Owners]", "Alice", "Bob", "Carol"]);
+
+    const desc = sortLayerGroupInPanel(layers, groups, "g", "desc");
+    assert.ok(desc);
+    assert.deepEqual(rows(desc.layers, desc.groups), ["[Owners]", "Carol", "Bob", "Alice"]);
+  });
+
+  it("orders numbers naturally and ignores case", () => {
+    const layers = [
+      layer("p1", { name: "Parcel 1", groupId: "g" }),
+      layer("p10", { name: "Parcel 10", groupId: "g" }),
+      layer("p2", { name: "parcel 2", groupId: "g" }),
+    ];
+    const sorted = sortLayerGroupInPanel(layers, [group("g")], "g", "asc");
+    assert.ok(sorted);
+    assert.deepEqual(rows(sorted.layers, [group("g")]).slice(1), [
+      "Parcel 1",
+      "parcel 2",
+      "Parcel 10",
+    ]);
+  });
+
+  it("leaves layers outside the group where they are", () => {
+    const layers = [
+      layer("below", { name: "Zeta" }),
+      layer("b", { name: "B", groupId: "g" }),
+      layer("a", { name: "A", groupId: "g" }),
+      layer("above", { name: "Alpha" }),
+    ];
+    // The panel already shows A above B, so A to Z changes nothing.
+    assert.equal(sortLayerGroupInPanel(layers, [group("g")], "g", "asc"), null);
+    const desc = sortLayerGroupInPanel(layers, [group("g")], "g", "desc");
+    assert.ok(desc);
+    assert.deepEqual(
+      desc.layers.map((l) => l.id),
+      ["below", "a", "b", "above"],
+    );
+  });
+
+  it("sorts child groups by name, each carrying its subtree, and keeps own layers as one block", () => {
+    // Panel, top first: [Zulu] z1, then Parent's own Alpha and Beta, then [Mike] m1.
+    const layers = [
+      layer("m1", { name: "m1", groupId: "mike" }),
+      layer("beta", { name: "Beta", groupId: "parent" }),
+      layer("alpha", { name: "Alpha", groupId: "parent" }),
+      layer("z1", { name: "z1", groupId: "zulu" }),
+    ];
+    const groups = [
+      group("parent", { name: "Parent" }),
+      group("zulu", { name: "Zulu", parentId: "parent" }),
+      group("mike", { name: "Mike", parentId: "parent" }),
+    ];
+    const sorted = sortLayerGroupInPanel(layers, groups, "parent", "desc");
+    assert.ok(sorted);
+    // Child folders swap into Z to A order around the own-layer block, which
+    // keeps its middle slot and is itself sorted Z to A.
+    assert.deepEqual(
+      buildLayerPanelUnits(sorted.layers, sorted.groups).map((unit) => [
+        unit.groupId,
+        unit.layers.map((l) => l.id),
+      ]),
+      [
+        ["zulu", ["z1"]],
+        ["parent", ["beta", "alpha"]],
+        ["mike", ["m1"]],
+      ],
+    );
+    const asc = sortLayerGroupInPanel(layers, groups, "parent", "asc");
+    assert.ok(asc);
+    assert.deepEqual(
+      buildLayerPanelUnits(asc.layers, asc.groups).map((unit) => [
+        unit.groupId,
+        unit.layers.map((l) => l.id),
+      ]),
+      [
+        ["mike", ["m1"]],
+        ["parent", ["alpha", "beta"]],
+        ["zulu", ["z1"]],
+      ],
+    );
+  });
+
+  it("sorts empty child folders through the group order", () => {
+    const groups = [
+      group("parent", { name: "Parent" }),
+      group("c", { name: "Charlie", parentId: "parent" }),
+      group("a", { name: "Alpha", parentId: "parent" }),
+      group("b", { name: "Bravo", parentId: "parent" }),
+    ];
+    const sorted = sortLayerGroupInPanel([], groups, "parent", "asc");
+    assert.ok(sorted);
+    assert.deepEqual(sorted.layers, []);
+    assert.deepEqual(panelOrder(sorted.layers, sorted.groups), [
+      "group:parent",
+      "group:a",
+      "group:b",
+      "group:c",
+    ]);
+  });
+
+  it("returns null for an unknown or empty group, and reports sortability", () => {
+    const layers = [layer("a", { groupId: "g" }), layer("b", { groupId: "g" })];
+    const groups = [group("g"), group("empty")];
+    assert.equal(sortLayerGroupInPanel(layers, groups, "missing", "asc"), null);
+    assert.equal(sortLayerGroupInPanel(layers, groups, "empty", "asc"), null);
+    // Panel shows b above a: already Z to A, so only A to Z would change it.
+    assert.deepEqual(layerGroupSortability(layers, groups).get("g"), { asc: true, desc: false });
+    assert.deepEqual(layerGroupSortability(layers, groups).get("empty"), {
+      asc: false,
+      desc: false,
+    });
+  });
+});
+
 describe("applyGroupEffects", () => {
   it("multiplies opacity and ANDs visibility into children", () => {
     const layers = [
@@ -866,6 +1003,29 @@ describe("layer group store actions", () => {
       }).layerGroups?.[0].collapsed,
       true,
     );
+  });
+
+  it("sorts a group's layers by name and undoes the sort (GeoLibre#2599)", () => {
+    const b = useAppStore.getState().addGeoJsonLayer("Bob", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("Carol", emptyFC);
+    const a = useAppStore.getState().addGeoJsonLayer("Alice", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("Owners", [b, c, a]);
+    useAppStore.getState().markSaved();
+    useAppStore.temporal.getState().clear();
+    const panelNames = () =>
+      [...useAppStore.getState().layers].reverse().map((candidate) => candidate.name);
+    assert.deepEqual(panelNames(), ["Alice", "Carol", "Bob"]);
+
+    useAppStore.getState().sortLayerGroup(gid, "asc");
+    assert.deepEqual(panelNames(), ["Alice", "Bob", "Carol"]);
+    assert.equal(useAppStore.getState().isDirty, true);
+    useAppStore.getState().sortLayerGroup(gid, "desc");
+    assert.deepEqual(panelNames(), ["Carol", "Bob", "Alice"]);
+
+    undo();
+    assert.deepEqual(panelNames(), ["Alice", "Bob", "Carol"]);
+    undo();
+    assert.deepEqual(panelNames(), ["Alice", "Carol", "Bob"]);
   });
 });
 

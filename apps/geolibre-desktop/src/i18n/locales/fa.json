@@ -7405,6 +7405,8 @@
     "renameGroup": "تغییر نام گروه",
     "moveGroupUp": "بردن گروه به بالا",
     "moveGroupDown": "بردن گروه به پایین",
+    "sortGroupAscending": "مرتب‌سازی از الف تا ی",
+    "sortGroupDescending": "مرتب‌سازی از ی تا الف",
     "ungroupKeepLayers": "خارج کردن از گروه (نگه داشتن لایه‌ها)",
     "deleteGroupAndLayers": "حذف گروه و لایه‌ها",
     "groupActions": "کنش‌های گروه",

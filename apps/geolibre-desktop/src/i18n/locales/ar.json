@@ -7728,6 +7728,8 @@
     "renameGroup": "إعادة تسمية المجموعة",
     "moveGroupUp": "نقل المجموعة لأعلى",
     "moveGroupDown": "نقل المجموعة لأسفل",
+    "sortGroupAscending": "فرز من أ إلى ي",
+    "sortGroupDescending": "فرز من ي إلى أ",
     "ungroupKeepLayers": "فك التجميع (الاحتفاظ بالطبقات)",
     "deleteGroupAndLayers": "حذف المجموعة والطبقات",
     "groupActions": "إجراءات المجموعة",

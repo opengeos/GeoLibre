@@ -592,6 +592,20 @@ function moveGroupThroughUnits(
   const reordered = [...remaining];
   reordered.splice(edge, 0, ...block);
 
+  return arraysFromUnits(reordered, layers, groups, groupById);
+}
+
+/**
+ * Turn reordered panel blocks back into the two store arrays, or `null` when
+ * neither array changed. Shared by every panel reorder so they all agree on how
+ * the empty folders follow a move.
+ */
+function arraysFromUnits(
+  reordered: LayerPanelUnit[],
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+  groupById: ReadonlyMap<string, LayerGroup>,
+): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
   // Units are top-first and so are the layers inside them; the store keeps the
   // reverse, with the last element drawing on top.
   const nextLayers = reordered.flatMap((unit) => unit.layers).reverse();
@@ -609,6 +623,93 @@ function moveGroupThroughUnits(
   const groupsMoved = nextGroups.some((group, index) => group.id !== groups[index]?.id);
   if (!layersMoved && !groupsMoved) return null;
   return { layers: nextLayers, groups: nextGroups };
+}
+
+/** Direction {@link sortLayerGroupInPanel} orders names in, top of panel first. */
+export type LayerGroupSortOrder = "asc" | "desc";
+
+// Numeric-aware and case/accent-insensitive, so "Parcel 2" sorts before
+// "Parcel 10" and "owner" sits with "Owner", the way a file browser orders.
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * Sort what sits directly inside a group by name, A to Z (`"asc"`) or Z to A
+ * (`"desc"`) from the top of the panel down (GeoLibre#2599).
+ *
+ * The group's own layers are sorted among themselves, and its child groups are
+ * sorted among themselves by group name, each carrying everything nested inside
+ * it. The two are not interleaved: a group's own layers are one contiguous
+ * block (see {@link normalizeGroupContiguity}), so that block keeps its slot
+ * among the child groups rather than being split between them. Only direct
+ * children move; the contents of a child group keep their order.
+ *
+ * Like {@link reorderLayerGroupInPanel}, both arrays come back, so empty child
+ * folders follow the sort too.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @param id Group whose children to sort.
+ * @param order `"asc"` for A to Z, `"desc"` for Z to A.
+ * @returns The new arrays, or `null` when the children are already in that
+ *   order and nothing would change.
+ */
+export function sortLayerGroupInPanel(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+  id: string,
+  order: LayerGroupSortOrder,
+): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
+  return sortGroupThroughUnits(buildLayerPanelUnits(layers, groups), layers, groups, id, order);
+}
+
+/**
+ * The body of {@link sortLayerGroupInPanel}, against panel blocks the caller
+ * already has.
+ */
+function sortGroupThroughUnits(
+  units: LayerPanelUnit[],
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+  id: string,
+  order: LayerGroupSortOrder,
+): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  if (!groupById.has(id)) return null;
+  const sign = order === "asc" ? 1 : -1;
+  const compare = (a: string, b: string) => sign * nameCollator.compare(a, b);
+  // Label each unit with the direct child of `id` it sits in (`id` itself for
+  // the group's own layers), or `undefined` when it lies outside the group.
+  const branches = units.map((unit) => branchUnder(id, unit.groupId, groupById));
+  const inside = branches.flatMap((branch, index) => (branch ? [index] : []));
+  if (inside.length === 0) return null;
+
+  // Blocks in their current top-first order: the group's own layers as one
+  // block, each child group as one block carrying its whole subtree.
+  const blockUnits = new Map<string, LayerPanelUnit[]>();
+  for (const index of inside) {
+    const branch = branches[index] as string;
+    const list = blockUnits.get(branch);
+    if (list) list.push(units[index]);
+    else blockUnits.set(branch, [units[index]]);
+  }
+  const blockIds = [...blockUnits.keys()];
+  const childIds = blockIds.filter((branch) => branch !== id);
+  const sortedChildIds = [...childIds].sort((a, b) =>
+    compare(groupById.get(a)?.name ?? "", groupById.get(b)?.name ?? ""),
+  );
+  let nextChild = 0;
+  const sortedBlocks = blockIds.map((branch): LayerPanelUnit[] => {
+    if (branch !== id) return blockUnits.get(sortedChildIds[nextChild++]) ?? [];
+    const own = (blockUnits.get(id) ?? []).flatMap((unit) => unit.layers);
+    return [{ groupId: id, layers: [...own].sort((a, b) => compare(a.name, b.name)) }];
+  });
+
+  // The group's units need not be contiguous (see `reorderLayerGroupInPanel`);
+  // gathering them at the first one compacts the subtree, as a move does.
+  const insideSet = new Set(inside);
+  const reordered = units.filter((_, index) => !insideSet.has(index));
+  reordered.splice(inside[0], 0, ...sortedBlocks.flat());
+  return arraysFromUnits(reordered, layers, groups, groupById);
 }
 
 /**
@@ -629,6 +730,29 @@ export function layerGroupMoveability(
     result.set(group.id, {
       up: moveGroupThroughUnits(units, layers, groups, group.id, "up") !== null,
       down: moveGroupThroughUnits(units, layers, groups, group.id, "down") !== null,
+    });
+  }
+  return result;
+}
+
+/**
+ * Which orders {@link sortLayerGroupInPanel} would actually change for each
+ * group, so the layer panel can disable a sort that would do nothing.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @returns Per-group flags, keyed by group id.
+ */
+export function layerGroupSortability(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+): Map<string, Record<LayerGroupSortOrder, boolean>> {
+  const units = buildLayerPanelUnits(layers, groups);
+  const result = new Map<string, Record<LayerGroupSortOrder, boolean>>();
+  for (const group of groups) {
+    result.set(group.id, {
+      asc: sortGroupThroughUnits(units, layers, groups, group.id, "asc") !== null,
+      desc: sortGroupThroughUnits(units, layers, groups, group.id, "desc") !== null,
     });
   }
   return result;

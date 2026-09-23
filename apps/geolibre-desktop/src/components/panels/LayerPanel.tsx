@@ -45,6 +45,7 @@ import {
   excludeHiddenFieldsFromGeojson,
   layerGroupDepth,
   layerGroupMoveability,
+  layerGroupSortability,
   layerPanelGroupHeaders,
   resolveLayerCapabilities,
 } from "@geolibre/core";
@@ -145,6 +146,8 @@ import {
   cn,
 } from "@geolibre/ui";
 import {
+  ArrowDownAZ,
+  ArrowDownZA,
   CalendarClock,
   ChevronDown,
   ChevronRight,
@@ -694,6 +697,7 @@ export function LayerPanel({
   const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
   const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
+  const sortLayerGroup = useAppStore((s) => s.sortLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const selectLayer = useAppStore((s) => s.selectLayer);
@@ -1028,6 +1032,10 @@ export function LayerPanel({
   );
   const groupMoveability = useMemo(
     () => layerGroupMoveability(layers, layerGroups),
+    [layers, layerGroups],
+  );
+  const groupSortability = useMemo(
+    () => layerGroupSortability(layers, layerGroups),
     [layers, layerGroups],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
@@ -2779,6 +2787,7 @@ export function LayerPanel({
     if (hasCollapsedAncestor(group)) return null;
     const isDropTarget = dropTargetGroupId === group.id;
     const moveability = groupMoveability.get(group.id);
+    const sortability = groupSortability.get(group.id);
     const moveTargets = groupMoveTargets(group);
     return (
       <div
@@ -2956,6 +2965,24 @@ export function LayerPanel({
               >
                 <ChevronDown className="me-2 h-3.5 w-3.5" />
                 {t("layers.moveGroupDown")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!sortability?.asc}
+                onSelect={() => {
+                  sortLayerGroup(group.id, "asc");
+                }}
+              >
+                <ArrowDownAZ className="me-2 h-3.5 w-3.5" />
+                {t("layers.sortGroupAscending")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!sortability?.desc}
+                onSelect={() => {
+                  sortLayerGroup(group.id, "desc");
+                }}
+              >
+                <ArrowDownZA className="me-2 h-3.5 w-3.5" />
+                {t("layers.sortGroupDescending")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
