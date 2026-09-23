@@ -1566,8 +1566,11 @@ export function PrintLayoutDialog({
             return await captureEngineMapImage(engine, null);
           } finally {
             // The drawn box stays on the map as a reference in either capture
-            // mode, as the MapLibre branch and recapture restore it.
-            showEnginePreview(extentBbox);
+            // mode, as the MapLibre branch and recapture restore it, but only
+            // on this dialog's engine: a capture that outlived a close or a
+            // renderer change must not draw on whatever replaced it.
+            if (wasOpenRef.current && mapControllerRef.current === engine)
+              showEnginePreview(extentBbox);
           }
         }
         setPrintExtentVisible(nativeMap, false);
