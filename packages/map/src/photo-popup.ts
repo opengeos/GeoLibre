@@ -365,7 +365,7 @@ export function createPhotoPopupElement(
       openPhotoFullscreen(fullResolution, image.alt, labels.close, image);
     });
     // Keyboard users open the viewer with Enter or Space on the focusable photo.
-    image.tabIndex = 0;
+    image.setAttribute("tabindex", "0");
     image.setAttribute("role", "button");
     image.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
