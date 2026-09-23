@@ -6,11 +6,15 @@ import {
   effectiveLayerRenderState,
   getActiveEllipsoid,
   IDENTIFY_ALL_LAYERS_ID,
+  isDuckDBQueryLayer,
   isPopupClickEnabled,
+  isPopupHoverEnabled,
+  NETCDF_IMAGE_SOURCE_KIND,
   redactUrlCredentials,
   resolveLayerCapabilities,
   resolvePopupMaxWidth,
   useAppStore,
+  type GeoLibreLayer,
   type PointerElevationResolver,
 } from "@geolibre/core";
 import type { MapEventOf, StyleSpecification } from "mapbox-gl";
@@ -32,18 +36,34 @@ import { resolveMapStyle } from "./map-controller";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import {
   attachFeatureSelection,
+  FEATURE_SELECTION_BEGIN_EVENT,
   type FeatureSelectionMap,
   type FeatureSelectionState,
 } from "./map-feature-selection";
 import { createMapResizeScheduler } from "./map-resize";
 import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
-import { createIdentifyPopupElement, identifyPopupShellMaxWidth } from "./feature-popup";
+import {
+  createHoverTooltipElement,
+  createIdentifyPopupElement,
+  identifyPopupShellMaxWidth,
+} from "./feature-popup";
+import { createPhotoPopupElement, PHOTO_SOURCE_KIND } from "./photo-popup";
 import {
   createGlobalIdentifyPopupElement,
   DEFAULT_IDENTIFY_ALL_LABELS,
   type GlobalIdentifyHit,
   type MapCanvasIdentifyAllLabels,
 } from "./identify-all-popup";
+import {
+  duckDBBridge,
+  fetchWmsIdentifyProperties,
+  isAbortError,
+  isPixelIdentifyLayer,
+  isWmsLayer,
+  pixelIdentifyProperties,
+  timeSliderBridge,
+} from "./identify-sources";
+import type { MapCanvasRasterIdentify } from "./MapCanvas";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -54,6 +74,8 @@ export interface MapboxCanvasProps {
   canUseRemoteElevation?: () => boolean;
   /** Translated headings for the grouped "Identify visible layers" popup. */
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  /** The app's COG / NetCDF pixel reader for "Identify visible layers". */
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
 }
 
 /** The namespace and its CSS load only when a Mapbox pane is mounted. */
@@ -65,6 +87,7 @@ export function MapboxCanvas({
   onMapDiagnosticEvent,
   canUseRemoteElevation,
   identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
+  identifyRasterLayerAt,
 }: MapboxCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   const readyCallback = useRef(onEngineReady);
@@ -75,6 +98,8 @@ export function MapboxCanvas({
   canUseRemoteElevationRef.current = canUseRemoteElevation;
   const identifyAllLabelsRef = useRef(identifyAllLabels);
   identifyAllLabelsRef.current = identifyAllLabels;
+  const identifyRasterLayerAtRef = useRef(identifyRasterLayerAt);
+  identifyRasterLayerAtRef.current = identifyRasterLayerAt;
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +201,28 @@ export function MapboxCanvas({
         // The layer "Identify visible layers" selected, so an empty click only
         // retires a selection this mode made (as MapCanvas does).
         let globalIdentifyActivatedLayerId: string | null = null;
+        // One in-flight asynchronous identify (WMS, pixel reads) at a time: a
+        // newer click, a mode change, or closing its loading popup cancels it.
+        let asyncIdentifyAbort: AbortController | null = null;
+        // Hover tooltips (#2113) and the geotagged-photo pointer, as MapCanvas
+        // binds them on MapLibre. Pointer moves are coalesced to one query and
+        // one render per frame, and only while some layer wants either.
+        let hoverTooltip: InstanceType<typeof gl.Popup> | undefined;
+        let photoPopup: InstanceType<typeof gl.Popup> | undefined;
+        let hoverPending: [number, number] | null = null;
+        let hoverFrame = 0;
+        let photoCursor = false;
+        const removeHoverTooltip = () => {
+          hoverPending = null;
+          if (hoverFrame) cancelAnimationFrame(hoverFrame);
+          hoverFrame = 0;
+          hoverTooltip?.remove();
+          hoverTooltip = undefined;
+        };
+        const removePhotoPopup = () => {
+          photoPopup?.remove();
+          photoPopup = undefined;
+        };
         const removeIdentifyPopup = (
           options: { restore?: boolean; forceRestore?: boolean } = {},
         ) => {
@@ -261,6 +308,7 @@ export function MapboxCanvas({
               // The new project owns its own selection. Drop the old popup and
               // its ownership record without restoring a layer from the project
               // that was just replaced.
+              asyncIdentifyAbort?.abort();
               removeIdentifyPopup({ restore: false });
               globalIdentifyActivatedLayerId = null;
             } else if (!viewId && identifyPopupState && next.layers !== previous?.layers) {
@@ -276,7 +324,15 @@ export function MapboxCanvas({
               }
             }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
+              asyncIdentifyAbort?.abort();
               removeIdentifyPopup();
+              // The photo popup and a hover tip never coexist with Identify.
+              if (next.identifyLayerId) {
+                removePhotoPopup();
+                removeHoverTooltip();
+                // Identify sets its own crosshair just below.
+                photoCursor = false;
+              }
               // A layer "Identify visible layers" selected before the mode
               // changed is the user's from here on, as MapCanvas resets it.
               globalIdentifyActivatedLayerId = null;
@@ -395,34 +451,189 @@ export function MapboxCanvas({
         cleanupTasks.push(() =>
           map.getContainer().removeEventListener("click", handleGlobeToggleClick),
         );
+        const setPhotoCursor = (active: boolean) => {
+          if (photoCursor === active) return;
+          photoCursor = active;
+          map.getCanvas().style.cursor = active ? "pointer" : "";
+        };
+        /** Visible layers that show a hover tip, and the geotagged-photo layers. */
+        const pointerTargets = () => {
+          const next = useAppStore.getState();
+          const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
+          const visible = next.layers.filter(
+            (layer) => effectiveLayerRenderState(layer, groupById).visible,
+          );
+          return {
+            hover: new Map(
+              visible
+                .filter((layer) => isPopupHoverEnabled(layer.popup))
+                .map((layer) => [layer.id, layer]),
+            ),
+            photos: new Set(
+              visible
+                .filter((layer) => layer.metadata.sourceKind === PHOTO_SOURCE_KIND)
+                .map((layer) => layer.id),
+            ),
+          };
+        };
+        const drawHover = () => {
+          hoverFrame = 0;
+          const lngLat = hoverPending;
+          hoverPending = null;
+          if (!lngLat) return;
+          // A selection gesture owns the pointer while it draws, and the
+          // Identify crosshair means a click is coming: neither wants a tip.
+          if (featureSelection.active.current || useAppStore.getState().identifyLayerId) {
+            removeHoverTooltip();
+            setPhotoCursor(false);
+            return;
+          }
+          const { hover, photos } = pointerTargets();
+          if (hover.size === 0 && photos.size === 0) {
+            removeHoverTooltip();
+            setPhotoCursor(false);
+            return;
+          }
+          const hits = current.identifyFeatures(lngLat);
+          setPhotoCursor(hits.some((hit) => photos.has(hit.layerId)));
+          const hit = hits.find((candidate) => hover.has(candidate.layerId));
+          const layer = hit && hover.get(hit.layerId);
+          const content =
+            hit && layer
+              ? createHoverTooltipElement(layer.name, hit.properties, {
+                  popup: layer.popup,
+                  fieldVisibility: layer.fieldVisibility,
+                  feature: hit.geometry
+                    ? { type: "Feature", properties: hit.properties, geometry: hit.geometry }
+                    : null,
+                  zoom: map.getZoom(),
+                })
+              : null;
+          if (!content) {
+            removeHoverTooltip();
+            return;
+          }
+          // The tip must never sit under the cursor, or it would steal the
+          // pointer from the feature and flicker itself in and out.
+          hoverTooltip ??= new gl.Popup({
+            className: "geolibre-hover-tooltip",
+            closeButton: false,
+            closeOnClick: false,
+            offset: 12,
+            maxWidth: "280px",
+          }).addTo(map);
+          hoverTooltip.setLngLat(lngLat).setDOMContent(content);
+        };
         const handleMouseMove = (e: MapEventOf<"mousemove">) => {
           if (!viewId) {
             const point = e.lngLat.toArray() as [number, number];
             useAppStore.getState().setPointerCoords(point);
             pointerElevation?.update(point);
+            hoverPending = point;
+            if (!hoverFrame) hoverFrame = requestAnimationFrame(drawHover);
           }
         };
         const handleMouseOut = () => {
           if (!viewId) {
             pointerElevation?.invalidate();
             useAppStore.getState().setPointerCoords(null);
+            removeHoverTooltip();
+            setPhotoCursor(false);
           }
+        };
+        /**
+         * Open the photo popup for a geotagged photo under a click made without
+         * the Identify tool, anchored on the photo point itself.
+         */
+        const showPhotoAt = (lngLat: [number, number]): boolean => {
+          const { photos } = pointerTargets();
+          if (photos.size === 0) return false;
+          const hit = current
+            .identifyFeatures(lngLat)
+            .find((candidate) => photos.has(candidate.layerId));
+          if (!hit) return false;
+          const anchor =
+            hit.geometry?.type === "Point"
+              ? (hit.geometry.coordinates as [number, number])
+              : lngLat;
+          removePhotoPopup();
+          photoPopup = new gl.Popup({
+            className: "geolibre-photo-popup-root",
+            closeButton: true,
+            closeOnClick: true,
+            maxWidth: "none",
+          })
+            .setLngLat(anchor)
+            .setDOMContent(createPhotoPopupElement(hit.properties))
+            .addTo(map);
+          return true;
+        };
+        // A selection gesture takes the pointer and sets its own cursor, so drop
+        // the tip and forget the photo cursor without writing over the gesture's.
+        const handleSelectionBegin = () => {
+          removeHoverTooltip();
+          photoCursor = false;
+        };
+        window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
+        cleanupTasks.push(() => {
+          window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
+          removeHoverTooltip();
+          removePhotoPopup();
+        });
+        const showPopupAt = (lngLat: [number, number], content: HTMLElement, maxWidth: string) => {
+          removeIdentifyPopup();
+          const shown = new gl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth,
+          })
+            .setLngLat(lngLat)
+            .setDOMContent(content)
+            .addTo(map);
+          popup = shown;
+          return shown;
+        };
+        /**
+         * Show a loading popup, then replace it with what `load` resolves to.
+         * Closing the loading popup aborts the request; a later click aborts
+         * it too, and a stale result never reopens a popup.
+         */
+        const identifyAsync = (
+          lngLat: [number, number],
+          loading: HTMLElement,
+          maxWidth: string,
+          load: (signal: AbortSignal) => Promise<(() => void) | null>,
+        ) => {
+          asyncIdentifyAbort?.abort();
+          const abort = new AbortController();
+          asyncIdentifyAbort = abort;
+          const loadingPopup = showPopupAt(lngLat, loading, maxWidth);
+          const onLoadingClose = () => abort.abort();
+          loadingPopup.once("close", onLoadingClose);
+          void load(abort.signal).then((show) => {
+            if (abort.signal.aborted) return;
+            asyncIdentifyAbort = null;
+            // Detach first: swapping the popup fires its "close" synchronously.
+            loadingPopup.off("close", onLoadingClose);
+            show?.();
+          });
         };
         // "Identify visible layers": every eligible layer's hits at the point,
         // grouped by layer in one popup, as MapCanvas shows them on MapLibre.
-        const showIdentifyAll = (lngLat: [number, number]) => {
+        // WMS, pixel and raster layers are read asynchronously behind a
+        // loading popup; DuckDB layers are picked from the deck overlay.
+        const showIdentifyAll = (lngLat: [number, number], point: { x: number; y: number }) => {
           const next = useAppStore.getState();
+          const labels = identifyAllLabelsRef.current;
           const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
-          const eligible = new Map(
-            next.layers
-              .filter(
-                (candidate) =>
-                  effectiveLayerRenderState(candidate, groupById).visible &&
-                  resolveLayerCapabilities(candidate).query &&
-                  isPopupClickEnabled(candidate.popup),
-              )
-              .map((candidate) => [candidate.id, candidate]),
+          const eligibleLayers = next.layers.filter(
+            (candidate) =>
+              effectiveLayerRenderState(candidate, groupById).visible &&
+              resolveLayerCapabilities(candidate).query &&
+              isPopupClickEnabled(candidate.popup),
           );
+          const eligible = new Map(eligibleLayers.map((candidate) => [candidate.id, candidate]));
           // The engine already collapses one feature drawn by several style
           // layers (fill and outline) into one hit per layer and feature.
           const hits: GlobalIdentifyHit[] = current.identifyFeatures(lngLat).flatMap((hit) => {
@@ -446,19 +657,16 @@ export function MapboxCanvas({
               },
             ];
           });
-          const order = new Map(next.layers.map((candidate, index) => [candidate.id, index]));
-          hits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
-          removeIdentifyPopup();
-          if (hits.length === 0) {
-            next.selectFeature(null);
-            // A layer the user picked in the Layers panel is theirs to keep.
-            if (
-              globalIdentifyActivatedLayerId !== null &&
-              useAppStore.getState().selectedLayerId === globalIdentifyActivatedLayerId
-            )
-              next.selectLayer(null);
-            globalIdentifyActivatedLayerId = null;
-            return;
+          // DuckDB query layers draw through deck.gl and own no style layer.
+          for (const candidate of eligibleLayers) {
+            if (!isDuckDBQueryLayer(candidate)) continue;
+            const result = duckDBBridge()?.identifyLayerAtPoint?.(candidate.id, point);
+            if (result)
+              hits.push({
+                layer: candidate,
+                properties: result.properties,
+                featureId: result.featureId,
+              });
           }
           const activate = (hit: GlobalIdentifyHit) => {
             const store = useAppStore.getState();
@@ -466,35 +674,219 @@ export function MapboxCanvas({
             store.selectFeature(hit.featureId);
             globalIdentifyActivatedLayerId = hit.layer.id;
           };
-          activate(hits[0]);
-          // One popup holds several layers, so it takes the widest width any
-          // of them asked for.
-          const widest = hits.reduce<number | undefined>((widestSoFar, hit) => {
-            const configured = resolvePopupMaxWidth(hit.layer.popup);
-            if (configured === undefined) return widestSoFar;
-            return widestSoFar === undefined ? configured : Math.max(widestSoFar, configured);
-          }, undefined);
-          const content = createGlobalIdentifyPopupElement(
-            hits,
-            map.getZoom(),
-            activate,
-            identifyAllLabelsRef.current,
-            widest,
+          const finish = (allHits: GlobalIdentifyHit[]) => {
+            const order = new Map(
+              useAppStore.getState().layers.map((candidate, index) => [candidate.id, index]),
+            );
+            allHits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
+            removeIdentifyPopup();
+            if (allHits.length === 0) {
+              const store = useAppStore.getState();
+              store.selectFeature(null);
+              // A layer the user picked in the Layers panel is theirs to keep.
+              if (
+                globalIdentifyActivatedLayerId !== null &&
+                store.selectedLayerId === globalIdentifyActivatedLayerId
+              )
+                store.selectLayer(null);
+              globalIdentifyActivatedLayerId = null;
+              return;
+            }
+            activate(allHits[0]);
+            // One popup holds several layers, so it takes the widest width any
+            // of them asked for.
+            const widest = allHits.reduce<number | undefined>((widestSoFar, hit) => {
+              const configured = resolvePopupMaxWidth(hit.layer.popup);
+              if (configured === undefined) return widestSoFar;
+              return widestSoFar === undefined ? configured : Math.max(widestSoFar, configured);
+            }, undefined);
+            showPopupAt(
+              lngLat,
+              createGlobalIdentifyPopupElement(allHits, map.getZoom(), activate, labels, widest),
+              identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined),
+            );
+          };
+          const identifyRaster = identifyRasterLayerAtRef.current;
+          const asyncLayers = eligibleLayers.filter(
+            (candidate) =>
+              isWmsLayer(candidate) ||
+              isPixelIdentifyLayer(candidate) ||
+              candidate.type === "cog" ||
+              candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
           );
-          popup = new gl.Popup({
-            className: "geolibre-identify-popup",
-            closeButton: true,
-            closeOnClick: false,
-            maxWidth: identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined),
-          })
-            .setLngLat(lngLat)
-            .setDOMContent(content)
-            .addTo(map);
+          if (asyncLayers.length === 0) {
+            asyncIdentifyAbort?.abort();
+            finish(hits);
+            return;
+          }
+          next.selectFeature(null);
+          const zoom = map.getZoom();
+          identifyAsync(
+            lngLat,
+            createIdentifyPopupElement(labels.loadingTitle, { status: labels.loading }),
+            identifyPopupShellMaxWidth(undefined),
+            async (signal) => {
+              const asyncHits = await Promise.all(
+                asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
+                  try {
+                    if (isWmsLayer(candidate)) {
+                      const result = await fetchWmsIdentifyProperties(
+                        candidate,
+                        lngLat,
+                        zoom,
+                        signal,
+                      );
+                      if (
+                        !result ||
+                        (result.featureId == null && Object.keys(result.properties).length === 0)
+                      )
+                        return null;
+                      return {
+                        layer: candidate,
+                        properties: result.properties,
+                        featureId: result.featureId == null ? null : String(result.featureId),
+                      };
+                    }
+                    // Before the pixel branch on purpose: the NetCDF dialog
+                    // marks its layers `pixelIdentify` too, and the Time Slider
+                    // bridge knows nothing about a retained NetCDF grid.
+                    if (
+                      candidate.metadata.sourceKind !== NETCDF_IMAGE_SOURCE_KIND &&
+                      isPixelIdentifyLayer(candidate)
+                    ) {
+                      const result = await timeSliderBridge()?.identifyPixelAt?.(
+                        candidate.id,
+                        lngLat,
+                        { signal },
+                      );
+                      return result
+                        ? {
+                            layer: candidate,
+                            properties: pixelIdentifyProperties(result),
+                            featureId: null,
+                            title: labels.pixel,
+                          }
+                        : null;
+                    }
+                    const result = await identifyRaster?.(candidate, lngLat, { signal });
+                    return result
+                      ? {
+                          layer: candidate,
+                          properties: result.properties,
+                          featureId: null,
+                          title: result.title ?? labels.pixel,
+                        }
+                      : null;
+                  } catch (error: unknown) {
+                    if (signal.aborted || isAbortError(error)) return null;
+                    return {
+                      layer: candidate,
+                      properties: {
+                        [labels.errorLabel]: error instanceof Error ? error.message : labels.error,
+                      },
+                      featureId: null,
+                    };
+                  }
+                }),
+              );
+              return () =>
+                finish([
+                  ...hits,
+                  ...asyncHits.filter((hit): hit is GlobalIdentifyHit => hit !== null),
+                ]);
+            },
+          );
+        };
+        /**
+         * Identify one layer that is not drawn as queryable style features: a
+         * WMS (GetFeatureInfo), a Time Slider pixel layer, or a DuckDB query
+         * layer. Returns false for ordinary vector layers.
+         */
+        const identifyNonVectorLayer = (
+          layer: GeoLibreLayer,
+          lngLat: [number, number],
+          point: { x: number; y: number },
+        ): boolean => {
+          const maxWidth = identifyPopupShellMaxWidth(layer.popup);
+          const message = (text: string) =>
+            createIdentifyPopupElement(layer.name, { status: text });
+          const store = useAppStore.getState();
+          if (isPixelIdentifyLayer(layer)) {
+            const identifyPixelAt = timeSliderBridge()?.identifyPixelAt;
+            if (!identifyPixelAt) {
+              asyncIdentifyAbort?.abort();
+              removeIdentifyPopup();
+              store.selectFeature(null);
+              return true;
+            }
+            store.selectFeature(null);
+            identifyAsync(lngLat, message("Loading..."), maxWidth, async (signal) => {
+              try {
+                const result = await identifyPixelAt(layer.id, lngLat, { signal });
+                // A null result is a click off the image grid: a miss, not a failure.
+                const content = result
+                  ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
+                  : message("No data at this location.");
+                return () => showPopupAt(lngLat, content, maxWidth);
+              } catch (error: unknown) {
+                if (signal.aborted || isAbortError(error)) return null;
+                const text =
+                  error instanceof Error ? error.message : "The pixel value could not be read.";
+                return () => showPopupAt(lngLat, message(text), maxWidth);
+              }
+            });
+            return true;
+          }
+          if (isWmsLayer(layer)) {
+            store.selectFeature(null);
+            const zoom = map.getZoom();
+            identifyAsync(lngLat, message("Loading..."), maxWidth, async (signal) => {
+              try {
+                const result = await fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
+                const content = createIdentifyPopupElement(
+                  layer.name,
+                  result?.properties ?? {},
+                  result?.featureId,
+                );
+                return () => showPopupAt(lngLat, content, maxWidth);
+              } catch (error: unknown) {
+                if (signal.aborted || isAbortError(error)) return null;
+                const text =
+                  error instanceof Error ? error.message : "The WMS GetFeatureInfo request failed.";
+                return () => showPopupAt(lngLat, message(text), maxWidth);
+              }
+            });
+            return true;
+          }
+          if (isDuckDBQueryLayer(layer)) {
+            asyncIdentifyAbort?.abort();
+            const result = duckDBBridge()?.identifyLayerAtPoint?.(layer.id, point);
+            if (!result) {
+              removeIdentifyPopup();
+              store.selectFeature(null);
+              return true;
+            }
+            store.selectFeature(result.featureId);
+            showPopupAt(
+              lngLat,
+              createIdentifyPopupElement(layer.name, result.properties, result.featureId, {
+                popup: layer.popup,
+                fieldVisibility: layer.fieldVisibility,
+                zoom: map.getZoom(),
+              }),
+              maxWidth,
+            );
+            return true;
+          }
+          return false;
         };
         const handleClick = (e: MapEventOf<"click">) => {
           if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
-          if (!next.identifyLayerId) return;
+          if (!next.identifyLayerId) {
+            showPhotoAt(e.lngLat.toArray());
+            return;
+          }
           const identifyAll = next.identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
           const targetLayer = identifyAll
             ? undefined
@@ -505,9 +897,19 @@ export function MapboxCanvas({
             return;
           }
           if (identifyAll) {
-            showIdentifyAll(e.lngLat.toArray());
+            showIdentifyAll(e.lngLat.toArray(), e.point);
             return;
           }
+          // COG layers are read by the raster control's own pixel inspector
+          // (useRasterIdentify) and a NetCDF grid by useNetcdfIdentify, as on
+          // MapLibre; neither has features to query here.
+          if (
+            targetLayer!.type === "cog" ||
+            targetLayer!.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND
+          )
+            return;
+          if (identifyNonVectorLayer(targetLayer!, e.lngLat.toArray(), e.point)) return;
+          asyncIdentifyAbort?.abort();
           const match = current
             .identifyFeatures(e.lngLat.toArray(), targetLayer?.id)
             .find((hit) => {
@@ -601,6 +1003,7 @@ export function MapboxCanvas({
         });
         cleanupTasks.push(() => themeObserver.disconnect());
         cleanupTasks.push(() => {
+          asyncIdentifyAbort?.abort();
           removeIdentifyPopup();
         });
       })

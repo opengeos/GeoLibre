@@ -1,6 +1,7 @@
 import {
   MapboxCanvas,
   type MapCanvasIdentifyAllLabels,
+  type MapCanvasRasterIdentify,
   type MapDiagnosticEvent,
   type MapEngine,
 } from "@geolibre/map";
@@ -24,6 +25,7 @@ export function PrimaryMapboxCanvas({
   onMapDiagnosticEvent,
   canUseRemoteElevation,
   identifyAllLabels,
+  identifyRasterLayerAt,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
@@ -31,6 +33,7 @@ export function PrimaryMapboxCanvas({
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   canUseRemoteElevation?: () => boolean;
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
   viewId?: string;
 }) {
   const token = useMapboxAccessToken();
@@ -42,6 +45,7 @@ export function PrimaryMapboxCanvas({
           canUseRemoteElevation={canUseRemoteElevation}
           engineRef={engineRef}
           identifyAllLabels={identifyAllLabels}
+          identifyRasterLayerAt={identifyRasterLayerAt}
           onEngineReady={onEngineReady}
           onMapDiagnosticEvent={onMapDiagnosticEvent}
           viewId={viewId}

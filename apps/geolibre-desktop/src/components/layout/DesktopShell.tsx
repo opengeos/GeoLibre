@@ -2715,6 +2715,7 @@ export function DesktopShell({
                   canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
                   identifyAllLabels={identifyAllLabels}
+                  identifyRasterLayerAt={identifyRasterLayerAt}
                   onEngineReady={handleMapControllerReady}
                   onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />
