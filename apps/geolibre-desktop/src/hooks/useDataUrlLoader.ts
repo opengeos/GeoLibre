@@ -9,6 +9,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dataUrlParameters,
+  type DataTypeHint,
   fetchRemoteData,
   fetchRemoteStyle,
   mapboxStyleForDataLayer,
@@ -37,11 +38,16 @@ function layerPointsAt(layer: GeoLibreLayer, url: string): boolean {
 export async function loadDataUrl(
   mapAppAPI: ReturnType<typeof createAppAPI>,
   dataUrl: string,
-  options: { styleUrl?: string | null; signal?: AbortSignal; fit?: boolean } = {},
+  options: {
+    styleUrl?: string | null;
+    dataType?: DataTypeHint | null;
+    signal?: AbortSignal;
+    fit?: boolean;
+  } = {},
 ): Promise<DataUrlLoadResult> {
   const fit = options.fit ?? true;
   const [remote, rawStyle] = await Promise.all([
-    fetchRemoteData(dataUrl, { signal: options.signal }),
+    fetchRemoteData(dataUrl, { signal: options.signal, dataType: options.dataType }),
     options.styleUrl ? fetchRemoteStyle(options.styleUrl, { signal: options.signal }) : null,
   ]);
   if (options.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
@@ -162,6 +168,7 @@ export function useDataUrlLoader(
         const [entry] = params;
         return loadDataUrl(mapAppAPI, entry.dataUrl, {
           styleUrl: entry.styleUrl,
+          dataType: entry.dataType,
           signal: controller.signal,
         });
       }
@@ -170,6 +177,7 @@ export function useDataUrlLoader(
         for (const entry of params) {
           const result = await loadDataUrl(mapAppAPI, entry.dataUrl, {
             styleUrl: entry.styleUrl,
+            dataType: entry.dataType,
             signal: controller.signal,
             fit: false,
           });

@@ -1,9 +1,18 @@
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 
+/**
+ * A `dataType` hint naming the format of a `data` URL that its path cannot
+ * reveal, such as an extensionless API endpoint.
+ */
+export type DataTypeHint = "lidar";
+
+const DATA_TYPE_HINTS = new Set<string>(["lidar"]);
+
 export interface DataUrlParameter {
   dataUrl: string;
   styleUrl: string | null;
+  dataType: DataTypeHint | null;
 }
 const SERVICE_KINDS = new Set([
   "xyz",
@@ -97,11 +106,20 @@ function httpUrl(value: string | null): string | null {
 export function dataUrlParameters(search: string): DataUrlParameter[] | null {
   const params = new URLSearchParams(search);
   const styles = params.getAll("style");
+  // Paired with `data` by position, like `style`; an empty or unknown value
+  // leaves that entry to be classified from its URL.
+  const dataTypes = params.getAll("dataType");
   const entries = params
     .getAll("data")
     .map((value, index) => {
       const dataUrl = httpUrl(value);
-      return dataUrl ? { dataUrl, styleUrl: httpUrl(styles[index] ?? null) } : null;
+      if (!dataUrl) return null;
+      const hint = dataTypes[index]?.trim().toLowerCase() ?? "";
+      return {
+        dataUrl,
+        styleUrl: httpUrl(styles[index] ?? null),
+        dataType: DATA_TYPE_HINTS.has(hint) ? (hint as DataTypeHint) : null,
+      };
     })
     .filter((entry): entry is DataUrlParameter => entry !== null);
   return entries.length ? entries : null;
@@ -301,11 +319,15 @@ function isLidarUrl(url: string): boolean {
   return /\.(?:las|laz)$/.test(pathname) || pathname.endsWith("/ept.json");
 }
 
-/** Classify or fetch a supported data URL into startup-loadable layers. */
+/**
+ * Classify or fetch a supported data URL into startup-loadable layers. A
+ * `dataType` hint overrides classification by the URL's path.
+ */
 export async function fetchRemoteData(
   url: string,
-  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+  options: { signal?: AbortSignal; fetchImpl?: typeof fetch; dataType?: DataTypeHint | null } = {},
 ): Promise<RemoteData> {
+  if (options.dataType === "lidar") return { kind: "lidar", name: remoteName(url), url };
   const ext = extension(url);
   if (["tif", "tiff", "cog"].includes(ext)) return { kind: "cog", name: remoteName(url), url };
   if (ext === "pmtiles") return { kind: "pmtiles", name: remoteName(url), url };

@@ -266,10 +266,12 @@ describe("data URL deep links", () => {
         {
           dataUrl: "https://example.com/roads.geojson",
           styleUrl: "https://example.com/roads.style.json",
+          dataType: null,
         },
         {
           dataUrl: "https://example.com/buildings.parquet",
           styleUrl: "https://example.com/buildings.style.json",
+          dataType: null,
         },
       ],
     );
@@ -283,11 +285,29 @@ describe("data URL deep links", () => {
           "&style=&style=https://example.com/dem.style.json",
       ),
       [
-        { dataUrl: "https://example.com/roads.geojson", styleUrl: null },
+        { dataUrl: "https://example.com/roads.geojson", styleUrl: null, dataType: null },
         {
           dataUrl: "https://example.com/dem.tif",
           styleUrl: "https://example.com/dem.style.json",
+          dataType: null,
         },
+      ],
+    );
+  });
+
+  it("pairs repeated dataType hints by position and ignores unknown ones", () => {
+    const endpoint = "https://api.example.com/download/42?token=abc";
+    assert.deepEqual(
+      dataUrlParameters(
+        "?data=https://example.com/roads.geojson" +
+          `&data=${encodeURIComponent(endpoint)}` +
+          "&data=https://example.com/dem.tif" +
+          "&dataType=&dataType=LiDAR&dataType=bogus",
+      ),
+      [
+        { dataUrl: "https://example.com/roads.geojson", styleUrl: null, dataType: null },
+        { dataUrl: endpoint, styleUrl: null, dataType: "lidar" },
+        { dataUrl: "https://example.com/dem.tif", styleUrl: null, dataType: null },
       ],
     );
   });
@@ -426,6 +446,21 @@ describe("data URL deep links", () => {
     for (const [url, name] of cases) {
       assert.deepEqual(await fetchRemoteData(url, { fetchImpl }), { kind: "lidar", name, url });
     }
+    assert.equal(fetched, false);
+  });
+
+  it("treats an extensionless endpoint as LiDAR when hinted, without fetching it", async () => {
+    let fetched = false;
+    const fetchImpl = (async () => {
+      fetched = true;
+      throw new Error("unexpected");
+    }) as unknown as typeof fetch;
+    const url = "https://api.example.com/download/42?token=abc";
+    assert.deepEqual(await fetchRemoteData(url, { fetchImpl, dataType: "lidar" }), {
+      kind: "lidar",
+      name: "42",
+      url,
+    });
     assert.equal(fetched, false);
   });
 

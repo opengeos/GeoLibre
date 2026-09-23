@@ -231,6 +231,12 @@ A LiDAR point cloud opens in the LiDAR layer control. A COPC file (`.copc.laz`) 
 https://web.geolibre.app/?data=https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz
 ```
 
+GeoLibre recognizes a point cloud from its URL path. An API endpoint whose path has no `.las`/`.laz` suffix, such as `https://api.example.com/download/42?token=…`, needs `dataType=lidar` to say what it returns. Like `style`, `dataType` pairs with `data` by position, so repeat it (leaving earlier values empty) in a batch. A hinted endpoint is downloaded whole, since COPC streaming is chosen only for a `.copc.` URL. An access token passed in the query string is kept on every request, including the byte-range reads of a streamed COPC file; encode the whole `data` value when the endpoint has more than one query parameter:
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Fdownload%2F42%3Ftoken%3Dabc%26expires%3D3600&dataType=lidar
+```
+
 A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `+`, `%`, or `#`. A bare `=` inside the value is fine, since only the first `=` in each `&`-delimited pair separates the name from the value. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, PMTiles, and COPC servers should also support HTTP byte-range requests.
 
 For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
