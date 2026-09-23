@@ -868,7 +868,13 @@ export class MapboxEngine implements MapEngine {
     const entries: Array<readonly [string, string]> = [];
     for (const layer of layers) {
       const prefix = `${mapboxSourceId(layer.id)}-`;
-      const planned = this.plans.get(layer.id)?.layers.map((spec) => spec.id) ?? [];
+      // Companion layers (masks, generator shapes, decorations, dedup labels)
+      // are not the layer's own, so no control lists them, as on MapLibre.
+      const planned =
+        this.plans
+          .get(layer.id)
+          ?.layers.filter((spec) => !isInternalMapboxLayer(spec))
+          .map((spec) => spec.id) ?? [];
       const native = Array.isArray(layer.metadata?.nativeLayerIds)
         ? layer.metadata.nativeLayerIds.filter((id): id is string => typeof id === "string")
         : [];

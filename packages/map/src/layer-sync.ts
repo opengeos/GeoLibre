@@ -28,6 +28,7 @@ import {
 import { encodeVectorTileLayerPart } from "./vector-tile-layer-ids";
 import {
   DEDUPED_LABEL_PROPERTY,
+  GEOMAN_TEXT_PROPERTY,
   getDedupedLabelFeatures,
   parseLabelOverride,
   TEXT_MARKER_SHAPE_FILTER,
@@ -132,7 +133,6 @@ const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
 const PMTILES_ARCHIVE_KEYS_GLOBAL_KEY = "__geolibrePMTilesArchiveKeys";
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
-const GEOMAN_TEXT_PROPERTY = "__gm_text";
 
 const pointGeometryFilter: maplibregl.FilterSpecification = [
   "match",

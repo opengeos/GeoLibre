@@ -19,6 +19,8 @@ export { DEDUPED_LABEL_PROPERTY } from "./label-dedup";
 export const TEXT_MARKER_SHAPE = "text_marker";
 /** The feature property Geoman stores a drawn shape's kind in. */
 export const GEOMAN_SHAPE_PROPERTY = "__gm_shape";
+/** The feature property a Geo Editor text marker stores its text in. */
+export const GEOMAN_TEXT_PROPERTY = "__gm_text";
 
 /**
  * Matches Geo Editor text-marker points (by Geoman's shape property or the

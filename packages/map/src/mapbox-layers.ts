@@ -41,6 +41,7 @@ import {
 import { flatExtrusionCutoff, hasTextMarkerFeatures } from "./symbology-shared";
 import {
   DEDUPED_LABEL_PROPERTY,
+  GEOMAN_TEXT_PROPERTY,
   getDedupedLabelFeatures,
   parseLabelOverride,
   TEXT_MARKER_SHAPE_FILTER,
@@ -317,12 +318,6 @@ export function compileMapboxLayer(
     ruleBasedVisibilityFilter(layer.style),
   ].filter((candidate) => (Array.isArray(candidate) ? candidate.length > 0 : Boolean(candidate)));
   const filter = filters.length ? ["all", ...filters] : null;
-  // `["geometry-type"]` evaluates to the Multi* variant for multi-geometries,
-  // so match both (as layer-sync.ts does) or a MultiPolygon never gets a fill.
-  const geometryFilter = (geometry: string): FilterSpecification => {
-    const isGeometry = ["match", ["geometry-type"], [geometry, `Multi${geometry}`], true, false];
-    return (filter ? ["all", isGeometry, filter] : isGeometry) as FilterSpecification;
-  };
   const notPoint = ["match", ["geometry-type"], ["Point", "MultiPoint"], false, true];
   // Which geometry layers to emit. Inline GeoJSON says what it holds, so only
   // the layers its data can draw are added, as MapLibre's layer-sync does: a
@@ -453,7 +448,10 @@ export function compileMapboxLayer(
         ...layout,
         "text-allow-overlap": true,
         "text-font": compileOptions.textFont ?? DEFAULT_MAPBOX_TEXT_FONT,
-        "text-field": ["to-string", ["coalesce", ["get", "__gm_text"], ["get", "text"], ""]],
+        "text-field": [
+          "to-string",
+          ["coalesce", ["get", GEOMAN_TEXT_PROPERTY], ["get", "text"], ""],
+        ],
         "text-ignore-placement": true,
         "text-size": Math.max(1, styleValue(layer.style, "textSize")),
       },
