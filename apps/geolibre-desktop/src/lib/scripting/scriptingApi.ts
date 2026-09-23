@@ -329,6 +329,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         // controller, which is also what makes this work in `?maponly` embeds
         // where no toolbar is mounted to re-apply anything.
         recordScriptMapControl(control, visible);
+        // The boolean this returns is deliberately not gated on. It is not a
+        // clean success flag: on the MapLibre engine `addNavigationControl` and
+        // friends return false when the control is *already* mounted, so an
+        // idempotent `show_control` on a shown control -- normal for an API that
+        // sets absolute state rather than toggling -- would report failure.
+        // `toggleMapControl` can check it only because it always flips, so it
+        // never asks for a state that already holds. Telling a real refusal
+        // (Mapbox declines to hide attribution) from that benign case needs a
+        // visibility getter on MapEngine, which does not exist yet.
         getController()?.setBuiltInControlVisible(control, visible);
         // The toolbar, when mounted, owns the checkmark state and re-applies it
         // on a renderer swap, so it has to hear about the change or it would

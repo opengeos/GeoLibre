@@ -124,6 +124,11 @@ export function isScriptablePanel(name: unknown): name is ScriptablePanel {
 /**
  * Arm Identify on one layer, on every visible layer, or turn it off.
  *
+ * {@link SCRIPT_IDENTIFY_ALL} is matched before `layerId` is resolved against
+ * the project, so a layer whose id is literally `"all"` cannot be targeted on
+ * its own. Generated ids are nanoid-style, so only a hand-authored project can
+ * reach that, and the sentinel is part of the documented API.
+ *
  * @param layerId - A layer id, {@link SCRIPT_IDENTIFY_ALL}, or null to disarm.
  * @returns The store's resulting `identifyLayerId` in script terms.
  * @throws If `layerId` is not a string or null, or names no layer.

@@ -2993,6 +2993,9 @@ class Map(anywidget.AnyWidget):
             layer: A layer id, display name, or :class:`Layer` handle to
                 identify on that layer; ``"all"`` (the default) to identify
                 every visible queryable layer; or ``None`` to turn Identify off.
+                ``"all"`` is matched before the lookup, so a layer whose id or
+                display name is literally ``"all"`` cannot be targeted on its
+                own.
 
         Raises:
             ValueError: If ``layer`` matches no layer.
