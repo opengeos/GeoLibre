@@ -70,7 +70,7 @@ export function firmsAcquisitionMs(acqDate: string, acqTime: string): number {
  *
  * Columns are located by header name so a reordered product version still
  * parses. Malformed rows are skipped, and low-confidence detections are
- * dropped: VIIRS flags those as likely false alarms (sun glint, hot surfaces).
+ * dropped: FIRMS flags those as likely false alarms (sun glint, hot surfaces).
  * Returns `null` when the body is not FIRMS CSV at all (an error page).
  */
 export function parseFirmsCsv(csv: string): FirmsDetection[] | null {
@@ -106,7 +106,7 @@ export function parseFirmsCsv(csv: string): FirmsDetection[] | null {
     const cells = line.split(",");
     if (cells.length < header.length) continue;
     const confidence = cell(cells, iConfidence).toLowerCase();
-    if (confidence === "low" || confidence === "l") continue;
+    if (isLowConfidence(confidence)) continue;
     const latitude = Number(cells[iLat]);
     const longitude = Number(cells[iLon]);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) continue;
@@ -135,6 +135,16 @@ const FIRMS_SATELLITE_CODES: Record<string, string> = {
   T: "Terra",
   A: "Aqua",
 };
+
+/**
+ * VIIRS reports confidence as a word (`low`/`nominal`/`high`, or `l`/`n`/`h`);
+ * MODIS as 0-100, where FIRMS classes below 30 as low.
+ */
+function isLowConfidence(confidence: string): boolean {
+  if (confidence === "low" || confidence === "l") return true;
+  const percent = Number(confidence);
+  return confidence !== "" && Number.isFinite(percent) && percent < 30;
+}
 
 function satelliteName(code: string): string {
   return FIRMS_SATELLITE_CODES[code.toUpperCase()] ?? code;

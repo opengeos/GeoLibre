@@ -9,7 +9,11 @@ import {
   FIRMS_SATELLITES,
   type FirmsDetection,
 } from "../packages/plugins/src/plugins/gods-eye-view-fire-feeds";
-import { FIRMS_UPSTREAMS as DEV_FIRMS_UPSTREAMS } from "../apps/geolibre-desktop/vite-proxy-guard";
+import {
+  FIRMS_UPSTREAMS as DEV_FIRMS_UPSTREAMS,
+  proxyFirmsRequestGuarded,
+} from "../apps/geolibre-desktop/vite-proxy-guard";
+import type { ServerResponse } from "node:http";
 import { FIRMS_UPSTREAMS as EDGE_FIRMS_UPSTREAMS } from "../workers/tiles/src/allowlisted-fetch";
 
 const VIIRS_HEADER =
@@ -66,8 +70,12 @@ describe("FIRMS CSV parsing", () => {
   it("parses MODIS column names and rejects error pages", () => {
     const modis =
       "latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,confidence,version,bright_t31,frp,daynight\n" +
-      "1.49,127.62,310.2,1.02,1.01,2026-09-22,0011,T,66,6.1NRT,290.53,8.78,D\n";
-    assert.equal(parseFirmsCsv(modis)?.[0].satellite, "Terra");
+      "1.49,127.62,310.2,1.02,1.01,2026-09-22,0011,T,66,6.1NRT,290.53,8.78,D\n" +
+      "2.00,120.00,305.0,1.00,1.00,2026-09-22,0011,A,12,6.1NRT,290.00,3.10,D\n";
+    // MODIS confidence is 0-100; below 30 is FIRMS' low class and is dropped.
+    const detections = parseFirmsCsv(modis);
+    assert.equal(detections?.length, 1);
+    assert.equal(detections?.[0].satellite, "Terra");
     assert.equal(parseFirmsCsv("<html>Service unavailable</html>"), null);
     assert.equal(parseFirmsCsv("Invalid MAP_KEY."), null);
   });
@@ -168,5 +176,22 @@ describe("FIRMS fetch", () => {
       }),
       /returned no CSV/,
     );
+  });
+});
+
+describe("FIRMS dev relay", () => {
+  it("answers an unknown satellite with 404 before fetching", async () => {
+    const written: { status?: number; body?: unknown } = {};
+    const res = {
+      statusCode: 200,
+      setHeader() {},
+      end(body?: unknown) {
+        written.status = this.statusCode;
+        written.body = body;
+      },
+    };
+    await proxyFirmsRequestGuarded("terra", res as unknown as ServerResponse);
+    assert.equal(written.status, 404);
+    assert.equal(written.body, "Unknown FIRMS satellite");
   });
 });
