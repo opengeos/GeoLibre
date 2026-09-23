@@ -282,12 +282,14 @@ export function compileMapboxLayer(
   const style = { ...DEFAULT_LAYER_STYLE, ...layer.style };
   const layout = { visibility: layer.visible ? ("visible" as const) : ("none" as const) };
   const zoom = { minzoom: style.minZoom, maxzoom: style.maxZoom };
+  // An empty array is no filter: the embed API's `setFilter(id, [])` stores
+  // one, and as an `all` operand it would be an invalid expression.
   const filters = [
     compileLayerFilters(layer),
     layer.timeFilter,
     layer.embedFilter,
     ruleBasedVisibilityFilter(layer.style),
-  ].filter(Boolean);
+  ].filter((candidate) => (Array.isArray(candidate) ? candidate.length > 0 : Boolean(candidate)));
   const filter = filters.length ? ["all", ...filters] : null;
   // `["geometry-type"]` evaluates to the Multi* variant for multi-geometries,
   // so match both (as layer-sync.ts does) or a MultiPolygon never gets a fill.

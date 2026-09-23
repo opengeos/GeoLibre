@@ -93,4 +93,12 @@ describe("Mapbox label compilation", () => {
     assert.equal(labelSpec(labelled({}, undefined, { pointRenderer: "heatmap" })), undefined);
     assert.equal(labelSpec(labelled({}, undefined, { extrusionEnabled: true })), undefined);
   });
+
+  it("treats an empty embed filter as no filter", () => {
+    const layer = { ...labelled({ dedupe: "unique" }), embedFilter: [] };
+    const plan = compileMapboxLayer(layer);
+    // Dedupe stays on, and no empty array lands in any layer's filter.
+    assert.ok(plan.additionalSources);
+    assert.doesNotMatch(JSON.stringify(plan.layers.map((spec) => spec.filter)), /\[\]/);
+  });
 });

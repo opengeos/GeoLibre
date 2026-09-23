@@ -770,13 +770,11 @@ export class MapboxEngine implements MapEngine {
         for (const old of oldPlan?.layers ?? [])
           if (!wanted.has(old.id) && map.getLayer(old.id)) map.removeLayer(old.id);
         for (const spec of plan.layers) {
+          const oldSpec = oldPlan?.layers.find((s) => s.id === spec.id);
           const old = map.getLayer(spec.id);
           if (old && old.type !== spec.type) map.removeLayer(spec.id);
           if (!map.getLayer(spec.id)) map.addLayer(spec);
-          else if (
-            JSON.stringify(oldPlan?.layers.find((s) => s.id === spec.id)) !== JSON.stringify(spec)
-          ) {
-            const oldSpec = oldPlan?.layers.find((s) => s.id === spec.id);
+          else if (JSON.stringify(oldSpec) !== JSON.stringify(spec)) {
             for (const [key, value] of Object.entries(spec.paint ?? {}))
               map.setPaintProperty(spec.id, key as keyof mapboxgl.AnyPaint, value);
             for (const [key, value] of Object.entries(spec.layout ?? {}))
