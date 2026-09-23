@@ -3,11 +3,13 @@ export {
   registerAssistantToolSpec,
   registerAssistantGuidance,
   listAssistantTools,
+  listAssistantToolEntries,
   listAssistantGuidance,
   getAssistantToolsVersion,
   unregisterAssistantToolsByOwner,
   MAX_ASSISTANT_GUIDANCE_LENGTH,
   type AssistantGuidanceEntry,
+  type AssistantToolEntry,
 } from "./assistant-tool-registry";
 export * from "./types";
 export { PluginManager } from "./plugin-manager";

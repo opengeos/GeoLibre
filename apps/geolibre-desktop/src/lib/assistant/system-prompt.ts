@@ -32,12 +32,24 @@ Guidelines:
  * Each block is attributed to its owning plugin so the model, and anyone
  * reading a captured prompt, can tell which plugin a rule came from.
  *
+ * When plugin tools are disclosed progressively, `pluginToolCatalog` (from
+ * `formatPluginToolCatalog`) lists them last, after any guidance that names them.
+ *
  * @param guidance Guidance entries to append; defaults to the live registry.
+ * @param pluginToolCatalog The deferred plugin tool catalog, or "" for none.
  * @returns The full system prompt string.
  */
 export function buildSystemPrompt(
   guidance: AssistantGuidanceEntry[] = listAssistantGuidance(),
+  pluginToolCatalog = "",
 ): string {
+  const prompt = withPluginGuidance(guidance);
+  const catalog = pluginToolCatalog.trim();
+  return catalog ? `${prompt}\n\n${catalog}` : prompt;
+}
+
+/** The host prompt followed by the attributed plugin guidance blocks, if any. */
+function withPluginGuidance(guidance: AssistantGuidanceEntry[]): string {
   const blocks = guidance
     .map(({ text, ownerPluginId }) => {
       const trimmed = text.trim();

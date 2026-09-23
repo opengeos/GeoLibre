@@ -106,6 +106,20 @@ export function listAssistantTools(): Tool[] {
   return [...registry.values()].map((entry) => entry.tool);
 }
 
+/** One registered tool with the plugin that owns it, for grouping by plugin. */
+export interface AssistantToolEntry {
+  tool: Tool;
+  ownerPluginId?: string;
+}
+
+/** Registered tools in registration order, each with its owning plugin. */
+export function listAssistantToolEntries(): AssistantToolEntry[] {
+  return [...registry.values()].map(({ tool, ownerPluginId }) => ({
+    tool,
+    ...(ownerPluginId ? { ownerPluginId } : {}),
+  }));
+}
+
 /** Append guidance to the assistant's system prompt for as long as it stays registered.
  * Tool descriptions are read only after the model has chosen a tool, so rules about
  * *when* to call a plugin's tools belong here, next to the host's own guidelines.

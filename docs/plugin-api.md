@@ -1193,6 +1193,26 @@ The assistant refreshes its tools before the next prompt while retaining its
 conversation history. Plugin callbacks execute plugin-authored code, like a
 panel button; they should use the app API to update layers and other app state.
 
+### Progressive tool disclosure
+
+While active plugins register at most 12 tools in total, every plugin tool is
+sent to the model in full on every request. Past that, the assistant stops
+sending plugin tool schemas up front, so the tool list does not grow with every
+installed plugin. The system prompt instead lists each plugin tool under a
+`Plugin tools:` heading, grouped by plugin, with its name and a one-line summary
+(the first sentence of the first line of its `description`, capped at 160
+characters). The model loads the tools it needs with the host tool
+`load_plugin_tools`, passing exact tool names or a plugin id to load all of that
+plugin's tools. Loaded tools become callable in the same turn and stay loaded
+for the rest of the conversation. GeoLibre's own tools are always sent.
+
+Because the summary is all the model sees before it loads a tool, **open each
+`description` with a sentence that says what the tool does and which data it
+covers**, so tools with the same shape in different plugins or domains (for
+example `query_*_database`) can be told apart without their schemas. Guidance
+registered with `registerAssistantGuidance` is still sent in full and can name
+your tools; the model loads them before calling them.
+
 ### Assistant guidance
 
 A tool's description is read only after the model has already decided which

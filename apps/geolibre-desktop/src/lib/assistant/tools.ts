@@ -1,4 +1,3 @@
-import { listAssistantTools } from "@geolibre/plugins/assistant-tool-registry";
 import {
   DEFAULT_LAYER_STYLE,
   OPENFREEMAP_BASEMAPS,
@@ -295,10 +294,13 @@ function asFeatureCollection(data: unknown): FeatureCollection {
  * by mutating MapLibre directly — so all changes flow through the app's one-way
  * data flow and are covered by undo/redo.
  *
+ * Plugin-contributed tools are not included: the agent scopes those separately
+ * (see `tool-scope.ts`), since they may be deferred behind `load_plugin_tools`.
+ *
  * @param deps Map-controller accessor for camera tools.
- * @returns The tools to register on the agent.
+ * @returns The host tools, which are always sent to the model.
  */
-export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
+export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   const store = () => useAppStore.getState();
   // Tool results are serialized to the model; the data we return is JSON-safe by
   // construction, so this asserts the shape against Strands' strict JSONValue.
@@ -1095,7 +1097,6 @@ export function createAssistantTools(deps: AssistantToolDeps): Tool[] {
   });
 
   return [
-    ...listAssistantTools(),
     listLayers,
     runSql,
     addLayerFromUrl,

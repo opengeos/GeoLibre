@@ -1,4 +1,7 @@
-import { getAssistantToolsVersion } from "@geolibre/plugins/assistant-tool-registry";
+import {
+  getAssistantToolsVersion,
+  listAssistantToolEntries,
+} from "@geolibre/plugins/assistant-tool-registry";
 import { OPENFREEMAP_BASEMAPS, useAppStore } from "@geolibre/core";
 import { Agent, type Tool } from "@strands-agents/sdk";
 import i18next from "i18next";
@@ -20,7 +23,14 @@ import {
 import type { AssistantProfile } from "./provider";
 import { describeLayers } from "./layer-summary";
 import { buildSystemPrompt } from "./system-prompt";
-import { createAssistantTools, type AssistantToolDeps } from "./tools";
+import {
+  createLoadPluginToolsTool,
+  formatPluginToolCatalog,
+  resolvePluginToolNames,
+  scopePluginTools,
+  type PluginToolLoadResult,
+} from "./tool-scope";
+import { createHostAssistantTools, type AssistantToolDeps } from "./tools";
 
 /** A streamed update surfaced to the chat UI. */
 export type AssistantStreamEvent =
@@ -95,6 +105,13 @@ export class AssistantSession {
   private selectionKey: string = assistantSelectionKey(null);
   /** Aborts an in-flight fast-path request when the user stops the run. */
   private fastPathAbort: AbortController | null = null;
+  /**
+   * Deferred plugin tools the model loaded with `load_plugin_tools` in this
+   * conversation. Kept by name so a tool re-registered by its plugin (a version
+   * bump) is re-resolved to the new instance on the next refresh; cleared with
+   * the conversation in {@link reset}.
+   */
+  private loadedPluginTools = new Set<string>();
   /** Tool instances for direct (non-model) invocation by the fast path. */
   private cachedTools: Tool[] | null = null;
   private cachedToolsVersion = -1;
@@ -140,6 +157,7 @@ export class AssistantSession {
     this.agent?.cancel();
     this.agent = null;
     this.lastContext = null;
+    this.loadedPluginTools.clear();
   }
 
   /** Cancel the in-flight model/tool run, if any. */
@@ -205,10 +223,50 @@ export class AssistantSession {
   private toolNamed(name: string): Tool | null {
     const version = getAssistantToolsVersion();
     if (!this.cachedTools || this.cachedToolsVersion !== version) {
-      this.cachedTools = createAssistantTools(this.deps);
+      this.cachedTools = createHostAssistantTools(this.deps);
       this.cachedToolsVersion = version;
     }
     return this.cachedTools.find((tool) => tool.name === name) ?? null;
+  }
+
+  /**
+   * The tools and system prompt for the next model call. Host tools are always
+   * sent; plugin tools are sent in full only while they fit under the eager
+   * limit, and otherwise are listed in the prompt and loaded on demand.
+   */
+  private composeAgentInputs(): { tools: Tool[]; systemPrompt: string } {
+    const entries = listAssistantToolEntries();
+    // Forget loads whose tool has since been unregistered, so a plugin that is
+    // deactivated and later reactivated starts deferred again.
+    const live = new Set(entries.map((entry) => entry.tool.name));
+    for (const name of this.loadedPluginTools) {
+      if (!live.has(name)) this.loadedPluginTools.delete(name);
+    }
+    const scope = scopePluginTools(entries, this.loadedPluginTools);
+    const tools = [...scope.active, ...createHostAssistantTools(this.deps)];
+    if (scope.catalog.length > 0) {
+      tools.push(createLoadPluginToolsTool((names) => this.loadPluginTools(names)));
+    }
+    return {
+      tools,
+      systemPrompt: buildSystemPrompt(undefined, formatPluginToolCatalog(scope.catalog)),
+    };
+  }
+
+  /**
+   * Make deferred plugin tools callable on the live agent. Called from inside
+   * a model turn; the SDK reads the tool registry before each model call, so
+   * the loaded specs reach the model on its next step.
+   */
+  private loadPluginTools(names: string[]): PluginToolLoadResult {
+    const { tools, result } = resolvePluginToolNames(
+      listAssistantToolEntries(),
+      names,
+      this.loadedPluginTools,
+    );
+    for (const loaded of tools) this.loadedPluginTools.add(loaded.name);
+    if (tools.length > 0) this.agent?.toolRegistry.addOrReplace(tools);
+    return result;
   }
 
   private async ensureAgent(): Promise<Agent> {
@@ -217,10 +275,10 @@ export class AssistantSession {
         // Refresh between prompts, retaining the agent and its conversation.
         // Plugin guidance shares the version counter, so the prompt is
         // recomposed alongside the tools.
-        const tools = createAssistantTools(this.deps);
+        const { tools, systemPrompt } = this.composeAgentInputs();
         this.agent.toolRegistry.clear();
         this.agent.toolRegistry.add(tools);
-        this.agent.systemPrompt = buildSystemPrompt();
+        this.agent.systemPrompt = systemPrompt;
         this.toolsVersion = getAssistantToolsVersion();
       }
       return this.agent;
@@ -244,11 +302,8 @@ export class AssistantSession {
       );
     }
     const model = await createModel(config);
-    this.agent = new Agent({
-      model,
-      tools: createAssistantTools(this.deps),
-      systemPrompt: buildSystemPrompt(),
-    });
+    const { tools, systemPrompt } = this.composeAgentInputs();
+    this.agent = new Agent({ model, tools, systemPrompt });
     this.toolsVersion = getAssistantToolsVersion();
     return this.agent;
   }
