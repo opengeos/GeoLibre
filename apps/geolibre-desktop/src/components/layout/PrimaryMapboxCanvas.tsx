@@ -1,4 +1,9 @@
-import { MapboxCanvas, type MapDiagnosticEvent, type MapEngine } from "@geolibre/map";
+import {
+  MapboxCanvas,
+  type MapCanvasIdentifyAllLabels,
+  type MapDiagnosticEvent,
+  type MapEngine,
+} from "@geolibre/map";
 import type { ComponentType, ReactElement, RefObject } from "react";
 import { Trans } from "react-i18next";
 import { useMapboxAccessToken } from "../../hooks/useMapboxAccessToken";
@@ -18,12 +23,14 @@ export function PrimaryMapboxCanvas({
   onEngineReady,
   onMapDiagnosticEvent,
   canUseRemoteElevation,
+  identifyAllLabels,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   canUseRemoteElevation?: () => boolean;
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
   viewId?: string;
 }) {
   const token = useMapboxAccessToken();
@@ -34,6 +41,7 @@ export function PrimaryMapboxCanvas({
           accessToken={token}
           canUseRemoteElevation={canUseRemoteElevation}
           engineRef={engineRef}
+          identifyAllLabels={identifyAllLabels}
           onEngineReady={onEngineReady}
           onMapDiagnosticEvent={onMapDiagnosticEvent}
           viewId={viewId}

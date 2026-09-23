@@ -2714,6 +2714,7 @@ export function DesktopShell({
                 <PrimaryMapboxCanvas
                   canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
+                  identifyAllLabels={identifyAllLabels}
                   onEngineReady={handleMapControllerReady}
                   onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />

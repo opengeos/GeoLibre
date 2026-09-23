@@ -2359,7 +2359,7 @@ body,
   color: #1f2a37;
 }
 
-.geolibre-identify-popup .maplibregl-popup-content {
+.geolibre-identify-popup :is(.maplibregl-popup-content, .mapboxgl-popup-content) {
   background: hsl(var(--popover));
   border: 1px solid hsl(var(--border));
   box-shadow:
@@ -2529,7 +2529,7 @@ body,
    it and give it a real square target. `right: auto` first so the logical
    inset wins over MapLibre's own physical `right: 0` in both directions — the
    popup content mirrors with the UI in a right-to-left locale. */
-.geolibre-identify-popup .maplibregl-popup-close-button {
+.geolibre-identify-popup :is(.maplibregl-popup-close-button, .mapboxgl-popup-close-button) {
   /* `right: auto` must precede the logical inset: within one block the two
      resolve in source order, so declaring it after would win in LTR and leave
      the button unpositioned. */
@@ -2547,20 +2547,32 @@ body,
   width: 1.25rem;
 }
 
-.geolibre-identify-popup .maplibregl-popup-close-button:hover {
+.geolibre-identify-popup :is(.maplibregl-popup-close-button, .mapboxgl-popup-close-button):hover {
   background: hsl(var(--accent));
   color: hsl(var(--accent-foreground));
 }
 
-.geolibre-identify-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
-.geolibre-identify-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-.geolibre-identify-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-top, .mapboxgl-popup-anchor-top)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip),
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-top-left, .mapboxgl-popup-anchor-top-left)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip),
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-top-right, .mapboxgl-popup-anchor-top-right)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip) {
   border-bottom-color: hsl(var(--popover));
 }
 
-.geolibre-identify-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
-.geolibre-identify-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-.geolibre-identify-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-bottom, .mapboxgl-popup-anchor-bottom)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip),
+.geolibre-identify-popup:is(
+    .maplibregl-popup-anchor-bottom-left,
+    .mapboxgl-popup-anchor-bottom-left
+  )
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip),
+.geolibre-identify-popup:is(
+    .maplibregl-popup-anchor-bottom-right,
+    .mapboxgl-popup-anchor-bottom-right
+  )
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip) {
   border-top-color: hsl(var(--popover));
 }
 
@@ -2635,7 +2647,7 @@ body,
     width: calc(100vw - 20px) !important;
   }
 
-  .geolibre-identify-popup .maplibregl-popup-content {
+  .geolibre-identify-popup :is(.maplibregl-popup-content, .mapboxgl-popup-content) {
     max-width: calc(100vw - 24px);
   }
 }
@@ -2650,11 +2662,13 @@ body,
   }
 }
 
-.geolibre-identify-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-left, .mapboxgl-popup-anchor-left)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip) {
   border-right-color: hsl(var(--popover));
 }
 
-.geolibre-identify-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+.geolibre-identify-popup:is(.maplibregl-popup-anchor-right, .mapboxgl-popup-anchor-right)
+  :is(.maplibregl-popup-tip, .mapboxgl-popup-tip) {
   border-left-color: hsl(var(--popover));
 }
 

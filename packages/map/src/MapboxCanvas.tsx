@@ -3,10 +3,13 @@ import {
   applyGroupEffects,
   createPointerElevationResolver,
   DEFAULT_BASEMAP,
+  effectiveLayerRenderState,
   getActiveEllipsoid,
   IDENTIFY_ALL_LAYERS_ID,
   isPopupClickEnabled,
   redactUrlCredentials,
+  resolveLayerCapabilities,
+  resolvePopupMaxWidth,
   useAppStore,
   type PointerElevationResolver,
 } from "@geolibre/core";
@@ -35,6 +38,12 @@ import {
 import { createMapResizeScheduler } from "./map-resize";
 import { refreshMapboxPointerElevationAfterStyleLoad } from "./mapbox-pointer-elevation";
 import { createIdentifyPopupElement, identifyPopupShellMaxWidth } from "./feature-popup";
+import {
+  createGlobalIdentifyPopupElement,
+  DEFAULT_IDENTIFY_ALL_LABELS,
+  type GlobalIdentifyHit,
+  type MapCanvasIdentifyAllLabels,
+} from "./identify-all-popup";
 
 export interface MapboxCanvasProps {
   accessToken: string;
@@ -43,6 +52,8 @@ export interface MapboxCanvasProps {
   onEngineReady?: () => void;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   canUseRemoteElevation?: () => boolean;
+  /** Translated headings for the grouped "Identify visible layers" popup. */
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
 }
 
 /** The namespace and its CSS load only when a Mapbox pane is mounted. */
@@ -53,6 +64,7 @@ export function MapboxCanvas({
   onEngineReady,
   onMapDiagnosticEvent,
   canUseRemoteElevation,
+  identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
 }: MapboxCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   const readyCallback = useRef(onEngineReady);
@@ -61,6 +73,8 @@ export function MapboxCanvas({
   diagnosticCallback.current = onMapDiagnosticEvent;
   const canUseRemoteElevationRef = useRef(canUseRemoteElevation);
   canUseRemoteElevationRef.current = canUseRemoteElevation;
+  const identifyAllLabelsRef = useRef(identifyAllLabels);
+  identifyAllLabelsRef.current = identifyAllLabels;
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +173,9 @@ export function MapboxCanvas({
         let identifyPopupState: IdentifyPopupState | undefined;
         let pointerElevation: PointerElevationResolver | undefined;
         let previousSelectedFeatureKey: string | null = null;
+        // The layer "Identify visible layers" selected, so an empty click only
+        // retires a selection this mode made (as MapCanvas does).
+        let globalIdentifyActivatedLayerId: string | null = null;
         const removeIdentifyPopup = (
           options: { restore?: boolean; forceRestore?: boolean } = {},
         ) => {
@@ -387,6 +404,89 @@ export function MapboxCanvas({
             useAppStore.getState().setPointerCoords(null);
           }
         };
+        // "Identify visible layers": every eligible layer's hits at the point,
+        // grouped by layer in one popup, as MapCanvas shows them on MapLibre.
+        const showIdentifyAll = (lngLat: [number, number]) => {
+          const next = useAppStore.getState();
+          const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
+          const eligible = new Map(
+            next.layers
+              .filter(
+                (candidate) =>
+                  effectiveLayerRenderState(candidate, groupById).visible &&
+                  resolveLayerCapabilities(candidate).query &&
+                  isPopupClickEnabled(candidate.popup),
+              )
+              .map((candidate) => [candidate.id, candidate]),
+          );
+          // The engine already collapses one feature drawn by several style
+          // layers (fill and outline) into one hit per layer and feature.
+          const hits: GlobalIdentifyHit[] = current.identifyFeatures(lngLat).flatMap((hit) => {
+            const layer = eligible.get(hit.layerId);
+            if (!layer) return [];
+            return [
+              {
+                layer,
+                properties: hit.properties,
+                featureId: hit.featureId,
+                ...(hit.geometry
+                  ? {
+                      feature: {
+                        type: "Feature" as const,
+                        properties: hit.properties,
+                        geometry: hit.geometry,
+                        ...(hit.featureId === null ? {} : { id: hit.featureId }),
+                      },
+                    }
+                  : {}),
+              },
+            ];
+          });
+          const order = new Map(next.layers.map((candidate, index) => [candidate.id, index]));
+          hits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
+          removeIdentifyPopup();
+          if (hits.length === 0) {
+            next.selectFeature(null);
+            // A layer the user picked in the Layers panel is theirs to keep.
+            if (
+              globalIdentifyActivatedLayerId !== null &&
+              useAppStore.getState().selectedLayerId === globalIdentifyActivatedLayerId
+            )
+              next.selectLayer(null);
+            globalIdentifyActivatedLayerId = null;
+            return;
+          }
+          const activate = (hit: GlobalIdentifyHit) => {
+            const store = useAppStore.getState();
+            store.selectLayer(hit.layer.id);
+            store.selectFeature(hit.featureId);
+            globalIdentifyActivatedLayerId = hit.layer.id;
+          };
+          activate(hits[0]);
+          // One popup holds several layers, so it takes the widest width any
+          // of them asked for.
+          const widest = hits.reduce<number | undefined>((widestSoFar, hit) => {
+            const configured = resolvePopupMaxWidth(hit.layer.popup);
+            if (configured === undefined) return widestSoFar;
+            return widestSoFar === undefined ? configured : Math.max(widestSoFar, configured);
+          }, undefined);
+          const content = createGlobalIdentifyPopupElement(
+            hits,
+            map.getZoom(),
+            activate,
+            identifyAllLabelsRef.current,
+            widest,
+          );
+          popup = new gl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined),
+          })
+            .setLngLat(lngLat)
+            .setDOMContent(content)
+            .addTo(map);
+        };
         const handleClick = (e: MapEventOf<"click">) => {
           if (viewId || featureSelection.active.current) return;
           const next = useAppStore.getState();
@@ -398,6 +498,10 @@ export function MapboxCanvas({
           if (!identifyAll && (!targetLayer || !isPopupClickEnabled(targetLayer.popup))) {
             removeIdentifyPopup();
             next.selectFeature(null);
+            return;
+          }
+          if (identifyAll) {
+            showIdentifyAll(e.lngLat.toArray());
             return;
           }
           const match = current
