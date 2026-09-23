@@ -1514,10 +1514,14 @@ export function PrintLayoutDialog({
       const containMap = Boolean(map.getLayer(GRATICULE_LABEL_LAYER_ID));
       const canvas = map.getCanvas();
       // mapbox-gl has no getPixelRatio; the canvas carries the same ratio.
+      // An unlaid-out canvas (clientWidth 0) has no ratio to read, so fall
+      // back to the device's.
       const mapPixelRatio =
         typeof map.getPixelRatio === "function"
           ? map.getPixelRatio()
-          : canvas.width / Math.max(1, canvas.clientWidth);
+          : canvas.clientWidth > 0
+            ? canvas.width / canvas.clientWidth
+            : window.devicePixelRatio || 1;
       const cssPixelRatio = Number.isFinite(mapPixelRatio) && mapPixelRatio > 0 ? mapPixelRatio : 1;
       const viewportWidth = canvas.clientWidth || canvas.width / cssPixelRatio;
       const viewportHeight = canvas.clientHeight || canvas.height / cssPixelRatio;
@@ -1561,7 +1565,9 @@ export function PrintLayoutDialog({
           try {
             return await captureEngineMapImage(engine, null);
           } finally {
-            if (captureMode === "extent") showEnginePreview(extentBbox);
+            // The drawn box stays on the map as a reference in either capture
+            // mode, as the MapLibre branch and recapture restore it.
+            showEnginePreview(extentBbox);
           }
         }
         setPrintExtentVisible(nativeMap, false);
@@ -1628,7 +1634,6 @@ export function PrintLayoutDialog({
     },
     [
       mapControllerRef,
-      captureMode,
       extentBbox,
       showEnginePreview,
       atlasExtentMode,
