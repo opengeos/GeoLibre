@@ -2424,6 +2424,7 @@
       },
       "earthquakes": "Earthquakes",
       "spaceMissions": "Space Missions (30d)",
+      "activeFires": "Active Fires (24h)",
       "satellites": "Satellites",
       "flights": "Live Flights",
       "militaryFlights": "Military Flights",

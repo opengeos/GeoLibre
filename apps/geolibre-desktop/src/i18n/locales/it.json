@@ -2380,6 +2380,7 @@
       },
       "earthquakes": "Terremoti",
       "spaceMissions": "Missioni spaziali (30 giorni)",
+      "activeFires": "Incendi attivi (24 ore)",
       "satellites": "Satelliti",
       "flights": "Voli in tempo reale",
       "militaryFlights": "Voli militari",

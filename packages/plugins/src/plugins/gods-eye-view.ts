@@ -17,6 +17,7 @@ import {
   type GodsEyeViewFeedPayload,
 } from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
+import { fetchActiveFiresCzml } from "./gods-eye-view-fire-feeds";
 import { fetchBikeShareCzml, fetchSpaceMissionsCzml } from "./gods-eye-view-global-feeds";
 import {
   ALPR_MAX_VIEW_SPAN_DEGREES,
@@ -49,6 +50,7 @@ export const GODS_EYE_VIEW_CABLES_FLAG = "godsEyeViewCables";
 export const GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG = "godsEyeViewOsmInfrastructure";
 export const GODS_EYE_VIEW_BIKE_SHARE_FLAG = "godsEyeViewBikeShare";
 export const GODS_EYE_VIEW_SPACE_MISSIONS_FLAG = "godsEyeViewSpaceMissions";
+export const GODS_EYE_VIEW_ACTIVE_FIRES_FLAG = "godsEyeViewActiveFires";
 export const GODS_EYE_VIEW_STREET_TRAFFIC_FLAG = "godsEyeViewStreetTraffic";
 export const GODS_EYE_VIEW_MAPPED_ALPR_FLAG = "godsEyeViewMappedAlpr";
 export const GODS_EYE_VIEW_FLIGHTS_FLAG = "godsEyeViewFlights";
@@ -241,6 +243,18 @@ const FEED_DESCRIPTORS = {
     flag: GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
     defaultEnabled: false,
     fetch: ({ signal }) => fetchSpaceMissionsCzml({ signal }),
+  },
+  activeFires: {
+    group: "events",
+    label: ["panel.godsEyeView.activeFires", "Active Fires (24h)"],
+    attribution: "Active fires: NASA FIRMS, VIIRS NRT (NOAA-20, NOAA-21, Suomi NPP)",
+    // The relay caches for 30 minutes; polling faster would only re-read it.
+    refreshIntervalMs: 30 * 60_000,
+    // Three ~6 MB CSVs, parsed and binned on the main thread.
+    timeoutMs: 90_000,
+    flag: GODS_EYE_VIEW_ACTIVE_FIRES_FLAG,
+    defaultEnabled: false,
+    fetch: ({ signal }) => fetchActiveFiresCzml({ signal }),
   },
   mappedAlpr: {
     group: "cameras",

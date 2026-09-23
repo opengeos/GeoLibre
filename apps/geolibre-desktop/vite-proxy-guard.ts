@@ -50,6 +50,17 @@ export const TRANSIT_UPSTREAMS = {
 const TRANSIT_CACHE_TTL_MS = 15_000;
 const OVAPI_TRANSIT_CACHE_TTL_MS = 60_000;
 const TRANSIT_MAX_BODY_BYTES = 8 * 1024 * 1024;
+/** Exported so a test can hold it against the edge relay. */
+export const FIRMS_UPSTREAMS = {
+  "noaa-20":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv",
+  "noaa-21":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv",
+  "suomi-npp":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+} as const;
+const FIRMS_CACHE_TTL_MS = 30 * 60_000;
+const FIRMS_MAX_BODY_BYTES = 32 * 1024 * 1024;
 const ADSBDB_AIRCRAFT_BASE = "https://api.adsbdb.com/v0/aircraft/";
 const AUSTIN_CCTV_FRAME_BASE = "https://cctv.austinmobility.io/image/";
 const CALGARY_CCTV_FRAME_BASE = "https://trafficcam.calgary.ca/loc";
@@ -85,6 +96,7 @@ const aircraftCaches = new Map<
   { body: Buffer; expiresAt: number }
 >();
 const transitCaches = new Map<string, { body: Buffer; expiresAt: number }>();
+const firmsCaches = new Map<string, { body: Buffer; expiresAt: number }>();
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -621,6 +633,56 @@ export async function proxyTransitRequestGuarded(
     feedId === "ovapi-nl" ? "public, max-age=60" : "public, max-age=15",
   );
   res.setHeader("content-type", "application/x-protobuf");
+  res.setHeader("content-length", String(entry.body.byteLength));
+  res.end(entry.body);
+}
+
+/**
+ * Fixed, cached NASA FIRMS VIIRS relay for local development.
+ *
+ * Mirrors `handleFirmsFeed` in the edge worker: 404 for an unknown satellite,
+ * 502 for an upstream failure or a body that is not FIRMS CSV.
+ */
+export async function proxyFirmsRequestGuarded(
+  satellite: string,
+  res: ServerResponse,
+): Promise<void> {
+  if (!Object.hasOwn(FIRMS_UPSTREAMS, satellite)) {
+    res.statusCode = 404;
+    res.setHeader("content-type", "text/plain");
+    res.end("Unknown FIRMS satellite");
+    return;
+  }
+  let entry = firmsCaches.get(satellite);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const upstream = FIRMS_UPSTREAMS[satellite as keyof typeof FIRMS_UPSTREAMS];
+    const response = await fetchWithGuard(upstream, {
+      headers: {
+        accept: "text/csv",
+        "user-agent": "GeoLibre-FIRMS-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+    if (!response.ok) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end(`NASA FIRMS returned HTTP ${response.status}`);
+      return;
+    }
+    const body = await readBodyWithLimit(response, FIRMS_MAX_BODY_BYTES);
+    const head = body.subarray(0, 256).toString("utf8").trimStart().toLowerCase();
+    if (!head.startsWith("latitude,longitude,")) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "text/plain");
+      res.end("NASA FIRMS returned a malformed response");
+      return;
+    }
+    entry = { body, expiresAt: Date.now() + FIRMS_CACHE_TTL_MS };
+    firmsCaches.set(satellite, entry);
+  }
+  res.statusCode = 200;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=1800");
+  res.setHeader("content-type", "text/csv; charset=utf-8");
   res.setHeader("content-length", String(entry.body.byteLength));
   res.end(entry.body);
 }

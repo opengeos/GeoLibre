@@ -11,6 +11,7 @@ import {
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   GODS_EYE_VIEW_RADIO_FLAG,
   GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+  GODS_EYE_VIEW_ACTIVE_FIRES_FLAG,
   GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
   GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
   GODS_EYE_VIEW_FLIGHTS_FLAG,
@@ -288,6 +289,13 @@ function stubFeeds(): { calls: () => string[]; restore: () => void } {
         { status: 200 },
       );
     }
+    if (url.includes("/firms/viirs/")) {
+      return new Response(
+        "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,confidence,version,bright_ti5,frp,daynight\n" +
+          "20.01,10.01,330.1,0.4,0.4,2026-09-22,1406,N20,nominal,2.0NRT,290.1,12.5,D\n",
+        { status: 200 },
+      );
+    }
     if (url.includes("launch-library/recent")) {
       return new Response(
         JSON.stringify({
@@ -430,7 +438,7 @@ describe("God's Eye View availability", () => {
           ],
           ["Cameras", ["mappedAlpr", "cctv"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
-          ["Events", ["earthquakes", "spaceMissions"]],
+          ["Events", ["earthquakes", "spaceMissions", "activeFires"]],
           ["Utilities", ["radio"]],
         ],
       );
@@ -457,6 +465,7 @@ describe("God's Eye View feed refresh", () => {
         osmInfrastructure: true,
         bikeShare: true,
         spaceMissions: true,
+        activeFires: true,
         streetTraffic: true,
         mappedAlpr: true,
         flights: true,
@@ -480,6 +489,7 @@ describe("God's Eye View feed refresh", () => {
           "radio",
           "satellites",
           "spaceMissions",
+          "activeFires",
           "streetTraffic",
           "mappedAlpr",
           "flights",
@@ -497,6 +507,7 @@ describe("God's Eye View feed refresh", () => {
         GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
         GODS_EYE_VIEW_BIKE_SHARE_FLAG,
         GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+        GODS_EYE_VIEW_ACTIVE_FIRES_FLAG,
         GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
         GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
         GODS_EYE_VIEW_FLIGHTS_FLAG,
@@ -518,6 +529,7 @@ describe("God's Eye View feed refresh", () => {
         "telegeography_submarine_cables",
         "tiles.geolibre.app/overpass",
         "launch-library/recent",
+        "firms/viirs/noaa-20",
         "station_information.json",
         "opensky/states",
         "adsb-lol/military",
@@ -873,6 +885,7 @@ describe("God's Eye View clock speed", () => {
         militaryFlights: false,
         earthquakes: true,
         spaceMissions: false,
+        activeFires: false,
         satellites: true,
         bikeShare: false,
         transit: false,

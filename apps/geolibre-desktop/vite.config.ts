@@ -22,6 +22,7 @@ import {
   proxyCelestrakRequestGuarded,
   proxyLaunchLibraryRequestGuarded,
   proxyOverpassRequestGuarded,
+  proxyFirmsRequestGuarded,
   proxyTransitRequestGuarded,
   proxyOntarioCctvFrameRequestGuarded,
   proxyNswCctvFrameRequestGuarded,
@@ -526,6 +527,7 @@ const OPEN_SKY_PROXY_PATH = "/opensky/states";
 const ADSB_LOL_MILITARY_PROXY_PATH = "/adsb-lol/military";
 const ADSBDB_AIRCRAFT_PROXY_PATH = "/adsbdb/aircraft";
 const TRANSIT_PROXY_PATH = "/transit/vehicles";
+const FIRMS_PROXY_PATH = "/firms/viirs";
 const AUSTIN_CCTV_FRAME_PROXY_PATH = "/cctv/austin";
 const CALGARY_CCTV_FRAME_PROXY_PATH = "/cctv/calgary";
 const CCTV_CATALOG_PROXY_PATH = "/cctv/catalog";
@@ -751,6 +753,17 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end("Transit proxy request failed");
+        }
+      });
+      server.middlewares.use(FIRMS_PROXY_PATH, async (req, res) => {
+        try {
+          const requestUrl = new URL(req.url ?? "", `http://localhost${FIRMS_PROXY_PATH}`);
+          const satellite = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+          await proxyFirmsRequestGuarded(satellite, res);
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("NASA FIRMS proxy request failed");
         }
       });
       server.middlewares.use(CALGARY_CCTV_FRAME_PROXY_PATH, async (req, res) => {

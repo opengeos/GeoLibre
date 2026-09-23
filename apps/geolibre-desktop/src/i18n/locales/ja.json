@@ -2332,6 +2332,7 @@
       },
       "earthquakes": "地震",
       "spaceMissions": "宇宙ミッション（30日）",
+      "activeFires": "アクティブな火災（24時間）",
       "satellites": "衛星",
       "flights": "ライブフライト",
       "militaryFlights": "軍用機",

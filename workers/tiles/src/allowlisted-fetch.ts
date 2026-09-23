@@ -35,6 +35,20 @@ export const TRANSIT_UPSTREAMS = {
   "translink-seq": "https://gtfsrt.api.translink.com.au/api/realtime/seq/VehiclePositions",
 } as const;
 
+/**
+ * NASA FIRMS' keyless global 24-hour VIIRS active-fire files. The keyed area
+ * API is not needed for a whole-world snapshot, but these files send no CORS
+ * header, so the browser build reads them through `/firms/viirs/<satellite>`.
+ */
+export const FIRMS_UPSTREAMS = {
+  "noaa-20":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv",
+  "noaa-21":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv",
+  "suomi-npp":
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+} as const;
+
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
   "https://s3.us-east-2.amazonaws.com/opmmarstiles/",
@@ -55,6 +69,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   NSW_CCTV_FRAME_UPSTREAM,
   CALTRANS_CCTV_UPSTREAM,
   ...Object.values(TRANSIT_UPSTREAMS),
+  ...Object.values(FIRMS_UPSTREAMS),
   // CapMetro's fixed Socrata download endpoint redirects to a versioned file
   // path on the same public-data host.
   "https://data.texas.gov/api/views/",

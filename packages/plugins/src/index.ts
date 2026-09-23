@@ -931,6 +931,7 @@ export {
   GODS_EYE_VIEW_OSM_INFRASTRUCTURE_FLAG,
   GODS_EYE_VIEW_BIKE_SHARE_FLAG,
   GODS_EYE_VIEW_SPACE_MISSIONS_FLAG,
+  GODS_EYE_VIEW_ACTIVE_FIRES_FLAG,
   GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
   GODS_EYE_VIEW_MAPPED_ALPR_FLAG,
   GODS_EYE_VIEW_FLIGHTS_FLAG,
@@ -1030,6 +1031,20 @@ export {
   LAUNCH_LIBRARY_DEV_URL,
   LAUNCH_LIBRARY_EDGE_URL,
 } from "./plugins/gods-eye-view-global-feeds";
+export {
+  fetchActiveFiresCzml,
+  firmsAcquisitionMs,
+  firmsDetectionsToCzml,
+  firmsRequestUrl,
+  parseFirmsCsv,
+  FIRMS_CELL_DEGREES,
+  FIRMS_DEV_BASE,
+  FIRMS_EDGE_BASE,
+  FIRMS_MAX_CELLS,
+  FIRMS_SATELLITES,
+  type FirmsDetection,
+  type FirmsSatellite,
+} from "./plugins/gods-eye-view-fire-feeds";
 export {
   ALPR_MAX_VIEW_SPAN_DEGREES,
   ALPR_QUERY_SNAP_DEGREES,

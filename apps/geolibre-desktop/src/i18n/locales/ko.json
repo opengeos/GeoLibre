@@ -2332,6 +2332,7 @@
       },
       "earthquakes": "지진",
       "spaceMissions": "우주 임무(30일)",
+      "activeFires": "활성 화재(24시간)",
       "satellites": "위성",
       "flights": "실시간 항공편",
       "militaryFlights": "군용기",

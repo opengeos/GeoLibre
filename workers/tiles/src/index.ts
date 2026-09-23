@@ -52,6 +52,7 @@ import {
   ONTARIO_CCTV_CATALOG_UPSTREAM,
   ONTARIO_CCTV_FRAME_UPSTREAM,
   TRANSIT_UPSTREAMS,
+  FIRMS_UPSTREAMS,
 } from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
@@ -127,6 +128,11 @@ const TRANSIT_PATH = /^\/transit\/vehicles\/([a-z0-9][a-z0-9-]{1,63})$/;
 const TRANSIT_MAX_BODY_BYTES = 8 * 1024 * 1024;
 const TRANSIT_CACHE_SECONDS = 15;
 const OVAPI_TRANSIT_CACHE_SECONDS = 60;
+// NASA regenerates the global 24 h VIIRS files a few times an hour. Half an
+// hour keeps the layer current while every client shares one ~6 MB fetch.
+const FIRMS_PATH = /^\/firms\/viirs\/([a-z0-9][a-z0-9-]{1,31})$/;
+const FIRMS_MAX_BODY_BYTES = 32 * 1024 * 1024;
+const FIRMS_CACHE_SECONDS = 30 * 60;
 const CALGARY_CCTV_PATH = /^\/cctv\/calgary\/(\d{1,4})\.jpg$/;
 const AUSTIN_CCTV_PATH = /^\/cctv\/austin\/(\d{1,4})\.jpg$/;
 const ONTARIO_CCTV_PATH = /^\/cctv\/ontario\/([A-Za-z0-9_.-]{1,64})$/;
@@ -889,6 +895,56 @@ async function handleTransitFeed(
   return response;
 }
 
+/**
+ * Relay one of NASA FIRMS' fixed global 24 h VIIRS CSVs.
+ *
+ * The body is checked for the FIRMS header before it is cached, so an HTML
+ * maintenance page cannot be served from the edge for half an hour.
+ */
+async function handleFirmsFeed(
+  request: Request,
+  ctx: ExecutionContext,
+  satellite: string,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  if (!Object.hasOwn(FIRMS_UPSTREAMS, satellite)) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  const upstream = FIRMS_UPSTREAMS[satellite as keyof typeof FIRMS_UPSTREAMS];
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: {
+        accept: "text/csv",
+        "user-agent": "GeoLibre-FIRMS-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const body = await readResponseBytesWithLimit(originResponse, FIRMS_MAX_BODY_BYTES);
+  if (!originResponse.ok || !body || !isFirmsCsv(body)) {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", "text/csv; charset=utf-8");
+  headers.set("cache-control", `public, max-age=${FIRMS_CACHE_SECONDS}`);
+  const response = new Response(body, { status: 200, headers });
+  if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+/** True when a body starts with a FIRMS CSV header row. */
+function isFirmsCsv(body: Uint8Array): boolean {
+  const head = new TextDecoder().decode(body.subarray(0, 256)).trimStart().toLowerCase();
+  return head.startsWith("latitude,longitude,");
+}
+
 /** Read an upstream response defensively without letting stream errors escape. */
 async function readResponseBytesWithLimit(
   response: Response,
@@ -1144,6 +1200,7 @@ export const tilesWorker = {
           "  adsb.lol military flights: /adsb-lol/military\n" +
           "  ADSBDB aircraft details: /adsbdb/aircraft/<icao>\n" +
           "  GTFS-Realtime transit: /transit/vehicles/<provider>\n" +
+          "  NASA FIRMS active fires (24 h): /firms/viirs/<satellite>\n" +
           "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
@@ -1371,6 +1428,11 @@ export const tilesWorker = {
     const transitMatch = TRANSIT_PATH.exec(url.pathname);
     if (transitMatch) {
       return handleTransitFeed(request, ctx, transitMatch[1]);
+    }
+
+    const firmsMatch = FIRMS_PATH.exec(url.pathname);
+    if (firmsMatch) {
+      return handleFirmsFeed(request, ctx, firmsMatch[1]);
     }
 
     const calgaryCctvMatch = CALGARY_CCTV_PATH.exec(url.pathname);

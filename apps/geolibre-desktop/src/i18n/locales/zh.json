@@ -2332,6 +2332,7 @@
       },
       "earthquakes": "地震",
       "spaceMissions": "太空任务（30 天）",
+      "activeFires": "活跃火点（24 小时）",
       "satellites": "卫星",
       "flights": "实时航班",
       "militaryFlights": "军用航班",
