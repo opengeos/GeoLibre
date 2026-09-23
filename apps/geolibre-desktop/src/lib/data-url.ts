@@ -331,9 +331,12 @@ export function isStreamedLidarUrl(url: string): boolean {
 /**
  * A point cloud the LiDAR control downloads whole bypasses `readCappedBytes`,
  * so ask for its size with a one-byte range request first and refuse one past
- * the same ceiling as any other `?data=` download. A server that reports no
- * size (or does not expose `Content-Range` to CORS) is let through, as the
- * Add LiDAR Layer panel would.
+ * the same ceiling as any other `?data=` download. The probe only ever refuses
+ * a load it knows would fail or is too large: `Range` forces a CORS preflight
+ * that a plain download endpoint may reject, and maplibre-gl-lidar falls back
+ * to a plain GET in that case, so a probe that cannot get through (or a server
+ * that reports no size) lets the load go ahead, as the Add LiDAR Layer panel
+ * would.
  */
 async function checkLidarDownloadSize(
   url: string,
@@ -345,12 +348,12 @@ async function checkLidarDownloadSize(
     response = await fetchImpl(url, { signal, headers: { Range: "bytes=0-0" } });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error(`Could not fetch ${url}. The server may be unreachable or blocking CORS.`, {
-      cause: error,
-    });
+    return;
   }
   // A server that ignores the range answers with the whole file; stop it here.
   await response.body?.cancel().catch(() => {});
+  // 416: the server rejects the range itself, which says nothing of the file.
+  if (response.status === 416) return;
   if (!response.ok) throw new Error(`Could not fetch ${url}: HTTP ${response.status}.`);
   const total = response.headers.get("content-range")?.match(/\/(\d+)\s*$/)?.[1];
   const size = total

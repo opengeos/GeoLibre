@@ -499,6 +499,40 @@ describe("data URL deep links", () => {
     });
   });
 
+  it("lets a point cloud through when the size check cannot get past CORS", async () => {
+    // `Range` forces a preflight a plain download endpoint may reject, which
+    // fetch reports as a TypeError; maplibre-gl-lidar then falls back to a
+    // plain GET, so the probe must not fail the load on its behalf.
+    const url = "https://api.example.com/download/42";
+    for (const fetchImpl of [
+      (async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+      (async () => new Response(null, { status: 416 })) as unknown as typeof fetch,
+    ]) {
+      assert.deepEqual(await fetchRemoteData(url, { fetchImpl, dataType: "lidar" }), {
+        kind: "lidar",
+        name: "42",
+        url,
+      });
+    }
+  });
+
+  it("stops at an aborted size check", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = (async () => {
+      throw new DOMException("The operation was aborted", "AbortError");
+    }) as unknown as typeof fetch;
+    await assert.rejects(
+      fetchRemoteData("https://example.com/survey.las", {
+        fetchImpl,
+        signal: controller.signal,
+      }),
+      { name: "AbortError" },
+    );
+  });
+
   it("reports an endpoint that refuses the size check", async () => {
     const fetchImpl = (async () =>
       new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;

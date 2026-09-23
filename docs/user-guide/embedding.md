@@ -225,7 +225,7 @@ A public DEM COG can be tested directly:
 https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/dem.tif
 ```
 
-A LiDAR point cloud opens in the LiDAR layer control. A COPC file (`.copc.laz`) or an EPT dataset (`ept.json`) streams the points in view on demand; a plain LAS or LAZ file is downloaded whole. A point cloud does not take a `style`:
+A LiDAR point cloud opens in the LiDAR layer control. A COPC file (`.copc.laz`) or an EPT dataset (`ept.json`) streams the points in view on demand; a plain LAS or LAZ file is downloaded whole, and is refused if its server reports it larger than 250 MB (convert a larger file to COPC to stream it). A point cloud does not take a `style`:
 
 ```text
 https://web.geolibre.app/?data=https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz
