@@ -108,6 +108,11 @@ Every `add_*` that takes style overrides accepts `popup=` and `tooltip=`
 (`add_ee_layer` does not). To change a layer's popup after it was added, use
 `m.set_popup(...)` / `m.set_tooltip(...)` / `m.clear_popup(...)`. Without a config a
 layer shows its name plus every visible property on click, and no hover tip.
+Click popups open only while Identify is armed: `m.set_identify()` arms it on
+every visible layer, `m.set_identify("Sites")` on one, `m.set_identify(None)`
+turns it off. Hover tips pause while it is armed. `m.show_control("bookmark")`,
+`m.show_control("search")` and `m.hide_control("globe")` toggle panels and map
+controls, and `m.set_projection("mercator")` draws a flat map instead of a globe.
 
 ```python
 m.add_markers(

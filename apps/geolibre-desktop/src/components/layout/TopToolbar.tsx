@@ -1,4 +1,10 @@
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
+import {
+  SCRIPT_MAP_CONTROL_EVENT,
+  clearScriptMapControls,
+  forgetScriptMapControl,
+  type ScriptMapControlDetail,
+} from "../../lib/scripting/ui-controls";
 import { supportsAddDataRenderer } from "../../lib/add-data-renderer";
 import {
   DEFAULT_PROJECT_NAME,
@@ -1260,6 +1266,24 @@ export function TopToolbar({
     }
   }, [mapControllerRef, mapReadyGeneration, controlsVisible]);
 
+  // A script (the Jupyter widget's show_control/hide_control) toggles a control
+  // on the map directly; mirror it here so the Controls menu checkmark agrees
+  // and the effect above does not revert it on the next renderer swap. The
+  // choice is per session, so unlike a menu toggle it is not written to the
+  // device preference. Only the checkmark is mirrored here: re-applying the
+  // control to a new map belongs to `useScriptControlRestore`, since this
+  // toolbar is unmounted in `?maponly` embeds.
+  useEffect(() => {
+    const onScriptControl = (event: Event) => {
+      const { control, visible } = (event as CustomEvent<ScriptMapControlDetail>).detail;
+      setControlsVisible((current) =>
+        current[control] === visible ? current : { ...current, [control]: visible },
+      );
+    };
+    window.addEventListener(SCRIPT_MAP_CONTROL_EVENT, onScriptControl);
+    return () => window.removeEventListener(SCRIPT_MAP_CONTROL_EVENT, onScriptControl);
+  }, []);
+
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
 
   // Terrain is project state, unlike the other optional map chrome, so applying
@@ -1394,6 +1418,13 @@ export function TopToolbar({
         NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
       );
     }
+    // New Project resets every control to its default, so an earlier scripted
+    // override is spent: without this `useScriptControlRestore` would re-apply
+    // it to the live map on this same project-generation bump (parent effects
+    // run after this child's) and desync the map from the checkmarks reset
+    // just above. A widget project push does not come through here, so it
+    // still keeps the controls a script set.
+    clearScriptMapControls();
     setControlsVisible(newProjectToolbarControlVisibility());
   };
 
@@ -1428,6 +1459,10 @@ export function TopToolbar({
     const visible = !controlsVisible[control];
     const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
     if (!updated) return;
+    // An explicit user choice revokes an earlier scripted one, so
+    // `useScriptControlRestore` stops forcing the scripted value back on the
+    // next renderer swap or project load.
+    forgetScriptMapControl(control);
     setControlsVisible((current) => ({ ...current, [control]: visible }));
     if (control !== "terrain" && control !== "maptoolkit-logo")
       writeControlPreference(control, visible);

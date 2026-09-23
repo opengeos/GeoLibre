@@ -139,6 +139,7 @@ import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
 import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
 import { useTerrainRestore } from "../../hooks/useTerrainRestore";
+import { useScriptControlRestore } from "../../hooks/useScriptControlRestore";
 import { useCogSpectralIdentify } from "../../hooks/useCogSpectralIdentify";
 import { useRasterViewportStretch } from "../../hooks/useRasterViewportStretch";
 import {
@@ -991,6 +992,7 @@ export function DesktopShell({
   useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
   useRasterViewportStretch(mapControllerRef, mapReadyGeneration);
   useTerrainRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
+  useScriptControlRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);

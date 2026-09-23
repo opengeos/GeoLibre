@@ -45,7 +45,7 @@
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@turf/union": "^7.4.0",
     "a5-js": "^0.10.1",
-    "cog-tiler-wasm": "^0.3.8",
+    "cog-tiler-wasm": "^0.4.0",
     "dggal": "^0.0.6",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.8.16",
@@ -73,7 +73,7 @@
     "maplibre-gl-national-map": "^0.1.1",
     "maplibre-gl-overture-maps": "^0.4.1",
     "maplibre-gl-planetary-computer": "^0.4.0",
-    "maplibre-gl-raster": "^0.14.14",
+    "maplibre-gl-raster": "^0.14.15",
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.8.0",
     "maplibre-gl-swipe": "^0.13.4",
@@ -92,7 +92,7 @@
     "shpjs": "^6.2.0",
     "three": "^0.186.0",
     "webdggrid": "^1.9.0",
-    "whitebox-wasm": "^0.5.1"
+    "whitebox-wasm": "^0.6.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

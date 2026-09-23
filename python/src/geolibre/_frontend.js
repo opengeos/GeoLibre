@@ -284,7 +284,35 @@ async function render({ model, el }) {
       project,
       trustedWidget: true,
     });
+    // Loading a project disarms Identify, so re-arm whatever Python asked for.
+    pushUiState({ controls: false });
   };
+
+  // UI state Python set that the project does not carry (`_ui`): the Identify
+  // target and shown/hidden map controls and panels. Replayed as ordinary
+  // scripting commands, fire-and-forget: Python drops a reply whose requestId
+  // it never registered.
+  let uiRequestCounter = 0;
+  const postUiCommand = (method, params) => {
+    uiRequestCounter += 1;
+    post({
+      type: "geolibre:command",
+      requestId: `geolibre-ui-${uiRequestCounter}`,
+      method,
+      params,
+    });
+  };
+  function pushUiState({ identify = true, controls = true } = {}) {
+    if (!ready) return;
+    const ui = model.get("_ui") || {};
+    if (identify && Object.prototype.hasOwnProperty.call(ui, "identify")) {
+      postUiCommand("setIdentify", { layerId: ui.identify ?? null });
+    }
+    if (!controls) return;
+    for (const [control, visible] of Object.entries(ui.controls || {})) {
+      postUiCommand("setControlVisible", { control, visible: Boolean(visible) });
+    }
+  }
 
   // Commands (geolibre:command) issued from Python before the iframe app has
   // signalled readiness are held here and flushed once geolibre:ready arrives,
@@ -305,6 +333,8 @@ async function render({ model, el }) {
     if (data.type === "geolibre:ready") {
       ready = true;
       pushProject();
+      // pushProject already re-armed Identify.
+      pushUiState({ identify: false });
       flushCommands();
     } else if (data.type === "geolibre:state") {
       // Record the project object that came from the app, then write it back to
@@ -368,14 +398,17 @@ async function render({ model, el }) {
   const onHeight = () => {
     iframe.style.height = model.get("height") || "800px";
   };
+  const onUiChange = () => pushUiState();
   model.on("change:project", onProjectChange);
   model.on("change:height", onHeight);
+  model.on("change:_ui", onUiChange);
 
   return () => {
     window.removeEventListener("message", onMessage);
     model.off("msg:custom", onCustom);
     model.off("change:project", onProjectChange);
     model.off("change:height", onHeight);
+    model.off("change:_ui", onUiChange);
   };
 }
 
